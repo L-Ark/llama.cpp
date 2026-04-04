@@ -15,6 +15,7 @@
 #include "ggml-cpp.h"
 
 #include "models/models.h"
+#include "llama-graph-builder.h"
 
 #include <algorithm>
 #include <cassert>
@@ -504,6 +505,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
     if (!classifier_labels.empty()) {
         hparams.n_cls_out = classifier_labels.size();
     }
+
+    // FFN activation type (optional, for dynamic architecture discovery)
+    std::string ffn_act_str;
+    if (ml.get_key(LLM_KV_FFN_ACTIVATION, ffn_act_str, false)) {
+        snprintf(hparams.ffn_activation, sizeof(hparams.ffn_activation), "%s", ffn_act_str.c_str());
+    }
+
+    // Norm eps values (try both, architectures use one or the other)
+    ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps, false);
+    ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,     hparams.f_norm_eps,     false);
 
     // arch-specific KVs
     switch (arch) {
@@ -8411,47 +8422,72 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
     switch (arch) {
         case LLM_ARCH_LLAMA:
             {
-                llm = std::make_unique<llm_build_llama<false>>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = (hparams.n_expert > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_LLAMA4:
             {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_llama<false>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_llama_iswa>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.moe = (hparams.n_expert > 0);
+                cfg.moe_shared = (hparams.n_expert_shared > 0);
+                cfg.qk_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_LLAMA_EMBED:
             {
-                llm = std::make_unique<llm_build_llama<true>>(*this, params);
+                llm_transformer_config cfg;
+                cfg.no_attn_cache = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_MAINCODER:
             {
-                llm = std::make_unique<llm_build_maincoder>(*this, params);
+                llm_transformer_config cfg;
+                cfg.qk_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DECI:
             {
-                llm = std::make_unique<llm_build_deci>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_BAICHUAN:
             {
-                llm = std::make_unique<llm_build_baichuan>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_FALCON:
             {
-                llm = std::make_unique<llm_build_falcon>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.combined_qkv = true;
+                cfg.parallel_ffn = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GROK:
             {
-                llm = std::make_unique<llm_build_grok>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.logit_softcap = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_STARCODER:
             {
-                llm = std::make_unique<llm_build_starcoder>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.use_rope = false;
+                cfg.use_pos_embd = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_REFACT:
             {
-                llm = std::make_unique<llm_build_refact>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_BERT:
         case LLM_ARCH_JINA_BERT_V2:
@@ -8475,59 +8511,96 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_BLOOM:
             {
-                llm = std::make_unique<llm_build_bloom>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.use_rope = false;
+                cfg.global_tok_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_MPT:
             {
-                llm = std::make_unique<llm_build_mpt>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.use_rope = false;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_STABLELM:
             {
-                llm = std::make_unique<llm_build_stablelm>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_QWEN:
             {
-                llm = std::make_unique<llm_build_qwen>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_QWEN2:
             {
-                llm = std::make_unique<llm_build_qwen2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.output_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DREAM:
             {
-                llm = std::make_unique<llm_build_dream>(*this, params);
-            }
-            break;
+                llm_transformer_config cfg;
+                cfg.no_attn_cache = true;
+                cfg.output_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+            } break;
         case LLM_ARCH_LLADA:
             {
-                llm = std::make_unique<llm_build_llada>(*this, params);
-            }
-            break;
+                llm_transformer_config cfg;
+                cfg.no_attn_cache = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+            } break;
         case LLM_ARCH_LLADA_MOE:
             {
-                llm = std::make_unique<llm_build_llada_moe>(*this, params);
-            }
-            break;
+                llm_transformer_config cfg;
+                cfg.no_attn_cache = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+            } break;
         case LLM_ARCH_RND1:
             {
-                llm = std::make_unique<llm_build_rnd1>(*this, params);
-            }
-            break;
+                llm_transformer_config cfg;
+                cfg.no_attn_cache = true;
+                cfg.qk_norm = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+            } break;
         case LLM_ARCH_QWEN2VL:
             {
-                llm = std::make_unique<llm_build_qwen2vl>(*this, params);
+                llm_transformer_config cfg;
+                cfg.attn_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_QWEN2MOE:
             {
-                llm = std::make_unique<llm_build_qwen2moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_QWEN3:
             {
-                llm = std::make_unique<llm_build_qwen3>(*this, params);
+                llm_transformer_config cfg;
+                cfg.qk_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_QWEN3MOE:
             {
-                llm = std::make_unique<llm_build_qwen3moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.qk_norm = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_QWEN3VL:
             {
@@ -8539,20 +8612,31 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_PHI2:
             {
-                llm = std::make_unique<llm_build_phi2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.output_bias = true;
+                cfg.use_pos_embd = true;
+                cfg.parallel_ffn = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_PHI3:
         case LLM_ARCH_PHIMOE:
             {
-                if (hparams.swa_type != LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_phi3<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_phi3<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.moe = (hparams.n_expert > 0);
+                cfg.moe_shared = (hparams.n_expert_shared > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_PLAMO:
             {
-                llm = std::make_unique<llm_build_plamo>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_PLAMO2:
             {
@@ -8560,27 +8644,46 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_PLAMO3:
             {
-                if (hparams.swa_type != LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_plamo3<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_plamo3<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.qk_norm = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GPT2:
             {
-                llm = std::make_unique<llm_build_gpt2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.use_rope = false;
+                cfg.use_pos_embd = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_CODESHELL:
             {
-                llm = std::make_unique<llm_build_codeshell>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_ORION:
             {
-                llm = std::make_unique<llm_build_orion>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_INTERNLM2:
             {
-                llm = std::make_unique<llm_build_internlm2>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_MINICPM3:
             {
@@ -8588,19 +8691,34 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_GEMMA:
             {
-                llm = std::make_unique<llm_build_gemma>(*this, params);
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_GELU;
+                cfg.token_embd_scale = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GEMMA2:
             {
-                llm = std::make_unique<llm_build_gemma2_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_GELU;
+                cfg.iswa = true;
+                cfg.qk_norm = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                cfg.logit_softcap = true;
+                cfg.token_embd_scale = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GEMMA3:
             {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_gemma3<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_gemma3<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_GELU;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.qk_norm = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                cfg.logit_softcap = true;
+                cfg.token_embd_scale = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GEMMA3N:
             {
@@ -8612,11 +8730,21 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_GEMMA_EMBEDDING:
             {
-                llm = std::make_unique<llm_build_gemma_embedding>(*this, params);
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_GELU;
+                cfg.no_attn_cache = true;
+                cfg.token_embd_scale = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_STARCODER2:
             {
-                llm = std::make_unique<llm_build_starcoder2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm      = LLM_NORM;
+                cfg.act       = LLM_FFN_GELU;
+                cfg.ffn_type  = LLM_FFN_SEQ;
+                cfg.attn_bias = true;
+                cfg.ffn_bias  = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_MAMBA:
         case LLM_ARCH_MAMBA2:
@@ -8629,51 +8757,70 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_XVERSE:
             {
-                llm = std::make_unique<llm_build_xverse>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_COMMAND_R:
             {
-                llm = std::make_unique<llm_build_command_r>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_COHERE2:
             {
-                llm = std::make_unique<llm_build_cohere2_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DBRX:
             {
-                llm = std::make_unique<llm_build_dbrx>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_OLMO:
             {
-                llm = std::make_unique<llm_build_olmo>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_OLMO2:
             {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_olmo2<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_olmo2<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.qk_norm = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_OLMOE:
             {
-                llm = std::make_unique<llm_build_olmoe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_OPENELM:
             {
-                llm = std::make_unique<llm_build_openelm>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_GPTNEOX:
             {
-                llm = std::make_unique<llm_build_gptneox>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_GELU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.parallel_ffn = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_ARCTIC:
             {
-                llm = std::make_unique<llm_build_arctic>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DEEPSEEK:
             {
-                llm = std::make_unique<llm_build_deepseek>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DEEPSEEK2:
         case LLM_ARCH_DEEPSEEK2OCR:
@@ -8684,15 +8831,30 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_CHATGLM:
             {
-                llm = std::make_unique<llm_build_chatglm>(*this, params);
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_SWIGLU;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GLM4:
             {
-                llm = std::make_unique<llm_build_glm4>(*this, params);
+                llm_transformer_config cfg;
+                cfg.combined_qkv = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GLM4_MOE:
             {
-                llm = std::make_unique<llm_build_glm4_moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.combined_qkv = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_BITNET:
             {
@@ -8719,15 +8881,34 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             break;
         case LLM_ARCH_JAIS:
             {
-                llm = std::make_unique<llm_build_jais>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.combined_qkv = true;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                cfg.use_rope = false;
+                cfg.use_pos_embd = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_JAIS2:
             {
-                llm = std::make_unique<llm_build_jais2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_RELU_SQR;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_NEMOTRON:
             {
-                llm = std::make_unique<llm_build_nemotron>(*this, params);
+                llm_transformer_config cfg;
+                cfg.norm = LLM_NORM;
+                cfg.act = LLM_FFN_RELU_SQR;
+                cfg.ffn_type = LLM_FFN_SEQ;
+                cfg.attn_bias = true;
+                cfg.ffn_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_NEMOTRON_H:
         case LLM_ARCH_NEMOTRON_H_MOE:
@@ -8736,19 +8917,22 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_EXAONE:
             {
-                llm = std::make_unique<llm_build_exaone>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_EXAONE4:
             {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_exaone4<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_exaone4<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.qk_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_EXAONE_MOE:
             {
-                llm = std::make_unique<llm_build_exaone_moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_RWKV6:
             {
@@ -8770,7 +8954,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
         case LLM_ARCH_GRANITE_MOE:
         case LLM_ARCH_MINICPM:
             {
-                llm = std::make_unique<llm_build_granite>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = (hparams.n_expert > 0);
+                cfg.moe_shared = (hparams.n_expert_shared > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GRANITE_HYBRID:
             {
@@ -8790,23 +8977,38 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_BAILINGMOE:
             {
-                llm = std::make_unique<llm_build_bailingmoe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_BAILINGMOE2:
             {
-                llm = std::make_unique<llm_build_bailingmoe2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.combined_qkv = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_SEED_OSS:
             {
-                llm = std::make_unique<llm_build_seed_oss>(*this, params);
+                llm_transformer_config cfg;
+                cfg.attn_post_norm = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DOTS1:
             {
-                llm = std::make_unique<llm_build_dots1>(*this, params);
+                llm_transformer_config cfg;
+                cfg.qk_norm = true;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_ARCEE:
             {
-                llm = std::make_unique<llm_build_arcee>(*this, params);
+                llm_transformer_config cfg;
+                cfg.act = LLM_FFN_RELU_SQR;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_AFMOE:
             {
@@ -8814,31 +9016,40 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_ERNIE4_5:
             {
-                llm = std::make_unique<llm_build_ernie4_5>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_ERNIE4_5_MOE:
             {
-                llm = std::make_unique<llm_build_ernie4_5_moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_PADDLEOCR:
             {
-                llm = std::make_unique<llm_build_paddleocr>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_HUNYUAN_MOE:
             {
-                llm = std::make_unique<llm_build_hunyuan_moe>(*this, params);
+                llm_transformer_config cfg;
+                cfg.moe = true;
+                cfg.moe_shared = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_HUNYUAN_DENSE:
             {
-                llm = std::make_unique<llm_build_hunyuan_dense>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_SMOLLM3:
             {
-                llm = std::make_unique<llm_build_smollm3>(*this, params);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params);
             } break;
         case LLM_ARCH_OPENAI_MOE:
             {
-                llm = std::make_unique<llm_build_openai_moe_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.moe = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_FALCON_H1:
             {
@@ -8855,11 +9066,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_SMALLTHINKER:
             {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_smallthinker<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_smallthinker<false>>(*this, params);
-                }
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.moe = (hparams.n_expert > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_GROVEMOE:
             {
@@ -8871,7 +9081,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_MINIMAX_M2:
             {
-                llm = std::make_unique<llm_build_minimax_m2>(*this, params);
+                llm_transformer_config cfg;
+                cfg.qk_norm = true;
+                cfg.moe = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_COGVLM:
             {
@@ -8879,7 +9092,9 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_PANGU_EMBED:
             {
-                llm = std::make_unique<llm_build_pangu_embedded>(*this, params);
+                llm_transformer_config cfg;
+                cfg.output_bias = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_QWEN3NEXT:
             {
@@ -8895,11 +9110,17 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_MISTRAL3:
             {
-                llm = std::make_unique<llm_build_mistral3>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE);
+                cfg.moe = (hparams.n_expert > 0);
+                cfg.moe_shared = (hparams.n_expert_shared > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_MIMO2:
             {
-                llm = std::make_unique<llm_build_mimo2_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = true;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_KIMI_LINEAR:
             {
@@ -8907,10 +9128,22 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_STEP35:
             {
-                llm = std::make_unique<llm_build_step35_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = true;
+                cfg.moe = (hparams.n_expert > 0);
+                cfg.moe_shared = (hparams.n_expert_shared > 0);
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         default:
-            GGML_ABORT("fatal error");
+            {
+                // Phase 3: auto-configure from model hparams + tensors
+                llm_transformer_config cfg;
+                if (llm_transformer_config_from_hparams(hparams, *this, cfg)) {
+                    llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+                } else {
+                    GGML_ABORT("fatal error: unsupported architecture");
+                }
+            } break;
     }
 
     // add on pooling layer

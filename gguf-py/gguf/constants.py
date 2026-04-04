@@ -113,6 +113,7 @@ class Keys:
         EXPERT_SHARED_FEED_FORWARD_LENGTH = "{arch}.expert_shared_feed_forward_length"
         EXPERT_CHUNK_FEED_FORWARD_LENGTH  = "{arch}.expert_chunk_feed_forward_length"
         USE_PARALLEL_RESIDUAL             = "{arch}.use_parallel_residual"
+        FFN_ACTIVATION                   = "{arch}.feed_forward_activation"
         TENSOR_DATA_LAYOUT                = "{arch}.tensor_data_layout"
         EXPERT_COUNT                      = "{arch}.expert_count"
         EXPERT_USED_COUNT                 = "{arch}.expert_used_count"
