@@ -1,6 +1,7 @@
 *
 !*.*
 !snapshots/
+!golden/
 *.o
 ggml-common.h
 **/*.swp
