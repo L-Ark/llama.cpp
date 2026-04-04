@@ -850,9 +850,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
-              python scripts/new-arch.py --name mymodel
-              python scripts/new-arch.py --name mymodel --moe --activation gelu
-              python scripts/new-arch.py --name mymodel --config path/to/config.json
+              # Add new standard transformer (infers everything from config.json):
+              python scripts/new-arch.py --name phonelm --config config.json --std-transformer --apply
+
+              # Add MoE model with ISWA:
+              python scripts/new-arch.py --name mymodel --moe --iswa --std-transformer --apply
+
+              # Generate custom builder (not std-transformer):
+              python scripts/new-arch.py --name mymodel --config config.json
+
+              # Dry-run to preview changes:
+              python scripts/new-arch.py --name mymodel --std-transformer --dry-run
         """),
     )
     parser.add_argument("--name", required=True,
