@@ -733,6 +733,9 @@ class GGUFWriter:
     def add_parallel_residual(self, use: bool) -> None:
         self.add_bool(Keys.LLM.USE_PARALLEL_RESIDUAL.format(arch=self.arch), use)
 
+    def add_ffn_activation(self, activation: str) -> None:
+        self.add_string(Keys.LLM.FFN_ACTIVATION.format(arch=self.arch), activation)
+
     def add_decoder_start_token_id(self, id: int) -> None:
         self.add_uint32(Keys.LLM.DECODER_START_TOKEN_ID.format(arch=self.arch), id)
 

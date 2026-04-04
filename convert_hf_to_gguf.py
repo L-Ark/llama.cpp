@@ -1105,6 +1105,10 @@ class TextModel(ModelBase):
             self.gguf_writer.add_causal_attention(False)
             logger.info("gguf: causal attention = False")
 
+        if (hidden_act := self.hparams.get("hidden_act")) is not None:
+            self.gguf_writer.add_ffn_activation(hidden_act)
+            logger.info(f"gguf: FFN activation = {hidden_act}")
+
         # TODO: Handle "sliding_attention" similarly when models start implementing it
         rope_params = self.rope_parameters.get("full_attention", self.rope_parameters)
         if (rope_type := rope_params.get("rope_type")) is not None:

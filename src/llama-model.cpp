@@ -505,6 +505,12 @@ void llama_model::load_hparams(llama_model_loader & ml) {
         hparams.n_cls_out = classifier_labels.size();
     }
 
+    // FFN activation type (optional, for future dynamic architecture discovery)
+    std::string ffn_act_str;
+    if (ml.get_key(LLM_KV_FFN_ACTIVATION, ffn_act_str, false)) {
+        snprintf(hparams.ffn_activation, sizeof(hparams.ffn_activation), "%s", ffn_act_str.c_str());
+    }
+
     // arch-specific KVs
     switch (arch) {
         case LLM_ARCH_LLAMA:
