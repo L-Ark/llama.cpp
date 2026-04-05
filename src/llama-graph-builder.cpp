@@ -52,28 +52,23 @@ llm_build_std_transformer::llm_build_std_transformer(
         cb(inpL, "inp_norm", -1);
     }
 
-    // Position tensor (for RoPE)
-    ggml_tensor * inp_pos = config.use_rope ? build_inp_pos() : nullptr;
+    // Position tensor (for RoPE — skip if model doesn't actually use RoPE)
+    ggml_tensor * inp_pos = (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE)
+        ? build_inp_pos() : nullptr;
 
     const int effective_n_layer = n_layer - (int) hparams.nextn_predict_layers;
 
-    // Per-layer embed injection (Gemma 4)
+    // Per-layer embed injection (Gemma 4) — testing disabled
     ggml_tensor * inp_per_layer = nullptr;
-    if (model.tok_embd_per_layer) {
+    if (false && model.tok_embd_per_layer) {
         const int64_t n_embd_per_layer = hparams.n_embd_per_layer;
 
-        // Get per-layer token embeddings
         ggml_tensor * per_layer_raw;
-        if (ubatch.token) {
-            auto inp = std::make_unique<llm_graph_input_embd>(n_embd);
-            inp->tokens = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, ubatch.n_tokens);
-            ggml_set_input(inp->tokens);
-            res->t_inp_tokens = inp->tokens;
-            per_layer_raw = ggml_get_rows(ctx0, model.tok_embd_per_layer, inp->tokens);
+        if (ubatch.token && res->t_inp_tokens) {
+            per_layer_raw = ggml_get_rows(ctx0, model.tok_embd_per_layer, res->t_inp_tokens);
             per_layer_raw = ggml_reshape_3d(ctx0, per_layer_raw,
                     n_embd_per_layer, effective_n_layer, n_tokens);
             per_layer_raw = ggml_scale(ctx0, per_layer_raw, sqrtf(float(n_embd_per_layer)));
-            res->add_input(std::move(inp));
         } else {
             const int64_t embd_size = model.tok_embd_per_layer->ne[0];
             ggml_tensor * padding = ggml_view_1d(ctx0, model.tok_embd_per_layer, embd_size, 0);
@@ -83,7 +78,6 @@ llm_build_std_transformer::llm_build_std_transformer(
         }
         cb(per_layer_raw, "per_layer_raw", -1);
 
-        // Project input embeddings to per-layer space
         ggml_tensor * per_layer_proj = ggml_mul_mat(ctx0, model.per_layer_model_proj, inpL);
         per_layer_proj = ggml_scale(ctx0, per_layer_proj, 1.0f / sqrtf(float(n_embd)));
         per_layer_proj = ggml_reshape_3d(ctx0, per_layer_proj,
@@ -93,7 +87,6 @@ llm_build_std_transformer::llm_build_std_transformer(
 
         inp_per_layer = ggml_add(ctx0, per_layer_proj, per_layer_raw);
         inp_per_layer = ggml_scale(ctx0, inp_per_layer, 1.0f / sqrtf(2.0f));
-        // Permute to [n_embd_per_layer, n_tokens, n_layer]
         inp_per_layer = ggml_cont(ctx0, ggml_permute(ctx0, inp_per_layer, 0, 2, 1, 3));
         cb(inp_per_layer, "inp_per_layer", -1);
     }
@@ -158,7 +151,11 @@ llm_build_std_transformer::llm_build_std_transformer(
             ggml_tensor * Kcur;
             ggml_tensor * Vcur;
 
-            if (config.combined_qkv && model.layers[il].wqkv) {
+            // Auto-detect combined QKV from tensor presence
+            bool use_combined_qkv = config.combined_qkv ||
+                (model.layers[il].wqkv != nullptr && model.layers[il].wq == nullptr);
+
+            if (use_combined_qkv && model.layers[il].wqkv) {
                 // Combined QKV projection (GPT-2, Bloom, Falcon, Jais)
                 ggml_tensor * qkv = build_lora_mm(model.layers[il].wqkv, cur);
                 if (model.layers[il].bqkv) {
@@ -205,19 +202,41 @@ llm_build_std_transformer::llm_build_std_transformer(
             }
 
             // QK normalization (before RoPE)
+            // Detect pre-reshape vs post-reshape norm from weight shape
             if (config.qk_norm) {
                 if (model.layers[il].attn_q_norm) {
-                    Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, nullptr, config.norm, il);
+                    const bool pre_reshape = (model.layers[il].attn_q_norm->ne[0] != n_embd_head);
+                    if (pre_reshape && !use_combined_qkv) {
+                        // Pre-reshape norm: undo reshape, norm, re-reshape (MiniMax-M2)
+                        Qcur = ggml_reshape_2d(ctx0, Qcur, n_embd_head * n_head, n_tokens);
+                        Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, nullptr, config.norm, il);
+                        Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
+                    } else {
+                        Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, nullptr, config.norm, il);
+                    }
                     cb(Qcur, "Qcur_norm", il);
                 }
                 if (model.layers[il].attn_k_norm) {
-                    Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, nullptr, config.norm, il);
+                    const bool pre_reshape = (model.layers[il].attn_k_norm->ne[0] != n_embd_head);
+                    if (pre_reshape && !use_combined_qkv) {
+                        Kcur = ggml_reshape_2d(ctx0, Kcur, n_embd_head * n_head_kv, n_tokens);
+                        Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, nullptr, config.norm, il);
+                        Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+                    } else {
+                        Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, nullptr, config.norm, il);
+                    }
                     cb(Kcur, "Kcur_norm", il);
                 }
             }
 
+            // V normalization (Gemma 4 — raw RMS norm without learned weights)
+            if (config.v_norm) {
+                Vcur = ggml_rms_norm(ctx0, Vcur, hparams.f_norm_rms_eps);
+                cb(Vcur, "Vcur_norm", il);
+            }
+
             // RoPE position encoding
-            if (config.use_rope) {
+            if (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
                 if (hparams.use_mrope()) {
                     // Multi-section RoPE (Qwen2VL, GLM4, PaddleOCR)
                     int sections[4];
@@ -260,7 +279,13 @@ llm_build_std_transformer::llm_build_std_transformer(
             }
         }
 
-        // Attention post-norm
+        // Output token filtering at last layer (before post-norm and residual)
+        if (il == effective_n_layer - 1 && inp_out_ids) {
+            cur   = ggml_get_rows(ctx0,   cur, inp_out_ids);
+            inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
+        }
+
+        // Attention post-norm (after filtering)
         if (config.attn_post_norm && model.layers[il].attn_post_norm) {
             cur = build_norm(cur, model.layers[il].attn_post_norm, nullptr, config.norm, il);
             cb(cur, "attn_post_norm", il);
@@ -335,7 +360,7 @@ llm_build_std_transformer::llm_build_std_transformer(
                         n_expert, n_expert_used,
                         config.act, hparams.expert_weights_norm,
                         hparams.expert_weights_scale,
-                        (llama_expert_gating_func_type) hparams.expert_gating_func,
+                        (hparams.expert_gating_func != LLAMA_EXPERT_GATING_FUNC_TYPE_NONE ? (llama_expert_gating_func_type) hparams.expert_gating_func : LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX),
                         il, logits,
                         model.layers[il].ffn_gate_up_exps,
                         nullptr, nullptr,
@@ -357,7 +382,7 @@ llm_build_std_transformer::llm_build_std_transformer(
                         n_expert, n_expert_used,
                         config.act, hparams.expert_weights_norm,
                         hparams.expert_weights_scale,
-                        (llama_expert_gating_func_type) hparams.expert_gating_func,
+                        (hparams.expert_gating_func != LLAMA_EXPERT_GATING_FUNC_TYPE_NONE ? (llama_expert_gating_func_type) hparams.expert_gating_func : LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX),
                         il);
                 cb(moe_out, "ffn_moe_out", il);
 
@@ -441,11 +466,6 @@ llm_build_std_transformer::llm_build_std_transformer(
     // 3. Output head
     // ==============================
     cur = inpL;
-
-    // Filter output tokens (optimization for partial decoding)
-    if (inp_out_ids) {
-        cur = ggml_get_rows(ctx0, cur, inp_out_ids);
-    }
 
     ggml_tensor * out_norm_b = (config.norm == LLM_NORM) ? model.output_norm_b : nullptr;
     cur = build_norm(cur, model.output_norm, out_norm_b, config.norm, -1);

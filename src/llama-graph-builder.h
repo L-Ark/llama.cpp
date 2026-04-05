@@ -54,6 +54,7 @@ struct llm_transformer_config {
     // Attention features
     bool attn_bias  = false;    // Attention Q/K/V/O bias (GPT-2, Falcon, Jais)
     bool qk_norm    = false;    // QK normalization (Qwen3, Exaone, Gemma3, ~35 models)
+    bool v_norm     = false;    // V normalization with raw ggml_rms_norm (Gemma 4)
     bool use_rope   = true;     // RoPE position encoding (76% of models)
     bool iswa       = false;    // Interleaved Sliding Window Attention (Gemma3/4, Phi-3)
 
