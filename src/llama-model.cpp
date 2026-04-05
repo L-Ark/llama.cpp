@@ -595,16 +595,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 hparams.use_kq_norm = type != LLM_TYPE_17B_128E;
             } break;
-        case LLM_ARCH_ARCEE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                // Arcee uses the same structure as Llama
-                switch (hparams.n_layer) {
-                    case 36: type = LLM_TYPE_4B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_AFMOE:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -639,16 +629,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 56: type = LLM_TYPE_6B; break;
                     case 32: type = LLM_TYPE_26B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_DECI:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 80: type = LLM_TYPE_70B; break;
-                    case 162: type = LLM_TYPE_405B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -718,16 +698,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_FALCON:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 60: type = LLM_TYPE_40B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_BAICHUAN:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -742,17 +712,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     hparams.f_max_alibi_bias = 8.0f;
                 }
             } break;
-        case LLM_ARCH_STARCODER:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 36: type = LLM_TYPE_3B; break;
-                    case 42: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_15B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_REFACT:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -763,26 +722,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 // TODO: become GGUF KV parameter
                 hparams.f_max_alibi_bias = 8.0f;
-            } break;
-        case LLM_ARCH_BERT:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 3:
-                        type = LLM_TYPE_17M; break; // bge-micro
-                    case 6:
-                        type = LLM_TYPE_22M; break; // MiniLM-L6
-                    case 12:
-                        switch (hparams.n_embd) {
-                            case 384: type = LLM_TYPE_33M; break; // MiniLM-L12, bge-small
-                            case 768: type = LLM_TYPE_109M; break; // bge-base
-                            default: type = LLM_TYPE_UNKNOWN;
-                        } break;
-                    case 24:
-                        type = LLM_TYPE_335M; break; // bge-large
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
             } break;
         case LLM_ARCH_MODERN_BERT:
             {
@@ -817,16 +756,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 4:  type = LLM_TYPE_33M;  break; // jina-embeddings-small
                     case 12: type = LLM_TYPE_137M; break; // jina-embeddings-base
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_JINA_BERT_V3:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24:
-                        type = LLM_TYPE_558M; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -887,27 +816,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 32: type = LLM_TYPE_7B; break;
                     case 48: type = LLM_TYPE_30B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_STABLELM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 32: type = LLM_TYPE_3B; break;
-                    case 40: type = LLM_TYPE_12B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
-            } break;
-        case LLM_ARCH_QWEN:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_13B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -997,25 +905,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_QWEN3:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 28: type = hparams.n_embd == 1024 ? LLM_TYPE_0_6B : LLM_TYPE_1_7B; break;
-                    case 36: type = hparams.n_embd == 2560 ? LLM_TYPE_4B : LLM_TYPE_8B; break;
-                    case 40: type = LLM_TYPE_14B; break;
-                    case 64: type = LLM_TYPE_32B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_MAINCODER:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_1B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_QWEN3VL:
             {
                 ml.get_key(LLM_KV_NUM_DEEPSTACK_LAYERS, hparams.n_deepstack_layers, false);
@@ -1051,16 +940,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_PHI2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 32: type = LLM_TYPE_3B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_PHI3:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -1084,24 +963,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     hparams.n_swa         = 0;
                     hparams.set_swa_pattern(1);
                 }
-            } break;
-        case LLM_ARCH_PHIMOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_16x3_8B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_PLAMO:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 40: type = LLM_TYPE_13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
             } break;
         case LLM_ARCH_PLAMO2:
             {
@@ -1148,53 +1009,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 24: type = LLM_TYPE_2B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
-            } break;
-        case LLM_ARCH_GPT2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 12: type = LLM_TYPE_SMALL; break;
-                    case 24: type = LLM_TYPE_MEDIUM; break;
-                    case 36: type = LLM_TYPE_LARGE; break;
-                    case 48: type = LLM_TYPE_XL; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_CODESHELL:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 42: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_ORION:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 40: type = LLM_TYPE_14B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_INTERNLM2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 48: type = LLM_TYPE_20B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_GEMMA:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 18: type = LLM_TYPE_2B; break;
-                    case 28: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
             } break;
         case LLM_ARCH_GEMMA2:
             {
@@ -1333,18 +1147,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 hparams.f_attention_scale = 1.0f / std::sqrt(float(hparams.n_embd_head_k()));
 
             } break;
-        case LLM_ARCH_STARCODER2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 30: type = LLM_TYPE_3B; break;
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_15B; break;
-                    case 52: type = LLM_TYPE_20B; break; // granite
-                    case 88: type = LLM_TYPE_34B; break; // granite
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_MAMBA:
             {
                 ml.get_key(LLM_KV_SSM_CONV_KERNEL,    hparams.ssm_d_conv);
@@ -1428,16 +1230,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_XVERSE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_13B; break;
-                    case 80: type = LLM_TYPE_65B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_COMMAND_R:
             {
                 ml.get_key(LLM_KV_LOGIT_SCALE,             hparams.f_logit_scale, false);
@@ -1511,34 +1303,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 40: type = LLM_TYPE_13B; break;
                     case 64: type = LLM_TYPE_32B; break;
                     default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_SEED_OSS:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 64: type = LLM_TYPE_36B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_OLMOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 16: type = LLM_TYPE_A1_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_OPENELM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                case 16: type = LLM_TYPE_270M; break;
-                case 20: type = LLM_TYPE_450M; break;
-                case 28: type = LLM_TYPE_1B; break;
-                case 36: type = LLM_TYPE_3B; break;
-                default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
         case LLM_ARCH_GPTNEOX:
@@ -1812,15 +1576,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_BITNET:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 26: type = LLM_TYPE_3B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_T5:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,      hparams.f_norm_rms_eps);
@@ -1874,24 +1629,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_JAIS2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_8B; break;
-                    case 68: type = LLM_TYPE_70B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_NEMOTRON:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_4B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_NEMOTRON_H:
         case LLM_ARCH_NEMOTRON_H_MOE:
             {
@@ -1920,15 +1657,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 52: type = LLM_TYPE_31B_A3_5B; break; // Nemotron-H_MOE 31B
                     case 56: type = LLM_TYPE_9B; break;
                     case 88: type = LLM_TYPE_120B_A12B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_EXAONE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_8B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2250,18 +1978,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_HUNYUAN_DENSE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_embd) {
-                    case 1024: type = LLM_TYPE_0_5B; break;
-                    case 2048: type = LLM_TYPE_1_8B; break;
-                    case 3072: type = LLM_TYPE_4B; break;
-                    case 4096: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_SMOLLM3:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -2396,23 +2112,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 switch (hparams.n_layer) {
                     case 62: type = LLM_TYPE_230B_A10B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_COGVLM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_PANGU_EMBED:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 26: type = LLM_TYPE_1B; break; // openPangu-Embedded-1B-V1.1
-                    case 34: type = LLM_TYPE_7B; break; // openPangu-Embedded-7B-V1.1
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2574,7 +2273,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_STEP35:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
 
@@ -2606,7 +2304,11 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        default: throw std::runtime_error("unsupported model architecture: " + arch_name());
+        default:
+            // Generic: norm eps already loaded by common section above.
+            // Type classification is informational only.
+            type = LLM_TYPE_UNKNOWN;
+            break;
     }
 
     pimpl->n_bytes = ml.n_bytes;
