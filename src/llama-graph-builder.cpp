@@ -13,6 +13,130 @@
 #include "models/models.h"
 
 #include <cstring>
+#include <string>
+
+// ---------------------------------------------------------------------------
+// Hardcoded layer operations per architecture
+//
+// These describe the per-layer computation graph for known architectures.
+// Priority: GGUF metadata > hardcoded table > tensor auto-detection.
+//
+// Tokens: norm, qkv, qk_norm, rope, attn, filter, post_norm, residual,
+//         ffn_norm, ffn, ffn_post_norm, cvec
+// ---------------------------------------------------------------------------
+
+// Common patterns (shared by groups of architectures)
+#define OPS_STD       "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec"
+#define OPS_NO_ROPE   "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec"
+#define OPS_QK        "norm,qkv,qk_norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec"
+#define OPS_PN        "norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec"
+#define OPS_PN_QK     "norm,qkv,qk_norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec"
+#define OPS_PN_ATT    "norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,residual,cvec"
+
+static const char * get_arch_layer_ops(llm_arch arch) {
+    switch (arch) {
+        // ── Standard with RoPE (majority of models) ──
+        case LLM_ARCH_LLAMA:
+        case LLM_ARCH_LLAMA_EMBED:
+        case LLM_ARCH_DECI:
+        case LLM_ARCH_BAICHUAN:
+        case LLM_ARCH_FALCON:
+        case LLM_ARCH_REFACT:
+        case LLM_ARCH_STABLELM:
+        case LLM_ARCH_QWEN:
+        case LLM_ARCH_QWEN2:
+        case LLM_ARCH_QWEN2VL:
+        case LLM_ARCH_QWEN2MOE:
+        case LLM_ARCH_DREAM:
+        case LLM_ARCH_LLADA:
+        case LLM_ARCH_LLADA_MOE:
+        case LLM_ARCH_PHI2:
+        case LLM_ARCH_PLAMO:
+        case LLM_ARCH_CODESHELL:
+        case LLM_ARCH_ORION:
+        case LLM_ARCH_INTERNLM2:
+        case LLM_ARCH_GEMMA:
+        case LLM_ARCH_GEMMA_EMBEDDING:
+        case LLM_ARCH_STARCODER2:
+        case LLM_ARCH_XVERSE:
+        case LLM_ARCH_COMMAND_R:
+        case LLM_ARCH_COHERE2:
+        case LLM_ARCH_DBRX:
+        case LLM_ARCH_OLMO:
+        case LLM_ARCH_OLMOE:
+        case LLM_ARCH_OPENELM:
+        case LLM_ARCH_GPTNEOX:
+        case LLM_ARCH_ARCTIC:
+        case LLM_ARCH_DEEPSEEK:
+        case LLM_ARCH_CHATGLM:
+        case LLM_ARCH_JAIS2:
+        case LLM_ARCH_NEMOTRON:
+        case LLM_ARCH_EXAONE:
+        case LLM_ARCH_EXAONE_MOE:
+        case LLM_ARCH_GRANITE:
+        case LLM_ARCH_GRANITE_MOE:
+        case LLM_ARCH_MINICPM:
+        case LLM_ARCH_BAILINGMOE:
+        case LLM_ARCH_BAILINGMOE2:
+        case LLM_ARCH_ARCEE:
+        case LLM_ARCH_ERNIE4_5:
+        case LLM_ARCH_ERNIE4_5_MOE:
+        case LLM_ARCH_PADDLEOCR:
+        case LLM_ARCH_HUNYUAN_MOE:
+        case LLM_ARCH_HUNYUAN_DENSE:
+        case LLM_ARCH_SMOLLM3:
+        case LLM_ARCH_OPENAI_MOE:
+        case LLM_ARCH_SMALLTHINKER:
+        case LLM_ARCH_PANGU_EMBED:
+        case LLM_ARCH_MISTRAL3:
+        case LLM_ARCH_MIMO2:
+        case LLM_ARCH_STEP35:
+            return OPS_STD;
+
+        // ── Standard without RoPE (positional embeddings instead) ──
+        case LLM_ARCH_STARCODER:
+        case LLM_ARCH_BLOOM:
+        case LLM_ARCH_MPT:
+        case LLM_ARCH_GPT2:
+        case LLM_ARCH_JAIS:
+            return OPS_NO_ROPE;
+
+        // ── QK-norm with RoPE ──
+        case LLM_ARCH_LLAMA4:
+        case LLM_ARCH_MAINCODER:
+        case LLM_ARCH_QWEN3:
+        case LLM_ARCH_QWEN3MOE:
+        case LLM_ARCH_RND1:
+        case LLM_ARCH_EXAONE4:
+        case LLM_ARCH_DOTS1:
+        case LLM_ARCH_MINIMAX_M2:
+            return OPS_QK;
+
+        // ── Post-norms + QK-norm with RoPE ──
+        case LLM_ARCH_GEMMA2:
+        case LLM_ARCH_GEMMA3:
+        case LLM_ARCH_OLMO2:
+            return OPS_PN_QK;
+
+        // ── Post-norms (both) with RoPE ──
+        case LLM_ARCH_GROK:
+            return OPS_PN;
+
+        // ── Attention post-norm only ──
+        case LLM_ARCH_SEED_OSS:
+            return OPS_PN_ATT;
+
+        default:
+            return nullptr;  // Unknown — fall back to GGUF or auto-detect
+    }
+}
+
+#undef OPS_STD
+#undef OPS_NO_ROPE
+#undef OPS_QK
+#undef OPS_PN
+#undef OPS_PN_QK
+#undef OPS_PN_ATT
 
 llm_build_std_transformer::llm_build_std_transformer(
         const llama_model & model,
@@ -607,25 +731,33 @@ bool llm_transformer_config_from_hparams(
         config.ffn_type = LLM_FFN_SEQ;
     }
 
-    // ---- Override config from layer_operations metadata (if present) ----
-    // layer_operations is a comma-separated string like
-    //   "norm,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec"
-    // Use it to confirm or correct auto-detected flags.
+    // ---- Apply layer_operations metadata ----
+    // Priority: GGUF metadata (new models) > hardcoded table (known models)
+    const char * ops_str = nullptr;
+
     if (hparams.layer_operations[0] != '\0') {
-        const std::string ops(hparams.layer_operations);
+        // GGUF metadata takes priority (future/custom models)
+        ops_str = hparams.layer_operations;
+    } else {
+        // Fall back to hardcoded table for known architectures
+        ops_str = get_arch_layer_ops(model.arch);
+    }
+
+    if (ops_str) {
+        const std::string ops(ops_str);
 
         auto has_op = [&ops](const char * token) -> bool {
             return ops.find(token) != std::string::npos;
         };
 
-        // Post-norms: presence of these tokens is authoritative
+        // Post-norms: presence is authoritative
         if (has_op("post_norm"))     config.attn_post_norm = true;
         if (has_op("ffn_post_norm")) config.ffn_post_norm  = true;
 
         // QK normalization
         if (has_op("qk_norm"))       config.qk_norm = true;
 
-        // RoPE
+        // RoPE: absence is authoritative
         if (!has_op("rope"))         config.use_rope = false;
     }
 
