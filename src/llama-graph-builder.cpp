@@ -16,16 +16,16 @@
 #include <string>
 
 // ---------------------------------------------------------------------------
-// Hardcoded layer operations per architecture
+// Per-architecture metadata table
 //
-// These describe the per-layer computation graph for known architectures.
-// Priority: GGUF metadata > hardcoded table > tensor auto-detection.
+// Maps known architectures to their layer operations, default activation,
+// and special flags. This eliminates per-architecture switch cases in
+// build_graph() — the builder self-configures from this table + auto-detect.
 //
-// Tokens: norm, qkv, qk_norm, rope, attn, filter, post_norm, residual,
-//         ffn_norm, ffn, ffn_post_norm, cvec
+// Priority: GGUF metadata > this table > tensor auto-detection.
 // ---------------------------------------------------------------------------
 
-// Common patterns (shared by groups of architectures)
+// Common layer operation patterns
 #define OPS_STD       "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec"
 #define OPS_NO_ROPE   "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec"
 #define OPS_QK        "norm,qkv,qk_norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec"
@@ -33,11 +33,44 @@
 #define OPS_PN_QK     "norm,qkv,qk_norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec"
 #define OPS_PN_ATT    "norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,residual,cvec"
 
-static const char * get_arch_layer_ops(llm_arch arch) {
+// Activation shorthands (LLM_FFN_SILU is the default for unspecified)
+#define ACT_DEFAULT LLM_FFN_SILU
+#define ACT_GELU    LLM_FFN_GELU
+#define ACT_RELU2   LLM_FFN_RELU_SQR
+#define ACT_SWIGLU  LLM_FFN_SWIGLU
+
+struct llm_arch_meta {
+    const char *    layer_ops;
+    llm_ffn_op_type default_act;
+    bool            no_attn_cache;
+};
+
+static const llm_arch_meta * get_arch_meta(llm_arch arch) {
+    // ── Standard RoPE ────────────────────────────────────────────────
+    static const llm_arch_meta STD           = { OPS_STD,     ACT_DEFAULT, false };
+    static const llm_arch_meta STD_GELU      = { OPS_STD,     ACT_GELU,    false };
+    static const llm_arch_meta STD_RELU2     = { OPS_STD,     ACT_RELU2,   false };
+    static const llm_arch_meta STD_SWIGLU    = { OPS_STD,     ACT_SWIGLU,  false };
+    static const llm_arch_meta STD_NC        = { OPS_STD,     ACT_DEFAULT, true  };
+    static const llm_arch_meta STD_GELU_NC   = { OPS_STD,     ACT_GELU,    true  };
+
+    // ── No RoPE ──────────────────────────────────────────────────────
+    static const llm_arch_meta NOROPE        = { OPS_NO_ROPE, ACT_DEFAULT, false };
+    static const llm_arch_meta NOROPE_GELU   = { OPS_NO_ROPE, ACT_GELU,    false };
+
+    // ── QK-norm ──────────────────────────────────────────────────────
+    static const llm_arch_meta QK            = { OPS_QK,      ACT_DEFAULT, false };
+    static const llm_arch_meta QK_NC         = { OPS_QK,      ACT_DEFAULT, true  };
+
+    // ── Post-norms ───────────────────────────────────────────────────
+    static const llm_arch_meta PN_QK_GELU    = { OPS_PN_QK,   ACT_GELU,    false };
+    static const llm_arch_meta PN_QK         = { OPS_PN_QK,   ACT_DEFAULT, false };
+    static const llm_arch_meta PN            = { OPS_PN,       ACT_DEFAULT, false };
+    static const llm_arch_meta PN_ATT        = { OPS_PN_ATT,  ACT_DEFAULT, false };
+
     switch (arch) {
-        // ── Standard with RoPE (majority of models) ──
+        // ── Standard with RoPE + SiLU (majority) ──
         case LLM_ARCH_LLAMA:
-        case LLM_ARCH_LLAMA_EMBED:
         case LLM_ARCH_DECI:
         case LLM_ARCH_BAICHUAN:
         case LLM_ARCH_FALCON:
@@ -47,17 +80,8 @@ static const char * get_arch_layer_ops(llm_arch arch) {
         case LLM_ARCH_QWEN2:
         case LLM_ARCH_QWEN2VL:
         case LLM_ARCH_QWEN2MOE:
-        case LLM_ARCH_DREAM:
-        case LLM_ARCH_LLADA:
-        case LLM_ARCH_LLADA_MOE:
-        case LLM_ARCH_PHI2:
         case LLM_ARCH_PLAMO:
-        case LLM_ARCH_CODESHELL:
-        case LLM_ARCH_ORION:
         case LLM_ARCH_INTERNLM2:
-        case LLM_ARCH_GEMMA:
-        case LLM_ARCH_GEMMA_EMBEDDING:
-        case LLM_ARCH_STARCODER2:
         case LLM_ARCH_XVERSE:
         case LLM_ARCH_COMMAND_R:
         case LLM_ARCH_COHERE2:
@@ -65,12 +89,8 @@ static const char * get_arch_layer_ops(llm_arch arch) {
         case LLM_ARCH_OLMO:
         case LLM_ARCH_OLMOE:
         case LLM_ARCH_OPENELM:
-        case LLM_ARCH_GPTNEOX:
         case LLM_ARCH_ARCTIC:
         case LLM_ARCH_DEEPSEEK:
-        case LLM_ARCH_CHATGLM:
-        case LLM_ARCH_JAIS2:
-        case LLM_ARCH_NEMOTRON:
         case LLM_ARCH_EXAONE:
         case LLM_ARCH_EXAONE_MOE:
         case LLM_ARCH_GRANITE:
@@ -78,7 +98,6 @@ static const char * get_arch_layer_ops(llm_arch arch) {
         case LLM_ARCH_MINICPM:
         case LLM_ARCH_BAILINGMOE:
         case LLM_ARCH_BAILINGMOE2:
-        case LLM_ARCH_ARCEE:
         case LLM_ARCH_ERNIE4_5:
         case LLM_ARCH_ERNIE4_5_MOE:
         case LLM_ARCH_PADDLEOCR:
@@ -91,43 +110,82 @@ static const char * get_arch_layer_ops(llm_arch arch) {
         case LLM_ARCH_MISTRAL3:
         case LLM_ARCH_MIMO2:
         case LLM_ARCH_STEP35:
-            return OPS_STD;
+            return &STD;
 
-        // ── Standard without RoPE (positional embeddings instead) ──
+        // ── Standard + GELU ──
+        case LLM_ARCH_STARCODER2:
+        case LLM_ARCH_CODESHELL:
+        case LLM_ARCH_ORION:
+        case LLM_ARCH_PHI2:
+        case LLM_ARCH_GPTNEOX:
+        case LLM_ARCH_GEMMA:
+            return &STD_GELU;
+
+        // ── Standard + RELU_SQR ──
+        case LLM_ARCH_JAIS2:
+        case LLM_ARCH_NEMOTRON:
+        case LLM_ARCH_ARCEE:
+            return &STD_RELU2;
+
+        // ── Standard + SWIGLU ──
+        case LLM_ARCH_CHATGLM:
+            return &STD_SWIGLU;
+
+        // ── Standard + no KV cache (embedding models) ──
+        case LLM_ARCH_LLAMA_EMBED:
+        case LLM_ARCH_LLADA:
+        case LLM_ARCH_DREAM:
+            return &STD_NC;
+
+        case LLM_ARCH_LLADA_MOE:
+            return &STD_NC;
+
+        case LLM_ARCH_GEMMA_EMBEDDING:
+            return &STD_GELU_NC;
+
+        // ── No RoPE + SiLU ──
+        case LLM_ARCH_JAIS:
+            return &NOROPE;
+
+        // ── No RoPE + GELU ──
         case LLM_ARCH_STARCODER:
         case LLM_ARCH_BLOOM:
         case LLM_ARCH_MPT:
         case LLM_ARCH_GPT2:
-        case LLM_ARCH_JAIS:
-            return OPS_NO_ROPE;
+            return &NOROPE_GELU;
 
-        // ── QK-norm with RoPE ──
+        // ── QK-norm ──
         case LLM_ARCH_LLAMA4:
         case LLM_ARCH_MAINCODER:
         case LLM_ARCH_QWEN3:
         case LLM_ARCH_QWEN3MOE:
-        case LLM_ARCH_RND1:
         case LLM_ARCH_EXAONE4:
         case LLM_ARCH_DOTS1:
         case LLM_ARCH_MINIMAX_M2:
-            return OPS_QK;
+            return &QK;
 
-        // ── Post-norms + QK-norm with RoPE ──
+        case LLM_ARCH_RND1:
+            return &QK_NC;
+
+        // ── Post-norms + QK-norm + GELU ──
         case LLM_ARCH_GEMMA2:
         case LLM_ARCH_GEMMA3:
-        case LLM_ARCH_OLMO2:
-            return OPS_PN_QK;
+            return &PN_QK_GELU;
 
-        // ── Post-norms (both) with RoPE ──
+        // ── Post-norms + QK-norm + SiLU ──
+        case LLM_ARCH_OLMO2:
+            return &PN_QK;
+
+        // ── Post-norms (both) ──
         case LLM_ARCH_GROK:
-            return OPS_PN;
+            return &PN;
 
         // ── Attention post-norm only ──
         case LLM_ARCH_SEED_OSS:
-            return OPS_PN_ATT;
+            return &PN_ATT;
 
         default:
-            return nullptr;  // Unknown — fall back to GGUF or auto-detect
+            return nullptr;
     }
 }
 
@@ -137,6 +195,10 @@ static const char * get_arch_layer_ops(llm_arch arch) {
 #undef OPS_PN
 #undef OPS_PN_QK
 #undef OPS_PN_ATT
+#undef ACT_DEFAULT
+#undef ACT_GELU
+#undef ACT_RELU2
+#undef ACT_SWIGLU
 
 llm_build_std_transformer::llm_build_std_transformer(
         const llama_model & model,
@@ -722,25 +784,24 @@ bool llm_transformer_config_from_hparams(
     } else if (strcmp(hparams.ffn_activation, "swiglu") == 0 ||
                strcmp(hparams.ffn_activation, "silu") == 0) {
         config.act = LLM_FFN_SILU;
-    } else {
-        config.act = LLM_FFN_SILU;
     }
+    // else: leave at default (will be set by arch table below)
 
     // FFN type: if no gate tensor in first layer, it's sequential
     if (model.layers.size() > 0 && model.layers[0].ffn_gate == nullptr && !config.moe) {
         config.ffn_type = LLM_FFN_SEQ;
     }
 
-    // ---- Apply layer_operations metadata ----
-    // Priority: GGUF metadata (new models) > hardcoded table (known models)
-    const char * ops_str = nullptr;
+    // ---- Apply per-architecture metadata ----
+    // Priority: GGUF metadata > arch table > tensor auto-detection
+    const llm_arch_meta * meta = get_arch_meta(model.arch);
 
+    // Layer operations: GGUF overrides arch table
+    const char * ops_str = nullptr;
     if (hparams.layer_operations[0] != '\0') {
-        // GGUF metadata takes priority (future/custom models)
         ops_str = hparams.layer_operations;
-    } else {
-        // Fall back to hardcoded table for known architectures
-        ops_str = get_arch_layer_ops(model.arch);
+    } else if (meta) {
+        ops_str = meta->layer_ops;
     }
 
     if (ops_str) {
@@ -750,15 +811,20 @@ bool llm_transformer_config_from_hparams(
             return ops.find(token) != std::string::npos;
         };
 
-        // Post-norms: presence is authoritative
         if (has_op("post_norm"))     config.attn_post_norm = true;
         if (has_op("ffn_post_norm")) config.ffn_post_norm  = true;
-
-        // QK normalization
         if (has_op("qk_norm"))       config.qk_norm = true;
-
-        // RoPE: absence is authoritative
         if (!has_op("rope"))         config.use_rope = false;
+    }
+
+    // Activation: arch table provides fallback for old GGUF files without ffn_activation
+    if (meta && hparams.ffn_activation[0] == '\0') {
+        config.act = meta->default_act;
+    }
+
+    // No-KV-cache mode (embedding/diffusion models)
+    if (meta && meta->no_attn_cache) {
+        config.no_attn_cache = true;
     }
 
     return true;
