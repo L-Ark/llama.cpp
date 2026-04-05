@@ -607,5 +607,27 @@ bool llm_transformer_config_from_hparams(
         config.ffn_type = LLM_FFN_SEQ;
     }
 
+    // ---- Override config from layer_operations metadata (if present) ----
+    // layer_operations is a comma-separated string like
+    //   "norm,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec"
+    // Use it to confirm or correct auto-detected flags.
+    if (hparams.layer_operations[0] != '\0') {
+        const std::string ops(hparams.layer_operations);
+
+        auto has_op = [&ops](const char * token) -> bool {
+            return ops.find(token) != std::string::npos;
+        };
+
+        // Post-norms: presence of these tokens is authoritative
+        if (has_op("post_norm"))     config.attn_post_norm = true;
+        if (has_op("ffn_post_norm")) config.ffn_post_norm  = true;
+
+        // QK normalization
+        if (has_op("qk_norm"))       config.qk_norm = true;
+
+        // RoPE
+        if (!has_op("rope"))         config.use_rope = false;
+    }
+
     return true;
 }

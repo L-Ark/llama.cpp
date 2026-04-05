@@ -737,7 +737,7 @@ class GGUFWriter:
         self.add_string(Keys.LLM.FFN_ACTIVATION.format(arch=self.arch), activation)
 
     def add_layer_operations(self, ops: list[str]) -> None:
-        self.add_array(Keys.LLM.LAYER_OPERATIONS.format(arch=self.arch), ops)
+        self.add_string(Keys.LLM.LAYER_OPERATIONS.format(arch=self.arch), ",".join(ops))
 
     def add_decoder_start_token_id(self, id: int) -> None:
         self.add_uint32(Keys.LLM.DECODER_START_TOKEN_ID.format(arch=self.arch), id)

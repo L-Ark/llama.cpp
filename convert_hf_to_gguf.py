@@ -1053,13 +1053,32 @@ class TextModel(ModelBase):
     def _derive_layer_operations(self) -> list[str]:
         """Return the per-layer operation sequence for this model.
 
-        Subclasses SHOULD override this to declare their exact operation
-        sequence. The default returns an empty list, which means the
-        builder falls back to architecture-specific code.
+        Automatically extracts operations from modeling_*.py if present in
+        the model directory.  Subclasses can override this to declare their
+        exact operation sequence manually.
 
         Operations: norm, qkv, reshape, qk_norm, rope, attn, filter,
                     post_norm, residual, ffn_norm, ffn, ffn_post_norm, cvec
         """
+        # Try to extract from modeling_*.py in the model directory
+        if self.dir_model is not None:
+            model_dir = Path(self.dir_model)
+            modeling_files = list(model_dir.glob('modeling_*.py'))
+            if modeling_files:
+                try:
+                    # Import the parser from scripts/
+                    scripts_dir = Path(__file__).parent / 'scripts'
+                    sys.path.insert(0, str(scripts_dir))
+                    from extract_layer_ops import extract_layer_operations
+                    sys.path.pop(0)
+
+                    source = modeling_files[0].read_text(encoding='utf-8')
+                    ops = extract_layer_operations(source)
+                    if ops:
+                        logger.info(f"Auto-extracted layer ops from {modeling_files[0].name}")
+                        return ops
+                except Exception as e:
+                    logger.warning(f"Failed to extract layer ops from {modeling_files[0].name}: {e}")
         return []
 
     def prepare_metadata(self, vocab_only: bool):
