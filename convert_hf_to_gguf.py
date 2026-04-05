@@ -1050,35 +1050,48 @@ class TextModel(ModelBase):
     def set_vocab(self):
         self._set_vocab_gpt2()
 
+    # Authoritative layer operations for known architectures.
+    # Keyed by converter class name (type(self).__name__).
+    # Derived from the actual C++ builder code, NOT from AST parsing.
+    LAYER_OPS_TABLE: dict[str, str] = {
+        # Standard: norm → rope → attn → filter → residual → ffn_norm → ffn → residual → cvec
+        "LlamaModel":        "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "Qwen2Model":        "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "InternLM2Model":    "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "GemmaModel":        "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "Starcoder2Model":   "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "MiniCPMModel":      "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "XverseModel":       "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "OlmoModel":         "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "ArcticModel":       "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "DeepseekModel":     "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "ExaoneModel":       "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        # No RoPE
+        "GPT2Model":         "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "BloomModel":        "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "MPTModel":          "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        "StarCoderModel":    "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        # QK-norm
+        "Qwen3Model":        "norm,qkv,qk_norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+        # Post-norms + QK-norm
+        "Gemma2Model":       "norm,qkv,qk_norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec",
+        "Gemma3Model":       "norm,qkv,qk_norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec",
+        "OlmoEModel":        "norm,qkv,qk_norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec",
+        # Post-norms
+        "GrokModel":         "norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,ffn_post_norm,residual,cvec",
+    }
+
     def _derive_layer_operations(self) -> list[str]:
         """Return the per-layer operation sequence for this model.
 
-        Automatically extracts operations from modeling_*.py if present in
-        the model directory.  Subclasses can override this to declare their
-        exact operation sequence manually.
-
-        Operations: norm, qkv, reshape, qk_norm, rope, attn, filter,
-                    post_norm, residual, ffn_norm, ffn, ffn_post_norm, cvec
+        Uses a deterministic lookup table keyed by the model's class name.
+        Falls back to empty (no metadata written) for unknown models.
+        The table entries are derived from the actual C++ builder code.
         """
-        # Try to extract from modeling_*.py in the model directory
-        if self.dir_model is not None:
-            model_dir = Path(self.dir_model)
-            modeling_files = list(model_dir.glob('modeling_*.py'))
-            if modeling_files:
-                try:
-                    # Import the parser from scripts/
-                    scripts_dir = Path(__file__).parent / 'scripts'
-                    sys.path.insert(0, str(scripts_dir))
-                    from extract_layer_ops import extract_layer_operations
-                    sys.path.pop(0)
-
-                    source = modeling_files[0].read_text(encoding='utf-8')
-                    ops = extract_layer_operations(source)
-                    if ops:
-                        logger.info(f"Auto-extracted layer ops from {modeling_files[0].name}")
-                        return ops
-                except Exception as e:
-                    logger.warning(f"Failed to extract layer ops from {modeling_files[0].name}: {e}")
+        model_class = type(self).__name__
+        ops_str = self.LAYER_OPS_TABLE.get(model_class, "")
+        if ops_str:
+            return ops_str.split(",")
         return []
 
     def prepare_metadata(self, vocab_only: bool):
