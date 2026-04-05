@@ -512,6 +512,12 @@ void llama_model::load_hparams(llama_model_loader & ml) {
         snprintf(hparams.ffn_activation, sizeof(hparams.ffn_activation), "%s", ffn_act_str.c_str());
     }
 
+    // Layer operations sequence (for data-driven graph construction)
+    std::string layer_ops_str;
+    if (ml.get_key(LLM_KV_LAYER_OPERATIONS, layer_ops_str, false)) {
+        snprintf(hparams.layer_operations, sizeof(hparams.layer_operations), "%s", layer_ops_str.c_str());
+    }
+
     // Norm eps values (try both, architectures use one or the other)
     ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps, false);
     ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,     hparams.f_norm_eps,     false);

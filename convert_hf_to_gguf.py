@@ -1050,6 +1050,18 @@ class TextModel(ModelBase):
     def set_vocab(self):
         self._set_vocab_gpt2()
 
+    def _derive_layer_operations(self) -> list[str]:
+        """Return the per-layer operation sequence for this model.
+
+        Subclasses SHOULD override this to declare their exact operation
+        sequence. The default returns an empty list, which means the
+        builder falls back to architecture-specific code.
+
+        Operations: norm, qkv, reshape, qk_norm, rope, attn, filter,
+                    post_norm, residual, ffn_norm, ffn, ffn_post_norm, cvec
+        """
+        return []
+
     def prepare_metadata(self, vocab_only: bool):
         super().prepare_metadata(vocab_only=vocab_only)
 
@@ -1109,6 +1121,12 @@ class TextModel(ModelBase):
         if (hidden_act := self.hparams.get("hidden_act")) is not None:
             self.gguf_writer.add_ffn_activation(hidden_act)
             logger.info(f"gguf: FFN activation = {hidden_act}")
+
+        # Layer operations sequence — derive from model architecture
+        layer_ops = self._derive_layer_operations()
+        if layer_ops:
+            self.gguf_writer.add_layer_operations(layer_ops)
+            logger.info(f"gguf: layer operations = {layer_ops}")
 
         # TODO: Handle "sliding_attention" similarly when models start implementing it
         rope_params = self.rope_parameters.get("full_attention", self.rope_parameters)

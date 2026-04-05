@@ -40,7 +40,8 @@ struct llama_hparams {
     bool use_par_res;
     bool swin_norm;
 
-    char ffn_activation[16] = {}; // "silu", "gelu", "relu", etc. (from GGUF metadata)
+    char ffn_activation[16] = {};     // "silu", "gelu", "relu" (from GGUF metadata)
+    char layer_operations[256] = {};  // operation sequence per layer (from GGUF metadata)
 
     uint32_t n_ctx_train; // context size the model was trained on
     uint32_t n_embd;
