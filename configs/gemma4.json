@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "gemma4_text",
+    "model_type": "encoder_decoder",
+    "hf_architectures": [
+      "Gemma4ForConditionalGeneration"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "gelu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Split",
+      "string_pattern": " ",
+      "behavior": "MergedWithPrevious",
+      "byte_encode": false
+    },
+    "normalizer": {
+      "type": "Replace",
+      "pattern": " ",
+      "content": "\u2581"
+    },
+    "added_tokens_count": 24,
+    "special_tokens_count": 24,
+    "pad_token": "<pad>",
+    "eos_token": "<eos>",
+    "bos_token": "<bos>",
+    "llama_pre_type": "default",
+    "add_bos_token": null,
+    "add_eos_token": null,
+    "tokenizer_class": "GemmaTokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  },
+  "multimodal": {
+    "vision": {
+      "model_type": "gemma4_vision",
+      "hidden_size": 768,
+      "intermediate_size": 3072,
+      "num_hidden_layers": 16,
+      "num_attention_heads": 12,
+      "num_key_value_heads": 12,
+      "head_dim": 64,
+      "patch_size": 16,
+      "pooling_kernel_size": 3,
+      "position_embedding_size": 10240,
+      "default_output_length": 280,
+      "hidden_act": "gelu_pytorch_tanh",
+      "norm_eps": 1e-06,
+      "rope": {
+        "rope_theta": 100.0,
+        "rope_type": "default"
+      },
+      "vision_soft_tokens_per_image": 280
+    },
+    "audio": {
+      "model_type": "gemma4_audio",
+      "hidden_size": 1024,
+      "num_hidden_layers": 12,
+      "num_attention_heads": 8,
+      "conv_kernel_size": 5,
+      "attention_chunk_size": 12,
+      "output_proj_dims": 1536,
+      "residual_weight": 0.5,
+      "attention_context_left": 13,
+      "attention_context_right": 0,
+      "attention_logit_cap": 50.0,
+      "hidden_act": "silu",
+      "norm_eps": 1e-06
+    },
+    "token_ids": {
+      "image_token_id": 258880,
+      "video_token_id": 258884,
+      "audio_token_id": 258881,
+      "boi_token_id": 255999,
+      "eoi_token_id": 258882,
+      "boa_token_id": 256000,
+      "eoa_token_id": 258883
+    },
+    "integration": "encoder_tower"
+  }
+}

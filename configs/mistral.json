@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "mistral",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "MistralForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Metaspace",
+      "replacement": "\u2581",
+      "add_prefix_space": true,
+      "byte_encode": false
+    },
+    "added_tokens_count": 3,
+    "special_tokens_count": 3,
+    "bos_token": "<s>",
+    "eos_token": "</s>",
+    "llama_pre_type": "unknown",
+    "add_bos_token": true,
+    "add_eos_token": false,
+    "tokenizer_class": "LlamaTokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

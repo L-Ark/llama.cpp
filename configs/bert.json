@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "bert",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "BertModel"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "gelu",
+    "norm_type": "layer_norm"
+  },
+  "tokenizer": {
+    "model_type": "WordPiece",
+    "pre_tokenizer": {
+      "type": "BertPreTokenizer",
+      "raw": {
+        "type": "BertPreTokenizer"
+      },
+      "byte_encode": false
+    },
+    "normalizer": {
+      "type": "BertNormalizer"
+    },
+    "added_tokens_count": 5,
+    "special_tokens_count": 5,
+    "pad_token": "[PAD]",
+    "llama_pre_type": "unknown",
+    "add_bos_token": null,
+    "add_eos_token": null,
+    "tokenizer_class": "BertTokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

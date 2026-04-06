@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "jamba",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "JambaForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "attn,filter,residual,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "normalizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Replace",
+          "pattern": " ",
+          "content": "\u2581"
+        }
+      ]
+    },
+    "added_tokens_count": 4,
+    "special_tokens_count": 4,
+    "pad_token": "<|endoftext|>",
+    "llama_pre_type": "unknown",
+    "add_bos_token": true,
+    "add_eos_token": false,
+    "tokenizer_class": "LlamaTokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

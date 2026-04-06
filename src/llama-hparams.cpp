@@ -201,6 +201,15 @@ bool llama_hparams::is_recurrent(uint32_t il) const {
     GGML_ABORT("%s: il (%u) out of bounds (n_layer: %u)\n", __func__, il, n_layer);
 }
 
+bool llama_hparams::has_recurrent_layers() const {
+    for (uint32_t il = 0; il < n_layer; ++il) {
+        if (recurrent_layer_arr[il]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 uint32_t llama_hparams::n_pos_per_embd() const {
     return rope_type == LLAMA_ROPE_TYPE_MROPE || rope_type == LLAMA_ROPE_TYPE_IMROPE ? 4 : 1;
 }

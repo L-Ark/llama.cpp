@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "baichuan",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "BaichuanForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "error": "no tokenizer.json found"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

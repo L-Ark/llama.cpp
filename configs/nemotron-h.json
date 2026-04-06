@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "nemotron_h",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "NemotronHForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "attn,filter,residual,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Split",
+          "regex": "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+          "behavior": "Isolated",
+          "byte_encode": false
+        },
+        {
+          "type": "ByteLevel",
+          "add_prefix_space": false,
+          "use_regex": false,
+          "byte_encode": true
+        }
+      ],
+      "byte_encode": true,
+      "regex": "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+    },
+    "added_tokens_count": 1000,
+    "special_tokens_count": 1000,
+    "bos_token": "<s>",
+    "eos_token": "</s>",
+    "llama_pre_type": "llama-bpe",
+    "add_bos_token": true,
+    "add_eos_token": false,
+    "tokenizer_class": "PreTrainedTokenizerFast"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

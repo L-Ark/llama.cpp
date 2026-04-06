@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "gemma2",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "Gemma2ForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,post_norm,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "gelu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Split",
+      "string_pattern": " ",
+      "behavior": "MergedWithPrevious",
+      "byte_encode": false
+    },
+    "normalizer": {
+      "type": "Replace",
+      "pattern": " ",
+      "content": "\u2581"
+    },
+    "added_tokens_count": 249,
+    "special_tokens_count": 6,
+    "pad_token": "<pad>",
+    "eos_token": "</s>",
+    "bos_token": "<s>",
+    "llama_pre_type": "default",
+    "add_bos_token": true,
+    "add_eos_token": false,
+    "tokenizer_class": "GemmaTokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

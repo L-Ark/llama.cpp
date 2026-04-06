@@ -20,7 +20,7 @@ struct llm_build_mamba_base : public llm_graph_context {
 
 };
 
-struct llm_build_delta_net_base : public llm_graph_context {
+struct llm_build_delta_net_base : public llm_build_mamba_base {
     llm_build_delta_net_base(const llm_graph_params & params);
 
     virtual ~llm_build_delta_net_base() = default;

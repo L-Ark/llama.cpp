@@ -40,6 +40,9 @@ struct llama_hparams {
     bool use_par_res;
     bool swin_norm;
 
+    char ffn_activation[16] = {};     // "silu", "gelu", "relu" (from GGUF metadata)
+    char layer_operations[256] = {};  // operation sequence per layer (from GGUF metadata)
+
     uint32_t n_ctx_train; // context size the model was trained on
     uint32_t n_embd;
     uint32_t n_layer;
@@ -293,6 +296,9 @@ struct llama_hparams {
 
     // whether or not the given layer is recurrent (for hybrid models)
     bool is_recurrent(uint32_t il) const;
+
+    // whether any layer is recurrent (for generic memory type detection)
+    bool has_recurrent_layers() const;
 
     uint32_t n_pos_per_embd() const;
 

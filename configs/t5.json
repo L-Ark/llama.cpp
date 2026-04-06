@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "t5",
+    "model_type": "encoder_decoder",
+    "hf_architectures": [
+      "T5ForConditionalGeneration"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "layer_norm"
+  },
+  "tokenizer": {
+    "model_type": "unknown",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "WhitespaceSplit",
+          "byte_encode": false
+        },
+        {
+          "type": "Metaspace",
+          "replacement": "\u2581",
+          "add_prefix_space": true,
+          "byte_encode": false
+        }
+      ],
+      "byte_encode": false
+    },
+    "normalizer": {
+      "type": "Precompiled"
+    },
+    "added_tokens_count": 103,
+    "special_tokens_count": 103,
+    "pad_token": "<pad>",
+    "eos_token": "</s>",
+    "llama_pre_type": "unknown",
+    "add_bos_token": null,
+    "add_eos_token": null,
+    "tokenizer_class": "T5Tokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

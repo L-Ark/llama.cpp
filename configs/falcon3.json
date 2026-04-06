@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "llama",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "LlamaForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Punctuation",
+          "raw": {
+            "type": "Punctuation",
+            "behavior": "Contiguous"
+          },
+          "byte_encode": false
+        },
+        {
+          "type": "ByteLevel",
+          "add_prefix_space": false,
+          "use_regex": true,
+          "byte_encode": true
+        },
+        {
+          "type": "Digits",
+          "raw": {
+            "type": "Digits",
+            "individual_digits": true
+          },
+          "byte_encode": false
+        }
+      ],
+      "byte_encode": true
+    },
+    "added_tokens_count": 2024,
+    "special_tokens_count": 2022,
+    "pad_token": "<|endoftext|>",
+    "llama_pre_type": "unknown",
+    "add_bos_token": null,
+    "add_eos_token": null,
+    "tokenizer_class": "PreTrainedTokenizerFast"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

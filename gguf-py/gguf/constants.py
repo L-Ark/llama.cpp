@@ -153,6 +153,10 @@ class Keys:
         DENSE_FEAT_IN_SIZE                = "{arch}.{dense}_feat_in"
         DENSE_FEAT_OUT_SIZE               = "{arch}.{dense}_feat_out"
 
+        # Graph metadata
+        FFN_ACTIVATION                    = "{arch}.feed_forward_activation"
+        LAYER_OPERATIONS                  = "{arch}.layer_operations"
+
     class Attention:
         HEAD_COUNT                   = "{arch}.attention.head_count"
         HEAD_COUNT_KV                = "{arch}.attention.head_count_kv"

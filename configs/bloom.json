@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "bloom",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "BloomForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "layer_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Split",
+          "regex": " ?[^(\\s|[.,!?\u2026\u3002\uff0c\u3001\u0964\u06d4\u060c])]+",
+          "behavior": "Isolated",
+          "byte_encode": false
+        },
+        {
+          "type": "ByteLevel",
+          "add_prefix_space": false,
+          "use_regex": false,
+          "byte_encode": true
+        }
+      ],
+      "byte_encode": true,
+      "regex": " ?[^(\\s|[.,!?\u2026\u3002\uff0c\u3001\u0964\u06d4\u060c])]+"
+    },
+    "added_tokens_count": 4,
+    "special_tokens_count": 4,
+    "bos_token": "<s>",
+    "eos_token": "</s>",
+    "pad_token": "<pad>",
+    "llama_pre_type": "llama-bpe",
+    "add_bos_token": null,
+    "add_eos_token": null,
+    "tokenizer_class": "BloomTokenizerFast"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

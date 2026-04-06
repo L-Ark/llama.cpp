@@ -20,6 +20,8 @@
 
 // TODO: tmp until the ggml meta backend matures and becomes public
 #include "../src/ggml-ext.h"
+#include "models/models.h"
+#include "llama-graph-builder.h"
 
 #include <algorithm>
 #include <cassert>
@@ -852,37 +854,39 @@ void llama_model::load_hparams(llama_model_loader & ml) {
         hparams.n_cls_out = classifier_labels.size();
     }
 
+    // Common optional keys — read here so per-arch cases don't need to repeat them.
+    // Per-arch cases can still override by reading the same key again (last write wins).
+    ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,          hparams.f_norm_rms_eps,       false);
+    ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,              hparams.f_norm_eps,           false);
+    ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,           hparams.n_ff_exp,             false);
+    ml.get_key(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH,    hparams.n_ff_shexp,           false);
+    ml.get_key(LLM_KV_EXPERT_SHARED_COUNT,                  hparams.n_expert_shared,      false);
+    ml.get_key(LLM_KV_EXPERT_GATING_FUNC,                   hparams.expert_gating_func,   false);
+    ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE,                 hparams.expert_weights_scale,  false);
+    ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM,                  hparams.expert_weights_norm,   false);
+    ml.get_key(LLM_KV_LEADING_DENSE_BLOCK_COUNT,            hparams.n_layer_dense_lead,    false);
+    ml.get_key(LLM_KV_LOGIT_SCALE,                          hparams.f_logit_scale,         false);
+    ml.get_key(LLM_KV_FINAL_LOGIT_SOFTCAPPING,              hparams.f_final_logit_softcapping, false);
+    ml.get_key(LLM_KV_EMBEDDING_SCALE,                      hparams.f_embedding_scale,     false);
+
+    // ── SWA (Sliding Window Attention) pre-loading ──
+    // Read SWA values but DON'T auto-enable swa_type — some models (Phi3)
+    // have SWA keys but intentionally disable SWA. Per-arch cases enable explicitly.
+    // The generic build_graph default enables ISWA if swa_type was set by a per-arch case.
+    {
+        uint32_t swa_window = 0;
+        ml.get_key(LLM_KV_ATTENTION_SLIDING_WINDOW, swa_window, false);
+        if (swa_window > 0) {
+            hparams.n_swa = swa_window;
+        }
+        // Pre-load SWA RoPE freq base (used by per-arch cases that enable SWA)
+        hparams.rope_freq_base_train_swa  = hparams.rope_freq_base_train;
+        hparams.rope_freq_scale_train_swa = hparams.rope_freq_scale_train;
+        ml.get_key(LLM_KV_ROPE_FREQ_BASE_SWA, hparams.rope_freq_base_train_swa, false);
+    }
+
     // arch-specific KVs
     switch (arch) {
-        case LLM_ARCH_LLAMA:
-        case LLM_ARCH_LLAMA_EMBED:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                if (hparams.n_expert == 8) {
-                    switch (hparams.n_layer) {
-                        case 32: type = LLM_TYPE_8x7B; break;
-                        case 56: type = LLM_TYPE_8x22B; break;
-                        default: type = LLM_TYPE_UNKNOWN;
-                    }
-                } else {
-                    switch (hparams.n_layer) {
-                        case 16: type = LLM_TYPE_1B; break; // Llama 3.2 1B
-                        case 22: type = LLM_TYPE_1B; break;
-                        case 26: type = LLM_TYPE_3B; break;
-                        case 28: type = LLM_TYPE_3B; break; // Llama 3.2 3B
-                        case 30: type = LLM_TYPE_256M; break; // smoldocling 256M
-                        // granite uses a vocab with len 49152
-                        case 32: type = n_vocab == 49152 ? LLM_TYPE_3B : (n_vocab < 40000 ? LLM_TYPE_7B : LLM_TYPE_8B); break;
-                        case 36: type = LLM_TYPE_8B; break; // granite
-                        case 40: type = LLM_TYPE_13B; break;
-                        case 48: type = LLM_TYPE_34B; break;
-                        case 60: type = LLM_TYPE_30B; break;
-                        case 80: type = hparams.n_head() == hparams.n_head_kv() ? LLM_TYPE_65B : LLM_TYPE_70B; break;
-                        default: type = LLM_TYPE_UNKNOWN;
-                    }
-                }
-            } break;
         case LLM_ARCH_LLAMA4:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -925,16 +929,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 hparams.use_kq_norm = type != LLM_TYPE_17B_128E;
             } break;
-        case LLM_ARCH_ARCEE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                // Arcee uses the same structure as Llama
-                switch (hparams.n_layer) {
-                    case 36: type = LLM_TYPE_4B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_AFMOE:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
@@ -969,16 +963,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 56: type = LLM_TYPE_6B; break;
                     case 32: type = LLM_TYPE_26B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_DECI:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 80: type = LLM_TYPE_70B; break;
-                    case 162: type = LLM_TYPE_405B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -1048,72 +1032,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_FALCON:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 60: type = LLM_TYPE_40B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_BAICHUAN:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-
-                if (type == LLM_TYPE_13B) {
-                    // TODO: become GGUF KV parameter
-                    hparams.f_max_alibi_bias = 8.0f;
-                }
-            } break;
-        case LLM_ARCH_STARCODER:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 36: type = LLM_TYPE_3B; break;
-                    case 42: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_15B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_REFACT:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_1B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-
-                // TODO: become GGUF KV parameter
-                hparams.f_max_alibi_bias = 8.0f;
-            } break;
-        case LLM_ARCH_BERT:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 3:
-                        type = LLM_TYPE_17M; break; // bge-micro
-                    case 6:
-                        type = LLM_TYPE_22M; break; // MiniLM-L6
-                    case 12:
-                        switch (hparams.n_embd) {
-                            case 384: type = LLM_TYPE_33M; break; // MiniLM-L12, bge-small
-                            case 768: type = LLM_TYPE_109M; break; // bge-base
-                            default: type = LLM_TYPE_UNKNOWN;
-                        } break;
-                    case 24:
-                        type = LLM_TYPE_335M; break; // bge-large
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_MODERN_BERT:
             {
                 const bool found_swa = ml.get_key(LLM_KV_ATTENTION_SLIDING_WINDOW, hparams.n_swa, false);
@@ -1139,27 +1057,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_JINA_BERT_V2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-                hparams.f_max_alibi_bias = 8.0f;
-
-                switch (hparams.n_layer) {
-                    case 4:  type = LLM_TYPE_33M;  break; // jina-embeddings-small
-                    case 12: type = LLM_TYPE_137M; break; // jina-embeddings-base
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_JINA_BERT_V3:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24:
-                        type = LLM_TYPE_558M; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_NOMIC_BERT:
         case LLM_ARCH_NOMIC_BERT_MOE:
             {
@@ -1174,40 +1071,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     }
                 }
             } break;
-        case LLM_ARCH_NEO_BERT:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                if (hparams.n_layer == 28) {
-                    type = LLM_TYPE_250M;
-                }
-            } break;
-        case LLM_ARCH_EUROBERT:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                if (hparams.n_layer == 12) {
-                    type = LLM_TYPE_SMALL;  // 0.2B
-                }
-            } break;
-        case LLM_ARCH_BLOOM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 30:
-                        switch (hparams.n_embd) {
-                            case 2560: type = LLM_TYPE_3B; break;
-                            case 4096: type = LLM_TYPE_7B; break;
-                            default: type = LLM_TYPE_UNKNOWN;
-                        } break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-
-                // TODO: become GGUF KV parameter
-                hparams.f_max_alibi_bias = 8.0f;
-            } break;
         case LLM_ARCH_MPT:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,  hparams.f_norm_eps);
@@ -1217,27 +1080,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 32: type = LLM_TYPE_7B; break;
                     case 48: type = LLM_TYPE_30B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_STABLELM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 32: type = LLM_TYPE_3B; break;
-                    case 40: type = LLM_TYPE_12B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
-            } break;
-        case LLM_ARCH_QWEN:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_13B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -1315,37 +1157,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 // Set non-causal attention for diffusion models
                 hparams.causal_attn = false;
             } break;
-        case LLM_ARCH_QWEN2MOE:
-            {
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,        hparams.n_ff_exp, false);
-                ml.get_key(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH, hparams.n_ff_shexp, false);
-
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_A2_7B; break;
-                    case 28: type = LLM_TYPE_57B_A14B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_QWEN3:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 28: type = hparams.n_embd == 1024 ? LLM_TYPE_0_6B : LLM_TYPE_1_7B; break;
-                    case 36: type = hparams.n_embd == 2560 ? LLM_TYPE_4B : LLM_TYPE_8B; break;
-                    case 40: type = LLM_TYPE_14B; break;
-                    case 64: type = LLM_TYPE_32B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_MAINCODER:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_1B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_QWEN3VL:
             {
                 ml.get_key(LLM_KV_NUM_DEEPSTACK_LAYERS, hparams.n_deepstack_layers, false);
@@ -1358,17 +1169,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_QWEN3MOE:
-            {
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,        hparams.n_ff_exp, false);
-
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 48: type = LLM_TYPE_30B_A3B; break;
-                    case 94: type = LLM_TYPE_235B_A22B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_QWEN3VLMOE:
             {
                 ml.get_key(LLM_KV_NUM_DEEPSTACK_LAYERS, hparams.n_deepstack_layers, false);
@@ -1378,16 +1178,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 switch (hparams.n_layer) {
                     case 48: type = LLM_TYPE_30B_A3B; break;
                     case 94: type = LLM_TYPE_235B_A22B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_PHI2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 24: type = LLM_TYPE_1B; break;
-                    case 32: type = LLM_TYPE_3B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -1414,24 +1204,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     hparams.n_swa         = 0;
                     hparams.set_swa_pattern(1);
                 }
-            } break;
-        case LLM_ARCH_PHIMOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_16x3_8B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_PLAMO:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 40: type = LLM_TYPE_13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
             } break;
         case LLM_ARCH_PLAMO2:
             {
@@ -1478,53 +1250,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 24: type = LLM_TYPE_2B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
-            } break;
-        case LLM_ARCH_GPT2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 12: type = LLM_TYPE_SMALL; break;
-                    case 24: type = LLM_TYPE_MEDIUM; break;
-                    case 36: type = LLM_TYPE_LARGE; break;
-                    case 48: type = LLM_TYPE_XL; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_CODESHELL:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 42: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_ORION:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 40: type = LLM_TYPE_14B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_INTERNLM2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 48: type = LLM_TYPE_20B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_GEMMA:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 18: type = LLM_TYPE_2B; break;
-                    case 28: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-               }
             } break;
         case LLM_ARCH_GEMMA2:
             {
@@ -1663,18 +1388,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 hparams.f_attention_scale = 1.0f / std::sqrt(float(hparams.n_embd_head_k()));
 
             } break;
-        case LLM_ARCH_STARCODER2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 30: type = LLM_TYPE_3B; break;
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_15B; break;
-                    case 52: type = LLM_TYPE_20B; break; // granite
-                    case 88: type = LLM_TYPE_34B; break; // granite
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_MAMBA:
             {
                 ml.get_key(LLM_KV_SSM_CONV_KERNEL,    hparams.ssm_d_conv);
@@ -1758,25 +1471,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_XVERSE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_7B; break;
-                    case 40: type = LLM_TYPE_13B; break;
-                    case 80: type = LLM_TYPE_65B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_COMMAND_R:
-            {
-                ml.get_key(LLM_KV_LOGIT_SCALE,             hparams.f_logit_scale, false);
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 40: type = LLM_TYPE_35B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_COHERE2:
             {
                 hparams.swa_type = LLAMA_SWA_TYPE_STANDARD;
@@ -1843,34 +1537,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_SEED_OSS:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 64: type = LLM_TYPE_36B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_OLMOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 16: type = LLM_TYPE_A1_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_OPENELM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                case 16: type = LLM_TYPE_270M; break;
-                case 20: type = LLM_TYPE_450M; break;
-                case 28: type = LLM_TYPE_1B; break;
-                case 36: type = LLM_TYPE_3B; break;
-                default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_GPTNEOX:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
@@ -1914,33 +1580,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                             case 24576: type = LLM_TYPE_20B; break;
                             default: type = LLM_TYPE_UNKNOWN;
                         } break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_ARCTIC:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                if (hparams.n_expert == 128) {
-                    switch (hparams.n_layer) {
-                        case 35: type = LLM_TYPE_10B_128x3_66B; break;
-                        default: type = LLM_TYPE_UNKNOWN;
-                    }
-                } else {
-                    type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_DEEPSEEK:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_LEADING_DENSE_BLOCK_COUNT,   hparams.n_layer_dense_lead, false);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,  hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_SHARED_COUNT,         hparams.n_expert_shared);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE,        hparams.expert_weights_scale, false);
-
-                switch (hparams.n_ff_exp) {
-                    case 1408: type = LLM_TYPE_16B; break;
-                    case 1792: type = LLM_TYPE_20B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -1994,53 +1633,12 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_DEEPSEEK2OCR:
-            {
-                // similar to deepseek2, but without MLA
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_LEADING_DENSE_BLOCK_COUNT,   hparams.n_layer_dense_lead, false);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,  hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_SHARED_COUNT,         hparams.n_expert_shared);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE,        hparams.expert_weights_scale, false);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM,         hparams.expert_weights_norm, false);
-                ml.get_key(LLM_KV_EXPERT_GATING_FUNC,          hparams.expert_gating_func, false);
-
-                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
-                }
-
-                switch (hparams.n_layer) {
-                    case 12: type = LLM_TYPE_3B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_PLM:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
                 ml.get_key(LLM_KV_ATTENTION_KV_LORA_RANK, hparams.n_lora_kv);
                 switch (hparams.n_layer) {
                     case 32: type = LLM_TYPE_1_8B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_CHATGLM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 28: {
-                        if (hparams.n_head(0) == 16) {
-                            type = LLM_TYPE_1_5B;
-                        } else {
-                            type = LLM_TYPE_6B;
-                        }
-                    } break;
-                    case 40: {
-                        if (hparams.n_head(0) == 24) {
-                            type = LLM_TYPE_4B;
-                        } else {
-                            type = LLM_TYPE_9B;
-                        }
-                    } break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2142,15 +1740,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_BITNET:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 26: type = LLM_TYPE_3B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_T5:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,      hparams.f_norm_rms_eps);
@@ -2204,24 +1793,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        case LLM_ARCH_JAIS2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_8B; break;
-                    case 68: type = LLM_TYPE_70B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_NEMOTRON:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_4B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_NEMOTRON_H:
         case LLM_ARCH_NEMOTRON_H_MOE:
             {
@@ -2250,15 +1821,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 52: type = LLM_TYPE_31B_A3_5B; break; // Nemotron-H_MOE 31B
                     case 56: type = LLM_TYPE_9B; break;
                     case 88: type = LLM_TYPE_120B_A12B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_EXAONE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_8B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2463,21 +2025,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 ml.get_key(LLM_KV_ATTENTION_GROUPNORM_EPS,    hparams.f_norm_group_eps);
                 ml.get_key(LLM_KV_ATTENTION_GROUPNORM_GROUPS, hparams.n_norm_groups);
             } break;
-        case LLM_ARCH_BAILINGMOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_LEADING_DENSE_BLOCK_COUNT,   hparams.n_layer_dense_lead, false);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,  hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_SHARED_COUNT,         hparams.n_expert_shared);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE,        hparams.expert_weights_scale, false);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM,         hparams.expert_weights_norm, false);
-
-                switch (hparams.n_layer) {
-                    case 28: type = LLM_TYPE_16B; break;
-                    case 88: type = LLM_TYPE_290B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
         case LLM_ARCH_BAILINGMOE2:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,       hparams.f_norm_rms_eps);
@@ -2499,20 +2046,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     case 21: type = LLM_TYPE_16B_A1B; break;
                     case 32: type = LLM_TYPE_100B_A6B; break;
                     case 33: type = LLM_TYPE_100B_A6B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_DOTS1:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_LEADING_DENSE_BLOCK_COUNT,   hparams.n_layer_dense_lead, false);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,  hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_SHARED_COUNT,         hparams.n_expert_shared);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE,        hparams.expert_weights_scale, false);
-                ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM,         hparams.expert_weights_norm, false);
-                ml.get_key(LLM_KV_EXPERT_GATING_FUNC,          hparams.expert_gating_func, false);
-                switch (hparams.n_layer) {
-                    case 62: type = LLM_TYPE_142B; break;
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2567,29 +2100,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                         type = LLM_TYPE_34B; break;
                     default:
                         type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_HUNYUAN_MOE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,       hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,        hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH, hparams.n_ff_shexp, false);
-
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_A13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_HUNYUAN_DENSE:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-
-                switch (hparams.n_embd) {
-                    case 1024: type = LLM_TYPE_0_5B; break;
-                    case 2048: type = LLM_TYPE_1_8B; break;
-                    case 3072: type = LLM_TYPE_4B; break;
-                    case 4096: type = LLM_TYPE_7B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
         case LLM_ARCH_SMOLLM3:
@@ -2715,34 +2225,6 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 switch (hparams.n_layer) {
                     case 32: type = LLM_TYPE_8B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_MINIMAX_M2:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,  hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,   hparams.n_ff_exp);
-                ml.get_key(LLM_KV_EXPERT_GATING_FUNC,           hparams.expert_gating_func, false);
-
-                switch (hparams.n_layer) {
-                    case 62: type = LLM_TYPE_230B_A10B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_COGVLM:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 32: type = LLM_TYPE_13B; break;
-                    default: type = LLM_TYPE_UNKNOWN;
-                }
-            } break;
-        case LLM_ARCH_PANGU_EMBED:
-            {
-                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                switch (hparams.n_layer) {
-                    case 26: type = LLM_TYPE_1B; break; // openPangu-Embedded-1B-V1.1
-                    case 34: type = LLM_TYPE_7B; break; // openPangu-Embedded-7B-V1.1
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
@@ -2936,7 +2418,10 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
-        default: throw std::runtime_error("unsupported model architecture: " + arch_name());
+        default:
+            // Generic: common keys already read above. Type is informational only.
+            type = LLM_TYPE_UNKNOWN;
+            break;
     }
 
     pimpl->n_bytes = ml.n_bytes;
@@ -7975,7 +7460,92 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                     }
                 } break;
             default:
-                throw std::runtime_error("unknown architecture");
+                {
+                    // Generic tensor loading for real GGUF files.
+                    // Uses weights_map to determine which tensors exist.
+                    // Test mode (no files) falls through to error since tensor
+                    // dimensions can't be determined without real weight data.
+                    if (ml.files.empty()) {
+                        throw std::runtime_error("unknown architecture: " + arch_name());
+                    }
+
+                    auto has = [&](llm_tensor t) -> bool {
+                        const auto name0 = tn(t, "weight").str();
+                        const auto name1 = tn(t, "weight", 0).str();
+                        return ml.weights_map.count(name0) > 0 || ml.weights_map.count(name1) > 0;
+                    };
+
+                    tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, 0);
+                    if (has(LLM_TENSOR_POS_EMBD))
+                        pos_embd = create_tensor(tn(LLM_TENSOR_POS_EMBD, "weight"), {n_embd, n_ctx_train}, 0);
+                    if (has(LLM_TENSOR_TOKEN_EMBD_NORM)) {
+                        tok_norm   = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD_NORM, "weight", 0), {n_embd}, 0);
+                        tok_norm_b = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD_NORM, "bias",   0), {n_embd}, TENSOR_NOT_REQUIRED);
+                    }
+                    if (has(LLM_TENSOR_OUTPUT_NORM))
+                        output_norm = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "weight"), {n_embd}, 0);
+                    output_norm_b = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "bias"), {n_embd}, TENSOR_NOT_REQUIRED);
+                    output   = create_tensor(tn(LLM_TENSOR_OUTPUT, "weight"), {n_embd, n_vocab}, TENSOR_NOT_REQUIRED);
+                    output_b = create_tensor(tn(LLM_TENSOR_OUTPUT, "bias"), {n_vocab}, TENSOR_NOT_REQUIRED);
+                    if (output == NULL)
+                        output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, TENSOR_DUPLICATED);
+
+                    for (int i = 0; i < n_layer; ++i) {
+                        auto & layer = layers[i];
+                        if (has(LLM_TENSOR_ATTN_NORM)) {
+                            layer.attn_norm   = create_tensor(tn(LLM_TENSOR_ATTN_NORM, "weight", i), {n_embd}, 0);
+                            layer.attn_norm_b = create_tensor(tn(LLM_TENSOR_ATTN_NORM, "bias", i),   {n_embd}, TENSOR_NOT_REQUIRED);
+                        }
+                        if (has(LLM_TENSOR_ATTN_QKV)) {
+                            layer.wqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa}, 0);
+                            layer.bqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "bias", i),   {n_embd + 2*n_embd_gqa}, TENSOR_NOT_REQUIRED);
+                        } else if (has(LLM_TENSOR_ATTN_Q)) {
+                            layer.wq = create_tensor(tn(LLM_TENSOR_ATTN_Q, "weight", i), {n_embd, n_embd_head_k * n_head}, 0);
+                            layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K, "weight", i), {n_embd, n_embd_k_gqa}, 0);
+                            layer.wv = create_tensor(tn(LLM_TENSOR_ATTN_V, "weight", i), {n_embd, n_embd_v_gqa}, TENSOR_NOT_REQUIRED);
+                            layer.bq = create_tensor(tn(LLM_TENSOR_ATTN_Q, "bias", i), {n_embd},     TENSOR_NOT_REQUIRED);
+                            layer.bk = create_tensor(tn(LLM_TENSOR_ATTN_K, "bias", i), {n_embd_gqa}, TENSOR_NOT_REQUIRED);
+                            layer.bv = create_tensor(tn(LLM_TENSOR_ATTN_V, "bias", i), {n_embd_gqa}, TENSOR_NOT_REQUIRED);
+                        }
+                        layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "weight", i), {n_embd_head_k * n_head, n_embd}, 0);
+                        layer.bo = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "bias", i),   {n_embd}, TENSOR_NOT_REQUIRED);
+                        if (has(LLM_TENSOR_ATTN_Q_NORM)) {
+                            layer.attn_q_norm = create_tensor(tn(LLM_TENSOR_ATTN_Q_NORM, "weight", i), {n_embd_head_k}, TENSOR_NOT_REQUIRED);
+                            layer.attn_k_norm = create_tensor(tn(LLM_TENSOR_ATTN_K_NORM, "weight", i), {n_embd_head_k}, TENSOR_NOT_REQUIRED);
+                        }
+                        if (has(LLM_TENSOR_ATTN_POST_NORM))
+                            layer.attn_post_norm = create_tensor(tn(LLM_TENSOR_ATTN_POST_NORM, "weight", i), {n_embd}, 0);
+                        if (has(LLM_TENSOR_FFN_NORM)) {
+                            layer.ffn_norm   = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, 0);
+                            layer.ffn_norm_b = create_tensor(tn(LLM_TENSOR_FFN_NORM, "bias", i),   {n_embd}, TENSOR_NOT_REQUIRED);
+                        }
+
+                        // MoE or dense FFN
+                        const int64_t n_ff_e = hparams.n_ff_exp > 0 ? hparams.n_ff_exp : n_ff;
+                        if (n_expert > 0 && has(LLM_TENSOR_FFN_GATE_INP)) {
+                            layer.ffn_gate_inp = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP, "weight", i), {n_embd, n_expert}, 0);
+                            layer.ffn_gate_up_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_UP_EXPS, "weight", i), {n_embd, n_ff_e*2, n_expert}, TENSOR_NOT_REQUIRED);
+                            if (!layer.ffn_gate_up_exps) {
+                                layer.ffn_gate_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), {n_embd, n_ff_e, n_expert}, TENSOR_NOT_REQUIRED);
+                                layer.ffn_up_exps   = create_tensor(tn(LLM_TENSOR_FFN_UP_EXPS,   "weight", i), {n_embd, n_ff_e, n_expert}, 0);
+                            }
+                            layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", i), {n_ff_e, n_embd, n_expert}, 0);
+                            if (hparams.n_ff_shexp > 0) {
+                                layer.ffn_gate_shexp     = create_tensor(tn(LLM_TENSOR_FFN_GATE_SHEXP,     "weight", i), {n_embd, hparams.n_ff_shexp}, 0);
+                                layer.ffn_up_shexp       = create_tensor(tn(LLM_TENSOR_FFN_UP_SHEXP,       "weight", i), {n_embd, hparams.n_ff_shexp}, 0);
+                                layer.ffn_down_shexp     = create_tensor(tn(LLM_TENSOR_FFN_DOWN_SHEXP,     "weight", i), {hparams.n_ff_shexp, n_embd}, 0);
+                                layer.ffn_gate_inp_shexp = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP_SHEXP, "weight", i), {n_embd}, TENSOR_NOT_REQUIRED);
+                            }
+                        } else {
+                            if (has(LLM_TENSOR_FFN_GATE))
+                                layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
+                            layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "weight", i), {n_ff, n_embd}, 0);
+                            layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd, n_ff}, 0);
+                        }
+                        if (has(LLM_TENSOR_FFN_POST_NORM))
+                            layer.ffn_post_norm = create_tensor(tn(LLM_TENSOR_FFN_POST_NORM, "weight", i), {n_embd}, 0);
+                    }
+                } break;
         }
 
         // generic pass: load optional per-tensor/per-expert ".scale" tensors (e.g. NVFP4 scale2)
@@ -8648,7 +8218,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             std::max((uint32_t) 1, cparams.n_seq_max),
                             cparams.n_seq_max,
                             nullptr);
-                } else if (llm_arch_is_hybrid(arch)) {
+                } else if (llm_arch_is_hybrid(arch) || hparams.has_recurrent_layers()) {
                     // The main difference between hybrid architectures is the
                     // layer filters, so pick the right one here
                     llama_memory_hybrid::layer_filter_cb filter_attn = nullptr;
@@ -8762,198 +8332,13 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
     std::unique_ptr<llm_graph_context> llm;
 
     switch (arch) {
-        case LLM_ARCH_LLAMA:
-            {
-                llm = std::make_unique<llm_build_llama<false>>(*this, params);
-            } break;
-        case LLM_ARCH_LLAMA4:
-            {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_llama<false>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_llama_iswa>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_LLAMA_EMBED:
-            {
-                llm = std::make_unique<llm_build_llama<true>>(*this, params);
-            } break;
-        case LLM_ARCH_MAINCODER:
-            {
-                llm = std::make_unique<llm_build_maincoder>(*this, params);
-            } break;
-        case LLM_ARCH_DECI:
-            {
-                llm = std::make_unique<llm_build_deci>(*this, params);
-            } break;
-        case LLM_ARCH_BAICHUAN:
-            {
-                llm = std::make_unique<llm_build_baichuan>(*this, params);
-            } break;
-        case LLM_ARCH_FALCON:
-            {
-                llm = std::make_unique<llm_build_falcon>(*this, params);
-            } break;
-        case LLM_ARCH_GROK:
-            {
-                llm = std::make_unique<llm_build_grok>(*this, params);
-            } break;
-        case LLM_ARCH_STARCODER:
-            {
-                llm = std::make_unique<llm_build_starcoder>(*this, params);
-            } break;
-        case LLM_ARCH_REFACT:
-            {
-                llm = std::make_unique<llm_build_refact>(*this, params);
-            } break;
-        case LLM_ARCH_BERT:
-        case LLM_ARCH_JINA_BERT_V2:
-        case LLM_ARCH_JINA_BERT_V3:
-        case LLM_ARCH_NOMIC_BERT:
-        case LLM_ARCH_NOMIC_BERT_MOE:
-            {
-                llm = std::make_unique<llm_build_bert>(*this, params);
-            } break;
-        case LLM_ARCH_MODERN_BERT:
-            {
-                llm = std::make_unique<llm_build_modern_bert>(*this, params);
-            } break;
-        case LLM_ARCH_NEO_BERT:
-            {
-                llm = std::make_unique<llm_build_neo_bert>(*this, params);
-            } break;
-        case LLM_ARCH_EUROBERT:
-            {
-                llm = std::make_unique<llm_build_eurobert>(*this, params);
-            } break;
-        case LLM_ARCH_BLOOM:
-            {
-                llm = std::make_unique<llm_build_bloom>(*this, params);
-            } break;
-        case LLM_ARCH_MPT:
-            {
-                llm = std::make_unique<llm_build_mpt>(*this, params);
-            } break;
-        case LLM_ARCH_STABLELM:
-            {
-                llm = std::make_unique<llm_build_stablelm>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN:
-            {
-                llm = std::make_unique<llm_build_qwen>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN2:
-            {
-                llm = std::make_unique<llm_build_qwen2>(*this, params);
-            } break;
-        case LLM_ARCH_DREAM:
-            {
-                llm = std::make_unique<llm_build_dream>(*this, params);
-            }
-            break;
-        case LLM_ARCH_LLADA:
-            {
-                llm = std::make_unique<llm_build_llada>(*this, params);
-            }
-            break;
-        case LLM_ARCH_LLADA_MOE:
-            {
-                llm = std::make_unique<llm_build_llada_moe>(*this, params);
-            }
-            break;
-        case LLM_ARCH_RND1:
-            {
-                llm = std::make_unique<llm_build_rnd1>(*this, params);
-            }
-            break;
-        case LLM_ARCH_QWEN2VL:
-            {
-                llm = std::make_unique<llm_build_qwen2vl>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN2MOE:
-            {
-                llm = std::make_unique<llm_build_qwen2moe>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN3:
-            {
-                llm = std::make_unique<llm_build_qwen3>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN3MOE:
-            {
-                llm = std::make_unique<llm_build_qwen3moe>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN3VL:
-            {
-                llm = std::make_unique<llm_build_qwen3vl>(*this, params);
-            } break;
-        case LLM_ARCH_QWEN3VLMOE:
-            {
-                llm = std::make_unique<llm_build_qwen3vlmoe>(*this, params);
-            } break;
-        case LLM_ARCH_PHI2:
-            {
-                llm = std::make_unique<llm_build_phi2>(*this, params);
-            } break;
-        case LLM_ARCH_PHI3:
-        case LLM_ARCH_PHIMOE:
-            {
-                if (hparams.swa_type != LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_phi3<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_phi3<false>>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_PLAMO:
-            {
-                llm = std::make_unique<llm_build_plamo>(*this, params);
-            } break;
         case LLM_ARCH_PLAMO2:
             {
                 llm = std::make_unique<llm_build_plamo2>(*this, params);
             } break;
-        case LLM_ARCH_PLAMO3:
-            {
-                if (hparams.swa_type != LLAMA_SWA_TYPE_NONE) {
-                    llm = std::make_unique<llm_build_plamo3<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_plamo3<false>>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_GPT2:
-            {
-                llm = std::make_unique<llm_build_gpt2>(*this, params);
-            } break;
-        case LLM_ARCH_CODESHELL:
-            {
-                llm = std::make_unique<llm_build_codeshell>(*this, params);
-            } break;
-        case LLM_ARCH_ORION:
-            {
-                llm = std::make_unique<llm_build_orion>(*this, params);
-            } break;
-        case LLM_ARCH_INTERNLM2:
-            {
-                llm = std::make_unique<llm_build_internlm2>(*this, params);
-            } break;
         case LLM_ARCH_MINICPM3:
             {
                 llm = std::make_unique<llm_build_minicpm3>(*this, params);
-            } break;
-        case LLM_ARCH_GEMMA:
-            {
-                llm = std::make_unique<llm_build_gemma>(*this, params);
-            } break;
-        case LLM_ARCH_GEMMA2:
-            {
-                llm = std::make_unique<llm_build_gemma2_iswa>(*this, params);
-            } break;
-        case LLM_ARCH_GEMMA3:
-            {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_gemma3<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_gemma3<false>>(*this, params);
-                }
             } break;
         case LLM_ARCH_GEMMA3N:
             {
@@ -8963,89 +8348,12 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             {
                 llm = std::make_unique<llm_build_gemma4_iswa>(*this, params);
             } break;
-        case LLM_ARCH_GEMMA_EMBEDDING:
-            {
-                llm = std::make_unique<llm_build_gemma_embedding>(*this, params);
-            } break;
-        case LLM_ARCH_STARCODER2:
-            {
-                llm = std::make_unique<llm_build_starcoder2>(*this, params);
-            } break;
-        case LLM_ARCH_MAMBA:
-        case LLM_ARCH_MAMBA2:
-            {
-                llm = std::make_unique<llm_build_mamba>(*this, params);
-            } break;
-        case LLM_ARCH_JAMBA:
-            {
-                llm = std::make_unique<llm_build_jamba>(*this, params);
-            } break;
-        case LLM_ARCH_XVERSE:
-            {
-                llm = std::make_unique<llm_build_xverse>(*this, params);
-            } break;
-        case LLM_ARCH_COMMAND_R:
-            {
-                llm = std::make_unique<llm_build_command_r>(*this, params);
-            } break;
-        case LLM_ARCH_COHERE2:
-            {
-                llm = std::make_unique<llm_build_cohere2_iswa>(*this, params);
-            } break;
-        case LLM_ARCH_DBRX:
-            {
-                llm = std::make_unique<llm_build_dbrx>(*this, params);
-            } break;
-        case LLM_ARCH_OLMO:
-            {
-                llm = std::make_unique<llm_build_olmo>(*this, params);
-            } break;
-        case LLM_ARCH_OLMO2:
-            {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_olmo2<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_olmo2<false>>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_OLMOE:
-            {
-                llm = std::make_unique<llm_build_olmoe>(*this, params);
-            } break;
-        case LLM_ARCH_OPENELM:
-            {
-                llm = std::make_unique<llm_build_openelm>(*this, params);
-            } break;
-        case LLM_ARCH_GPTNEOX:
-            {
-                llm = std::make_unique<llm_build_gptneox>(*this, params);
-            } break;
-        case LLM_ARCH_ARCTIC:
-            {
-                llm = std::make_unique<llm_build_arctic>(*this, params);
-            } break;
-        case LLM_ARCH_DEEPSEEK:
-            {
-                llm = std::make_unique<llm_build_deepseek>(*this, params);
-            } break;
         case LLM_ARCH_DEEPSEEK2:
         case LLM_ARCH_DEEPSEEK2OCR:
         case LLM_ARCH_GLM_DSA:
         case LLM_ARCH_MISTRAL4:
             {
                 llm = std::make_unique<llm_build_deepseek2>(*this, params);
-            } break;
-        case LLM_ARCH_CHATGLM:
-            {
-                llm = std::make_unique<llm_build_chatglm>(*this, params);
-            } break;
-        case LLM_ARCH_GLM4:
-            {
-                llm = std::make_unique<llm_build_glm4>(*this, params);
-            } break;
-        case LLM_ARCH_GLM4_MOE:
-            {
-                llm = std::make_unique<llm_build_glm4_moe>(*this, params);
             } break;
         case LLM_ARCH_BITNET:
             {
@@ -9070,38 +8378,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
                 llm = std::make_unique<llm_build_t5_enc>(*this, params);
             }
             break;
-        case LLM_ARCH_JAIS:
-            {
-                llm = std::make_unique<llm_build_jais>(*this, params);
-            } break;
-        case LLM_ARCH_JAIS2:
-            {
-                llm = std::make_unique<llm_build_jais2>(*this, params);
-            } break;
-        case LLM_ARCH_NEMOTRON:
-            {
-                llm = std::make_unique<llm_build_nemotron>(*this, params);
-            } break;
         case LLM_ARCH_NEMOTRON_H:
         case LLM_ARCH_NEMOTRON_H_MOE:
             {
                 llm = std::make_unique<llm_build_nemotron_h>(*this, params);
-            } break;
-        case LLM_ARCH_EXAONE:
-            {
-                llm = std::make_unique<llm_build_exaone>(*this, params);
-            } break;
-        case LLM_ARCH_EXAONE4:
-            {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_exaone4<true>>(*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_exaone4<false>>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_EXAONE_MOE:
-            {
-                llm = std::make_unique<llm_build_exaone_moe>(*this, params);
             } break;
         case LLM_ARCH_RWKV6:
             {
@@ -9119,19 +8399,14 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             {
                 llm = std::make_unique<llm_build_arwkv7>(*this, params);
             } break;
-        case LLM_ARCH_GRANITE:
-        case LLM_ARCH_GRANITE_MOE:
-        case LLM_ARCH_MINICPM:
-            {
-                llm = std::make_unique<llm_build_granite>(*this, params);
-            } break;
         case LLM_ARCH_GRANITE_HYBRID:
             {
-                llm = std::make_unique<llm_build_granite_hybrid>(*this, params);
-            } break;
-        case LLM_ARCH_CHAMELEON:
-            {
-                llm = std::make_unique<llm_build_chameleon>(*this, params);
+                llm_transformer_config cfg;
+                if (llm_transformer_config_from_hparams(hparams, *this, cfg)) {
+                    llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+                } else {
+                    GGML_ABORT("fatal error: unsupported architecture");
+                }
             } break;
         case LLM_ARCH_WAVTOKENIZER_DEC:
             {
@@ -9141,62 +8416,6 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             {
                 llm = std::make_unique<llm_build_plm>(*this, params);
             } break;
-        case LLM_ARCH_BAILINGMOE:
-            {
-                llm = std::make_unique<llm_build_bailingmoe>(*this, params);
-            } break;
-        case LLM_ARCH_BAILINGMOE2:
-            {
-                llm = std::make_unique<llm_build_bailingmoe2>(*this, params);
-            } break;
-        case LLM_ARCH_SEED_OSS:
-            {
-                llm = std::make_unique<llm_build_seed_oss>(*this, params);
-            } break;
-        case LLM_ARCH_DOTS1:
-            {
-                llm = std::make_unique<llm_build_dots1>(*this, params);
-            } break;
-        case LLM_ARCH_ARCEE:
-            {
-                llm = std::make_unique<llm_build_arcee>(*this, params);
-            } break;
-        case LLM_ARCH_AFMOE:
-            {
-                llm = std::make_unique<llm_build_afmoe>(*this, params);
-            } break;
-        case LLM_ARCH_ERNIE4_5:
-            {
-                llm = std::make_unique<llm_build_ernie4_5>(*this, params);
-            } break;
-        case LLM_ARCH_ERNIE4_5_MOE:
-            {
-                llm = std::make_unique<llm_build_ernie4_5_moe>(*this, params);
-            } break;
-        case LLM_ARCH_PADDLEOCR:
-            {
-                llm = std::make_unique<llm_build_paddleocr>(*this, params);
-            } break;
-        case LLM_ARCH_HUNYUAN_MOE:
-            {
-                llm = std::make_unique<llm_build_hunyuan_moe>(*this, params);
-            } break;
-        case LLM_ARCH_HUNYUAN_DENSE:
-            {
-                llm = std::make_unique<llm_build_hunyuan_dense>(*this, params);
-            } break;
-        case LLM_ARCH_SMOLLM3:
-            {
-                llm = std::make_unique<llm_build_smollm3>(*this, params);
-            } break;
-        case LLM_ARCH_OPENAI_MOE:
-            {
-                llm = std::make_unique<llm_build_openai_moe_iswa>(*this, params);
-            } break;
-        case LLM_ARCH_FALCON_H1:
-            {
-                llm = std::make_unique<llm_build_falcon_h1>(*this, params);
-            } break;
         case LLM_ARCH_LFM2:
         case LLM_ARCH_LFM2MOE:
             {
@@ -9205,34 +8424,6 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
                 } else {
                     llm = std::make_unique<llm_build_lfm2<false>>(*this, params);
                 }
-            } break;
-        case LLM_ARCH_SMALLTHINKER:
-            {
-                if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_smallthinker<true>> (*this, params);
-                } else {
-                    llm = std::make_unique<llm_build_smallthinker<false>>(*this, params);
-                }
-            } break;
-        case LLM_ARCH_GROVEMOE:
-            {
-                llm = std::make_unique<llm_build_grovemoe>(*this, params);
-            } break;
-        case LLM_ARCH_APERTUS:
-            {
-                llm = std::make_unique<llm_build_apertus>(*this, params);
-            } break;
-        case LLM_ARCH_MINIMAX_M2:
-            {
-                llm = std::make_unique<llm_build_minimax_m2>(*this, params);
-            } break;
-        case LLM_ARCH_COGVLM:
-            {
-                llm = std::make_unique<llm_build_cogvlm>(*this, params);
-            } break;
-        case LLM_ARCH_PANGU_EMBED:
-            {
-                llm = std::make_unique<llm_build_pangu_embedded>(*this, params);
             } break;
         case LLM_ARCH_QWEN3NEXT:
             {
@@ -9246,24 +8437,19 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             {
                 llm = std::make_unique<llm_build_qwen35moe>(*this, params);
             } break;
-        case LLM_ARCH_MISTRAL3:
-            {
-                llm = std::make_unique<llm_build_mistral3>(*this, params);
-            } break;
-        case LLM_ARCH_MIMO2:
-            {
-                llm = std::make_unique<llm_build_mimo2_iswa>(*this, params);
-            } break;
         case LLM_ARCH_KIMI_LINEAR:
             {
                 llm = std::make_unique<llm_build_kimi_linear>(*this, params);
             } break;
-        case LLM_ARCH_STEP35:
-            {
-                llm = std::make_unique<llm_build_step35_iswa>(*this, params);
-            } break;
         default:
-            GGML_ABORT("fatal error");
+            {
+                llm_transformer_config cfg;
+                if (llm_transformer_config_from_hparams(hparams, *this, cfg)) {
+                    llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
+                } else {
+                    GGML_ABORT("fatal error: unsupported architecture");
+                }
+            } break;
     }
 
     // add on pooling layer

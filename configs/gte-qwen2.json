@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "qwen2",
+    "model_type": "causal_lm",
+    "hf_architectures": [
+      "Qwen2ForCausalLM"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Split",
+          "regex": "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+          "behavior": "Isolated",
+          "byte_encode": false
+        },
+        {
+          "type": "ByteLevel",
+          "add_prefix_space": false,
+          "use_regex": false,
+          "byte_encode": true
+        }
+      ],
+      "byte_encode": true,
+      "regex": "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+    },
+    "normalizer": {
+      "type": "NFC"
+    },
+    "added_tokens_count": 3,
+    "special_tokens_count": 3,
+    "pad_token": "<|endoftext|>",
+    "llama_pre_type": "qwen2",
+    "add_bos_token": null,
+    "add_eos_token": true,
+    "tokenizer_class": "Qwen2Tokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  }
+}

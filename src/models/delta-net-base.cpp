@@ -10,7 +10,7 @@ static ggml_tensor * get_slice_2d(ggml_context * ctx0, ggml_tensor * t, int64_t 
         t->nb[1], t->nb[2], t->nb[3], t->nb[2] * c);
 }
 
-llm_build_delta_net_base::llm_build_delta_net_base(const llm_graph_params & params) : llm_graph_context(params) {}
+llm_build_delta_net_base::llm_build_delta_net_base(const llm_graph_params & params) : llm_build_mamba_base(params) {}
 
 std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_net_chunking(
         ggml_tensor * q,

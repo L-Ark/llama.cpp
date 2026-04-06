@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "model_info": {
+    "architecture": "qwen2_5_vl",
+    "model_type": "encoder_decoder",
+    "hf_architectures": [
+      "Qwen2_5_VLForConditionalGeneration"
+    ]
+  },
+  "graph": {
+    "layer_operations": "norm,rope,attn,filter,residual,ffn_norm,ffn,residual,cvec",
+    "ffn_activation": "silu",
+    "norm_type": "rms_norm"
+  },
+  "tokenizer": {
+    "model_type": "BPE",
+    "pre_tokenizer": {
+      "type": "Sequence",
+      "steps": [
+        {
+          "type": "Split",
+          "regex": "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+          "behavior": "Isolated",
+          "byte_encode": false
+        },
+        {
+          "type": "ByteLevel",
+          "add_prefix_space": false,
+          "use_regex": false,
+          "byte_encode": true
+        }
+      ],
+      "byte_encode": true,
+      "regex": "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+    },
+    "normalizer": {
+      "type": "NFC"
+    },
+    "added_tokens_count": 22,
+    "special_tokens_count": 14,
+    "pad_token": "<|endoftext|>",
+    "llama_pre_type": "qwen2",
+    "add_bos_token": false,
+    "add_eos_token": null,
+    "tokenizer_class": "Qwen2Tokenizer"
+  },
+  "tensors": {
+    "qkv_style": "separate",
+    "ffn_type": "gated",
+    "has_bias": false
+  },
+  "multimodal": {
+    "vision": {
+      "hidden_size": 1280,
+      "intermediate_size": 3420,
+      "num_hidden_layers": 32,
+      "num_attention_heads": 16,
+      "patch_size": 14,
+      "in_chans": 3,
+      "spatial_merge_size": 2,
+      "spatial_patch_size": 14,
+      "window_size": 112,
+      "temporal_patch_size": 2,
+      "tokens_per_second": 2,
+      "hidden_act": "silu"
+    },
+    "token_ids": {
+      "image_token_id": 151655,
+      "video_token_id": 151656,
+      "vision_token_id": 151654,
+      "vision_start_token_id": 151652,
+      "vision_end_token_id": 151653
+    },
+    "integration": "encoder_tower"
+  }
+}
