@@ -8408,7 +8408,13 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
         case LLM_ARCH_NEMOTRON_H:
         case LLM_ARCH_NEMOTRON_H_MOE:
             {
-                llm = std::make_unique<llm_build_nemotron_h>(*this, params);
+                llm_hybrid_mamba2_single_op_transformer_config cfg;
+                cfg.attn_bias = true;
+                cfg.use_hparams_attn_scale = true;
+                cfg.moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
+                cfg.shared_expert = true;
+                cfg.latent_moe = true;
+                llm = std::make_unique<llm_build_hybrid_mamba2_single_op_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_RWKV6:
             {

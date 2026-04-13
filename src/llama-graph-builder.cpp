@@ -1731,6 +1731,195 @@ template struct llm_build_hybrid_shortconv_transformer<true>;
 template struct llm_build_hybrid_shortconv_transformer<false>;
 
 // ---------------------------------------------------------------------------
+// Reusable hybrid Mamba2 single-operator builder (Nemotron-H-style family)
+// ---------------------------------------------------------------------------
+
+llm_build_hybrid_mamba2_single_op_transformer::llm_build_hybrid_mamba2_single_op_transformer(
+        const llama_model & model,
+        const llm_graph_params & params,
+        const llm_hybrid_mamba2_single_op_transformer_config & config) :
+        llm_build_mamba_base(params),
+        model(model),
+        cfg_(config) {
+    const int64_t n_embd_head = hparams.n_embd_head_v();
+    GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
+
+    ggml_tensor * cur = build_inp_embd(model.tok_embd);
+    cb(cur, "model.embed_tokens", -1);
+    ggml_build_forward_expand(gf, cur);
+
+    auto * inp_hybrid = build_inp_mem_hybrid();
+    ggml_tensor * inp_out_ids = build_inp_out_ids();
+
+    for (int il = 0; il < n_layer; ++il) {
+        ggml_tensor * residual = cur;
+
+        cur = build_norm(cur, model.layers[il].attn_norm, nullptr, cfg_.norm, il);
+        cb(cur, "model.layers.{}.operator_norm", il);
+
+        if (hparams.is_recurrent(il)) {
+            cur = build_layer_mamba2(inp_hybrid->get_recr(), cur, il);
+        } else if (hparams.n_ff(il) == 0) {
+            cur = build_layer_attn(inp_hybrid->get_attn(), cur, il);
+        } else {
+            cur = build_layer_ffn(cur, il);
+        }
+
+        if (il == n_layer - 1 && inp_out_ids) {
+            cur = ggml_get_rows(ctx0, cur, inp_out_ids);
+            residual = ggml_get_rows(ctx0, residual, inp_out_ids);
+        }
+
+        cur = ggml_add(ctx0, residual, cur);
+        cb(cur, "operator_residual", il);
+
+        if (cfg_.apply_cvec_after_residual) {
+            cur = build_cvec(cur, il);
+        }
+        cb(cur, "l_out", il);
+    }
+
+    cur = build_norm(cur, model.output_norm, nullptr, cfg_.norm, -1);
+    cb(cur, "result_norm", -1);
+    res->t_embd = cur;
+
+    cur = build_lora_mm(model.output, cur);
+    cb(cur, "result_output", -1);
+    res->t_logits = cur;
+
+    ggml_build_forward_expand(gf, cur);
+}
+
+ggml_tensor * llm_build_hybrid_mamba2_single_op_transformer::build_layer_attn(
+        llm_graph_input_attn_kv * inp_attn,
+        ggml_tensor *             cur,
+        int                       il) {
+    const auto & layer = model.layers[il];
+    const int64_t n_embd_head = hparams.n_embd_head_v();
+    const int32_t layer_n_head = hparams.n_head(il);
+    const int32_t layer_n_head_kv = hparams.n_head_kv(il);
+
+    ggml_tensor * q = build_lora_mm(layer.wq, cur);
+    cb(q, "Qcur", il);
+    if (cfg_.attn_bias && layer.bq) {
+        q = ggml_add(ctx0, q, layer.bq);
+        cb(q, "Qcur", il);
+    }
+
+    ggml_tensor * k = build_lora_mm(layer.wk, cur);
+    cb(k, "Kcur", il);
+    if (cfg_.attn_bias && layer.bk) {
+        k = ggml_add(ctx0, k, layer.bk);
+        cb(k, "Kcur", il);
+    }
+
+    ggml_tensor * v = build_lora_mm(layer.wv, cur);
+    cb(v, "Vcur", il);
+    if (cfg_.attn_bias && layer.bv) {
+        v = ggml_add(ctx0, v, layer.bv);
+        cb(v, "Vcur", il);
+    }
+
+    q = ggml_reshape_3d(ctx0, q, n_embd_head, layer_n_head, n_tokens);
+    k = ggml_reshape_3d(ctx0, k, n_embd_head, layer_n_head_kv, n_tokens);
+    v = ggml_reshape_3d(ctx0, v, n_embd_head, layer_n_head_kv, n_tokens);
+
+    cb(q, "Qcur", il);
+    cb(k, "Kcur", il);
+    cb(v, "Vcur", il);
+
+    const float kq_scale = cfg_.use_hparams_attn_scale && hparams.f_attention_scale != 0.0f
+        ? hparams.f_attention_scale
+        : 1.0f / sqrtf(float(n_embd_head));
+
+    ggml_tensor * out = build_attn(inp_attn,
+            layer.wo, cfg_.attn_bias ? layer.bo : nullptr,
+            q, k, v, nullptr, nullptr, nullptr, kq_scale, il);
+    cb(out, "attn_out", il);
+    return out;
+}
+
+ggml_tensor * llm_build_hybrid_mamba2_single_op_transformer::build_layer_mamba2(
+        llm_graph_input_rs * inp_rs,
+        ggml_tensor *        cur,
+        int                  il) const {
+    if (hparams.ssm_n_group > 0) {
+        return build_mamba2_layer(inp_rs, cur, model, ubatch, il);
+    }
+    return build_mamba2_layer_zero_group(inp_rs, cur, model, ubatch, il);
+}
+
+ggml_tensor * llm_build_hybrid_mamba2_single_op_transformer::build_layer_ffn(
+        ggml_tensor * cur,
+        int           il) {
+    const auto & layer = model.layers[il];
+
+    if (!layer.ffn_gate_inp) {
+        ggml_tensor * out = build_ffn(cur,
+                layer.ffn_up,   layer.ffn_up_b,   layer.ffn_up_s,
+                nullptr,        nullptr,          nullptr,
+                layer.ffn_down, layer.ffn_down_b, layer.ffn_down_s,
+                nullptr,
+                cfg_.dense_ffn_act, cfg_.dense_ffn_type, il);
+        cb(out, "ffn_out", il);
+        return out;
+    }
+
+    GGML_ASSERT(n_expert > 0 && n_expert_used > 0);
+
+    ggml_tensor * inp_emb = cur;
+    ggml_tensor * inp_latent = cur;
+
+    if (cfg_.latent_moe && layer.ffn_latent_down) {
+        inp_latent = ggml_mul_mat(ctx0, layer.ffn_latent_down, cur);
+    }
+
+    ggml_tensor * router_logits = build_lora_mm(layer.ffn_gate_inp, cur);
+    cb(router_logits, "ffn_moe_logits", il);
+
+    const auto moe_gating = cfg_.moe_gating == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE
+        ? static_cast<llama_expert_gating_func_type>(hparams.expert_gating_func)
+        : cfg_.moe_gating;
+
+    ggml_tensor * moe_out = build_moe_ffn(inp_latent,
+            layer.ffn_gate_inp,
+            layer.ffn_up_exps,
+            nullptr,
+            layer.ffn_down_exps,
+            layer.ffn_exp_probs_b,
+            n_expert, n_expert_used,
+            cfg_.dense_ffn_act,
+            cfg_.moe_norm_weights || hparams.expert_weights_norm,
+            hparams.expert_weights_scale,
+            moe_gating,
+            il,
+            router_logits,
+            nullptr,
+            layer.ffn_up_exps_s,
+            nullptr,
+            layer.ffn_down_exps_s);
+    cb(moe_out, "ffn_moe_out", il);
+
+    if (cfg_.latent_moe && layer.ffn_latent_up) {
+        moe_out = ggml_mul_mat(ctx0, layer.ffn_latent_up, moe_out);
+    }
+
+    if (cfg_.shared_expert && layer.ffn_up_shexp && layer.ffn_down_shexp) {
+        ggml_tensor * ffn_shexp = build_ffn(inp_emb,
+                layer.ffn_up_shexp,   nullptr, layer.ffn_up_shexp_s,
+                nullptr,              nullptr, nullptr,
+                layer.ffn_down_shexp, nullptr, layer.ffn_down_shexp_s,
+                nullptr,
+                cfg_.dense_ffn_act, cfg_.dense_ffn_type, il);
+        cb(ffn_shexp, "ffn_shexp", il);
+        moe_out = ggml_add(ctx0, moe_out, ffn_shexp);
+    }
+
+    cb(moe_out, "ffn_out", il);
+    return moe_out;
+}
+
+// ---------------------------------------------------------------------------
 // Reusable MLA + KDA hybrid builder (Kimi Linear family)
 // ---------------------------------------------------------------------------
 

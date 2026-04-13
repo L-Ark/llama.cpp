@@ -100,7 +100,6 @@ add_library(llama
             models/mistral3.cpp
             models/modern-bert.cpp
             models/mpt.cpp
-            models/nemotron-h.cpp
             models/nemotron.cpp
             models/neo-bert.cpp
             models/olmo.cpp

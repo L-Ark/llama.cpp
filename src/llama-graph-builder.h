@@ -245,6 +245,44 @@ private:
     llm_graph_input_attn_kv_iswa * inp_attn_iswa_ = nullptr;
 };
 
+struct llm_hybrid_mamba2_single_op_transformer_config {
+    llm_norm_type norm = LLM_NORM_RMS;
+    llm_ffn_op_type dense_ffn_act = LLM_FFN_RELU_SQR;
+    llm_ffn_gate_type dense_ffn_type = LLM_FFN_PAR;
+    bool attn_bias = false;
+    bool use_hparams_attn_scale = false;
+    bool moe_norm_weights = false;
+    llama_expert_gating_func_type moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_NONE;
+    bool shared_expert = false;
+    bool latent_moe = false;
+    bool apply_cvec_after_residual = true;
+};
+
+struct llm_build_hybrid_mamba2_single_op_transformer : public llm_build_mamba_base {
+    llm_build_hybrid_mamba2_single_op_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_hybrid_mamba2_single_op_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_layer_attn(
+            llm_graph_input_attn_kv * inp_attn,
+            ggml_tensor *             cur,
+            int                       il);
+
+    ggml_tensor * build_layer_mamba2(
+            llm_graph_input_rs * inp_rs,
+            ggml_tensor *        cur,
+            int                  il) const;
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+    const llm_hybrid_mamba2_single_op_transformer_config cfg_;
+};
+
 struct llm_build_mla_kda_hybrid : public llm_build_delta_net_base {
     llm_build_mla_kda_hybrid(
             const llama_model & model,
