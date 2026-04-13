@@ -88,7 +88,6 @@ add_library(llama
             models/jais.cpp
             models/jais2.cpp
             models/jamba.cpp
-            models/lfm2.cpp
             models/llada-moe.cpp
             models/llada.cpp
             models/llama-iswa.cpp

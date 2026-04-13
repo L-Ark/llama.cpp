@@ -1520,6 +1520,217 @@ ggml_tensor * llm_build_hybrid_mamba2_transformer::build_layer_ffn(
 }
 
 // ---------------------------------------------------------------------------
+// Reusable hybrid shortconv transformer builder (LFM2 family)
+// ---------------------------------------------------------------------------
+
+template <bool iswa>
+llm_build_hybrid_shortconv_transformer<iswa>::llm_build_hybrid_shortconv_transformer(
+        const llama_model & model,
+        const llm_graph_params & params,
+        const llm_hybrid_shortconv_transformer_config & config) :
+        llm_graph_context(params),
+        model(model),
+        cfg_(config) {
+    ggml_tensor * cur = build_inp_embd(model.tok_embd);
+    cb(cur, "model.embed_tokens", -1);
+    ggml_build_forward_expand(gf, cur);
+
+    if constexpr (iswa) {
+        auto * inp_hybrid = build_inp_mem_hybrid_iswa();
+        inp_recr_ = inp_hybrid->get_recr();
+        inp_attn_iswa_ = inp_hybrid->get_attn();
+    } else {
+        auto * inp_hybrid = build_inp_mem_hybrid();
+        inp_recr_ = inp_hybrid->get_recr();
+        inp_attn_kv_ = inp_hybrid->get_attn();
+    }
+
+    inp_pos_ = build_inp_pos();
+    ggml_tensor * inp_out_ids = build_inp_out_ids();
+
+    for (int il = 0; il < n_layer; ++il) {
+        ggml_tensor * prev_cur = cur;
+
+        cur = build_norm(cur, model.layers[il].attn_norm, nullptr, cfg_.norm, il);
+        cb(cur, "model.layers.{}.operator_norm", il);
+
+        cur = hparams.is_recurrent(il)
+            ? build_layer_shortconv(inp_recr_, cur, il)
+            : build_layer_attn(cur, il);
+
+        if (il == n_layer - 1 && inp_out_ids) {
+            cur      = ggml_get_rows(ctx0, cur, inp_out_ids);
+            prev_cur = ggml_get_rows(ctx0, prev_cur, inp_out_ids);
+        }
+
+        cur = ggml_add(ctx0, prev_cur, cur);
+
+        ggml_tensor * ffn_norm_out = build_norm(cur, model.layers[il].ffn_norm, nullptr, cfg_.norm, il);
+        cb(ffn_norm_out, "model.layers.{}.ffn_norm", il);
+
+        ggml_tensor * ffn_out = build_layer_ffn(ffn_norm_out, il);
+        cur = ggml_add(ctx0, cur, ffn_out);
+
+        cur = build_cvec(cur, il);
+        cb(cur, "l_out", il);
+    }
+
+    cur = build_norm(cur, model.output_norm, nullptr, cfg_.norm, -1);
+    cb(cur, "result_norm", -1);
+    res->t_embd = cur;
+
+    cur = build_lora_mm(model.output, cur);
+    cb(cur, "result_output", -1);
+    res->t_logits = cur;
+
+    ggml_build_forward_expand(gf, cur);
+}
+
+template <bool iswa>
+ggml_tensor * llm_build_hybrid_shortconv_transformer<iswa>::build_layer_attn(
+        ggml_tensor * cur,
+        int           il) {
+    GGML_ASSERT(hparams.n_embd_v_gqa(il) == hparams.n_embd_k_gqa(il));
+
+    const auto n_embd_head = hparams.n_embd_head_v();
+    const auto layer_n_head = hparams.n_head(il);
+    const auto layer_n_head_kv = hparams.n_head_kv(il);
+
+    ggml_tensor * q = build_lora_mm(model.layers[il].wq, cur);
+    cb(q, "model.layers.{}.self_attn.q_proj", il);
+    ggml_tensor * k = build_lora_mm(model.layers[il].wk, cur);
+    cb(k, "model.layers.{}.self_attn.k_proj", il);
+    ggml_tensor * v = build_lora_mm(model.layers[il].wv, cur);
+    cb(v, "model.layers.{}.self_attn.v_proj", il);
+
+    q = ggml_reshape_3d(ctx0, q, n_embd_head, layer_n_head, n_tokens);
+    k = ggml_reshape_3d(ctx0, k, n_embd_head, layer_n_head_kv, n_tokens);
+    v = ggml_reshape_3d(ctx0, v, n_embd_head, layer_n_head_kv, n_tokens);
+
+    if (cfg_.qk_norm) {
+        q = build_norm(q, model.layers[il].attn_q_norm, nullptr, cfg_.norm, il);
+        cb(q, "model.layers.{}.self_attn.q_layernorm", il);
+        k = build_norm(k, model.layers[il].attn_k_norm, nullptr, cfg_.norm, il);
+        cb(k, "model.layers.{}.self_attn.k_layernorm", il);
+    }
+
+    q = ggml_rope_ext(ctx0, q, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+            ext_factor, attn_factor, beta_fast, beta_slow);
+    k = ggml_rope_ext(ctx0, k, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+            ext_factor, attn_factor, beta_fast, beta_slow);
+
+    ggml_tensor * out = nullptr;
+    if constexpr (iswa) {
+        out = build_attn(inp_attn_iswa_,
+                model.layers[il].wo, nullptr,
+                q, k, v, nullptr, nullptr, nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
+    } else {
+        out = build_attn(inp_attn_kv_,
+                model.layers[il].wo, nullptr,
+                q, k, v, nullptr, nullptr, nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
+    }
+
+    cb(out, "model.layers.{}.self_attn.out_proj", il);
+    return out;
+}
+
+template <bool iswa>
+ggml_tensor * llm_build_hybrid_shortconv_transformer<iswa>::build_layer_shortconv(
+        llm_graph_input_rs * inp_recr,
+        ggml_tensor *        cur,
+        int                  il) {
+    const auto * mctx_cur = inp_recr->mctx;
+    const uint32_t kv_head = mctx_cur->get_head();
+    const int64_t n_seq_tokens = ubatch.n_seq_tokens;
+    const int64_t n_seqs = ubatch.n_seqs;
+
+    GGML_ASSERT(n_seqs != 0);
+    GGML_ASSERT(ubatch.equal_seqs());
+    GGML_ASSERT(ubatch.n_tokens == n_seq_tokens * n_seqs);
+    GGML_ASSERT(hparams.n_shortconv_l_cache > 1);
+
+    const uint32_t d_conv = hparams.n_shortconv_l_cache - 1;
+
+    cur = ggml_reshape_3d(ctx0, cur, cur->ne[0], n_seq_tokens, n_seqs);
+
+    ggml_tensor * bcx = build_lora_mm(model.layers[il].shortconv.in_proj, cur);
+    cb(bcx, "model.layers.{}.conv.in_proj", il);
+
+    constexpr int64_t n_chunks = 3;
+    GGML_ASSERT(bcx->ne[0] % n_chunks == 0);
+    const int64_t chunk_size = bcx->ne[0] / n_chunks;
+
+    ggml_tensor * b = ggml_view_3d(ctx0, bcx, chunk_size, bcx->ne[1], bcx->ne[2],
+            bcx->nb[1], bcx->nb[2], 0 * chunk_size * ggml_element_size(bcx));
+    ggml_tensor * c = ggml_view_3d(ctx0, bcx, chunk_size, bcx->ne[1], bcx->ne[2],
+            bcx->nb[1], bcx->nb[2], 1 * chunk_size * ggml_element_size(bcx));
+    ggml_tensor * x = ggml_view_3d(ctx0, bcx, chunk_size, bcx->ne[1], bcx->ne[2],
+            bcx->nb[1], bcx->nb[2], 2 * chunk_size * ggml_element_size(bcx));
+
+    ggml_tensor * bx = ggml_transpose(ctx0, ggml_mul(ctx0, b, x));
+
+    ggml_tensor * conv_state = mctx_cur->get_r_l(il);
+    ggml_tensor * conv_rs = build_rs(inp_recr, conv_state, hparams.n_embd_r(), n_seqs);
+    ggml_tensor * conv = ggml_reshape_3d(ctx0, conv_rs, d_conv, n_embd, n_seqs);
+
+    bx = ggml_concat(ctx0, conv, bx, 0);
+    GGML_ASSERT(bx->ne[0] > conv->ne[0]);
+
+    ggml_tensor * new_conv = ggml_view_3d(ctx0, bx, conv->ne[0], bx->ne[1], bx->ne[2],
+            bx->nb[1], bx->nb[2], (bx->ne[0] - conv->ne[0]) * ggml_element_size(bx));
+    GGML_ASSERT(ggml_are_same_shape(conv, new_conv));
+
+    ggml_build_forward_expand(gf, ggml_cpy(ctx0, new_conv,
+            ggml_view_1d(ctx0, conv_state, ggml_nelements(new_conv),
+                    kv_head * d_conv * n_embd * ggml_element_size(new_conv))));
+
+    ggml_tensor * conv_out = ggml_ssm_conv(ctx0, bx, model.layers[il].shortconv.conv);
+    cb(conv_out, "model.layers.{}.conv.conv", il);
+
+    ggml_tensor * y = ggml_mul(ctx0, c, conv_out);
+    y = build_lora_mm(model.layers[il].shortconv.out_proj, y);
+    cb(y, "model.layers.{}.conv.out_proj", il);
+
+    y = ggml_reshape_2d(ctx0, y, y->ne[0], n_seq_tokens * n_seqs);
+    return y;
+}
+
+template <bool iswa>
+ggml_tensor * llm_build_hybrid_shortconv_transformer<iswa>::build_layer_ffn(
+        ggml_tensor * cur,
+        int           il) {
+    const auto & layer = model.layers[il];
+
+    if (layer.ffn_gate_inp) {
+        ggml_tensor * out = build_moe_ffn(cur,
+                layer.ffn_gate_inp,
+                layer.ffn_up_exps,
+                layer.ffn_gate_exps,
+                layer.ffn_down_exps,
+                layer.ffn_exp_probs_b,
+                n_expert, n_expert_used,
+                cfg_.dense_ffn_act, cfg_.moe_norm_weights,
+                hparams.expert_weights_scale,
+                static_cast<llama_expert_gating_func_type>(hparams.expert_gating_func),
+                il);
+        cb(out, "ffn_out", il);
+        return out;
+    }
+
+    ggml_tensor * out = build_ffn(cur,
+            layer.ffn_up,   layer.ffn_up_b,   nullptr,
+            layer.ffn_gate, layer.ffn_gate_b, nullptr,
+            layer.ffn_down, layer.ffn_down_b, nullptr,
+            nullptr,
+            cfg_.dense_ffn_act, cfg_.dense_ffn_type, il);
+    cb(out, "ffn_out", il);
+    return out;
+}
+
+template struct llm_build_hybrid_shortconv_transformer<true>;
+template struct llm_build_hybrid_shortconv_transformer<false>;
+
+// ---------------------------------------------------------------------------
 // Reusable MLA + KDA hybrid builder (Kimi Linear family)
 // ---------------------------------------------------------------------------
 

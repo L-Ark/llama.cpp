@@ -8480,10 +8480,11 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
         case LLM_ARCH_LFM2:
         case LLM_ARCH_LFM2MOE:
             {
+                llm_hybrid_shortconv_transformer_config cfg;
                 if (hparams.swa_type == LLAMA_SWA_TYPE_STANDARD) {
-                    llm = std::make_unique<llm_build_lfm2<true>>(*this, params);
+                    llm = std::make_unique<llm_build_hybrid_shortconv_transformer<true>>(*this, params, cfg);
                 } else {
-                    llm = std::make_unique<llm_build_lfm2<false>>(*this, params);
+                    llm = std::make_unique<llm_build_hybrid_shortconv_transformer<false>>(*this, params, cfg);
                 }
             } break;
         case LLM_ARCH_QWEN3NEXT:

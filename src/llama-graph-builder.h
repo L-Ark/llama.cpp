@@ -208,6 +208,43 @@ private:
     ggml_tensor * inp_pos_ = nullptr;
 };
 
+struct llm_hybrid_shortconv_transformer_config {
+    llm_norm_type norm = LLM_NORM_RMS;
+    llm_ffn_op_type dense_ffn_act = LLM_FFN_SILU;
+    llm_ffn_gate_type dense_ffn_type = LLM_FFN_PAR;
+    bool qk_norm = true;
+    bool moe_norm_weights = true;
+};
+
+template <bool iswa>
+struct llm_build_hybrid_shortconv_transformer : public llm_graph_context {
+    llm_build_hybrid_shortconv_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_hybrid_shortconv_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_layer_attn(
+            ggml_tensor * cur,
+            int           il);
+
+    ggml_tensor * build_layer_shortconv(
+            llm_graph_input_rs * inp_recr,
+            ggml_tensor *        cur,
+            int                  il);
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+    const llm_hybrid_shortconv_transformer_config cfg_;
+    ggml_tensor * inp_pos_ = nullptr;
+    llm_graph_input_rs * inp_recr_ = nullptr;
+    llm_graph_input_attn_kv * inp_attn_kv_ = nullptr;
+    llm_graph_input_attn_kv_iswa * inp_attn_iswa_ = nullptr;
+};
+
 struct llm_build_mla_kda_hybrid : public llm_build_delta_net_base {
     llm_build_mla_kda_hybrid(
             const llama_model & model,
