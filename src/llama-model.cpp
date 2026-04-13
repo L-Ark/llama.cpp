@@ -8373,6 +8373,7 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
                 cfg.logit_softcap = true;
                 cfg.token_embd_scale = true;
                 cfg.per_layer_embd = true;
+                cfg.per_layer_attn_dims = true;
                 cfg.act = LLM_FFN_GELU;
                 llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;

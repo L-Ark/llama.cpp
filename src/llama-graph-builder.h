@@ -115,6 +115,9 @@ struct llm_transformer_config {
 
     // Per-layer token embeddings / residual injection (Gemma4)
     bool per_layer_embd = false;
+
+    // Per-layer attention geometry (Gemma4)
+    bool per_layer_attn_dims = false;
 };
 
 // ---------------------------------------------------------------------------

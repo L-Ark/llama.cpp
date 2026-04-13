@@ -319,7 +319,7 @@ llm_build_std_transformer::llm_build_std_transformer(
         inp_attn_kv = build_attn_inp_kv();
     }
 
-    const float kq_scale = hparams.f_attention_scale == 0.0f
+    const float default_kq_scale = hparams.f_attention_scale == 0.0f
         ? 1.0f/sqrtf(float(n_embd_head))
         : hparams.f_attention_scale;
 
@@ -405,7 +405,7 @@ llm_build_std_transformer::llm_build_std_transformer(
                 }
 
                 cur = build_attn(inp_attn_nc, model.layers[il].wo, model.layers[il].bo,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, default_kq_scale, il);
             }
 
             if (il == effective_n_layer - 1 && inp_out_ids) {
@@ -512,7 +512,7 @@ llm_build_std_transformer::llm_build_std_transformer(
 
                 attn_cur = build_attn(inp_hybrid->get_attn(),
                         model.layers[il].wo, nullptr,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, default_kq_scale, il);
                 cb(attn_cur, "attn_out", il);
             }
 
@@ -551,6 +551,16 @@ llm_build_std_transformer::llm_build_std_transformer(
                 rope_factors = model.get_rope_factors(cparams, il);
             }
 
+            const int64_t layer_n_head      = config.per_layer_attn_dims ? hparams.n_head(il)       : n_head;
+            const int64_t layer_n_head_kv   = config.per_layer_attn_dims ? hparams.n_head_kv(il)    : n_head_kv;
+            const int64_t layer_n_embd_head = config.per_layer_attn_dims ? hparams.n_embd_head_k(il): n_embd_head;
+            const int64_t layer_n_rot       = config.per_layer_attn_dims ? hparams.n_rot(il)        : n_rot;
+            const int64_t layer_n_embd_k_gqa = config.per_layer_attn_dims ? hparams.n_embd_k_gqa(il) : n_embd_k_gqa;
+            const int64_t layer_q_embd      = layer_n_embd_head * layer_n_head;
+            const float layer_kq_scale = hparams.f_attention_scale == 0.0f
+                ? 1.0f/sqrtf(float(layer_n_embd_head))
+                : hparams.f_attention_scale;
+
             // Q, K, V projections
             ggml_tensor * Qcur;
             ggml_tensor * Kcur = nullptr;
@@ -571,15 +581,15 @@ llm_build_std_transformer::llm_build_std_transformer(
                 ggml_tensor * Qcur_full = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
                 cb(Qcur_full, "Qcur_full", il);
 
-                Qcur = ggml_view_3d(ctx0, Qcur_full, n_embd_head, n_head, n_tokens,
-                        ggml_element_size(Qcur_full) * n_embd_head * 2,
-                        ggml_element_size(Qcur_full) * n_embd_head * 2 * n_head,
+                Qcur = ggml_view_3d(ctx0, Qcur_full, layer_n_embd_head, layer_n_head, n_tokens,
+                        ggml_element_size(Qcur_full) * layer_n_embd_head * 2,
+                        ggml_element_size(Qcur_full) * layer_n_embd_head * 2 * layer_n_head,
                         0);
-                gate = ggml_view_3d(ctx0, Qcur_full, n_embd_head, n_head, n_tokens,
-                        ggml_element_size(Qcur_full) * n_embd_head * 2,
-                        ggml_element_size(Qcur_full) * n_embd_head * 2 * n_head,
-                        ggml_element_size(Qcur_full) * n_embd_head);
-                gate = ggml_cont_2d(ctx0, gate, n_embd_head * n_head, n_tokens);
+                gate = ggml_view_3d(ctx0, Qcur_full, layer_n_embd_head, layer_n_head, n_tokens,
+                        ggml_element_size(Qcur_full) * layer_n_embd_head * 2,
+                        ggml_element_size(Qcur_full) * layer_n_embd_head * 2 * layer_n_head,
+                        ggml_element_size(Qcur_full) * layer_n_embd_head);
+                gate = ggml_cont_2d(ctx0, gate, layer_n_embd_head * layer_n_head, n_tokens);
 
                 if (layer_has_kv) {
                     Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
@@ -596,12 +606,12 @@ llm_build_std_transformer::llm_build_std_transformer(
                 cb(qkv, "qkv", il);
 
                 // Split via 3D views
-                Qcur = ggml_view_3d(ctx0, qkv, n_embd_head, n_head,    n_tokens,
-                        n_embd_head*qkv->nb[0], qkv->nb[1], 0);
-                Kcur = ggml_view_3d(ctx0, qkv, n_embd_head, n_head_kv, n_tokens,
-                        n_embd_head*qkv->nb[0], qkv->nb[1], n_embd*qkv->nb[0]);
-                Vcur = ggml_view_3d(ctx0, qkv, n_embd_head, n_head_kv, n_tokens,
-                        n_embd_head*qkv->nb[0], qkv->nb[1], (n_embd + n_embd_k_gqa)*qkv->nb[0]);
+                Qcur = ggml_view_3d(ctx0, qkv, layer_n_embd_head, layer_n_head,    n_tokens,
+                        layer_n_embd_head*qkv->nb[0], qkv->nb[1], 0);
+                Kcur = ggml_view_3d(ctx0, qkv, layer_n_embd_head, layer_n_head_kv, n_tokens,
+                        layer_n_embd_head*qkv->nb[0], qkv->nb[1], layer_q_embd*qkv->nb[0]);
+                Vcur = ggml_view_3d(ctx0, qkv, layer_n_embd_head, layer_n_head_kv, n_tokens,
+                        layer_n_embd_head*qkv->nb[0], qkv->nb[1], (layer_q_embd + layer_n_embd_k_gqa)*qkv->nb[0]);
             } else {
                 // Separate Q, K, V projections (standard)
                 Qcur = build_lora_mm(model.layers[il].wq, cur);
@@ -637,13 +647,13 @@ llm_build_std_transformer::llm_build_std_transformer(
             // Reshape for multi-head attention (only for separate Q/K/V)
             if (!use_combined_qkv) {
                 if (!layer_attn_q_gate) {
-                    Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
+                    Qcur = ggml_reshape_3d(ctx0, Qcur, layer_n_embd_head, layer_n_head, n_tokens);
                 }
                 if (Kcur) {
-                    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+                    Kcur = ggml_reshape_3d(ctx0, Kcur, layer_n_embd_head, layer_n_head_kv, n_tokens);
                 }
                 if (Vcur) {
-                    Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+                    Vcur = ggml_reshape_3d(ctx0, Vcur, layer_n_embd_head, layer_n_head_kv, n_tokens);
                 }
             }
 
@@ -654,12 +664,12 @@ llm_build_std_transformer::llm_build_std_transformer(
                 if (model.layers[il].attn_q_norm) {
                     ggml_tensor * q_norm_b = model.layers[il].attn_q_norm_b;
                     llm_norm_type qk_norm_type = q_norm_b ? LLM_NORM : config.norm;
-                    const bool pre_reshape = (model.layers[il].attn_q_norm->ne[0] != n_embd_head);
+                    const bool pre_reshape = (model.layers[il].attn_q_norm->ne[0] != layer_n_embd_head);
                     if (pre_reshape && !use_combined_qkv) {
                         // Pre-reshape norm: undo reshape, norm, re-reshape (MiniMax-M2)
-                        Qcur = ggml_reshape_2d(ctx0, Qcur, n_embd_head * n_head, n_tokens);
+                        Qcur = ggml_reshape_2d(ctx0, Qcur, layer_n_embd_head * layer_n_head, n_tokens);
                         Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, q_norm_b, qk_norm_type, il);
-                        Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
+                        Qcur = ggml_reshape_3d(ctx0, Qcur, layer_n_embd_head, layer_n_head, n_tokens);
                     } else {
                         Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, q_norm_b, qk_norm_type, il);
                     }
@@ -668,11 +678,11 @@ llm_build_std_transformer::llm_build_std_transformer(
                 if (model.layers[il].attn_k_norm) {
                     ggml_tensor * k_norm_b = model.layers[il].attn_k_norm_b;
                     llm_norm_type qk_norm_type = k_norm_b ? LLM_NORM : config.norm;
-                    const bool pre_reshape = (model.layers[il].attn_k_norm->ne[0] != n_embd_head);
+                    const bool pre_reshape = (model.layers[il].attn_k_norm->ne[0] != layer_n_embd_head);
                     if (Kcur && pre_reshape && !use_combined_qkv) {
-                        Kcur = ggml_reshape_2d(ctx0, Kcur, n_embd_head * n_head_kv, n_tokens);
+                        Kcur = ggml_reshape_2d(ctx0, Kcur, layer_n_embd_head * layer_n_head_kv, n_tokens);
                         Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, k_norm_b, qk_norm_type, il);
-                        Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+                        Kcur = ggml_reshape_3d(ctx0, Kcur, layer_n_embd_head, layer_n_head_kv, n_tokens);
                     } else if (Kcur) {
                         Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, k_norm_b, qk_norm_type, il);
                     }
@@ -701,20 +711,20 @@ llm_build_std_transformer::llm_build_std_transformer(
                     std::copy(std::begin(hparams.rope_sections), std::begin(hparams.rope_sections) + 4, sections);
 
                     Qcur = ggml_rope_multi(ctx0, Qcur, inp_pos, rope_factors,
-                            n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                            layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                     if (Kcur) {
                         Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, rope_factors,
-                                n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                                 ext_factor, attn_factor, beta_fast, beta_slow);
                     }
                 } else {
                     Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors,
-                            n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                            layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                     if (Kcur) {
                         Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
-                                n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                                 ext_factor, attn_factor, beta_fast, beta_slow);
                     }
                 }
@@ -736,16 +746,16 @@ llm_build_std_transformer::llm_build_std_transformer(
 
             if (config.hybrid) {
                 cur = build_attn(inp_hybrid->get_attn(), attn_wo, attn_wo_b,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, layer_kq_scale, il);
             } else if (config.no_attn_cache) {
                 cur = build_attn(inp_attn_nc, attn_wo, attn_wo_b,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, layer_kq_scale, il);
             } else if (config.iswa) {
                 cur = build_attn(inp_attn_iswa, attn_wo, attn_wo_b,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, layer_kq_scale, il);
             } else {
                 cur = build_attn(inp_attn_kv, attn_wo, attn_wo_b,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, layer_kq_scale, il);
             }
 
             // Attention gating: sigmoid(gate) * attn_out → wo projection
