@@ -8363,7 +8363,18 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_GEMMA4:
             {
-                llm = std::make_unique<llm_build_gemma4_iswa>(*this, params);
+                llm_transformer_config cfg;
+                cfg.iswa = true;
+                cfg.qk_norm = true;
+                cfg.v_norm = true;
+                cfg.moe = true;
+                cfg.attn_post_norm = true;
+                cfg.ffn_post_norm = true;
+                cfg.logit_softcap = true;
+                cfg.token_embd_scale = true;
+                cfg.per_layer_embd = true;
+                cfg.act = LLM_FFN_GELU;
+                llm = std::make_unique<llm_build_std_transformer>(*this, params, cfg);
             } break;
         case LLM_ARCH_DEEPSEEK2:
         case LLM_ARCH_GLM_DSA:

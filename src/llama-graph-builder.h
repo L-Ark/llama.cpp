@@ -112,6 +112,9 @@ struct llm_transformer_config {
 
     // Deepstack embedding injection (Qwen3VL)
     bool deepstack = false;         // Add slices of input embeddings to early layer outputs
+
+    // Per-layer token embeddings / residual injection (Gemma4)
+    bool per_layer_embd = false;
 };
 
 // ---------------------------------------------------------------------------

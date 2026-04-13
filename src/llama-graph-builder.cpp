@@ -282,9 +282,9 @@ llm_build_std_transformer::llm_build_std_transformer(
 
     const int effective_n_layer = n_layer - (int) hparams.nextn_predict_layers;
 
-    // Per-layer embed injection (Gemma 4) — testing disabled
+    // Per-layer embed injection (Gemma 4)
     ggml_tensor * inp_per_layer = nullptr;
-    if (false && model.per_layer_tok_embd) {
+    if (config.per_layer_embd && model.per_layer_tok_embd) {
         const int64_t n_embd_per_layer = hparams.n_embd_per_layer;
 
         ggml_tensor * per_layer_raw;
@@ -568,10 +568,11 @@ llm_build_std_transformer::llm_build_std_transformer(
 
             // Q, K, V projections
             ggml_tensor * Qcur;
-            ggml_tensor * Kcur;
-            ggml_tensor * Vcur;
+            ggml_tensor * Kcur = nullptr;
+            ggml_tensor * Vcur = nullptr;
             ggml_tensor * gate = nullptr;
             const bool layer_attn_q_gate = config.attn_q_gate && !hparams.is_recurrent(il);
+            const bool layer_has_kv = !config.iswa || hparams.has_kv(il);
 
             // Vision expert: use layer_wqkv for combined QKV routing
             ggml_tensor * layer_wqkv = (config.vision_expert && !ubatch.token)
@@ -595,8 +596,12 @@ llm_build_std_transformer::llm_build_std_transformer(
                         ggml_element_size(Qcur_full) * n_embd_head);
                 gate = ggml_cont_2d(ctx0, gate, n_embd_head * n_head, n_tokens);
 
-                Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
-                Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);
+                if (layer_has_kv) {
+                    Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
+                    Vcur = model.layers[il].wv
+                        ? build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s)
+                        : Kcur;
+                }
             } else if (use_combined_qkv && layer_wqkv) {
                 // Combined QKV projection (GPT-2, Bloom, Falcon, Jais, CogVLM)
                 ggml_tensor * qkv = build_lora_mm(layer_wqkv, cur);
@@ -615,23 +620,31 @@ llm_build_std_transformer::llm_build_std_transformer(
             } else {
                 // Separate Q, K, V projections (standard)
                 Qcur = build_lora_mm(model.layers[il].wq, cur);
-                Kcur = build_lora_mm(model.layers[il].wk, cur);
-                Vcur = build_lora_mm(model.layers[il].wv, cur);
+                if (layer_has_kv) {
+                    Kcur = build_lora_mm(model.layers[il].wk, cur);
+                    Vcur = model.layers[il].wv
+                        ? build_lora_mm(model.layers[il].wv, cur)
+                        : Kcur;
+                }
             }
 
             cb(Qcur, "Qcur", il);
-            cb(Kcur, "Kcur", il);
-            cb(Vcur, "Vcur", il);
+            if (Kcur) {
+                cb(Kcur, "Kcur", il);
+            }
+            if (Vcur) {
+                cb(Vcur, "Vcur", il);
+            }
 
             // Attention bias
             if (config.attn_bias) {
                 if (model.layers[il].bq) {
                     Qcur = ggml_add(ctx0, Qcur, model.layers[il].bq);
                 }
-                if (model.layers[il].bk) {
+                if (Kcur && model.layers[il].bk) {
                     Kcur = ggml_add(ctx0, Kcur, model.layers[il].bk);
                 }
-                if (model.layers[il].bv) {
+                if (Vcur && model.layers[il].bv) {
                     Vcur = ggml_add(ctx0, Vcur, model.layers[il].bv);
                 }
             }
@@ -641,8 +654,12 @@ llm_build_std_transformer::llm_build_std_transformer(
                 if (!layer_attn_q_gate) {
                     Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
                 }
-                Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
-                Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+                if (Kcur) {
+                    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+                }
+                if (Vcur) {
+                    Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+                }
             }
 
             // QK normalization (before RoPE)
@@ -667,19 +684,21 @@ llm_build_std_transformer::llm_build_std_transformer(
                     ggml_tensor * k_norm_b = model.layers[il].attn_k_norm_b;
                     llm_norm_type qk_norm_type = k_norm_b ? LLM_NORM : config.norm;
                     const bool pre_reshape = (model.layers[il].attn_k_norm->ne[0] != n_embd_head);
-                    if (pre_reshape && !use_combined_qkv) {
+                    if (Kcur && pre_reshape && !use_combined_qkv) {
                         Kcur = ggml_reshape_2d(ctx0, Kcur, n_embd_head * n_head_kv, n_tokens);
                         Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, k_norm_b, qk_norm_type, il);
                         Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
-                    } else {
+                    } else if (Kcur) {
                         Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, k_norm_b, qk_norm_type, il);
                     }
-                    cb(Kcur, "Kcur_norm", il);
+                    if (Kcur) {
+                        cb(Kcur, "Kcur_norm", il);
+                    }
                 }
             }
 
             // V normalization (Gemma 4 — raw RMS norm without learned weights)
-            if (config.v_norm) {
+            if (config.v_norm && Vcur) {
                 Vcur = ggml_rms_norm(ctx0, Vcur, hparams.f_norm_rms_eps);
                 cb(Vcur, "Vcur_norm", il);
             }
@@ -699,20 +718,26 @@ llm_build_std_transformer::llm_build_std_transformer(
                     Qcur = ggml_rope_multi(ctx0, Qcur, inp_pos, rope_factors,
                             n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
-                    Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, rope_factors,
-                            n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                    if (Kcur) {
+                        Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, rope_factors,
+                                n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                ext_factor, attn_factor, beta_fast, beta_slow);
+                    }
                 } else {
                     Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors,
                             n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
-                    Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
-                            n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                    if (Kcur) {
+                        Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
+                                n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                ext_factor, attn_factor, beta_fast, beta_slow);
+                    }
                 }
 
                 cb(Qcur, "Qcur_rope", il);
-                cb(Kcur, "Kcur_rope", il);
+                if (Kcur) {
+                    cb(Kcur, "Kcur_rope", il);
+                }
             }
 
             // Attention computation + output projection
@@ -1039,6 +1064,11 @@ llm_build_std_transformer::llm_build_std_transformer(
             cb(cur, "per_layer_embd_out", il);
 
             cur = ggml_add(ctx0, pe_in, cur);
+        }
+
+        if (model.layers[il].out_scale) {
+            cur = ggml_mul(ctx0, cur, model.layers[il].out_scale);
+            cb(cur, "out_scaled", il);
         }
 
         cur = build_cvec(cur, il);
