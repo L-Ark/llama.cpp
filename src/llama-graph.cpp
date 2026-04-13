@@ -1706,6 +1706,65 @@ ggml_tensor * llm_graph_context::build_inp_embd(ggml_tensor * tok_embd) const {
     return cur;
 }
 
+ggml_tensor * llm_graph_context::build_per_layer_inputs_raw(
+        ggml_tensor * per_layer_tok_embd,
+        int64_t       n_embd_per_layer,
+        int64_t       n_layer) const {
+    GGML_ASSERT(per_layer_tok_embd != nullptr);
+
+    const float tok_embd_scale = sqrtf(float(n_embd_per_layer));
+
+    if (ubatch.token && res->t_inp_tokens) {
+        ggml_tensor * inp_per_layer = ggml_get_rows(ctx0, per_layer_tok_embd, res->t_inp_tokens);
+        inp_per_layer = ggml_reshape_3d(ctx0, inp_per_layer, n_embd_per_layer, n_layer, n_tokens);
+        inp_per_layer = ggml_scale(ctx0, inp_per_layer, tok_embd_scale);
+        cb(inp_per_layer, "inp_per_layer_selected", -1);
+        return inp_per_layer;
+    }
+
+    const int64_t embd_size = per_layer_tok_embd->ne[0];
+    ggml_tensor * padding = ggml_view_1d(ctx0, per_layer_tok_embd, embd_size, 0);
+    ggml_tensor * inp_per_layer = ggml_cast(ctx0, padding, GGML_TYPE_F32);
+    inp_per_layer = ggml_scale(ctx0, inp_per_layer, tok_embd_scale);
+    inp_per_layer = ggml_reshape_3d(ctx0, inp_per_layer, n_embd_per_layer, n_layer, 1);
+    cb(inp_per_layer, "inp_per_layer_multimodal", -1);
+    return inp_per_layer;
+}
+
+ggml_tensor * llm_graph_context::project_per_layer_inputs_common(
+        ggml_tensor * inp_batch,
+        ggml_tensor * inp_per_layer,
+        ggml_tensor * per_layer_model_proj,
+        ggml_tensor * per_layer_proj_norm,
+        int64_t       n_embd_per_layer,
+        int64_t       n_layer) const {
+    const float per_layer_projection_scale = 1.0f / sqrtf(float(n_embd));
+    const float per_layer_input_scale = 1.0f / sqrtf(2.0f);
+
+    ggml_tensor * per_layer_proj = ggml_mul_mat(ctx0, per_layer_model_proj, inp_batch);
+    per_layer_proj = ggml_scale(ctx0, per_layer_proj, per_layer_projection_scale);
+    per_layer_proj = ggml_reshape_3d(ctx0, per_layer_proj, n_embd_per_layer, n_layer, n_tokens);
+    per_layer_proj = build_norm(per_layer_proj, per_layer_proj_norm, nullptr, LLM_NORM_RMS, -1);
+    cb(per_layer_proj, "per_layer_proj", -1);
+
+    inp_per_layer = ggml_add(ctx0, per_layer_proj, inp_per_layer);
+    inp_per_layer = ggml_scale(ctx0, inp_per_layer, per_layer_input_scale);
+    cb(inp_per_layer, "inp_per_layer", -1);
+
+    return ggml_cont(ctx0, ggml_permute(ctx0, inp_per_layer, 0, 2, 1, 3));
+}
+
+ggml_tensor * llm_graph_context::view_2d_slice_3d(
+        ggml_tensor * x,
+        int           idx) const {
+    GGML_ASSERT(idx >= 0);
+    GGML_ASSERT(idx < (int) x->ne[2]);
+
+    return ggml_view_2d(ctx0, x, x->ne[0], x->ne[1],
+            ggml_row_size(x->type, x->ne[0]),
+            idx * x->ne[0] * x->ne[1] * ggml_element_size(x));
+}
+
 ggml_tensor * llm_graph_context::build_inp_pos() const {
     auto inp = std::make_unique<llm_graph_input_pos>(hparams.n_pos_per_embd());
 

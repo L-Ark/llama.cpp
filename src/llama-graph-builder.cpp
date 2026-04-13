@@ -286,33 +286,18 @@ llm_build_std_transformer::llm_build_std_transformer(
     ggml_tensor * inp_per_layer = nullptr;
     if (config.per_layer_embd && model.per_layer_tok_embd) {
         const int64_t n_embd_per_layer = hparams.n_embd_per_layer;
-
-        ggml_tensor * per_layer_raw;
-        if (ubatch.token && res->t_inp_tokens) {
-            per_layer_raw = ggml_get_rows(ctx0, model.per_layer_tok_embd, res->t_inp_tokens);
-            per_layer_raw = ggml_reshape_3d(ctx0, per_layer_raw,
-                    n_embd_per_layer, effective_n_layer, n_tokens);
-            per_layer_raw = ggml_scale(ctx0, per_layer_raw, sqrtf(float(n_embd_per_layer)));
-        } else {
-            const int64_t embd_size = model.per_layer_tok_embd->ne[0];
-            ggml_tensor * padding = ggml_view_1d(ctx0, model.per_layer_tok_embd, embd_size, 0);
-            per_layer_raw = ggml_cast(ctx0, padding, GGML_TYPE_F32);
-            per_layer_raw = ggml_reshape_3d(ctx0, per_layer_raw,
-                    n_embd_per_layer, effective_n_layer, 1);
-        }
-        cb(per_layer_raw, "per_layer_raw", -1);
-
-        ggml_tensor * per_layer_proj = ggml_mul_mat(ctx0, model.per_layer_model_proj, inpL);
-        per_layer_proj = ggml_scale(ctx0, per_layer_proj, 1.0f / sqrtf(float(n_embd)));
-        per_layer_proj = ggml_reshape_3d(ctx0, per_layer_proj,
-                n_embd_per_layer, effective_n_layer, n_tokens);
-        per_layer_proj = build_norm(per_layer_proj, model.per_layer_proj_norm,
-                nullptr, LLM_NORM_RMS, -1);
-
-        inp_per_layer = ggml_add(ctx0, per_layer_proj, per_layer_raw);
-        inp_per_layer = ggml_scale(ctx0, inp_per_layer, 1.0f / sqrtf(2.0f));
-        inp_per_layer = ggml_cont(ctx0, ggml_permute(ctx0, inp_per_layer, 0, 2, 1, 3));
-        cb(inp_per_layer, "inp_per_layer", -1);
+        inp_per_layer = build_per_layer_inputs_raw(
+                model.per_layer_tok_embd,
+                n_embd_per_layer,
+                effective_n_layer);
+        cb(inp_per_layer, "per_layer_raw", -1);
+        inp_per_layer = project_per_layer_inputs_common(
+                inpL,
+                inp_per_layer,
+                model.per_layer_model_proj,
+                model.per_layer_proj_norm,
+                n_embd_per_layer,
+                effective_n_layer);
     }
 
     // Attention input -- pure SSM, hybrid, no-cache, ISWA, or standard KV cache
@@ -1048,11 +1033,7 @@ llm_build_std_transformer::llm_build_std_transformer(
             cur = build_lora_mm(model.layers[il].per_layer_inp_gate, cur);
             cur = ggml_gelu(ctx0, cur);
 
-            // Extract 2D slice for this layer from [n_embd_per_layer, n_tokens, n_layer]
-            ggml_tensor * inp_this_layer = ggml_view_2d(ctx0, inp_per_layer,
-                    inp_per_layer->ne[0], inp_per_layer->ne[1],
-                    ggml_row_size(inp_per_layer->type, inp_per_layer->ne[0]),
-                    il * inp_per_layer->ne[0] * inp_per_layer->ne[1] * ggml_element_size(inp_per_layer));
+            ggml_tensor * inp_this_layer = view_2d_slice_3d(inp_per_layer, il);
 
             if (il == effective_n_layer - 1 && inp_out_ids) {
                 inp_this_layer = ggml_get_rows(ctx0, inp_this_layer, inp_out_ids);

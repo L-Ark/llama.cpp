@@ -865,6 +865,20 @@ struct llm_graph_context {
     ggml_tensor * build_inp_out_ids() const;
     ggml_tensor * build_inp_mean() const;
     ggml_tensor * build_inp_cls() const;
+    ggml_tensor * build_per_layer_inputs_raw(
+            ggml_tensor * per_layer_tok_embd,
+            int64_t       n_embd_per_layer,
+            int64_t       n_layer) const;
+    ggml_tensor * project_per_layer_inputs_common(
+            ggml_tensor * inp_batch,
+            ggml_tensor * inp_per_layer,
+            ggml_tensor * per_layer_model_proj,
+            ggml_tensor * per_layer_proj_norm,
+            int64_t       n_embd_per_layer,
+            int64_t       n_layer) const;
+    ggml_tensor * view_2d_slice_3d(
+            ggml_tensor * x,
+            int           idx) const;
 
     ggml_tensor * build_inp_cross_embd() const;
     ggml_tensor * build_inp_pos_bucket_enc() const;
