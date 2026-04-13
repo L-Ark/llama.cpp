@@ -41,7 +41,6 @@ add_library(llama
             models/apertus.cpp
             models/arcee.cpp
             models/arctic.cpp
-            models/arwkv7.cpp
             models/baichuan.cpp
             models/bailingmoe.cpp
             models/bailingmoe2.cpp
@@ -89,7 +88,6 @@ add_library(llama
             models/jais.cpp
             models/jais2.cpp
             models/jamba.cpp
-            models/kimi-linear.cpp
             models/lfm2.cpp
             models/llada-moe.cpp
             models/llada.cpp
@@ -99,7 +97,6 @@ add_library(llama
             models/mamba-base.cpp
             models/mamba.cpp
             models/mimo2-iswa.cpp
-            models/minicpm3.cpp
             models/minimax-m2.cpp
             models/mistral3.cpp
             models/modern-bert.cpp
@@ -118,27 +115,21 @@ add_library(llama
             models/phi2.cpp
             models/phi3.cpp
             models/plamo.cpp
-            models/plamo2.cpp
             models/plamo3.cpp
-            models/plm.cpp
             models/qwen.cpp
             models/qwen2.cpp
             models/qwen2moe.cpp
             models/qwen2vl.cpp
             models/qwen3.cpp
-            models/qwen35.cpp
-            models/qwen35moe.cpp
             models/qwen3moe.cpp
-            models/qwen3next.cpp
             models/qwen3vl-moe.cpp
             models/qwen3vl.cpp
             models/refact.cpp
             models/rnd1.cpp
             models/rwkv6-base.cpp
-            models/rwkv6.cpp
-            models/rwkv6qwen2.cpp
+            models/rwkv6-family.cpp
             models/rwkv7-base.cpp
-            models/rwkv7.cpp
+            models/rwkv7-family.cpp
             models/seed-oss.cpp
             models/smallthinker.cpp
             models/smollm3.cpp

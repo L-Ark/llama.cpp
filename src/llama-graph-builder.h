@@ -58,11 +58,15 @@ struct llm_transformer_config {
     bool use_rope   = true;     // RoPE position encoding (76% of models)
     bool iswa       = false;    // Interleaved Sliding Window Attention (Gemma3/4, Phi-3)
     bool attn_gate  = false;    // Sigmoid gating on attention output before o_proj (AFMoE)
+    bool attn_q_gate = false;   // Query projection packs query + attention gate halves (Qwen3.5)
 
     // FFN features
     bool ffn_bias   = false;    // FFN bias terms
     bool moe        = false;    // Mixture-of-Experts FFN (auto-detected per layer)
     bool moe_shared = false;    // MoE with shared expert (DeepSeek, Qwen MoE)
+    bool moe_shared_gate = false; // Shared expert output gated by a sigmoid router (Qwen3.5-MoE)
+    bool moe_norm_weights = false; // Force normalized expert weights even if hparams omit it
+    llama_expert_gating_func_type moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_NONE; // Optional router override
 
     // Output
     bool output_bias = false;   // Output projection bias
@@ -94,6 +98,8 @@ struct llm_transformer_config {
     // Hybrid attention/SSM
     bool hybrid = false;         // Layers alternate between attention and SSM (Jamba, Granite-Hybrid)
     bool hybrid_parallel = false; // All layers run BOTH attention AND SSM in parallel (Falcon-H1)
+    bool hybrid_delta = false;   // Recurrent layers use delta-net instead of Mamba/Mamba2
+    bool hybrid_delta_interleave_repeat = false; // Repeat Q/K heads via grouped expansion when V heads > K heads (Qwen3Next)
 
     // Encoder (BERT-style post-norm)
     bool encoder_post_norm = false; // Post-norm encoder: norm AFTER attn/FFN, not before (BERT family)
@@ -147,4 +153,133 @@ struct llm_build_std_transformer : public llm_build_delta_net_base {
             const llama_model & model,
             const llm_graph_params & params,
             const llm_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_norm_gated(
+            ggml_tensor * input,
+            ggml_tensor * weights,
+            ggml_tensor * gate,
+            int           layer);
+
+    ggml_tensor * build_layer_hybrid_delta_net(
+            llm_graph_input_rs * inp,
+            ggml_tensor *        cur,
+            int                  il);
+
+    const llama_model & model;
+    const llm_transformer_config cfg_;
+};
+
+struct llm_hybrid_mamba2_transformer_config {
+    llm_norm_type norm = LLM_NORM_RMS;
+    llm_ffn_op_type ffn_act = LLM_FFN_SWIGLU;
+    llm_ffn_gate_type ffn_type = LLM_FFN_SEQ;
+    bool combined_qkv = true;
+    bool qk_norm = true;
+    bool use_rope = true;
+    bool attn_bias = false;
+    bool attn_post_norm = true;
+    bool ffn_post_norm = true;
+};
+
+struct llm_build_hybrid_mamba2_transformer : public llm_build_mamba_base {
+    llm_build_hybrid_mamba2_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_hybrid_mamba2_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_layer_attn(
+            llm_graph_input_attn_kv * inp_attn,
+            ggml_tensor *             cur,
+            int                       il);
+
+    ggml_tensor * build_layer_mamba2(
+            llm_graph_input_rs * inp_rs,
+            ggml_tensor *        cur,
+            int                  il);
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+    const llm_hybrid_mamba2_transformer_config cfg_;
+    ggml_tensor * inp_pos_ = nullptr;
+};
+
+struct llm_build_mla_kda_hybrid : public llm_build_delta_net_base {
+    llm_build_mla_kda_hybrid(
+            const llama_model & model,
+            const llm_graph_params & params);
+
+private:
+    ggml_tensor * build_norm_sigmoid_gated(
+            ggml_tensor * input,
+            ggml_tensor * weights,
+            ggml_tensor * gate,
+            int           layer);
+
+    ggml_tensor * build_kda_conv1d(
+            ggml_tensor * conv_states_all,
+            ggml_tensor * conv_state_all,
+            ggml_tensor * input,
+            ggml_tensor * proj_w,
+            ggml_tensor * conv_w,
+            int64_t       qkv,
+            int64_t       kv_head);
+
+    ggml_tensor * build_layer_kda(
+            llm_graph_input_rs * inp,
+            ggml_tensor *        cur,
+            int                  il);
+
+    ggml_tensor * build_layer_mla(
+            llm_graph_input_attn_kv * inp_attn_kv,
+            llm_graph_input_attn_k   * inp_attn_k,
+            ggml_tensor *             cur,
+            int                       il);
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+};
+
+struct llm_mla_transformer_config {
+    float embd_scale = 1.0f;
+    float residual_scale = 1.0f;
+    float lmhead_scale = 1.0f;
+    bool rope_factors = false;
+    bool flatten_v = false;
+    bool absorb_kv = false;
+    bool yarn_kq_scale = false;
+    bool attn_temp = false;
+    uint32_t nextn_layers = 0;
+    llm_ffn_op_type ffn_act = LLM_FFN_SILU;
+    llm_ffn_gate_type ffn_type = LLM_FFN_PAR;
+};
+
+struct llm_build_mla_transformer : public llm_graph_context {
+    llm_build_mla_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_mla_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_layer_mla(
+            llm_graph_input_attn_kv * inp_attn,
+            llm_graph_input_attn_k   * inp_attn_k,
+            ggml_tensor *             cur,
+            int                       il);
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+    const llm_mla_transformer_config cfg_;
+    ggml_tensor * inp_pos_ = nullptr;
+    ggml_tensor * inp_attn_scale_ = nullptr;
 };

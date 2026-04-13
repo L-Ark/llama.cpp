@@ -17,6 +17,7 @@ struct llm_build_mamba_base : public llm_graph_context {
 
     ggml_tensor * build_mamba_layer(llm_graph_input_rs * inp, ggml_tensor * cur, const llama_model & model, const llama_ubatch & ubatch, int il);
     ggml_tensor * build_mamba2_layer(llm_graph_input_rs * inp, ggml_tensor * cur, const llama_model & model, const llama_ubatch & ubatch, int il) const;
+    ggml_tensor * build_mamba2_layer_zero_group(llm_graph_input_rs * inp, ggml_tensor * cur, const llama_model & model, const llama_ubatch & ubatch, int il) const;
 
 };
 
@@ -124,10 +125,6 @@ struct llm_build_arcee : public llm_graph_context {
 
 struct llm_build_arctic : public llm_graph_context {
     llm_build_arctic(const llama_model & model, const llm_graph_params & params);
-};
-
-struct llm_build_arwkv7 : public llm_build_rwkv7_base {
-    llm_build_arwkv7(const llama_model & model, const llm_graph_params & params);
 };
 
 struct llm_build_baichuan : public llm_graph_context {
@@ -362,33 +359,6 @@ struct llm_build_jamba : public llm_build_mamba_base {
     llm_build_jamba(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_kimi_linear : public llm_build_delta_net_base {
-    llm_build_kimi_linear(const llama_model & model, const llm_graph_params & params);
-
-    std::pair<ggml_tensor *, ggml_tensor *> build_kda_autoregressive(
-                ggml_tensor * q,
-                ggml_tensor * k,
-                ggml_tensor * v,
-                ggml_tensor * gk,
-                ggml_tensor * beta,
-                ggml_tensor * state,
-                        int   il);
-
-    std::pair<ggml_tensor *, ggml_tensor *> build_kda_chunking(
-                ggml_tensor * q,
-                ggml_tensor * k,
-                ggml_tensor * v,
-                ggml_tensor * gk,
-                ggml_tensor * beta,
-                ggml_tensor * state,
-                ggml_tensor * causal_mask,
-                ggml_tensor * identity,
-                ggml_tensor * diag_mask,
-                        int   il);
-
-    const llama_model & model;
-};
-
 template <bool iswa>
 struct llm_build_lfm2 : public llm_graph_context {
     llm_build_lfm2(const llama_model & model, const llm_graph_params & params);
@@ -421,10 +391,6 @@ struct llm_build_mamba : public llm_build_mamba_base {
 
 struct llm_build_mimo2_iswa : public llm_graph_context {
     llm_build_mimo2_iswa(const llama_model & model, const llm_graph_params & params);
-};
-
-struct llm_build_minicpm3 : public llm_graph_context {
-    llm_build_minicpm3(const llama_model & model, const llm_graph_params & params);
 };
 
 struct llm_build_minimax_m2 : public llm_graph_context {
@@ -500,14 +466,6 @@ struct llm_build_phi3 : public llm_graph_context {
     llm_build_phi3(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_plamo2 : public llm_build_mamba_base {
-    llm_build_plamo2(const llama_model & model, const llm_graph_params & params);
-    private:
-        ggml_tensor * build_plamo2_mamba_layer(llm_graph_input_rs * inp, ggml_tensor * cur, const llama_model & model, const llama_ubatch & ubatch, int il);
-        ggml_tensor * build_plamo2_attn_layer(llm_graph_input_attn_kv * inp, ggml_tensor * inp_pos, ggml_tensor * cur,
-                                                const llama_model & model, int il);
-};
-
 struct llm_build_plamo : public llm_graph_context {
     llm_build_plamo(const llama_model & model, const llm_graph_params & params);
 };
@@ -515,10 +473,6 @@ struct llm_build_plamo : public llm_graph_context {
 template <bool iswa>
 struct llm_build_plamo3 : public llm_graph_context {
     llm_build_plamo3(const llama_model & model, const llm_graph_params & params);
-};
-
-struct llm_build_plm : public llm_graph_context {
-    llm_build_plm(const llama_model & model, const llm_graph_params & params);
 };
 
 struct llm_build_qwen2 : public llm_graph_context {
@@ -549,105 +503,6 @@ struct llm_build_qwen3vlmoe : public llm_graph_context {
     llm_build_qwen3vlmoe(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_qwen3next : public llm_build_delta_net_base {
-    llm_build_qwen3next(const llama_model & model, const llm_graph_params & params);
-private:
-    ggml_tensor * build_layer_attn(
-    llm_graph_input_attn_kv * inp_attn,
-                ggml_tensor * cur,
-                ggml_tensor * inp_pos,
-                        int   il);
-
-    ggml_tensor * build_layer_attn_linear(
-         llm_graph_input_rs * inp,
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_layer_ffn(
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_norm_gated(
-                ggml_tensor * input,
-                ggml_tensor * weights,
-                ggml_tensor * gate,
-                        int   layer);
-
-    // returns pair of qkv, z
-    std::pair<ggml_tensor *, ggml_tensor *> build_qkvz(
-                ggml_tensor * input,
-                        int   il);
-
-    const llama_model & model;
-};
-
-struct llm_build_qwen35 : public llm_build_delta_net_base {
-    llm_build_qwen35(const llama_model & model, const llm_graph_params & params);
-private:
-    ggml_tensor * build_layer_attn(
-    llm_graph_input_attn_kv * inp_attn,
-                ggml_tensor * cur,
-                ggml_tensor * inp_pos,
-                        int * sections,
-                        int   il);
-
-    ggml_tensor * build_layer_attn_linear(
-         llm_graph_input_rs * inp,
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_layer_ffn(
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_norm_gated(
-                ggml_tensor * input,
-                ggml_tensor * weights,
-                ggml_tensor * gate,
-                        int   layer);
-
-    // returns pair of qkv, z
-    std::pair<ggml_tensor *, ggml_tensor *> build_qkvz(
-                ggml_tensor * input,
-                        int   il);
-
-    const llama_model & model;
-};
-
-// TODO: derive llm_build_delta_net_base instead
-struct llm_build_qwen35moe : public llm_build_delta_net_base {
-    llm_build_qwen35moe(const llama_model & model, const llm_graph_params & params);
-private:
-    ggml_tensor * build_layer_attn(
-    llm_graph_input_attn_kv * inp_attn,
-                ggml_tensor * cur,
-                ggml_tensor * inp_pos,
-                        int * sections,
-                        int   il);
-
-    ggml_tensor * build_layer_attn_linear(
-         llm_graph_input_rs * inp,
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_layer_ffn(
-                ggml_tensor * cur,
-                        int   il);
-
-    ggml_tensor * build_norm_gated(
-                ggml_tensor * input,
-                ggml_tensor * weights,
-                ggml_tensor * gate,
-                        int   layer);
-
-    // returns pair of qkv, z
-    std::pair<ggml_tensor *, ggml_tensor *> build_qkvz(
-                ggml_tensor * input,
-                        int   il);
-
-    const llama_model & model;
-};
-
 struct llm_build_qwen : public llm_graph_context {
     llm_build_qwen(const llama_model & model, const llm_graph_params & params);
 };
@@ -660,16 +515,33 @@ struct llm_build_rnd1 : public llm_graph_context {
     llm_build_rnd1(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_rwkv6 : public llm_build_rwkv6_base {
-    llm_build_rwkv6(const llama_model & model, const llm_graph_params & params);
+struct llm_rwkv6_config {
+    bool use_tok_norm = true;
+    bool assert_n_embd_r = false;
+    bool use_channel_mix = true;
+    bool use_rescale = false;
+    int expected_token_shift_count = 0;
+    llm_norm_type attn_norm = LLM_NORM;
+    llm_norm_type ffn_norm = LLM_NORM;
+    llm_norm_type output_norm = LLM_NORM;
 };
 
-struct llm_build_rwkv6qwen2 : public llm_build_rwkv6_base {
-    llm_build_rwkv6qwen2(const llama_model & model, const llm_graph_params & params);
+struct llm_build_rwkv6_family : public llm_build_rwkv6_base {
+    llm_build_rwkv6_family(const llama_model & model, const llm_graph_params & params, const llm_rwkv6_config & config);
 };
 
-struct llm_build_rwkv7 : public llm_build_rwkv7_base {
-    llm_build_rwkv7(const llama_model & model, const llm_graph_params & params);
+struct llm_rwkv7_config {
+    bool use_tok_norm = true;
+    bool assert_n_embd_r = false;
+    bool use_channel_mix = true;
+    int expected_token_shift_count = 0;
+    llm_norm_type attn_norm = LLM_NORM;
+    llm_norm_type ffn_norm = LLM_NORM;
+    llm_norm_type output_norm = LLM_NORM;
+};
+
+struct llm_build_rwkv7_family : public llm_build_rwkv7_base {
+    llm_build_rwkv7_family(const llama_model & model, const llm_graph_params & params, const llm_rwkv7_config & config);
 };
 
 struct llm_build_seed_oss : public llm_graph_context {

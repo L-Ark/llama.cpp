@@ -147,10 +147,10 @@ ggml_tensor * llm_build_mamba_base::build_mamba_layer(llm_graph_input_rs * inp,
 }
 
 ggml_tensor * llm_build_mamba_base::build_mamba2_layer(llm_graph_input_rs * inp,
-                                                          ggml_tensor *        cur,
-                                                          const llama_model &  model,
-                                                          const llama_ubatch & ubatch,
-                                                          int                  il) const {
+                                                           ggml_tensor *        cur,
+                                                           const llama_model &  model,
+                                                           const llama_ubatch & ubatch,
+                                                           int                  il) const {
     const auto * mctx_cur = inp->mctx;
 
     const auto kv_head = mctx_cur->get_head();
@@ -282,6 +282,153 @@ ggml_tensor * llm_build_mamba_base::build_mamba2_layer(llm_graph_input_rs * inp,
     }
 
     // {n_embd, n_seq_tokens, n_seqs} => {n_embd, n_tokens}
+    cur = ggml_reshape_2d(ctx0, cur, cur->ne[0], n_seq_tokens * n_seqs);
+    cb(cur, "mamba_out", il);
+
+    return cur;
+}
+
+ggml_tensor * llm_build_mamba_base::build_mamba2_layer_zero_group(llm_graph_input_rs * inp,
+                                                                  ggml_tensor *        cur,
+                                                                  const llama_model &  model,
+                                                                  const llama_ubatch & ubatch,
+                                                                  int                  il) const {
+    const auto * mctx_cur = inp->mctx;
+
+    const auto kv_head = mctx_cur->get_head();
+
+    const int64_t d_conv       = hparams.ssm_d_conv;
+    const int64_t d_inner      = hparams.ssm_d_inner;
+    const int64_t d_state      = hparams.ssm_d_state;
+    const int64_t n_heads      = hparams.ssm_dt_rank;
+    const int64_t head_dim     = d_inner / n_heads;
+    const int64_t n_group      = hparams.ssm_n_group;
+    const int64_t n_seqs       = ubatch.n_seqs;
+    const int64_t n_seq_tokens = ubatch.n_seq_tokens;
+    int64_t       dt_dim       = hparams.n_embd / 16;
+    if (dt_dim < 64) {
+        dt_dim = 64;
+    }
+
+    GGML_ASSERT(n_seqs != 0);
+    GGML_ASSERT(ubatch.equal_seqs());
+    GGML_ASSERT(ubatch.n_tokens == n_seq_tokens * n_seqs);
+    GGML_ASSERT(d_inner % n_heads == 0);
+    GGML_ASSERT(n_group == 0);
+
+    ggml_tensor * conv_states_all = mctx_cur->get_r_l(il);
+    ggml_tensor * ssm_states_all  = mctx_cur->get_s_l(il);
+
+    ggml_tensor * conv = build_rs(inp, conv_states_all, hparams.n_embd_r(), n_seqs);
+    conv               = ggml_reshape_3d(ctx0, conv, d_conv - 1, d_inner, n_seqs);
+
+    cur = ggml_reshape_3d(ctx0, cur, cur->ne[0], n_seq_tokens, n_seqs);
+
+    ggml_tensor * zx = build_lora_mm(model.layers[il].ssm_in, cur);
+    cb(zx, "mamba_in_proj", il);
+
+    zx = ggml_permute(ctx0, zx, 0, 2, 1, 3);
+    zx = ggml_cont_4d(ctx0, zx, head_dim * 2, n_heads, n_seq_tokens, n_seqs);
+    cb(zx, "mamba_in_proj_out", il);
+
+    ggml_tensor * x = ggml_view_4d(ctx0, zx, head_dim, n_heads, n_seq_tokens, n_seqs,
+            zx->nb[1], zx->nb[2], zx->nb[3],
+            head_dim * ggml_element_size(zx));
+    x = ggml_cont_3d(ctx0, x, head_dim * n_heads, n_seq_tokens, n_seqs);
+    cb(x, "mamba_x_split", il);
+
+    ggml_tensor * z = ggml_view_4d(ctx0, zx, head_dim, n_heads, n_seq_tokens, n_seqs,
+            zx->nb[1], zx->nb[2], zx->nb[3], 0);
+    cb(z, "mamba_z_split", il);
+
+    {
+        ggml_tensor * conv_x = ggml_concat(ctx0, conv, ggml_transpose(ctx0, x), 0);
+        cb(conv_x, "mamba_conv1d_input", il);
+
+        ggml_tensor * last_conv = ggml_view_3d(ctx0, conv_x, d_conv - 1, d_inner, n_seqs,
+                conv_x->nb[1], conv_x->nb[2], n_seq_tokens * conv_x->nb[0]);
+
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, last_conv,
+                ggml_view_1d(ctx0, conv_states_all, (d_conv - 1) * d_inner * n_seqs,
+                        kv_head * (d_conv - 1) * d_inner * ggml_element_size(conv_states_all))));
+
+        x = ggml_ssm_conv(ctx0, conv_x, model.layers[il].ssm_conv1d);
+        cb(x, "mamba_conv1d", il);
+
+        x = ggml_silu(ctx0, x);
+        cb(x, "mamba_conv1d_silu", il);
+    }
+
+    {
+        ggml_tensor * x_bcdt = build_lora_mm(model.layers[il].ssm_x, x);
+        cb(x_bcdt, "mamba_bcdt_proj", il);
+
+        ggml_tensor * B = ggml_view_3d(ctx0, x_bcdt, d_state, n_seq_tokens, n_seqs,
+                x_bcdt->nb[1], x_bcdt->nb[2], 0);
+        ggml_tensor * C = ggml_view_3d(ctx0, x_bcdt, d_state, n_seq_tokens, n_seqs,
+                x_bcdt->nb[1], x_bcdt->nb[2], ggml_element_size(x_bcdt) * d_state);
+        ggml_tensor * dt = ggml_view_3d(ctx0, x_bcdt, dt_dim, n_seq_tokens, n_seqs,
+                x_bcdt->nb[1], x_bcdt->nb[2], ggml_element_size(x_bcdt) * (2 * d_state));
+        cb(B, "mamba_B_raw", il);
+        cb(C, "mamba_C_raw", il);
+        cb(dt, "mamba_dt_raw", il);
+
+        B  = build_norm(B, model.layers[il].ssm_b_norm,  nullptr, LLM_NORM_RMS, il);
+        C  = build_norm(C, model.layers[il].ssm_c_norm,  nullptr, LLM_NORM_RMS, il);
+        dt = build_norm(dt, model.layers[il].ssm_dt_norm, nullptr, LLM_NORM_RMS, il);
+        cb(B, "mamba_B_normed", il);
+        cb(C, "mamba_C_normed", il);
+        cb(dt, "mamba_dt_normed", il);
+
+        dt = build_lora_mm(model.layers[il].ssm_dt, dt);
+        dt = ggml_add(ctx0, dt, model.layers[il].ssm_dt_b);
+        cb(dt, "mamba_dt_proj", il);
+
+        ggml_tensor * A = ggml_reshape_2d(ctx0, model.layers[il].ssm_a, 1, n_heads);
+        cb(A, "mamba_A", il);
+
+        x = ggml_view_4d(ctx0, x, head_dim, n_heads, n_seq_tokens, n_seqs,
+                head_dim * ggml_element_size(x),
+                head_dim * n_heads * ggml_element_size(x),
+                head_dim * n_heads * n_seq_tokens * ggml_element_size(x), 0);
+        B = ggml_view_4d(ctx0, B, d_state, 1, n_seq_tokens, n_seqs,
+                d_state * B->nb[0], B->nb[1], B->nb[2], 0);
+        C = ggml_view_4d(ctx0, C, d_state, 1, n_seq_tokens, n_seqs,
+                d_state * C->nb[0], C->nb[1], C->nb[2], 0);
+
+        auto get_ssm_rows = [&](ggml_context * ctx, ggml_tensor * states, ggml_tensor * ids) {
+            ggml_tensor * ssm = ggml_reshape_4d(ctx, states, d_state, head_dim, n_heads, mctx_cur->get_size());
+            return ggml_ssm_scan(ctx, ssm, x, dt, A, B, C, ids);
+        };
+
+        ggml_tensor * y_ssm = build_rs(inp, ssm_states_all, hparams.n_embd_s(), ubatch.n_seqs, get_ssm_rows);
+        cb(y_ssm, "mamba_ssm_scan", il);
+
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0,
+                ggml_view_1d(ctx0, y_ssm, n_heads * head_dim * d_state * n_seqs,
+                        n_heads * head_dim * n_seq_tokens * n_seqs * ggml_element_size(y_ssm)),
+                ggml_view_1d(ctx0, ssm_states_all, n_heads * head_dim * d_state * n_seqs,
+                        kv_head * n_seqs * n_heads * head_dim * d_state * ggml_element_size(ssm_states_all))));
+        cb(ssm_states_all, "mamba_ssm_states", il);
+
+        ggml_tensor * y = ggml_view_4d(ctx0, y_ssm, head_dim, n_heads, n_seq_tokens, n_seqs,
+                head_dim * ggml_element_size(x),
+                head_dim * n_heads * ggml_element_size(x),
+                head_dim * n_heads * n_seq_tokens * ggml_element_size(x), 0);
+        cb(y, "mamba_y_view", il);
+
+        ggml_tensor * D = ggml_reshape_2d(ctx0, model.layers[il].ssm_d, 1, n_heads);
+        y = ggml_add(ctx0, y, ggml_mul(ctx0, x, D));
+        cb(y, "mamba_y_add_d", il);
+
+        y = ggml_swiglu_split(ctx0, ggml_cont(ctx0, z), y);
+        cb(y, "mamba_y_swiglu_z", il);
+
+        y = ggml_view_3d(ctx0, y, head_dim * n_heads, n_seq_tokens, n_seqs, y->nb[2], y->nb[3], 0);
+        cur = build_lora_mm(model.layers[il].ssm_out, y);
+        cb(cur, "mamba_out_proj", il);
+    }
+
     cur = ggml_reshape_2d(ctx0, cur, cur->ne[0], n_seq_tokens * n_seqs);
     cb(cur, "mamba_out", il);
 
