@@ -276,9 +276,16 @@ llm_build_std_transformer::llm_build_std_transformer(
         cb(inpL, "inp_norm", -1);
     }
 
-    // Position tensor (for RoPE — skip if model doesn't actually use RoPE)
-    ggml_tensor * inp_pos = (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE)
-        ? build_inp_pos() : nullptr;
+    // Build the RoPE position input lazily so hybrid schedules that end up
+    // skipping RoPE on every active attention layer do not register an unused
+    // graph input with no allocated buffer.
+    ggml_tensor * inp_pos = nullptr;
+    auto get_inp_pos = [&]() -> ggml_tensor * {
+        if (!inp_pos) {
+            inp_pos = build_inp_pos();
+        }
+        return inp_pos;
+    };
 
     const int effective_n_layer = n_layer - (int) hparams.nextn_predict_layers;
 
@@ -396,10 +403,10 @@ llm_build_std_transformer::llm_build_std_transformer(
 
                 // RoPE (Nomic-BERT, Jina-BERT-V3)
                 if (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
-                    Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, nullptr,
+                    Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), nullptr,
                             n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
-                    Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, nullptr,
+                    Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), nullptr,
                             n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                 }
@@ -498,10 +505,10 @@ llm_build_std_transformer::llm_build_std_transformer(
                 Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
 
                 if (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
-                    Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors,
+                    Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), rope_factors,
                             n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
-                    Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
+                    Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), rope_factors,
                             n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                 }
@@ -701,7 +708,8 @@ llm_build_std_transformer::llm_build_std_transformer(
             // RoPE position encoding
             // Conditional RoPE: skip every Nth layer (AFMoE)
             bool layer_use_rope = config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE;
-            if (layer_use_rope && hparams.n_no_rope_layer_step > 0) {
+            const bool use_absolute_no_rope_step = !config.hybrid && !config.hybrid_parallel;
+            if (layer_use_rope && use_absolute_no_rope_step && hparams.n_no_rope_layer_step > 0) {
                 layer_use_rope = (il + 1) % hparams.n_no_rope_layer_step != 0;
             }
             if (layer_use_rope) {
@@ -710,20 +718,20 @@ llm_build_std_transformer::llm_build_std_transformer(
                     int sections[4];
                     std::copy(std::begin(hparams.rope_sections), std::begin(hparams.rope_sections) + 4, sections);
 
-                    Qcur = ggml_rope_multi(ctx0, Qcur, inp_pos, rope_factors,
+                    Qcur = ggml_rope_multi(ctx0, Qcur, get_inp_pos(), rope_factors,
                             layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                     if (Kcur) {
-                        Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, rope_factors,
+                        Kcur = ggml_rope_multi(ctx0, Kcur, get_inp_pos(), rope_factors,
                                 layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                                 ext_factor, attn_factor, beta_fast, beta_slow);
                     }
                 } else {
-                    Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors,
+                    Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), rope_factors,
                             layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                             ext_factor, attn_factor, beta_fast, beta_slow);
                     if (Kcur) {
-                        Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
+                        Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), rope_factors,
                                 layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                                 ext_factor, attn_factor, beta_fast, beta_slow);
                     }
@@ -1554,7 +1562,6 @@ llm_build_hybrid_mamba2_transformer::llm_build_hybrid_mamba2_transformer(
     ggml_tensor * inpL = build_inp_embd(model.tok_embd);
     cb(inpL, "embedding_output", -1);
 
-    inp_pos_ = build_inp_pos();
     auto * inp_hybrid = build_inp_mem_hybrid();
     ggml_tensor * inp_out_ids = build_inp_out_ids();
 
@@ -1617,11 +1624,12 @@ ggml_tensor * llm_build_hybrid_mamba2_transformer::build_layer_attn(
         int                       il) {
     const auto & layer = model.layers[il];
 
-    const int64_t n_embd_head_q = hparams.n_embd_head_k();
-    const int64_t n_embd_head_k = hparams.n_embd_head_k();
-    const int64_t n_embd_head_v = hparams.n_embd_head_v();
+    const int64_t n_embd_head_q = hparams.n_embd_head_k(il);
+    const int64_t n_embd_head_k = hparams.n_embd_head_k(il);
+    const int64_t n_embd_head_v = hparams.n_embd_head_v(il);
     const int32_t layer_n_head = hparams.n_head(il);
     const int32_t layer_n_head_kv = hparams.n_head_kv(il);
+    const int32_t layer_n_rot = hparams.n_rot(il);
 
     ggml_tensor * Qcur = nullptr;
     ggml_tensor * Kcur = nullptr;
@@ -1682,16 +1690,26 @@ ggml_tensor * llm_build_hybrid_mamba2_transformer::build_layer_attn(
     }
 
     if (cfg_.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
-        Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+        if (!inp_pos_) {
+            inp_pos_ = build_inp_pos();
+        }
+        ggml_tensor * rope_factors = model.get_rope_factors(cparams, il);
+        const float rope_freq_base = model.get_rope_freq_base(cparams, il);
+        const float rope_freq_scale = model.get_rope_freq_scale(cparams, il);
+        Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos_, rope_factors, layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                 ext_factor, attn_factor, beta_fast, beta_slow);
-        Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+        Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos_, rope_factors, layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
                 ext_factor, attn_factor, beta_fast, beta_slow);
     }
+
+    const float kq_scale = hparams.f_attention_scale != 0.0f
+        ? hparams.f_attention_scale
+        : 1.0f / sqrtf(float(n_embd_head_q));
 
     ggml_tensor * out = build_attn(inp_attn,
             layer.wo, cfg_.attn_bias ? layer.bo : nullptr,
             Qcur, Kcur, Vcur, nullptr, nullptr, nullptr,
-            1.0f / sqrtf(float(n_embd_head_v)), il);
+            kq_scale, il);
     cb(out, "attn_out", il);
     return out;
 }
@@ -1747,7 +1765,6 @@ llm_build_hybrid_shortconv_transformer<iswa>::llm_build_hybrid_shortconv_transfo
         inp_attn_kv_ = inp_hybrid->get_attn();
     }
 
-    inp_pos_ = build_inp_pos();
     ggml_tensor * inp_out_ids = build_inp_out_ids();
 
     for (int il = 0; il < n_layer; ++il) {
@@ -1794,9 +1811,11 @@ ggml_tensor * llm_build_hybrid_shortconv_transformer<iswa>::build_layer_attn(
         int           il) {
     GGML_ASSERT(hparams.n_embd_v_gqa(il) == hparams.n_embd_k_gqa(il));
 
-    const auto n_embd_head = hparams.n_embd_head_v();
+    const auto n_embd_head = hparams.n_embd_head_v(il);
+    GGML_ASSERT(n_embd_head == hparams.n_embd_head_k(il));
     const auto layer_n_head = hparams.n_head(il);
     const auto layer_n_head_kv = hparams.n_head_kv(il);
+    const auto layer_n_rot = hparams.n_rot(il);
 
     ggml_tensor * q = build_lora_mm(model.layers[il].wq, cur);
     cb(q, "model.layers.{}.self_attn.q_proj", il);
@@ -1816,9 +1835,15 @@ ggml_tensor * llm_build_hybrid_shortconv_transformer<iswa>::build_layer_attn(
         cb(k, "model.layers.{}.self_attn.k_layernorm", il);
     }
 
-    q = ggml_rope_ext(ctx0, q, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+    if (!inp_pos_) {
+        inp_pos_ = build_inp_pos();
+    }
+    ggml_tensor * rope_factors = model.get_rope_factors(cparams, il);
+    const float rope_freq_base = model.get_rope_freq_base(cparams, il);
+    const float rope_freq_scale = model.get_rope_freq_scale(cparams, il);
+    q = ggml_rope_ext(ctx0, q, inp_pos_, rope_factors, layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
             ext_factor, attn_factor, beta_fast, beta_slow);
-    k = ggml_rope_ext(ctx0, k, inp_pos_, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+    k = ggml_rope_ext(ctx0, k, inp_pos_, rope_factors, layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
             ext_factor, attn_factor, beta_fast, beta_slow);
 
     ggml_tensor * out = nullptr;
@@ -1997,7 +2022,8 @@ ggml_tensor * llm_build_hybrid_mamba2_single_op_transformer::build_layer_attn(
         ggml_tensor *             cur,
         int                       il) {
     const auto & layer = model.layers[il];
-    const int64_t n_embd_head = hparams.n_embd_head_v();
+    const int64_t n_embd_head = hparams.n_embd_head_v(il);
+    GGML_ASSERT(n_embd_head == hparams.n_embd_head_k(il));
     const int32_t layer_n_head = hparams.n_head(il);
     const int32_t layer_n_head_kv = hparams.n_head_kv(il);
 
@@ -2344,11 +2370,11 @@ ggml_tensor * llm_build_mla_kda_hybrid::build_layer_mla(
         int                       il) {
     const auto & layer = model.layers[il];
 
-    const int64_t n_head = hparams.n_head();
+    const int64_t n_head = hparams.n_head(il);
     const int64_t n_embd_head_k_mla = hparams.n_embd_head_k_mla();
     const int64_t n_embd_head_v_mla = hparams.n_embd_head_v_mla();
     const int64_t kv_lora_rank = hparams.n_lora_kv;
-    const int64_t n_embd_head_qk_rope = hparams.n_rot();
+    const int64_t n_embd_head_qk_rope = hparams.n_rot(il);
     const int64_t n_embd_head_qk_nope = n_embd_head_k_mla - n_embd_head_qk_rope;
     const float kq_scale_mla = 1.0f / sqrtf((float) n_embd_head_k_mla);
 
@@ -2509,7 +2535,6 @@ llm_build_mla_transformer::llm_build_mla_transformer(
         cb(inpL, "inp_scaled", -1);
     }
 
-    inp_pos_ = build_inp_pos();
     auto * inp_attn = cfg_.absorb_kv ? nullptr : build_attn_inp_kv();
     auto * inp_attn_k = cfg_.absorb_kv ? build_attn_inp_k() : nullptr;
     if (cfg_.attn_temp) {
@@ -2579,7 +2604,8 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
         int                       il) {
     const auto & layer = model.layers[il];
 
-    const uint32_t n_embd_head_qk_rope = hparams.n_rot();
+    const uint32_t n_head = hparams.n_head(il);
+    const uint32_t n_embd_head_qk_rope = hparams.n_rot(il);
     const uint32_t n_embd_head_k = hparams.n_embd_head_k_mla();
     const uint32_t n_embd_head_v = hparams.n_embd_head_v_mla();
     const uint32_t n_embd_head_qk_nope = n_embd_head_k - n_embd_head_qk_rope;
@@ -2630,12 +2656,17 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
     kv_compressed = build_norm(kv_compressed, layer.attn_kv_a_norm, nullptr, LLM_NORM_RMS, il);
     cb(kv_compressed, "kv_compressed_norm", il);
 
+    if (!inp_pos_) {
+        inp_pos_ = build_inp_pos();
+    }
     ggml_tensor * rope_factors = cfg_.rope_factors ? model.get_rope_factors(cparams, il) : nullptr;
+    const float rope_freq_base = model.get_rope_freq_base(cparams, il);
+    const float rope_freq_scale = model.get_rope_freq_scale(cparams, il);
     q_pe = ggml_rope_ext(ctx0, q_pe, inp_pos_, rope_factors,
-            n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+            n_embd_head_qk_rope, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
             ext_factor, attn_factor, beta_fast, beta_slow);
     k_pe = ggml_rope_ext(ctx0, k_pe, inp_pos_, rope_factors,
-            n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+            n_embd_head_qk_rope, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
             ext_factor, attn_factor, beta_fast, beta_slow);
     cb(q_pe, "q_pe_rope", il);
     cb(k_pe, "k_pe_rope", il);
@@ -2786,6 +2817,10 @@ bool llm_transformer_config_from_hparams(
 
     // RoPE
     config.use_rope = (hparams.rope_type != LLAMA_ROPE_TYPE_NONE);
+
+    config.per_layer_attn_dims = hparams.has_recurrent_layers() ||
+        hparams.is_n_embd_k_gqa_variable() ||
+        hparams.is_n_embd_v_gqa_variable();
 
     // Position embeddings (if no RoPE and model has pos_embd)
     config.use_pos_embd = (!config.use_rope && model.pos_embd != nullptr);
