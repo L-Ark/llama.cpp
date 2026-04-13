@@ -545,14 +545,6 @@ struct llm_build_step35_iswa : public llm_graph_context {
     llm_build_step35_iswa(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_t5_dec : public llm_graph_context {
-    llm_build_t5_dec(const llama_model & model, const llm_graph_params & params);
-};
-
-struct llm_build_t5_enc : public llm_graph_context {
-    llm_build_t5_enc(const llama_model & model, const llm_graph_params & params);
-};
-
 struct llm_build_wavtokenizer_dec : public llm_graph_context {
     llm_build_wavtokenizer_dec(const llama_model & model, const llm_graph_params & params);
 };

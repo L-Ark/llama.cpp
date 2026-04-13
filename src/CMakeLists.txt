@@ -134,8 +134,6 @@ add_library(llama
             models/starcoder.cpp
             models/starcoder2.cpp
             models/step35-iswa.cpp
-            models/t5-dec.cpp
-            models/t5-enc.cpp
             models/wavtokenizer-dec.cpp
             models/xverse.cpp
             )

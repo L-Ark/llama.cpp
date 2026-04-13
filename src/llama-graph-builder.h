@@ -173,6 +173,38 @@ private:
     const llm_transformer_config cfg_;
 };
 
+struct llm_t5_transformer_config {
+    bool decoder = false;
+};
+
+struct llm_build_t5_transformer : public llm_graph_context {
+    llm_build_t5_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_t5_transformer_config & config = {});
+
+private:
+    ggml_tensor * build_layer_self_attn(
+            llm_graph_input_attn_no_cache * inp_attn_no_cache,
+            llm_graph_input_attn_kv *       inp_attn_kv,
+            ggml_tensor *                   pos_bucket,
+            ggml_tensor *                   cur,
+            int                             il);
+
+    ggml_tensor * build_layer_cross_attn(
+            llm_graph_input_attn_cross * inp_attn_cross,
+            ggml_tensor *                embd_enc,
+            ggml_tensor *                cur,
+            int                          il);
+
+    ggml_tensor * build_layer_ffn(
+            ggml_tensor * cur,
+            int           il);
+
+    const llama_model & model;
+    const llm_t5_transformer_config cfg_;
+};
+
 struct llm_hybrid_mamba2_transformer_config {
     llm_norm_type norm = LLM_NORM_RMS;
     llm_ffn_op_type ffn_act = LLM_FFN_SWIGLU;

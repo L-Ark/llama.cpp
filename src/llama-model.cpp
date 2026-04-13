@@ -8399,13 +8399,16 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_T5:
             {
+                llm_t5_transformer_config cfg;
                 switch (params.gtype) {
                     case LLM_GRAPH_TYPE_ENCODER:
-                        llm = std::make_unique<llm_build_t5_enc>(*this, params);
+                        cfg.decoder = false;
+                        llm = std::make_unique<llm_build_t5_transformer>(*this, params, cfg);
                         break;
                     case LLM_GRAPH_TYPE_DEFAULT:
                     case LLM_GRAPH_TYPE_DECODER:
-                        llm = std::make_unique<llm_build_t5_dec>(*this, params);
+                        cfg.decoder = true;
+                        llm = std::make_unique<llm_build_t5_transformer>(*this, params, cfg);
                         break;
                     default:
                         GGML_ABORT("invalid graph type");
@@ -8413,7 +8416,7 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_T5ENCODER:
             {
-                llm = std::make_unique<llm_build_t5_enc>(*this, params);
+                llm = std::make_unique<llm_build_t5_transformer>(*this, params);
             }
             break;
         case LLM_ARCH_NEMOTRON_H:

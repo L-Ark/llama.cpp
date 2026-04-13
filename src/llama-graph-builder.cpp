@@ -1113,6 +1113,187 @@ ggml_tensor * llm_build_std_transformer::build_norm_gated(
     return ggml_mul(ctx0, normalized, gated_silu);
 }
 
+llm_build_t5_transformer::llm_build_t5_transformer(
+        const llama_model & model,
+        const llm_graph_params & params,
+        const llm_t5_transformer_config & config) :
+        llm_graph_context(params),
+        model(model),
+        cfg_(config) {
+    const int64_t n_embd_head = hparams.n_embd_head_v();
+    GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
+
+    ggml_tensor * inpL = build_inp_embd(model.tok_embd);
+    ggml_tensor * pos_bucket = cfg_.decoder ? build_inp_pos_bucket_dec() : build_inp_pos_bucket_enc();
+    ggml_tensor * embd_enc = cfg_.decoder ? build_inp_cross_embd() : nullptr;
+
+    auto * inp_attn_no_cache = cfg_.decoder ? nullptr : build_attn_inp_no_cache();
+    auto * inp_attn_kv = cfg_.decoder ? build_attn_inp_kv() : nullptr;
+    auto * inp_attn_cross = cfg_.decoder ? build_attn_inp_cross() : nullptr;
+
+    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    const int64_t t5_n_layer = cfg_.decoder ? hparams.dec_n_layer : n_layer;
+
+    for (int il = 0; il < t5_n_layer; ++il) {
+        const auto & layer = model.layers[il];
+        ggml_tensor * inpSA = inpL;
+
+        ggml_tensor * cur = build_norm(inpL,
+                cfg_.decoder ? layer.attn_norm : layer.attn_norm_enc,
+                nullptr,
+                LLM_NORM_RMS,
+                il);
+        cb(cur, "attn_norm", il);
+
+        cur = build_layer_self_attn(inp_attn_no_cache, inp_attn_kv, pos_bucket, cur, il);
+        cur = ggml_add(ctx0, cur, inpSA);
+
+        ggml_tensor * ffn_inp = nullptr;
+        if (cfg_.decoder) {
+            cb(cur, "cross_inp", il);
+
+            ggml_tensor * inpCA = cur;
+            cur = build_norm(cur, layer.attn_norm_cross, nullptr, LLM_NORM_RMS, il);
+            cb(cur, "attn_norm_cross", il);
+
+            cur = build_layer_cross_attn(inp_attn_cross, embd_enc, cur, il);
+
+            if (il == t5_n_layer - 1 && inp_out_ids) {
+                cur   = ggml_get_rows(ctx0, cur,   inp_out_ids);
+                inpCA = ggml_get_rows(ctx0, inpCA, inp_out_ids);
+            }
+
+            ffn_inp = ggml_add(ctx0, cur, inpCA);
+        } else {
+            if (il == t5_n_layer - 1 && inp_out_ids) {
+                cur   = ggml_get_rows(ctx0, cur,   inp_out_ids);
+                inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
+            }
+
+            ffn_inp = ggml_add(ctx0, cur, inpSA);
+        }
+        cb(ffn_inp, "ffn_inp", il);
+
+        cur = build_norm(ffn_inp,
+                cfg_.decoder ? layer.ffn_norm : layer.ffn_norm_enc,
+                nullptr,
+                LLM_NORM_RMS,
+                il);
+        cb(cur, "ffn_norm", il);
+
+        cur = build_layer_ffn(cur, il);
+        cur = ggml_add(ctx0, cur, ffn_inp);
+        cb(cur, "ffn_out", il);
+
+        cur = build_cvec(cur, il);
+        cb(cur, "l_out", il);
+
+        inpL = cur;
+    }
+
+    ggml_tensor * cur = inpL;
+    cb(cur, "result_embd", -1);
+
+    cur = build_norm(cur,
+            cfg_.decoder ? model.output_norm : model.output_norm_enc,
+            nullptr,
+            LLM_NORM_RMS,
+            -1);
+    cb(cur, "result_norm", -1);
+    res->t_embd = cur;
+
+    if (cfg_.decoder) {
+        cur = build_lora_mm(model.output, cur);
+        cb(cur, "result_output", -1);
+        res->t_logits = cur;
+    }
+
+    ggml_build_forward_expand(gf, cur);
+}
+
+ggml_tensor * llm_build_t5_transformer::build_layer_self_attn(
+        llm_graph_input_attn_no_cache * inp_attn_no_cache,
+        llm_graph_input_attn_kv *       inp_attn_kv,
+        ggml_tensor *                   pos_bucket,
+        ggml_tensor *                   cur,
+        int                             il) {
+    const auto & layer = model.layers[il];
+    const int64_t n_embd_head = hparams.n_embd_head_v();
+
+    ggml_tensor * Qcur = build_lora_mm(cfg_.decoder ? layer.wq : layer.wq_enc, cur);
+    ggml_tensor * Kcur = build_lora_mm(cfg_.decoder ? layer.wk : layer.wk_enc, cur);
+    ggml_tensor * Vcur = build_lora_mm(cfg_.decoder ? layer.wv : layer.wv_enc, cur);
+    cb(Qcur, "Qcur", il);
+    cb(Kcur, "Kcur", il);
+    cb(Vcur, "Vcur", il);
+
+    Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+    Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+
+    ggml_tensor * attn_rel_b = cfg_.decoder
+            ? (layer.attn_rel_b ? layer.attn_rel_b : model.layers[0].attn_rel_b)
+            : (layer.attn_rel_b_enc ? layer.attn_rel_b_enc : model.layers[0].attn_rel_b_enc);
+    ggml_tensor * kq_b = build_pos_bias(pos_bucket, attn_rel_b);
+
+    ggml_tensor * out = cfg_.decoder
+            ? build_attn(inp_attn_kv,
+                    layer.wo, layer.bo,
+                    Qcur, Kcur, Vcur, kq_b, nullptr, nullptr, 1.0f, il)
+            : build_attn(inp_attn_no_cache,
+                    layer.wo_enc, nullptr,
+                    Qcur, Kcur, Vcur, kq_b, nullptr, nullptr, 1.0f, il);
+    cb(out, "kqv_out", il);
+    return out;
+}
+
+ggml_tensor * llm_build_t5_transformer::build_layer_cross_attn(
+        llm_graph_input_attn_cross * inp_attn_cross,
+        ggml_tensor *                embd_enc,
+        ggml_tensor *                cur,
+        int                          il) {
+    const auto & layer = model.layers[il];
+    const int64_t n_embd_head = hparams.n_embd_head_v();
+    const int64_t n_outputs_enc = embd_enc->ne[1];
+
+    ggml_tensor * Qcur = build_lora_mm(layer.wq_cross, cur);
+    ggml_tensor * Kcur = build_lora_mm(layer.wk_cross, embd_enc);
+    ggml_tensor * Vcur = build_lora_mm(layer.wv_cross, embd_enc);
+    cb(Qcur, "Qcur", il);
+    cb(Kcur, "Kcur", il);
+    cb(Vcur, "Vcur", il);
+
+    Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_outputs_enc);
+    Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_outputs_enc);
+
+    ggml_tensor * out = build_attn(inp_attn_cross,
+            layer.wo_cross, nullptr,
+            Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f, il);
+    cb(out, "kqv_out", il);
+    return out;
+}
+
+ggml_tensor * llm_build_t5_transformer::build_layer_ffn(
+        ggml_tensor * cur,
+        int           il) {
+    const auto & layer = model.layers[il];
+    ggml_tensor * ffn_up   = cfg_.decoder ? layer.ffn_up   : layer.ffn_up_enc;
+    ggml_tensor * ffn_gate = cfg_.decoder ? layer.ffn_gate : layer.ffn_gate_enc;
+    ggml_tensor * ffn_down = cfg_.decoder ? layer.ffn_down : layer.ffn_down_enc;
+
+    cur = build_ffn(cur,
+            ffn_up,   nullptr, nullptr,
+            ffn_gate, nullptr, nullptr,
+            ffn_down, nullptr, nullptr,
+            nullptr,
+            ffn_gate ? LLM_FFN_GELU : LLM_FFN_RELU,
+            ffn_gate ? LLM_FFN_PAR  : LLM_FFN_SEQ,
+            il);
+    cb(cur, "ffn_out", il);
+    return cur;
+}
+
 ggml_tensor * llm_build_std_transformer::build_layer_hybrid_delta_net(
         llm_graph_input_rs * inp,
         ggml_tensor *        cur,
