@@ -246,6 +246,19 @@ void llama_model_saver::add_kv_from_model() {
     add_kv(LLM_KV_INTERLEAVE_MOE_LAYER_STEP,         hparams.n_moe_layer_step);
     // add_kv(LLM_KV_FULL_ATTENTION_INTERVAL,           ???);
 
+    if (hparams.n_embd_per_layer > 0) {
+        add_kv(LLM_KV_EMBEDDING_LENGTH_PER_LAYER, hparams.n_embd_per_layer);
+    }
+
+    if (hparams.n_layer_kv_from_start >= 0) {
+        add_kv(LLM_KV_ATTENTION_SHARED_KV_LAYERS, uint32_t(hparams.n_layer - hparams.n_layer_kv_from_start));
+    }
+
+    if (hparams.is_swa_any()) {
+        add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN,
+                std::vector<uint32_t>(hparams.swa_layers.begin(), hparams.swa_layers.begin() + hparams.n_layer));
+    }
+
     add_kv(LLM_KV_ATTENTION_HEAD_COUNT,              hparams.n_head_arr, true);
     add_kv(LLM_KV_ATTENTION_HEAD_COUNT_KV,           hparams.n_head_kv_arr, true);
     add_kv(LLM_KV_ATTENTION_MAX_ALIBI_BIAS,          hparams.f_max_alibi_bias);
@@ -397,6 +410,9 @@ void llama_model_saver::add_tensors_from_model() {
     add_tensor(model->cls_out);
     add_tensor(model->cls_out_b);
     add_tensor(model->cls_norm);
+    add_tensor(model->per_layer_tok_embd);
+    add_tensor(model->per_layer_model_proj);
+    add_tensor(model->per_layer_proj_norm);
 
     for (const struct llama_layer & layer : model->layers) {
         for (size_t i = 0; i < sizeof(layer)/sizeof(struct ggml_tensor *); ++i) {

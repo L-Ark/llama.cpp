@@ -16,6 +16,14 @@
 #include <cstring>
 #include <string>
 
+static ggml_tensor * llm_maybe_cont(ggml_context * ctx0, ggml_tensor * tensor) {
+    return ggml_is_contiguous(tensor) ? tensor : ggml_cont(ctx0, tensor);
+}
+
+static ggml_tensor * llm_repeat_if_needed(ggml_context * ctx0, ggml_tensor * src, ggml_tensor * dst_shape) {
+    return ggml_are_same_shape(src, dst_shape) ? src : ggml_repeat(ctx0, src, dst_shape);
+}
+
 // ---------------------------------------------------------------------------
 // Per-architecture metadata table
 //
@@ -2338,7 +2346,7 @@ ggml_tensor * llm_build_mla_kda_hybrid::build_layer_kda(
 
     auto attn_out = build_delta_net(Qcur, Kcur, Vcur, g1, beta, state, il);
 
-    ggml_tensor * output = ggml_cont(ctx0, attn_out.first);
+    ggml_tensor * output = llm_maybe_cont(ctx0, attn_out.first);
     ggml_tensor * new_state = attn_out.second;
     cb(output, "attn_output", il);
     cb(new_state, "new_state", il);
@@ -2453,10 +2461,9 @@ ggml_tensor * llm_build_mla_kda_hybrid::build_layer_mla(
             ggml_row_size(kv->type, kv_per_head),
             ggml_row_size(kv->type, kv_per_head * n_head),
             ggml_row_size(kv->type, n_embd_head_qk_nope));
-    Vcur = ggml_cont(ctx0, Vcur);
+    Vcur = llm_maybe_cont(ctx0, Vcur);
 
-    ggml_tensor * k_pe_target = ggml_new_tensor_3d(ctx0, k_pe->type, n_embd_head_qk_rope, n_head, n_tokens);
-    ggml_tensor * k_pe_repeated = ggml_repeat(ctx0, k_pe, k_pe_target);
+    ggml_tensor * k_pe_repeated = llm_repeat_if_needed(ctx0, k_pe, q_pe);
     ggml_tensor * Kcur = ggml_concat(ctx0, k_nope, k_pe_repeated, 0);
 
     cb(Qcur, "Qcur", il);
@@ -2717,7 +2724,7 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
         cb(k_nope, "k_nope", il);
         cb(v_states, "v_states_view", il);
 
-        v_states = ggml_cont(ctx0, v_states);
+        v_states = llm_maybe_cont(ctx0, v_states);
         cb(v_states, "v_states", il);
         if (cfg_.flatten_v) {
             v_states = ggml_view_2d(ctx0, v_states, n_embd_head_v * n_head, n_tokens,
@@ -2727,7 +2734,7 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
         }
 
         ggml_tensor * q_states = ggml_concat(ctx0, q_nope, q_pe, 0);
-        ggml_tensor * k_states = ggml_concat(ctx0, k_nope, ggml_repeat(ctx0, k_pe, q_pe), 0);
+        ggml_tensor * k_states = ggml_concat(ctx0, k_nope, llm_repeat_if_needed(ctx0, k_pe, q_pe), 0);
         cb(q_states, "q_states", il);
         cb(k_states, "k_states", il);
 
