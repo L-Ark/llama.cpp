@@ -136,6 +136,37 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
     { LLM_ARCH_UNKNOWN,          "(unknown)"        },
 };
 
+struct llm_arch_runtime_traits {
+    bool is_recurrent = false;
+    bool is_hybrid = false;
+    bool is_diffusion = false;
+    bool supports_sm_tensor = true;
+    bool uses_encoder_pass = false;
+    bool prefers_embedding_outputs = false;
+    bool uses_sliding_window_metadata = false;
+    bool uses_explicit_swa_pattern = false;
+    bool has_default_expert_weights_norm = false;
+    bool default_expert_weights_norm = false;
+    uint32_t default_full_attention_interval = 0;
+    uint32_t default_sliding_window_pattern = 0;
+    uint32_t default_expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_NONE;
+};
+
+static const std::map<llm_arch, llm_arch_runtime_traits> LLM_ARCH_RUNTIME_TRAITS = {
+#include "llama-arch-runtime-traits.inc"
+};
+
+static const llm_arch_runtime_traits & llm_arch_runtime_traits_for(const llm_arch & arch) {
+    static const llm_arch_runtime_traits defaults = {};
+
+    const auto it = LLM_ARCH_RUNTIME_TRAITS.find(arch);
+    if (it != LLM_ARCH_RUNTIME_TRAITS.end()) {
+        return it->second;
+    }
+
+    return defaults;
+}
+
 static const std::map<llm_kv, const char *> LLM_KV_NAMES = {
     { LLM_KV_GENERAL_TYPE,                     "general.type"                          },
     { LLM_KV_GENERAL_ARCHITECTURE,             "general.architecture"                  },
@@ -832,203 +863,61 @@ const llm_tensor_info & llm_tensor_info_for(llm_tensor tensor) {
 }
 
 bool llm_arch_is_recurrent(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_MAMBA:
-        case LLM_ARCH_MAMBA2:
-        case LLM_ARCH_RWKV6:
-        case LLM_ARCH_RWKV6QWEN2:
-        case LLM_ARCH_RWKV7:
-        case LLM_ARCH_ARWKV7:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).is_recurrent;
 }
 
 bool llm_arch_is_hybrid(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_JAMBA:
-        case LLM_ARCH_FALCON_H1:
-        case LLM_ARCH_PLAMO2:
-        case LLM_ARCH_GRANITE_HYBRID:
-        case LLM_ARCH_LFM2:
-        case LLM_ARCH_LFM2MOE:
-        case LLM_ARCH_NEMOTRON_H:
-        case LLM_ARCH_NEMOTRON_H_MOE:
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_KIMI_LINEAR:
-        case LLM_ARCH_QWEN35:
-        case LLM_ARCH_QWEN35MOE:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).is_hybrid;
 }
 
 bool llm_arch_is_diffusion(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_DREAM:
-        case LLM_ARCH_LLADA:
-        case LLM_ARCH_LLADA_MOE:
-        case LLM_ARCH_RND1:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).is_diffusion;
 }
 
 bool llm_arch_supports_sm_tensor(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_GROK:
-        case LLM_ARCH_MPT:
-        case LLM_ARCH_PLAMO2:
-        case LLM_ARCH_MINICPM3:
-        case LLM_ARCH_GEMMA3N:
-        case LLM_ARCH_MAMBA:
-        case LLM_ARCH_MAMBA2:
-        case LLM_ARCH_JAMBA:
-        case LLM_ARCH_FALCON_H1:
-        case LLM_ARCH_OLMO2:
-        case LLM_ARCH_OLMOE:
-        case LLM_ARCH_DEEPSEEK2:
-        case LLM_ARCH_GLM_DSA:
-        case LLM_ARCH_BITNET:
-        case LLM_ARCH_T5:
-        case LLM_ARCH_NEMOTRON_H:
-        case LLM_ARCH_NEMOTRON_H_MOE:
-        case LLM_ARCH_GRANITE_HYBRID:
-        case LLM_ARCH_LFM2:
-        case LLM_ARCH_LFM2MOE:
-        case LLM_ARCH_MINIMAX_M2:
-        case LLM_ARCH_MISTRAL4:
-        case LLM_ARCH_KIMI_LINEAR:
-            return false;
-        default:
-            return true;
-    }
+    return llm_arch_runtime_traits_for(arch).supports_sm_tensor;
 }
 
 bool llm_arch_uses_encoder_pass(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_BERT:
-        case LLM_ARCH_NOMIC_BERT:
-        case LLM_ARCH_NOMIC_BERT_MOE:
-        case LLM_ARCH_JINA_BERT_V2:
-        case LLM_ARCH_JINA_BERT_V3:
-        case LLM_ARCH_MODERN_BERT:
-        case LLM_ARCH_NEO_BERT:
-        case LLM_ARCH_EUROBERT:
-        case LLM_ARCH_T5:
-        case LLM_ARCH_T5ENCODER:
-        case LLM_ARCH_DREAM:
-        case LLM_ARCH_LLADA:
-        case LLM_ARCH_LLADA_MOE:
-        case LLM_ARCH_RND1:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).uses_encoder_pass;
 }
 
 uint32_t llm_arch_default_full_attention_interval(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_QWEN35:
-        case LLM_ARCH_QWEN35MOE:
-            return 4;
-        default:
-            return 0;
-    }
+    return llm_arch_runtime_traits_for(arch).default_full_attention_interval;
 }
 
 uint32_t llm_arch_default_sliding_window_pattern(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_LLAMA4:
-        case LLM_ARCH_AFMOE:
-        case LLM_ARCH_COHERE2:
-        case LLM_ARCH_OLMO2:
-        case LLM_ARCH_EXAONE4:
-        case LLM_ARCH_EXAONE_MOE:
-        case LLM_ARCH_SMALLTHINKER:
-            return 4;
-        case LLM_ARCH_MODERN_BERT:
-            return 3;
-        case LLM_ARCH_PLAMO3:
-            return 8;
-        case LLM_ARCH_GEMMA2:
-        case LLM_ARCH_OPENAI_MOE:
-            return 2;
-        case LLM_ARCH_GEMMA3:
-        case LLM_ARCH_GEMMA_EMBEDDING:
-            return 6;
-        case LLM_ARCH_GEMMA3N:
-            return 5;
-        default:
-            return 0;
-    }
+    return llm_arch_runtime_traits_for(arch).default_sliding_window_pattern;
 }
 
 bool llm_arch_uses_sliding_window_metadata(const llm_arch & arch) {
-    return llm_arch_default_sliding_window_pattern(arch) > 0 ||
-            llm_arch_uses_explicit_swa_pattern(arch) ||
-            arch == LLM_ARCH_PHI3 ||
-            arch == LLM_ARCH_LFM2;
+    return llm_arch_runtime_traits_for(arch).uses_sliding_window_metadata;
 }
 
 bool llm_arch_uses_explicit_swa_pattern(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_GEMMA4:
-        case LLM_ARCH_MIMO2:
-        case LLM_ARCH_STEP35:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).uses_explicit_swa_pattern;
 }
 
 bool llm_arch_default_expert_gating_func(const llm_arch & arch, uint32_t & expert_gating_func) {
-    switch (arch) {
-        case LLM_ARCH_AFMOE:
-        case LLM_ARCH_GLM4_MOE:
-        case LLM_ARCH_GLM_DSA:
-        case LLM_ARCH_STEP35:
-            expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
-            return true;
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_QWEN35MOE:
-            expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
-            return true;
-        default:
-            return false;
+    const auto & traits = llm_arch_runtime_traits_for(arch);
+    if (traits.default_expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
+        return false;
     }
+
+    expert_gating_func = traits.default_expert_gating_func;
+    return true;
 }
 
 bool llm_arch_default_expert_weights_norm(const llm_arch & arch, bool & expert_weights_norm) {
-    switch (arch) {
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_QWEN35MOE:
-            expert_weights_norm = true;
-            return true;
-        default:
-            return false;
+    const auto & traits = llm_arch_runtime_traits_for(arch);
+    if (!traits.has_default_expert_weights_norm) {
+        return false;
     }
+
+    expert_weights_norm = traits.default_expert_weights_norm;
+    return true;
 }
 
 bool llm_arch_prefers_embedding_outputs(const llm_arch & arch) {
-    switch (arch) {
-        case LLM_ARCH_BERT:
-        case LLM_ARCH_NOMIC_BERT:
-        case LLM_ARCH_NOMIC_BERT_MOE:
-        case LLM_ARCH_JINA_BERT_V2:
-        case LLM_ARCH_JINA_BERT_V3:
-        case LLM_ARCH_MODERN_BERT:
-        case LLM_ARCH_NEO_BERT:
-        case LLM_ARCH_EUROBERT:
-        case LLM_ARCH_LLAMA_EMBED:
-        case LLM_ARCH_GEMMA_EMBEDDING:
-        case LLM_ARCH_T5ENCODER:
-            return true;
-        default:
-            return false;
-    }
+    return llm_arch_runtime_traits_for(arch).prefers_embedding_outputs;
 }
