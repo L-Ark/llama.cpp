@@ -642,3 +642,5 @@ uint32_t llm_arch_default_full_attention_interval(const llm_arch & arch);
 uint32_t llm_arch_default_sliding_window_pattern(const llm_arch & arch);
 bool llm_arch_uses_sliding_window_metadata(const llm_arch & arch);
 bool llm_arch_uses_explicit_swa_pattern(const llm_arch & arch);
+bool llm_arch_default_expert_gating_func(const llm_arch & arch, uint32_t & expert_gating_func);
+bool llm_arch_default_expert_weights_norm(const llm_arch & arch, bool & expert_weights_norm);

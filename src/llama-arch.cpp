@@ -1,5 +1,6 @@
 #include "llama-arch.h"
 
+#include "llama-hparams.h"
 #include "llama-impl.h"
 
 #include <map>
@@ -979,6 +980,34 @@ bool llm_arch_uses_explicit_swa_pattern(const llm_arch & arch) {
         case LLM_ARCH_GEMMA4:
         case LLM_ARCH_MIMO2:
         case LLM_ARCH_STEP35:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool llm_arch_default_expert_gating_func(const llm_arch & arch, uint32_t & expert_gating_func) {
+    switch (arch) {
+        case LLM_ARCH_AFMOE:
+        case LLM_ARCH_GLM4_MOE:
+        case LLM_ARCH_GLM_DSA:
+        case LLM_ARCH_STEP35:
+            expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
+            return true;
+        case LLM_ARCH_QWEN3NEXT:
+        case LLM_ARCH_QWEN35MOE:
+            expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool llm_arch_default_expert_weights_norm(const llm_arch & arch, bool & expert_weights_norm) {
+    switch (arch) {
+        case LLM_ARCH_QWEN3NEXT:
+        case LLM_ARCH_QWEN35MOE:
+            expert_weights_norm = true;
             return true;
         default:
             return false;

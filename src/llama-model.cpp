@@ -95,6 +95,24 @@ static void load_explicit_swa_pattern(
     ml.get_key_or_arr(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, hparams.swa_layers, hparams.n_layer);
 }
 
+static void apply_arch_default_expert_gating_func(const llm_arch arch, llama_hparams & hparams) {
+    if (hparams.expert_gating_func != LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
+        return;
+    }
+
+    uint32_t expert_gating_func = hparams.expert_gating_func;
+    if (llm_arch_default_expert_gating_func(arch, expert_gating_func)) {
+        hparams.expert_gating_func = expert_gating_func;
+    }
+}
+
+static void apply_arch_default_expert_weights_norm(const llm_arch arch, llama_hparams & hparams) {
+    bool expert_weights_norm = hparams.expert_weights_norm;
+    if (llm_arch_default_expert_weights_norm(arch, expert_weights_norm)) {
+        hparams.expert_weights_norm = expert_weights_norm;
+    }
+}
+
 struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const struct ggml_tensor * tensor, void * userdata) {
     const llama_meta_device_get_split_state_userdata * ud = (const llama_meta_device_get_split_state_userdata *) userdata;
     const llama_hparams & hparams = ud->model->hparams;
@@ -1003,9 +1021,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 }
 
                 // Default to sigmoid if not set
-                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
-                }
+                apply_arch_default_expert_gating_func(arch, hparams);
 
                 switch (hparams.n_layer) {
                     case 56: type = LLM_TYPE_6B; break;
@@ -1668,9 +1684,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 // Expert gating function (GLM-4.5 uses sigmoid)
                 ml.get_key(LLM_KV_EXPERT_GATING_FUNC,          hparams.expert_gating_func, false);
-                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func =  LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
-                }
+                apply_arch_default_expert_gating_func(arch, hparams);
 
                 // NextN/MTP parameters
                 ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS,        hparams.nextn_predict_layers, false);
@@ -1715,9 +1729,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
 
                 // Expert gating function (GLM-4.5 uses sigmoid)
                 ml.get_key(LLM_KV_EXPERT_GATING_FUNC,          hparams.expert_gating_func, false);
-                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func =  LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
-                }
+                apply_arch_default_expert_gating_func(arch, hparams);
 
                 // NextN/MTP parameters
                 ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS,        hparams.nextn_predict_layers, false);
@@ -2195,10 +2207,10 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 }
 
                 if (!found_expert_gating_func || hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
+                    apply_arch_default_expert_gating_func(arch, hparams);
                 }
                 if (!found_expert_weights_norm) {
-                    hparams.expert_weights_norm = true;
+                    apply_arch_default_expert_weights_norm(arch, hparams);
                 }
 
                 switch (hparams.n_layer) {
@@ -2251,10 +2263,10 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 }
 
                 if (!found_expert_gating_func || hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
+                    apply_arch_default_expert_gating_func(arch, hparams);
                 }
                 if (!found_expert_weights_norm) {
-                    hparams.expert_weights_norm = true;
+                    apply_arch_default_expert_weights_norm(arch, hparams);
                 }
 
                 switch (hparams.n_layer) {
@@ -2345,9 +2357,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM,               hparams.expert_weights_norm, false);
 
                 // Step35 uses sigmoid gating by default (if not set in GGUF)
-                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
-                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
-                }
+                apply_arch_default_expert_gating_func(arch, hparams);
 
                 load_explicit_swa_pattern(ml, hparams);
                 ml.get_key_or_arr(LLM_KV_SWIGLU_CLAMP_EXP,   hparams.swiglu_clamp_exp,   hparams.n_layer, false);
