@@ -14,14 +14,6 @@
 
 bool llama_model_saver_supports_arch(llm_arch arch) {
     switch (arch) {
-        case LLM_ARCH_PLAMO3:
-        case LLM_ARCH_GEMMA3:
-        case LLM_ARCH_GEMMA3N:
-        case LLM_ARCH_COHERE2:
-        case LLM_ARCH_OLMO2:
-        case LLM_ARCH_EXAONE_MOE:
-        case LLM_ARCH_AFMOE:
-            return false;
         default:
             return true;
     }
@@ -58,6 +50,53 @@ static uint32_t full_attention_interval_from_model(const llama_model * model) {
     }
 
     return interval;
+}
+
+static bool saver_uses_explicit_swa_pattern(llm_arch arch) {
+    switch (arch) {
+        case LLM_ARCH_GEMMA4:
+        case LLM_ARCH_MIMO2:
+        case LLM_ARCH_STEP35:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool matches_swa_pattern(const llama_hparams & hparams, uint32_t period, bool dense_first) {
+    for (uint32_t il = 0; il < hparams.n_layer; ++il) {
+        const bool expected = period == 0
+            ? true
+            : (dense_first
+                ? (il % period != 0)
+                : (il % period < (period - 1)));
+        if (bool(hparams.swa_layers[il]) != expected) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool infer_swa_pattern_period(const llama_hparams & hparams, uint32_t & period) {
+    if (!hparams.is_swa_any()) {
+        return false;
+    }
+
+    if (matches_swa_pattern(hparams, 0, false)) {
+        period = 0;
+        return true;
+    }
+
+    for (uint32_t candidate = 1; candidate <= hparams.n_layer; ++candidate) {
+        if (matches_swa_pattern(hparams, candidate, false) ||
+                matches_swa_pattern(hparams, candidate, true)) {
+            period = candidate;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 llama_model_saver::llama_model_saver(const struct llama_model * model) :
@@ -285,8 +324,18 @@ void llama_model_saver::add_kv_from_model() {
     }
 
     if (hparams.is_swa_any()) {
-        add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN,
-                std::vector<uint32_t>(hparams.swa_layers.begin(), hparams.swa_layers.begin() + hparams.n_layer));
+        if (saver_uses_explicit_swa_pattern(model->arch)) {
+            add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN,
+                    std::vector<uint32_t>(hparams.swa_layers.begin(), hparams.swa_layers.begin() + hparams.n_layer));
+        } else {
+            uint32_t swa_period = 0;
+            if (infer_swa_pattern_period(hparams, swa_period)) {
+                add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, swa_period);
+            } else {
+                add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN,
+                        std::vector<uint32_t>(hparams.swa_layers.begin(), hparams.swa_layers.begin() + hparams.n_layer));
+            }
+        }
     }
 
     add_kv(LLM_KV_ATTENTION_HEAD_COUNT,              hparams.n_head_arr, true);
