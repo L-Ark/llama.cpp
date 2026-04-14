@@ -1,242 +1,98 @@
 {
   "version": 1,
-  "traits": {
-    "LLM_ARCH_AFMOE": {
-      "default_expert_gating_func": "sigmoid",
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_ARWKV7": {
-      "is_recurrent": true
-    },
-    "LLM_ARCH_BERT": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_BITNET": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_COHERE2": {
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_DEEPSEEK2": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_DREAM": {
-      "is_diffusion": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_EUROBERT": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_EXAONE4": {
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_EXAONE_MOE": {
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_FALCON_H1": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_GEMMA2": {
-      "default_sliding_window_pattern": 2,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_GEMMA3": {
-      "default_sliding_window_pattern": 6,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_GEMMA3N": {
-      "default_sliding_window_pattern": 5,
-      "supports_sm_tensor": false,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_GEMMA4": {
-      "uses_explicit_swa_pattern": true,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_GEMMA_EMBEDDING": {
-      "default_sliding_window_pattern": 6,
-      "prefers_embedding_outputs": true,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_GLM4_MOE": {
-      "default_expert_gating_func": "sigmoid"
-    },
-    "LLM_ARCH_GLM_DSA": {
-      "default_expert_gating_func": "sigmoid",
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_GRANITE_HYBRID": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_GROK": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_JAMBA": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_JINA_BERT_V2": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_JINA_BERT_V3": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_KIMI_LINEAR": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_LFM2": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_LFM2MOE": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_LLADA": {
-      "is_diffusion": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_LLADA_MOE": {
-      "is_diffusion": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_LLAMA4": {
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_LLAMA_EMBED": {
-      "prefers_embedding_outputs": true
-    },
-    "LLM_ARCH_MAMBA": {
-      "is_recurrent": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_MAMBA2": {
-      "is_recurrent": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_MINICPM3": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_MINIMAX_M2": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_MIMO2": {
-      "uses_explicit_swa_pattern": true,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_MISTRAL4": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_MODERN_BERT": {
-      "default_sliding_window_pattern": 3,
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_MPT": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_NEMOTRON_H": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_NEMOTRON_H_MOE": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_NEO_BERT": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_NOMIC_BERT": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_NOMIC_BERT_MOE": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_OLMO2": {
-      "default_sliding_window_pattern": 4,
-      "supports_sm_tensor": false,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_OLMOE": {
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_OPENAI_MOE": {
-      "default_sliding_window_pattern": 2,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_PHI3": {
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_PLAMO2": {
-      "is_hybrid": true,
-      "supports_sm_tensor": false
-    },
-    "LLM_ARCH_PLAMO3": {
-      "default_sliding_window_pattern": 8,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_QWEN35": {
-      "default_full_attention_interval": 4,
-      "is_hybrid": true
-    },
-    "LLM_ARCH_QWEN35MOE": {
-      "default_expert_gating_func": "softmax",
-      "default_expert_weights_norm": true,
-      "default_full_attention_interval": 4,
-      "is_hybrid": true
-    },
-    "LLM_ARCH_QWEN3NEXT": {
-      "default_expert_gating_func": "softmax",
-      "default_expert_weights_norm": true,
-      "default_full_attention_interval": 4,
-      "is_hybrid": true
-    },
-    "LLM_ARCH_RND1": {
-      "is_diffusion": true,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_RWKV6": {
-      "is_recurrent": true
-    },
-    "LLM_ARCH_RWKV6QWEN2": {
-      "is_recurrent": true
-    },
-    "LLM_ARCH_RWKV7": {
-      "is_recurrent": true
-    },
-    "LLM_ARCH_SMALLTHINKER": {
-      "default_sliding_window_pattern": 4,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_STEP35": {
-      "default_expert_gating_func": "sigmoid",
-      "uses_explicit_swa_pattern": true,
-      "uses_sliding_window_metadata": true
-    },
-    "LLM_ARCH_T5": {
-      "supports_sm_tensor": false,
-      "uses_encoder_pass": true
-    },
-    "LLM_ARCH_T5ENCODER": {
-      "prefers_embedding_outputs": true,
-      "uses_encoder_pass": true
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_AFMOE": {
+        "default_expert_gating_func": "sigmoid",
+        "default_sliding_window_pattern": 4,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_ARWKV7": {
+        "is_recurrent": true
+      },
+      "LLM_ARCH_BITNET": {
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_DREAM": {
+        "is_diffusion": true,
+        "uses_encoder_pass": true
+      },
+      "LLM_ARCH_FALCON_H1": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_GROK": {
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_KIMI_LINEAR": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_LFM2": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_LFM2MOE": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_LLADA": {
+        "is_diffusion": true,
+        "uses_encoder_pass": true
+      },
+      "LLM_ARCH_LLADA_MOE": {
+        "is_diffusion": true,
+        "uses_encoder_pass": true
+      },
+      "LLM_ARCH_LLAMA4": {
+        "default_sliding_window_pattern": 4,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_MIMO2": {
+        "uses_explicit_swa_pattern": true,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_MPT": {
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_OLMOE": {
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_OPENAI_MOE": {
+        "default_sliding_window_pattern": 2,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_PLAMO2": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_PLAMO3": {
+        "default_sliding_window_pattern": 8,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_RND1": {
+        "is_diffusion": true,
+        "uses_encoder_pass": true
+      },
+      "LLM_ARCH_RWKV6": {
+        "is_recurrent": true
+      },
+      "LLM_ARCH_RWKV6QWEN2": {
+        "is_recurrent": true
+      },
+      "LLM_ARCH_RWKV7": {
+        "is_recurrent": true
+      },
+      "LLM_ARCH_SMALLTHINKER": {
+        "default_sliding_window_pattern": 4,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_STEP35": {
+        "default_expert_gating_func": "sigmoid",
+        "uses_explicit_swa_pattern": true,
+        "uses_sliding_window_metadata": true
+      }
     }
   }
 }

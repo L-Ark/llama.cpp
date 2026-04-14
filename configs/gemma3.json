@@ -44,5 +44,23 @@
     "chunked_attention": {
       "swa_period": 6
     }
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_GEMMA3": {
+        "default_sliding_window_pattern": 6,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_GEMMA3N": {
+        "default_sliding_window_pattern": 5,
+        "supports_sm_tensor": false,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_GEMMA_EMBEDDING": {
+        "default_sliding_window_pattern": 6,
+        "prefers_embedding_outputs": true,
+        "uses_sliding_window_metadata": true
+      }
+    }
   }
 }

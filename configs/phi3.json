@@ -41,5 +41,12 @@
     "qkv_style": "combined",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_PHI3": {
+        "uses_sliding_window_metadata": true
+      }
+    }
   }
 }

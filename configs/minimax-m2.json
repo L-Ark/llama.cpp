@@ -51,5 +51,12 @@
       "n_expert": 256,
       "n_expert_used": 8
     }
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_MINIMAX_M2": {
+        "supports_sm_tensor": false
+      }
+    }
   }
 }

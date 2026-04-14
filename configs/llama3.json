@@ -44,5 +44,12 @@
     "qkv_style": "separate",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_LLAMA_EMBED": {
+        "prefers_embedding_outputs": true
+      }
+    }
   }
 }

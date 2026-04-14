@@ -51,5 +51,17 @@
     "qkv_style": "separate",
     "ffn_type": "sequential",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_EXAONE4": {
+        "default_sliding_window_pattern": 4,
+        "uses_sliding_window_metadata": true
+      },
+      "LLM_ARCH_EXAONE_MOE": {
+        "default_sliding_window_pattern": 4,
+        "uses_sliding_window_metadata": true
+      }
+    }
   }
 }

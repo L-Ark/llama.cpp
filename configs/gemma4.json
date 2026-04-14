@@ -86,5 +86,13 @@
       "eoa_token_id": 258883
     },
     "integration": "encoder_tower"
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_GEMMA4": {
+        "uses_explicit_swa_pattern": true,
+        "uses_sliding_window_metadata": true
+      }
+    }
   }
 }

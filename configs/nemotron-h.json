@@ -46,5 +46,17 @@
     "qkv_style": "separate",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_NEMOTRON_H": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      },
+      "LLM_ARCH_NEMOTRON_H_MOE": {
+        "is_hybrid": true,
+        "supports_sm_tensor": false
+      }
+    }
   }
 }

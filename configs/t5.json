@@ -46,5 +46,17 @@
     "qkv_style": "separate",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_T5": {
+        "supports_sm_tensor": false,
+        "uses_encoder_pass": true
+      },
+      "LLM_ARCH_T5ENCODER": {
+        "prefers_embedding_outputs": true,
+        "uses_encoder_pass": true
+      }
+    }
   }
 }

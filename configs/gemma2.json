@@ -39,5 +39,13 @@
     "qkv_style": "separate",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_GEMMA2": {
+        "default_sliding_window_pattern": 2,
+        "uses_sliding_window_metadata": true
+      }
+    }
   }
 }

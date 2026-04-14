@@ -68,5 +68,12 @@
       "first_k_dense": 3,
       "moe_layer_freq": 1
     }
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_DEEPSEEK2": {
+        "supports_sm_tensor": false
+      }
+    }
   }
 }

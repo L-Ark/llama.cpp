@@ -48,5 +48,25 @@
     "qkv_style": "separate",
     "ffn_type": "gated",
     "has_bias": false
+  },
+  "runtime": {
+    "traits": {
+      "LLM_ARCH_QWEN35": {
+        "default_full_attention_interval": 4,
+        "is_hybrid": true
+      },
+      "LLM_ARCH_QWEN35MOE": {
+        "default_expert_gating_func": "softmax",
+        "default_expert_weights_norm": true,
+        "default_full_attention_interval": 4,
+        "is_hybrid": true
+      },
+      "LLM_ARCH_QWEN3NEXT": {
+        "default_expert_gating_func": "softmax",
+        "default_expert_weights_norm": true,
+        "default_full_attention_interval": 4,
+        "is_hybrid": true
+      }
+    }
   }
 }
