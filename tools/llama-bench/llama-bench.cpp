@@ -19,6 +19,7 @@
 #include <vector>
 #include <unordered_set>
 
+#include "arg.h"
 #include "common.h"
 #include "download.h"
 #include "ggml.h"
@@ -267,6 +268,37 @@ static const char * split_mode_str(llama_split_mode mode) {
     }
 }
 
+static const char * flash_attn_mode_str(llama_flash_attn_type mode) {
+    switch (mode) {
+        case LLAMA_FLASH_ATTN_TYPE_AUTO:
+            return "auto";
+        case LLAMA_FLASH_ATTN_TYPE_DISABLED:
+            return "off";
+        case LLAMA_FLASH_ATTN_TYPE_ENABLED:
+            return "on";
+    }
+    GGML_ABORT("invalid flash attention mode");
+}
+
+static bool flash_attn_mode_from_str(const std::string & value, llama_flash_attn_type & mode) {
+    using namespace common_arg_utils;
+
+    if (is_truthy(value)) {
+        mode = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+        return true;
+    }
+    if (is_falsey(value)) {
+        mode = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+        return true;
+    }
+    if (is_autoy(value)) {
+        mode = LLAMA_FLASH_ATTN_TYPE_AUTO;
+        return true;
+    }
+
+    return false;
+}
+
 static std::string pair_str(const std::pair<int, int> & p) {
     static char buf[32];
     snprintf(buf, sizeof(buf), "%d,%d", p.first, p.second);
@@ -335,7 +367,7 @@ struct cmd_params {
     std::vector<llama_split_mode>    split_mode;
     std::vector<int>                 main_gpu;
     std::vector<bool>                no_kv_offload;
-    std::vector<bool>                flash_attn;
+    std::vector<llama_flash_attn_type> flash_attn;
     std::vector<std::vector<ggml_backend_dev_t>> devices;
     std::vector<std::vector<float>>  tensor_split;
     std::vector<std::vector<llama_model_tensor_buft_override>> tensor_buft_overrides;
@@ -379,7 +411,7 @@ static const cmd_params cmd_params_defaults = {
     /* split_mode           */ { LLAMA_SPLIT_MODE_LAYER },
     /* main_gpu             */ { 0 },
     /* no_kv_offload        */ { false },
-    /* flash_attn           */ { false },
+    /* flash_attn           */ { LLAMA_FLASH_ATTN_TYPE_AUTO },
     /* devices              */ { {} },
     /* tensor_split         */ { std::vector<float>(llama_max_devices(), 0.0f) },
     /* tensor_buft_overrides*/ { std::vector<llama_model_tensor_buft_override>{ { nullptr, nullptr } } },
@@ -449,7 +481,8 @@ static void print_usage(int /* argc */, char ** argv) {
     printf("  -sm, --split-mode <none|layer|row|tensor>   (default: %s)\n", join(transform_to_str(cmd_params_defaults.split_mode, split_mode_str), ",").c_str());
     printf("  -mg, --main-gpu <i>                         (default: %s)\n", join(cmd_params_defaults.main_gpu, ",").c_str());
     printf("  -nkvo, --no-kv-offload <0|1>                (default: %s)\n", join(cmd_params_defaults.no_kv_offload, ",").c_str());
-    printf("  -fa, --flash-attn <0|1>                     (default: %s)\n", join(cmd_params_defaults.flash_attn, ",").c_str());
+    printf("  -fa, --flash-attn <on|off|auto>             (default: %s)\n",
+            join(transform_to_str(cmd_params_defaults.flash_attn, flash_attn_mode_str), ",").c_str());
     printf("  -dev, --device <dev0/dev1/...>              (default: auto)\n");
     printf("  -mmp, --mmap <0|1>                          (default: %s)\n", join(cmd_params_defaults.use_mmap, ",").c_str());
     printf("  -dio, --direct-io <0|1>                     (default: %s)\n", join(cmd_params_defaults.use_direct_io, ",").c_str());
@@ -791,8 +824,19 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                     invalid_param = true;
                     break;
                 }
-                auto p = string_split<bool>(argv[i], split_delim);
-                params.flash_attn.insert(params.flash_attn.end(), p.begin(), p.end());
+                auto p = string_split<std::string>(argv[i], split_delim);
+                for (const auto & value : p) {
+                    llama_flash_attn_type mode;
+                    if (!flash_attn_mode_from_str(value, mode)) {
+                        fprintf(stderr, "error: invalid flash attention mode '%s'\n", value.c_str());
+                        invalid_param = true;
+                        break;
+                    }
+                    params.flash_attn.push_back(mode);
+                }
+                if (invalid_param) {
+                    break;
+                }
             } else if (arg == "-mmp" || arg == "--mmap") {
                 if (++i >= argc) {
                     invalid_param = true;
@@ -1136,7 +1180,7 @@ struct cmd_params_instance {
     llama_split_mode   split_mode;
     int                main_gpu;
     bool               no_kv_offload;
-    bool               flash_attn;
+    llama_flash_attn_type flash_attn;
     std::vector<ggml_backend_dev_t> devices;
     std::vector<float> tensor_split;
     std::vector<llama_model_tensor_buft_override> tensor_buft_overrides;
@@ -1220,7 +1264,7 @@ struct cmd_params_instance {
         cparams.type_k          = type_k;
         cparams.type_v          = type_v;
         cparams.offload_kqv     = !no_kv_offload;
-        cparams.flash_attn_type = flash_attn ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+        cparams.flash_attn_type = flash_attn;
         cparams.embeddings      = embeddings;
         cparams.op_offload      = !no_op_offload;
         cparams.swa_full        = false;
@@ -1398,7 +1442,7 @@ struct test {
     llama_split_mode         split_mode;
     int                      main_gpu;
     bool                     no_kv_offload;
-    bool                     flash_attn;
+    llama_flash_attn_type    flash_attn;
     std::vector<ggml_backend_dev_t> devices;
     std::vector<float>       tensor_split;
     std::vector<llama_model_tensor_buft_override> tensor_buft_overrides;
@@ -1523,7 +1567,7 @@ struct test {
             field == "fit_target" || field == "fit_min_ctx") {
             return INT;
         }
-        if (field == "f16_kv" || field == "no_kv_offload" || field == "cpu_strict" || field == "flash_attn" ||
+        if (field == "f16_kv" || field == "no_kv_offload" || field == "cpu_strict" ||
             field == "use_mmap" || field == "use_direct_io" || field == "embeddings" || field == "no_host") {
             return BOOL;
         }
@@ -1592,7 +1636,7 @@ struct test {
                                             split_mode_str(split_mode),
                                             std::to_string(main_gpu),
                                             std::to_string(no_kv_offload),
-                                            std::to_string(flash_attn),
+                                            flash_attn_mode_str(flash_attn),
                                             devices_to_string(devices),
                                             tensor_split_str,
                                             tensor_buft_overrides_str,
@@ -1777,7 +1821,7 @@ struct markdown_printer : public printer {
             return 6;
         }
         if (field == "flash_attn") {
-            return 2;
+            return -4;
         }
         if (field == "devices") {
             return -12;
