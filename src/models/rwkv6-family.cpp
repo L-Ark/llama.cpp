@@ -46,7 +46,7 @@ llm_build_rwkv6_family::llm_build_rwkv6_family(
                     ggml_view_3d(ctx0, att_norm, n_embd, n_seq_tokens - 1, n_seqs, att_norm->nb[1], att_norm->nb[2], 0),
                     1);
 
-            cur = build_rwkv6_time_mix(rs_inp, att_norm, x_prev, ubatch, il);
+            cur = build_rwkv6_time_mix(rs_inp, att_norm, x_prev, config.is_qrwkv, ubatch, il);
 
             ggml_tensor * ffn_inp = ggml_add(ctx0, cur, inpL);
             cb(ffn_inp, "ffn_inp", il);
@@ -89,7 +89,7 @@ llm_build_rwkv6_family::llm_build_rwkv6_family(
                     ggml_view_3d(ctx0, att_norm, n_embd, n_seq_tokens - 1, n_seqs, att_norm->nb[1], att_norm->nb[2], 0),
                     1);
 
-            cur = build_rwkv6_time_mix(rs_inp, att_norm, x_prev, ubatch, il);
+            cur = build_rwkv6_time_mix(rs_inp, att_norm, x_prev, config.is_qrwkv, ubatch, il);
 
             token_shift = ggml_view_3d(ctx0, att_norm, n_embd, 1, n_seqs, att_norm->nb[1], att_norm->nb[2],
                     (n_seq_tokens - 1) * n_embd * ggml_element_size(att_norm));

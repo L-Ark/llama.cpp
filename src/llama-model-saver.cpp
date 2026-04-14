@@ -20,13 +20,8 @@ bool llama_model_saver_supports_arch(llm_arch arch) {
 }
 
 static uint32_t full_attention_interval_from_model(const llama_model * model) {
-    switch (model->arch) {
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_QWEN35:
-        case LLM_ARCH_QWEN35MOE:
-            break;
-        default:
-            return 0;
+    if (llm_arch_default_full_attention_interval(model->arch) == 0) {
+        return 0;
     }
 
     const auto & hparams = model->hparams;
@@ -50,17 +45,6 @@ static uint32_t full_attention_interval_from_model(const llama_model * model) {
     }
 
     return interval;
-}
-
-static bool saver_uses_explicit_swa_pattern(llm_arch arch) {
-    switch (arch) {
-        case LLM_ARCH_GEMMA4:
-        case LLM_ARCH_MIMO2:
-        case LLM_ARCH_STEP35:
-            return true;
-        default:
-            return false;
-    }
 }
 
 static bool matches_swa_pattern(const llama_hparams & hparams, uint32_t period, bool dense_first) {
@@ -324,7 +308,7 @@ void llama_model_saver::add_kv_from_model() {
     }
 
     if (hparams.is_swa_any()) {
-        if (saver_uses_explicit_swa_pattern(model->arch)) {
+        if (llm_arch_uses_explicit_swa_pattern(model->arch)) {
             add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN,
                     std::vector<uint32_t>(hparams.swa_layers.begin(), hparams.swa_layers.begin() + hparams.n_layer));
         } else {
@@ -476,8 +460,9 @@ void llama_model_saver::add_kv_from_model() {
 }
 
 void llama_model_saver::add_tensors_from_model() {
-    if (model->output != nullptr &&
-            std::string(model->output->name) != std::string(model->tok_embd->name)) {
+    if (model->tok_embd != nullptr &&
+            (model->output == nullptr ||
+             std::string(model->output->name) != std::string(model->tok_embd->name))) {
         add_tensor(model->tok_embd); // some models use the same tensor for tok_embd and output
     }
     add_tensor(model->type_embd);

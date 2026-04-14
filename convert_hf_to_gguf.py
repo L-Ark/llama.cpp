@@ -4633,6 +4633,9 @@ class Qwen2MoeModel(TextModel):
         if (shared_expert_intermediate_size := self.hparams.get('shared_expert_intermediate_size')) is not None:
             self.gguf_writer.add_expert_shared_feed_forward_length(shared_expert_intermediate_size)
             logger.info(f"gguf: expert shared feed forward length = {shared_expert_intermediate_size}")
+        if (norm_topk_prob := self.hparams.get("norm_topk_prob")) is not None:
+            self.gguf_writer.add_expert_weights_norm(norm_topk_prob)
+            logger.info(f"gguf: expert weights norm = {norm_topk_prob}")
 
     _experts: list[dict[str, Tensor]] | None = None
 

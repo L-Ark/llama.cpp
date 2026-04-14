@@ -97,7 +97,7 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         n_embd = 128;
         n_head = 2;
         n_ff   = 192;
-        n_layer = 5; // need at least 5 for swa_pattern (every 5th is full_attention)
+        n_layer = 6; // real Gemma4 uses five SWA layers followed by a full-attention layer without attn_v
     } else if (arch == LLM_ARCH_DEEPSEEK2OCR) {
         n_embd = 128;
         n_head = 1;
@@ -133,7 +133,8 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
     ms.add_kv(LLM_KV_EMBEDDING_LENGTH,          n_embd);
     ms.add_kv(LLM_KV_FEATURES_LENGTH,           n_embd);
     ms.add_kv(LLM_KV_BLOCK_COUNT,               n_layer);
-    ms.add_kv(LLM_KV_ATTENTION_CAUSAL,          arch != LLM_ARCH_WAVTOKENIZER_DEC);
+    const bool non_causal = arch == LLM_ARCH_WAVTOKENIZER_DEC || llm_arch_prefers_embedding_outputs(arch);
+    ms.add_kv(LLM_KV_ATTENTION_CAUSAL,          !non_causal);
     ms.add_kv(LLM_KV_LEADING_DENSE_BLOCK_COUNT,
             arch == LLM_ARCH_DEEPSEEK2OCR && !moe
                 ? n_layer
@@ -150,14 +151,31 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         ms.add_kv(LLM_KV_FEED_FORWARD_LENGTH, n_ff);
     }
 
-    ms.add_kv(LLM_KV_USE_PARALLEL_RESIDUAL,   false);
+    if (arch == LLM_ARCH_GPTNEOX) {
+        ms.add_kv(LLM_KV_USE_PARALLEL_RESIDUAL, false);
+    }
     ms.add_kv(LLM_KV_LOGIT_SCALE,             1.0f);
-    ms.add_kv(LLM_KV_TIME_MIX_EXTRA_DIM,      uint32_t(64));
-    ms.add_kv(LLM_KV_TIME_DECAY_EXTRA_DIM,    uint32_t(128));
-    ms.add_kv(LLM_KV_FULL_ATTENTION_INTERVAL,
-            arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE
-                ? uint32_t(4)
-                : uint32_t(2));
+    if (arch == LLM_ARCH_RWKV6 || arch == LLM_ARCH_RWKV6QWEN2) {
+        ms.add_kv(LLM_KV_TIME_MIX_EXTRA_DIM,   uint32_t(64));
+        ms.add_kv(LLM_KV_TIME_DECAY_EXTRA_DIM, uint32_t(128));
+    }
+    if (arch == LLM_ARCH_RWKV6 || arch == LLM_ARCH_RWKV7) {
+        ms.add_kv(LLM_KV_TOKEN_SHIFT_COUNT, uint32_t(2));
+    } else if (arch == LLM_ARCH_RWKV6QWEN2 || arch == LLM_ARCH_ARWKV7) {
+        ms.add_kv(LLM_KV_TOKEN_SHIFT_COUNT, uint32_t(1));
+    }
+    if (arch == LLM_ARCH_RWKV7 || arch == LLM_ARCH_ARWKV7) {
+        ms.add_kv(LLM_KV_ATTENTION_DECAY_LORA_RANK,              uint32_t(32));
+        ms.add_kv(LLM_KV_ATTENTION_ICLR_LORA_RANK,               uint32_t(32));
+        ms.add_kv(LLM_KV_ATTENTION_VALUE_RESIDUAL_MIX_LORA_RANK, uint32_t(32));
+    }
+    if (arch == LLM_ARCH_RWKV7) {
+        ms.add_kv(LLM_KV_ATTENTION_GATE_LORA_RANK, uint32_t(64));
+    }
+    const uint32_t full_attn_interval = llm_arch_default_full_attention_interval(arch);
+    if (full_attn_interval > 0) {
+        ms.add_kv(LLM_KV_FULL_ATTENTION_INTERVAL, full_attn_interval);
+    }
     if (arch == LLM_ARCH_DEEPSEEK2OCR) {
         ms.add_kv(LLM_KV_NEXTN_PREDICT_LAYERS, uint32_t(1));
         ms.add_kv(LLM_KV_ROPE_SCALING_FACTOR,  2.0f);
@@ -184,7 +202,9 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         ms.add_kv(LLM_KV_ATTENTION_HEAD_COUNT_KV, n_head);
     }
 
-    ms.add_kv(LLM_KV_ATTENTION_MAX_ALIBI_BIAS, 8.0f);
+    if (arch == LLM_ARCH_MPT || arch == LLM_ARCH_JAIS) {
+        ms.add_kv(LLM_KV_ATTENTION_MAX_ALIBI_BIAS, 8.0f);
+    }
     if (arch == LLM_ARCH_DEEPSEEK2
             || arch == LLM_ARCH_GLM_DSA
             || arch == LLM_ARCH_KIMI_LINEAR
@@ -195,42 +215,67 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         ms.add_kv(LLM_KV_ATTENTION_KEY_LENGTH_MLA,   uint32_t(192));
         ms.add_kv(LLM_KV_ATTENTION_VALUE_LENGTH_MLA, uint32_t(128));
     }
-    ms.add_kv(LLM_KV_ATTENTION_CLAMP_KQV,              1.0f);
+    if (arch == LLM_ARCH_MPT || arch == LLM_ARCH_DBRX || arch == LLM_ARCH_OLMO) {
+        ms.add_kv(LLM_KV_ATTENTION_CLAMP_KQV,          1.0f);
+    }
     ms.add_kv(LLM_KV_ATTENTION_LAYERNORM_EPS,          1e-5f);
     ms.add_kv(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,      1e-5f);
-    ms.add_kv(LLM_KV_ATTENTION_GROUPNORM_EPS,          1e-5f);
-    ms.add_kv(LLM_KV_ATTENTION_GROUPNORM_GROUPS,       uint32_t(8));
-    ms.add_kv(LLM_KV_ATTENTION_Q_LORA_RANK,            uint32_t(512));
-    ms.add_kv(LLM_KV_ATTENTION_KV_LORA_RANK,           uint32_t(512));
-    ms.add_kv(LLM_KV_ATTENTION_RELATIVE_BUCKETS_COUNT, uint32_t(8));
-    ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW,         n_ctx/8);
+    if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
+        ms.add_kv(LLM_KV_ATTENTION_GROUPNORM_EPS,      1e-5f);
+        ms.add_kv(LLM_KV_ATTENTION_GROUPNORM_GROUPS,   uint32_t(8));
+    }
+    if (arch == LLM_ARCH_MINICPM3 || arch == LLM_ARCH_DEEPSEEK2 || arch == LLM_ARCH_MISTRAL4 || arch == LLM_ARCH_GLM_DSA) {
+        ms.add_kv(LLM_KV_ATTENTION_Q_LORA_RANK,        uint32_t(512));
+    }
+    if (arch == LLM_ARCH_MINICPM3 || arch == LLM_ARCH_DEEPSEEK2 || arch == LLM_ARCH_MISTRAL4 ||
+            arch == LLM_ARCH_GLM_DSA || arch == LLM_ARCH_PLM || arch == LLM_ARCH_KIMI_LINEAR) {
+        ms.add_kv(LLM_KV_ATTENTION_KV_LORA_RANK,       uint32_t(512));
+    }
+    if (arch == LLM_ARCH_T5 || arch == LLM_ARCH_T5ENCODER) {
+        ms.add_kv(LLM_KV_ATTENTION_RELATIVE_BUCKETS_COUNT, uint32_t(8));
+    }
+    if (llm_arch_uses_sliding_window_metadata(arch)) {
+        ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW, n_ctx/8);
 
-    if (arch == LLM_ARCH_GEMMA4) {
-        std::vector<uint32_t> swa_layers(n_layer, 1);
-        swa_layers.back() = 0;
-        ms.add_kv(LLM_KV_EMBEDDING_LENGTH_PER_LAYER,      n_embd/2);
-        ms.add_kv(LLM_KV_ATTENTION_SHARED_KV_LAYERS,      uint32_t(0));
-        ms.add_kv(LLM_KV_ATTENTION_KEY_LENGTH_SWA,        n_embd_head);
-        ms.add_kv(LLM_KV_ATTENTION_VALUE_LENGTH_SWA,      n_embd_head);
-        ms.add_kv(LLM_KV_ROPE_FREQ_BASE_SWA,              10000.0f);
-        // Gemma4 encodes per-layer SWA flags directly: 1 = SWA, 0 = full attention.
-        ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, swa_layers);
-    } else if (arch == LLM_ARCH_MIMO2 || arch == LLM_ARCH_STEP35) {
-        std::vector<uint32_t> pattern;
-        pattern.reserve(n_layer);
-        for (uint32_t il = 0; il < n_layer; il++) {
-            pattern.push_back(il % 2);
+        if (arch == LLM_ARCH_GEMMA4) {
+            std::vector<uint32_t> swa_layers;
+            swa_layers.reserve(n_layer);
+            for (uint32_t il = 0; il < n_layer; il++) {
+                swa_layers.push_back((il + 1) % 6 == 0 ? 0 : 1);
+            }
+            ms.add_kv(LLM_KV_EMBEDDING_LENGTH_PER_LAYER,      n_embd/2);
+            ms.add_kv(LLM_KV_ATTENTION_SHARED_KV_LAYERS,      uint32_t(0));
+            ms.add_kv(LLM_KV_ATTENTION_KEY_LENGTH_SWA,        n_embd_head);
+            ms.add_kv(LLM_KV_ATTENTION_VALUE_LENGTH_SWA,      n_embd_head);
+            ms.add_kv(LLM_KV_ROPE_FREQ_BASE_SWA,              10000.0f);
+            // Gemma4 encodes per-layer SWA flags directly: 1 = SWA, 0 = full attention.
+            ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, swa_layers);
+        } else if (llm_arch_uses_explicit_swa_pattern(arch)) {
+            std::vector<uint32_t> pattern;
+            pattern.reserve(n_layer);
+            for (uint32_t il = 0; il < n_layer; il++) {
+                pattern.push_back(il % 2);
+            }
+            ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, pattern);
+        } else if (const uint32_t swa_period = llm_arch_default_sliding_window_pattern(arch); swa_period > 0) {
+            ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, swa_period);
         }
-        ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, pattern);
-    } else {
-        ms.add_kv(LLM_KV_ATTENTION_SLIDING_WINDOW_PATTERN, uint32_t(2));
     }
 
-    ms.add_kv(LLM_KV_ATTENTION_INDEXER_HEAD_COUNT, uint32_t(1));
-    ms.add_kv(LLM_KV_ATTENTION_INDEXER_KEY_LENGTH, uint32_t(64));
-    ms.add_kv(LLM_KV_ATTENTION_INDEXER_TOP_K,      uint32_t(8));
+    if (arch == LLM_ARCH_GLM_DSA) {
+        ms.add_kv(LLM_KV_ATTENTION_INDEXER_HEAD_COUNT, uint32_t(1));
+        ms.add_kv(LLM_KV_ATTENTION_INDEXER_KEY_LENGTH, uint32_t(64));
+        ms.add_kv(LLM_KV_ATTENTION_INDEXER_TOP_K,      uint32_t(8));
+    }
     ms.add_kv(LLM_KV_ROPE_DIMENSION_SECTIONS, std::vector<uint32_t>({n_embd_head/4, n_embd_head/4, n_embd_head/4, n_embd_head/4}));
     ms.add_kv(LLM_KV_TOKENIZER_MODEL,         "no_vocab");
+    if (arch == LLM_ARCH_BERT
+            || arch == LLM_ARCH_NOMIC_BERT
+            || arch == LLM_ARCH_NOMIC_BERT_MOE
+            || arch == LLM_ARCH_JINA_BERT_V2
+            || arch == LLM_ARCH_JINA_BERT_V3) {
+        ms.add_kv(LLM_KV_TOKENIZER_TOKEN_TYPE_COUNT, uint32_t(2));
+    }
     // ms.add_kv(LLM_KV_DENSE_2_FEAT_OUT,     n_embd);
     // ms.add_kv(LLM_KV_DENSE_3_FEAT_IN,      n_embd);
 
@@ -239,28 +284,184 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         ms.add_kv(LLM_KV_INTERLEAVE_MOE_LAYER_STEP,  uint32_t(2));
         ms.add_kv(LLM_KV_EXPERT_COUNT,               uint32_t(2));
         ms.add_kv(LLM_KV_EXPERT_USED_COUNT,          uint32_t(1));
-        ms.add_kv(LLM_KV_EXPERT_SHARED_COUNT,        uint32_t(1));
-        ms.add_kv(LLM_KV_EXPERT_GATING_FUNC,         uint32_t(2)); // sigmoid
+        ms.add_kv(LLM_KV_EXPERT_SHARED_COUNT,        arch == LLM_ARCH_NOMIC_BERT_MOE ? uint32_t(0) : uint32_t(1));
+        ms.add_kv(LLM_KV_EXPERT_GATING_FUNC,         arch == LLM_ARCH_NOMIC_BERT_MOE ? uint32_t(0) : uint32_t(2)); // default softmax or sigmoid
+        if (arch == LLM_ARCH_QWEN2MOE
+                || arch == LLM_ARCH_QWEN3MOE
+                || arch == LLM_ARCH_QWEN3NEXT
+                || arch == LLM_ARCH_QWEN3VLMOE
+                || arch == LLM_ARCH_QWEN35MOE) {
+            ms.add_kv(LLM_KV_EXPERT_WEIGHTS_NORM,    true);
+        }
         ms.add_kv(LLM_KV_EXPERT_GROUP_SCALE,         1.0f);
         ms.add_kv(LLM_KV_EXPERTS_PER_GROUP,          uint32_t(1));
+        if (arch == LLM_ARCH_NOMIC_BERT_MOE) {
+            ms.add_kv(LLM_KV_MOE_EVERY_N_LAYERS, uint32_t(2));
+        }
     }
 
-    ms.add_kv(LLM_KV_POSNET_EMBEDDING_LENGTH,   n_embd);
-    ms.add_kv(LLM_KV_POSNET_BLOCK_COUNT,        n_layer);
-    ms.add_kv(LLM_KV_CONVNEXT_EMBEDDING_LENGTH, n_embd);
-    ms.add_kv(LLM_KV_CONVNEXT_BLOCK_COUNT,      n_layer);
-    ms.add_kv(LLM_KV_XIELU_ALPHA_N,             1.0f);
-    ms.add_kv(LLM_KV_XIELU_ALPHA_P,             1.0f);
-    ms.add_kv(LLM_KV_XIELU_BETA,                1.0f);
-    ms.add_kv(LLM_KV_XIELU_EPS,                 1.0e-7f);
-    ms.add_kv(LLM_KV_SSM_INNER_SIZE,            arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE ? 256 : 2*n_embd);
-    ms.add_kv(LLM_KV_SSM_CONV_KERNEL,           uint32_t(4));
-    ms.add_kv(LLM_KV_SSM_STATE_SIZE,            uint32_t(128));
-    ms.add_kv(LLM_KV_SSM_TIME_STEP_RANK,        n_head);
-    ms.add_kv(LLM_KV_SSM_GROUP_COUNT,           arch == LLM_ARCH_PLAMO2 ? 0 : uint32_t(2));
-    ms.add_kv(LLM_KV_KDA_HEAD_DIM,              uint32_t(128));
-    ms.add_kv(LLM_KV_WKV_HEAD_SIZE,             n_embd/n_head);
-    ms.add_kv(LLM_KV_SHORTCONV_L_CACHE,         uint32_t(3));
+    if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
+        ms.add_kv(LLM_KV_POSNET_EMBEDDING_LENGTH,   n_embd);
+        ms.add_kv(LLM_KV_POSNET_BLOCK_COUNT,        n_layer);
+        ms.add_kv(LLM_KV_CONVNEXT_EMBEDDING_LENGTH, n_embd);
+        ms.add_kv(LLM_KV_CONVNEXT_BLOCK_COUNT,      n_layer);
+    }
+    if (arch == LLM_ARCH_APERTUS) {
+        ms.add_kv(LLM_KV_XIELU_ALPHA_N,             1.0f);
+        ms.add_kv(LLM_KV_XIELU_ALPHA_P,             1.0f);
+        ms.add_kv(LLM_KV_XIELU_BETA,                1.0f);
+        ms.add_kv(LLM_KV_XIELU_EPS,                 1.0e-7f);
+    }
+    const bool uses_ssm_conv = arch == LLM_ARCH_PLAMO2 || arch == LLM_ARCH_MAMBA || arch == LLM_ARCH_MAMBA2 ||
+            arch == LLM_ARCH_JAMBA || arch == LLM_ARCH_NEMOTRON_H || arch == LLM_ARCH_NEMOTRON_H_MOE ||
+            arch == LLM_ARCH_GRANITE_HYBRID || arch == LLM_ARCH_FALCON_H1 || arch == LLM_ARCH_QWEN3NEXT ||
+            arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE || arch == LLM_ARCH_KIMI_LINEAR;
+    const bool uses_ssm_core = arch == LLM_ARCH_PLAMO2 || arch == LLM_ARCH_MAMBA || arch == LLM_ARCH_MAMBA2 ||
+            arch == LLM_ARCH_JAMBA || arch == LLM_ARCH_NEMOTRON_H || arch == LLM_ARCH_NEMOTRON_H_MOE ||
+            arch == LLM_ARCH_GRANITE_HYBRID || arch == LLM_ARCH_FALCON_H1 || arch == LLM_ARCH_QWEN3NEXT ||
+            arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE;
+    const bool uses_ssm_group_count = arch == LLM_ARCH_PLAMO2 || arch == LLM_ARCH_MAMBA2 ||
+            arch == LLM_ARCH_NEMOTRON_H || arch == LLM_ARCH_NEMOTRON_H_MOE || arch == LLM_ARCH_GRANITE_HYBRID ||
+            arch == LLM_ARCH_FALCON_H1 || arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 ||
+            arch == LLM_ARCH_QWEN35MOE;
+    if (uses_ssm_conv) {
+        ms.add_kv(LLM_KV_SSM_CONV_KERNEL,       uint32_t(4));
+    }
+    if (uses_ssm_core) {
+        ms.add_kv(LLM_KV_SSM_INNER_SIZE,        arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE ? 256 : 2*n_embd);
+        ms.add_kv(LLM_KV_SSM_STATE_SIZE,        uint32_t(128));
+        ms.add_kv(LLM_KV_SSM_TIME_STEP_RANK,    n_head);
+    }
+    if (uses_ssm_group_count) {
+        ms.add_kv(LLM_KV_SSM_GROUP_COUNT,       arch == LLM_ARCH_PLAMO2 ? 0 : uint32_t(2));
+    }
+    if (arch == LLM_ARCH_KIMI_LINEAR) {
+        ms.add_kv(LLM_KV_KDA_HEAD_DIM,          uint32_t(128));
+    }
+    if (arch == LLM_ARCH_RWKV6 || arch == LLM_ARCH_RWKV6QWEN2 || arch == LLM_ARCH_RWKV7 || arch == LLM_ARCH_ARWKV7) {
+        ms.add_kv(LLM_KV_WKV_HEAD_SIZE,         n_embd/n_head);
+    }
+    if (arch == LLM_ARCH_LFM2 || arch == LLM_ARCH_LFM2MOE) {
+        ms.add_kv(LLM_KV_SHORTCONV_L_CACHE,     uint32_t(3));
+    }
+
+    if (arch == LLM_ARCH_NOMIC_BERT || arch == LLM_ARCH_NOMIC_BERT_MOE || arch == LLM_ARCH_JINA_BERT_V3) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+            if (arch == LLM_ARCH_NOMIC_BERT_MOE) {
+                ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.bias", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+            }
+        }
+    }
+
+    if (arch == LLM_ARCH_CHATGLM) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+            ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.bias", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+        }
+    }
+
+    if (arch == LLM_ARCH_PHI2) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+            ggml_format_name(&t, "blk.%" PRIu32 ".attn_qkv.bias", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+        }
+    }
+
+    if (arch == LLM_ARCH_GEMMA4) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            if ((il + 1) % 6 != 0) {
+                ggml_format_name(&t, "blk.%" PRIu32 ".attn_v.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+            }
+        }
+    }
+
+    if (arch == LLM_ARCH_JAMBA && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        ggml_format_name(&t, "blk.0.ffn_gate_inp.weight");
+        gguf_add_tensor(ms.gguf_ctx, &t);
+    }
+
+    if (arch == LLM_ARCH_LLAMA4 && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            if ((il + 1) % 2 == 0) {
+                ggml_format_name(&t, "blk.%" PRIu32 ".ffn_gate_inp.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+            }
+        }
+    }
+
+    if (arch == LLM_ARCH_NOMIC_BERT_MOE && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 0; il < n_layer; il++) {
+            if (il % 2 == 1) {
+                ggml_format_name(&t, "blk.%" PRIu32 ".ffn_gate_inp.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+            }
+        }
+    }
+
+    if ((arch == LLM_ARCH_GLM4_MOE
+            || arch == LLM_ARCH_KIMI_LINEAR
+            || arch == LLM_ARCH_BAILINGMOE2
+            || arch == LLM_ARCH_DOTS1
+            || arch == LLM_ARCH_AFMOE
+            || arch == LLM_ARCH_ERNIE4_5_MOE
+            || arch == LLM_ARCH_LFM2MOE
+            || arch == LLM_ARCH_STEP35
+            || arch == LLM_ARCH_DEEPSEEK
+            || arch == LLM_ARCH_DEEPSEEK2
+            || arch == LLM_ARCH_MISTRAL4) && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        for (uint32_t il = 1; il < n_layer; il++) {
+            ggml_format_name(&t, "blk.%" PRIu32 ".ffn_gate_inp.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+        }
+    }
+
+    if (arch == LLM_ARCH_GLM_DSA && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        ggml_format_name(&t, "blk.1.ffn_gate_inp.weight");
+        gguf_add_tensor(ms.gguf_ctx, &t);
+    }
+
+    if (arch == LLM_ARCH_DEEPSEEK2OCR && moe) {
+        ggml_tensor t;
+        memset(&t, 0, sizeof(ggml_tensor));
+        t.type = GGML_TYPE_F32;
+        ggml_format_name(&t, "blk.1.ffn_gate_inp.weight");
+        gguf_add_tensor(ms.gguf_ctx, &t);
+    }
 
     if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
         ggml_tensor t;
@@ -310,7 +511,8 @@ static std::pair<llama_model_ptr, llama_context_ptr> get_model_and_ctx(
     ctx_params.n_ctx = 0;
     ctx_params.n_threads = 4;
     ctx_params.n_threads_batch = 4;
-    if (!encode && arch != LLM_ARCH_WAVTOKENIZER_DEC) {
+    ctx_params.embeddings = true;
+    if (!encode && !llm_arch_prefers_embedding_outputs(arch) && arch != LLM_ARCH_WAVTOKENIZER_DEC) {
         ctx_params.n_ubatch = 64;
     }
 
@@ -328,34 +530,57 @@ static std::pair<llama_model_ptr, llama_context_ptr> get_model_and_ctx(
     return std::make_pair(std::move(model), std::move(lctx));
 }
 
-static std::vector<float> get_logits(
-        llama_model * model, llama_context * lctx, const std::vector<llama_token> & tokens, bool encode = false) {
+static std::vector<float> get_outputs(
+        llama_model * model, llama_context * lctx, const std::vector<llama_token> & tokens, const llm_arch arch, bool encode = false) {
     const uint32_t n_vocab  = llama_vocab_n_tokens(llama_model_get_vocab(model));
     const uint32_t n_ctx    = llama_n_ctx(lctx);
     const uint32_t n_tokens = tokens.size();
+    const uint32_t n_embd_out = llama_model_n_embd_out(model);
     llama_batch batch = llama_batch_init(n_ctx, 0, 1);
     GGML_ASSERT(n_tokens <= n_ctx);
     for (uint32_t pos = 0; pos < n_tokens; pos++) {
         common_batch_add(batch, tokens[pos], pos, {0}, true);
     }
     batch.n_tokens = n_tokens;
-    if (encode) {
+    const bool run_encode = encode || llama_model_has_encoder(model);
+    if (run_encode) {
         if (llama_encode(lctx, batch)) {
             llama_batch_free(batch);
             throw std::runtime_error("failed to encode batch");
         }
     }
-    if (llama_decode(lctx, batch)) {
+    if (llama_model_has_decoder(model) && llama_decode(lctx, batch)) {
         llama_batch_free(batch);
         throw std::runtime_error("failed to decode batch");
     }
 
     std::vector<float> ret;
-    ret.reserve(n_tokens*n_vocab);
-    for (uint32_t i = 0; i < n_tokens; i++) {
-        const float * logits_ith = llama_get_logits_ith(lctx, i);
-        for (uint32_t j = 0; j < n_vocab; j++) {
-            ret.push_back(logits_ith[j]);
+    const bool use_embeddings = llm_arch_prefers_embedding_outputs(arch) || llama_pooling_type(lctx) != LLAMA_POOLING_TYPE_NONE;
+    if (!use_embeddings) {
+        ret.reserve(n_tokens*n_vocab);
+        for (uint32_t i = 0; i < n_tokens; i++) {
+            const float * logits_ith = llama_get_logits_ith(lctx, i);
+            GGML_ASSERT(logits_ith != nullptr);
+            for (uint32_t j = 0; j < n_vocab; j++) {
+                ret.push_back(logits_ith[j]);
+            }
+        }
+    } else if (llama_pooling_type(lctx) == LLAMA_POOLING_TYPE_NONE) {
+        ret.reserve(n_tokens*n_embd_out);
+        for (uint32_t i = 0; i < n_tokens; i++) {
+            const float * embd_ith = llama_get_embeddings_ith(lctx, i);
+            GGML_ASSERT(embd_ith != nullptr);
+            for (uint32_t j = 0; j < n_embd_out; j++) {
+                ret.push_back(embd_ith[j]);
+            }
+        }
+    } else {
+        const float * embd_seq = llama_get_embeddings_seq(lctx, 0);
+        GGML_ASSERT(embd_seq != nullptr);
+        const uint32_t n_outputs = llama_pooling_type(lctx) == LLAMA_POOLING_TYPE_RANK ? llama_model_n_cls_out(model) : n_embd_out;
+        ret.reserve(n_outputs);
+        for (uint32_t j = 0; j < n_outputs; j++) {
+            ret.push_back(embd_seq[j]);
         }
     }
     llama_batch_free(batch);
@@ -384,7 +609,6 @@ static bool moe_mandatory(const llm_arch arch) {
         case LLM_ARCH_BAILINGMOE2:
         case LLM_ARCH_DOTS1:
         case LLM_ARCH_AFMOE:
-        case LLM_ARCH_ERNIE4_5:
         case LLM_ARCH_ERNIE4_5_MOE:
         case LLM_ARCH_HUNYUAN_MOE:
         case LLM_ARCH_OPENAI_MOE:
@@ -394,11 +618,11 @@ static bool moe_mandatory(const llm_arch arch) {
         case LLM_ARCH_GROVEMOE:
         case LLM_ARCH_MINIMAX_M2:
         case LLM_ARCH_RND1:
-        case LLM_ARCH_PADDLEOCR:
         case LLM_ARCH_MIMO2:
         case LLM_ARCH_KIMI_LINEAR:
         case LLM_ARCH_STEP35:
         case LLM_ARCH_MISTRAL4:
+        case LLM_ARCH_NOMIC_BERT_MOE:
             return true;
         default:
             return false;
@@ -415,6 +639,7 @@ static bool moe_implemented(const llm_arch arch) {
         case LLM_ARCH_MINICPM:
         case LLM_ARCH_GRANITE:
         case LLM_ARCH_GRANITE_MOE:
+        case LLM_ARCH_JAMBA:
         case LLM_ARCH_MISTRAL3:
         case LLM_ARCH_LLAMA_EMBED:
         case LLM_ARCH_DEEPSEEK2OCR:
@@ -430,19 +655,6 @@ static bool arch_supported(const llm_arch arch) {
     }
     if (arch == LLM_ARCH_CHAMELEON) {
         return false; // Only half-implemented and to be removed in the future.
-    }
-    if (arch == LLM_ARCH_LLAMA_EMBED || arch == LLM_ARCH_GEMMA_EMBEDDING || arch == LLM_ARCH_T5ENCODER) {
-        return false; // FIXME Embedding (?) models produce inconsistent results.
-    }
-    if (arch == LLM_ARCH_RWKV6 || arch == LLM_ARCH_RWKV6QWEN2 || arch == LLM_ARCH_RWKV7 || arch == LLM_ARCH_ARWKV7) {
-        return false; // FIXME RWKV models hang indefinitely.
-    }
-    if (arch == LLM_ARCH_BERT || arch == LLM_ARCH_MODERN_BERT || arch == LLM_ARCH_NOMIC_BERT || arch == LLM_ARCH_NOMIC_BERT_MOE ||
-            arch == LLM_ARCH_NEO_BERT || arch == LLM_ARCH_JINA_BERT_V2 || arch == LLM_ARCH_JINA_BERT_V3 || arch == LLM_ARCH_EUROBERT) {
-        return false; // TODO vocab
-    }
-    if (arch == LLM_ARCH_PLM) {
-        return false; // TODO tensor shapes
     }
     // FIXME some models are segfaulting with WebGPU:
 #ifdef GGML_USE_WEBGPU
@@ -579,7 +791,7 @@ static int test_backends(const llm_arch target_arch, const size_t seed, const gg
         if (target_arch != LLM_ARCH_UNKNOWN && arch != target_arch) {
             continue;
         }
-        const bool encode = arch == LLM_ARCH_T5 || arch == LLM_ARCH_DREAM || arch == LLM_ARCH_LLADA || arch == LLM_ARCH_LLADA_MOE || arch == LLM_ARCH_RND1;
+        const bool encode = llm_arch_uses_encoder_pass(arch);
         for (bool moe : {false, true}) {
             if (moe && !moe_implemented(arch)) {
                 continue;
@@ -604,11 +816,11 @@ static int test_backends(const llm_arch target_arch, const size_t seed, const gg
                 if (!skip) {
                     if (logits_cpu.empty()) {
                         model_and_ctx_cpu = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, {}, LLAMA_SPLIT_MODE_LAYER, encode, arch);
-                        logits_cpu = get_logits(model_and_ctx_cpu.first.get(), model_and_ctx_cpu.second.get(), tokens, encode);
+                        logits_cpu = get_outputs(model_and_ctx_cpu.first.get(), model_and_ctx_cpu.second.get(), tokens, arch, encode);
                     }
                     if (dc.split_mode != LLAMA_SPLIT_MODE_TENSOR || llm_arch_supports_sm_tensor(arch)) {
                         model_and_ctx_dev = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, dc.devs, dc.split_mode, encode, arch);
-                        logits_dev = get_logits(model_and_ctx_dev.first.get(), model_and_ctx_dev.second.get(), tokens, encode);
+                        logits_dev = get_outputs(model_and_ctx_dev.first.get(), model_and_ctx_dev.second.get(), tokens, arch, encode);
                         const double nmse_val = nmse(logits_cpu, logits_dev);
                         snprintf(nmse_str, sizeof(nmse_str), "(%.2e)", nmse_val);
                         status_nmse = "\033[1;32mOK\033[0m";
@@ -630,8 +842,8 @@ static int test_backends(const llm_arch target_arch, const size_t seed, const gg
                         rewind(file);
 
                         auto model_and_ctx_roundtrip = get_model_and_ctx(nullptr, file, seed, dc.devs, dc.split_mode, encode, arch);
-                        const std::vector<float> logits_roundtrip = get_logits(
-                            model_and_ctx_roundtrip.first.get(), model_and_ctx_roundtrip.second.get(), tokens, encode);
+                        const std::vector<float> logits_roundtrip = get_outputs(
+                            model_and_ctx_roundtrip.first.get(), model_and_ctx_roundtrip.second.get(), tokens, arch, encode);
                         status_roundtrip = "\033[1;32mOK\033[0m";
                         GGML_ASSERT(logits_roundtrip.size() == logits_dev.size());
                         for (size_t i = 0; i < logits_roundtrip.size(); i++) {

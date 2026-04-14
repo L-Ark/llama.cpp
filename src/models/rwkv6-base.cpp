@@ -31,6 +31,7 @@ ggml_tensor * llm_build_rwkv6_base::build_rwkv6_channel_mix(const llama_layer * 
 ggml_tensor * llm_build_rwkv6_base::build_rwkv6_time_mix(llm_graph_input_rs * inp,
                                                          ggml_tensor *        cur,
                                                          ggml_tensor *        x_prev,
+                                                         bool                 is_qrwkv,
                                                          const llama_ubatch & ubatch,
                                                          int                  il) const {
     const auto * mctx_cur = static_cast<const llama_memory_recurrent_context *>(mctx);
@@ -46,8 +47,6 @@ ggml_tensor * llm_build_rwkv6_base::build_rwkv6_time_mix(llm_graph_input_rs * in
     const auto kv_head = mctx_cur->get_head();
 
     const auto & layer = model.layers[il];
-
-    bool is_qrwkv = layer.time_mix_first == nullptr;
 
     ggml_tensor * sx = ggml_sub(ctx0, x_prev, cur);
 

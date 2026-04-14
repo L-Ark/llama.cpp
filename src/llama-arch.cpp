@@ -906,3 +906,100 @@ bool llm_arch_supports_sm_tensor(const llm_arch & arch) {
             return true;
     }
 }
+
+bool llm_arch_uses_encoder_pass(const llm_arch & arch) {
+    switch (arch) {
+        case LLM_ARCH_BERT:
+        case LLM_ARCH_NOMIC_BERT:
+        case LLM_ARCH_NOMIC_BERT_MOE:
+        case LLM_ARCH_JINA_BERT_V2:
+        case LLM_ARCH_JINA_BERT_V3:
+        case LLM_ARCH_MODERN_BERT:
+        case LLM_ARCH_NEO_BERT:
+        case LLM_ARCH_EUROBERT:
+        case LLM_ARCH_T5:
+        case LLM_ARCH_T5ENCODER:
+        case LLM_ARCH_DREAM:
+        case LLM_ARCH_LLADA:
+        case LLM_ARCH_LLADA_MOE:
+        case LLM_ARCH_RND1:
+            return true;
+        default:
+            return false;
+    }
+}
+
+uint32_t llm_arch_default_full_attention_interval(const llm_arch & arch) {
+    switch (arch) {
+        case LLM_ARCH_QWEN3NEXT:
+        case LLM_ARCH_QWEN35:
+        case LLM_ARCH_QWEN35MOE:
+            return 4;
+        default:
+            return 0;
+    }
+}
+
+uint32_t llm_arch_default_sliding_window_pattern(const llm_arch & arch) {
+    switch (arch) {
+        case LLM_ARCH_LLAMA4:
+        case LLM_ARCH_AFMOE:
+        case LLM_ARCH_COHERE2:
+        case LLM_ARCH_OLMO2:
+        case LLM_ARCH_EXAONE4:
+        case LLM_ARCH_EXAONE_MOE:
+        case LLM_ARCH_SMALLTHINKER:
+            return 4;
+        case LLM_ARCH_MODERN_BERT:
+            return 3;
+        case LLM_ARCH_PLAMO3:
+            return 8;
+        case LLM_ARCH_GEMMA2:
+        case LLM_ARCH_OPENAI_MOE:
+            return 2;
+        case LLM_ARCH_GEMMA3:
+        case LLM_ARCH_GEMMA_EMBEDDING:
+            return 6;
+        case LLM_ARCH_GEMMA3N:
+            return 5;
+        default:
+            return 0;
+    }
+}
+
+bool llm_arch_uses_sliding_window_metadata(const llm_arch & arch) {
+    return llm_arch_default_sliding_window_pattern(arch) > 0 ||
+            llm_arch_uses_explicit_swa_pattern(arch) ||
+            arch == LLM_ARCH_PHI3 ||
+            arch == LLM_ARCH_LFM2;
+}
+
+bool llm_arch_uses_explicit_swa_pattern(const llm_arch & arch) {
+    switch (arch) {
+        case LLM_ARCH_GEMMA4:
+        case LLM_ARCH_MIMO2:
+        case LLM_ARCH_STEP35:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool llm_arch_prefers_embedding_outputs(const llm_arch & arch) {
+    switch (arch) {
+        case LLM_ARCH_BERT:
+        case LLM_ARCH_NOMIC_BERT:
+        case LLM_ARCH_NOMIC_BERT_MOE:
+        case LLM_ARCH_JINA_BERT_V2:
+        case LLM_ARCH_JINA_BERT_V3:
+        case LLM_ARCH_MODERN_BERT:
+        case LLM_ARCH_NEO_BERT:
+        case LLM_ARCH_EUROBERT:
+        case LLM_ARCH_LLAMA_EMBED:
+        case LLM_ARCH_GEMMA_EMBEDDING:
+        case LLM_ARCH_T5ENCODER:
+            return true;
+        default:
+            return false;
+    }
+}

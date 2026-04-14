@@ -71,8 +71,10 @@ struct llm_transformer_config {
     llama_expert_gating_func_type moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_NONE; // Optional router override
 
     // Output
+    bool output_logits = true; // Skip the LM logits head for embedding-only encoders
     bool output_bias = false;   // Output projection bias
     bool tied_embeddings = true; // Fall back to tok_embd if output is NULL
+    bool use_output_norm_enc = false; // Use encoder output norm instead of decoder output_norm
 
     // Post-norm (Gemma 3/4, CogVLM)
     bool attn_post_norm = false;
@@ -86,6 +88,7 @@ struct llm_transformer_config {
     // Input features
     bool combined_qkv  = false;  // Use wqkv instead of separate wq/wk/wv (GPT-2, Bloom, Falcon, Jais)
     bool use_pos_embd  = false;  // Learned position embeddings (GPT-2, Jais)
+    bool use_type_embd = false;  // Add the first token-type embedding row to every token (BERT family)
     bool global_tok_norm = false; // Pre-layer token normalization (Bloom)
 
     // Residual connection
@@ -141,6 +144,9 @@ struct llm_arch_meta {
     const char * layer_ops;
     llm_ffn_op_type default_act;
     bool no_attn_cache;
+    bool output_logits = true;
+    bool encoder_post_norm = false;
+    bool post_norm_after_residual = false;
 };
 
 const llm_arch_meta * get_arch_meta(llm_arch arch);
@@ -164,6 +170,15 @@ struct llm_build_std_transformer : public llm_build_delta_net_base {
             const llm_transformer_config & config = {});
 
 private:
+    ggml_tensor * build_layer_encoder_post_norm(
+            llm_graph_input_attn_no_cache * inp_attn_nc,
+            ggml_tensor *                   inpL,
+            ggml_tensor *                   inp_out_ids,
+            ggml_tensor *                 & inp_pos,
+            float                           default_kq_scale,
+            int                             effective_n_layer,
+            int                             il);
+
     ggml_tensor * build_norm_gated(
             ggml_tensor * input,
             ggml_tensor * weights,
@@ -404,7 +419,6 @@ struct llm_mla_transformer_config {
     float residual_scale = 1.0f;
     float lmhead_scale = 1.0f;
     bool rope_factors = false;
-    bool flatten_v = false;
     bool absorb_kv = false;
     bool yarn_kq_scale = false;
     bool attn_temp = false;

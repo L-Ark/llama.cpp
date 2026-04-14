@@ -57,6 +57,7 @@ static float llm_yarn_kq_scale(
 // Activation shorthands (LLM_FFN_SILU is the default for unspecified)
 #define ACT_DEFAULT LLM_FFN_SILU
 #define ACT_GELU    LLM_FFN_GELU
+#define ACT_GEGLU   LLM_FFN_GEGLU
 #define ACT_RELU2   LLM_FFN_RELU_SQR
 #define ACT_SWIGLU  LLM_FFN_SWIGLU
 
@@ -64,14 +65,20 @@ const llm_arch_meta * get_arch_meta(llm_arch arch) {
     // ── Standard RoPE ────────────────────────────────────────────────
     static const llm_arch_meta STD           = { OPS_STD,     ACT_DEFAULT, false };
     static const llm_arch_meta STD_GELU      = { OPS_STD,     ACT_GELU,    false };
+    static const llm_arch_meta STD_GEGLU     = { OPS_STD,     ACT_GEGLU,   false };
     static const llm_arch_meta STD_RELU2     = { OPS_STD,     ACT_RELU2,   false };
     static const llm_arch_meta STD_SWIGLU    = { OPS_STD,     ACT_SWIGLU,  false };
     static const llm_arch_meta STD_NC        = { OPS_STD,     ACT_DEFAULT, true  };
+    static const llm_arch_meta STD_NC_OUT    = { OPS_STD,     ACT_DEFAULT, true, false };
     static const llm_arch_meta STD_GELU_NC   = { OPS_STD,     ACT_GELU,    true  };
+    static const llm_arch_meta STD_GELU_ENC  = { OPS_STD,     ACT_GELU,    true, false, true };
+    static const llm_arch_meta STD_GEGLU_OUT = { OPS_STD,     ACT_GEGLU,   true, false };
+    static const llm_arch_meta STD_SWIGLU_OUT = { OPS_STD,    ACT_SWIGLU,  true, false };
 
     // ── No RoPE ──────────────────────────────────────────────────────
     static const llm_arch_meta NOROPE        = { OPS_NO_ROPE, ACT_DEFAULT, false };
     static const llm_arch_meta NOROPE_GELU   = { OPS_NO_ROPE, ACT_GELU,    false };
+    static const llm_arch_meta NOROPE_GELU_ENC = { OPS_NO_ROPE, ACT_GELU,  true, false, true };
 
     // ── QK-norm ──────────────────────────────────────────────────────
     static const llm_arch_meta QK            = { OPS_QK,      ACT_DEFAULT, false };
@@ -84,6 +91,8 @@ const llm_arch_meta * get_arch_meta(llm_arch arch) {
     static const llm_arch_meta PN            = { OPS_PN,       ACT_DEFAULT, false };
     static const llm_arch_meta PN_SWIGLU     = { OPS_PN,       ACT_SWIGLU,  false };
     static const llm_arch_meta PN_ATT        = { OPS_PN_ATT,  ACT_DEFAULT, false };
+    static const llm_arch_meta PN_ATT_RESID  = { OPS_PN_ATT,  ACT_DEFAULT, false, true, false, true };
+    static const llm_arch_meta POST_RESIDUAL = { nullptr,     ACT_DEFAULT, false, true, false, true };
 
     switch (arch) {
         // ── Standard with RoPE + SiLU (majority) ──
@@ -168,14 +177,22 @@ const llm_arch_meta * get_arch_meta(llm_arch arch) {
 
         // ── Encoder (BERT family) ──
         case LLM_ARCH_BERT:
+        case LLM_ARCH_JINA_BERT_V2:
+            return &NOROPE_GELU_ENC;
+
         case LLM_ARCH_NOMIC_BERT:
         case LLM_ARCH_NOMIC_BERT_MOE:
-        case LLM_ARCH_JINA_BERT_V2:
         case LLM_ARCH_JINA_BERT_V3:
+            return &STD_GELU_ENC;
+
         case LLM_ARCH_MODERN_BERT:
+            return &STD_GEGLU_OUT;
+
         case LLM_ARCH_NEO_BERT:
+            return &STD_SWIGLU_OUT;
+
         case LLM_ARCH_EUROBERT:
-            return &NOROPE_GELU;
+            return &STD_NC_OUT;
 
         // ── No RoPE + SiLU ──
         case LLM_ARCH_JAIS:
@@ -239,7 +256,12 @@ const llm_arch_meta * get_arch_meta(llm_arch arch) {
 
         // ── Attention post-norm + SWIGLU (post-norm after residual) ──
         case LLM_ARCH_GLM4_MOE:
-            return &PN_ATT;
+            return &PN_ATT_RESID;
+
+        case LLM_ARCH_QWEN3NEXT:
+        case LLM_ARCH_QWEN35:
+        case LLM_ARCH_QWEN35MOE:
+            return &POST_RESIDUAL;
 
         default:
             return nullptr;
@@ -254,6 +276,7 @@ const llm_arch_meta * get_arch_meta(llm_arch arch) {
 #undef OPS_PN_ATT
 #undef ACT_DEFAULT
 #undef ACT_GELU
+#undef ACT_GEGLU
 #undef ACT_RELU2
 #undef ACT_SWIGLU
 
@@ -273,6 +296,13 @@ llm_build_std_transformer::llm_build_std_transformer(
     // 1. Input embeddings
     // ==============================
     inpL = build_inp_embd(model.tok_embd);
+
+    if (config.use_type_embd && model.type_embd) {
+        ggml_tensor * type_row0 = ggml_view_1d(ctx0, model.type_embd, n_embd, 0);
+        cb(type_row0, "type_embd", -1);
+        inpL = ggml_add(ctx0, inpL, type_row0);
+        cb(inpL, "inpL_type", -1);
+    }
 
     // Gemma-style: scale token embeddings by sqrt(n_embd), skip for raw embeddings (vision)
     if (config.token_embd_scale) {
@@ -382,95 +412,14 @@ llm_build_std_transformer::llm_build_std_transformer(
         }
 
         if (config.encoder_post_norm) {
-            // ── ENCODER POST-NORM PATH (BERT family) ──
-            cur = inpL;
-
-            // Self-attention
-            {
-                ggml_tensor * Qcur = nullptr;
-                ggml_tensor * Kcur = nullptr;
-                ggml_tensor * Vcur = nullptr;
-
-                if (model.layers[il].wqkv) {
-                    cur = build_lora_mm(model.layers[il].wqkv, cur);
-                    if (model.layers[il].bqkv) {
-                        cur = ggml_add(ctx0, cur, model.layers[il].bqkv);
-                    }
-                    Qcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head,    n_tokens, n_embd_head*sizeof(float), cur->nb[1], 0*sizeof(float)*(n_embd));
-                    Kcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head*sizeof(float), cur->nb[1], 1*sizeof(float)*(n_embd));
-                    Vcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head*sizeof(float), cur->nb[1], 1*sizeof(float)*(n_embd + hparams.n_embd_v_gqa()));
-                } else {
-                    Qcur = ggml_add(ctx0, build_lora_mm(model.layers[il].wq, cur), model.layers[il].bq);
-                    Kcur = ggml_add(ctx0, build_lora_mm(model.layers[il].wk, cur), model.layers[il].bk);
-                    Vcur = ggml_add(ctx0, build_lora_mm(model.layers[il].wv, cur), model.layers[il].bv);
-                    Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
-                    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
-                    Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
-                }
-
-                // QK norm (Nomic-BERT, Jina-BERT-V3)
-                if (model.layers[il].attn_q_norm) {
-                    Qcur = ggml_reshape_2d(ctx0, Qcur, n_embd_head * n_head, n_tokens);
-                    Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, model.layers[il].attn_q_norm_b, LLM_NORM, il);
-                    Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
-                }
-                if (model.layers[il].attn_k_norm) {
-                    Kcur = ggml_reshape_2d(ctx0, Kcur, n_embd_head * n_head_kv, n_tokens);
-                    Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, model.layers[il].attn_k_norm_b, LLM_NORM, il);
-                    Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
-                }
-
-                // RoPE (Nomic-BERT, Jina-BERT-V3)
-                if (config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
-                    Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), nullptr,
-                            n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
-                    Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), nullptr,
-                            n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
-                }
-
-                cur = build_attn(inp_attn_nc, model.layers[il].wo, model.layers[il].bo,
-                        Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, default_kq_scale, il);
-            }
-
-            if (il == effective_n_layer - 1 && inp_out_ids) {
-                cur  = ggml_get_rows(ctx0, cur, inp_out_ids);
-                inpL = ggml_get_rows(ctx0, inpL, inp_out_ids);
-            }
-
-            // Residual + attention output norm
-            cur = ggml_add(ctx0, cur, inpL);
-            cur = build_norm(cur, model.layers[il].attn_out_norm, model.layers[il].attn_out_norm_b, LLM_NORM, il);
-
-            // Optional second norm (Jina-BERT-V2)
-            if (model.layers[il].attn_norm_2) {
-                cur = ggml_add(ctx0, cur, inpL);
-                cur = build_norm(cur, model.layers[il].attn_norm_2, model.layers[il].attn_norm_2_b, LLM_NORM, il);
-            }
-
-            ggml_tensor * ffn_inp = cur;
-
-            // FFN (sequential GELU by default)
-            if (model.layers[il].ffn_gate) {
-                cur = build_ffn(cur,
-                        model.layers[il].ffn_up, model.layers[il].ffn_up_b, NULL,
-                        model.layers[il].ffn_gate, NULL, NULL,
-                        model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL, NULL,
-                        config.act, LLM_FFN_PAR, il);
-            } else {
-                cur = build_ffn(cur,
-                        model.layers[il].ffn_up, model.layers[il].ffn_up_b, NULL,
-                        NULL, NULL, NULL,
-                        model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL, NULL,
-                        config.act, LLM_FFN_SEQ, il);
-            }
-
-            // Residual + layer output norm
-            cur = ggml_add(ctx0, cur, ffn_inp);
-            cur = build_norm(cur, model.layers[il].layer_out_norm, model.layers[il].layer_out_norm_b, LLM_NORM, il);
-
-            cur = build_cvec(cur, il);
+            cur = build_layer_encoder_post_norm(
+                    inp_attn_nc,
+                    inpL,
+                    inp_out_ids,
+                    inp_pos,
+                    default_kq_scale,
+                    effective_n_layer,
+                    il);
             cb(cur, "l_out", il);
             inpL = cur;
             continue;
@@ -493,7 +442,9 @@ llm_build_std_transformer::llm_build_std_transformer(
 
         // --- Pre-attention norm ---
         ggml_tensor * norm_b = (config.norm == LLM_NORM) ? model.layers[il].attn_norm_b : nullptr;
-        cur = build_norm(inpL, model.layers[il].attn_norm, norm_b, config.norm, il);
+        cur = model.layers[il].attn_norm
+            ? build_norm(inpL, model.layers[il].attn_norm, norm_b, config.norm, il)
+            : inpL;
         cb(cur, "attn_norm", il);
 
         // Save for parallel residual (Falcon-style: FFN uses attn_norm output)
@@ -1129,35 +1080,175 @@ llm_build_std_transformer::llm_build_std_transformer(
     // ==============================
     cur = inpL;
 
-    ggml_tensor * out_norm_b = (config.norm == LLM_NORM) ? model.output_norm_b : nullptr;
-    cur = build_norm(cur, model.output_norm, out_norm_b, config.norm, -1);
-    cb(cur, "result_norm", -1);
+    ggml_tensor * out_norm = config.use_output_norm_enc ? model.output_norm_enc : model.output_norm;
+    ggml_tensor * out_norm_b = (config.norm == LLM_NORM && !config.use_output_norm_enc) ? model.output_norm_b : nullptr;
+    if (out_norm) {
+        cur = build_norm(cur, out_norm, out_norm_b, config.norm, -1);
+        cb(cur, "result_norm", -1);
+    } else {
+        cb(cur, "result_embd", -1);
+    }
 
     res->t_embd = cur;
 
-    cur = build_lora_mm(model.output, cur);
-    if (config.output_bias && model.output_b) {
-        cur = ggml_add(ctx0, cur, model.output_b);
+    if (config.output_logits) {
+        ggml_tensor * out = model.output ? model.output : (config.tied_embeddings ? model.tok_embd : nullptr);
+        GGML_ASSERT(out != nullptr && "missing output projection");
+
+        cur = build_lora_mm(out, cur);
+        if (config.output_bias && model.output_b) {
+            cur = ggml_add(ctx0, cur, model.output_b);
+        }
+
+        // Final logit softcapping: cap * tanh(logits / cap)
+        if (config.logit_softcap && hparams.f_final_logit_softcapping > 0.0f) {
+            float cap = hparams.f_final_logit_softcapping;
+            cur = ggml_scale(ctx0, cur, 1.0f / cap);
+            cur = ggml_tanh(ctx0, cur);
+            cur = ggml_scale(ctx0, cur, cap);
+        }
+
+        // Logit scaling (Granite, Command-R)
+        if (hparams.f_logit_scale != 0.0f) {
+            cur = ggml_scale(ctx0, cur, 1.0f / hparams.f_logit_scale);
+        }
+
+        cb(cur, "result_output", -1);
+
+        res->t_logits = cur;
     }
-
-    // Final logit softcapping: cap * tanh(logits / cap)
-    if (config.logit_softcap && hparams.f_final_logit_softcapping > 0.0f) {
-        float cap = hparams.f_final_logit_softcapping;
-        cur = ggml_scale(ctx0, cur, 1.0f / cap);
-        cur = ggml_tanh(ctx0, cur);
-        cur = ggml_scale(ctx0, cur, cap);
-    }
-
-    // Logit scaling (Granite, Command-R)
-    if (hparams.f_logit_scale != 0.0f) {
-        cur = ggml_scale(ctx0, cur, 1.0f / hparams.f_logit_scale);
-    }
-
-    cb(cur, "result_output", -1);
-
-    res->t_logits = cur;
 
     ggml_build_forward_expand(gf, cur);
+}
+
+ggml_tensor * llm_build_std_transformer::build_layer_encoder_post_norm(
+        llm_graph_input_attn_no_cache * inp_attn_nc,
+        ggml_tensor *                   inpL,
+        ggml_tensor *                   inp_out_ids,
+        ggml_tensor *                 & inp_pos,
+        float                           default_kq_scale,
+        int                             effective_n_layer,
+        int                             il) {
+    GGML_ASSERT(n_embd_head_v == n_embd_head_k);
+
+    const auto & layer = model.layers[il];
+    const int64_t n_embd_head = n_embd_head_v;
+
+    auto get_inp_pos = [&]() -> ggml_tensor * {
+        if (!inp_pos) {
+            inp_pos = build_inp_pos();
+        }
+        return inp_pos;
+    };
+
+    ggml_tensor * cur = inpL;
+
+    {
+        ggml_tensor * Qcur = nullptr;
+        ggml_tensor * Kcur = nullptr;
+        ggml_tensor * Vcur = nullptr;
+
+        if (layer.wqkv) {
+            cur = build_lora_mm(layer.wqkv, cur);
+            if (layer.bqkv) {
+                cur = ggml_add(ctx0, cur, layer.bqkv);
+            }
+            Qcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head,    n_tokens, n_embd_head*sizeof(float), cur->nb[1], 0*sizeof(float)*(n_embd));
+            Kcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head*sizeof(float), cur->nb[1], 1*sizeof(float)*(n_embd));
+            Vcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head*sizeof(float), cur->nb[1], 1*sizeof(float)*(n_embd + hparams.n_embd_v_gqa()));
+        } else {
+            Qcur = ggml_add(ctx0, build_lora_mm(layer.wq, cur), layer.bq);
+            Kcur = ggml_add(ctx0, build_lora_mm(layer.wk, cur), layer.bk);
+            Vcur = ggml_add(ctx0, build_lora_mm(layer.wv, cur), layer.bv);
+            Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+            Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+        }
+
+        if (layer.attn_q_norm) {
+            Qcur = ggml_reshape_2d(ctx0, Qcur, n_embd_head * n_head, n_tokens);
+            Qcur = build_norm(Qcur, layer.attn_q_norm, layer.attn_q_norm_b, LLM_NORM, il);
+            Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head, n_tokens);
+        }
+        if (layer.attn_k_norm) {
+            Kcur = ggml_reshape_2d(ctx0, Kcur, n_embd_head * n_head_kv, n_tokens);
+            Kcur = build_norm(Kcur, layer.attn_k_norm, layer.attn_k_norm_b, LLM_NORM, il);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+        }
+
+        if (cfg_.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE) {
+            Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), nullptr,
+                    n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+                    ext_factor, attn_factor, beta_fast, beta_slow);
+            Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), nullptr,
+                    n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+                    ext_factor, attn_factor, beta_fast, beta_slow);
+        }
+
+        cur = build_attn(inp_attn_nc, layer.wo, layer.bo,
+                Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, default_kq_scale, il);
+    }
+
+    if (il == effective_n_layer - 1 && inp_out_ids) {
+        cur  = ggml_get_rows(ctx0, cur, inp_out_ids);
+        inpL = ggml_get_rows(ctx0, inpL, inp_out_ids);
+    }
+
+    cur = ggml_add(ctx0, cur, inpL);
+    cur = build_norm(cur, layer.attn_out_norm, layer.attn_out_norm_b, LLM_NORM, il);
+
+    if (layer.attn_norm_2) {
+        cur = ggml_add(ctx0, cur, inpL);
+        cur = build_norm(cur, layer.attn_norm_2, layer.attn_norm_2_b, LLM_NORM, il);
+    }
+
+    ggml_tensor * ffn_inp = cur;
+
+    if (cfg_.moe && layer.ffn_gate_inp) {
+        const llm_ffn_op_type moe_act = (cfg_.act == LLM_FFN_SWIGLU) ? LLM_FFN_SILU
+                : (cfg_.act == LLM_FFN_GEGLU) ? LLM_FFN_GELU
+                : (cfg_.act == LLM_FFN_REGLU) ? LLM_FFN_RELU
+                : cfg_.act;
+        const bool moe_norm_w = cfg_.moe_norm_weights || hparams.expert_weights_norm;
+        const llama_expert_gating_func_type moe_gating =
+                cfg_.moe_gating != LLAMA_EXPERT_GATING_FUNC_TYPE_NONE
+                ? cfg_.moe_gating
+                : (hparams.expert_gating_func != LLAMA_EXPERT_GATING_FUNC_TYPE_NONE
+                    ? (llama_expert_gating_func_type) hparams.expert_gating_func
+                    : LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX);
+
+        cur = build_moe_ffn(cur,
+                layer.ffn_gate_inp,
+                layer.ffn_up_exps,
+                nullptr,
+                layer.ffn_down_exps,
+                nullptr,
+                n_expert, n_expert_used,
+                moe_act, moe_norm_w,
+                hparams.expert_weights_scale,
+                moe_gating,
+                il);
+    } else {
+        const bool ffn_up_contains_gate = layer.ffn_gate == nullptr &&
+                layer.ffn_up != nullptr &&
+                layer.ffn_up->ne[1] != hparams.n_ff();
+        const llm_ffn_op_type ffn_act = ffn_up_contains_gate && cfg_.act == LLM_FFN_GELU
+                ? LLM_FFN_GEGLU
+                : (ffn_up_contains_gate && cfg_.act == LLM_FFN_RELU
+                    ? LLM_FFN_REGLU
+                    : cfg_.act);
+        cur = build_ffn(cur,
+                layer.ffn_up, layer.ffn_up_b, NULL,
+                layer.ffn_gate, NULL, NULL,
+                layer.ffn_down, layer.ffn_down_b, NULL,
+                NULL,
+                ffn_act, layer.ffn_gate ? LLM_FFN_PAR : LLM_FFN_SEQ, il);
+    }
+
+    cur = ggml_add(ctx0, cur, ffn_inp);
+    cur = build_norm(cur, layer.layer_out_norm, layer.layer_out_norm_b, LLM_NORM, il);
+
+    return build_cvec(cur, il);
 }
 
 ggml_tensor * llm_build_std_transformer::build_norm_gated(
@@ -3186,13 +3277,6 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
 
         v_states = llm_maybe_cont(ctx0, v_states);
         cb(v_states, "v_states", il);
-        if (cfg_.flatten_v) {
-            v_states = ggml_view_2d(ctx0, v_states, n_embd_head_v * n_head, n_tokens,
-                    ggml_row_size(kv->type, n_embd_head_v * n_head),
-                    0);
-            cb(v_states, "v_states_flat", il);
-        }
-
         ggml_tensor * q_states = ggml_concat(ctx0, q_nope, q_pe, 0);
         ggml_tensor * k_states = ggml_concat(ctx0, k_nope, llm_repeat_if_needed(ctx0, k_pe, q_pe), 0);
         cb(q_states, "q_states", il);
@@ -3289,9 +3373,6 @@ bool llm_transformer_config_from_hparams(
         hparams.is_n_embd_k_gqa_variable() ||
         hparams.is_n_embd_v_gqa_variable();
 
-    // Position embeddings (if no RoPE and model has pos_embd)
-    config.use_pos_embd = (!config.use_rope && model.pos_embd != nullptr);
-
     // ISWA (sliding window attention)
     config.iswa = (hparams.swa_type != LLAMA_SWA_TYPE_NONE && hparams.n_swa > 0);
 
@@ -3345,6 +3426,12 @@ bool llm_transformer_config_from_hparams(
     bool has_attn_gate = false;
     bool has_attn_post_norm = false;
     bool has_ffn_post_norm = false;
+    bool has_attn_q_gate = false;
+    bool all_attn_layers_q_gated = true;
+    bool has_delta_net = false;
+    bool has_delta_net_interleave_repeat = false;
+    bool has_moe_shared_gate = false;
+    bool saw_separate_attn_q = false;
     bool has_vision_expert = false;
 
     for (uint32_t il = 0; il < model.layers.size(); ++il) {
@@ -3356,7 +3443,24 @@ bool llm_transformer_config_from_hparams(
         has_attn_gate     = has_attn_gate     || (!recurrent && layer.wqkv_gate != nullptr);
         has_attn_post_norm = has_attn_post_norm || layer.attn_post_norm != nullptr;
         has_ffn_post_norm  = has_ffn_post_norm  || layer.ffn_post_norm  != nullptr;
+        has_moe_shared_gate = has_moe_shared_gate || layer.ffn_gate_inp_shexp != nullptr;
         has_vision_expert = has_vision_expert || layer.visexp_attn_wqkv != nullptr;
+
+        if (!recurrent && layer.wq != nullptr) {
+            const int64_t layer_q_embd = int64_t(hparams.n_embd_head_k(il)) * hparams.n_head(il);
+            const bool layer_attn_q_gate = layer.wq->ne[1] == layer_q_embd * 2;
+            saw_separate_attn_q = true;
+            has_attn_q_gate = has_attn_q_gate || layer_attn_q_gate;
+            all_attn_layers_q_gated = all_attn_layers_q_gated && layer_attn_q_gate;
+        }
+
+        if (recurrent) {
+            const bool layer_delta_net = layer.ssm_beta_alpha != nullptr ||
+                    (layer.ssm_beta != nullptr && layer.ssm_alpha != nullptr);
+            has_delta_net = has_delta_net || layer_delta_net;
+            has_delta_net_interleave_repeat =
+                    has_delta_net_interleave_repeat || layer.ssm_beta_alpha != nullptr;
+        }
     }
 
     if (hparams.use_kq_norm || (model.layers.size() > 0 && model.layers[0].attn_q_norm != nullptr)) {
@@ -3366,6 +3470,10 @@ bool llm_transformer_config_from_hparams(
     config.combined_qkv = has_combined_qkv;
     config.attn_bias    = has_attn_bias;
     config.attn_gate    = has_attn_gate;
+    config.attn_q_gate  = saw_separate_attn_q && has_attn_q_gate && all_attn_layers_q_gated;
+    config.hybrid_delta = has_delta_net;
+    config.hybrid_delta_interleave_repeat = has_delta_net_interleave_repeat;
+    config.moe_shared_gate = has_moe_shared_gate;
 
     // FFN bias
     if (model.layers.size() > 0 && model.layers[0].ffn_up_b != nullptr) {
@@ -3382,6 +3490,12 @@ bool llm_transformer_config_from_hparams(
 
     // Global token normalization (Bloom)
     config.global_tok_norm = (model.tok_norm != nullptr);
+
+    // Optional learned token-type embeddings (BERT family)
+    config.use_type_embd = (model.type_embd != nullptr);
+
+    // Some encoder-style models carry only enc_output_norm on the shared path.
+    config.use_output_norm_enc = (model.output_norm_enc != nullptr && model.output_norm == nullptr);
 
     // Post-norms: detect from layer tensors
     if (model.layers.size() > 0) {
@@ -3435,6 +3549,10 @@ bool llm_transformer_config_from_hparams(
     } else if (strcmp(hparams.ffn_activation, "relu_sqr") == 0 ||
                strcmp(hparams.ffn_activation, "relu2") == 0) {
         config.act = LLM_FFN_RELU_SQR;
+    } else if (strcmp(hparams.ffn_activation, "geglu") == 0) {
+        config.act = LLM_FFN_GEGLU;
+    } else if (strcmp(hparams.ffn_activation, "reglu") == 0) {
+        config.act = LLM_FFN_REGLU;
     } else if (strcmp(hparams.ffn_activation, "swiglu") == 0 ||
                strcmp(hparams.ffn_activation, "silu") == 0) {
         config.act = LLM_FFN_SILU;
@@ -3500,40 +3618,16 @@ bool llm_transformer_config_from_hparams(
         config.no_attn_cache = true;
     }
 
-    // Post-norm after residual (GLM4-MOE): attn_post_norm applied to (attn+residual) sum
-    if (model.arch == LLM_ARCH_GLM4_MOE) {
-        config.post_norm_after_residual = true;
+    if (meta) {
+        config.output_logits = config.output_logits && meta->output_logits;
+        config.encoder_post_norm = config.encoder_post_norm || meta->encoder_post_norm;
+        config.post_norm_after_residual =
+                config.post_norm_after_residual || meta->post_norm_after_residual;
     }
 
-    switch (model.arch) {
-        case LLM_ARCH_QWEN3NEXT:
-            config.qk_norm = true;
-            config.attn_q_gate = true;
-            config.hybrid_delta = true;
-            config.hybrid_delta_interleave_repeat = true;
-            config.post_norm_after_residual = true;
-            config.moe_shared_gate = true;
-            config.moe_norm_weights = true;
-            config.moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
-            break;
-        case LLM_ARCH_QWEN35:
-            config.qk_norm = true;
-            config.attn_q_gate = true;
-            config.hybrid_delta = true;
-            config.post_norm_after_residual = true;
-            break;
-        case LLM_ARCH_QWEN35MOE:
-            config.qk_norm = true;
-            config.attn_q_gate = true;
-            config.hybrid_delta = true;
-            config.post_norm_after_residual = true;
-            config.moe_shared_gate = true;
-            config.moe_norm_weights = true;
-            config.moe_gating = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
-            break;
-        default:
-            break;
-    }
+    // Learned position embeddings depend on the final RoPE decision, including
+    // any arch-table override from layer-ops metadata.
+    config.use_pos_embd = (!config.use_rope && model.pos_embd != nullptr);
 
     return true;
 }
