@@ -72,6 +72,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cfloat>
+#include <cmath>
 #include <initializer_list>
 #include <limits>
 #include <map>
@@ -195,6 +196,91 @@ static int ggml_cuda_parse_id(char devName[]) {
 }
 #endif // defined(GGML_USE_HIP)
 
+static std::array<float, GGML_CUDA_MAX_DEVICES> ggml_cuda_make_tensor_split(
+        const std::array<double, GGML_CUDA_MAX_DEVICES> & split_weights,
+        int device_count) {
+    std::array<float, GGML_CUDA_MAX_DEVICES> tensor_split = {};
+    double split_sum = 0.0;
+
+    for (int id = 0; id < device_count; ++id) {
+        split_sum += std::max(split_weights[id], 0.0);
+    }
+
+    if (split_sum <= 0.0) {
+        return tensor_split;
+    }
+
+    double prefix = 0.0;
+    for (int id = 0; id < device_count; ++id) {
+        tensor_split[id] = static_cast<float>(prefix / split_sum);
+        prefix += std::max(split_weights[id], 0.0);
+    }
+
+    return tensor_split;
+}
+
+using ggml_cuda_peer_info = ggml_cuda_device_info::cuda_device_info::cuda_peer_info;
+
+static double ggml_cuda_peer_split_weight(const ggml_cuda_peer_info & peer) {
+    if (!peer.access) {
+        return 0.90;
+    }
+
+    // Lower performance ranks indicate faster links, so bias row-split auto placement
+    // toward better-connected peers without fully excluding slower devices.
+    return 1.0 + 0.50 / (1.0 + peer.performance_rank) + (peer.native_atomics ? 0.05 : 0.0);
+}
+
+static std::array<float, GGML_CUDA_MAX_DEVICES> ggml_cuda_get_recommended_tensor_split(const ggml_cuda_device_info & info) {
+    std::array<double, GGML_CUDA_MAX_DEVICES> split_weights = {};
+    for (int id = 0; id < info.device_count; ++id) {
+        double topology_weight = info.device_count > 1 ? 0.90 : 1.0;
+        for (int id_other = 0; id_other < info.device_count; ++id_other) {
+            if (id == id_other) {
+                continue;
+            }
+            topology_weight = std::max(topology_weight, ggml_cuda_peer_split_weight(info.devices[id].peers[id_other]));
+        }
+        split_weights[id] = static_cast<double>(info.devices[id].total_vram) * topology_weight;
+    }
+
+    return ggml_cuda_make_tensor_split(split_weights, info.device_count);
+}
+
+static bool ggml_cuda_tensor_split_differs(
+        const std::array<float, GGML_CUDA_MAX_DEVICES> & lhs,
+        const std::array<float, GGML_CUDA_MAX_DEVICES> & rhs,
+        int device_count,
+        float epsilon = 0.01f) {
+    for (int id = 0; id < device_count; ++id) {
+        const float lhs_share = (id + 1 < device_count ? lhs[id + 1] : 1.0f) - lhs[id];
+        const float rhs_share = (id + 1 < device_count ? rhs[id + 1] : 1.0f) - rhs[id];
+        if (std::abs(lhs_share - rhs_share) > epsilon) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static std::string ggml_cuda_format_tensor_split(
+        const std::array<float, GGML_CUDA_MAX_DEVICES> & tensor_split,
+        int device_count) {
+    std::string result;
+
+    for (int id = 0; id < device_count; ++id) {
+        const float share = (id + 1 < device_count ? tensor_split[id + 1] : 1.0f) - tensor_split[id];
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.3f", share);
+        if (!result.empty()) {
+            result += ", ";
+        }
+        result += buf;
+    }
+
+    return result;
+}
+
 static ggml_cuda_device_info ggml_cuda_init() {
     ggml_cuda_device_info info = {};
 
@@ -214,9 +300,8 @@ static ggml_cuda_device_info ggml_cuda_init() {
     }
     GGML_LOG_INFO("%s: found %d " GGML_CUDA_NAME " devices (Total VRAM: %zu MiB):\n",
                   __func__, info.device_count, (size_t)(total_vram / (1024 * 1024)));
-    total_vram = 0;
-
     std::vector<std::pair<int, std::string>> turing_devices_without_mma;
+    std::array<double, GGML_CUDA_MAX_DEVICES> default_split_weights = {};
     for (int id = 0; id < info.device_count; ++id) {
         int device_vmm = 0;
 
@@ -238,8 +323,8 @@ static ggml_cuda_device_info ggml_cuda_init() {
         cudaDeviceProp prop;
         CUDA_CHECK(cudaGetDeviceProperties(&prop, id));
 
-        info.default_tensor_split[id] = total_vram;
-        total_vram += prop.totalGlobalMem;
+        info.devices[id].total_vram = prop.totalGlobalMem;
+        default_split_weights[id] = static_cast<double>(prop.totalGlobalMem);
         info.devices[id].integrated = false; // Temporarily disabled due to issues with corrupted output (e.g. #15034)
         info.devices[id].nsm        = prop.multiProcessorCount;
         info.devices[id].smpb       = prop.sharedMemPerBlock;
@@ -317,25 +402,59 @@ static ggml_cuda_device_info ggml_cuda_init() {
             "Consider compiling with CMAKE_CUDA_ARCHITECTURES=61-virtual;80-virtual and DGGML_CUDA_FORCE_MMQ to force the use of the Pascal code for Turing.\n");
     }
 
-    for (int id = 0; id < info.device_count; ++id) {
-        info.default_tensor_split[id] /= total_vram;
-    }
+    info.default_tensor_split = ggml_cuda_make_tensor_split(default_split_weights, info.device_count);
 
     // configure logging to stdout
     // CUBLAS_CHECK(cublasLoggerConfigure(1, 1, 0, nullptr));
 
     for (int id = 0; id < info.device_count; ++id) {
         ggml_cuda_set_device(id);
+        info.devices[id].peers[id].access = true;
+        info.devices[id].peers[id].performance_rank = 0;
+        info.devices[id].peers[id].native_atomics = true;
         for (int id_other = 0; id_other < info.device_count; ++id_other) {
             if (id == id_other) {
                 continue;
             }
-            int can_access_peer;
+            int can_access_peer = 0;
             CUDA_CHECK(cudaDeviceCanAccessPeer(&can_access_peer, id, id_other));
-            if (can_access_peer) {
+            auto & peer = info.devices[id].peers[id_other];
+            peer.access = can_access_peer != 0;
+#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+            if (peer.access) {
+                CUDA_CHECK(cudaDeviceGetP2PAttribute(&peer.performance_rank, cudaDevP2PAttrPerformanceRank, id, id_other));
+                int native_atomics = 0;
+                CUDA_CHECK(cudaDeviceGetP2PAttribute(&native_atomics, cudaDevP2PAttrNativeAtomicSupported, id, id_other));
+                peer.native_atomics = native_atomics != 0;
+            }
+#endif
+            if (peer.access) {
                 CUDA_CHECK(cudaDeviceEnablePeerAccess(id_other, 0));
             }
         }
+    }
+
+    for (int id = 0; id < info.device_count; ++id) {
+        for (int id_other = id + 1; id_other < info.device_count; ++id_other) {
+            const auto & peer = info.devices[id].peers[id_other];
+            const auto & peer_other = info.devices[id_other].peers[id];
+            if (!peer.access && !peer_other.access) {
+                continue;
+            }
+#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+            GGML_LOG_INFO("%s: peer link %d <-> %d: rank %d, native atomics: %s\n",
+                    __func__, id, id_other, std::min(peer.performance_rank, peer_other.performance_rank),
+                    (peer.native_atomics && peer_other.native_atomics) ? "yes" : "no");
+#else
+            GGML_LOG_INFO("%s: peer link %d <-> %d: access %s\n",
+                    __func__, id, id_other, (peer.access && peer_other.access) ? "yes" : "partial");
+#endif
+        }
+    }
+    const auto recommended_tensor_split = ggml_cuda_get_recommended_tensor_split(info);
+    if (info.device_count > 1 && ggml_cuda_tensor_split_differs(recommended_tensor_split, info.default_tensor_split, info.device_count)) {
+        GGML_LOG_INFO("%s: recommended row split: [%s]\n",
+                __func__, ggml_cuda_format_tensor_split(recommended_tensor_split, info.device_count).c_str());
     }
 
 #ifdef GGML_USE_NCCL

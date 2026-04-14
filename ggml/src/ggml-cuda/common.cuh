@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cfloat>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1077,6 +1078,12 @@ struct ggml_cuda_device_info {
     int device_count;
 
     struct cuda_device_info {
+        struct cuda_peer_info {
+            bool access = false;
+            int  performance_rank = std::numeric_limits<int>::max();
+            bool native_atomics = false;
+        };
+
         int     cc;                             // compute capability
         int     nsm;                            // number of streaming multiprocessors
         size_t  smpb;                           // max. shared memory per block
@@ -1087,6 +1094,7 @@ struct ggml_cuda_device_info {
         size_t  total_vram;
         int     warp_size;                      // Number of threads in a dispatch
         bool    supports_cooperative_launch;    // whether cooperative launch is supported
+        std::array<cuda_peer_info, GGML_CUDA_MAX_DEVICES> peers = {};
     };
 
     cuda_device_info devices[GGML_CUDA_MAX_DEVICES] = {};
