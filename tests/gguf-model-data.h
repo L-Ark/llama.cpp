@@ -27,9 +27,13 @@ struct gguf_remote_model {
     uint32_t    n_expert        = 0;        // <arch>.expert_count (0 if absent)
     uint32_t    n_embd_head_k   = 0;        // <arch>.attention.key_length
     uint32_t    n_embd_head_v   = 0;        // <arch>.attention.value_length
+    uint32_t    full_attention_interval = 0; // <arch>.full_attention_interval
     uint16_t    n_split         = 0;        // split.count (0 = not split)
     uint32_t    n_split_tensors = 0;        // split.tensors.count (0 if not split)
 
+    std::vector<uint32_t> n_head_arr;             // scalar or per-layer <arch>.attention.head_count
+    std::vector<uint32_t> n_head_kv_arr;          // scalar or per-layer <arch>.attention.head_count_kv
+    std::vector<uint32_t> sliding_window_pattern; // <arch>.attention.sliding_window_pattern, bools normalized to 0/1
     std::vector<gguf_remote_tensor> tensors;
 };
 

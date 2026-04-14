@@ -1,5 +1,6 @@
 #include "gguf-model-data.h"
 
+#include <algorithm>
 #include <cstdio>
 
 #define TEST_ASSERT(cond, msg) \
@@ -148,6 +149,45 @@ int main() {
     TEST_ASSERT(model4.n_embd_head_v == 128, "expected n_embd_head_v == 128");
     TEST_ASSERT(model4.n_vocab == 128896, "expected n_vocab == 128896");
     TEST_ASSERT(model4.tensors.size() == 754, "expected tensor count == 754");
+
+    // Test a hybrid-attention model that exposes its full-attention cadence.
+    auto result5 = gguf_fetch_model_meta("bartowski/Qwen_Qwen3.5-27B-GGUF", "Q4_K_M");
+    if (!result5.has_value()) {
+        fprintf(stderr, "FAIL: could not fetch Qwen3.5-27B metadata\n");
+        return 1;
+    }
+    const auto & model5 = result5.value();
+
+    TEST_ASSERT(model5.architecture == "qwen35", "expected architecture 'qwen35'");
+    TEST_ASSERT(model5.n_layer == 64, "expected Qwen3.5-27B n_layer == 64");
+    TEST_ASSERT(model5.full_attention_interval == 4, "expected Qwen3.5 full_attention_interval == 4");
+
+    // Test a Gemma4 model that preserves per-layer hybrid attention metadata.
+    auto result6 = gguf_fetch_model_meta("ggml-org/gemma-4-31B-it-GGUF", "Q4_K_M");
+    if (!result6.has_value()) {
+        fprintf(stderr, "FAIL: could not fetch Gemma4 metadata\n");
+        return 1;
+    }
+    const auto & model6 = result6.value();
+
+    TEST_ASSERT(model6.architecture == "gemma4", "expected architecture 'gemma4'");
+    TEST_ASSERT(model6.n_layer == 60, "expected Gemma4 n_layer == 60");
+    TEST_ASSERT(model6.n_head_kv_arr.size() == model6.n_layer, "expected Gemma4 per-layer head_count_kv metadata");
+    TEST_ASSERT(model6.sliding_window_pattern.size() == model6.n_layer, "expected Gemma4 sliding_window_pattern metadata");
+    TEST_ASSERT(model6.n_head_kv_arr.front() == 16, "expected Gemma4 first layer n_head_kv == 16");
+    TEST_ASSERT(model6.n_head_kv_arr[5] == 4, "expected Gemma4 sixth layer n_head_kv == 4");
+    TEST_ASSERT(model6.sliding_window_pattern.front() == 1, "expected Gemma4 first layer to be SWA");
+    TEST_ASSERT(model6.sliding_window_pattern[5] == 0, "expected Gemma4 sixth layer to be full attention");
+    TEST_ASSERT(std::count(model6.sliding_window_pattern.begin(), model6.sliding_window_pattern.end(), 1u) == 50,
+            "expected Gemma4 SWA pattern to mark 50 sliding-window layers");
+    TEST_ASSERT(std::count(model6.sliding_window_pattern.begin(), model6.sliding_window_pattern.end(), 0u) == 10,
+            "expected Gemma4 SWA pattern to mark 10 full-attention layers");
+
+    for (size_t il = 0; il < model6.n_layer; ++il) {
+        const uint32_t expected_kv = model6.sliding_window_pattern[il] ? 16u : 4u;
+        TEST_ASSERT(model6.n_head_kv_arr[il] == expected_kv,
+                "expected Gemma4 head_count_kv to follow the SWA pattern");
+    }
 
     fprintf(stderr, "=== ALL TESTS PASSED ===\n");
     return 0;

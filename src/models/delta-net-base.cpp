@@ -10,6 +10,14 @@ static ggml_tensor * get_slice_2d(ggml_context * ctx0, ggml_tensor * t, int64_t 
         t->nb[1], t->nb[2], t->nb[3], t->nb[2] * c);
 }
 
+static ggml_tensor * dnet_maybe_cont(ggml_context * ctx0, ggml_tensor * tensor) {
+    return ggml_is_contiguous(tensor) ? tensor : ggml_cont(ctx0, tensor);
+}
+
+static ggml_tensor * dnet_repeat_if_needed(ggml_context * ctx0, ggml_tensor * src, ggml_tensor * dst_shape) {
+    return ggml_are_same_shape(src, dst_shape) ? src : ggml_repeat(ctx0, src, dst_shape);
+}
+
 llm_build_delta_net_base::llm_build_delta_net_base(const llm_graph_params & params) : llm_build_mamba_base(params) {}
 
 std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_net_chunking(
@@ -85,7 +93,7 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
 
     // [CS, g_0, n_chunks, H_v * n_seqs]
     // TODO: extend ggml_cumsum with axis parameter to avoid transpose
-    ggml_tensor * g_cs = ggml_cumsum(ctx0, ggml_cont(ctx0, ggml_transpose(ctx0, g)));
+    ggml_tensor * g_cs = ggml_cumsum(ctx0, dnet_maybe_cont(ctx0, ggml_transpose(ctx0, g)));
     cb(g_cs, "g_cs", il);
 
     ggml_tensor * kb = nullptr;
@@ -119,8 +127,8 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
         kb = ggml_mul_mat(ctx0, decay_k_b_i, k_j);
         kq = ggml_mul_mat(ctx0, decay_q_i,   k_j);
 
-        kb = ggml_cont(ctx0, ggml_transpose(ctx0, ggml_reshape_4d(ctx0, kb, CS, CS, n_chunks, H_v * n_seqs)));
-        kq = ggml_cont(ctx0, ggml_transpose(ctx0, ggml_reshape_4d(ctx0, kq, CS, CS, n_chunks, H_v * n_seqs)));
+        kb = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, ggml_reshape_4d(ctx0, kb, CS, CS, n_chunks, H_v * n_seqs)));
+        kq = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, ggml_reshape_4d(ctx0, kq, CS, CS, n_chunks, H_v * n_seqs)));
     } else {
         ggml_tensor * g_cs_i = g_cs;
         ggml_tensor * g_cs_j = ggml_reshape_4d(ctx0, g_cs, 1, CS, n_chunks, H_v * n_seqs);
@@ -167,12 +175,12 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
     cb(attn, "dnet_add_ch_attn_solved", il); // [CS, CS, n_chunks, H_k * n_seqs]
 
     // [S_v, CS, n_chunks, H_v * n_seqs]
-    v = ggml_mul_mat(ctx0, ggml_cont(ctx0, ggml_transpose(ctx0, v_b)), attn);
+    v = ggml_mul_mat(ctx0, dnet_maybe_cont(ctx0, ggml_transpose(ctx0, v_b)), attn);
 
     // [CS, 1, n_chunks, H_v * n_seqs] KDA: [CS, S_k, n_chunks, H_v * n_seqs]
     ggml_tensor * g_exp = ggml_exp(ctx0, g_cs);
 
-    k_b = ggml_cont(ctx0, ggml_transpose(ctx0, k_b));
+    k_b = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, k_b));
 
     // [CS, S_k, n_chunks, H_k * n_seqs]
     ggml_tensor * kbg = ggml_mul(ctx0, k_b, g_exp);
@@ -183,7 +191,7 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
     cb(k_cd, "k_cumdecay", il);
 
     // [1, CS, n_chunks, H_k * n_seqs] KDA: [S_k, CS, n_chunks, H_k * n_seqs]
-    ggml_tensor * g_exp_t = ggml_cont(ctx0, ggml_transpose(ctx0, g_exp));
+    ggml_tensor * g_exp_t = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, g_exp));
     ggml_tensor * q_g_exp = ggml_mul(ctx0, q, g_exp_t);
 
     // vectorized calculation of key_gdiff
@@ -205,7 +213,7 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
     cb(g_last, "g_last", il);
 
     // TODO: remove this cont when CUDA supports non-cont unary ops
-    g_last = ggml_cont(ctx0, g_last);
+    g_last = dnet_maybe_cont(ctx0, g_last);
 
     // [1, 1, n_chunks, H_v * n_seqs] KDA: [S_k, 1, n_chunks, H_v * n_seqs]
     ggml_tensor * g_last_exp_t = ggml_transpose(ctx0, ggml_exp(ctx0, g_last));
@@ -215,21 +223,21 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
     ggml_tensor * g_diff = ggml_neg(ctx0, ggml_sub(ctx0, g_cs, g_last));
     cb(g_diff, "g_diff", il);
 
-    ggml_tensor * g_diff_exp_t = ggml_cont(ctx0, ggml_transpose(ctx0, ggml_exp(ctx0, g_diff)));
+    ggml_tensor * g_diff_exp_t = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, ggml_exp(ctx0, g_diff)));
 
     // [S_k, CS, n_chunks, H_v * n_seqs]
     ggml_tensor * kg = ggml_mul(ctx0, k, g_diff_exp_t);
     cb(kg, "key_gdiff", il);
 
     // [CS, S_k, n_chunks, H_v * n_seqs]
-    ggml_tensor * kg_t = ggml_cont(ctx0, ggml_transpose(ctx0, kg));
+    ggml_tensor * kg_t = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, kg));
     cb(kg_t, "key_gdiff_t", il);
 
     s = ggml_reshape_4d(ctx0, s, S_v, S_v, 1, H_v * n_seqs);
     cb(s, "dnet_add_ch_state", il);
 
     // [CS, S_v, n_chunks, H_v * n_seqs]
-    ggml_tensor * v_t = ggml_cont(ctx0, ggml_transpose(ctx0, v));
+    ggml_tensor * v_t = dnet_maybe_cont(ctx0, ggml_transpose(ctx0, v));
 
     for (int64_t chunk = 0; chunk < n_chunks; chunk++) {
         ggml_tensor * ch_k_cd    = get_slice_2d(ctx0, k_cd,    chunk); // [S_k,  CS, 1, H_k * n_seqs]
@@ -354,7 +362,7 @@ std::pair<ggml_tensor *, ggml_tensor *> llm_build_delta_net_base::build_delta_ne
 
     // [S_v, S_v, H_v, n_seqs]
     ggml_tensor * kd;
-    k  = ggml_repeat(ctx0, k, s);
+    k  = dnet_repeat_if_needed(ctx0, k, s);
     kd = ggml_mul   (ctx0, k, d_t);
 
     s = ggml_add(ctx0, s, kd);

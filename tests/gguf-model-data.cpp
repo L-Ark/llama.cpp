@@ -221,6 +221,56 @@ static bool gguf_read_uint32_val(gguf_buf_reader & r, int32_t vtype, uint32_t & 
     return false;
 }
 
+static bool gguf_read_uint32_list(gguf_buf_reader & r, int32_t vtype, std::vector<uint32_t> & out) {
+    out.clear();
+
+    if (vtype == GGUF_TYPE_ARRAY) {
+        int32_t elem_type;
+        uint64_t count;
+        if (!r.read_val(elem_type)) {
+            return false;
+        }
+        if (!r.read_val(count)) {
+            return false;
+        }
+
+        out.reserve((size_t) count);
+        for (uint64_t i = 0; i < count; ++i) {
+            if (elem_type == GGUF_TYPE_BOOL) {
+                bool v;
+                if (!r.read_val(v)) {
+                    return false;
+                }
+                out.push_back(v ? 1u : 0u);
+                continue;
+            }
+
+            uint32_t v;
+            if (!gguf_read_uint32_val(r, elem_type, v)) {
+                return false;
+            }
+            out.push_back(v);
+        }
+        return true;
+    }
+
+    if (vtype == GGUF_TYPE_BOOL) {
+        bool v;
+        if (!r.read_val(v)) {
+            return false;
+        }
+        out.push_back(v ? 1u : 0u);
+        return true;
+    }
+
+    uint32_t v;
+    if (!gguf_read_uint32_val(r, vtype, v)) {
+        return false;
+    }
+    out.push_back(v);
+    return true;
+}
+
 // Follows the same header -> KV -> tensor parsing sequence as gguf() huggingface/gguf
 static std::optional<gguf_remote_model> gguf_parse_meta(const std::vector<char> & buf) {
     gguf_buf_reader r(buf);
@@ -301,13 +351,41 @@ static std::optional<gguf_remote_model> gguf_parse_meta(const std::vector<char> 
         }
 
         if (!arch_prefix.empty()) {
+            if (key == arch_prefix + "attention.head_count") {
+                if (!gguf_read_uint32_list(r, vtype, model.n_head_arr) || model.n_head_arr.empty()) {
+                    return std::nullopt;
+                }
+                model.n_head = model.n_head_arr.front();
+                continue;
+            }
+
+            if (key == arch_prefix + "attention.head_count_kv") {
+                if (!gguf_read_uint32_list(r, vtype, model.n_head_kv_arr) || model.n_head_kv_arr.empty()) {
+                    return std::nullopt;
+                }
+                model.n_head_kv = model.n_head_kv_arr.front();
+                continue;
+            }
+
+            if (key == arch_prefix + "attention.sliding_window_pattern") {
+                if (!gguf_read_uint32_list(r, vtype, model.sliding_window_pattern)) {
+                    return std::nullopt;
+                }
+                continue;
+            }
+
+            if (key == arch_prefix + "full_attention_interval") {
+                if (!gguf_read_uint32_val(r, vtype, model.full_attention_interval)) {
+                    return std::nullopt;
+                }
+                continue;
+            }
+
             uint32_t * target = nullptr;
 
             if      (key == arch_prefix + "embedding_length")         { target = &model.n_embd; }
             else if (key == arch_prefix + "feed_forward_length")      { target = &model.n_ff; }
             else if (key == arch_prefix + "block_count")              { target = &model.n_layer; }
-            else if (key == arch_prefix + "attention.head_count")     { target = &model.n_head; }
-            else if (key == arch_prefix + "attention.head_count_kv")  { target = &model.n_head_kv; }
             else if (key == arch_prefix + "expert_count")             { target = &model.n_expert; }
             else if (key == arch_prefix + "attention.key_length")     { target = &model.n_embd_head_k; }
             else if (key == arch_prefix + "attention.value_length")   { target = &model.n_embd_head_v; }
