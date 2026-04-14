@@ -654,11 +654,11 @@ llm_build_std_transformer::llm_build_std_transformer(
                         layer_n_embd_head*qkv->nb[0], qkv->nb[1], (layer_q_embd + layer_n_embd_k_gqa)*qkv->nb[0]);
             } else {
                 // Separate Q, K, V projections (standard)
-                Qcur = build_lora_mm(model.layers[il].wq, cur);
+                Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
                 if (layer_has_kv) {
-                    Kcur = build_lora_mm(model.layers[il].wk, cur);
+                    Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
                     Vcur = model.layers[il].wv
-                        ? build_lora_mm(model.layers[il].wv, cur)
+                        ? build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s)
                         : Kcur;
                 }
             }
@@ -783,7 +783,9 @@ llm_build_std_transformer::llm_build_std_transformer(
 
             // When attention gating or sub-norm is active, defer wo projection
             const bool layer_attn_gate = config.attn_gate && model.layers[il].wqkv_gate != nullptr;
-            bool defer_wo = layer_attn_q_gate || layer_attn_gate || (model.layers[il].attn_sub_norm != nullptr);
+            bool defer_wo = layer_attn_q_gate || layer_attn_gate ||
+                    (model.layers[il].attn_sub_norm != nullptr) ||
+                    (model.layers[il].wo_s != nullptr);
             ggml_tensor * attn_wo = defer_wo ? nullptr : layer_wo;
             ggml_tensor * attn_wo_b = defer_wo ? nullptr : wo_b;
 
@@ -821,6 +823,10 @@ llm_build_std_transformer::llm_build_std_transformer(
             else if (model.layers[il].attn_sub_norm) {
                 cur = build_norm(cur, model.layers[il].attn_sub_norm, nullptr, LLM_NORM_RMS, il);
                 cb(cur, "attn_sub_norm", il);
+                cur = build_lora_mm(layer_wo, cur, model.layers[il].wo_s);
+                if (wo_b) { cur = ggml_add(ctx0, cur, wo_b); }
+                cb(cur, "attn_out", il);
+            } else if (model.layers[il].wo_s) {
                 cur = build_lora_mm(layer_wo, cur, model.layers[il].wo_s);
                 if (wo_b) { cur = ggml_add(ctx0, cur, wo_b); }
                 cb(cur, "attn_out", il);
@@ -1052,9 +1058,9 @@ llm_build_std_transformer::llm_build_std_transformer(
             ggml_tensor * down_b = config.ffn_bias ? model.layers[il].ffn_down_b : nullptr;
 
             cur = build_ffn(cur,
-                    layer_ffn_up,   up_b,   nullptr,
-                    layer_ffn_gate, gate_b, nullptr,
-                    layer_ffn_down, down_b, nullptr,
+                    layer_ffn_up,   up_b,   model.layers[il].ffn_up_s,
+                    layer_ffn_gate, gate_b, model.layers[il].ffn_gate_s,
+                    layer_ffn_down, down_b, model.layers[il].ffn_down_s,
                     nullptr,
                     config.act, config.ffn_type, il);
             cb(cur, "ffn_out", il);

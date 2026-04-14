@@ -45,7 +45,6 @@ add_library(llama
             models/bailingmoe.cpp
             models/bailingmoe2.cpp
             models/bert.cpp
-            models/bitnet.cpp
             models/bloom.cpp
             models/chameleon.cpp
             models/chatglm.cpp

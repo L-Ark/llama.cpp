@@ -143,10 +143,6 @@ struct llm_build_bert : public llm_graph_context {
     llm_build_bert(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_bitnet : public llm_graph_context {
-    llm_build_bitnet(const llama_model & model, const llm_graph_params & params);
-};
-
 struct llm_build_bloom : public llm_graph_context {
     llm_build_bloom(const llama_model & model, const llm_graph_params & params);
 };

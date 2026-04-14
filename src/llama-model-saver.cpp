@@ -22,7 +22,6 @@ bool llama_model_saver_supports_arch(llm_arch arch) {
         case LLM_ARCH_GEMMA3N:
         case LLM_ARCH_COHERE2:
         case LLM_ARCH_OLMO2:
-        case LLM_ARCH_BITNET:
         case LLM_ARCH_T5:
         case LLM_ARCH_EXAONE_MOE:
         case LLM_ARCH_AFMOE:
