@@ -156,6 +156,10 @@ static const std::map<llm_arch, llm_arch_runtime_traits> LLM_ARCH_RUNTIME_TRAITS
 #include "llama-arch-runtime-traits.inc"
 };
 
+static const std::set<llm_arch> LLM_ARCH_RUNTIME_DEFAULT_TRAITS_ARCHES = {
+#include "llama-arch-runtime-default-traits.inc"
+};
+
 static const llm_arch_runtime_traits & llm_arch_runtime_traits_for(const llm_arch & arch) {
     static const llm_arch_runtime_traits defaults = {};
 
@@ -860,6 +864,11 @@ llm_arch llm_arch_from_string(const std::string & name) {
 
 const llm_tensor_info & llm_tensor_info_for(llm_tensor tensor) {
     return LLM_TENSOR_INFOS.at(tensor);
+}
+
+bool llm_arch_has_runtime_traits_coverage(const llm_arch & arch) {
+    return LLM_ARCH_RUNTIME_TRAITS.find(arch) != LLM_ARCH_RUNTIME_TRAITS.end() ||
+           LLM_ARCH_RUNTIME_DEFAULT_TRAITS_ARCHES.find(arch) != LLM_ARCH_RUNTIME_DEFAULT_TRAITS_ARCHES.end();
 }
 
 bool llm_arch_is_recurrent(const llm_arch & arch) {
