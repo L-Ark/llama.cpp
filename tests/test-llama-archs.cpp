@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -33,6 +34,10 @@ static double nmse(const std::vector<float> & a, const std::vector<float> & b) {
 
         mse_a_b += (a_i - b_i) * (a_i - b_i);
         mse_a_0 += a_i * a_i;
+    }
+
+    if (mse_a_0 == 0.0) {
+        return mse_a_b == 0.0 ? 0.0 : std::numeric_limits<double>::infinity();
     }
 
     return mse_a_b / mse_a_0;
@@ -105,6 +110,8 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         n_head = 1;
         n_ff   = 96;
         n_layer = 22; // hparams.n_layer_kv_from_start = 20 is hardcoded
+    } else if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
+        n_layer = 6; // exercise the full posnet schedule, including the attention and terminal norm stages
     } else if (arch == LLM_ARCH_DEEPSEEK2
             || arch == LLM_ARCH_GLM_DSA
             || arch == LLM_ARCH_KIMI_LINEAR
@@ -126,6 +133,7 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
     ms.add_kv(LLM_KV_EMBEDDING_LENGTH,          n_embd);
     ms.add_kv(LLM_KV_FEATURES_LENGTH,           n_embd);
     ms.add_kv(LLM_KV_BLOCK_COUNT,               n_layer);
+    ms.add_kv(LLM_KV_ATTENTION_CAUSAL,          arch != LLM_ARCH_WAVTOKENIZER_DEC);
     ms.add_kv(LLM_KV_LEADING_DENSE_BLOCK_COUNT,
             arch == LLM_ARCH_DEEPSEEK2OCR && !moe
                 ? n_layer
@@ -254,18 +262,31 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
     ms.add_kv(LLM_KV_WKV_HEAD_SIZE,             n_embd/n_head);
     ms.add_kv(LLM_KV_SHORTCONV_L_CACHE,         uint32_t(3));
 
-    for (uint32_t il = 0; il < n_layer; il++) {
+    if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
         ggml_tensor t;
         memset(&t, 0, sizeof(ggml_tensor));
         t.type = GGML_TYPE_F16;
-        ggml_format_name(&t, "conv%" PRIu32 "d.weight", il);
+        ggml_format_name(&t, "conv1d.weight");
         gguf_add_tensor(ms.gguf_ctx, &t);
-        ggml_format_name(&t, "posnet.%" PRIu32 ".conv1.weight", il);
-        gguf_add_tensor(ms.gguf_ctx, &t);
-        ggml_format_name(&t, "posnet.%" PRIu32 ".conv2.weight", il);
-        gguf_add_tensor(ms.gguf_ctx, &t);
-        ggml_format_name(&t, "convnext.%" PRIu32 ".dw.weight", il);
-        gguf_add_tensor(ms.gguf_ctx, &t);
+
+        for (uint32_t il = 0; il < n_layer; il++) {
+            ggml_format_name(&t, "posnet.%" PRIu32 ".conv1.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+            ggml_format_name(&t, "posnet.%" PRIu32 ".conv2.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+            if (il == 2) {
+                ggml_format_name(&t, "posnet.%" PRIu32 ".attn_q.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+                ggml_format_name(&t, "posnet.%" PRIu32 ".attn_k.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+                ggml_format_name(&t, "posnet.%" PRIu32 ".attn_v.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+                ggml_format_name(&t, "posnet.%" PRIu32 ".attn_output.weight", il);
+                gguf_add_tensor(ms.gguf_ctx, &t);
+            }
+            ggml_format_name(&t, "convnext.%" PRIu32 ".dw.weight", il);
+            gguf_add_tensor(ms.gguf_ctx, &t);
+        }
     }
     return ret;
 }
@@ -276,7 +297,7 @@ static bool silent_model_load_progress(float /*progress*/, void * /*user_data*/)
 
 static std::pair<llama_model_ptr, llama_context_ptr> get_model_and_ctx(
         struct gguf_context * gguf_ctx, FILE * file, const size_t seed, const std::vector<ggml_backend_dev_t> & devs,
-        const llama_split_mode split_mode = LLAMA_SPLIT_MODE_LAYER, bool encode = false) {
+        const llama_split_mode split_mode = LLAMA_SPLIT_MODE_LAYER, bool encode = false, llm_arch arch = LLM_ARCH_UNKNOWN) {
     GGML_ASSERT((gguf_ctx == nullptr) != (file == nullptr));
     llama_model_params model_params = llama_model_default_params();
     model_params.progress_callback = silent_model_load_progress;
@@ -289,7 +310,7 @@ static std::pair<llama_model_ptr, llama_context_ptr> get_model_and_ctx(
     ctx_params.n_ctx = 0;
     ctx_params.n_threads = 4;
     ctx_params.n_threads_batch = 4;
-    if (!encode) {
+    if (!encode && arch != LLM_ARCH_WAVTOKENIZER_DEC) {
         ctx_params.n_ubatch = 64;
     }
 
@@ -410,9 +431,6 @@ static bool arch_supported(const llm_arch arch) {
     if (arch == LLM_ARCH_CHAMELEON) {
         return false; // Only half-implemented and to be removed in the future.
     }
-    if (arch == LLM_ARCH_WAVTOKENIZER_DEC) {
-        return false; // FIXME CUDA backend crashes.
-    }
     if (arch == LLM_ARCH_LLAMA_EMBED || arch == LLM_ARCH_GEMMA_EMBEDDING || arch == LLM_ARCH_T5ENCODER) {
         return false; // FIXME Embedding (?) models produce inconsistent results.
     }
@@ -434,6 +452,25 @@ static bool arch_supported(const llm_arch arch) {
 #endif // GGML_USE_WEBGPU
 
     return true;
+}
+
+static bool arch_backend_supported(
+        const llm_arch arch,
+        const std::vector<ggml_backend_dev_t> & devs,
+        const llama_split_mode split_mode) {
+    if (!arch_supported(arch)) {
+        return false;
+    }
+    if (split_mode == LLAMA_SPLIT_MODE_TENSOR && devs.empty()) {
+        return false;
+    }
+    if (arch != LLM_ARCH_WAVTOKENIZER_DEC) {
+        return true;
+    }
+    // The CUDA backend currently crashes for WavTokenizer, but CPU execution is still worth keeping under test.
+    return split_mode == LLAMA_SPLIT_MODE_LAYER
+        && devs.size() == 1
+        && ggml_backend_dev_buffer_type(devs[0]) == ggml_backend_cpu_buffer_type();
 }
 
 static int save_models(const llm_arch target_arch, const size_t seed, const ggml_log_level log_level, const std::string & dir) {
@@ -473,7 +510,7 @@ static int save_models(const llm_arch target_arch, const size_t seed, const ggml
                 continue;
             }
             gguf_context_ptr gguf_ctx = get_gguf_ctx(arch, moe);
-            auto model_and_ctx = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, {});
+            auto model_and_ctx = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, {}, LLAMA_SPLIT_MODE_LAYER, false, arch);
             const std::string path = dir + "/" + llm_arch_name(arch) + (moe ? "-moe.gguf" : "-dense.gguf");
             LOG_INF("%s: Saving %s model (%s) to %s...\n", __func__, llm_arch_name(arch), moe ? "MoE" : "dense", path.c_str());
             llama_model_save_to_file(model_and_ctx.first.get(), path.c_str());
@@ -560,17 +597,17 @@ static int test_backends(const llm_arch target_arch, const size_t seed, const gg
                 std::string status_nmse      = "\033[1;33mSKIP\033[0m";
                 std::string status_roundtrip = "\033[1;33mSKIP\033[0m";
                 char nmse_str[12] = {0};
-                bool skip = !arch_supported(arch) || (dc.split_mode == LLAMA_SPLIT_MODE_TENSOR && dc.devs.empty());
+                bool skip = !arch_backend_supported(arch, dc.devs, dc.split_mode);
 #if defined(GGML_USE_WEBGPU)
                 skip = true; // FIXME
 #endif // GGML_USE_WEBGPU
                 if (!skip) {
                     if (logits_cpu.empty()) {
-                        model_and_ctx_cpu = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, {}, LLAMA_SPLIT_MODE_LAYER, encode);
+                        model_and_ctx_cpu = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, {}, LLAMA_SPLIT_MODE_LAYER, encode, arch);
                         logits_cpu = get_logits(model_and_ctx_cpu.first.get(), model_and_ctx_cpu.second.get(), tokens, encode);
                     }
                     if (dc.split_mode != LLAMA_SPLIT_MODE_TENSOR || llm_arch_supports_sm_tensor(arch)) {
-                        model_and_ctx_dev = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, dc.devs, dc.split_mode, encode);
+                        model_and_ctx_dev = get_model_and_ctx(gguf_ctx.get(), nullptr, seed, dc.devs, dc.split_mode, encode, arch);
                         logits_dev = get_logits(model_and_ctx_dev.first.get(), model_and_ctx_dev.second.get(), tokens, encode);
                         const double nmse_val = nmse(logits_cpu, logits_dev);
                         snprintf(nmse_str, sizeof(nmse_str), "(%.2e)", nmse_val);
@@ -592,7 +629,7 @@ static int test_backends(const llm_arch target_arch, const size_t seed, const gg
                         ms.save(file);
                         rewind(file);
 
-                        auto model_and_ctx_roundtrip = get_model_and_ctx(nullptr, file, seed, dc.devs, dc.split_mode, encode);
+                        auto model_and_ctx_roundtrip = get_model_and_ctx(nullptr, file, seed, dc.devs, dc.split_mode, encode, arch);
                         const std::vector<float> logits_roundtrip = get_logits(
                             model_and_ctx_roundtrip.first.get(), model_and_ctx_roundtrip.second.get(), tokens, encode);
                         status_roundtrip = "\033[1;32mOK\033[0m";
