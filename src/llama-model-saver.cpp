@@ -14,24 +14,50 @@
 
 bool llama_model_saver_supports_arch(llm_arch arch) {
     switch (arch) {
-        case LLM_ARCH_QWEN3NEXT:
-        case LLM_ARCH_QWEN35:
-        case LLM_ARCH_QWEN35MOE:
         case LLM_ARCH_PLAMO3:
         case LLM_ARCH_GEMMA3:
         case LLM_ARCH_GEMMA3N:
         case LLM_ARCH_COHERE2:
         case LLM_ARCH_OLMO2:
-        case LLM_ARCH_T5:
         case LLM_ARCH_EXAONE_MOE:
         case LLM_ARCH_AFMOE:
-        case LLM_ARCH_APERTUS:
-        case LLM_ARCH_MIMO2:
-        case LLM_ARCH_STEP35:
             return false;
         default:
             return true;
     }
+}
+
+static uint32_t full_attention_interval_from_model(const llama_model * model) {
+    switch (model->arch) {
+        case LLM_ARCH_QWEN3NEXT:
+        case LLM_ARCH_QWEN35:
+        case LLM_ARCH_QWEN35MOE:
+            break;
+        default:
+            return 0;
+    }
+
+    const auto & hparams = model->hparams;
+    uint32_t interval = 0;
+    for (uint32_t il = 0; il < hparams.n_layer; ++il) {
+        if (!hparams.is_recurrent(il)) {
+            interval = il + 1;
+            break;
+        }
+    }
+
+    if (interval == 0) {
+        return 0;
+    }
+
+    for (uint32_t il = 0; il < hparams.n_layer; ++il) {
+        const bool expected_recurrent = ((il + 1) % interval) != 0;
+        if (hparams.is_recurrent(il) != expected_recurrent) {
+            return 0;
+        }
+    }
+
+    return interval;
 }
 
 llama_model_saver::llama_model_saver(const struct llama_model * model) :
@@ -214,8 +240,8 @@ void llama_model_saver::add_kv_from_model() {
     add_kv(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,        hparams.n_ff_exp);
     add_kv(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH, hparams.n_ff_shexp);
     add_kv(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH, hparams.n_ff_chexp);
-    add_kv(LLM_KV_SWIGLU_CLAMP_EXP,                  hparams.swiglu_clamp_exp);
-    add_kv(LLM_KV_SWIGLU_CLAMP_SHEXP,                hparams.swiglu_clamp_shexp);
+    add_kv(LLM_KV_SWIGLU_CLAMP_EXP,                  hparams.swiglu_clamp_exp, true);
+    add_kv(LLM_KV_SWIGLU_CLAMP_SHEXP,                hparams.swiglu_clamp_shexp, true);
     add_kv(LLM_KV_USE_PARALLEL_RESIDUAL,             hparams.use_par_res);
     // add_kv(LLM_KV_TENSOR_DATA_LAYOUT,                ???);
     add_kv(LLM_KV_EXPERT_COUNT,                      hparams.n_expert);
@@ -233,7 +259,7 @@ void llama_model_saver::add_kv_from_model() {
     add_kv(LLM_KV_NUM_DEEPSTACK_LAYERS,              hparams.n_deepstack_layers);
     add_kv(LLM_KV_POOLING_TYPE,                      uint32_t(hparams.pooling_type));
     add_kv(LLM_KV_LOGIT_SCALE,                       hparams.f_logit_scale);
-    add_kv(LLM_KV_DECODER_START_TOKEN_ID,            hparams.dec_start_token_id);
+    add_kv(LLM_KV_DECODER_START_TOKEN_ID,            uint32_t(hparams.dec_start_token_id));
     add_kv(LLM_KV_DECODER_BLOCK_COUNT,               hparams.dec_n_layer);
     add_kv(LLM_KV_ATTN_LOGIT_SOFTCAPPING,            hparams.f_attn_logit_softcapping);
     add_kv(LLM_KV_ROUTER_LOGIT_SOFTCAPPING,          hparams.f_router_logit_softcapping);
@@ -246,7 +272,9 @@ void llama_model_saver::add_kv_from_model() {
     add_kv(LLM_KV_EMBEDDING_SCALE,                   hparams.f_embedding_scale);
     add_kv(LLM_KV_TOKEN_SHIFT_COUNT,                 hparams.token_shift_count);
     add_kv(LLM_KV_INTERLEAVE_MOE_LAYER_STEP,         hparams.n_moe_layer_step);
-    // add_kv(LLM_KV_FULL_ATTENTION_INTERVAL,           ???);
+    if (const uint32_t full_attention_interval = full_attention_interval_from_model(model)) {
+        add_kv(LLM_KV_FULL_ATTENTION_INTERVAL,       full_attention_interval);
+    }
 
     if (hparams.n_embd_per_layer > 0) {
         add_kv(LLM_KV_EMBEDDING_LENGTH_PER_LAYER, hparams.n_embd_per_layer);
@@ -382,10 +410,10 @@ void llama_model_saver::add_kv_from_model() {
 
     add_kv(LLM_KV_SHORTCONV_L_CACHE,                 hparams.n_shortconv_l_cache);
 
-    add_kv(LLM_KV_XIELU_ALPHA_N,                     hparams.xielu_alpha_n);
-    add_kv(LLM_KV_XIELU_ALPHA_P,                     hparams.xielu_alpha_p);
-    add_kv(LLM_KV_XIELU_BETA,                        hparams.xielu_beta);
-    add_kv(LLM_KV_XIELU_EPS,                         hparams.xielu_eps);
+    add_kv(LLM_KV_XIELU_ALPHA_N,                     hparams.xielu_alpha_n, true);
+    add_kv(LLM_KV_XIELU_ALPHA_P,                     hparams.xielu_alpha_p, true);
+    add_kv(LLM_KV_XIELU_BETA,                        hparams.xielu_beta, true);
+    add_kv(LLM_KV_XIELU_EPS,                         hparams.xielu_eps, true);
 
     // deprecated
     // add_kv(LLM_KV_TOKENIZER_PREFIX_ID,               ???);
@@ -419,6 +447,8 @@ void llama_model_saver::add_tensors_from_model() {
     add_tensor(model->cls_norm);
     add_tensor(model->conv1d);
     add_tensor(model->conv1d_b);
+    add_tensor(model->altup_proj);
+    add_tensor(model->altup_unembd_proj);
     add_tensor(model->per_layer_tok_embd);
     add_tensor(model->per_layer_model_proj);
     add_tensor(model->per_layer_proj_norm);
