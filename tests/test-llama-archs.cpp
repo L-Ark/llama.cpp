@@ -93,6 +93,11 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
         n_head = 2;
         n_ff   = 192;
         n_layer = 5; // need at least 5 for swa_pattern (every 5th is full_attention)
+    } else if (arch == LLM_ARCH_DEEPSEEK2OCR) {
+        n_embd = 128;
+        n_head = 1;
+        n_ff   = 192;
+        n_layer = 3; // one dense block, one active expert block, one NextN-only tail
     } else if (arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE) {
         n_layer = 4; // need at least 4 so full_attn_interval exercises one attention layer
     } else if (arch == LLM_ARCH_GEMMA3N) {
@@ -121,7 +126,10 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
     ms.add_kv(LLM_KV_EMBEDDING_LENGTH,          n_embd);
     ms.add_kv(LLM_KV_FEATURES_LENGTH,           n_embd);
     ms.add_kv(LLM_KV_BLOCK_COUNT,               n_layer);
-    ms.add_kv(LLM_KV_LEADING_DENSE_BLOCK_COUNT, uint32_t(1));
+    ms.add_kv(LLM_KV_LEADING_DENSE_BLOCK_COUNT,
+            arch == LLM_ARCH_DEEPSEEK2OCR && !moe
+                ? n_layer
+                : uint32_t(1));
 
     if (arch == LLM_ARCH_NEMOTRON_H || arch == LLM_ARCH_NEMOTRON_H_MOE) {
         std::vector<uint32_t> n_ff_per_layer;
@@ -142,6 +150,11 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe) {
             arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE
                 ? uint32_t(4)
                 : uint32_t(2));
+    if (arch == LLM_ARCH_DEEPSEEK2OCR) {
+        ms.add_kv(LLM_KV_NEXTN_PREDICT_LAYERS, uint32_t(1));
+        ms.add_kv(LLM_KV_ROPE_SCALING_FACTOR,  2.0f);
+        ms.add_kv(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, 0.2f);
+    }
 
     if (arch == LLM_ARCH_GEMMA4) {
         std::vector<uint32_t> n_head_per_layer(n_layer, n_head);
@@ -383,6 +396,7 @@ static bool moe_implemented(const llm_arch arch) {
         case LLM_ARCH_GRANITE_MOE:
         case LLM_ARCH_MISTRAL3:
         case LLM_ARCH_LLAMA_EMBED:
+        case LLM_ARCH_DEEPSEEK2OCR:
             return true;
         default:
             return false;
@@ -412,10 +426,6 @@ static bool arch_supported(const llm_arch arch) {
     if (arch == LLM_ARCH_PLM) {
         return false; // TODO tensor shapes
     }
-    if (arch == LLM_ARCH_DEEPSEEK2OCR) {
-        return false;
-    }
-
     // FIXME some models are segfaulting with WebGPU:
 #ifdef GGML_USE_WEBGPU
     if (arch == LLM_ARCH_QWEN3NEXT || arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE || arch == LLM_ARCH_KIMI_LINEAR) {

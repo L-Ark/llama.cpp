@@ -59,6 +59,8 @@ struct llm_transformer_config {
     bool iswa       = false;    // Interleaved Sliding Window Attention (Gemma3/4, Phi-3)
     bool attn_gate  = false;    // Sigmoid gating on attention output before o_proj (AFMoE)
     bool attn_q_gate = false;   // Query projection packs query + attention gate halves (Qwen3.5)
+    llama_rope_type rope_override = LLAMA_ROPE_TYPE_NONE; // Override the model's RoPE type when needed
+    bool raw_rope   = false;    // Apply RoPE with raw theta only (no context scaling inputs)
 
     // FFN features
     bool ffn_bias   = false;    // FFN bias terms
@@ -91,6 +93,7 @@ struct llm_transformer_config {
 
     // Attention scaling
     bool q_pre_scale   = false;  // Scale Q by 1/sqrt(head_dim) before attention (Phi-2)
+    bool yarn_kq_scale = false;  // DeepSeek-style YaRN kq pre-scaling without MLA
 
     // Attention cache mode
     bool no_attn_cache = false;  // No KV cache (embedding models, diffusion)

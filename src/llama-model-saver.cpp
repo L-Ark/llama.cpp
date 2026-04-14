@@ -304,7 +304,12 @@ void llama_model_saver::add_kv_from_model() {
     add_kv(LLM_KV_ROPE_SCALING_ATTN_FACTOR,          hparams.rope_attn_factor);
     add_kv(LLM_KV_ROPE_SCALING_ORIG_CTX_LEN,         hparams.n_ctx_orig_yarn);
     add_kv(LLM_KV_ROPE_SCALING_FINETUNED,            hparams.rope_finetuned);
-    add_kv(LLM_KV_ROPE_SCALING_YARN_LOG_MUL,         hparams.rope_yarn_log_mul);
+    const float rope_yarn_log_mul = (model->arch == LLM_ARCH_DEEPSEEK2 ||
+            model->arch == LLM_ARCH_DEEPSEEK2OCR ||
+            model->arch == LLM_ARCH_MISTRAL4)
+        ? 0.1f * hparams.rope_yarn_log_mul
+        : hparams.rope_yarn_log_mul;
+    add_kv(LLM_KV_ROPE_SCALING_YARN_LOG_MUL,         rope_yarn_log_mul);
     add_kv(LLM_KV_ROPE_SCALING_YARN_EXT_FACTOR,      hparams.yarn_ext_factor);
     add_kv(LLM_KV_ROPE_SCALING_YARN_ATTN_FACTOR,     hparams.yarn_attn_factor);
     add_kv(LLM_KV_ROPE_SCALING_YARN_BETA_FAST,       hparams.yarn_beta_fast);

@@ -24,6 +24,18 @@ static ggml_tensor * llm_repeat_if_needed(ggml_context * ctx0, ggml_tensor * src
     return ggml_are_same_shape(src, dst_shape) ? src : ggml_repeat(ctx0, src, dst_shape);
 }
 
+static float llm_yarn_kq_scale(
+        const llama_hparams & hparams,
+        float                 ext_factor,
+        float                 attn_factor,
+        float                 freq_scale,
+        uint32_t              n_embd_head_k) {
+    GGML_ASSERT(ext_factor >= 0.0f);
+    const float attn_factor_org = attn_factor * (1.0f + 0.1f * logf(1.0f / freq_scale));
+    const float mscale = attn_factor_org * (1.0f + 0.1f * hparams.rope_yarn_log_mul * logf(1.0f / freq_scale));
+    return mscale * mscale / sqrtf(float(n_embd_head_k));
+}
+
 // ---------------------------------------------------------------------------
 // Per-architecture metadata table
 //
@@ -557,13 +569,23 @@ llm_build_std_transformer::llm_build_std_transformer(
             float rope_freq_base  = freq_base;
             float rope_freq_scale = freq_scale;
             ggml_tensor * rope_factors = nullptr;
+            const enum llama_rope_type layer_rope_type = config.rope_override != LLAMA_ROPE_TYPE_NONE
+                    ? config.rope_override
+                    : rope_type;
+            const uint32_t layer_n_ctx_orig = config.raw_rope ? 0 : n_ctx_orig;
+            const float layer_ext_factor = config.raw_rope ? 0.0f : ext_factor;
+            const float layer_attn_factor = config.raw_rope ? 1.0f : attn_factor;
+            const float layer_beta_fast = config.raw_rope ? 0.0f : beta_fast;
+            const float layer_beta_slow = config.raw_rope ? 0.0f : beta_slow;
 
             if (config.use_rope) {
-                if (config.iswa) {
+                if (config.iswa && !config.raw_rope) {
                     rope_freq_base  = model.get_rope_freq_base(cparams, il);
                     rope_freq_scale = model.get_rope_freq_scale(cparams, il);
+                } else if (config.raw_rope) {
+                    rope_freq_scale = 1.0f;
                 }
-                rope_factors = model.get_rope_factors(cparams, il);
+                rope_factors = config.raw_rope ? nullptr : model.get_rope_factors(cparams, il);
             }
 
             const int64_t layer_n_head      = config.per_layer_attn_dims ? hparams.n_head(il)       : n_head;
@@ -572,9 +594,12 @@ llm_build_std_transformer::llm_build_std_transformer(
             const int64_t layer_n_rot       = config.per_layer_attn_dims ? hparams.n_rot(il)        : n_rot;
             const int64_t layer_n_embd_k_gqa = config.per_layer_attn_dims ? hparams.n_embd_k_gqa(il) : n_embd_k_gqa;
             const int64_t layer_q_embd      = layer_n_embd_head * layer_n_head;
-            const float layer_kq_scale = hparams.f_attention_scale == 0.0f
+            float layer_kq_scale = hparams.f_attention_scale == 0.0f
                 ? 1.0f/sqrtf(float(layer_n_embd_head))
                 : hparams.f_attention_scale;
+            if (config.yarn_kq_scale) {
+                layer_kq_scale = llm_yarn_kq_scale(hparams, ext_factor, attn_factor, freq_scale, layer_n_embd_head);
+            }
 
             // Q, K, V projections
             ggml_tensor * Qcur;
@@ -715,33 +740,35 @@ llm_build_std_transformer::llm_build_std_transformer(
 
             // RoPE position encoding
             // Conditional RoPE: skip every Nth layer (AFMoE)
-            bool layer_use_rope = config.use_rope && rope_type != LLAMA_ROPE_TYPE_NONE;
+            bool layer_use_rope = config.use_rope && layer_rope_type != LLAMA_ROPE_TYPE_NONE;
             const bool use_absolute_no_rope_step = !config.hybrid && !config.hybrid_parallel;
             if (layer_use_rope && use_absolute_no_rope_step && hparams.n_no_rope_layer_step > 0) {
                 layer_use_rope = (il + 1) % hparams.n_no_rope_layer_step != 0;
             }
             if (layer_use_rope) {
-                if (hparams.use_mrope()) {
+                const bool use_mrope = hparams.use_mrope() &&
+                        (layer_rope_type == LLAMA_ROPE_TYPE_MROPE || layer_rope_type == LLAMA_ROPE_TYPE_IMROPE);
+                if (use_mrope) {
                     // Multi-section RoPE (Qwen2VL, GLM4, PaddleOCR)
                     int sections[4];
                     std::copy(std::begin(hparams.rope_sections), std::begin(hparams.rope_sections) + 4, sections);
 
                     Qcur = ggml_rope_multi(ctx0, Qcur, get_inp_pos(), rope_factors,
-                            layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                            layer_n_rot, sections, layer_rope_type, layer_n_ctx_orig, rope_freq_base, rope_freq_scale,
+                            layer_ext_factor, layer_attn_factor, layer_beta_fast, layer_beta_slow);
                     if (Kcur) {
                         Kcur = ggml_rope_multi(ctx0, Kcur, get_inp_pos(), rope_factors,
-                                layer_n_rot, sections, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                                ext_factor, attn_factor, beta_fast, beta_slow);
+                                layer_n_rot, sections, layer_rope_type, layer_n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                layer_ext_factor, layer_attn_factor, layer_beta_fast, layer_beta_slow);
                     }
                 } else {
                     Qcur = ggml_rope_ext(ctx0, Qcur, get_inp_pos(), rope_factors,
-                            layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                            layer_n_rot, layer_rope_type, layer_n_ctx_orig, rope_freq_base, rope_freq_scale,
+                            layer_ext_factor, layer_attn_factor, layer_beta_fast, layer_beta_slow);
                     if (Kcur) {
                         Kcur = ggml_rope_ext(ctx0, Kcur, get_inp_pos(), rope_factors,
-                                layer_n_rot, rope_type, n_ctx_orig, rope_freq_base, rope_freq_scale,
-                                ext_factor, attn_factor, beta_fast, beta_slow);
+                                layer_n_rot, layer_rope_type, layer_n_ctx_orig, rope_freq_base, rope_freq_scale,
+                                layer_ext_factor, layer_attn_factor, layer_beta_fast, layer_beta_slow);
                     }
                 }
 
@@ -2619,10 +2646,7 @@ ggml_tensor * llm_build_mla_transformer::build_layer_mla(
     const uint32_t kv_lora_rank = hparams.n_lora_kv;
     float kq_scale = 1.0f / sqrtf(float(n_embd_head_k));
     if (cfg_.yarn_kq_scale) {
-        GGML_ASSERT(ext_factor >= 0.0f);
-        const float attn_factor_org = attn_factor * (1.0f + 0.1f * logf(1.0f / freq_scale));
-        const float mscale = attn_factor_org * (1.0f + 0.1f * hparams.rope_yarn_log_mul * logf(1.0f / freq_scale));
-        kq_scale = mscale * mscale / sqrtf(float(n_embd_head_k));
+        kq_scale = llm_yarn_kq_scale(hparams, ext_factor, attn_factor, freq_scale, n_embd_head_k);
     }
 
     ggml_tensor * q = nullptr;
