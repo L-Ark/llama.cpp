@@ -179,6 +179,36 @@ private:
     const llm_transformer_config cfg_;
 };
 
+struct llm_altup_transformer_config {
+    bool token_embd_scale = true;
+    bool v_norm = true;
+    bool logit_softcap = true;
+    int n_layer_sparsity = 10;
+    float sparsity_std_mul = 1.6448533535003662f;
+};
+
+struct llm_build_altup_transformer : public llm_graph_context {
+    llm_build_altup_transformer(
+            const llama_model & model,
+            const llm_graph_params & params,
+            const llm_altup_transformer_config & config = {});
+
+private:
+    ggml_tensor * calc_magnitude(ggml_tensor * x);
+    ggml_tensor * laurel(ggml_tensor * cur, int il);
+    ggml_tensor * gaussian_topk(ggml_tensor * x);
+    ggml_tensor * altup_compute_router_modalities(ggml_tensor * x, int il);
+    ggml_tensor * altup_predict(ggml_tensor * cur, int il);
+    ggml_tensor * altup_correct(ggml_tensor * predictions, ggml_tensor * activated, int il);
+
+    const llama_model & model;
+    const llm_altup_transformer_config cfg_;
+    const int64_t n_embd_head;
+    const int64_t n_embd_altup;
+    const int64_t n_altup;
+    const int i_altup_act;
+};
+
 struct llm_t5_transformer_config {
     bool decoder = false;
 };

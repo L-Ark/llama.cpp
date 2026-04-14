@@ -8375,7 +8375,7 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_GEMMA3N:
             {
-                llm = std::make_unique<llm_build_gemma3n_iswa>(*this, params);
+                llm = std::make_unique<llm_build_altup_transformer>(*this, params);
             } break;
         case LLM_ARCH_GEMMA4:
             {
