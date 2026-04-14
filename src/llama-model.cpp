@@ -8510,7 +8510,7 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             } break;
         case LLM_ARCH_WAVTOKENIZER_DEC:
             {
-                llm = std::make_unique<llm_build_wavtokenizer_dec>(*this, params);
+                llm = std::make_unique<llm_build_conv_tokenizer>(*this, params);
             } break;
         case LLM_ARCH_PLM:
             {

@@ -209,6 +209,12 @@ private:
     const int i_altup_act;
 };
 
+struct llm_build_conv_tokenizer : public llm_graph_context {
+    llm_build_conv_tokenizer(
+            const llama_model & model,
+            const llm_graph_params & params);
+};
+
 struct llm_t5_transformer_config {
     bool decoder = false;
 };

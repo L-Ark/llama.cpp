@@ -28,7 +28,6 @@ bool llama_model_saver_supports_arch(llm_arch arch) {
         case LLM_ARCH_APERTUS:
         case LLM_ARCH_MIMO2:
         case LLM_ARCH_STEP35:
-        case LLM_ARCH_WAVTOKENIZER_DEC:
             return false;
         default:
             return true;
@@ -202,7 +201,10 @@ void llama_model_saver::add_kv_from_model() {
 
     add_kv(LLM_KV_VOCAB_SIZE,                        vocab.n_tokens());
     add_kv(LLM_KV_CONTEXT_LENGTH,                    hparams.n_ctx_train);
-    add_kv(LLM_KV_EMBEDDING_LENGTH,                  hparams.n_embd);
+    add_kv(LLM_KV_EMBEDDING_LENGTH,                  model->arch == LLM_ARCH_WAVTOKENIZER_DEC ? hparams.n_embd_out() : hparams.n_embd);
+    if (model->arch == LLM_ARCH_WAVTOKENIZER_DEC) {
+        add_kv(LLM_KV_FEATURES_LENGTH,               hparams.n_embd);
+    }
     if (hparams.n_embd_out_impl > 0) {
         add_kv(LLM_KV_EMBEDDING_LENGTH_OUT,          hparams.n_embd_out_impl);
     }
@@ -415,6 +417,8 @@ void llama_model_saver::add_tensors_from_model() {
     add_tensor(model->cls_out);
     add_tensor(model->cls_out_b);
     add_tensor(model->cls_norm);
+    add_tensor(model->conv1d);
+    add_tensor(model->conv1d_b);
     add_tensor(model->per_layer_tok_embd);
     add_tensor(model->per_layer_model_proj);
     add_tensor(model->per_layer_proj_norm);
