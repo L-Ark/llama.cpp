@@ -101,8 +101,15 @@ The model params and tensors layout must be defined in `llama.cpp` source files:
     - Add the list of model tensors to `llm_get_tensor_names` (you may also need to update `LLM_TENSOR_NAMES`)
 3. Add any non-standard metadata loading in the `llama_model_loader` constructor in `src/llama-model-loader.cpp`.
 4. If the model has a RoPE operation, add a case for the architecture in `llama_model_rope_type` function in `src/llama-model.cpp`.
+5. Add a runtime-trait coverage decision for the new `llm_arch`:
+    - If the architecture needs non-default shared runtime helper behavior (for example recurrent / hybrid / diffusion classification, encoder-pass behavior, embedding-output preference, sliding-window metadata / pattern defaults, or MoE default gating), add it to `runtime.traits` in the appropriate `configs/*.json` family file.
+    - If the architecture intentionally uses the shared runtime defaults, add it to `runtime.default_traits_arches`.
+    - If there is no clear existing family config yet, use `configs/llama-arch-runtime-traits.json` as the fallback registry.
+    - Regenerate the committed runtime-traits outputs with `python scripts/gen-llama-arch-runtime-traits.py`.
 
 NOTE: The dimensions in `ggml` are typically in the reverse order of the `pytorch` dimensions.
+
+The runtime-traits coverage contract is enforced: every `llm_arch` must be covered exactly once by either an explicit `runtime.traits` entry or an explicit `runtime.default_traits_arches` allowlist entry. The generator emits both `src/llama-arch-runtime-traits.inc` and `src/llama-arch-runtime-default-traits.inc`, and `tests/test-llama-arch-runtime.cpp` checks that every architecture returned by `llm_arch_all()` reports coverage.
 
 ### 3. Build the GGML graph implementation
 
