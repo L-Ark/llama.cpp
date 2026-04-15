@@ -1446,7 +1446,6 @@ typedef void (*ggml_cuda_op_mul_mat_t)(
 #endif // GGML_CUDA_PEER_MAX_BATCH_SIZE
 
 #define MUL_MAT_SRC1_COL_STRIDE 128
-
 static cudaError_t ggml_cuda_cpy_tensor_2d(
     void * dst, const struct ggml_tensor * src, int64_t i3, int64_t i2, int64_t i1_low, int64_t i1_high, cudaStream_t stream) {
 
@@ -1783,6 +1782,12 @@ static void ggml_cuda_op_mul_mat(
     dev_data dev[GGML_CUDA_MAX_DEVICES];
 
     int used_devices = 0;
+    bool can_overlap_src1_quantize =
+        split &&
+        ne11 == 1 &&
+        src1_ctx->device == ctx.device &&
+        src1_is_contiguous &&
+        quantize_src1 == quantize_row_q8_1_cuda;
 
     for (int id = 0; id < ggml_backend_cuda_get_device_count(); ++id) {
         dev[id].cc = ggml_cuda_info().devices[id].cc;
@@ -1818,6 +1823,20 @@ static void ggml_cuda_op_mul_mat(
         }
 
         used_devices++;
+
+        if (id != ctx.device) {
+            const bool can_quantize_peer_src1_for_overlap =
+                ggml_cuda_info().devices[id].peers[ctx.device].access;
+            can_overlap_src1_quantize = can_overlap_src1_quantize && can_quantize_peer_src1_for_overlap;
+        }
+    }
+
+    can_overlap_src1_quantize = can_overlap_src1_quantize && used_devices > 1;
+
+    for (int id = 0; id < ggml_backend_cuda_get_device_count(); ++id) {
+        if ((!split && id != ctx.device) || dev[id].row_low == dev[id].row_high) {
+            continue;
+        }
 
         const bool src1_on_device = id == src1_ctx->device;
         const bool  dst_on_device = id == dst_ctx->device;
@@ -1881,6 +1900,9 @@ static void ggml_cuda_op_mul_mat(
             dev[id].src1_ddq = dev[id].src1_ddq_alloc.alloc(ctx.pool(id), src_1_ddq_size);
 
             if (src1_on_device && src1_is_contiguous) {
+                if (can_overlap_src1_quantize) {
+                    CUDA_CHECK(cudaEventRecord(src0_extra->events[ctx.device][0], stream));
+                }
                 quantize_src1(
                     dev[id].src1_ddf, nullptr, dev[id].src1_ddq, src0->type, ne10,
                     nb11/sizeof(float), nb12/sizeof(float), nb13/sizeof(float),
@@ -1903,7 +1925,7 @@ static void ggml_cuda_op_mul_mat(
 
     // if multiple devices are used they need to wait for the main device
     // here an event is recorded that signals that the main device has finished calculating the input data
-    if (split && used_devices > 1) {
+    if (split && used_devices > 1 && !can_overlap_src1_quantize) {
         ggml_cuda_set_device(ctx.device);
         CUDA_CHECK(cudaEventRecord(src0_extra->events[ctx.device][0], ctx.stream()));
     }
