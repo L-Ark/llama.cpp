@@ -51,7 +51,9 @@ test parameters:
   --poll <0...100>                          (default: 50)
   -ngl, --n-gpu-layers <n>                  (default: 99)
   -ncmoe, --n-cpu-moe <n>                   (default: 0)
-  -sm, --split-mode <none|layer|row>        (default: layer)
+  -sm, --split-mode <none|layer|row|tensor|auto>
+                                            auto benchmarks the relevant split-mode candidates and prints a recommendation
+                                            (default: layer)
   -mg, --main-gpu <i>                       (default: 0)
   -nkvo, --no-kv-offload <0|1>              (default: 0)
   -fa, --flash-attn <on|off|auto>           (default: auto)
@@ -79,6 +81,8 @@ llama-bench can perform three types of tests:
 With the exception of `-r`, `-o` and `-v`, all options can be specified multiple times to run multiple tests. Each pp and tg test is run with all combinations of the specified options. To specify multiple values for an option, the values can be separated by commas (e.g. `-n 16,32`), or the option can be specified multiple times (e.g. `-n 16 -n 32`).
 
 Each test is repeated the number of times given by `-r`, and the results are averaged. The results are given in average tokens per second (t/s) and standard deviation. Some output formats (e.g. json) also include the individual results of each repetition.
+
+When `-sm auto` is used, `llama-bench` expands to the relevant split-mode candidates for the visible accelerator count (`none/layer` on a single accelerator, `layer/row` on multiple accelerators) and prints a recommendation to stderr after the run.
 
 Using the `-d <n>` option, each test can be run at a specified context depth, prefilling the KV cache with `<n>` tokens.
 

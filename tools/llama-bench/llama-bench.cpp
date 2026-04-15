@@ -387,6 +387,7 @@ struct cmd_params {
     bool                             no_warmup;
     output_formats                   output_format;
     output_formats                   output_format_stderr;
+    bool                             split_mode_auto = false;
 };
 
 static const cmd_params cmd_params_defaults = {
@@ -431,6 +432,7 @@ static const cmd_params cmd_params_defaults = {
     /* no_warmup            */ false,
     /* output_format        */ MARKDOWN,
     /* output_format_stderr */ NONE,
+    /* split_mode_auto      */ false,
 };
 
 static void print_usage(int /* argc */, char ** argv) {
@@ -478,7 +480,9 @@ static void print_usage(int /* argc */, char ** argv) {
     printf("  --poll <0...100>                            (default: %s)\n", join(cmd_params_defaults.poll, ",").c_str());
     printf("  -ngl, --n-gpu-layers <n>                    (default: %s)\n", join(cmd_params_defaults.n_gpu_layers, ",").c_str());
     printf("  -ncmoe, --n-cpu-moe <n>                     (default: %s)\n", join(cmd_params_defaults.n_cpu_moe, ",").c_str());
-    printf("  -sm, --split-mode <none|layer|row|tensor>   (default: %s)\n", join(transform_to_str(cmd_params_defaults.split_mode, split_mode_str), ",").c_str());
+    printf("  -sm, --split-mode <none|layer|row|tensor|auto>\n");
+    printf("                                              auto benchmarks the relevant split-mode candidates and prints a recommendation\n");
+    printf("                                              (default: %s)\n", join(transform_to_str(cmd_params_defaults.split_mode, split_mode_str), ",").c_str());
     printf("  -mg, --main-gpu <i>                         (default: %s)\n", join(cmd_params_defaults.main_gpu, ",").c_str());
     printf("  -nkvo, --no-kv-offload <0|1>                (default: %s)\n", join(cmd_params_defaults.no_kv_offload, ",").c_str());
     printf("  -fa, --flash-attn <on|off|auto>             (default: %s)\n",
@@ -497,6 +501,43 @@ static void print_usage(int /* argc */, char ** argv) {
         "Multiple values can be given for each parameter by separating them with ','\n"
         "or by specifying the parameter multiple times. Ranges can be given as\n"
         "'first-last' or 'first-last+step' or 'first-last*mult'.\n");
+}
+
+static size_t count_accelerator_devices(const std::vector<ggml_backend_dev_t> & devices) {
+    size_t count = 0;
+    for (auto * dev : devices) {
+        if (dev != nullptr && ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static size_t count_visible_accelerator_devices() {
+    size_t count = 0;
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        auto * dev = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static std::vector<llama_split_mode> get_auto_split_modes(const std::vector<ggml_backend_dev_t> & devices, int n_gpu_layers) {
+    if (n_gpu_layers == 0) {
+        return { LLAMA_SPLIT_MODE_NONE };
+    }
+
+    const size_t accelerator_count = devices.empty() ? count_visible_accelerator_devices() : count_accelerator_devices(devices);
+    if (accelerator_count == 0) {
+        return { LLAMA_SPLIT_MODE_NONE };
+    }
+    if (accelerator_count == 1) {
+        return { LLAMA_SPLIT_MODE_NONE, LLAMA_SPLIT_MODE_LAYER };
+    }
+
+    return { LLAMA_SPLIT_MODE_LAYER, LLAMA_SPLIT_MODE_ROW };
 }
 
 static ggml_type ggml_type_from_name(const std::string & s) {
@@ -770,9 +811,13 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                 auto p = string_split<std::string>(argv[i], split_delim);
 
                 std::vector<llama_split_mode> modes;
+                bool saw_auto = false;
                 for (const auto & m : p) {
                     llama_split_mode mode;
-                    if (m == "none") {
+                    if (m == "auto") {
+                        saw_auto = true;
+                        continue;
+                    } else if (m == "none") {
                         mode = LLAMA_SPLIT_MODE_NONE;
                     } else if (m == "layer") {
                         mode = LLAMA_SPLIT_MODE_LAYER;
@@ -789,7 +834,21 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                 if (invalid_param) {
                     break;
                 }
-                params.split_mode.insert(params.split_mode.end(), modes.begin(), modes.end());
+                if (saw_auto) {
+                    if (!modes.empty() || params.split_mode_auto || !params.split_mode.empty()) {
+                        fprintf(stderr, "error: split-mode 'auto' cannot be combined with explicit split modes\n");
+                        invalid_param = true;
+                        break;
+                    }
+                    params.split_mode_auto = true;
+                } else {
+                    if (params.split_mode_auto) {
+                        fprintf(stderr, "error: split-mode 'auto' cannot be combined with explicit split modes\n");
+                        invalid_param = true;
+                        break;
+                    }
+                    params.split_mode.insert(params.split_mode.end(), modes.begin(), modes.end());
+                }
             } else if (arg == "-mg" || arg == "--main-gpu") {
                 if (++i >= argc) {
                     invalid_param = true;
@@ -1104,7 +1163,7 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
     if (params.n_cpu_moe.empty()) {
         params.n_cpu_moe = cmd_params_defaults.n_cpu_moe;
     }
-    if (params.split_mode.empty()) {
+    if (params.split_mode.empty() && !params.split_mode_auto) {
         params.split_mode = cmd_params_defaults.split_mode;
     }
     if (params.main_gpu.empty()) {
@@ -1283,9 +1342,9 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
     for (const auto & fpc : params.fit_params_min_ctx)
     for (const auto & nl : params.n_gpu_layers)
     for (const auto & ncmoe : params.n_cpu_moe)
-    for (const auto & sm : params.split_mode)
-    for (const auto & mg : params.main_gpu)
     for (const auto & devs : params.devices)
+    for (const auto & sm : (params.split_mode_auto ? get_auto_split_modes(devs, nl) : params.split_mode))
+    for (const auto & mg : params.main_gpu)
     for (const auto & ts : params.tensor_split)
     for (const auto & ot : params.tensor_buft_overrides)
     for (const auto & mmp : params.use_mmap)
@@ -1671,6 +1730,104 @@ struct test {
 const std::string test::build_commit = LLAMA_COMMIT;
 const int         test::build_number = LLAMA_BUILD_NUMBER;
 
+static std::string test_label(const test & t) {
+    char buf[128];
+    if (t.n_prompt > 0 && t.n_gen == 0) {
+        snprintf(buf, sizeof(buf), "pp%d", t.n_prompt);
+    } else if (t.n_gen > 0 && t.n_prompt == 0) {
+        snprintf(buf, sizeof(buf), "tg%d", t.n_gen);
+    } else {
+        snprintf(buf, sizeof(buf), "pp%d+tg%d", t.n_prompt, t.n_gen);
+    }
+    if (t.n_depth > 0) {
+        const int len = strlen(buf);
+        snprintf(buf + len, sizeof(buf) - len, " @ d%d", t.n_depth);
+    }
+    return buf;
+}
+
+static std::string split_mode_group_key(const test & t) {
+    static const std::unordered_set<std::string> ignored_fields = {
+        "split_mode",
+        "test_time",
+        "avg_ns",
+        "stddev_ns",
+        "avg_ts",
+        "stddev_ts",
+    };
+
+    const auto values = t.get_map();
+    std::string key;
+    for (const auto & field : test::get_fields()) {
+        if (ignored_fields.find(field) != ignored_fields.end()) {
+            continue;
+        }
+        key += field;
+        key += '=';
+        key += values.at(field);
+        key += '\n';
+    }
+    return key;
+}
+
+static void print_split_mode_recommendations(const std::vector<test> & tests, FILE * fout) {
+    std::map<std::string, std::vector<const test *>> groups;
+    for (const auto & t : tests) {
+        groups[split_mode_group_key(t)].push_back(&t);
+    }
+
+    bool printed_header = false;
+    for (const auto & [key, group] : groups) {
+        GGML_UNUSED(key);
+
+        std::map<llama_split_mode, const test *> by_mode;
+        for (const auto * t : group) {
+            const auto it = by_mode.find(t->split_mode);
+            if (it == by_mode.end() || t->avg_ts() > it->second->avg_ts()) {
+                by_mode[t->split_mode] = t;
+            }
+        }
+
+        if (by_mode.size() < 2) {
+            continue;
+        }
+
+        std::vector<const test *> ranked;
+        ranked.reserve(by_mode.size());
+        for (const auto & [mode, t] : by_mode) {
+            GGML_UNUSED(mode);
+            ranked.push_back(t);
+        }
+        std::sort(ranked.begin(), ranked.end(), [](const test * lhs, const test * rhs) {
+            return lhs->avg_ts() > rhs->avg_ts();
+        });
+
+        if (!printed_header) {
+            fprintf(fout, "\nllama-bench: split-mode auto recommendations:\n");
+            printed_header = true;
+        }
+
+        const test & best = *ranked[0];
+        const test & next = *ranked[1];
+        const double gain_pct = next.avg_ts() > 0.0 ? 100.0 * (best.avg_ts() / next.avg_ts() - 1.0) : 0.0;
+
+        fprintf(fout,
+                "  %s | %s | dev=%s | ngl=%d | b=%d | ub=%d | fa=%s -> %s (%.2f t/s vs %s %.2f t/s, %+0.1f%%)\n",
+                best.model_type.c_str(),
+                test_label(best).c_str(),
+                devices_to_string(best.devices).c_str(),
+                best.n_gpu_layers,
+                best.n_batch,
+                best.n_ubatch,
+                flash_attn_mode_str(best.flash_attn),
+                split_mode_str(best.split_mode),
+                best.avg_ts(),
+                split_mode_str(next.split_mode),
+                next.avg_ts(),
+                gain_pct);
+    }
+}
+
 struct printer {
     virtual ~printer() {}
 
@@ -1941,7 +2098,7 @@ struct markdown_printer : public printer {
         if (params.main_gpu.size() > 1 || params.main_gpu != cmd_params_defaults.main_gpu) {
             fields.emplace_back("main_gpu");
         }
-        if (params.split_mode.size() > 1 || params.split_mode != cmd_params_defaults.split_mode) {
+        if (params.split_mode_auto || params.split_mode.size() > 1 || params.split_mode != cmd_params_defaults.split_mode) {
             fields.emplace_back("split_mode");
         }
         if (params.no_kv_offload.size() > 1 || params.no_kv_offload != cmd_params_defaults.no_kv_offload) {
@@ -2239,6 +2396,7 @@ int main(int argc, char ** argv) {
 
     llama_model *               lmodel    = nullptr;
     const cmd_params_instance * prev_inst = nullptr;
+    std::vector<test>           completed_tests;
 
     // store the llama_context state at the previous depth that we performed a test
     // ref: https://github.com/ggml-org/llama.cpp/pull/16944#issuecomment-3478151721
@@ -2450,6 +2608,8 @@ int main(int argc, char ** argv) {
             fflush(p_err->fout);
         }
 
+        completed_tests.push_back(t);
+
         llama_perf_context_print(ctx);
 
         llama_free(ctx);
@@ -2465,6 +2625,10 @@ int main(int argc, char ** argv) {
 
     if (p_err) {
         p_err->print_footer();
+    }
+
+    if (params.split_mode_auto && params.output_format_stderr == NONE) {
+        print_split_mode_recommendations(completed_tests, stderr);
     }
 
     llama_backend_free();
