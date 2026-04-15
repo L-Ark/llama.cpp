@@ -457,14 +457,6 @@ static ggml_cuda_device_info ggml_cuda_init() {
                 __func__, ggml_cuda_format_tensor_split(recommended_tensor_split, info.device_count).c_str());
     }
 
-#ifdef GGML_USE_NCCL
-    int dev_ids[GGML_CUDA_MAX_DEVICES];
-    for (int id = 0; id < info.device_count; ++id) {
-        dev_ids[id] = id;
-    }
-    NCCL_CHECK(ncclCommInitAll(info.comms, info.device_count, dev_ids));
-#endif // GGML_USE_NCCL
-
     return info;
 }
 
@@ -472,6 +464,35 @@ const ggml_cuda_device_info & ggml_cuda_info() {
     static ggml_cuda_device_info info = ggml_cuda_init();
     return info;
 }
+
+#ifdef GGML_USE_NCCL
+static const std::array<ncclComm_t, GGML_CUDA_MAX_DEVICES> & ggml_cuda_nccl_comms_for(std::vector<int> devices) {
+    GGML_ASSERT(!devices.empty());
+
+    std::sort(devices.begin(), devices.end());
+    GGML_ASSERT(std::adjacent_find(devices.begin(), devices.end()) == devices.end());
+
+    static std::mutex mutex;
+    static std::map<std::vector<int>, std::array<ncclComm_t, GGML_CUDA_MAX_DEVICES>> cache;
+
+    std::lock_guard<std::mutex> lock(mutex);
+
+    auto it = cache.find(devices);
+    if (it != cache.end()) {
+        return it->second;
+    }
+
+    ncclComm_t comms[GGML_CUDA_MAX_DEVICES] = {};
+    NCCL_CHECK(ncclCommInitAll(comms, int(devices.size()), devices.data()));
+
+    std::array<ncclComm_t, GGML_CUDA_MAX_DEVICES> comm_map = {};
+    for (size_t i = 0; i < devices.size(); ++i) {
+        comm_map[devices[i]] = comms[i];
+    }
+
+    return cache.emplace(std::move(devices), comm_map).first->second;
+}
+#endif // GGML_USE_NCCL
 
 // #define DEBUG_CUDA_MALLOC
 
@@ -1258,7 +1279,13 @@ bool ggml_backend_cuda_allreduce_tensor(ggml_backend_t * backends, struct ggml_t
         GGML_ASSERT(ggml_is_contiguously_allocated(tensors[i]));
     }
 
-    const ggml_cuda_device_info info = ggml_cuda_info();
+    std::vector<int> devices;
+    devices.reserve(n_backends);
+    for (size_t i = 0; i < n_backends; ++i) {
+        ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backends[i]->context;
+        devices.push_back(cuda_ctx->device);
+    }
+    const auto comms = ggml_cuda_nccl_comms_for(devices);
 
     // For small tensors, simply reduce them as FP32.
     // The following heuristic for how "small" a tensor should be is based on RTX 4090s connected via 16x PCIe 4.0.
@@ -1266,7 +1293,7 @@ bool ggml_backend_cuda_allreduce_tensor(ggml_backend_t * backends, struct ggml_t
         NCCL_CHECK(ncclGroupStart());
         for (size_t i = 0; i < n_backends; ++i) {
             ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backends[i]->context;
-            NCCL_CHECK(ncclAllReduce(tensors[i]->data, tensors[i]->data, ne, ncclFloat, ncclSum, info.comms[cuda_ctx->device], cuda_ctx->stream()));
+            NCCL_CHECK(ncclAllReduce(tensors[i]->data, tensors[i]->data, ne, ncclFloat, ncclSum, comms[cuda_ctx->device], cuda_ctx->stream()));
         }
         NCCL_CHECK(ncclGroupEnd());
 
@@ -1291,7 +1318,7 @@ bool ggml_backend_cuda_allreduce_tensor(ggml_backend_t * backends, struct ggml_t
     NCCL_CHECK(ncclGroupStart());
     for (size_t i = 0; i < n_backends; ++i) {
         ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backends[i]->context;
-        NCCL_CHECK(ncclAllReduce(tmp[i].get(), tmp[i].get(), ne, ncclBfloat16, ncclSum, info.comms[cuda_ctx->device], cuda_ctx->stream()));
+        NCCL_CHECK(ncclAllReduce(tmp[i].get(), tmp[i].get(), ne, ncclBfloat16, ncclSum, comms[cuda_ctx->device], cuda_ctx->stream()));
     }
     NCCL_CHECK(ncclGroupEnd());
 
