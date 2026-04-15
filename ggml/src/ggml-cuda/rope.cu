@@ -12,6 +12,15 @@ struct mrope_sections {
     int v[4];
 };
 
+static __device__ __forceinline__ uint3 rope_row_indices(
+        const uint32_t row_dst,
+        const uint3    ne01_fastdiv,
+        const uint3    ne01_ne02_fastdiv) {
+    const uint2 i3_row = fast_div_modulo(row_dst, ne01_ne02_fastdiv);
+    const uint2 i2_i1  = fast_div_modulo(i3_row.y, ne01_fastdiv);
+    return make_uint3(i2_i1.y, i2_i1.x, i3_row.x);
+}
+
 static __device__ float rope_yarn_ramp(const float low, const float high, const int i0) {
     const float y = (i0 / 2 - low) / max(0.001f, high - low);
     return 1.0f - min(1.0f, max(0.0f, y));
@@ -46,6 +55,8 @@ static __global__ void rope_norm(const T *            x,
                                  const int            ne00,
                                  const int            ne01,
                                  const int            ne02,
+                                 const uint3          ne01_fastdiv,
+                                 const uint3          ne01_ne02_fastdiv,
                                  const int            s01,
                                  const int            s02,
                                  const int            s03,
@@ -70,9 +81,10 @@ static __global__ void rope_norm(const T *            x,
 
     const int row_dst = blockDim.x*blockIdx.x + threadIdx.x;
 
-    const uint32_t i3 = row_dst / (ne01 * ne02);
-    const uint32_t i2 = (row_dst - i3 * ne01 * ne02) / ne01;
-    const uint32_t i1 = row_dst - i3 * ne01 * ne02 - i2 * ne01;
+    const uint3 i1_i2_i3 = rope_row_indices((uint32_t) row_dst, ne01_fastdiv, ne01_ne02_fastdiv);
+    const uint32_t i1 = i1_i2_i3.x;
+    const uint32_t i2 = i1_i2_i3.y;
+    const uint32_t i3 = i1_i2_i3.z;
 
     int       idst = i0 + i1 * s1  + i2 * s2  + i3 * s3;
     const int ix   = i0 + i1 * s01 + i2 * s02 + i3 * s03;
@@ -118,6 +130,8 @@ static __global__ void rope_neox(const T *            x,
                                  const int            ne00,
                                  const int            ne01,
                                  const int            ne02,
+                                 const uint3          ne01_fastdiv,
+                                 const uint3          ne01_ne02_fastdiv,
                                  const int            s01,
                                  const int            s02,
                                  const int            s03,
@@ -142,9 +156,10 @@ static __global__ void rope_neox(const T *            x,
 
     const int row_dst = blockDim.x*blockIdx.x + threadIdx.x;
 
-    const uint32_t i3 = row_dst / (ne01 * ne02);
-    const uint32_t i2 = (row_dst - i3 * ne01 * ne02) / ne01;
-    const uint32_t i1 = row_dst - i3 * ne01 * ne02 - i2 * ne01;
+    const uint3 i1_i2_i3 = rope_row_indices((uint32_t) row_dst, ne01_fastdiv, ne01_ne02_fastdiv);
+    const uint32_t i1 = i1_i2_i3.x;
+    const uint32_t i2 = i1_i2_i3.y;
+    const uint32_t i3 = i1_i2_i3.z;
 
     int       idst = i0 / 2 + i1 * s1  + i2 * s2  + i3 * s3;
     const int ix   = i0 / 2 + i1 * s01 + i2 * s02 + i3 * s03;
@@ -185,6 +200,8 @@ static __global__ void rope_multi(const T *            x,
                                   const int            ne00,
                                   const int            ne01,
                                   const int            ne02,
+                                  const uint3          ne01_fastdiv,
+                                  const uint3          ne01_ne02_fastdiv,
                                   const int            s01,
                                   const int            s02,
                                   const int            s03,
@@ -209,9 +226,10 @@ static __global__ void rope_multi(const T *            x,
 
     const int row_dst = blockDim.x*blockIdx.x + threadIdx.x;
 
-    const uint32_t i3 = row_dst / (ne01 * ne02);
-    const uint32_t i2 = (row_dst - i3 * ne01 * ne02) / ne01;
-    const uint32_t i1 = row_dst - i3 * ne01 * ne02 - i2 * ne01;
+    const uint3 i1_i2_i3 = rope_row_indices((uint32_t) row_dst, ne01_fastdiv, ne01_ne02_fastdiv);
+    const uint32_t i1 = i1_i2_i3.x;
+    const uint32_t i2 = i1_i2_i3.y;
+    const uint32_t i3 = i1_i2_i3.z;
 
     int       idst = i0 / 2 + i1 * s1  + i2 * s2  + i3 * s3;
     const int ix   = i0 / 2 + i1 * s01 + i2 * s02 + i3 * s03;
@@ -270,6 +288,8 @@ static __global__ void rope_vision(const T *            x,
                                    const int            ne00,
                                    const int            ne01,
                                    const int            ne02,
+                                   const uint3          ne01_fastdiv,
+                                   const uint3          ne01_ne02_fastdiv,
                                    const int            s01,
                                    const int            s02,
                                    const int            s03,
@@ -293,9 +313,10 @@ static __global__ void rope_vision(const T *            x,
 
     const int row_dst = blockDim.x*blockIdx.x + threadIdx.x;
 
-    const uint32_t i3 = row_dst / (ne01 * ne02);
-    const uint32_t i2 = (row_dst - i3 * ne01 * ne02) / ne01;
-    const uint32_t i1 = row_dst - i3 * ne01 * ne02 - i2 * ne01;
+    const uint3 i1_i2_i3 = rope_row_indices((uint32_t) row_dst, ne01_fastdiv, ne01_ne02_fastdiv);
+    const uint32_t i1 = i1_i2_i3.x;
+    const uint32_t i2 = i1_i2_i3.y;
+    const uint32_t i3 = i1_i2_i3.z;
 
     int       idst = i0 / 2 + i1 * s1  + i2 * s2  + i3 * s3;
     const int ix   = i0 / 2 + i1 * s01 + i2 * s02 + i3 * s03;
@@ -349,22 +370,24 @@ static void rope_norm_cuda(const T *            x,
                            const rope_corr_dims corr_dims,
                            const float *        freq_factors,
                            const int64_t *      row_indices,
-                           const int            set_rows_stride,
-                           cudaStream_t         stream) {
+                            const int            set_rows_stride,
+                            cudaStream_t         stream) {
     GGML_ASSERT(ne00 % 2 == 0);
     const dim3 block_dims(1, CUDA_ROPE_BLOCK_SIZE, 1);
     const int  n_blocks_x = (ne00 + 2 * CUDA_ROPE_BLOCK_SIZE - 1) / (2 * CUDA_ROPE_BLOCK_SIZE);
     const dim3 block_nums(nr, n_blocks_x, 1);
+    const uint3 ne01_fastdiv = init_fastdiv_values((uint32_t) ne01);
+    const uint3 ne01_ne02_fastdiv = init_fastdiv_values((uint32_t) ((int64_t) ne01 * ne02));
 
     const float theta_scale = powf(freq_base, -2.0f / n_dims);
 
     if (freq_factors == nullptr) {
         rope_norm<forward, false><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, row_indices, set_rows_stride);
     } else {
         rope_norm<forward, true><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, row_indices, set_rows_stride);
     }
 }
@@ -391,22 +414,24 @@ static void rope_neox_cuda(const T *            x,
                            const rope_corr_dims corr_dims,
                            const float *        freq_factors,
                            const int64_t *      row_indices,
-                           const int            set_rows_stride,
-                           cudaStream_t         stream) {
+                            const int            set_rows_stride,
+                            cudaStream_t         stream) {
     GGML_ASSERT(ne00 % 2 == 0);
     const dim3 block_dims(1, CUDA_ROPE_BLOCK_SIZE, 1);
     const int  n_blocks_x = (ne00 + 2 * CUDA_ROPE_BLOCK_SIZE - 1) / (2 * CUDA_ROPE_BLOCK_SIZE);
     const dim3 block_nums(nr, n_blocks_x, 1);
+    const uint3 ne01_fastdiv = init_fastdiv_values((uint32_t) ne01);
+    const uint3 ne01_ne02_fastdiv = init_fastdiv_values((uint32_t) ((int64_t) ne01 * ne02));
 
     const float theta_scale = powf(freq_base, -2.0f / n_dims);
 
     if (freq_factors == nullptr) {
         rope_neox<forward, false><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, row_indices, set_rows_stride);
     } else {
         rope_neox<forward, true><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, row_indices, set_rows_stride);
     }
 }
@@ -433,22 +458,24 @@ static void rope_multi_cuda(const T *            x,
                             const rope_corr_dims corr_dims,
                             const float *        freq_factors,
                             const mrope_sections sections,
-                            const bool           is_imrope,
-                            cudaStream_t         stream) {
+                             const bool           is_imrope,
+                             cudaStream_t         stream) {
     GGML_ASSERT(ne00 % 2 == 0);
     const dim3 block_dims(1, CUDA_ROPE_BLOCK_SIZE, 1);
     const int  n_blocks_x = (ne00 + 2 * CUDA_ROPE_BLOCK_SIZE - 1) / (2 * CUDA_ROPE_BLOCK_SIZE);
     const dim3 block_nums(nr, n_blocks_x, 1);
+    const uint3 ne01_fastdiv = init_fastdiv_values((uint32_t) ne01);
+    const uint3 ne01_ne02_fastdiv = init_fastdiv_values((uint32_t) ((int64_t) ne01 * ne02));
 
     const float theta_scale = powf(freq_base, -2.0f / n_dims);
 
     if (freq_factors == nullptr) {
         rope_multi<forward, false, T><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, sections, is_imrope);
     } else {
         rope_multi<forward, true, T><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, sections, is_imrope);
     }
 }
@@ -482,16 +509,18 @@ static void rope_vision_cuda(const T *            x,
     const dim3 block_nums(nr, n_blocks_x, 1);
     // break down (head_dim, heads, seq) into (CUDA_ROPE_BLOCK_SIZE, x, heads * seq)
     // where x ~= ceil(head_dim / CUDA_ROPE_BLOCK_SIZE);
+    const uint3 ne01_fastdiv = init_fastdiv_values((uint32_t) ne01);
+    const uint3 ne01_ne02_fastdiv = init_fastdiv_values((uint32_t) ((int64_t) ne01 * ne02));
 
     const float theta_scale = powf(freq_base, -2.0f/n_dims);
 
     if (freq_factors == nullptr) {
         rope_vision<forward, false, T><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, sections);
     } else {
         rope_vision<forward, true, T><<<block_nums, block_dims, 0, stream>>>(
-            x, dst, ne00, ne01, ne02, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
+            x, dst, ne00, ne01, ne02, ne01_fastdiv, ne01_ne02_fastdiv, s01, s02, s03, s1, s2, s3, n_dims, pos, freq_scale, ext_factor,
             attn_factor, corr_dims, theta_scale, freq_factors, sections);
     }
 }
