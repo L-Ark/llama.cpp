@@ -324,18 +324,16 @@ static ggml_cuda_device_info ggml_cuda_init() {
     // configure logging to stdout
     // CUBLAS_CHECK(cublasLoggerConfigure(1, 1, 0, nullptr));
 
-    if (getenv("GGML_CUDA_P2P") != nullptr) {
-        for (int id = 0; id < info.device_count; ++id) {
-            ggml_cuda_set_device(id);
-            for (int id_other = 0; id_other < info.device_count; ++id_other) {
-                if (id == id_other) {
-                    continue;
-                }
-                int can_access_peer;
-                CUDA_CHECK(cudaDeviceCanAccessPeer(&can_access_peer, id, id_other));
-                if (can_access_peer) {
-                    CUDA_CHECK(cudaDeviceEnablePeerAccess(id_other, 0));
-                }
+    for (int id = 0; id < info.device_count; ++id) {
+        ggml_cuda_set_device(id);
+        for (int id_other = 0; id_other < info.device_count; ++id_other) {
+            if (id == id_other) {
+                continue;
+            }
+            int can_access_peer;
+            CUDA_CHECK(cudaDeviceCanAccessPeer(&can_access_peer, id, id_other));
+            if (can_access_peer) {
+                CUDA_CHECK(cudaDeviceEnablePeerAccess(id_other, 0));
             }
         }
     }
@@ -2355,6 +2353,14 @@ static bool ggml_cuda_should_fuse_mul_mat_vec_q(const ggml_tensor * tensor) {
 static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
     const bool split = ggml_backend_buft_is_cuda_split(src0->buffer->buft);
 
+    if (ggml_nelements(src0) == 0 || ggml_nelements(src1) == 0) {
+        const size_t dst_nbytes = ggml_nbytes(dst);
+        if (dst_nbytes > 0) {
+            CUDA_CHECK(cudaMemsetAsync(dst->data, 0, dst_nbytes, ctx.stream()));
+        }
+        return;
+    }
+
     // If src0 is a temporary compute buffer it may have some padding that needs to be cleared for mul_mat_vec_q or mul_mat_q.
     // But if src0 is also a view of another tensor then this cannot be done safely because it may overwrite valid tensor data.
     // Therefore, in such cases use cuBLAS.
@@ -2449,6 +2455,11 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
     GGML_TENSOR_BINARY_OP_LOCALS
 
     const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
+
+    if (ggml_nelements(src0) == 0 || ggml_nelements(src1) == 0) {
+        CUDA_CHECK(cudaMemsetAsync(dst->data, 0, ggml_nbytes(dst), ctx.stream()));
+        return;
+    }
 
     // [TAG_MUL_MAT_ID_CUDA_GRAPHS]
     if (src1->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32) {
@@ -4718,10 +4729,18 @@ static void ggml_backend_cuda_device_get_props(ggml_backend_dev_t dev, ggml_back
     };
 }
 
+static bool ggml_backend_cuda_params_disable_mmq_stream_k_default(const char * params) {
+    return params != nullptr && strstr(params, "disable_mmq_stream_k_default=1") != nullptr;
+}
+
 static ggml_backend_t ggml_backend_cuda_device_init_backend(ggml_backend_dev_t dev, const char * params) {
-    GGML_UNUSED(params);
     ggml_backend_cuda_device_context * ctx = (ggml_backend_cuda_device_context *)dev->context;
-    return ggml_backend_cuda_init(ctx->device);
+    ggml_backend_t backend = ggml_backend_cuda_init(ctx->device);
+    if (backend != nullptr) {
+        ggml_backend_cuda_context * backend_ctx = (ggml_backend_cuda_context *) backend->context;
+        backend_ctx->disable_mmq_stream_k_default = ggml_backend_cuda_params_disable_mmq_stream_k_default(params);
+    }
+    return backend;
 }
 
 static ggml_backend_buffer_type_t ggml_backend_cuda_device_get_buffer_type(ggml_backend_dev_t dev) {
