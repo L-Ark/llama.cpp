@@ -889,6 +889,103 @@ static __device__ __forceinline__ uint32_t fastmodulo(uint32_t n, const uint3 fa
     return n - fastdiv(n, fastdiv_values) * fastdiv_values.z;
 }
 
+// 64-bit dividend variant of the Granlund-Möller fastdiv.
+// Required when the dividend may legitimately exceed UINT32_MAX (e.g. in MMQ
+// stream-k bookkeeping for frontier MoE workloads at long context, where
+// ntiles * blocks_per_ne00 grows past 2^32).
+//
+// Recipe (libdivide style; see Hacker's Delight 10-9):
+//   k = floor(log2(d))
+//   proposed_m = floor(2^(64+k) / d)
+//   rem        = 2^(64+k) - proposed_m * d
+//   if (d - rem) < 2^k:  small-magic case  → q = mulhi64(n, mp) >> k
+//   else:                 65-bit-magic case → q = ((n - mulhi64(n,mp)) >> 1 + mulhi64(n,mp)) >> k
+// The 65-bit form (Robison's trick) avoids the +n carry-out that would
+// otherwise be lost in uint64 arithmetic.
+struct uint64_fastdiv_values {
+    uint64_t mp;
+    uint32_t L;          // floor(log2(d))
+    uint32_t d;          // original divisor (must fit in uint32_t)
+    uint32_t add_marker; // 0 = small magic, 1 = 65-bit magic
+    uint32_t _pad;
+};
+
+static const uint64_fastdiv_values init_fastdiv_values_u64(uint64_t d_64) {
+    GGML_ASSERT(d_64 != 0);
+    GGML_ASSERT(d_64 <= std::numeric_limits<uint32_t>::max());
+    uint64_fastdiv_values v{};
+    v.d = (uint32_t) d_64;
+    if ((v.d & (v.d - 1)) == 0) {
+        // power of two: q = n >> log2(d)
+        uint32_t k = 0;
+        while ((uint32_t{ 1 } << k) < v.d) {
+            k++;
+        }
+        v.mp         = 0;
+        v.L          = k;
+        v.add_marker = 0;
+        return v;
+    }
+    uint32_t k = 0;
+    while (k < 31 && (uint32_t{ 1 } << (k + 1)) <= v.d) {
+        k++;
+    }
+    // Compute proposed_m = floor(2^(64+k) / d) without 128-bit arithmetic.
+    // Two-step long division of the 96-bit numerator 2^(64+k) by d (d ≤ 2^32):
+    //   numerator bytes (96 bits): top 32 = 2^k, middle 32 = 0, low 32 = 0.
+    //   For non-power-of-2 d, d > 2^k so the leading 32-bit quotient digit is 0.
+    //   Then we just need two more 32-bit quotient digits.
+    const uint64_t t1     = uint64_t{ 1 } << (k + 32);  // r_top << 32, where r_top = 2^k
+    const uint64_t q_mid  = t1 / v.d;                   // < 2^32
+    const uint64_t r_mid  = t1 - q_mid * v.d;
+    const uint64_t t2     = r_mid << 32;
+    const uint64_t q_lo   = t2 / v.d;
+    const uint64_t rem    = t2 - q_lo * v.d;
+    uint64_t proposed_m   = (q_mid << 32) | q_lo;
+    const uint64_t e         = (uint64_t) v.d - rem;
+    if (e < (uint64_t{ 1 } << k)) {
+        v.add_marker = 0;
+    } else {
+        proposed_m += proposed_m;
+        const uint64_t twice_rem = rem + rem;
+        if (twice_rem >= v.d || twice_rem < rem) {
+            proposed_m += 1;
+        }
+        v.add_marker = 1;
+    }
+    v.mp = proposed_m + 1;
+    v.L  = k;
+    return v;
+}
+
+static __device__ __forceinline__ uint64_t fastdiv64(uint64_t n, const uint64_fastdiv_values v) {
+    if (v.mp == 0) {
+        return n >> v.L;
+    }
+#ifdef __CUDA_ARCH__
+    const uint64_t q = __umul64hi(n, v.mp);
+#else
+    // Portable host fallback (correctness reference; perf not relevant since this only runs on host).
+    const uint64_t a_lo = (uint32_t) n,        a_hi = n  >> 32;
+    const uint64_t b_lo = (uint32_t) v.mp,     b_hi = v.mp >> 32;
+    const uint64_t ll = a_lo * b_lo;
+    const uint64_t lh = a_lo * b_hi;
+    const uint64_t hl = a_hi * b_lo;
+    const uint64_t hh = a_hi * b_hi;
+    const uint64_t mid = (ll >> 32) + (uint32_t) lh + (uint32_t) hl;
+    const uint64_t q   = hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
+#endif
+    if (v.add_marker) {
+        const uint64_t t = ((n - q) >> 1) + q;
+        return t >> v.L;
+    }
+    return q >> v.L;
+}
+
+static __device__ __forceinline__ uint64_t fastmodulo64(uint64_t n, const uint64_fastdiv_values v) {
+    return n - fastdiv64(n, v) * (uint64_t) v.d;
+}
+
 // Calculate both division and modulo at once, returns <n/divisor, n%divisor>
 static __device__ __forceinline__ uint2 fast_div_modulo(uint32_t n, const uint3 fastdiv_values) {
     // expects  fastdiv_values to contain <mp, L, divisor> in <x, y, z> (see init_fastdiv_values)
