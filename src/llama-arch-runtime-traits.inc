@@ -146,6 +146,11 @@
         traits.supports_sm_tensor = false;
         return traits;
     }() },
+    { LLM_ARCH_DEEPSEEK4, []() {
+        llm_arch_runtime_traits traits;
+        traits.supports_sm_tensor = false;
+        return traits;
+    }() },
     { LLM_ARCH_DREAM, []() {
         llm_arch_runtime_traits traits;
         traits.is_diffusion = true;

@@ -13,6 +13,9 @@
       "LLM_ARCH_BITNET": {
         "supports_sm_tensor": false
       },
+      "LLM_ARCH_DEEPSEEK4": {
+        "supports_sm_tensor": false
+      },
       "LLM_ARCH_DREAM": {
         "is_diffusion": true,
         "uses_encoder_pass": true

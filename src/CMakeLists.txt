@@ -24,6 +24,7 @@ add_library(llama
             llama-kv-cache.cpp
             llama-kv-cache-iswa.cpp
             llama-memory.cpp
+            llama-memory-deepseek4.cpp
             llama-memory-hybrid.cpp
             llama-memory-hybrid-iswa.cpp
             llama-memory-recurrent.cpp
@@ -37,6 +38,7 @@ add_library(llama
             unicode-data.cpp
             unicode.cpp
             unicode.h
+            models/deepseek4-family.cpp
             models/delta-net-base.cpp
             models/mamba-base.cpp
             models/rwkv6-base.cpp

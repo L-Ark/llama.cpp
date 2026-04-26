@@ -126,3 +126,7 @@ struct llm_rwkv7_config {
 struct llm_build_rwkv7_family : public llm_build_rwkv7_base {
     llm_build_rwkv7_family(const llama_model & model, const llm_graph_params & params, const llm_rwkv7_config & config);
 };
+
+struct llm_build_deepseek4_family : public llm_graph_context {
+    llm_build_deepseek4_family(const llama_model & model, const llm_graph_params & params);
+};

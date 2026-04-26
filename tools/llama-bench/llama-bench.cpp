@@ -524,7 +524,10 @@ static size_t count_visible_accelerator_devices() {
     return count;
 }
 
-static std::vector<llama_split_mode> get_auto_split_modes(const std::vector<ggml_backend_dev_t> & devices, int n_gpu_layers) {
+static std::vector<llama_split_mode> get_auto_split_modes(
+        const std::vector<ggml_backend_dev_t> & devices,
+        int                                     n_gpu_layers,
+        bool                                    fit_enabled) {
     if (n_gpu_layers == 0) {
         return { LLAMA_SPLIT_MODE_NONE };
     }
@@ -535,6 +538,9 @@ static std::vector<llama_split_mode> get_auto_split_modes(const std::vector<ggml
     }
     if (accelerator_count == 1) {
         return { LLAMA_SPLIT_MODE_NONE, LLAMA_SPLIT_MODE_LAYER };
+    }
+    if (fit_enabled) {
+        return { LLAMA_SPLIT_MODE_LAYER };
     }
 
     return { LLAMA_SPLIT_MODE_LAYER, LLAMA_SPLIT_MODE_ROW };
@@ -1343,7 +1349,7 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
     for (const auto & nl : params.n_gpu_layers)
     for (const auto & ncmoe : params.n_cpu_moe)
     for (const auto & devs : params.devices)
-    for (const auto & sm : (params.split_mode_auto ? get_auto_split_modes(devs, nl) : params.split_mode))
+    for (const auto & sm : (params.split_mode_auto ? get_auto_split_modes(devs, nl, fpt != cmd_params_defaults.fit_params_target[0]) : params.split_mode))
     for (const auto & mg : params.main_gpu)
     for (const auto & ts : params.tensor_split)
     for (const auto & ot : params.tensor_buft_overrides)
