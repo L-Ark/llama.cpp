@@ -718,15 +718,14 @@ void ggml_cuda_mul_mat_vec_f(ggml_backend_cuda_context & ctx, const ggml_tensor 
 void ggml_cuda_op_mul_mat_vec_f(
     ggml_backend_cuda_context & ctx,
     const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, const char * src0_dd_i, const float * src1_ddf_i,
-    const char * src1_ddq_i, float * dst_dd_i, const int64_t row_low, const int64_t row_high, const int64_t src1_ncols,
-    const int64_t src1_padded_row_size, cudaStream_t stream) {
+    const char * src1_ddq_i, float * dst_dd_i, const int64_t dst_stride, const int64_t row_low, const int64_t row_high, const int64_t src1_ncols,
+    const int64_t src1_padded_row_size, cudaStream_t stream, const ggml_cuda_mm_fusion_args_device * fusion) {
 
     GGML_ASSERT(src1->type == GGML_TYPE_F32);
     GGML_ASSERT(dst->type  == GGML_TYPE_F32);
 
     const int64_t ne00 = src0->ne[0];
     const int64_t ne10 = src1->ne[0];
-    const int64_t ne0  =  dst->ne[0];
     const int64_t row_diff = row_high - row_low;
 
     const int id = ggml_cuda_get_device();
@@ -736,7 +735,7 @@ void ggml_cuda_op_mul_mat_vec_f(
     // ggml_cuda_op provides single, contiguous matrices
     const int64_t stride_row         = ne00;
     const int64_t stride_col_y       = ne10;
-    const int64_t stride_col_dst     = id == ctx.device ? ne0 : row_diff; // main device has larger memory buffer
+    const int64_t stride_col_dst     = dst_stride;
     const int64_t nchannels_x        = 1;
     const int64_t nchannels_y        = 1;
     const int64_t nchannels_dst      = 1;
@@ -749,23 +748,26 @@ void ggml_cuda_op_mul_mat_vec_f(
     const int64_t stride_sample_y    = 0;
     const int64_t stride_sample_dst  = 0;
 
-    ggml_cuda_mm_fusion_args_device empty{};
+    ggml_cuda_mm_fusion_args_device fusion_local{};
+    if (fusion) {
+        fusion_local = *fusion;
+    }
     switch (src0->type) {
         case GGML_TYPE_F32: {
             const float * src0_d = (const float *) src0_dd_i;
-            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, empty, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
+            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, fusion_local, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, 0, prec, stream);
         } break;
         case GGML_TYPE_F16: {
             const half * src0_d = (const half *) src0_dd_i;
-            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, empty, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
+            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, fusion_local, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, 0, prec, stream);
         } break;
         case GGML_TYPE_BF16: {
             const nv_bfloat16 * src0_d = (const nv_bfloat16 *) src0_dd_i;
-            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, empty, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
+            mul_mat_vec_f_cuda(src0_d, src1_ddf_i, nullptr, fusion_local, dst_dd_i, ne00, row_diff, src1_ncols, stride_row, stride_col_y, stride_col_dst,
                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, 0, prec, stream);
         } break;
