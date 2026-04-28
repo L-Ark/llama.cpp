@@ -222,7 +222,7 @@ llama_kv_cache::llama_kv_cache(
 
         map_layer_ids[il] = layers.size();
 
-        layers.push_back({ il, buft, k, v, k_stream, v_stream, });
+        layers.push_back({ il, k, v, k_stream, v_stream, });
     }
 
     if (reuse) {
@@ -247,6 +247,37 @@ llama_kv_cache::llama_kv_cache(
 
             LLAMA_LOG_DEBUG("%s: - layer %3d: reuse layer %d, is_swa = %d\n", __func__, il, il_reuse, hparams.is_swa(il));
         }
+    }
+
+    // allocate tensors and initialize the buffers to avoid NaNs in the padding
+    for (auto & [buft, ctx] : ctx_map) {
+        ggml_backend_buffer_t buf;
+        if (model.hparams.no_alloc) {
+            buf = ggml_backend_buft_alloc_buffer(buft, /*size =*/ 0); // dummy buffer
+            for (ggml_tensor * t = ggml_get_first_tensor(ctx.get()); t != nullptr; t = ggml_get_next_tensor(ctx.get(), t)) {
+                t->buffer = buf; // set dummy buffer for KV cache so that the backend scheduler won't try to allocate it
+            }
+        } else {
+            buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx.get(), buft); // real buffer
+        }
+        if (!buf) {
+            throw std::runtime_error("failed to allocate buffer for kv cache");
+        }
+
+        LLAMA_LOG_INFO("%s: %10s KV buffer size = %8.2f MiB\n", __func__, ggml_backend_buffer_name(buf), ggml_backend_buffer_get_size(buf)/1024.0/1024.0);
+
+        ggml_backend_buffer_clear(buf, 0);
+        ctxs_bufs.emplace_back(std::move(ctx), buf);
+    }
+
+    {
+        const size_t memory_size_k = size_k_bytes();
+        const size_t memory_size_v = size_v_bytes();
+
+        LLAMA_LOG_INFO("%s: size = %7.2f MiB (%6u cells, %3d layers, %2u/%u seqs), K (%s): %7.2f MiB, V (%s): %7.2f MiB\n", __func__,
+                (float)(memory_size_k + memory_size_v) / (1024.0f * 1024.0f), kv_size, (int) layers.size(), n_seq_max, n_stream,
+                ggml_type_name(type_k), (float)memory_size_k / (1024.0f * 1024.0f),
+                ggml_type_name(type_v), (float)memory_size_v / (1024.0f * 1024.0f));
     }
 
     const char * LLAMA_ATTN_ROT_DISABLE = getenv("LLAMA_ATTN_ROT_DISABLE");
@@ -289,76 +320,6 @@ llama_kv_cache::llama_kv_cache(
 
             ggml_gen_hadamard(tmp);
         }
-    }
-
-    int32_t nrot_k = 0;
-    if (attn_rot_k) {
-        nrot_k = 64;
-
-        do {
-            nrot_k *= 2;
-        } while (n_embd_head_k_all % nrot_k == 0);
-        nrot_k /= 2;
-    }
-
-    const int32_t nrot_v = attn_rot_v ? 64 : 0;
-
-    for (auto & [buft, ctx] : ctx_map) {
-        if (attn_rot_k) {
-            ggml_tensor * rot_k = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, nrot_k, nrot_k);
-            ggml_set_name(rot_k, "attn_rot_k");
-            attn_rot_k_tensors[buft] = rot_k;
-        }
-
-        if (attn_rot_v) {
-            ggml_tensor * rot_v = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, nrot_v, nrot_v);
-            ggml_set_name(rot_v, "attn_rot_v");
-            attn_rot_v_tensors[buft] = rot_v;
-        }
-    }
-
-    // allocate tensors and initialize the buffers to avoid NaNs in the padding
-    for (auto & [buft, ctx] : ctx_map) {
-        ggml_backend_buffer_t buf;
-        if (model.hparams.no_alloc) {
-            buf = ggml_backend_buft_alloc_buffer(buft, /*size =*/ 0); // dummy buffer
-            for (ggml_tensor * t = ggml_get_first_tensor(ctx.get()); t != nullptr; t = ggml_get_next_tensor(ctx.get(), t)) {
-                t->buffer = buf; // set dummy buffer for KV cache so that the backend scheduler won't try to allocate it
-            }
-        } else {
-            buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx.get(), buft); // real buffer
-        }
-        if (!buf) {
-            throw std::runtime_error("failed to allocate buffer for kv cache");
-        }
-
-        LLAMA_LOG_INFO("%s: %10s KV buffer size = %8.2f MiB\n", __func__, ggml_backend_buffer_name(buf), ggml_backend_buffer_get_size(buf)/1024.0/1024.0);
-
-        ggml_backend_buffer_clear(buf, 0);
-
-        if (!model.hparams.no_alloc) {
-            auto it_k = attn_rot_k_tensors.find(buft);
-            if (it_k != attn_rot_k_tensors.end()) {
-                ggml_backend_tensor_set(it_k->second, attn_rot_hadamard.at(nrot_k).data(), 0, ggml_nbytes(it_k->second));
-            }
-
-            auto it_v = attn_rot_v_tensors.find(buft);
-            if (it_v != attn_rot_v_tensors.end()) {
-                ggml_backend_tensor_set(it_v->second, attn_rot_hadamard.at(nrot_v).data(), 0, ggml_nbytes(it_v->second));
-            }
-        }
-
-        ctxs_bufs.emplace_back(std::move(ctx), buf);
-    }
-
-    {
-        const size_t memory_size_k = size_k_bytes();
-        const size_t memory_size_v = size_v_bytes();
-
-        LLAMA_LOG_INFO("%s: size = %7.2f MiB (%6u cells, %3d layers, %2u/%u seqs), K (%s): %7.2f MiB, V (%s): %7.2f MiB\n", __func__,
-                (float)(memory_size_k + memory_size_v) / (1024.0f * 1024.0f), kv_size, (int) layers.size(), n_seq_max, n_stream,
-                ggml_type_name(type_k), (float)memory_size_k / (1024.0f * 1024.0f),
-                ggml_type_name(type_v), (float)memory_size_v / (1024.0f * 1024.0f));
     }
 
     const char * LLAMA_KV_CACHE_DEBUG = getenv("LLAMA_KV_CACHE_DEBUG");
@@ -1230,32 +1191,6 @@ ggml_tensor * llama_kv_cache::get_v(ggml_context * ctx, int32_t il, uint32_t n_k
             ggml_row_size(v->type, kv_size),                        // v->nb[2]
             ggml_row_size(v->type, kv_size*n_embd_v_gqa),           // v->nb[3]
             ggml_row_size(v->type, kv_size*n_embd_v_gqa)*sinfo.s0);
-}
-
-ggml_tensor * llama_kv_cache::get_k_rot(int32_t il) const {
-    if (!attn_rot_k) {
-        return nullptr;
-    }
-
-    const int32_t ikv = map_layer_ids.at(il);
-    const auto buft = layers[ikv].buft;
-    auto it = attn_rot_k_tensors.find(buft);
-
-    GGML_ASSERT(it != attn_rot_k_tensors.end());
-    return it->second;
-}
-
-ggml_tensor * llama_kv_cache::get_v_rot(int32_t il) const {
-    if (!attn_rot_v) {
-        return nullptr;
-    }
-
-    const int32_t ikv = map_layer_ids.at(il);
-    const auto buft = layers[ikv].buft;
-    auto it = attn_rot_v_tensors.find(buft);
-
-    GGML_ASSERT(it != attn_rot_v_tensors.end());
-    return it->second;
 }
 
 ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il, const slot_info & sinfo) const {
@@ -2514,14 +2449,6 @@ ggml_tensor * llama_kv_cache_context::get_k(ggml_context * ctx, int32_t il) cons
 
 ggml_tensor * llama_kv_cache_context::get_v(ggml_context * ctx, int32_t il) const {
     return kv->get_v(ctx, il, n_kv, sinfos[i_cur]);
-}
-
-ggml_tensor * llama_kv_cache_context::get_k_rot(int32_t il) const {
-    return kv->get_k_rot(il);
-}
-
-ggml_tensor * llama_kv_cache_context::get_v_rot(int32_t il) const {
-    return kv->get_v_rot(il);
 }
 
 ggml_tensor * llama_kv_cache_context::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il) const {
