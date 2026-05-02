@@ -672,6 +672,7 @@ void ggml_compute_forward_add(
         case GGML_TYPE_Q8_0:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -1123,6 +1124,7 @@ void ggml_compute_forward_add1(
         case GGML_TYPE_Q8_1:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -1253,6 +1255,7 @@ void ggml_compute_forward_acc(
         case GGML_TYPE_Q8_1:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -1502,6 +1505,46 @@ void ggml_compute_forward_sum_rows(
             {
                 GGML_ABORT("fatal error");
             }
+    }
+}
+
+// ggml_compute_forward_hc_weighted_sum
+
+void ggml_compute_forward_hc_weighted_sum(
+        const ggml_compute_params * params,
+        ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    const ggml_tensor * src1 = dst->src[1];
+
+    GGML_ASSERT(src0->type == GGML_TYPE_F32);
+    GGML_ASSERT(src1->type == GGML_TYPE_F32);
+    GGML_ASSERT( dst->type == GGML_TYPE_F32);
+    GGML_ASSERT(src0->ne[1] == src1->ne[0]);
+    GGML_ASSERT(src0->ne[2] == 1 && src0->ne[3] == 1);
+    GGML_ASSERT(src1->ne[1] == 1 && src1->ne[2] == 1 && src1->ne[3] == 1);
+    GGML_ASSERT(dst->ne[0] == src0->ne[0] && dst->ne[1] == 1 && dst->ne[2] == 1 && dst->ne[3] == 1);
+
+    const int64_t n_embd  = src0->ne[0];
+    const int64_t hc_mult = src0->ne[1];
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+    const int64_t e0 = (n_embd * ith) / nth;
+    const int64_t e1 = (n_embd * (ith + 1)) / nth;
+
+    const char * x = (const char *) src0->data;
+    const char * w = (const char *) src1->data;
+    float * out = (float *) dst->data;
+
+    for (int64_t e = e0; e < e1; ++e) {
+        float sum = 0.0f;
+        for (int64_t h = 0; h < hc_mult; ++h) {
+            const float xv = *(const float *) (x + e*src0->nb[0] + h*src0->nb[1]);
+            const float wv = *(const float *) (w + h*src1->nb[0]);
+            sum += xv * wv;
+        }
+        out[e] = sum;
     }
 }
 
@@ -4342,6 +4385,7 @@ void ggml_compute_forward_out_prod(
         case GGML_TYPE_Q8_0:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -4619,6 +4663,7 @@ void ggml_compute_forward_set(
         case GGML_TYPE_Q8_1:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -4843,6 +4888,7 @@ void ggml_compute_forward_get_rows(
         case GGML_TYPE_Q8_1:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -5569,6 +5615,7 @@ void ggml_compute_forward_clamp(
         case GGML_TYPE_Q8_1:
         case GGML_TYPE_MXFP4:
         case GGML_TYPE_NVFP4:
+        case GGML_TYPE_F8_E4M3_B128:
         case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_Q4_K:
@@ -9755,6 +9802,18 @@ void ggml_compute_forward_unary(
         case GGML_UNARY_OP_TRUNC:
             {
                 ggml_compute_forward_trunc(params, dst);
+            } break;
+        case GGML_UNARY_OP_FP4_ACT_QUANT:
+            {
+                ggml_compute_forward_fp4_act_quant(params, dst);
+            } break;
+        case GGML_UNARY_OP_FP8_ACT_QUANT:
+            {
+                ggml_compute_forward_fp8_act_quant(params, dst);
+            } break;
+        case GGML_UNARY_OP_SINKHORN_4X4:
+            {
+                ggml_compute_forward_sinkhorn_4x4(params, dst);
             } break;
         case GGML_UNARY_OP_XIELU:
             {

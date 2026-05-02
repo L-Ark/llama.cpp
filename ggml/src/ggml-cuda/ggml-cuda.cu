@@ -2741,6 +2741,12 @@ static bool ggml_cuda_compute_forward(ggml_backend_cuda_context & ctx, struct gg
                 case GGML_UNARY_OP_TRUNC:
                     ggml_cuda_op_trunc(ctx, dst);
                     break;
+                case GGML_UNARY_OP_FP4_ACT_QUANT:
+                    ggml_cuda_op_fp4_act_quant(ctx, dst);
+                    break;
+                case GGML_UNARY_OP_FP8_ACT_QUANT:
+                    ggml_cuda_op_fp8_act_quant(ctx, dst);
+                    break;
                 case GGML_UNARY_OP_EXPM1:
                     ggml_cuda_op_expm1(ctx, dst);
                     break;
@@ -4885,6 +4891,14 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                     // TODO: should become:
                     //return ggml_is_contiguous_rows(op->src[0]);
                     return ggml_is_contiguous(op->src[0]);
+                case GGML_UNARY_OP_FP4_ACT_QUANT:
+                    return op->src[0]->type == GGML_TYPE_F32 &&
+                           op->type == GGML_TYPE_NVFP4 &&
+                           ggml_is_contiguous(op->src[0]);
+                case GGML_UNARY_OP_FP8_ACT_QUANT:
+                    return op->src[0]->type == GGML_TYPE_F32 &&
+                           op->type == GGML_TYPE_F8_E4M3_B128 &&
+                           ggml_is_contiguous(op->src[0]);
                 default:
                     return false;
             }
@@ -4948,6 +4962,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                     case GGML_TYPE_Q8_0:
                     case GGML_TYPE_MXFP4:
                     case GGML_TYPE_NVFP4:
+                    case GGML_TYPE_F8_E4M3_B128:
                     case GGML_TYPE_Q2_K:
                     case GGML_TYPE_Q3_K:
                     case GGML_TYPE_Q4_K:

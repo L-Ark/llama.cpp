@@ -429,7 +429,8 @@ extern "C" {
         GGML_TYPE_MXFP4   = 39, // MXFP4 (1 block)
         GGML_TYPE_NVFP4   = 40, // NVFP4 (4 blocks, E4M3 scale)
         GGML_TYPE_Q1_0    = 41,
-        GGML_TYPE_COUNT   = 42,
+        GGML_TYPE_F8_E4M3_B128 = 42, // E4M3 FP8 values with one E8M0 scale per 128 values
+        GGML_TYPE_COUNT   = 43,
     };
 
     // precision
@@ -467,6 +468,7 @@ extern "C" {
         GGML_FTYPE_MOSTLY_MXFP4   = 25, // except 1d tensors
         GGML_FTYPE_MOSTLY_NVFP4   = 26, // except 1d tensors
         GGML_FTYPE_MOSTLY_Q1_0    = 27, // except 1d tensors
+        GGML_FTYPE_MOSTLY_F8_E4M3_MXFP4 = 28, // except 1d tensors
     };
 
     // available tensor operations:
@@ -576,6 +578,7 @@ extern "C" {
         GGML_OP_OPT_STEP_SGD,
 
         GGML_OP_GLU,
+        GGML_OP_HC_WEIGHTED_SUM,
 
         GGML_OP_COUNT,
     };
@@ -603,6 +606,9 @@ extern "C" {
         GGML_UNARY_OP_CEIL,
         GGML_UNARY_OP_ROUND,
         GGML_UNARY_OP_TRUNC,
+        GGML_UNARY_OP_FP4_ACT_QUANT,
+        GGML_UNARY_OP_FP8_ACT_QUANT,
+        GGML_UNARY_OP_SINKHORN_4X4,
 
         GGML_UNARY_OP_COUNT,
     };
@@ -1246,7 +1252,18 @@ extern "C" {
             struct ggml_context * ctx,
             struct ggml_tensor  * a);
 
+    // Blockwise activation quant-dequant simulation used by DeepSeek4 QAT paths.
+    GGML_API struct ggml_tensor * ggml_fp4_act_quant(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
 
+    GGML_API struct ggml_tensor * ggml_fp8_act_quant(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_sinkhorn_4x4(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
 
     // xIELU activation function
     // x = x * (c_a(alpha_n) + c_b(alpha_p, beta) * sigmoid(beta * x)) + eps * (x > 0)
@@ -1409,6 +1426,13 @@ extern "C" {
     // B: k columns, m rows  (i.e. we transpose it internally) => [ne03 * x, ne02 * y, m, k]
     // result is n columns, m rows => [ne03 * x, ne02 * y, m, n]
     GGML_API struct ggml_tensor * ggml_mul_mat(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
+            struct ggml_tensor  * b);
+
+    // weighted sum over the HC dimension:
+    // a: [n_embd, hc_mult], b: [hc_mult] => result: [n_embd]
+    GGML_API struct ggml_tensor * ggml_hc_weighted_sum(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
             struct ggml_tensor  * b);
