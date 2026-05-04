@@ -2319,6 +2319,54 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             }
         }
     ).set_env("LLAMA_ARG_N_CPU_MOE"));
+    add_opt(common_arg(
+        {"-ncmoeb", "--cpu-moe-balanced"}, "N",
+        "like --n-cpu-moe but also distributes the remaining layers' MoE\n"
+        "weights round-robin across all available GPU devices.\n"
+        "Useful with --split-mode layer (the default), where the standard\n"
+        "layer split would place every GPU-bound expert layer on the last\n"
+        "GPU. Uses --device's list when set, otherwise auto-enumerates all\n"
+        "non-CPU devices.",
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("invalid value");
+            }
+            // Keep strings alive: a single static list is shared across all
+            // override entries appended below so c_str() pointers stay valid.
+            static std::list<std::string> moe_balanced_overrides;
+            for (int i = 0; i < value; ++i) {
+                moe_balanced_overrides.push_back(llm_ffn_exps_block_regex(i));
+                params.tensor_buft_overrides.push_back({moe_balanced_overrides.back().c_str(), ggml_backend_cpu_buffer_type()});
+            }
+            std::vector<ggml_backend_dev_t> gpu_devices;
+            if (!params.devices.empty()) {
+                for (auto * dev : params.devices) {
+                    if (dev && ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) {
+                        gpu_devices.push_back(dev);
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+                    auto * dev = ggml_backend_dev_get(i);
+                    if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) {
+                        gpu_devices.push_back(dev);
+                    }
+                }
+            }
+            if (gpu_devices.empty()) {
+                return;
+            }
+            // Cover any reasonable layer count via per-layer regex; entries
+            // whose layer doesn't exist in the model just don't match.
+            static constexpr int MOE_BALANCED_MAX_LAYERS = 256;
+            for (int i = value; i < MOE_BALANCED_MAX_LAYERS; ++i) {
+                moe_balanced_overrides.push_back(llm_ffn_exps_block_regex(i));
+                const int gpu_idx = (i - value) % (int) gpu_devices.size();
+                auto buft = ggml_backend_dev_buffer_type(gpu_devices[gpu_idx]);
+                params.tensor_buft_overrides.push_back({moe_balanced_overrides.back().c_str(), buft});
+            }
+        }
+    ).set_env("LLAMA_ARG_CPU_MOE_BALANCED"));
     GGML_ASSERT(params.n_gpu_layers < 0); // string_format would need to be extended for a default >= 0
     add_opt(common_arg(
         {"-ngl", "--gpu-layers", "--n-gpu-layers"}, "N",
