@@ -171,6 +171,85 @@ common_chat_msg task_result_state::update_chat_msg(
     }
 
     if (!new_msg.empty()) {
+        // Some templates leave the model in a state where its very first
+        // content tokens are stray punctuation or a filename hint that
+        // gets concatenated to the following code fence (e.g.
+        // " game.html```html\n<!DOCTYPE...") and breaks the markdown
+        // renderer. Detect this on the first chunk that has visible
+        // content, decide how many leading bytes to drop, then apply
+        // the SAME strip on every re-parse so streaming diffs stay
+        // monotonic.
+        if (prefix_strip_bytes < 0 && !new_msg.content.empty()) {
+            const std::string & c = new_msg.content;
+            size_t strip = 0;
+
+            // Case A: a code fence appears within the first ~200 bytes,
+            // preceded by non-newline text. Strip everything up to (but
+            // not including) the fence, and prepend a newline so the
+            // renderer recognizes the fence as a fence.
+            const size_t scan_max = std::min<size_t>(c.size(), 200);
+            size_t fence_at = std::string::npos;
+            for (size_t i = 0; i + 2 < scan_max; ++i) {
+                if (c[i] == '`' && c[i+1] == '`' && c[i+2] == '`') {
+                    fence_at = i;
+                    break;
+                }
+            }
+            if (fence_at != std::string::npos && fence_at > 0) {
+                bool has_newline_in_prefix = false;
+                for (size_t i = 0; i < fence_at; ++i) {
+                    if (c[i] == '\n') { has_newline_in_prefix = true; break; }
+                }
+                if (!has_newline_in_prefix) {
+                    // Strip the inline prefix. Don't bother prepending
+                    // a newline: at the very start of a message, the
+                    // fence is at column 0 and renders fine.
+                    strip = fence_at;
+                }
+            }
+
+            // Case B: a single sentence-boundary punctuation char with
+            // surrounding whitespace before real content (".\n\nThe...",
+            // "?\n\nThe...", etc.).
+            if (strip == 0) {
+                size_t i = 0;
+                while (i < c.size() && (c[i] == ' ' || c[i] == '\t')) ++i;
+                if (i < c.size() && (c[i] == '.' || c[i] == '?' || c[i] == '!' ||
+                                     c[i] == ',' || c[i] == ':' || c[i] == ';')) {
+                    size_t j = i + 1;
+                    while (j < c.size() && (c[j] == ' ' || c[j] == '\t' ||
+                                            c[j] == '\n' || c[j] == '\r')) ++j;
+                    if (j < c.size()) {
+                        unsigned char ch = (unsigned char) c[j];
+                        bool real_content =
+                            std::isalnum(ch) ||
+                            ch == '*' || ch == '_' || ch == '`' ||
+                            ch == '#' || ch == '"' || ch == '\'' ||
+                            ch == '(' || ch == '[' || ch == '{' ||
+                            ch >= 0x80; // any UTF-8 multi-byte
+                        if (real_content) {
+                            strip = j;
+                        }
+                    }
+                }
+            }
+
+            // Only commit to a strip decision once we have enough
+            // content to be confident; otherwise leave prefix_strip_bytes
+            // = -1 and try again on the next call.
+            if (strip > 0) {
+                prefix_strip_bytes = (int) strip;
+            } else if ((int) c.size() >= 32 || !is_partial) {
+                // Decided: nothing to strip.
+                prefix_strip_bytes = 0;
+            }
+        }
+
+        if (prefix_strip_bytes > 0) {
+            const size_t n = std::min<size_t>((size_t) prefix_strip_bytes, new_msg.content.size());
+            new_msg.content.erase(0, n);
+        }
+
         new_msg.set_tool_call_ids(generated_tool_call_ids, gen_tool_call_id);
         chat_msg = new_msg;
         auto all_diffs = common_chat_msg_diff::compute_diffs(msg_prv_copy, chat_msg);
