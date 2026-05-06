@@ -106,14 +106,6 @@ struct task_result_state {
     bool thinking_block_started = false;
     bool text_block_started = false;
 
-    // Some chat templates (notably DeepSeek V4 with </think> injection)
-    // can have the model open with stray punctuation or a "filename"
-    // prefix like " game.html" before a code fence. Detect this on
-    // the first chunk that contains real content and remember how many
-    // leading bytes to strip from new_msg.content on every subsequent
-    // re-parse. Set to -1 = "not yet decided", >=0 = "strip this many".
-    int prefix_strip_bytes = -1;
-
     // for OpenAI Responses streaming API
     const std::string oai_resp_id;
     const std::string oai_resp_reasoning_id;
