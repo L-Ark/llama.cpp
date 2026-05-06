@@ -171,44 +171,6 @@ common_chat_msg task_result_state::update_chat_msg(
     }
 
     if (!new_msg.empty()) {
-        // Some chat templates inject `</think>` directly into the assistant
-        // generation prompt to suppress the reasoning phase (notably
-        // DeepSeek V4). When the model continues from there, its first
-        // sampled token sometimes turns out to be a stray punctuation
-        // glyph (".", "?", "!", ",") followed by a newline before the
-        // actual content begins. Strip such a single-char prefix once,
-        // before any visible content has been sent to the client.
-        if (chat_msg.content.empty() && !new_msg.content.empty()) {
-            const std::string & c = new_msg.content;
-            size_t i = 0;
-            // accept up to one leading punctuation char optionally
-            // surrounded by whitespace, then real content (alpha/digit/markup).
-            while (i < c.size() && (c[i] == ' ' || c[i] == '\t')) {
-                ++i;
-            }
-            if (i < c.size() && (c[i] == '.' || c[i] == '?' || c[i] == '!' || c[i] == ',' || c[i] == ':' || c[i] == ';')) {
-                size_t j = i + 1;
-                while (j < c.size() && (c[j] == ' ' || c[j] == '\t' || c[j] == '\n' || c[j] == '\r')) {
-                    ++j;
-                }
-                // Only strip if there is real content after, and it starts
-                // with an alphanumeric / common opening glyph -- avoids
-                // damaging legitimate single-char model replies and code blocks.
-                if (j < c.size()) {
-                    unsigned char ch = (unsigned char) c[j];
-                    bool looks_like_real_content =
-                        std::isalnum(ch) ||
-                        ch == '*' || ch == '_' || ch == '`' ||
-                        ch == '#' || ch == '"' || ch == '\'' ||
-                        ch == '(' || ch == '[' || ch == '{' ||
-                        ch >= 0x80; // any UTF-8 multi-byte char (e.g. emoji, CJK)
-                    if (looks_like_real_content) {
-                        new_msg.content.erase(0, j);
-                    }
-                }
-            }
-        }
-
         new_msg.set_tool_call_ids(generated_tool_call_ids, gen_tool_call_id);
         chat_msg = new_msg;
         auto all_diffs = common_chat_msg_diff::compute_diffs(msg_prv_copy, chat_msg);
