@@ -221,6 +221,23 @@ common_chat_msg task_result_state::update_chat_msg(
         new_msg.reasoning_content = std::move(reasoning);
     }
 
+    // When generation has finished (not partial) and reasoning was primed but
+    // never closed -- model hit EOS or length cutoff while still inside
+    // <think>...</think> -- the parser may succeed by stuffing everything into
+    // reasoning_content with empty content. The web UI then renders an empty
+    // message bubble alongside a (possibly very long) Reasoning toggle, which
+    // looks like the model said nothing. Promote that text into content so the
+    // user sees what the model actually produced.
+    if (!is_partial &&
+            chat_parser_params.reasoning_format == COMMON_REASONING_FORMAT_DEEPSEEK &&
+            string_ends_with(chat_parser_params.generation_prompt, "<think>") &&
+            generated_text.find("</think>") == std::string::npos &&
+            new_msg.content.empty() &&
+            !new_msg.reasoning_content.empty()) {
+        new_msg.content = std::move(new_msg.reasoning_content);
+        new_msg.reasoning_content.clear();
+    }
+
     if (!new_msg.empty()) {
         // First-content prefix strip (DeepSeek V4 + similar templates).
         // Until the decision is made, suppress emission of the diff so we
