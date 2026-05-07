@@ -184,11 +184,25 @@ common_chat_msg task_result_state::update_chat_msg(
             new_msg.reasoning_content = std::move(reasoning);
             new_msg.content = generated_text.substr(close_pos + std::string("</think>").size());
         } else if (primed_reasoning) {
-            std::string reasoning = generated_text;
-            if (string_starts_with(reasoning, "<think>")) {
-                reasoning.erase(0, std::string("<think>").size());
+            // Model never closed </think>. We can't tell where reasoning would
+            // have ended and content begun. Two failure modes look identical
+            // here: (a) model genuinely stuck in long reasoning with no
+            // final answer, (b) model decided to skip reasoning and answered
+            // directly. Returning empty content for either case is bad UX
+            // -- the user sees a blank message bubble.
+            //
+            // Best UX: always populate content with the full text so the
+            // user sees *something*. This also matches the partial-streaming
+            // fallback below, which puts text in reasoning_content during
+            // streaming -- by the time we reach the final parse, the streamed
+            // chunks have already been delivered to the client; we just need
+            // to make sure the final consolidated message has content set so
+            // it isn't rendered as an empty bubble.
+            std::string text = generated_text;
+            if (string_starts_with(text, "<think>")) {
+                text.erase(0, std::string("<think>").size());
             }
-            new_msg.reasoning_content = std::move(reasoning);
+            new_msg.content = std::move(text);
         } else {
             new_msg.content = generated_text;
         }
