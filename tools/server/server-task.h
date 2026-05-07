@@ -106,6 +106,16 @@ struct task_result_state {
     bool thinking_block_started = false;
     bool text_block_started = false;
 
+    // Some chat templates (notably DeepSeek V4 with </think> injection)
+    // can have the model open with stray punctuation or a "filename" hint
+    // (e.g. " game.html") glued directly to a code fence, breaking the
+    // markdown render. Buffer the first few content bytes, decide once
+    // how much to strip, then commit. Stays empty/false until the strip
+    // decision is made; once made, prefix_strip_decided=true and
+    // prefix_strip_bytes is the stable number of leading bytes to drop.
+    bool prefix_strip_decided = false;
+    int  prefix_strip_bytes = 0;
+
     // for OpenAI Responses streaming API
     const std::string oai_resp_id;
     const std::string oai_resp_reasoning_id;

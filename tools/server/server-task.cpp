@@ -171,6 +171,87 @@ common_chat_msg task_result_state::update_chat_msg(
     }
 
     if (!new_msg.empty()) {
+        // First-content prefix strip (DeepSeek V4 + similar templates).
+        // Until the decision is made, suppress emission of the diff so we
+        // don't send bytes we'd later need to retract -- that breaks
+        // common_chat_msg_diff's invariant that previous content is a
+        // prefix of new content.
+        if (!prefix_strip_decided) {
+            const std::string & c = new_msg.content;
+            // Buffer until we have either:
+            //   - enough bytes to reliably classify (>= 32)
+            //   - a triple-backtick within the first 200 bytes (means we
+            //     can decide the fence-prefix strip now)
+            //   - the final non-partial chunk (must commit something)
+            //   - non-empty reasoning_content / tool_calls (these pieces
+            //     always pass through; we're only buffering content bytes)
+            const bool has_aux = !new_msg.reasoning_content.empty() || !new_msg.tool_calls.empty();
+            bool can_decide = !is_partial || has_aux || c.size() >= 32;
+            size_t fence_at = std::string::npos;
+            const size_t scan_max = std::min<size_t>(c.size(), 200);
+            for (size_t i = 0; i + 2 < scan_max; ++i) {
+                if (c[i] == '`' && c[i+1] == '`' && c[i+2] == '`') {
+                    fence_at = i;
+                    can_decide = true;
+                    break;
+                }
+            }
+
+            if (!can_decide) {
+                // Hold output for now. Don't commit chat_msg either, so
+                // msg_prv_copy stays the original empty chat_msg on the
+                // next call and the diff invariant is preserved.
+                diffs.clear();
+                return chat_msg;
+            }
+
+            // Compute the strip count once.
+            int strip = 0;
+            if (fence_at != std::string::npos && fence_at > 0) {
+                bool has_newline = false;
+                for (size_t i = 0; i < fence_at; ++i) {
+                    if (c[i] == '\n') { has_newline = true; break; }
+                }
+                if (!has_newline) {
+                    // Inline prefix glued to the fence. Drop everything
+                    // before the fence so it renders as a real code block.
+                    strip = (int) fence_at;
+                }
+            }
+            if (strip == 0) {
+                // Single sentence-boundary punctuation char with whitespace
+                // before alphanumeric/markup/UTF-8 content.
+                size_t i = 0;
+                while (i < c.size() && (c[i] == ' ' || c[i] == '\t')) ++i;
+                if (i < c.size() && (c[i] == '.' || c[i] == '?' || c[i] == '!' ||
+                                     c[i] == ',' || c[i] == ':' || c[i] == ';')) {
+                    size_t j = i + 1;
+                    while (j < c.size() && (c[j] == ' ' || c[j] == '\t' ||
+                                            c[j] == '\n' || c[j] == '\r')) ++j;
+                    if (j < c.size()) {
+                        unsigned char ch = (unsigned char) c[j];
+                        bool real_content =
+                            std::isalnum(ch) ||
+                            ch == '*' || ch == '_' || ch == '`' ||
+                            ch == '#' || ch == '"' || ch == '\'' ||
+                            ch == '(' || ch == '[' || ch == '{' ||
+                            ch >= 0x80;
+                        if (real_content) {
+                            strip = (int) j;
+                        }
+                    }
+                }
+            }
+
+            prefix_strip_decided = true;
+            prefix_strip_bytes = strip;
+        }
+
+        if (prefix_strip_bytes > 0) {
+            const size_t n = std::min<size_t>((size_t) prefix_strip_bytes, new_msg.content.size());
+            new_msg.content.erase(0, n);
+        }
+
         new_msg.set_tool_call_ids(generated_tool_call_ids, gen_tool_call_id);
         chat_msg = new_msg;
         auto all_diffs = common_chat_msg_diff::compute_diffs(msg_prv_copy, chat_msg);
