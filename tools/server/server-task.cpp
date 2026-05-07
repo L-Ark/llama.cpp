@@ -152,10 +152,47 @@ common_chat_msg task_result_state::update_chat_msg(
     generated_text += text_added;
     auto msg_prv_copy = chat_msg;
     //SRV_DBG("Parsing chat message: %s\n", generated_text.c_str());
-    auto new_msg = common_chat_parse(
-        generated_text,
-        is_partial,
-        chat_parser_params);
+    common_chat_msg new_msg;
+    try {
+        new_msg = common_chat_parse(
+            generated_text,
+            is_partial,
+            chat_parser_params);
+    } catch (const std::runtime_error & e) {
+        // The PEG chat parser threw because the model output didn't match
+        // the auto-generated grammar. Common cause: a reasoning model that
+        // got stuck in <think>...</think> and emitted EOS without ever
+        // closing </think>, so the optional reasoning rule's until(</think>)
+        // never matched and the parser couldn't make sense of the rest.
+        //
+        // Rather than failing the entire request with a 500, fall back to a
+        // best-effort split: if the prompt primed reasoning and we have
+        // </think>, split there; otherwise treat everything as reasoning
+        // (since the prompt told the model to reason). The caller still
+        // gets a usable assistant message.
+        new_msg = common_chat_msg();
+        new_msg.role = "assistant";
+        const bool primed_reasoning =
+            chat_parser_params.reasoning_format == COMMON_REASONING_FORMAT_DEEPSEEK &&
+            string_ends_with(chat_parser_params.generation_prompt, "<think>");
+        const size_t close_pos = generated_text.find("</think>");
+        if (primed_reasoning && close_pos != std::string::npos) {
+            std::string reasoning = generated_text.substr(0, close_pos);
+            if (string_starts_with(reasoning, "<think>")) {
+                reasoning.erase(0, std::string("<think>").size());
+            }
+            new_msg.reasoning_content = std::move(reasoning);
+            new_msg.content = generated_text.substr(close_pos + std::string("</think>").size());
+        } else if (primed_reasoning) {
+            std::string reasoning = generated_text;
+            if (string_starts_with(reasoning, "<think>")) {
+                reasoning.erase(0, std::string("<think>").size());
+            }
+            new_msg.reasoning_content = std::move(reasoning);
+        } else {
+            new_msg.content = generated_text;
+        }
+    }
 
     if (is_partial &&
             chat_parser_params.reasoning_format == COMMON_REASONING_FORMAT_DEEPSEEK &&
