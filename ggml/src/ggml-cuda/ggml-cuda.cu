@@ -62,6 +62,7 @@
 #include "ggml-cuda/cumsum.cuh"
 #include "ggml-cuda/fill.cuh"
 #include "ggml-cuda/hc-weighted-sum.cuh"
+#include "ggml-cuda/lightning-indexer.cuh"
 #include "ggml.h"
 
 #include <algorithm>
@@ -2833,6 +2834,9 @@ static bool ggml_cuda_compute_forward(ggml_backend_cuda_context & ctx, struct gg
         case GGML_OP_HC_WEIGHTED_SUM:
             ggml_cuda_op_hc_weighted_sum(ctx, dst);
             break;
+        case GGML_OP_LIGHTNING_INDEXER:
+            ggml_cuda_op_lightning_indexer(ctx, dst);
+            break;
         case GGML_OP_OUT_PROD:
             ggml_cuda_out_prod(ctx, dst);
             break;
@@ -5203,6 +5207,26 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                 op->ne[0] == op->src[0]->ne[0] &&
                 op->ne[1] == op->src[0]->ne[2] &&
                 op->ne[2] == 1 && op->ne[3] == 1;
+        case GGML_OP_LIGHTNING_INDEXER:
+            // The CUDA kernel currently only handles n_embd=128, n_head=64
+            // (matches DeepSeek V3.2 / V4 indexer shapes). Other shapes
+            // GGML_ABORT inside the kernel; surface that here so the
+            // scheduler keeps the op on a backend that can run it.
+            return op->src[0]->type == GGML_TYPE_F32 &&
+                op->src[2]->type == GGML_TYPE_F32 &&
+                op->type == GGML_TYPE_F32 &&
+                op->src[0]->ne[0] == 128 &&
+                op->src[0]->ne[1] == 64 &&
+                op->src[1]->ne[0] == 128 &&
+                op->src[1]->ne[1] == 1 &&
+                (op->src[1]->type == GGML_TYPE_F32 ||
+                 op->src[1]->type == GGML_TYPE_F16 ||
+                 op->src[1]->type == GGML_TYPE_BF16 ||
+                 op->src[1]->type == GGML_TYPE_Q4_0 ||
+                 op->src[1]->type == GGML_TYPE_Q4_1 ||
+                 op->src[1]->type == GGML_TYPE_Q5_0 ||
+                 op->src[1]->type == GGML_TYPE_Q5_1 ||
+                 op->src[1]->type == GGML_TYPE_Q8_0);
         case GGML_OP_PAD:
             return true;
         case GGML_OP_UPSCALE:
