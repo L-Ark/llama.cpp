@@ -63,6 +63,20 @@ static bool deepseek4_indexer_per_query() {
     return !deepseek4_indexer_collapse_q();
 }
 
+static bool deepseek4_lightning_indexer_enabled() {
+    // Opt-in: use the fused ggml_lightning_indexer CUDA kernel for the
+    // mul_mat -> relu -> weighted-sum pipeline that produces indexer
+    // scores. Math is equivalent to the explicit-op path; this only
+    // changes kernel-launch and intermediate-tensor cost. Off by default
+    // until we've A/B-validated parity at long context. Set
+    // LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1 to enable.
+    static const bool enabled = []() {
+        const char * value = std::getenv("LLAMA_DEEPSEEK4_LIGHTNING_INDEXER");
+        return value != nullptr && std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
 static bool deepseek4_hot_dispatch_enabled() {
     // Default OFF until the prompt-content-sensitive crash on certain expert
     // ID patterns is resolved. Set DS4_HOT_DISPATCH=1 to opt in.
@@ -1239,10 +1253,65 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                     cb(indexer_q, "indexer_q", il);
 
                     ggml_tensor * indexer_kv_prefix = ggml_view_2d(ctx0, updated_indexer_kv, indexer_head_dim, n_comp, updated_indexer_kv->nb[1], 0);
+
+                    // Decide whether to use the fused ggml_lightning_indexer
+                    // kernel. It's only valid for the simple n_batch=1
+                    // shape regime: either decode (work_tokens=1) or the
+                    // collapsed-q prefill path where indexer_q has already
+                    // been summed across the work_tokens axis. The kernel
+                    // also restricts to n_embd=128 / n_heads=64.
+                    const bool use_lightning_indexer =
+                        deepseek4_lightning_indexer_enabled() &&
+                        indexer_head_dim == 128 &&
+                        hparams.indexer_n_head == 64 &&
+                        (work_tokens == 1 || !deepseek4_indexer_per_query()) &&
+                        indexer_q->ne[0] == indexer_head_dim &&
+                        indexer_q->ne[1] == hparams.indexer_n_head &&
+                        indexer_kv_prefix->type == GGML_TYPE_F32;
+
+                    ggml_tensor * index_scores = nullptr;
+                    if (use_lightning_indexer) {
+                        // Lightning indexer expects:
+                        //   q:       [n_embd, n_heads, n_batch, n_stream]  F32
+                        //   k:       [n_embd, 1,       n_kv,    n_stream]
+                        //   weights: [n_heads, n_batch, 1,      n_stream]  F32
+                        // For the n_batch=1 path we reshape our 2D tensors
+                        // to 4D with the trailing dims set to 1.
+                        ggml_tensor * lq = ggml_reshape_4d(ctx0,
+                            cont_if_needed(indexer_q),
+                            indexer_head_dim, hparams.indexer_n_head, 1, 1);
+                        ggml_set_name(lq, "build_attn_v4.indexer_lq");
+                        ggml_tensor * lk = ggml_reshape_4d(ctx0,
+                            cont_if_needed(indexer_kv_prefix),
+                            indexer_head_dim, 1, n_comp, 1);
+                        ggml_set_name(lk, "build_attn_v4.indexer_lk");
+
+                        // Compute weights without our pre-applied scale --
+                        // the kernel takes scale_embd and scale_heads
+                        // explicitly and applies them inside the fused op.
+                        ggml_tensor * lw = mul_mat_checked(layer.indexer_proj, cur_attn, "build_attn_v4.indexer_weights_l");
+                        // lw is [n_heads, work_tokens]; for work_tokens>1 we're
+                        // in the collapsed-q regime so collapse weights too.
+                        if (work_tokens > 1) {
+                            lw = ggml_cont(ctx0, ggml_transpose(ctx0, lw));
+                            lw = sum_rows_checked(lw, "build_attn_v4.indexer_weights_l_sum");
+                        }
+                        lw = ggml_reshape_4d(ctx0, cont_if_needed(lw),
+                            hparams.indexer_n_head, 1, 1, 1);
+                        ggml_set_name(lw, "build_attn_v4.indexer_weights_l4d");
+
+                        const float scale_embd  = 1.0f / std::sqrt(float(indexer_head_dim));
+                        const float scale_heads = 1.0f / std::sqrt(float(hparams.indexer_n_head));
+                        ggml_tensor * lscore = ggml_lightning_indexer(ctx0, lq, lk, lw, scale_embd, scale_heads);
+                        // lscore is [n_kv=n_comp, n_batch=1, 1, 1]. Top-k
+                        // expects [n_comp, 1] (or 1D), so reshape down.
+                        index_scores = reshape_2d_checked(cont_if_needed(lscore), n_comp, 1, "build_attn_v4.index_scores_l", il);
+                        cb(index_scores, "index_scores", il);
+                    } else {
                     // After the work_tokens collapse this is [n_comp, n_head]
                     // (same as decode). In per-query mode it is
                     // [n_comp, n_head, work_tokens].
-                    ggml_tensor * index_scores = ggml_mul_mat(ctx0, indexer_kv_prefix, indexer_q);
+                    index_scores = ggml_mul_mat(ctx0, indexer_kv_prefix, indexer_q);
                     index_scores = ggml_relu(ctx0, index_scores);
 
                     ggml_tensor * index_weights = mul_mat_checked(layer.indexer_proj, cur_attn, "build_attn_v4.indexer_weights");
@@ -1282,6 +1351,7 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                         index_scores = reshape_2d_checked(index_scores, n_comp, 1, "build_attn_v4.index_scores", il);
                     }
                     cb(index_scores, "index_scores", il);
+                    }
 
                     ggml_tensor * selected_comp = ggml_argsort_top_k(ctx0, index_scores, hparams.indexer_top_k);
                     cb(selected_comp, "index_topk", il);
