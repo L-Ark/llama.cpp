@@ -1400,6 +1400,8 @@ std::vector<llama_token> mtp_speculative_gen_draft(
     int i0 = 0;
     if (last.last_id >= 0) {
         if (last.prob < p_min) {
+            llama_batch_free(mtp_batch);
+            llama_set_mtp_op_type(ctx, MTP_OP_NONE);
             return drafts;
         }
         current_input_id = last.last_id;
@@ -1421,6 +1423,7 @@ std::vector<llama_token> mtp_speculative_gen_draft(
         }
 
         llama_token id_next = common_sampler_sample_speculative(smpl, ctx, 0, prob_ptr);
+
         if (i > 0 && prob_ptr && prob < p_min) {
             break;
         }
