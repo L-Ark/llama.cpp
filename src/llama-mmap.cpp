@@ -4,6 +4,11 @@
 
 #include "ggml.h"
 
+extern "C" void ggml_vm_register_mapping(void *addr, size_t size, int fd);
+static inline void ggml_vm_register_mapping_ext(void *addr, size_t size, int fd) {
+    ggml_vm_register_mapping(addr, size, fd);
+}
+
 #include <cstring>
 #include <climits>
 #include <stdexcept>
@@ -313,6 +318,16 @@ struct llama_mmap::impl {
         addr = mmap(NULL, file->size(), PROT_READ, flags, fd, 0);
         if (addr == MAP_FAILED) {
             throw std::runtime_error(format("mmap failed: %s", strerror(errno)));
+        }
+
+        // ik_llama_fork: register (addr, size, dup'd-fd) so ggml's MoE prefetch
+        // can call posix_fadvise / readahead on the underlying file.  We dup
+        // because llama_file might close its fp later.
+        {
+            int dfd = dup(fd);
+            if (dfd >= 0) {
+                ggml_vm_register_mapping_ext(addr, file->size(), dfd);
+            }
         }
 
         if (prefetch > 0) {
