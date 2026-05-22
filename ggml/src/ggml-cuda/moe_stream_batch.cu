@@ -153,10 +153,12 @@ struct batch_vram_cache {
     int n_slots = 0;
     uintptr_t slot_key[16384] = {};
     uint64_t slot_used[16384] = {};
+    bool slot_pinned[16384] = {};
     uint64_t clock = 1;
     uint64_t hits = 0;
     uint64_t misses = 0;
     uint64_t preloads = 0;
+    uint64_t pinned = 0;
 };
 
 static batch_vram_cache g_bcaches[2];
@@ -178,15 +180,55 @@ static void batch_cache_report_atexit() {
     uint64_t hits = 0;
     uint64_t misses = 0;
     uint64_t preloads = 0;
+    uint64_t pinned = 0;
     for (batch_vram_cache &c : g_bcaches) {
         hits += c.hits;
         misses += c.misses;
         preloads += c.preloads;
+        pinned += c.pinned;
     }
     const uint64_t total = hits + misses;
     if (total == 0) return;
-    std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
-                 hits, misses, preloads, 100.0 * hits / total);
+    if (pinned > 0) {
+        std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu pinned=%lu hit_rate=%.1f%%\n",
+                     hits, misses, preloads, pinned, 100.0 * hits / total);
+    } else {
+        std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
+                     hits, misses, preloads, 100.0 * hits / total);
+    }
+}
+
+static bool profile_protect_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PROTECT");
+    return env && env[0] && env[0] != '0';
+}
+
+static size_t profile_reserve_slots(const batch_vram_cache *c) {
+    if (!c || c->n_slots <= 1) return 0;
+
+    const char *slots_env = std::getenv("GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS");
+    if (slots_env && slots_env[0]) {
+        long reserve = std::atol(slots_env);
+        if (reserve < 0) reserve = 0;
+        if (reserve >= c->n_slots) reserve = c->n_slots - 1;
+        return (size_t)reserve;
+    }
+
+    const char *pct_env = std::getenv("GGML_MOE_VRAM_PROFILE_RESERVE_PCT");
+    long pct = (pct_env && pct_env[0]) ? std::atol(pct_env) : 20;
+    if (pct < 0) pct = 0;
+    if (pct > 95) pct = 95;
+
+    size_t reserve = ((size_t)c->n_slots * (size_t)pct + 99) / 100;
+    if (reserve >= (size_t)c->n_slots) reserve = (size_t)c->n_slots - 1;
+    return reserve;
+}
+
+static size_t profile_preload_slot_budget(const batch_vram_cache *c) {
+    if (!c || c->n_slots <= 0) return 0;
+    if (!profile_protect_enabled()) return (size_t)c->n_slots;
+    const size_t reserve = profile_reserve_slots(c);
+    return (size_t)c->n_slots > reserve ? (size_t)c->n_slots - reserve : 1;
 }
 
 static uint64_t batch_key_hash(const char *name, int expert_idx) {
@@ -332,6 +374,9 @@ static int batch_cache_lookup_slot(batch_vram_cache *c, uintptr_t key) {
 
 static int batch_cache_insert_slot(batch_vram_cache *c, uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool allow_evict, bool preload) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
+    const bool pin_slot = preload && profile_protect_enabled();
+    if (pin_slot && c->pinned >= profile_preload_slot_budget(c)) return -1;
+
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
     for (int i = 0; i < c->n_slots; ++i) {
@@ -340,14 +385,22 @@ static int batch_cache_insert_slot(batch_vram_cache *c, uintptr_t key, const voi
             break;
         }
         if (!allow_evict) continue;
+        if (c->slot_pinned[i]) continue;
         if (c->slot_used[i] < oldest) {
             oldest = c->slot_used[i];
             slot = i;
         }
     }
     if (slot < 0) return -1;
+    if (c->slot_pinned[slot] && !pin_slot && c->pinned > 0) {
+        --c->pinned;
+    }
     c->slot_key[slot] = key;
     c->slot_used[slot] = c->clock++;
+    if (pin_slot && !c->slot_pinned[slot]) {
+        ++c->pinned;
+    }
+    c->slot_pinned[slot] = pin_slot;
     void *dst = (char *)c->pool + (size_t)slot * c->slot_sz;
     cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st);
     if (preload) {
@@ -369,7 +422,8 @@ static void preload_profile_for_tensor(
     char lookup_name[96] = {};
     profile_lookup_name(tensor_name, lookup_name, sizeof(lookup_name));
     int loaded = 0;
-    size_t slot_share = (size_t)cache->n_slots;
+    const size_t preload_budget = profile_preload_slot_budget(cache);
+    size_t slot_share = preload_budget;
     const char *share_env = std::getenv("GGML_MOE_VRAM_PROFILE_SHARE");
     if (share_env && share_env[0] && share_env[0] != '0' &&
         (std::strstr(tensor_name, ".ffn_down_exps.") ||
