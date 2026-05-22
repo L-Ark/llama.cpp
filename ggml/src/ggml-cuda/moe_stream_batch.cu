@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <vector>
 
 #include <cuda_runtime.h>
 
@@ -27,6 +28,7 @@ typedef struct {
 
 bool ggml_cuda_moe_stream_batch(
     int  src0_type_int,
+    const char *src0_name,
     const void *src0_data,
     int64_t n_as,
     int64_t ne01,
@@ -40,6 +42,14 @@ bool ggml_cuda_moe_stream_batch(
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride);
+
+bool ggml_cuda_moe_stream_preload_tensor(
+    int src0_type_int,
+    const char *src0_name,
+    const void *src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes);
 
 }
 
@@ -108,16 +118,92 @@ struct batch_vram_cache {
     uint64_t clock = 1;
     uint64_t hits = 0;
     uint64_t misses = 0;
+    uint64_t preloads = 0;
 };
 
 static batch_vram_cache g_bcache;
 static bool g_bcache_inited = false;
 
+struct profile_entry {
+    int expert_idx = -1;
+    char tensor[96] = {};
+};
+
+static std::vector<profile_entry> g_profile;
+static bool g_profile_loaded = false;
+static bool g_profile_enabled = false;
+static std::mutex g_profile_mu;
+static char g_preloaded_tensors[256][96] = {};
+static int g_n_preloaded_tensors = 0;
+
 static void batch_cache_report_atexit() {
     const uint64_t total = g_bcache.hits + g_bcache.misses;
     if (total == 0) return;
-    std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu hit_rate=%.1f%%\n",
-                 g_bcache.hits, g_bcache.misses, 100.0 * g_bcache.hits / total);
+    std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
+                 g_bcache.hits, g_bcache.misses, g_bcache.preloads, 100.0 * g_bcache.hits / total);
+}
+
+static uint64_t batch_key_hash(const char *name, int expert_idx) {
+    uint64_t h = 1469598103934665603ULL;
+    if (name) {
+        for (const unsigned char *p = (const unsigned char *)name; *p; ++p) {
+            h ^= (uint64_t)*p;
+            h *= 1099511628211ULL;
+        }
+    }
+    h ^= (uint64_t)(uint32_t)expert_idx + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    return h ? h : 1;
+}
+
+static bool tensor_already_preloaded(const char *name) {
+    if (!name || !name[0]) return true;
+    for (int i = 0; i < g_n_preloaded_tensors; ++i) {
+        if (std::strcmp(g_preloaded_tensors[i], name) == 0) return true;
+    }
+    if (g_n_preloaded_tensors < (int)(sizeof(g_preloaded_tensors) / sizeof(g_preloaded_tensors[0]))) {
+        std::snprintf(g_preloaded_tensors[g_n_preloaded_tensors++], sizeof(g_preloaded_tensors[0]), "%s", name);
+    }
+    return false;
+}
+
+static void load_profile_once() {
+    if (g_profile_loaded) return;
+    std::lock_guard<std::mutex> lk(g_profile_mu);
+    if (g_profile_loaded) return;
+    const char *path = std::getenv("GGML_MOE_VRAM_PROFILE");
+    if (!path || !path[0]) {
+        g_profile_loaded = true;
+        return;
+    }
+    FILE *f = std::fopen(path, "r");
+    if (!f) {
+        std::fprintf(stderr, "[moe_stream_batch] profile preload: open failed: %s\n", path);
+        g_profile_loaded = true;
+        return;
+    }
+    char line[512];
+    if (!std::fgets(line, sizeof(line), f)) {
+        std::fclose(f);
+        g_profile_loaded = true;
+        return;
+    }
+    while (std::fgets(line, sizeof(line), f)) {
+        profile_entry e;
+        unsigned long long rank = 0, count = 0, cumulative = 0, tensor_base = 0;
+        size_t expert_bytes = 0;
+        if (std::sscanf(line, "%llu,%llu,%zu,%llu,0x%llx,%d,%95[^\n]",
+                    &rank, &count, &expert_bytes, &cumulative, &tensor_base, &e.expert_idx, e.tensor) == 7 &&
+                e.expert_idx >= 0 && e.tensor[0]) {
+            g_profile.push_back(e);
+        }
+    }
+    std::fclose(f);
+    g_profile_enabled = !g_profile.empty();
+    if (g_profile_enabled) {
+        std::fprintf(stderr, "[moe_stream_batch] profile preload: loaded %zu entries from %s\n",
+                     g_profile.size(), path);
+    }
+    g_profile_loaded = true;
 }
 
 static void batch_cache_init(size_t expert_sz) {
@@ -163,7 +249,7 @@ static int batch_cache_lookup_slot(uintptr_t key) {
     return -1;
 }
 
-static int batch_cache_insert_slot(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st) {
+static int batch_cache_insert_slot(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool allow_evict, bool preload) {
     if (!g_bcache.pool || g_bcache.n_slots == 0 || sz > g_bcache.slot_sz) return -1;
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
@@ -172,6 +258,7 @@ static int batch_cache_insert_slot(uintptr_t key, const void *host_data, size_t 
             slot = i;
             break;
         }
+        if (!allow_evict) continue;
         if (g_bcache.slot_used[i] < oldest) {
             oldest = g_bcache.slot_used[i];
             slot = i;
@@ -182,8 +269,35 @@ static int batch_cache_insert_slot(uintptr_t key, const void *host_data, size_t 
     g_bcache.slot_used[slot] = g_bcache.clock++;
     void *dst = (char *)g_bcache.pool + (size_t)slot * g_bcache.slot_sz;
     cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st);
-    ++g_bcache.misses;
+    if (preload) {
+        ++g_bcache.preloads;
+    } else {
+        ++g_bcache.misses;
+    }
     return slot;
+}
+
+static void preload_profile_for_tensor(
+        const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
+    load_profile_once();
+    if (!g_profile_enabled || !tensor_name || !tensor_name[0]) return;
+    std::lock_guard<std::mutex> lk(g_profile_mu);
+    if (tensor_already_preloaded(tensor_name)) return;
+    int loaded = 0;
+    const size_t profile_limit = (size_t)g_bcache.n_slots < g_profile.size() ? (size_t)g_bcache.n_slots : g_profile.size();
+    for (size_t ip = 0; ip < profile_limit; ++ip) {
+        const profile_entry &e = g_profile[ip];
+        if (std::strcmp(e.tensor, tensor_name) != 0) continue;
+        if (e.expert_idx < 0 || e.expert_idx >= n_as) continue;
+        const uintptr_t key = batch_key_hash(tensor_name, e.expert_idx);
+        if (batch_cache_lookup_slot(key) >= 0) continue;
+        const char *expert_host = (const char *)src0_data + (size_t)e.expert_idx * nb02;
+        if (batch_cache_insert_slot(key, expert_host, src0_bytes, st, false, true) < 0) break;
+        ++loaded;
+    }
+    if (loaded > 0) {
+        std::fprintf(stderr, "[moe_stream_batch] profile preload: %s loaded=%d\n", tensor_name, loaded);
+    }
 }
 
 static bool ensure_dev(void *&p, size_t &cur, size_t need) {
@@ -230,6 +344,25 @@ static bool init_batch_once() {
     return g_batch.stream != nullptr;
 }
 
+extern "C" bool ggml_cuda_moe_stream_preload_tensor(
+    int src0_type_int,
+    const char *src0_name,
+    const void *src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes) {
+    if (!init_batch_once()) return false;
+    if ((ggml_type)src0_type_int != GGML_TYPE_IQ3_XXS || !src0_data || !src0_name) return false;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    if (!g_bcache_inited) {
+        batch_cache_init(expert_bytes);
+    }
+    if (!g_bcache.pool || g_bcache.n_slots <= 0) return false;
+    preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, expert_bytes, g_batch.stream);
+    cudaStreamSynchronize(g_batch.stream);
+    return true;
+}
+
 static bool launch_iq3_xxs_mmq_id_batch(
         const char * d_src0, const int * d_src1_q8, const int32_t * d_ids_dst,
         const int32_t * d_bounds, const int32_t * d_x_ids, float * d_dst,
@@ -248,6 +381,7 @@ static bool launch_iq3_xxs_mmq_id_batch(
 
 extern "C" bool ggml_cuda_moe_stream_batch(
     int  src0_type_int,
+    const char *src0_name,
     const void *src0_data,
     int64_t n_as,
     int64_t ne01,
@@ -322,15 +456,16 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         batch_cache_init(src0_bytes);
     }
     if (!g_bcache.pool || g_bcache.n_slots <= 0) return false;
+    preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
-        const uintptr_t cache_key = (uintptr_t)expert_host;
+        const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
         int cache_slot = batch_cache_lookup_slot(cache_key);
         if (cache_slot < 0) {
-            cache_slot = batch_cache_insert_slot(cache_key, expert_host, src0_bytes, st);
+            cache_slot = batch_cache_insert_slot(cache_key, expert_host, src0_bytes, st, true, false);
         }
         if (cache_slot < 0) return false;
         bc.h_x_ids[j] = cache_slot;

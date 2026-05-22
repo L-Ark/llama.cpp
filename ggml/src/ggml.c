@@ -128,6 +128,7 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
     const ggml_moe_row_mapping *rows);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int  src0_type_int,
+    const char *src0_name,
     const void *src0_data,
     int64_t n_as,
     int64_t ne01,
@@ -141,6 +142,13 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_preload_tensor(
+    int src0_type_int,
+    const char *src0_name,
+    const void *src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes);
 
 #define GGML_HOTEXP_MAX_ENTRIES (262144)   // 2^18 slots, more than enough
 struct ggml_hotexp_entry {
@@ -18249,6 +18257,17 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_pf_record_addr_layered((const char *)src0->data + cur_a*nb02, nb02, src0->name);
     }
 
+    if (ith == 0 &&
+            ggml_cuda_moe_stream_preload_tensor &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            src0->type == GGML_TYPE_IQ3_XXS &&
+            getenv("GGML_MOE_VRAM_PROFILE")) {
+        ggml_cuda_moe_stream_preload_tensor(src0->type, src0->name, src0->data, n_as, nb02, nb02);
+    }
+
+    ggml_barrier(params->shared);
+
 #if GGML_USE_IQK_MULMAT
     // ik_llama_fork: parallel-experts path — each thread takes a disjoint stripe
     // of experts and runs each one single-threaded, so multiple experts' weights
@@ -18273,6 +18292,7 @@ static void ggml_compute_forward_mul_mat_id(
             if (ith == 0) {
                 const bool done = ggml_cuda_moe_stream_batch(
                     src0->type,
+                    src0->name,
                     src0->data,
                     n_as,
                     ne01, ne00, nb01, nb02,
