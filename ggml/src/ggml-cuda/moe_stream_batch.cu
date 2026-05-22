@@ -131,6 +131,7 @@ struct batch_profile {
 };
 
 static batch_profile g_bprof;
+static batch_profile g_uprof;
 
 static void batch_profile_report_atexit() {
     if (!g_bprof.enabled || g_bprof.calls == 0) return;
@@ -146,6 +147,22 @@ static void batch_profile_report_atexit() {
         g_bprof.d2h_ms / calls,
         g_bprof.scatter_ms / calls,
         (g_bprof.stage_ms + g_bprof.quant_ms + g_bprof.kernel_ms + g_bprof.d2h_ms + g_bprof.scatter_ms) / calls);
+}
+
+static void up_gate_profile_report_atexit() {
+    if (!g_uprof.enabled || g_uprof.calls == 0) return;
+    const double calls = (double)g_uprof.calls;
+    std::fprintf(stderr,
+        "[moe_stream_batch] up/gate profile: calls=%lu avg_active=%.2f "
+        "stage=%.3f ms quant=%.3f ms kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
+        g_uprof.calls,
+        (double)g_uprof.active_experts / calls,
+        g_uprof.stage_ms / calls,
+        g_uprof.quant_ms / calls,
+        g_uprof.kernel_ms / calls,
+        g_uprof.d2h_ms / calls,
+        g_uprof.scatter_ms / calls,
+        (g_uprof.stage_ms + g_uprof.quant_ms + g_uprof.kernel_ms + g_uprof.d2h_ms + g_uprof.scatter_ms) / calls);
 }
 
 struct batch_vram_cache {
@@ -563,6 +580,7 @@ static bool init_batch_once() {
         }
         const char *prof_env = std::getenv("GGML_MOE_BATCH_PROFILE");
         g_bprof.enabled = prof_env && prof_env[0] && prof_env[0] != '0';
+        g_uprof.enabled = g_bprof.enabled;
         if (g_batch.stream && g_bprof.enabled) {
             cudaEventCreate(&g_batch.ev_start);
             cudaEventCreate(&g_batch.ev_stage);
@@ -570,6 +588,7 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_kernel);
             cudaEventCreate(&g_batch.ev_d2h);
             std::atexit(batch_profile_report_atexit);
+            std::atexit(up_gate_profile_report_atexit);
         }
     }
     g_batch_inited.store(true, std::memory_order_release);
@@ -758,6 +777,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     std::lock_guard<std::mutex> lk(g_batch_mu);
     batch_ctx &bc = g_batch;
     cudaStream_t st = bc.stream;
+    const bool profile = g_uprof.enabled && bc.ev_start && bc.ev_stage && bc.ev_quant && bc.ev_kernel && bc.ev_d2h;
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     const int64_t ne00_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
@@ -795,6 +815,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         preload_profile_for_tensor(src0_up_name, src0_up_data, n_as, nb02, src0_bytes, st);
         preload_profile_for_tensor(src0_gate_name, src0_gate_data, n_as, nb02, src0_bytes, st);
     }
+    if (profile) cudaEventRecord(bc.ev_start, st);
 
     char up_key_name[128] = {};
     char gate_key_name[128] = {};
@@ -871,6 +892,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_up_gate_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+    if (profile) cudaEventRecord(bc.ev_stage, st);
 
     if (!serial_up_gate) {
         quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
@@ -878,6 +900,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             ne00_padded, n_active, 1, 1, st);
         if (cudaGetLastError() != cudaSuccess) return false;
     }
+    if (profile) cudaEventRecord(bc.ev_quant, st);
 
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
     if (!stage_tensor(up_key_name, src0_up_data, bc.d_up)) return false;
@@ -906,6 +929,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
         bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
     if (cudaGetLastError() != cudaSuccess) return false;
+    if (profile) cudaEventRecord(bc.ev_kernel, st);
 
     if (use_handoff) {
         if (cudaStreamSynchronize(st) != cudaSuccess) return false;
@@ -919,12 +943,36 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     }
 
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
+    if (profile) cudaEventRecord(bc.ev_d2h, st);
     if (cudaStreamSynchronize(st) != cudaSuccess) return false;
 
+    float stage_ms = 0.0f;
+    float quant_ms = 0.0f;
+    float kernel_ms = 0.0f;
+    float d2h_ms = 0.0f;
+    if (profile) {
+        cudaEventElapsedTime(&stage_ms, bc.ev_start, bc.ev_stage);
+        cudaEventElapsedTime(&quant_ms, bc.ev_stage, bc.ev_quant);
+        cudaEventElapsedTime(&kernel_ms, bc.ev_quant, bc.ev_kernel);
+        cudaEventElapsedTime(&d2h_ms, bc.ev_kernel, bc.ev_d2h);
+    }
+
     const float *tmp = (const float *)bc.h_dst;
+    const auto scatter_start = std::chrono::steady_clock::now();
     for (int j = 0; j < n_active; ++j) {
         float *dst_row = (float *)((char *)dst + (size_t)dst_ids[j] * dst_nb1 + (size_t)token_ids[j] * dst_nb2);
         std::memcpy(dst_row, tmp + (size_t)dst_ids[j] * ne01, (size_t)ne01 * sizeof(float));
+    }
+    if (profile) {
+        const auto scatter_end = std::chrono::steady_clock::now();
+        const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
+        ++g_uprof.calls;
+        g_uprof.active_experts += (uint64_t)n_active;
+        g_uprof.stage_ms += stage_ms;
+        g_uprof.quant_ms += quant_ms;
+        g_uprof.kernel_ms += kernel_ms;
+        g_uprof.d2h_ms += d2h_ms;
+        g_uprof.scatter_ms += scatter_ms;
     }
     return true;
 }
