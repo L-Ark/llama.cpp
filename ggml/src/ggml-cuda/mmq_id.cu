@@ -381,7 +381,7 @@ void ggml_cuda_mul_mat_q_id(ggml_backend_cuda_context & ctx, const ggml_tensor *
         const int64_t s13 = ne12*s12;
 
         const mmq_args_id args = {
-            src0_d, src0->type, (const int *)src1_quantized_data, nullptr, nullptr, dst_d,
+            src0_d, src0->type, (const int *)src1_quantized_data, nullptr, nullptr, nullptr, dst_d,
             ne00, ne01, ne1, s01, ne11, s1,
             ne02, ne12, s02, s12, s2,
             ne03, ne13, s03, s13, s3,
@@ -483,7 +483,7 @@ void ggml_cuda_mul_mat_q_id(ggml_backend_cuda_context & ctx, const ggml_tensor *
 
     // Note that ne02 is used instead of ne12 because the number of y channels determines the z dimension of the CUDA grid.
     const mmq_args_id args = {
-        src0_d, src0->type, (const int *) src1_q8_1, ids_dst, expert_bounds, dst_d,
+        src0_d, src0->type, (const int *) src1_q8_1, ids_dst, expert_bounds, nullptr, dst_d,
         ne00, ne01, ne_get_rows, s01, ne_get_rows, s1,
         ne02, ne02, s02, s12, s2,
         ne03, ne13, s03, s13, s3,

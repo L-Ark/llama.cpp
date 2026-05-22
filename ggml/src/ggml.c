@@ -85,6 +85,262 @@ static struct ggml_vm_map ggml_vm_maps[GGML_VM_MAX_MAPS];
 static int  ggml_vm_nmaps = 0;
 static pthread_mutex_t ggml_vm_mu = PTHREAD_MUTEX_INITIALIZER;
 
+// === Hot-expert userspace cache ============================================
+// On systems where the model exceeds page cache (e.g. 268 GiB GGUF + 16 GiB
+// RAM cap), the kernel LRU is ineffective: every token brings in fresh
+// expert pages, and there's no way to "pin" the heavy-tail of frequently-
+// used routed experts.
+//
+// This cache solves it by maintaining a fixed-size anonymous-RAM buffer
+// (sized via GGML_HOTEXP_CACHE_GB) that holds COPIES of expert tensor
+// slices on first touch.  Once full, no eviction — subsequent accesses
+// to a cached expert read from RAM instead of mmap.  Since the buffer
+// is anonymous-dirty, it doesn't get evicted under memory pressure the
+// way file-backed mmap pages do.
+//
+// Sizing: replaces the standalone scripts/ballast.  The cache itself
+// creates memory pressure that bounds the kernel's mmap cache for cold
+// experts, satisfying the "16 GiB cap" spirit while using those bytes
+// for useful expert data instead of garbage.
+//
+// First-touch population is a simple proxy for hotness: warm experts
+// get picked early and often, so the cache fills with the heavy-tail.
+// === Streaming-MoE GPU compute hook ===
+// Defined in ggml-cuda/moe_stream.cu (extern "C") if CUDA backend is built.
+// Returns true if it ran the expert matmul on GPU; false to fall back to CPU.
+typedef struct { int32_t i1; int32_t i2; } ggml_moe_row_mapping;
+__attribute__((weak)) extern int  ggml_cuda_host_register(void *p, size_t n);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_available(void);
+__attribute__((weak)) extern void ggml_cuda_moe_stream_sync(void);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
+    int  src0_type_int,
+    const void *src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    int64_t cne1,
+    const void *src1_q8_1,
+    size_t src1_padded_num_cols,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const ggml_moe_row_mapping *rows);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
+    int  src0_type_int,
+    const void *src0_data,
+    int64_t n_as,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    size_t nb02,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const int64_t *matrix_row_counts,
+    const ggml_moe_row_mapping *matrix_rows,
+    int64_t rows_stride);
+
+#define GGML_HOTEXP_MAX_ENTRIES (262144)   // 2^18 slots, more than enough
+struct ggml_hotexp_entry {
+    uintptr_t tensor_base;   // src0->data — start of the expert tensor
+    int       expert_idx;    // which expert within that tensor
+    void *    cache_ptr;     // pointer into the cache buffer
+};
+static struct ggml_hotexp_entry  ggml_hotexp_table[GGML_HOTEXP_MAX_ENTRIES];
+static _Atomic int               ggml_hotexp_n = 0;
+static pthread_mutex_t           ggml_hotexp_mu = PTHREAD_MUTEX_INITIALIZER;
+static char *                    ggml_hotexp_buf = NULL;
+static size_t                    ggml_hotexp_buf_size = 0;
+static _Atomic size_t            ggml_hotexp_buf_used = 0;
+static int                       ggml_hotexp_inited = 0;
+static int                       ggml_hotexp_debug = 0;
+static _Atomic long              ggml_hotexp_hits   = 0;
+static _Atomic long              ggml_hotexp_misses = 0;
+
+#define GGML_HOTEXP_PROFILE_SIZE 65536
+struct ggml_hotexp_profile_entry {
+    uintptr_t tensor_base;
+    int       expert_idx;
+    uint64_t  count;
+    size_t    expert_bytes;
+    char      name[64];
+};
+static struct ggml_hotexp_profile_entry ggml_hotexp_profile[GGML_HOTEXP_PROFILE_SIZE];
+static pthread_mutex_t                  ggml_hotexp_profile_mu = PTHREAD_MUTEX_INITIALIZER;
+static const char *                     ggml_hotexp_profile_out = NULL;
+
+static int ggml_hotexp_profile_cmp(const void * a, const void * b) {
+    const struct ggml_hotexp_profile_entry * ea = *(const struct ggml_hotexp_profile_entry * const *)a;
+    const struct ggml_hotexp_profile_entry * eb = *(const struct ggml_hotexp_profile_entry * const *)b;
+    if (ea->count < eb->count) return  1;
+    if (ea->count > eb->count) return -1;
+    if (ea->tensor_base < eb->tensor_base) return -1;
+    if (ea->tensor_base > eb->tensor_base) return  1;
+    return ea->expert_idx - eb->expert_idx;
+}
+
+static void ggml_hotexp_report_atexit(void) {
+    if (ggml_hotexp_debug) {
+        long h = atomic_load(&ggml_hotexp_hits);
+        long m = atomic_load(&ggml_hotexp_misses);
+        long tot = h + m;
+        double mb_used = (double)atomic_load(&ggml_hotexp_buf_used) / (1024.0*1024.0);
+        fprintf(stderr,
+            "[hotexp] hits=%ld misses=%ld total=%ld hit_rate=%.1f%% entries=%d used=%.1f MiB\n",
+            h, m, tot,
+            tot ? 100.0 * (double)h / (double)tot : 0.0,
+            atomic_load(&ggml_hotexp_n), mb_used);
+    }
+    if (ggml_hotexp_profile_out && ggml_hotexp_profile_out[0]) {
+        FILE * f = fopen(ggml_hotexp_profile_out, "w");
+        if (!f) {
+            fprintf(stderr, "[hotexp] profile open failed: %s: %s\n",
+                    ggml_hotexp_profile_out, strerror(errno));
+            return;
+        }
+        const struct ggml_hotexp_profile_entry * rows[GGML_HOTEXP_PROFILE_SIZE];
+        int nrows = 0;
+        for (int i = 0; i < GGML_HOTEXP_PROFILE_SIZE; ++i) {
+            const struct ggml_hotexp_profile_entry * e = &ggml_hotexp_profile[i];
+            if (e->count == 0) continue;
+            rows[nrows++] = e;
+        }
+        qsort(rows, nrows, sizeof(rows[0]), ggml_hotexp_profile_cmp);
+        fprintf(f, "rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor\n");
+        size_t cumulative_bytes = 0;
+        for (int i = 0; i < nrows; ++i) {
+            const struct ggml_hotexp_profile_entry * e = rows[i];
+            cumulative_bytes += e->expert_bytes;
+            fprintf(f, "%d,%llu,%zu,%zu,0x%llx,%d,%s\n",
+                    i + 1,
+                    (unsigned long long)e->count,
+                    e->expert_bytes,
+                    cumulative_bytes,
+                    (unsigned long long)e->tensor_base,
+                    e->expert_idx,
+                    e->name);
+        }
+        fclose(f);
+        fprintf(stderr, "[hotexp] profile written: %s (%d entries)\n", ggml_hotexp_profile_out, nrows);
+    }
+}
+
+static void ggml_hotexp_init_once(void) {
+    if (ggml_hotexp_inited) return;
+    pthread_mutex_lock(&ggml_hotexp_mu);
+    if (!ggml_hotexp_inited) {
+        const char *s = getenv("GGML_HOTEXP_CACHE_GB");
+        long gb = (s && s[0]) ? strtol(s, NULL, 10) : 0;
+        const char *d = getenv("GGML_HOTEXP_DEBUG");
+        ggml_hotexp_debug = (d && d[0] && d[0] != '0') ? 1 : 0;
+        ggml_hotexp_profile_out = getenv("GGML_HOTEXP_PROFILE_OUT");
+        if (ggml_hotexp_debug || (ggml_hotexp_profile_out && ggml_hotexp_profile_out[0])) {
+            atexit(ggml_hotexp_report_atexit);
+        }
+        if (gb > 0) {
+            size_t bytes = (size_t)gb * 1024UL * 1024UL * 1024UL;
+            ggml_hotexp_buf = mmap(NULL, bytes, PROT_READ|PROT_WRITE,
+                                   MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE,
+                                   -1, 0);
+            if (ggml_hotexp_buf == MAP_FAILED) {
+                ggml_hotexp_buf = NULL;
+                fprintf(stderr, "[hotexp] mmap %ld GiB FAILED: %s\n",
+                        gb, strerror(errno));
+            } else {
+                ggml_hotexp_buf_size = bytes;
+                // Pages are allocated on-demand when experts are memcpy'd
+                // into the cache.  No pre-touching — this avoids evicting
+                // mmap'd model pages during the warmup phase.
+                fprintf(stderr, "[hotexp] anonymous-RAM cache: %ld GiB reserved (demand-paged) at %p\n",
+                        gb, ggml_hotexp_buf);
+                // Register as pinned host memory so GPU streaming can DMA at
+                // PCIe-pinned bandwidth (~27 GB/s vs ~3 GB/s pageable).
+                if (ggml_cuda_host_register) {
+                    ggml_cuda_host_register(ggml_hotexp_buf, bytes);
+                }
+            }
+        }
+        ggml_hotexp_inited = 1;
+    }
+    pthread_mutex_unlock(&ggml_hotexp_mu);
+}
+
+static void ggml_hotexp_profile_hit(
+        uintptr_t tensor_base, int expert_idx,
+        const char * tensor_name, size_t expert_bytes) {
+    if (!ggml_hotexp_profile_out || !ggml_hotexp_profile_out[0]) return;
+    uint64_t key = ((uint64_t)tensor_base >> 6) ^ ((uint64_t)(uint32_t)expert_idx * 0x9E3779B185EBCA87ULL);
+    int slot = (int)(key & (GGML_HOTEXP_PROFILE_SIZE - 1));
+    pthread_mutex_lock(&ggml_hotexp_profile_mu);
+    for (int probe = 0; probe < 64; ++probe) {
+        struct ggml_hotexp_profile_entry * e = &ggml_hotexp_profile[(slot + probe) & (GGML_HOTEXP_PROFILE_SIZE - 1)];
+        if (e->count == 0) {
+            e->tensor_base = tensor_base;
+            e->expert_idx = expert_idx;
+            e->count = 1;
+            e->expert_bytes = expert_bytes;
+            snprintf(e->name, sizeof(e->name), "%s", tensor_name ? tensor_name : "");
+            pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+            return;
+        }
+        if (e->tensor_base == tensor_base && e->expert_idx == expert_idx) {
+            e->count++;
+            pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+            return;
+        }
+    }
+    pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+}
+
+// Look up expert (tensor_base, expert_idx); if cached return ptr, else
+// try to populate cache from src_data.  Returns NULL when cache is full
+// or expert wasn't seen before and couldn't be inserted.
+static const void *ggml_hotexp_get_or_insert(
+        uintptr_t tensor_base, int expert_idx,
+        const void *src_data, size_t expert_bytes) {
+    if (!ggml_hotexp_buf) return NULL;
+    // Fast path: linear scan (table is small in practice; ~5k entries
+    // for GLM-5.1 with first-touch caching).  TODO: hash if it gets big.
+    int n = atomic_load(&ggml_hotexp_n);
+    for (int i = 0; i < n; ++i) {
+        if (ggml_hotexp_table[i].tensor_base == tensor_base &&
+            ggml_hotexp_table[i].expert_idx  == expert_idx) {
+            if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_hits, 1);
+            return ggml_hotexp_table[i].cache_ptr;
+        }
+    }
+    // Slow path: insert.
+    pthread_mutex_lock(&ggml_hotexp_mu);
+    // Re-check after lock — another thread may have inserted.
+    int n2 = atomic_load(&ggml_hotexp_n);
+    for (int i = n; i < n2; ++i) {
+        if (ggml_hotexp_table[i].tensor_base == tensor_base &&
+            ggml_hotexp_table[i].expert_idx  == expert_idx) {
+            pthread_mutex_unlock(&ggml_hotexp_mu);
+            return ggml_hotexp_table[i].cache_ptr;
+        }
+    }
+    if (n2 >= GGML_HOTEXP_MAX_ENTRIES ||
+        ggml_hotexp_buf_used + expert_bytes > ggml_hotexp_buf_size) {
+        pthread_mutex_unlock(&ggml_hotexp_mu);
+        if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_misses, 1);
+        return NULL;
+    }
+    void *dst = ggml_hotexp_buf + ggml_hotexp_buf_used;
+    ggml_hotexp_buf_used += expert_bytes;
+    memcpy(dst, src_data, expert_bytes);
+    ggml_hotexp_table[n2].tensor_base = tensor_base;
+    ggml_hotexp_table[n2].expert_idx  = expert_idx;
+    ggml_hotexp_table[n2].cache_ptr   = dst;
+    atomic_store(&ggml_hotexp_n, n2 + 1);
+    pthread_mutex_unlock(&ggml_hotexp_mu);
+    if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_misses, 1);
+    return dst;
+}
+// === end Hot-expert cache ==================================================
+
 void ggml_vm_register_mapping(void *addr, size_t size, int fd) {
     pthread_mutex_lock(&ggml_vm_mu);
     if (ggml_vm_nmaps < GGML_VM_MAX_MAPS) {
@@ -17978,6 +18234,7 @@ static void ggml_compute_forward_mul_mat_id(
         }
 
         ggml_moe_prefetch_init();
+        ggml_hotexp_init_once();
     }
 
     ggml_barrier(params->shared);
@@ -17997,17 +18254,75 @@ static void ggml_compute_forward_mul_mat_id(
     // of experts and runs each one single-threaded, so multiple experts' weights
     // stream from the SSD concurrently.  Only valid for the IQK mulmat path.
     if (ggml_moe_parallel_experts && ne13 == 1 && dst->type == GGML_TYPE_F32) {
+        ggml_hotexp_init_once();
         const void * wdata    = (src1->type == vec_dot_type) ? src1->data : params->wdata;
         const size_t row_size = ggml_row_size(vec_dot_type, ne10);
+        const uintptr_t tbase = (uintptr_t)src0->data;
+        // GPU streaming-MoE: keep experts mmap/SSD-backed, stage only the
+        // routed expert slice into VRAM, and run the CUDA IQ3_XXS MMVQ kernel.
+        const bool use_gpu_stream =
+            ggml_cuda_moe_stream_one &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            src0->type == GGML_TYPE_IQ3_XXS &&
+            src1->type == GGML_TYPE_F32 &&
+            (!getenv("GGML_MOE_STREAM_DEFER") || ids->ne[1] == 1) &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32;
+        if (use_gpu_stream && ggml_cuda_moe_stream_batch && ids->ne[1] == 1) {
+            if (ith == 0) {
+                const bool done = ggml_cuda_moe_stream_batch(
+                    src0->type,
+                    src0->data,
+                    n_as,
+                    ne01, ne00, nb01, nb02,
+                    (const float *)src1->data,
+                    nb11, nb12,
+                    (float *)dst->data,
+                    nb1, nb2,
+                    matrix_row_counts,
+                    (const ggml_moe_row_mapping *)matrix_rows,
+                    ne12);
+                if (!done) {
+                    GGML_ABORT("batched CUDA MoE stream path failed after selection");
+                }
+            }
+            ggml_barrier(params->shared);
+            return;
+        }
         for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
             const int64_t cne1 = matrix_row_counts[cur_a];
             if (cne1 == 0) continue;
             const char * src0_cur = (const char *) src0->data + cur_a*nb02;
-            if (!iqk_mul_mat_moe(ne01, cne1, ne00, ne11,
-                        src0->type, (const char *)src0_cur, nb01,
-                        vec_dot_type, (const char *)wdata, row_size,
-                        (float *)dst->data, nb1, nb2,
-                        matrix_rows + cur_a*ne12, 0, 1)) GGML_ABORT("pe: iqk_mul_mat_moe failed");
+            ggml_hotexp_profile_hit(tbase, cur_a, src0->name, nb02);
+            // Hot-expert cache: if this expert has been seen before (or fits in
+            // the cache now), use the RAM-resident copy instead of the mmap addr.
+            const void *cached = ggml_hotexp_get_or_insert(tbase, cur_a, src0_cur, nb02);
+            if (cached) src0_cur = (const char *)cached;
+            bool done = false;
+            if (use_gpu_stream) {
+                done = ggml_cuda_moe_stream_one(
+                    src0->type,
+                    src0_cur,
+                    ne01, ne00, nb01,
+                    (const float *)src1->data,
+                    nb11, nb12,
+                    cne1,
+                    NULL, 0,
+                    (float *)dst->data,
+                    nb1, nb2,
+                    (const ggml_moe_row_mapping *)(matrix_rows + cur_a*ne12));
+            }
+            if (!done) {
+                if (!iqk_mul_mat_moe(ne01, cne1, ne00, ne11,
+                            src0->type, (const char *)src0_cur, nb01,
+                            vec_dot_type, (const char *)wdata, row_size,
+                            (float *)dst->data, nb1, nb2,
+                            matrix_rows + cur_a*ne12, 0, 1)) GGML_ABORT("pe: iqk_mul_mat_moe failed");
+            }
+        }
+        if (ggml_cuda_moe_stream_sync) {
+            ggml_cuda_moe_stream_sync();
         }
         return;
     }
@@ -18031,6 +18346,18 @@ static void ggml_compute_forward_mul_mat_id(
                                   //
 #if GGML_USE_IQK_MULMAT
         if (ne13 == 1 && dst->type == GGML_TYPE_F32) {
+           // ik_llama_fork: hot-expert cache.  All threads call concurrently;
+           // mutex-protected insert ensures exactly one thread does the
+           // memcpy, the rest hit the cached entry on the lock-free fast path.
+           const void *cached = ggml_hotexp_get_or_insert(
+               (uintptr_t)src0->data, cur_a, src0_cur, nb02);
+           ggml_hotexp_profile_hit((uintptr_t)src0->data, cur_a, src0->name, nb02);
+           if (cached) src0_cur = (const char *)cached;
+           // GPU streaming: disabled — see STREAMING_MOE_PLAN.md "Breakthrough 6"
+           // The current MMVQ kernels expect Q8_1 src1, but GLM-5.1's IQ3_XXS
+           // vec_dot_type is Q8_K.  Quantize-on-GPU adds per-call overhead that
+           // erases the streaming win.  Path forward: write IQ3_XXS×Q8_K CUDA
+           // kernel, OR refactor to batch all 8 experts per layer in one call.
            if (!iqk_mul_mat_moe(nr0, nr1, ne00, ne11,
                        src0->type, (const char *)src0_cur, nb01, ///ggml_type_size(src0->type),
                        vec_dot_type, (const char *)wdata, row_size, ///ggml_type_size(vec_dot_type),
@@ -18167,6 +18494,11 @@ IQK_MulMat_Not_Available:;
     }
 
 #undef MMID_MATRIX_ROW
+
+    // GPU streaming: thread 0 collected async dispatches; sync + scatter now.
+    if (ith == 0 && ggml_cuda_moe_stream_sync) {
+        ggml_cuda_moe_stream_sync();
+    }
 }
 
 #if GGML_USE_IQK_MULMAT

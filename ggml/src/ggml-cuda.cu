@@ -1445,9 +1445,9 @@ GGML_CALL ggml_backend_buffer_type_t ggml_backend_cuda_host_buffer_type() {
     return &ggml_backend_cuda_buffer_type_host;
 }
 
-//static bool ggml_backend_buffer_is_cuda_host(ggml_backend_buffer_t buffer) {
-//    return buffer->buft->iface.get_name == ggml_backend_cuda_host_buffer_type_name;
-//}
+static bool ggml_backend_buffer_is_cuda_host(ggml_backend_buffer_t buffer) {
+    return buffer->buft->iface.get_name == ggml_backend_cuda_host_buffer_type_name;
+}
 
 /// kernels
 
