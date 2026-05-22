@@ -18676,13 +18676,17 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             src0_1->type == GGML_TYPE_IQ3_XXS &&
             getenv("GGML_MOE_VRAM_PROFILE") &&
             getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
-        if (src0_2) {
-            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, nb02);
-            ggml_cuda_moe_stream_preload_tensor(src0_2->type, src0_2->name, src0_2->data, n_as, nb02, nb02);
-        } else {
-            const size_t half = nb02/2;
-            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, (const char *)src0_1->data + half, n_as, nb02, half);
-            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, half);
+        const char *profile_upgate_env = getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
+        const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
+        if (profile_upgate) {
+            if (src0_2) {
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, nb02);
+                ggml_cuda_moe_stream_preload_tensor(src0_2->type, src0_2->name, src0_2->data, n_as, nb02, nb02);
+            } else {
+                const size_t half = nb02/2;
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, (const char *)src0_1->data + half, n_as, nb02, half);
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, half);
+            }
         }
     }
 

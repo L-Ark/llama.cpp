@@ -656,8 +656,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
     if (!cache) return false;
-    preload_profile_for_tensor(src0_up_name, src0_up_data, n_as, nb02, src0_bytes, st);
-    preload_profile_for_tensor(src0_gate_name, src0_gate_data, n_as, nb02, src0_bytes, st);
+    const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
+    const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
+    if (profile_upgate) {
+        preload_profile_for_tensor(src0_up_name, src0_up_data, n_as, nb02, src0_bytes, st);
+        preload_profile_for_tensor(src0_gate_name, src0_gate_data, n_as, nb02, src0_bytes, st);
+    }
 
     char up_key_name[128] = {};
     char gate_key_name[128] = {};
