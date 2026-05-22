@@ -18595,7 +18595,8 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     };
 
     int64_t * matrix_row_counts = (int64_t *) (wdata_src1_end); // [n_as]
-    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as); // [n_as][ne11]
+    atomic_int * cuda_up_gate_done = (atomic_int *)(matrix_row_counts + n_as); // one shared flag, padded as int64_t
+    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as + 1); // [n_as][ne11]
 
     if (src1->type != vec_dot_type) {
 
@@ -18638,6 +18639,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+        atomic_store(cuda_up_gate_done, 0);
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -18696,7 +18698,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     float * cuda_validate = NULL;
     size_t cuda_validate_bytes = 0;
 
-    if (ith == 0 &&
+    const bool try_cuda_up_gate =
             ggml_moe_parallel_experts &&
             ggml_cuda_moe_stream_up_gate_batch &&
             ggml_cuda_moe_stream_available &&
@@ -18707,46 +18709,51 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             ne13 == 1 &&
             dst->type == GGML_TYPE_F32 &&
             !up_b && !gate_b &&
-            getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
+            getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
+    if (try_cuda_up_gate) {
         const bool validate_cuda = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_VALIDATE") != NULL;
-        const int64_t nr0 = src0_2 ? ne01 : ne01/2;
-        const char * up_name = src0_1->name;
-        const char * gate_name = src0_2 ? src0_2->name : src0_1->name;
-        const char * up_data = (const char *)src0_1->data;
-        const char * gate_data = src0_2 ? (const char *)src0_2->data : (const char *)src0_1->data;
-        const size_t expert_stride = src0_2 ? nb02 : nb02/2;
-        if (!src0_2) {
-            up_data += expert_stride;
-        }
-        const bool done = ggml_cuda_moe_stream_up_gate_batch(
-            src0_1->type,
-            up_name, up_data,
-            gate_name, gate_data,
-            n_as,
-            nr0, ne00, nb01, src0_2 ? nb02 : nb02,
-            (const float *)src1->data,
-            nb11, nb12,
-            (float *)dst->data,
-            nb1, nb2,
-            dst->op_params[0],
-            limit,
-            matrix_row_counts,
-            (const ggml_moe_row_mapping *)matrix_rows,
-            ne12);
-        if (!done) {
-            GGML_ABORT("batched CUDA MoE up/gate stream path failed after selection");
-        }
-        if (validate_cuda) {
-            cuda_validate_bytes = ggml_nbytes(dst);
-            cuda_validate = (float *)malloc(cuda_validate_bytes);
-            if (cuda_validate) {
-                memcpy(cuda_validate, dst->data, cuda_validate_bytes);
+        if (ith == 0) {
+            const int64_t nr0 = src0_2 ? ne01 : ne01/2;
+            const char * up_name = src0_1->name;
+            const char * gate_name = src0_2 ? src0_2->name : src0_1->name;
+            const char * up_data = (const char *)src0_1->data;
+            const char * gate_data = src0_2 ? (const char *)src0_2->data : (const char *)src0_1->data;
+            const size_t expert_stride = src0_2 ? nb02 : nb02/2;
+            if (!src0_2) {
+                up_data += expert_stride;
             }
-        } else {
-            ggml_barrier(params->shared);
-            return;
+            const bool done = ggml_cuda_moe_stream_up_gate_batch(
+                src0_1->type,
+                up_name, up_data,
+                gate_name, gate_data,
+                n_as,
+                nr0, ne00, nb01, src0_2 ? nb02 : nb02,
+                (const float *)src1->data,
+                nb11, nb12,
+                (float *)dst->data,
+                nb1, nb2,
+                dst->op_params[0],
+                limit,
+                matrix_row_counts,
+                (const ggml_moe_row_mapping *)matrix_rows,
+                ne12);
+            if (!done) {
+                GGML_ABORT("batched CUDA MoE up/gate stream path failed after selection");
+            }
+            if (validate_cuda) {
+                cuda_validate_bytes = ggml_nbytes(dst);
+                cuda_validate = (float *)malloc(cuda_validate_bytes);
+                if (cuda_validate) {
+                    memcpy(cuda_validate, dst->data, cuda_validate_bytes);
+                }
+            } else {
+                atomic_store(cuda_up_gate_done, 1);
+            }
         }
         ggml_barrier(params->shared);
+        if (!validate_cuda && atomic_load(cuda_up_gate_done)) {
+            return;
+        }
     }
 
     ggml_barrier(params->shared);
@@ -27867,6 +27874,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
                     const int n_as = src0->ne[2];
                     cur += GGML_PAD(cur, sizeof(int64_t));       // align
                     cur += n_as * sizeof(int64_t);               // matrix_row_counts
+                    cur += sizeof(int64_t);                      // cuda_up_gate_done shared flag
                     cur += n_as * src2->ne[2] * sizeof(int64_t); // matrix_rows
                 } break;
             case GGML_OP_FUSED_UP_GATE:
