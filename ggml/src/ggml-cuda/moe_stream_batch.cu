@@ -9,6 +9,7 @@
 #include "quantize.cuh"
 #include "quantize_id.cuh"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -175,6 +176,84 @@ static bool g_profile_enabled = false;
 static std::mutex g_profile_mu;
 static char g_preloaded_tensors[256][96] = {};
 static int g_n_preloaded_tensors = 0;
+
+struct batch_route_profile_entry {
+    int expert_idx = -1;
+    uint64_t count = 0;
+    size_t expert_bytes = 0;
+    char tensor[96] = {};
+};
+
+static std::vector<batch_route_profile_entry> g_route_profile;
+static std::mutex g_route_profile_mu;
+static const char * g_route_profile_out = nullptr;
+static bool g_route_profile_inited = false;
+
+static void batch_route_profile_report_atexit() {
+    if (!g_route_profile_out || !g_route_profile_out[0]) return;
+
+    std::vector<batch_route_profile_entry> rows;
+    {
+        std::lock_guard<std::mutex> lk(g_route_profile_mu);
+        rows = g_route_profile;
+    }
+    if (rows.empty()) return;
+
+    std::sort(rows.begin(), rows.end(),
+        [](const batch_route_profile_entry &a, const batch_route_profile_entry &b) {
+            if (a.count != b.count) return a.count > b.count;
+            const int name_cmp = std::strcmp(a.tensor, b.tensor);
+            if (name_cmp != 0) return name_cmp < 0;
+            return a.expert_idx < b.expert_idx;
+        });
+
+    FILE *f = std::fopen(g_route_profile_out, "w");
+    if (!f) {
+        std::fprintf(stderr, "[moe_stream_batch] route profile: open failed: %s\n", g_route_profile_out);
+        return;
+    }
+    std::fprintf(f, "rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor\n");
+    size_t cumulative = 0;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const batch_route_profile_entry &e = rows[i];
+        cumulative += e.expert_bytes;
+        std::fprintf(f, "%zu,%lu,%zu,%zu,0x0,%d,%s\n",
+                     i + 1, e.count, e.expert_bytes, cumulative, e.expert_idx, e.tensor);
+    }
+    std::fclose(f);
+    std::fprintf(stderr, "[moe_stream_batch] route profile written: %s (%zu entries)\n",
+                 g_route_profile_out, rows.size());
+}
+
+static void batch_route_profile_init_once() {
+    if (g_route_profile_inited) return;
+    std::lock_guard<std::mutex> lk(g_route_profile_mu);
+    if (g_route_profile_inited) return;
+    g_route_profile_out = std::getenv("GGML_MOE_BATCH_PROFILE_OUT");
+    if (g_route_profile_out && g_route_profile_out[0]) {
+        std::atexit(batch_route_profile_report_atexit);
+    }
+    g_route_profile_inited = true;
+}
+
+static void batch_route_profile_hit(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    batch_route_profile_init_once();
+    if (!g_route_profile_out || !g_route_profile_out[0] || !tensor_name || !tensor_name[0]) return;
+
+    std::lock_guard<std::mutex> lk(g_route_profile_mu);
+    for (batch_route_profile_entry &e : g_route_profile) {
+        if (e.expert_idx == expert_idx && std::strcmp(e.tensor, tensor_name) == 0) {
+            ++e.count;
+            return;
+        }
+    }
+    batch_route_profile_entry e;
+    e.expert_idx = expert_idx;
+    e.count = 1;
+    e.expert_bytes = expert_bytes;
+    std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
+    g_route_profile.push_back(e);
+}
 
 static void batch_cache_report_atexit() {
     uint64_t hits = 0;
@@ -944,6 +1023,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
         const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
+        batch_route_profile_hit(src0_name, active_experts[j], src0_bytes);
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
         if (cache_slot < 0) {
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false);
