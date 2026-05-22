@@ -431,16 +431,18 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     }
     const char *env = std::getenv("GGML_MOE_VRAM_CACHE_GB");
     const size_t budget_gb = env ? (size_t)std::atoi(env) : 16;
-    if (budget_gb == 0) {
+    const char *env_mib = std::getenv("GGML_MOE_VRAM_CACHE_MIB");
+    size_t budget_mib = env_mib && env_mib[0] ? (size_t)std::strtoull(env_mib, nullptr, 10) : budget_gb * 1024ULL;
+    if (budget_mib == 0) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
-    size_t this_budget_gb = budget_gb;
+    size_t this_budget_mib = budget_mib;
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
-    if (fused_env && fused_env[0] && fused_env[0] != '0' && budget_gb > 8 && cid == 1) {
-        this_budget_gb = 8;
+    if (fused_env && fused_env[0] && fused_env[0] != '0' && budget_mib > 8192 && cid == 1) {
+        this_budget_mib = 8192;
     }
-    const size_t budget = this_budget_gb * 1024ULL * 1024ULL * 1024ULL;
+    const size_t budget = this_budget_mib * 1024ULL * 1024ULL;
     batch_vram_cache *c = &g_bcaches[cid];
     c->slot_sz = expert_sz;
     c->n_slots = (int)(budget / expert_sz);
