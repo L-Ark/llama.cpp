@@ -97,6 +97,8 @@ struct batch_ctx {
     cudaEvent_t ev_quant = nullptr;
     cudaEvent_t ev_kernel = nullptr;
     cudaEvent_t ev_d2h = nullptr;
+    cudaEvent_t ev_up = nullptr;
+    cudaEvent_t ev_gate = nullptr;
     int32_t h_ids_dst[128] = {};
     int32_t h_up_gate_ids_dst[128] = {};
     int32_t h_ids_src1[128] = {};
@@ -128,6 +130,9 @@ struct batch_profile {
     double kernel_ms = 0.0;
     double d2h_ms = 0.0;
     double scatter_ms = 0.0;
+    double up_ms = 0.0;
+    double gate_ms = 0.0;
+    double fuse_ms = 0.0;
 };
 
 static batch_profile g_bprof;
@@ -154,11 +159,15 @@ static void up_gate_profile_report_atexit() {
     const double calls = (double)g_uprof.calls;
     std::fprintf(stderr,
         "[moe_stream_batch] up/gate profile: calls=%lu avg_active=%.2f "
-        "stage=%.3f ms quant=%.3f ms kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
+        "stage=%.3f ms quant=%.3f ms up=%.3f ms gate=%.3f ms fuse=%.3f ms "
+        "kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
         g_uprof.calls,
         (double)g_uprof.active_experts / calls,
         g_uprof.stage_ms / calls,
         g_uprof.quant_ms / calls,
+        g_uprof.up_ms / calls,
+        g_uprof.gate_ms / calls,
+        g_uprof.fuse_ms / calls,
         g_uprof.kernel_ms / calls,
         g_uprof.d2h_ms / calls,
         g_uprof.scatter_ms / calls,
@@ -587,6 +596,8 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_quant);
             cudaEventCreate(&g_batch.ev_kernel);
             cudaEventCreate(&g_batch.ev_d2h);
+            cudaEventCreate(&g_batch.ev_up);
+            cudaEventCreate(&g_batch.ev_gate);
             std::atexit(batch_profile_report_atexit);
             std::atexit(up_gate_profile_report_atexit);
         }
@@ -904,7 +915,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
     if (!stage_tensor(up_key_name, src0_up_data, bc.d_up)) return false;
+    if (profile) cudaEventRecord(bc.ev_up, st);
     if (!stage_tensor(gate_key_name, src0_gate_data, bc.d_gate)) return false;
+    if (profile) cudaEventRecord(bc.ev_gate, st);
 
     const char *prefuse_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_PREFUSE_DUMP");
     const bool prefuse_dump = prefuse_env && prefuse_env[0] && prefuse_env[0] != '0';
@@ -948,11 +961,17 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     float stage_ms = 0.0f;
     float quant_ms = 0.0f;
+    float up_ms = 0.0f;
+    float gate_ms = 0.0f;
+    float fuse_ms = 0.0f;
     float kernel_ms = 0.0f;
     float d2h_ms = 0.0f;
     if (profile) {
         cudaEventElapsedTime(&stage_ms, bc.ev_start, bc.ev_stage);
         cudaEventElapsedTime(&quant_ms, bc.ev_stage, bc.ev_quant);
+        cudaEventElapsedTime(&up_ms, bc.ev_quant, bc.ev_up);
+        cudaEventElapsedTime(&gate_ms, bc.ev_up, bc.ev_gate);
+        cudaEventElapsedTime(&fuse_ms, bc.ev_gate, bc.ev_kernel);
         cudaEventElapsedTime(&kernel_ms, bc.ev_quant, bc.ev_kernel);
         cudaEventElapsedTime(&d2h_ms, bc.ev_kernel, bc.ev_d2h);
     }
@@ -970,6 +989,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         g_uprof.active_experts += (uint64_t)n_active;
         g_uprof.stage_ms += stage_ms;
         g_uprof.quant_ms += quant_ms;
+        g_uprof.up_ms += up_ms;
+        g_uprof.gate_ms += gate_ms;
+        g_uprof.fuse_ms += fuse_ms;
         g_uprof.kernel_ms += kernel_ms;
         g_uprof.d2h_ms += d2h_ms;
         g_uprof.scatter_ms += scatter_ms;
