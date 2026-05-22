@@ -83,6 +83,7 @@ struct batch_ctx {
     void * d_dst = nullptr;      size_t d_dst_sz = 0;
     void * d_up = nullptr;       size_t d_up_sz = 0;
     void * d_gate = nullptr;     size_t d_gate_sz = 0;
+    void * d_handoff = nullptr;  size_t d_handoff_sz = 0;
     int32_t * d_ids_src1 = nullptr; size_t d_ids_src1_sz = 0;
     int32_t * d_ids_dst = nullptr; size_t d_ids_dst_sz = 0;
     int32_t * d_x_ids = nullptr; size_t d_x_ids_sz = 0;
@@ -103,6 +104,17 @@ struct batch_ctx {
 static batch_ctx g_batch;
 static std::mutex g_batch_mu;
 static std::atomic<bool> g_batch_inited{false};
+
+struct moe_gpu_handoff {
+    const float * host_ptr = nullptr;
+    const float * d_data = nullptr;
+    size_t bytes = 0;
+    int64_t ne01 = 0;
+    int64_t dst_cols = 0;
+    uint64_t serial = 0;
+};
+
+static moe_gpu_handoff g_handoff;
 
 struct batch_profile {
     bool enabled = false;
@@ -400,6 +412,11 @@ static bool ensure_host_pinned(void *&p, size_t &cur, size_t need) {
     return true;
 }
 
+static bool gpu_handoff_enabled() {
+    const char *env = std::getenv("GGML_MOE_GPU_HANDOFF");
+    return env && env[0] && env[0] != '0';
+}
+
 static bool init_batch_once() {
     if (g_batch_inited.load(std::memory_order_acquire)) return g_batch.stream != nullptr;
     std::lock_guard<std::mutex> lk(g_batch_mu);
@@ -560,12 +577,14 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
+    const bool use_handoff = gpu_handoff_enabled();
 
     bool ok = ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes)
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
         && ensure_dev(bc.d_up, bc.d_up_sz, dst_bytes)
         && ensure_dev(bc.d_gate, bc.d_gate_sz, dst_bytes)
+        && (!use_handoff || ensure_dev(bc.d_handoff, bc.d_handoff_sz, dst_bytes))
         && ensure_dev((void *&)bc.d_ids_src1, bc.d_ids_src1_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_x_ids, bc.d_x_ids_sz, ids_bytes)
@@ -627,10 +646,22 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
+    float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
-        (const float *)bc.d_up, (const float *)bc.d_gate, (float *)bc.d_dst,
+        (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
         bc.d_ids_dst, n_active, ne01, unary_op, limit);
     if (cudaGetLastError() != cudaSuccess) return false;
+
+    if (use_handoff) {
+        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        g_handoff.host_ptr = dst;
+        g_handoff.d_data = fused_d;
+        g_handoff.bytes = dst_bytes;
+        g_handoff.ne01 = ne01;
+        g_handoff.dst_cols = dst_cols;
+        ++g_handoff.serial;
+        return true;
+    }
 
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
     if (cudaStreamSynchronize(st) != cudaSuccess) return false;
@@ -706,19 +737,25 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const size_t src1_q8_bytes = (size_t)n_active * ne00_padded * sizeof(block_q8_1) / QK8_1
         + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
     const int64_t dst_cols = max_dst_id + 1;
+    const bool use_handoff =
+        gpu_handoff_enabled() &&
+        g_handoff.host_ptr == src1_f32 &&
+        g_handoff.d_data &&
+        g_handoff.ne01 == ne00 &&
+        g_handoff.dst_cols >= dst_cols;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
 
     bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)
-        && ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes)
+        && (use_handoff || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
         && ensure_dev((void *&)bc.d_ids_src1, bc.d_ids_src1_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_x_ids, bc.d_x_ids_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)
-        && ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes)
+        && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
     if (!ok) return false;
 
@@ -738,16 +775,18 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cache_slot < 0) return false;
         bc.h_x_ids[j] = cache_slot;
 
-        const char *src1_base = (const char *)src1_f32;
-        const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
-        std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
+        if (!use_handoff) {
+            const char *src1_base = (const char *)src1_f32;
+            const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
+            std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
+        }
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
         bc.h_bounds[j] = j;
     }
     bc.h_bounds[n_active] = n_active;
 
-    if (cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+    if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
@@ -755,9 +794,22 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) return false;
     if (profile) cudaEventRecord(bc.ev_stage, st);
 
-    quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
-        GGML_TYPE_IQ3_XXS, ne00, ne00, n_active * ne00, n_active * ne00,
-        ne00_padded, n_active, 1, 1, st);
+    if (use_handoff) {
+        static std::atomic<int> first_handoff_consume{0};
+        if (first_handoff_consume.fetch_add(1) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] GPU handoff consumed: ne00=%ld dst_cols=%ld\n",
+                         (long)ne00, (long)dst_cols);
+        }
+        quantize_mmq_q8_1_cuda_id(g_handoff.d_data, bc.d_ids_dst, bc.d_src1_q8,
+            GGML_TYPE_IQ3_XXS, ne00, g_handoff.ne01, g_handoff.ne01 * g_handoff.dst_cols, g_handoff.ne01 * g_handoff.dst_cols,
+            ne00_padded, n_active, 1, 1, st);
+        g_handoff.host_ptr = nullptr;
+        g_handoff.d_data = nullptr;
+    } else {
+        quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
+            GGML_TYPE_IQ3_XXS, ne00, ne00, n_active * ne00, n_active * ne00,
+            ne00_padded, n_active, 1, 1, st);
+    }
     if (cudaGetLastError() != cudaSuccess) return false;
     if (profile) cudaEventRecord(bc.ev_quant, st);
 
