@@ -80,6 +80,7 @@ struct batch_ctx {
     void * d_src0 = nullptr;     size_t d_src0_sz = 0;
     void * d_src1_f32 = nullptr; size_t d_src1_f32_sz = 0;
     void * d_src1_q8 = nullptr;  size_t d_src1_q8_sz = 0;
+    void * d_src1_q8_one = nullptr; size_t d_src1_q8_one_sz = 0;
     void * d_dst = nullptr;      size_t d_dst_sz = 0;
     void * d_up = nullptr;       size_t d_up_sz = 0;
     void * d_gate = nullptr;     size_t d_gate_sz = 0;
@@ -96,6 +97,7 @@ struct batch_ctx {
     cudaEvent_t ev_kernel = nullptr;
     cudaEvent_t ev_d2h = nullptr;
     int32_t h_ids_dst[128] = {};
+    int32_t h_up_gate_ids_dst[128] = {};
     int32_t h_ids_src1[128] = {};
     int32_t h_x_ids[128] = {};
     int32_t h_bounds[129] = {};
@@ -473,6 +475,22 @@ static bool launch_iq3_xxs_mmq_id_batch(
     return cudaGetLastError() == cudaSuccess;
 }
 
+static bool launch_iq3_xxs_mmq_id_one(
+        const char * d_src0, const int * d_src1_q8, const int32_t * d_ids_dst,
+        const int32_t * d_bounds, const int32_t * d_x_ids, float * d_dst,
+        int64_t ne00, int64_t ne01, int64_t src0_stride, int64_t src0_channel_stride,
+        int64_t dst_cols, cudaStream_t st) {
+    const mmq_args_id args = {
+        d_src0, GGML_TYPE_IQ3_XXS, d_src1_q8, d_ids_dst, d_bounds, d_x_ids, d_dst,
+        ne00, ne01, dst_cols, src0_stride, 1, ne01,
+        1, 1, src0_channel_stride, 0, 0,
+        1, 1, 0, 0, 0,
+        false, 1};
+    ggml_backend_cuda_context * null_ctx = nullptr;
+    launch_mul_mat_q_id<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
+    return cudaGetLastError() == cudaSuccess;
+}
+
 static __device__ __forceinline__ float moe_stream_silu(float x) {
     return x / (1.0f + expf(-x));
 }
@@ -580,6 +598,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
     const size_t src1_q8_bytes = (size_t)n_active * ne00_padded * sizeof(block_q8_1) / QK8_1
         + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
+    const size_t src1_q8_one_bytes = (size_t)ne00_padded * sizeof(block_q8_1) / QK8_1
+        + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
     const int64_t dst_cols = max_dst_id + 1;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
@@ -588,6 +608,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     bool ok = ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes)
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
+        && ensure_dev(bc.d_src1_q8_one, bc.d_src1_q8_one_sz, src1_q8_one_bytes)
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
         && ensure_dev(bc.d_up, bc.d_up_sz, dst_bytes)
         && ensure_dev(bc.d_gate, bc.d_gate_sz, dst_bytes)
@@ -607,8 +628,17 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     char up_key_name[128] = {};
     char gate_key_name[128] = {};
-    std::snprintf(up_key_name, sizeof(up_key_name), "%s%s", src0_up_name ? src0_up_name : "up", src0_up_data == src0_gate_data ? ":up" : "");
-    std::snprintf(gate_key_name, sizeof(gate_key_name), "%s%s", src0_gate_name ? src0_gate_name : "gate", src0_up_data == src0_gate_data ? ":gate" : "");
+    const bool shared_tensor_name = src0_up_name && src0_gate_name && std::strcmp(src0_up_name, src0_gate_name) == 0;
+    const bool disambiguate_halves = shared_tensor_name || src0_up_data == src0_gate_data;
+    std::snprintf(up_key_name, sizeof(up_key_name), "%s%s", src0_up_name ? src0_up_name : "up", disambiguate_halves ? ":up" : "");
+    std::snprintf(gate_key_name, sizeof(gate_key_name), "%s%s", src0_gate_name ? src0_gate_name : "gate", disambiguate_halves ? ":gate" : "");
+
+    const char *serial_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_SERIAL");
+    const bool serial_up_gate = serial_env && serial_env[0] && serial_env[0] != '0';
+    static std::atomic<int> first_serial_up_gate{0};
+    if (serial_up_gate && first_serial_up_gate.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream] up/gate serial MMQ probe active\n");
+    }
 
     auto stage_tensor = [&](const char *key_name, const void *host_base, void *d_out) -> bool {
         for (int j = 0; j < n_active; ++j) {
@@ -621,8 +651,29 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             if (cache_slot < 0) return false;
             bc.h_x_ids[j] = cache_slot;
         }
-        if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
         if (cudaMemsetAsync(d_out, 0, dst_bytes, st) != cudaSuccess) return false;
+        if (serial_up_gate) {
+            bc.h_bounds[0] = 0;
+            bc.h_bounds[1] = 1;
+            if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, 2 * sizeof(int32_t), cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+            for (int j = 0; j < n_active; ++j) {
+                bc.h_up_gate_ids_dst[0] = j;
+                bc.h_up_gate_ids_dst[1] = bc.h_x_ids[j];
+                if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_up_gate_ids_dst, sizeof(int32_t), cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+                if (cudaMemcpyAsync(bc.d_x_ids, bc.h_up_gate_ids_dst + 1, sizeof(int32_t), cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+                quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32 + (size_t)j * ne00, bc.d_ids_src1, bc.d_src1_q8_one,
+                    GGML_TYPE_IQ3_XXS, ne00, ne00, ne00, ne00,
+                    ne00_padded, 1, 1, 1, st);
+                if (cudaGetLastError() != cudaSuccess) return false;
+                if (!launch_iq3_xxs_mmq_id_one(
+                        (const char *)cache->pool, (const int *)bc.d_src1_q8_one, bc.d_ids_dst, bc.d_bounds,
+                        bc.d_x_ids, (float *)d_out, ne00, ne01, nb01, src0_bytes, dst_cols, st)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
         return launch_iq3_xxs_mmq_id_batch(
             (const char *)cache->pool, (const int *)bc.d_src1_q8, bc.d_ids_dst, bc.d_bounds,
             bc.d_x_ids, (float *)d_out, ne00, ne01, nb01, src0_bytes, n_active, dst_cols, st);
@@ -634,31 +685,36 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
+        bc.h_up_gate_ids_dst[j] = j;
         bc.h_bounds[j] = j;
     }
     bc.h_bounds[n_active] = n_active;
 
     if (cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_up_gate_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
 
-    quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
-        GGML_TYPE_IQ3_XXS, ne00, ne00, n_active * ne00, n_active * ne00,
-        ne00_padded, n_active, 1, 1, st);
-    if (cudaGetLastError() != cudaSuccess) return false;
+    if (!serial_up_gate) {
+        quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
+            GGML_TYPE_IQ3_XXS, ne00, ne00, n_active * ne00, n_active * ne00,
+            ne00_padded, n_active, 1, 1, st);
+        if (cudaGetLastError() != cudaSuccess) return false;
+    }
 
     if (!stage_tensor(up_key_name, src0_up_data, bc.d_up)) return false;
     if (!stage_tensor(gate_key_name, src0_gate_data, bc.d_gate)) return false;
+    for (int j = 0; j < n_active; ++j) {
+        bc.h_ids_dst[j] = dst_ids[j];
+    }
+    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
 
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
-    const char *compact_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_COMPACT_READ");
-    const bool read_compact = compact_env && compact_env[0] && compact_env[0] != '0';
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
-        bc.d_ids_dst, n_active, ne01, unary_op, limit, read_compact);
+        bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
     if (cudaGetLastError() != cudaSuccess) return false;
 
     if (use_handoff) {
