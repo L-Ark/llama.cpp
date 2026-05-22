@@ -142,6 +142,26 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
+    int  src0_type_int,
+    const char *src0_up_name,
+    const void *src0_up_data,
+    const char *src0_gate_name,
+    const void *src0_gate_data,
+    int64_t n_as,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    size_t nb02,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    int unary_op,
+    float limit,
+    const int64_t *matrix_row_counts,
+    const ggml_moe_row_mapping *matrix_rows,
+    int64_t rows_stride);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_preload_tensor(
     int src0_type_int,
     const char *src0_name,
@@ -18649,8 +18669,71 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
         }
     }
 
+    if (ith == 0 &&
+            ggml_cuda_moe_stream_preload_tensor &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            src0_1->type == GGML_TYPE_IQ3_XXS &&
+            getenv("GGML_MOE_VRAM_PROFILE") &&
+            getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
+        if (src0_2) {
+            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, nb02);
+            ggml_cuda_moe_stream_preload_tensor(src0_2->type, src0_2->name, src0_2->data, n_as, nb02, nb02);
+        } else {
+            const size_t half = nb02/2;
+            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, (const char *)src0_1->data + half, n_as, nb02, half);
+            ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, half);
+        }
+    }
+
+    ggml_barrier(params->shared);
 
     const float limit = *(const float *)(dst->op_params + 1);
+
+    if (ith == 0 &&
+            ggml_moe_parallel_experts &&
+            ggml_cuda_moe_stream_up_gate_batch &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            src0_1->type == GGML_TYPE_IQ3_XXS &&
+            src1->type == GGML_TYPE_F32 &&
+            ids->ne[1] == 1 &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32 &&
+            !up_b && !gate_b &&
+            getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
+        const int64_t nr0 = src0_2 ? ne01 : ne01/2;
+        const char * up_name = src0_1->name;
+        const char * gate_name = src0_2 ? src0_2->name : src0_1->name;
+        const char * up_data = (const char *)src0_1->data;
+        const char * gate_data = src0_2 ? (const char *)src0_2->data : (const char *)src0_1->data;
+        const size_t expert_stride = src0_2 ? nb02 : nb02/2;
+        if (!src0_2) {
+            up_data += expert_stride;
+        }
+        const bool done = ggml_cuda_moe_stream_up_gate_batch(
+            src0_1->type,
+            up_name, up_data,
+            gate_name, gate_data,
+            n_as,
+            nr0, ne00, nb01, src0_2 ? nb02 : nb02,
+            (const float *)src1->data,
+            nb11, nb12,
+            (float *)dst->data,
+            nb1, nb2,
+            dst->op_params[0],
+            limit,
+            matrix_row_counts,
+            (const ggml_moe_row_mapping *)matrix_rows,
+            ne12);
+        if (!done) {
+            GGML_ABORT("batched CUDA MoE up/gate stream path failed after selection");
+        }
+        ggml_barrier(params->shared);
+        return;
+    }
+
+    ggml_barrier(params->shared);
 
     // so GGML_TENSOR_BINARY_OP_LOCALS works
 
