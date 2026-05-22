@@ -18689,6 +18689,8 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     ggml_barrier(params->shared);
 
     const float limit = *(const float *)(dst->op_params + 1);
+    float * cuda_validate = NULL;
+    size_t cuda_validate_bytes = 0;
 
     if (ith == 0 &&
             ggml_moe_parallel_experts &&
@@ -18702,6 +18704,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             dst->type == GGML_TYPE_F32 &&
             !up_b && !gate_b &&
             getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
+        const bool validate_cuda = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_VALIDATE") != NULL;
         const int64_t nr0 = src0_2 ? ne01 : ne01/2;
         const char * up_name = src0_1->name;
         const char * gate_name = src0_2 ? src0_2->name : src0_1->name;
@@ -18729,8 +18732,17 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
         if (!done) {
             GGML_ABORT("batched CUDA MoE up/gate stream path failed after selection");
         }
+        if (validate_cuda) {
+            cuda_validate_bytes = ggml_nbytes(dst);
+            cuda_validate = (float *)malloc(cuda_validate_bytes);
+            if (cuda_validate) {
+                memcpy(cuda_validate, dst->data, cuda_validate_bytes);
+            }
+        } else {
+            ggml_barrier(params->shared);
+            return;
+        }
         ggml_barrier(params->shared);
-        return;
     }
 
     ggml_barrier(params->shared);
@@ -18783,6 +18795,56 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
                             (float *)dst->data, nb1, nb2,
                             matrix_rows + cur_a*ne12, limit, inner_ith, inner_nth)) GGML_ABORT("fatal error");
 
+    }
+
+    ggml_barrier(params->shared);
+
+    if (ith == 0 && cuda_validate) {
+        const float *gpu = cuda_validate;
+        const float *cpu = (const float *)dst->data;
+        const size_t n = cuda_validate_bytes / sizeof(float);
+        double sse = 0.0;
+        double max_abs = 0.0;
+        size_t max_i = 0;
+        for (size_t i = 0; i < n; ++i) {
+            const double d = (double)gpu[i] - (double)cpu[i];
+            const double ad = fabs(d);
+            sse += d*d;
+            if (ad > max_abs) {
+                max_abs = ad;
+                max_i = i;
+            }
+        }
+        fprintf(stderr,
+                "[moe_stream] up/gate validate: tensor=%s n=%zu max_abs=%g rmse=%g max_i=%zu gpu=%g cpu=%g\n",
+                src0_1->name, n, max_abs, n ? sqrt(sse/(double)n) : 0.0, max_i,
+                n ? (double)gpu[max_i] : 0.0, n ? (double)cpu[max_i] : 0.0);
+        const char *row_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_VALIDATE_ROWS");
+        if (row_env && row_env[0] && row_env[0] != '0') {
+            const int64_t row_len = dst->ne[0];
+            const int64_t n_rows = dst->ne[1] * dst->ne[2];
+            for (int64_t r = 0; r < n_rows; ++r) {
+                double row_sse = 0.0;
+                double row_max = 0.0;
+                double gpu_abs = 0.0;
+                double cpu_abs = 0.0;
+                for (int64_t c = 0; c < row_len; ++c) {
+                    const size_t i = (size_t)r * (size_t)row_len + (size_t)c;
+                    const double gd = gpu[i];
+                    const double cd = cpu[i];
+                    const double d = gd - cd;
+                    const double ad = fabs(d);
+                    row_sse += d*d;
+                    gpu_abs += fabs(gd);
+                    cpu_abs += fabs(cd);
+                    if (ad > row_max) row_max = ad;
+                }
+                fprintf(stderr,
+                        "[moe_stream] up/gate validate row=%ld max_abs=%g rmse=%g gpu_l1=%g cpu_l1=%g\n",
+                        (long)r, row_max, sqrt(row_sse/(double)row_len), gpu_abs, cpu_abs);
+            }
+        }
+        free(cuda_validate);
     }
 
 #undef MMID_MATRIX_ROW

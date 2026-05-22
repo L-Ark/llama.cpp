@@ -467,7 +467,7 @@ static bool launch_iq3_xxs_mmq_id_batch(
         ne00, ne01, dst_cols, src0_stride, n_active, ne01,
         n_active, n_active, src0_channel_stride, 0, 0,
         1, 1, 0, 0, 0,
-        false, 1};
+        false, n_active};
     ggml_backend_cuda_context * null_ctx = nullptr;
     launch_mul_mat_q_id<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
     return cudaGetLastError() == cudaSuccess;
@@ -479,14 +479,16 @@ static __device__ __forceinline__ float moe_stream_silu(float x) {
 
 static __global__ void moe_stream_up_gate_fuse_kernel(
         const float *up, const float *gate, float *dst,
-        const int32_t *dst_ids, int n_active, int64_t ne01, int unary_op, float limit) {
+        const int32_t *dst_ids, int n_active, int64_t ne01, int unary_op, float limit, bool read_compact) {
     const int j = (int)blockIdx.y;
     const int64_t col = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
     if (j >= n_active || col >= ne01) return;
     const int row = dst_ids[j];
-    const int64_t off = (int64_t)row * ne01 + col;
-    float u = up[off];
-    float g = gate[off];
+    const int read_row = read_compact ? j : row;
+    const int64_t read_off = (int64_t)read_row * ne01 + col;
+    const int64_t write_off = (int64_t)row * ne01 + col;
+    float u = up[read_off];
+    float g = gate[read_off];
     float r = 0.0f;
     switch ((ggml_unary_op)unary_op) {
         case GGML_UNARY_OP_SILU:
@@ -511,7 +513,7 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
             r = 0.0f;
             break;
     }
-    dst[off] = r;
+    dst[write_off] = r;
 }
 
 extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
@@ -562,6 +564,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (first_up_gate.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] batched up/gate decode path active: experts=%d ne01=%ld ne00=%ld\n",
                      n_active, (long)ne01, (long)ne00);
+        std::fprintf(stderr, "[moe_stream] up/gate routes:");
+        for (int j = 0; j < n_active; ++j) {
+            std::fprintf(stderr, " #%d:e%d->dst%d/tok%d", j, active_experts[j], dst_ids[j], token_ids[j]);
+        }
+        std::fprintf(stderr, "\n");
     }
 
     std::lock_guard<std::mutex> lk(g_batch_mu);
@@ -647,9 +654,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
+    const char *compact_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_COMPACT_READ");
+    const bool read_compact = compact_env && compact_env[0] && compact_env[0] != '0';
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
-        bc.d_ids_dst, n_active, ne01, unary_op, limit);
+        bc.d_ids_dst, n_active, ne01, unary_op, limit, read_compact);
     if (cudaGetLastError() != cudaSuccess) return false;
 
     if (use_handoff) {
