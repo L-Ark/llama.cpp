@@ -534,6 +534,38 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
     dst[write_off] = r;
 }
 
+static void moe_stream_dump_prefuse_rows(const char *tag, const float *buf, int n_active, int64_t ne01) {
+    std::fprintf(stderr, "[moe_stream] up/gate prefuse %s:", tag);
+    for (int r = 0; r < n_active; ++r) {
+        double l1 = 0.0;
+        double max_abs = 0.0;
+        for (int64_t c = 0; c < ne01; ++c) {
+            const double v = buf[(size_t)r * (size_t)ne01 + (size_t)c];
+            const double av = std::fabs(v);
+            l1 += av;
+            if (av > max_abs) max_abs = av;
+        }
+        std::fprintf(stderr, " row%d_l1=%g row%d_max=%g", r, l1, r, max_abs);
+    }
+    std::fprintf(stderr, "\n");
+}
+
+static void moe_stream_dump_f32_rows(const char *tag, const float *buf, int n_rows, int64_t ne00) {
+    std::fprintf(stderr, "[moe_stream] up/gate %s:", tag);
+    for (int r = 0; r < n_rows; ++r) {
+        double l1 = 0.0;
+        double max_abs = 0.0;
+        for (int64_t c = 0; c < ne00; ++c) {
+            const double v = buf[(size_t)r * (size_t)ne00 + (size_t)c];
+            const double av = std::fabs(v);
+            l1 += av;
+            if (av > max_abs) max_abs = av;
+        }
+        std::fprintf(stderr, " row%d_l1=%g row%d_max=%g", r, l1, r, max_abs);
+    }
+    std::fprintf(stderr, "\n");
+}
+
 extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     int  src0_type_int,
     const char *src0_up_name,
@@ -557,6 +589,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (!init_batch_once()) return false;
     if ((ggml_type)src0_type_int != GGML_TYPE_IQ3_XXS || !src1_f32 || !src0_up_data || !src0_gate_data) return false;
     if (unary_op != GGML_UNARY_OP_SILU && unary_op != GGML_UNARY_OP_RELU && unary_op != GGML_UNARY_OP_GELU) return false;
+    GGML_UNUSED(src1_nb1);
 
     int active_experts[128];
     int32_t dst_ids[128];
@@ -681,7 +714,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     for (int j = 0; j < n_active; ++j) {
         const char *src1_base = (const char *)src1_f32;
-        const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
+        const char *src_row = src1_base + (size_t)token_ids[j] * src1_nb2;
         std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
@@ -689,6 +722,13 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         bc.h_bounds[j] = j;
     }
     bc.h_bounds[n_active] = n_active;
+
+    const char *src1_dump_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_SRC1_DUMP");
+    const bool src1_dump = src1_dump_env && src1_dump_env[0] && src1_dump_env[0] != '0';
+    static std::atomic<int> src1_dump_count{0};
+    if (src1_dump && src1_dump_count.fetch_add(1) == 0) {
+        moe_stream_dump_f32_rows("src1", (const float *)bc.h_src1, n_active, ne00);
+    }
 
     if (cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
@@ -702,8 +742,22 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (cudaGetLastError() != cudaSuccess) return false;
     }
 
+    float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
     if (!stage_tensor(up_key_name, src0_up_data, bc.d_up)) return false;
     if (!stage_tensor(gate_key_name, src0_gate_data, bc.d_gate)) return false;
+
+    const char *prefuse_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_PREFUSE_DUMP");
+    const bool prefuse_dump = prefuse_env && prefuse_env[0] && prefuse_env[0] != '0';
+    static std::atomic<int> prefuse_dump_count{0};
+    if (prefuse_dump && prefuse_dump_count.fetch_add(1) == 0) {
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_up, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
+        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        moe_stream_dump_prefuse_rows("up", (const float *)bc.h_dst, n_active, ne01);
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_gate, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
+        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        moe_stream_dump_prefuse_rows("gate", (const float *)bc.h_dst, n_active, ne01);
+    }
+
     for (int j = 0; j < n_active; ++j) {
         bc.h_ids_dst[j] = dst_ids[j];
     }
@@ -711,7 +765,6 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
-    float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
         bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
