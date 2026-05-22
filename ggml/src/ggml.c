@@ -169,6 +169,10 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_preload_tensor(
     int64_t n_as,
     size_t nb02,
     size_t expert_bytes);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_cache_contains(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx);
 
 #define GGML_HOTEXP_MAX_ENTRIES (262144)   // 2^18 slots, more than enough
 struct ggml_hotexp_entry {
@@ -929,16 +933,18 @@ static inline void ggml_moe_prefetch_init(void) {
     }
     if (ggml_moe_prefetch_debug) {
         const char *mname[] = {"madvise", "fadvise", "readahead", "uring"};
+        const char *du = getenv("GGML_MOE_PREFETCH_DOWN_FROM_UPGATE");
+        const int down_from_up_gate = (du && du[0] && du[0] != '0') ? 1 : 0;
         fprintf(stderr, "[moe-prefetch] enabled=%d mode=%s stride=%zu n_maps=%d "
-                "parallel_experts=%d predict=%d\n",
+                "parallel_experts=%d predict=%d down_from_upgate=%d\n",
                 ggml_moe_prefetch_enabled, mname[ggml_moe_prefetch_mode],
                 ggml_moe_prefetch_stride, ggml_vm_nmaps,
-                ggml_moe_parallel_experts, ggml_pf_enabled);
+                ggml_moe_parallel_experts, ggml_pf_enabled, down_from_up_gate);
     }
 }
 
-static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
-    if (ggml_moe_prefetch_enabled <= 0 || size == 0 || addr == NULL) return;
+static inline void ggml_moe_prefetch_range_impl(const void *addr, size_t size, int force) {
+    if ((!force && ggml_moe_prefetch_enabled <= 0) || size == 0 || addr == NULL) return;
     if (ggml_moe_prefetch_stride && size > ggml_moe_prefetch_stride)
         size = ggml_moe_prefetch_stride;
 
@@ -969,11 +975,141 @@ static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
         }
     }
 }
+
+static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
+    ggml_moe_prefetch_range_impl(addr, size, 0);
+}
+
+#define GGML_MOE_DOWN_REG_MAX 256
+struct ggml_moe_down_reg {
+    char      name[96];
+    const void *data;
+    int64_t   n_as;
+    size_t    nb02;
+};
+static struct ggml_moe_down_reg ggml_moe_down_regs[GGML_MOE_DOWN_REG_MAX];
+static int ggml_moe_down_reg_count = 0;
+static pthread_mutex_t ggml_moe_down_reg_mu = PTHREAD_MUTEX_INITIALIZER;
+static int ggml_moe_prefetch_down_from_up_gate = -1;
+
+static inline int ggml_moe_prefetch_down_from_up_gate_enabled(void) {
+    if (ggml_moe_prefetch_down_from_up_gate != -1) return ggml_moe_prefetch_down_from_up_gate;
+    const char *env = getenv("GGML_MOE_PREFETCH_DOWN_FROM_UPGATE");
+    ggml_moe_prefetch_down_from_up_gate = (env && env[0] && env[0] != '0') ? 1 : 0;
+    return ggml_moe_prefetch_down_from_up_gate;
+}
+
+static bool ggml_moe_make_down_name(const char *name, char *out, size_t out_sz) {
+    if (!name || !name[0] || !out || out_sz == 0) return false;
+    const char *markers[] = {
+        ".ffn_up_exps.",
+        ".ffn_gate_exps.",
+        ".ffn_up_gate_exps.",
+    };
+    const char *marker = NULL;
+    const char *pos = NULL;
+    for (size_t i = 0; i < sizeof(markers)/sizeof(markers[0]); ++i) {
+        pos = strstr(name, markers[i]);
+        if (pos) {
+            marker = markers[i];
+            break;
+        }
+    }
+    if (!marker || !pos) return false;
+    const size_t prefix_len = (size_t)(pos - name);
+    if (prefix_len + strlen(".ffn_down_exps.") + strlen(pos + strlen(marker)) + 1 > out_sz) return false;
+    memcpy(out, name, prefix_len);
+    out[prefix_len] = '\0';
+    strcat(out, ".ffn_down_exps.");
+    strcat(out, pos + strlen(marker));
+    return true;
+}
+
+static void ggml_moe_register_down_tensor(const char *name, const void *data, int64_t n_as, size_t nb02) {
+    if (!name || !name[0] || !data || n_as <= 0 || nb02 == 0) return;
+    if (!strstr(name, ".ffn_down_exps.")) return;
+
+    pthread_mutex_lock(&ggml_moe_down_reg_mu);
+    for (int i = 0; i < ggml_moe_down_reg_count; ++i) {
+        if (strcmp(ggml_moe_down_regs[i].name, name) == 0) {
+            ggml_moe_down_regs[i].data = data;
+            ggml_moe_down_regs[i].n_as = n_as;
+            ggml_moe_down_regs[i].nb02 = nb02;
+            pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+            return;
+        }
+    }
+    if (ggml_moe_down_reg_count < GGML_MOE_DOWN_REG_MAX) {
+        struct ggml_moe_down_reg *r = &ggml_moe_down_regs[ggml_moe_down_reg_count++];
+        snprintf(r->name, sizeof(r->name), "%s", name);
+        r->data = data;
+        r->n_as = n_as;
+        r->nb02 = nb02;
+    }
+    pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+}
+
+static bool ggml_moe_lookup_down_tensor(const char *name, const void **data, int64_t *n_as, size_t *nb02) {
+    if (!name || !name[0]) return false;
+    bool found = false;
+    pthread_mutex_lock(&ggml_moe_down_reg_mu);
+    for (int i = 0; i < ggml_moe_down_reg_count; ++i) {
+        if (strcmp(ggml_moe_down_regs[i].name, name) == 0) {
+            if (data) *data = ggml_moe_down_regs[i].data;
+            if (n_as) *n_as = ggml_moe_down_regs[i].n_as;
+            if (nb02) *nb02 = ggml_moe_down_regs[i].nb02;
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+    return found;
+}
+
+static void ggml_moe_prefetch_down_for_up_gate(
+        const char *up_gate_name,
+        const int64_t *matrix_row_counts,
+        int64_t n_as,
+        int ith,
+        int nth) {
+    if (!ggml_moe_prefetch_down_from_up_gate_enabled()) return;
+    if (!matrix_row_counts || n_as <= 0) return;
+
+    char down_name[96] = {0};
+    if (!ggml_moe_make_down_name(up_gate_name, down_name, sizeof(down_name))) return;
+
+    const void *down_data = NULL;
+    int64_t down_n_as = 0;
+    size_t down_nb02 = 0;
+    if (!ggml_moe_lookup_down_tensor(down_name, &down_data, &down_n_as, &down_nb02)) return;
+    if (!down_data || down_nb02 == 0) return;
+
+    const int64_t limit = n_as < down_n_as ? n_as : down_n_as;
+    for (int64_t cur_a = ith; cur_a < limit; cur_a += nth) {
+        if (matrix_row_counts[cur_a] == 0) continue;
+        if (ggml_cuda_moe_stream_cache_contains &&
+                ggml_cuda_moe_stream_cache_contains(down_name, down_nb02, (int)cur_a)) {
+            continue;
+        }
+        ggml_moe_prefetch_range_impl((const char *)down_data + cur_a*down_nb02, down_nb02, 1);
+    }
+}
 #else
 void ggml_vm_register_mapping(void *addr, size_t size, int fd) { (void)addr; (void)size; (void)fd; }
 static inline void ggml_moe_prefetch_init(void) {}
 static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
     (void)addr; (void)size;
+}
+static void ggml_moe_register_down_tensor(const char *name, const void *data, int64_t n_as, size_t nb02) {
+    (void)name; (void)data; (void)n_as; (void)nb02;
+}
+static void ggml_moe_prefetch_down_for_up_gate(
+        const char *up_gate_name,
+        const int64_t *matrix_row_counts,
+        int64_t n_as,
+        int ith,
+        int nth) {
+    (void)up_gate_name; (void)matrix_row_counts; (void)n_as; (void)ith; (void)nth;
 }
 #endif
 // === end MoE expert prefetch =================================================
@@ -18263,6 +18399,7 @@ static void ggml_compute_forward_mul_mat_id(
 
         ggml_moe_prefetch_init();
         ggml_hotexp_init_once();
+        ggml_moe_register_down_tensor(src0->name, src0->data, n_as, nb02);
     }
 
     ggml_barrier(params->shared);
@@ -18670,6 +18807,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             ggml_pf_record_addr_layered((const char *)src0_2->data + cur_a*nb02, nb02, src0_2->name);
         }
     }
+    ggml_moe_prefetch_down_for_up_gate(src0_1->name, matrix_row_counts, n_as, ith, nth);
 
     if (ith == 0 &&
             ggml_cuda_moe_stream_preload_tensor &&

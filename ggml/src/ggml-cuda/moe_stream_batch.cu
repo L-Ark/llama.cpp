@@ -53,6 +53,11 @@ bool ggml_cuda_moe_stream_preload_tensor(
     size_t nb02,
     size_t expert_bytes);
 
+bool ggml_cuda_moe_stream_cache_contains(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx);
+
 bool ggml_cuda_moe_stream_up_gate_batch(
     int  src0_type_int,
     const char *src0_up_name,
@@ -479,6 +484,14 @@ static int batch_cache_lookup_slot(batch_vram_cache *c, uintptr_t key) {
     return -1;
 }
 
+static bool batch_cache_contains_slot(const batch_vram_cache *c, uintptr_t key) {
+    if (!c || !c->pool || c->n_slots == 0) return false;
+    for (int slot = 0; slot < c->n_slots; ++slot) {
+        if (c->slot_key[slot] == key) return true;
+    }
+    return false;
+}
+
 static int batch_cache_insert_slot(batch_vram_cache *c, uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool allow_evict, bool preload) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
     const bool pin_slot = preload && profile_protect_enabled();
@@ -622,6 +635,18 @@ extern "C" bool ggml_cuda_moe_stream_preload_tensor(
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, expert_bytes, g_batch.stream);
     cudaStreamSynchronize(g_batch.stream);
     return true;
+}
+
+extern "C" bool ggml_cuda_moe_stream_cache_contains(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx) {
+    if (!src0_name || !src0_name[0] || expert_bytes == 0 || expert_idx < 0) return false;
+    const int cid = batch_cache_id_for_size(expert_bytes);
+    if (!g_bcache_inited[cid]) return false;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    const batch_vram_cache *cache = &g_bcaches[cid];
+    return batch_cache_contains_slot(cache, batch_key_hash(src0_name, expert_idx));
 }
 
 static bool launch_iq3_xxs_mmq_id_batch(
