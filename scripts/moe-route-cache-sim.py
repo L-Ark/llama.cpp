@@ -63,6 +63,10 @@ class RuntimeProfile:
     d2h_ms: float = 0.0
     scatter_ms: float = 0.0
     total_ms: float = 0.0
+    up_wait_ms: float = 0.0
+    gate_wait_ms: float = 0.0
+    up_compute_ms: float = 0.0
+    gate_compute_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,10 @@ def parse_runtime_stderr(path: Path) -> RuntimeReport:
                     quant_ms=values.get("quant", 0.0),
                     up_ms=values.get("up", 0.0),
                     gate_ms=values.get("gate", 0.0),
+                    up_wait_ms=values.get("up_wait", 0.0),
+                    gate_wait_ms=values.get("gate_wait", 0.0),
+                    up_compute_ms=values.get("up_compute", 0.0),
+                    gate_compute_ms=values.get("gate_compute", 0.0),
                     fuse_ms=values.get("fuse", 0.0),
                     kernel_ms=values.get("kernel", 0.0),
                     d2h_ms=values.get("d2h", 0.0),
@@ -565,6 +573,19 @@ def print_runtime_calibration(report: RuntimeReport, paths: list[Path]) -> None:
             f"kernel_ms_per_call={upgate_profile.kernel_ms:.3f} "
             f"total_ms_per_call={upgate_profile.total_ms:.3f}"
         )
+        wait_span_ms = max(upgate_profile.up_wait_ms, upgate_profile.gate_wait_ms)
+        compute_span_ms = max(upgate_profile.up_compute_ms, upgate_profile.gate_compute_ms)
+        if wait_span_ms > 0.0 or compute_span_ms > 0.0:
+            wait_total_ms = wait_span_ms * upgate_profile.calls
+            print(
+                "calibrate_upgate_detail "
+                f"up_wait_ms_per_call={upgate_profile.up_wait_ms:.3f} "
+                f"gate_wait_ms_per_call={upgate_profile.gate_wait_ms:.3f} "
+                f"wait_span_ms_per_gib={wait_total_ms / max(miss_gib, 1e-9):.2f} "
+                f"up_compute_ms_per_call={upgate_profile.up_compute_ms:.3f} "
+                f"gate_compute_ms_per_call={upgate_profile.gate_compute_ms:.3f} "
+                f"compute_span_ms_per_call={compute_span_ms:.3f}"
+            )
         print(
             "calibrate_note upgate staging is measured inside the up/gate stream spans; "
             "use host_stage as a lower bound and stream_span as an upper bound, not as an isolated copy cost."
@@ -597,10 +618,13 @@ def runtime_calibration_costs(report: RuntimeReport) -> dict[str, float]:
     upgate_host_ms_per_gib = upgate_profile.stage_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
     upgate_span_ms = max(upgate_profile.up_ms, upgate_profile.gate_ms)
     upgate_span_ms_per_gib = upgate_span_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
+    upgate_wait_ms = max(upgate_profile.up_wait_ms, upgate_profile.gate_wait_ms)
+    upgate_wait_ms_per_gib = upgate_wait_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
     return {
         "down_stage_ms_per_gib": down_stage_ms_per_gib,
         "upgate_host_ms_per_gib": upgate_host_ms_per_gib,
         "upgate_span_ms_per_gib": upgate_span_ms_per_gib,
+        "upgate_wait_ms_per_gib": upgate_wait_ms_per_gib,
     }
 
 
@@ -609,6 +633,12 @@ def calibrated_trace_costs(est: dict[str, float | int], costs: dict[str, float])
     upgate_host_ms = float(est["upgate_miss_gib"]) * costs["upgate_host_ms_per_gib"]
     upgate_span_ms = float(est["upgate_miss_gib"]) * costs["upgate_span_ms_per_gib"]
     return down_exposed_ms, upgate_host_ms, upgate_span_ms
+
+
+def upgate_leak_signal_ms(est: dict[str, float | int], costs: dict[str, float]) -> tuple[str, float]:
+    if costs.get("upgate_wait_ms_per_gib", 0.0) > 0.0:
+        return "upgate_wait_ms", float(est["upgate_miss_gib"]) * costs["upgate_wait_ms_per_gib"]
+    return "upgate_stream_upper_ms", float(est["upgate_miss_gib"]) * costs["upgate_span_ms_per_gib"]
 
 
 def print_measured_calibration(
@@ -631,21 +661,23 @@ def print_measured_calibration(
 
     best_run = min(usable, key=lambda run: run.timing.eval_ms)
     best_est = by_pct[best_run.pct]
-    best_down, _, best_up_span = calibrated_trace_costs(best_est, costs)
+    best_down, _, _ = calibrated_trace_costs(best_est, costs)
+    signal_name, best_signal = upgate_leak_signal_ms(best_est, costs)
 
     print()
     print(
-        "measured_pct,eval_ms,tok_s,down_exposed_ms,upgate_stream_upper_ms,"
-        "delta_eval_ms,delta_down_ms,delta_upgate_stream_ms"
+        f"measured_pct,eval_ms,tok_s,down_exposed_ms,{signal_name},"
+        f"delta_eval_ms,delta_down_ms,delta_{signal_name}"
     )
     for run in sorted(usable, key=lambda r: r.pct):
         est = by_pct[run.pct]
-        down_ms, _, up_span_ms = calibrated_trace_costs(est, costs)
+        down_ms, _, _ = calibrated_trace_costs(est, costs)
+        _, up_signal_ms = upgate_leak_signal_ms(est, costs)
         print(
             f"{run.pct},{run.timing.eval_ms:.0f},{run.timing.eval_tok_s:.2f},"
-            f"{down_ms:.0f},{up_span_ms:.0f},"
+            f"{down_ms:.0f},{up_signal_ms:.0f},"
             f"{run.timing.eval_ms - best_run.timing.eval_ms:.0f},"
-            f"{down_ms - best_down:.0f},{up_span_ms - best_up_span:.0f}"
+            f"{down_ms - best_down:.0f},{up_signal_ms - best_signal:.0f}"
         )
     print(
         f"measured_recommend upgate_pct={best_run.pct} "
@@ -659,8 +691,9 @@ def print_measured_calibration(
         if run.pct == best_run.pct:
             continue
         est = by_pct[run.pct]
-        down_ms, _, up_span_ms = calibrated_trace_costs(est, costs)
-        up_delta = up_span_ms - best_up_span
+        down_ms, _, _ = calibrated_trace_costs(est, costs)
+        _, up_signal_ms = upgate_leak_signal_ms(est, costs)
+        up_delta = up_signal_ms - best_signal
         if abs(up_delta) < 1e-9:
             continue
         # Residual after the current down-exposed model; remaining signal is the
@@ -671,8 +704,9 @@ def print_measured_calibration(
         denom = sum(x * x for x in xs)
         leak = max(0.0, sum(x * y for x, y in zip(xs, ys)) / max(denom, 1e-9))
         rms = math.sqrt(sum((leak * x - y) ** 2 for x, y in zip(xs, ys)) / len(xs))
+        fit_name = "fit_upgate_wait_leak" if signal_name == "upgate_wait_ms" else "fit_upgate_stream_leak"
         print(
-            f"fit_upgate_stream_leak baseline_pct={best_run.pct} "
+            f"{fit_name} baseline_pct={best_run.pct} "
             f"leak={leak:.3f} residual_rms_ms={rms:.0f} samples={len(xs)}"
         )
         if rms > 250:
@@ -832,6 +866,16 @@ def main() -> None:
                         "upgate_host_lower_ms and upgate_stream_upper_ms bound an overlapped span, "
                         "so do not minimize them as a single linear objective."
                     )
+                    if costs.get("upgate_wait_ms_per_gib", 0.0) > 0.0:
+                        print()
+                        print("trace_calibrated_wait_pct,upgate_wait_ms")
+                        for est in trace_estimates:
+                            upgate_wait_ms = est["upgate_miss_gib"] * costs["upgate_wait_ms_per_gib"]
+                            print(f"{est['pct']},{upgate_wait_ms:.0f}")
+                        print(
+                            "trace_calibrated_wait_note upgate_wait_ms uses explicit copy-wait events "
+                            "and is the preferred signal for split leakage once available."
+                        )
                     print_measured_calibration(trace_estimates, costs, measured_runs)
         else:
             est = simulate_trace(

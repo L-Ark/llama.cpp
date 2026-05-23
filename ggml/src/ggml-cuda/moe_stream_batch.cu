@@ -180,6 +180,9 @@ struct batch_ctx {
     cudaEvent_t ev_kernel = nullptr;
     cudaEvent_t ev_d2h = nullptr;
     cudaEvent_t ev_up_start = nullptr;
+    cudaEvent_t ev_gate_work_start = nullptr;
+    cudaEvent_t ev_up_compute_start = nullptr;
+    cudaEvent_t ev_gate_compute_start = nullptr;
     cudaEvent_t ev_gate_start = nullptr;
     cudaEvent_t ev_up = nullptr;
     cudaEvent_t ev_gate = nullptr;
@@ -231,6 +234,10 @@ struct batch_profile {
     double scatter_ms = 0.0;
     double up_ms = 0.0;
     double gate_ms = 0.0;
+    double up_wait_ms = 0.0;
+    double gate_wait_ms = 0.0;
+    double up_compute_ms = 0.0;
+    double gate_compute_ms = 0.0;
     double fuse_ms = 0.0;
 };
 
@@ -285,7 +292,8 @@ static void up_gate_profile_report_atexit() {
     const double calls = (double)g_uprof.calls;
     std::fprintf(stderr,
         "[moe_stream_batch] up/gate profile: calls=%lu avg_active=%.2f "
-        "stage=%.3f ms quant=%.3f ms up=%.3f ms gate=%.3f ms fuse=%.3f ms "
+        "stage=%.3f ms quant=%.3f ms up=%.3f ms gate=%.3f ms "
+        "up_wait=%.3f ms gate_wait=%.3f ms up_compute=%.3f ms gate_compute=%.3f ms fuse=%.3f ms "
         "kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
         g_uprof.calls,
         (double)g_uprof.active_experts / calls,
@@ -293,6 +301,10 @@ static void up_gate_profile_report_atexit() {
         g_uprof.quant_ms / calls,
         g_uprof.up_ms / calls,
         g_uprof.gate_ms / calls,
+        g_uprof.up_wait_ms / calls,
+        g_uprof.gate_wait_ms / calls,
+        g_uprof.up_compute_ms / calls,
+        g_uprof.gate_compute_ms / calls,
         g_uprof.fuse_ms / calls,
         g_uprof.kernel_ms / calls,
         g_uprof.d2h_ms / calls,
@@ -1314,6 +1326,9 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_kernel);
             cudaEventCreate(&g_batch.ev_d2h);
             cudaEventCreate(&g_batch.ev_up_start);
+            cudaEventCreate(&g_batch.ev_gate_work_start);
+            cudaEventCreate(&g_batch.ev_up_compute_start);
+            cudaEventCreate(&g_batch.ev_gate_compute_start);
             cudaEventCreate(&g_batch.ev_gate_start);
             cudaEventCreate(&g_batch.ev_up);
             cudaEventCreate(&g_batch.ev_gate);
@@ -1904,6 +1919,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (bc.up_copy_stream && cudaStreamWaitEvent(bc.up_copy_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
         if (bc.gate_copy_stream && cudaStreamWaitEvent(bc.gate_copy_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
         if (profile && bc.ev_up_start) cudaEventRecord(bc.ev_up_start, bc.up_stream);
+        if (profile && bc.ev_gate_work_start) cudaEventRecord(bc.ev_gate_work_start, bc.gate_stream);
         auto parallel_fail = [&]() -> bool {
             cudaStreamSynchronize(bc.up_stream);
             cudaStreamSynchronize(bc.gate_stream);
@@ -1974,6 +1990,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     gate_b_thread.join();
                     return parallel_fail();
                 }
+                if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
                 if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
                     gate_a_thread.join();
                     gate_b_thread.join();
@@ -1993,6 +2010,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                         cudaStreamWaitEvent(bc.gate_stream, bc.ev_gate_copy_aux_done, 0) != cudaSuccess) {
                     return parallel_fail();
                 }
+                if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
                 if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
                     return parallel_fail();
                 }
@@ -2013,6 +2031,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     clear_stage_jobs(gate_jobs);
                     return parallel_fail();
                 }
+                if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
                 if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
                     gate_thread.join();
                     return parallel_fail();
@@ -2026,6 +2045,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     clear_stage_jobs(gate_jobs);
                     return parallel_fail();
                 }
+                if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
                 if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
                     return parallel_fail();
                 }
@@ -2102,6 +2122,10 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             float quant_ms = 0.0f;
             float up_ms = 0.0f;
             float gate_ms = 0.0f;
+            float up_wait_ms = 0.0f;
+            float gate_wait_ms = 0.0f;
+            float up_compute_ms = 0.0f;
+            float gate_compute_ms = 0.0f;
             float fuse_ms = 0.0f;
             float kernel_ms = 0.0f;
             cudaEventElapsedTime(&stage_ms, bc.ev_start, bc.ev_stage);
@@ -2109,6 +2133,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             if (parallel_up_gate && bc.ev_up_start && bc.ev_gate_start) {
                 cudaEventElapsedTime(&up_ms, bc.ev_up_start, bc.ev_up);
                 cudaEventElapsedTime(&gate_ms, bc.ev_gate_start, bc.ev_gate);
+                if (parallel_stage && bc.ev_gate_work_start && bc.ev_up_compute_start && bc.ev_gate_compute_start) {
+                    cudaEventElapsedTime(&up_wait_ms, bc.ev_up_start, bc.ev_up_compute_start);
+                    cudaEventElapsedTime(&gate_wait_ms, bc.ev_gate_work_start, bc.ev_gate_compute_start);
+                    cudaEventElapsedTime(&up_compute_ms, bc.ev_up_compute_start, bc.ev_up);
+                    cudaEventElapsedTime(&gate_compute_ms, bc.ev_gate_compute_start, bc.ev_gate);
+                }
             } else {
                 cudaEventElapsedTime(&up_ms, bc.ev_quant, bc.ev_up);
                 cudaEventElapsedTime(&gate_ms, bc.ev_up, bc.ev_gate);
@@ -2121,6 +2151,10 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             g_uprof.quant_ms += quant_ms;
             g_uprof.up_ms += up_ms;
             g_uprof.gate_ms += gate_ms;
+            g_uprof.up_wait_ms += up_wait_ms;
+            g_uprof.gate_wait_ms += gate_wait_ms;
+            g_uprof.up_compute_ms += up_compute_ms;
+            g_uprof.gate_compute_ms += gate_compute_ms;
             g_uprof.fuse_ms += fuse_ms;
             g_uprof.kernel_ms += kernel_ms;
         }
@@ -2135,6 +2169,10 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     float quant_ms = 0.0f;
     float up_ms = 0.0f;
     float gate_ms = 0.0f;
+    float up_wait_ms = 0.0f;
+    float gate_wait_ms = 0.0f;
+    float up_compute_ms = 0.0f;
+    float gate_compute_ms = 0.0f;
     float fuse_ms = 0.0f;
     float kernel_ms = 0.0f;
     float d2h_ms = 0.0f;
@@ -2144,6 +2182,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (parallel_up_gate && bc.ev_up_start && bc.ev_gate_start) {
             cudaEventElapsedTime(&up_ms, bc.ev_up_start, bc.ev_up);
             cudaEventElapsedTime(&gate_ms, bc.ev_gate_start, bc.ev_gate);
+            if (parallel_stage && bc.ev_gate_work_start && bc.ev_up_compute_start && bc.ev_gate_compute_start) {
+                cudaEventElapsedTime(&up_wait_ms, bc.ev_up_start, bc.ev_up_compute_start);
+                cudaEventElapsedTime(&gate_wait_ms, bc.ev_gate_work_start, bc.ev_gate_compute_start);
+                cudaEventElapsedTime(&up_compute_ms, bc.ev_up_compute_start, bc.ev_up);
+                cudaEventElapsedTime(&gate_compute_ms, bc.ev_gate_compute_start, bc.ev_gate);
+            }
         } else {
             cudaEventElapsedTime(&up_ms, bc.ev_quant, bc.ev_up);
             cudaEventElapsedTime(&gate_ms, bc.ev_up, bc.ev_gate);
@@ -2168,6 +2212,10 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         g_uprof.quant_ms += quant_ms;
         g_uprof.up_ms += up_ms;
         g_uprof.gate_ms += gate_ms;
+        g_uprof.up_wait_ms += up_wait_ms;
+        g_uprof.gate_wait_ms += gate_wait_ms;
+        g_uprof.up_compute_ms += up_compute_ms;
+        g_uprof.gate_compute_ms += gate_compute_ms;
         g_uprof.fuse_ms += fuse_ms;
         g_uprof.kernel_ms += kernel_ms;
         g_uprof.d2h_ms += d2h_ms;
