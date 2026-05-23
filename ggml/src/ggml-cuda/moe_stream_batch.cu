@@ -691,6 +691,52 @@ static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
     return budget_mib;
 }
 
+static size_t env_mib_or_default(const char *name, size_t fallback) {
+    const char *env = std::getenv(name);
+    if (!env || !env[0]) return fallback;
+    return (size_t)std::strtoull(env, nullptr, 10);
+}
+
+static size_t batch_cache_effective_budget_mib(size_t requested_mib) {
+    static bool inited = false;
+    static size_t effective_mib = 0;
+    if (inited) return effective_mib;
+
+    effective_mib = requested_mib;
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    const cudaError_t info_err = cudaMemGetInfo(&free_bytes, &total_bytes);
+    if (info_err != cudaSuccess) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] VRAM cache budget: requested=%zu MiB actual=%zu MiB cudaMemGetInfo failed: %s\n",
+            requested_mib, effective_mib, cudaGetErrorString(info_err));
+        cudaGetLastError();
+        inited = true;
+        return effective_mib;
+    }
+
+    const size_t free_mib = free_bytes / (1024ULL * 1024ULL);
+    const size_t total_mib = total_bytes / (1024ULL * 1024ULL);
+    const size_t graph_reserve_mib = env_mib_or_default("GGML_MOE_VRAM_CACHE_GRAPH_RESERVE_MIB", 0);
+    const size_t safety_mib = env_mib_or_default("GGML_MOE_VRAM_CACHE_SAFETY_MIB", graph_reserve_mib > 0 ? 128 : 0);
+    const char *clamp_env = std::getenv("GGML_MOE_VRAM_CACHE_AUTO_CLAMP");
+    const bool clamp = (clamp_env && clamp_env[0] && clamp_env[0] != '0') || graph_reserve_mib > 0;
+
+    if (clamp) {
+        const size_t reserved_mib = graph_reserve_mib + safety_mib;
+        const size_t max_cache_mib = free_mib > reserved_mib ? free_mib - reserved_mib : 0;
+        if (effective_mib > max_cache_mib) {
+            effective_mib = max_cache_mib;
+        }
+    }
+
+    std::fprintf(stderr,
+        "[moe_stream_batch] VRAM cache budget: requested=%zu MiB actual=%zu MiB free=%zu MiB total=%zu MiB graph_reserve=%zu MiB safety=%zu MiB clamp=%d\n",
+        requested_mib, effective_mib, free_mib, total_mib, graph_reserve_mib, safety_mib, clamp ? 1 : 0);
+    inited = true;
+    return effective_mib;
+}
+
 static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     const int cid = batch_cache_id_for_size(expert_sz);
     if (g_bcache_inited[cid]) {
@@ -725,6 +771,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
+    budget_mib = batch_cache_effective_budget_mib(budget_mib);
     size_t this_budget_mib = batch_cache_budget_mib_for_id(budget_mib, cid);
     const size_t budget = this_budget_mib * 1024ULL * 1024ULL;
     batch_vram_cache *c = &g_bcaches[cid];
