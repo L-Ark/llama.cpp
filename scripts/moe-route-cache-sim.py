@@ -87,16 +87,19 @@ def static_hotset(entries: list[Entry], budget_bytes: int) -> tuple[int, int, in
 
 
 class CacheSim:
-    def __init__(self, slots: int, policy: str) -> None:
+    def __init__(self, slots: int, policy: str, admit_after: int) -> None:
         self.slots = slots
         self.policy = policy
+        self.admit_after = admit_after
         self.clock = 1
         self.key: list[tuple[str, int] | None] = [None] * slots
         self.used: list[int] = [0] * slots
         self.slot_hits: list[int] = [0] * slots
         self.pinned: list[bool] = [False] * slots
+        self.key_misses: dict[tuple[str, int], int] = {}
         self.hits = 0
         self.misses = 0
+        self.bypassed = 0
         self.dropped = 0
         self.miss_bytes = 0
 
@@ -125,6 +128,11 @@ class CacheSim:
 
         self.misses += 1
         self.miss_bytes += nbytes
+        miss_count = self.key_misses.get(key, 0) + 1
+        self.key_misses[key] = miss_count
+        if miss_count < self.admit_after:
+            self.bypassed += 1
+            return False
         slot = self._find_insert_slot()
         if slot < 0:
             self.dropped += 1
@@ -186,6 +194,8 @@ def simulate_trace(
         reserve_pct: int,
         protect: bool,
         policy: str,
+        preload: str,
+        admit_after: int,
         upgate_weight: float,
         down_weight: float) -> dict[str, float | int]:
     upgate_budget = budget_mib * upgate_pct // 100
@@ -202,12 +212,20 @@ def simulate_trace(
     up_slots, up_slot_bytes = slot_count(by_bucket_entries["upgate"], by_bucket_events["upgate"], upgate_budget)
     down_slots, down_slot_bytes = slot_count(by_bucket_entries["down"], by_bucket_events["down"], down_budget)
     caches = {
-        "upgate": CacheSim(up_slots, policy),
-        "down": CacheSim(down_slots, policy),
+        "upgate": CacheSim(up_slots, policy, admit_after),
+        "down": CacheSim(down_slots, policy, admit_after),
     }
-    up_protected = protected_slot_count(up_slots, reserve_pct, protect)
-    down_protected = protected_slot_count(down_slots, reserve_pct, protect)
+    if preload == "none":
+        up_protected = 0
+        down_protected = 0
+    elif preload == "full":
+        up_protected = up_slots
+        down_protected = down_slots
+    else:
+        up_protected = protected_slot_count(up_slots, reserve_pct, protect)
     caches["upgate"].preload(preload_keys(by_bucket_entries["upgate"], up_protected))
+    if preload == "protected":
+        down_protected = protected_slot_count(down_slots, reserve_pct, protect)
     caches["down"].preload(preload_keys(by_bucket_entries["down"], down_protected))
 
     events = 0
@@ -246,6 +264,7 @@ def simulate_trace(
         "weighted_miss_gib": weighted_miss / (1024 ** 3),
         "events": events,
         "other_events": other_events,
+        "bypassed": up.bypassed + down.bypassed,
         "dropped": up.dropped + down.dropped,
     }
 
@@ -352,6 +371,8 @@ def main() -> None:
     parser.add_argument("--objective", choices=("full", "protected"), default="protected", help="Use all cache slots or only profile-protected slots for the cost estimate.")
     parser.add_argument("--trace", type=Path, help="Optional sequence trace CSV from GGML_MOE_ROUTE_TRACE_OUT.")
     parser.add_argument("--policy", choices=("lru", "lfu_lru"), default="lfu_lru", help="Cache eviction policy for --trace replay.")
+    parser.add_argument("--preload", choices=("protected", "none", "full"), default="protected", help="Preload mode for --trace replay.")
+    parser.add_argument("--admit-after", type=int, default=1, help="Only insert an uncached expert into the replay cache after this many misses.")
     parser.set_defaults(protect_profile=True)
     args = parser.parse_args()
 
@@ -363,6 +384,8 @@ def main() -> None:
         raise SystemExit("--sweep-step must be positive")
     if args.sweep_min < 1 or args.sweep_max > 99 or args.sweep_min > args.sweep_max:
         raise SystemExit("--sweep-min/--sweep-max must define a range within 1..99")
+    if args.admit_after <= 0:
+        raise SystemExit("--admit-after must be positive")
 
     entries = load_entries(args.profile)
     total_routes = sum(e.count for e in entries)
@@ -427,13 +450,14 @@ def main() -> None:
             print()
             print(
                 "trace_pct,up_mib,down_mib,up_slots,down_slots,up_protected,down_protected,"
-                "up_hit_pct,down_hit_pct,hit_pct,up_miss_gib,down_miss_gib,miss_gib,weighted_miss_gib,dropped"
+                "up_hit_pct,down_hit_pct,hit_pct,up_miss_gib,down_miss_gib,miss_gib,weighted_miss_gib,bypassed,dropped"
             )
             trace_estimates = []
             for pct in range(args.sweep_min, args.sweep_max + 1, args.sweep_step):
                 est = simulate_trace(
                     entries, trace_events, args.budget_mib, pct, args.reserve_pct,
-                    args.protect_profile, args.policy, args.upgate_weight, args.down_weight)
+                    args.protect_profile, args.policy, args.preload, args.admit_after,
+                    args.upgate_weight, args.down_weight)
                 trace_estimates.append(est)
                 print(
                     f"{est['pct']},{est['upgate_budget_mib']},{est['down_budget_mib']},"
@@ -441,11 +465,16 @@ def main() -> None:
                     f"{est['upgate_protected_slots']},{est['down_protected_slots']},"
                     f"{est['upgate_hit_pct']:.2f},{est['down_hit_pct']:.2f},{est['hit_pct']:.2f},"
                     f"{est['upgate_miss_gib']:.2f},{est['down_miss_gib']:.2f},"
-                    f"{est['miss_gib']:.2f},{est['weighted_miss_gib']:.2f},{est['dropped']}"
+                    f"{est['miss_gib']:.2f},{est['weighted_miss_gib']:.2f},{est['bypassed']},{est['dropped']}"
                 )
-            best = min(trace_estimates, key=lambda e: (e["weighted_miss_gib"], e["miss_gib"], e["pct"]))
+            valid_estimates = [e for e in trace_estimates if e["dropped"] == 0]
+            best_pool = valid_estimates if valid_estimates else trace_estimates
+            best = min(best_pool, key=lambda e: (e["weighted_miss_gib"], e["miss_gib"], e["pct"]))
+            valid = "yes" if best["dropped"] == 0 else "no"
             print(
                 f"trace_recommend upgate_pct={best['pct']} policy={args.policy} "
+                f"preload={args.preload} admit_after={args.admit_after} "
+                f"valid={valid} "
                 f"weighted_miss={best['weighted_miss_gib']:.2f} GiB "
                 f"miss={best['miss_gib']:.2f} GiB hit_est={best['hit_pct']:.2f}% "
                 f"events={best['events']} other_events={best['other_events']}"
@@ -453,13 +482,16 @@ def main() -> None:
         else:
             est = simulate_trace(
                 entries, trace_events, args.budget_mib, args.upgate_pct, args.reserve_pct,
-                args.protect_profile, args.policy, args.upgate_weight, args.down_weight)
+                args.protect_profile, args.policy, args.preload, args.admit_after,
+                args.upgate_weight, args.down_weight)
             print()
             print(
                 f"trace_sim upgate_pct={est['pct']} policy={args.policy} "
+                f"preload={args.preload} admit_after={args.admit_after} "
                 f"up_hit={est['upgate_hit_pct']:.2f}% down_hit={est['down_hit_pct']:.2f}% "
                 f"hit={est['hit_pct']:.2f}% miss={est['miss_gib']:.2f} GiB "
-                f"weighted_miss={est['weighted_miss_gib']:.2f} GiB dropped={est['dropped']}"
+                f"weighted_miss={est['weighted_miss_gib']:.2f} GiB "
+                f"bypassed={est['bypassed']} dropped={est['dropped']}"
             )
 
 
