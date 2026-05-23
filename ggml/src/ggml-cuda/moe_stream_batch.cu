@@ -342,10 +342,20 @@ struct batch_route_profile_entry {
     char tensor[96] = {};
 };
 
+struct batch_route_trace_entry {
+    uint64_t seq = 0;
+    int expert_idx = -1;
+    size_t expert_bytes = 0;
+    char tensor[96] = {};
+};
+
 static std::vector<batch_route_profile_entry> g_route_profile;
+static std::vector<batch_route_trace_entry> g_route_trace;
 static std::mutex g_route_profile_mu;
 static const char * g_route_profile_out = nullptr;
+static const char * g_route_trace_out = nullptr;
 static bool g_route_profile_inited = false;
+static uint64_t g_route_trace_seq = 0;
 
 static bool batch_route_profile_enabled() {
     const char *route_env = std::getenv("GGML_MOE_ROUTE_PROFILE");
@@ -355,39 +365,56 @@ static bool batch_route_profile_enabled() {
 }
 
 static void batch_route_profile_report_atexit() {
-    if (!g_route_profile_out || !g_route_profile_out[0]) return;
-
     std::vector<batch_route_profile_entry> rows;
+    std::vector<batch_route_trace_entry> trace;
     {
         std::lock_guard<std::mutex> lk(g_route_profile_mu);
         rows = g_route_profile;
+        trace = g_route_trace;
     }
-    if (rows.empty()) return;
 
-    std::sort(rows.begin(), rows.end(),
-        [](const batch_route_profile_entry &a, const batch_route_profile_entry &b) {
-            if (a.count != b.count) return a.count > b.count;
-            const int name_cmp = std::strcmp(a.tensor, b.tensor);
-            if (name_cmp != 0) return name_cmp < 0;
-            return a.expert_idx < b.expert_idx;
-        });
+    if (g_route_profile_out && g_route_profile_out[0] && !rows.empty()) {
+        std::sort(rows.begin(), rows.end(),
+            [](const batch_route_profile_entry &a, const batch_route_profile_entry &b) {
+                if (a.count != b.count) return a.count > b.count;
+                const int name_cmp = std::strcmp(a.tensor, b.tensor);
+                if (name_cmp != 0) return name_cmp < 0;
+                return a.expert_idx < b.expert_idx;
+            });
 
-    FILE *f = std::fopen(g_route_profile_out, "w");
-    if (!f) {
-        std::fprintf(stderr, "[moe_stream_batch] route profile: open failed: %s\n", g_route_profile_out);
-        return;
+        FILE *f = std::fopen(g_route_profile_out, "w");
+        if (!f) {
+            std::fprintf(stderr, "[moe_stream_batch] route profile: open failed: %s\n", g_route_profile_out);
+        } else {
+            std::fprintf(f, "rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor\n");
+            size_t cumulative = 0;
+            for (size_t i = 0; i < rows.size(); ++i) {
+                const batch_route_profile_entry &e = rows[i];
+                cumulative += e.expert_bytes;
+                std::fprintf(f, "%zu,%lu,%zu,%zu,0x0,%d,%s\n",
+                             i + 1, e.count, e.expert_bytes, cumulative, e.expert_idx, e.tensor);
+            }
+            std::fclose(f);
+            std::fprintf(stderr, "[moe_stream_batch] route profile written: %s (%zu entries)\n",
+                         g_route_profile_out, rows.size());
+        }
     }
-    std::fprintf(f, "rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor\n");
-    size_t cumulative = 0;
-    for (size_t i = 0; i < rows.size(); ++i) {
-        const batch_route_profile_entry &e = rows[i];
-        cumulative += e.expert_bytes;
-        std::fprintf(f, "%zu,%lu,%zu,%zu,0x0,%d,%s\n",
-                     i + 1, e.count, e.expert_bytes, cumulative, e.expert_idx, e.tensor);
+
+    if (g_route_trace_out && g_route_trace_out[0] && !trace.empty()) {
+        FILE *f = std::fopen(g_route_trace_out, "w");
+        if (!f) {
+            std::fprintf(stderr, "[moe_stream_batch] route trace: open failed: %s\n", g_route_trace_out);
+        } else {
+            std::fprintf(f, "seq,expert_bytes,tensor_base,expert_idx,tensor\n");
+            for (const batch_route_trace_entry &e : trace) {
+                std::fprintf(f, "%lu,%zu,0x0,%d,%s\n",
+                             e.seq, e.expert_bytes, e.expert_idx, e.tensor);
+            }
+            std::fclose(f);
+            std::fprintf(stderr, "[moe_stream_batch] route trace written: %s (%zu events)\n",
+                         g_route_trace_out, trace.size());
+        }
     }
-    std::fclose(f);
-    std::fprintf(stderr, "[moe_stream_batch] route profile written: %s (%zu entries)\n",
-                 g_route_profile_out, rows.size());
 }
 
 static void batch_route_profile_init_once() {
@@ -395,7 +422,8 @@ static void batch_route_profile_init_once() {
     std::lock_guard<std::mutex> lk(g_route_profile_mu);
     if (g_route_profile_inited) return;
     g_route_profile_out = batch_route_profile_enabled() ? std::getenv("GGML_MOE_BATCH_PROFILE_OUT") : nullptr;
-    if (g_route_profile_out && g_route_profile_out[0]) {
+    g_route_trace_out = std::getenv("GGML_MOE_ROUTE_TRACE_OUT");
+    if ((g_route_profile_out && g_route_profile_out[0]) || (g_route_trace_out && g_route_trace_out[0])) {
         std::atexit(batch_route_profile_report_atexit);
     }
     g_route_profile_inited = true;
@@ -403,21 +431,38 @@ static void batch_route_profile_init_once() {
 
 static void batch_route_profile_hit(const char *tensor_name, int expert_idx, size_t expert_bytes) {
     batch_route_profile_init_once();
-    if (!g_route_profile_out || !g_route_profile_out[0] || !tensor_name || !tensor_name[0]) return;
+    if (!tensor_name || !tensor_name[0]) return;
+    const bool profile_enabled = g_route_profile_out && g_route_profile_out[0];
+    const bool trace_enabled = g_route_trace_out && g_route_trace_out[0];
+    if (!profile_enabled && !trace_enabled) return;
 
     std::lock_guard<std::mutex> lk(g_route_profile_mu);
-    for (batch_route_profile_entry &e : g_route_profile) {
-        if (e.expert_idx == expert_idx && std::strcmp(e.tensor, tensor_name) == 0) {
-            ++e.count;
-            return;
+    if (profile_enabled) {
+        bool found = false;
+        for (batch_route_profile_entry &e : g_route_profile) {
+            if (e.expert_idx == expert_idx && std::strcmp(e.tensor, tensor_name) == 0) {
+                ++e.count;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            batch_route_profile_entry e;
+            e.expert_idx = expert_idx;
+            e.count = 1;
+            e.expert_bytes = expert_bytes;
+            std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
+            g_route_profile.push_back(e);
         }
     }
-    batch_route_profile_entry e;
-    e.expert_idx = expert_idx;
-    e.count = 1;
-    e.expert_bytes = expert_bytes;
-    std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
-    g_route_profile.push_back(e);
+    if (trace_enabled) {
+        batch_route_trace_entry e;
+        e.seq = ++g_route_trace_seq;
+        e.expert_idx = expert_idx;
+        e.expert_bytes = expert_bytes;
+        std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
+        g_route_trace.push_back(e);
+    }
 }
 
 static void batch_cache_report_atexit() {
