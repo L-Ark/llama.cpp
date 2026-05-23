@@ -79,6 +79,13 @@ class RuntimeReport:
     timing: RuntimeTiming | None
 
 
+@dataclass(frozen=True)
+class MeasuredRun:
+    pct: int
+    timing: RuntimeTiming
+    path: Path
+
+
 def bucket(tensor: str) -> str:
     if ".ffn_up_exps." in tensor or ".ffn_gate_exps." in tensor or ".ffn_gate_up_exps." in tensor:
         return "upgate"
@@ -176,6 +183,47 @@ def parse_runtime_stderr(path: Path) -> RuntimeReport:
                     eval_ms, runs, tok_s = match.groups()
                     timing = RuntimeTiming(float(eval_ms), int(runs), float(tok_s))
     return RuntimeReport(profiles=profiles, caches=caches, timing=timing)
+
+
+def measured_env_path(stderr_path: Path) -> Path:
+    name = stderr_path.name
+    suffix = ".stderr.txt"
+    if name.endswith(suffix):
+        return stderr_path.with_name(name[:-len(suffix)] + ".env.txt")
+    return stderr_path.with_suffix(".env.txt")
+
+
+def parse_measured_pct(stderr_path: Path) -> int | None:
+    env_path = measured_env_path(stderr_path)
+    if env_path.exists():
+        with env_path.open("r", errors="replace") as f:
+            for line in f:
+                if line.startswith("GGML_MOE_VRAM_CACHE_UPGATE_PCT="):
+                    value = line.split("=", 1)[1].strip()
+                    if value.isdigit():
+                        pct = int(value)
+                        if 1 <= pct <= 99:
+                            return pct
+
+    match = re.search(r"(?:^|[-_])p(?:ct)?([0-9]{1,2})(?:[-_]|$)", stderr_path.stem)
+    if match:
+        pct = int(match.group(1))
+        if 1 <= pct <= 99:
+            return pct
+    return None
+
+
+def parse_measured_runs(paths: list[Path]) -> list[MeasuredRun]:
+    runs: list[MeasuredRun] = []
+    for path in paths:
+        report = parse_runtime_stderr(path)
+        if not report.timing:
+            raise SystemExit(f"--measured-stderr has no eval timing: {path}")
+        pct = parse_measured_pct(path)
+        if pct is None:
+            raise SystemExit(f"--measured-stderr cannot determine UPGATE_PCT from env or file name: {path}")
+        runs.append(MeasuredRun(pct=pct, timing=report.timing, path=path))
+    return runs
 
 
 def merge_runtime_reports(reports: list[RuntimeReport]) -> RuntimeReport:
@@ -556,6 +604,84 @@ def runtime_calibration_costs(report: RuntimeReport) -> dict[str, float]:
     }
 
 
+def calibrated_trace_costs(est: dict[str, float | int], costs: dict[str, float]) -> tuple[float, float, float]:
+    down_exposed_ms = float(est["down_miss_gib"]) * costs["down_stage_ms_per_gib"]
+    upgate_host_ms = float(est["upgate_miss_gib"]) * costs["upgate_host_ms_per_gib"]
+    upgate_span_ms = float(est["upgate_miss_gib"]) * costs["upgate_span_ms_per_gib"]
+    return down_exposed_ms, upgate_host_ms, upgate_span_ms
+
+
+def print_measured_calibration(
+        trace_estimates: list[dict[str, float | int]],
+        costs: dict[str, float],
+        measured_runs: list[MeasuredRun]) -> None:
+    if not measured_runs:
+        return
+
+    by_pct = {int(est["pct"]): est for est in trace_estimates}
+    usable = [run for run in measured_runs if run.pct in by_pct]
+    missing = [run for run in measured_runs if run.pct not in by_pct]
+    if missing:
+        print(
+            "measured_warning missing_trace_pct="
+            + ",".join(str(run.pct) for run in sorted(missing, key=lambda r: r.pct))
+        )
+    if not usable:
+        return
+
+    best_run = min(usable, key=lambda run: run.timing.eval_ms)
+    best_est = by_pct[best_run.pct]
+    best_down, _, best_up_span = calibrated_trace_costs(best_est, costs)
+
+    print()
+    print(
+        "measured_pct,eval_ms,tok_s,down_exposed_ms,upgate_stream_upper_ms,"
+        "delta_eval_ms,delta_down_ms,delta_upgate_stream_ms"
+    )
+    for run in sorted(usable, key=lambda r: r.pct):
+        est = by_pct[run.pct]
+        down_ms, _, up_span_ms = calibrated_trace_costs(est, costs)
+        print(
+            f"{run.pct},{run.timing.eval_ms:.0f},{run.timing.eval_tok_s:.2f},"
+            f"{down_ms:.0f},{up_span_ms:.0f},"
+            f"{run.timing.eval_ms - best_run.timing.eval_ms:.0f},"
+            f"{down_ms - best_down:.0f},{up_span_ms - best_up_span:.0f}"
+        )
+    print(
+        f"measured_recommend upgate_pct={best_run.pct} "
+        f"eval_ms={best_run.timing.eval_ms:.0f} tok_s={best_run.timing.eval_tok_s:.2f} "
+        f"source={best_run.path}"
+    )
+
+    xs: list[float] = []
+    ys: list[float] = []
+    for run in usable:
+        if run.pct == best_run.pct:
+            continue
+        est = by_pct[run.pct]
+        down_ms, _, up_span_ms = calibrated_trace_costs(est, costs)
+        up_delta = up_span_ms - best_up_span
+        if abs(up_delta) < 1e-9:
+            continue
+        # Residual after the current down-exposed model; remaining signal is the
+        # fraction of up/gate stream span that leaks onto the critical path.
+        xs.append(up_delta)
+        ys.append((run.timing.eval_ms - best_run.timing.eval_ms) - (down_ms - best_down))
+    if xs:
+        denom = sum(x * x for x in xs)
+        leak = max(0.0, sum(x * y for x, y in zip(xs, ys)) / max(denom, 1e-9))
+        rms = math.sqrt(sum((leak * x - y) ** 2 for x, y in zip(xs, ys)) / len(xs))
+        print(
+            f"fit_upgate_stream_leak baseline_pct={best_run.pct} "
+            f"leak={leak:.3f} residual_rms_ms={rms:.0f} samples={len(xs)}"
+        )
+        if rms > 250:
+            print(
+                "fit_warning residual is large; prefer measured_recommend and add more counters "
+                "before auto-applying the fitted leak."
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Estimate hot-expert VRAM cache coverage from GGML_MOE_BATCH_PROFILE_OUT CSV.")
     parser.add_argument("profile", type=Path)
@@ -575,6 +701,7 @@ def main() -> None:
     parser.add_argument("--preload", choices=("protected", "none", "full"), default="protected", help="Preload mode for --trace replay.")
     parser.add_argument("--admit-after", type=int, default=1, help="Only insert an uncached expert into the replay cache after this many misses.")
     parser.add_argument("--profile-stderr", type=Path, action="append", help="Parse one or more bench stderr logs and print critical-path calibration from runtime counters.")
+    parser.add_argument("--measured-stderr", type=Path, action="append", help="Parse benchmark stderrs for selected UPGATE_PCT values and compare measured timing against calibrated trace estimates.")
     parser.set_defaults(protect_profile=True)
     args = parser.parse_args()
 
@@ -623,6 +750,8 @@ def main() -> None:
         reports = [parse_runtime_stderr(path) for path in args.profile_stderr]
         runtime_report = merge_runtime_reports(reports)
         print_runtime_calibration(runtime_report, args.profile_stderr)
+
+    measured_runs = parse_measured_runs(args.measured_stderr) if args.measured_stderr else []
 
     if args.sweep:
         print()
@@ -693,9 +822,7 @@ def main() -> None:
                     print()
                     print("trace_calibrated_pct,down_exposed_ms,upgate_host_lower_ms,upgate_stream_upper_ms")
                     for est in trace_estimates:
-                        down_exposed_ms = est["down_miss_gib"] * costs["down_stage_ms_per_gib"]
-                        upgate_host_ms = est["upgate_miss_gib"] * costs["upgate_host_ms_per_gib"]
-                        upgate_span_ms = est["upgate_miss_gib"] * costs["upgate_span_ms_per_gib"]
+                        down_exposed_ms, upgate_host_ms, upgate_span_ms = calibrated_trace_costs(est, costs)
                         print(
                             f"{est['pct']},{down_exposed_ms:.0f},"
                             f"{upgate_host_ms:.0f},{upgate_span_ms:.0f}"
@@ -705,6 +832,7 @@ def main() -> None:
                         "upgate_host_lower_ms and upgate_stream_upper_ms bound an overlapped span, "
                         "so do not minimize them as a single linear objective."
                     )
+                    print_measured_calibration(trace_estimates, costs, measured_runs)
         else:
             est = simulate_trace(
                 entries, trace_events, args.budget_mib, args.upgate_pct, args.reserve_pct,
