@@ -145,6 +145,8 @@ struct batch_ctx {
     cudaStream_t prefetch_stream = nullptr;
     cudaStream_t up_stream = nullptr;
     cudaStream_t gate_stream = nullptr;
+    cudaStream_t up_copy_stream = nullptr;
+    cudaStream_t gate_copy_stream = nullptr;
     void * d_src0 = nullptr;     size_t d_src0_sz = 0;
     void * d_src1_f32 = nullptr; size_t d_src1_f32_sz = 0;
     void * d_src1_q8 = nullptr;  size_t d_src1_q8_sz = 0;
@@ -165,9 +167,13 @@ struct batch_ctx {
     void * h_dst = nullptr;      size_t h_dst_sz = 0;
     pinned_stage_ring stage_ring;
     pinned_stage_ring stage_ring_gate;
+    pinned_stage_ring stage_ring_up_aux;
+    pinned_stage_ring stage_ring_gate_aux;
     cudaEvent_t ev_stage_ready = nullptr;
     cudaEvent_t ev_up_done = nullptr;
     cudaEvent_t ev_gate_done = nullptr;
+    cudaEvent_t ev_up_copy_aux_done = nullptr;
+    cudaEvent_t ev_gate_copy_aux_done = nullptr;
     cudaEvent_t ev_start = nullptr;
     cudaEvent_t ev_stage = nullptr;
     cudaEvent_t ev_quant = nullptr;
@@ -979,6 +985,8 @@ static void pinned_stage_report_atexit() {
     };
     report_ring("", g_batch.stage_ring);
     report_ring(" gate", g_batch.stage_ring_gate);
+    report_ring(" up_aux", g_batch.stage_ring_up_aux);
+    report_ring(" gate_aux", g_batch.stage_ring_gate_aux);
 }
 
 static bool pinned_stage_ensure(pinned_stage_ring &ring, size_t need, bool force) {
@@ -1227,10 +1235,18 @@ static bool init_batch_once() {
         if (g_batch.stream && cudaStreamCreateWithFlags(&g_batch.gate_stream, cudaStreamNonBlocking) != cudaSuccess) {
             g_batch.gate_stream = nullptr;
         }
+        if (g_batch.stream && cudaStreamCreateWithFlags(&g_batch.up_copy_stream, cudaStreamNonBlocking) != cudaSuccess) {
+            g_batch.up_copy_stream = nullptr;
+        }
+        if (g_batch.stream && cudaStreamCreateWithFlags(&g_batch.gate_copy_stream, cudaStreamNonBlocking) != cudaSuccess) {
+            g_batch.gate_copy_stream = nullptr;
+        }
         if (g_batch.stream) {
             cudaEventCreateWithFlags(&g_batch.ev_stage_ready, cudaEventDisableTiming);
             cudaEventCreateWithFlags(&g_batch.ev_up_done, cudaEventDisableTiming);
             cudaEventCreateWithFlags(&g_batch.ev_gate_done, cudaEventDisableTiming);
+            cudaEventCreateWithFlags(&g_batch.ev_up_copy_aux_done, cudaEventDisableTiming);
+            cudaEventCreateWithFlags(&g_batch.ev_gate_copy_aux_done, cudaEventDisableTiming);
         }
         const char *prof_env = std::getenv("GGML_MOE_BATCH_PROFILE");
         g_bprof.enabled = prof_env && prof_env[0] && prof_env[0] != '0';
@@ -1766,6 +1782,21 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         return true;
     };
 
+    auto split_stage_jobs = [&](const std::vector<stage_copy_job> &jobs,
+            std::vector<stage_copy_job> &a, std::vector<stage_copy_job> &b) {
+        a.clear();
+        b.clear();
+        a.reserve((jobs.size() + 1) / 2);
+        b.reserve(jobs.size() / 2);
+        for (size_t i = 0; i < jobs.size(); ++i) {
+            if (i & 1) {
+                b.push_back(jobs[i]);
+            } else {
+                a.push_back(jobs[i]);
+            }
+        }
+    };
+
     auto launch_tensor = [&](
             void *d_out, cudaStream_t run_stream, int32_t *d_x_ids, void *d_src1_q8,
             int32_t *h_x_ids) -> bool {
@@ -1814,10 +1845,14 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (cudaEventRecord(bc.ev_stage_ready, st) != cudaSuccess) return false;
         if (cudaStreamWaitEvent(bc.up_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
         if (cudaStreamWaitEvent(bc.gate_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
+        if (bc.up_copy_stream && cudaStreamWaitEvent(bc.up_copy_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
+        if (bc.gate_copy_stream && cudaStreamWaitEvent(bc.gate_copy_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
         if (profile && bc.ev_up_start) cudaEventRecord(bc.ev_up_start, bc.up_stream);
         auto parallel_fail = [&]() -> bool {
             cudaStreamSynchronize(bc.up_stream);
             cudaStreamSynchronize(bc.gate_stream);
+            if (bc.up_copy_stream) cudaStreamSynchronize(bc.up_copy_stream);
+            if (bc.gate_copy_stream) cudaStreamSynchronize(bc.gate_copy_stream);
             return false;
         };
 
@@ -1835,37 +1870,109 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 return parallel_fail();
             }
 
-            bool up_copy_ok = true;
-            bool gate_copy_ok = true;
-            std::thread up_thread([&]() {
-                up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
-            });
-            std::thread gate_thread([&]() {
-                gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
-            });
+            const char *stage_split_env = std::getenv("GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT");
+            const bool stage_split = stage_split_env && stage_split_env[0] && stage_split_env[0] != '0' &&
+                bc.up_copy_stream && bc.gate_copy_stream && bc.ev_up_copy_aux_done && bc.ev_gate_copy_aux_done;
+            static std::atomic<int> first_stage_split{0};
+            if (stage_split && first_stage_split.fetch_add(1) == 0) {
+                std::fprintf(stderr, "[moe_stream] up/gate split CPU staging active\n");
+            }
 
-            up_thread.join();
-            if (!up_copy_ok) {
-                gate_thread.join();
-                clear_stage_jobs(up_jobs);
-                clear_stage_jobs(gate_jobs);
-                return parallel_fail();
-            }
-            if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
-                gate_thread.join();
-                return parallel_fail();
-            }
-            if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+            if (stage_split) {
+                std::vector<stage_copy_job> up_jobs_a;
+                std::vector<stage_copy_job> up_jobs_b;
+                std::vector<stage_copy_job> gate_jobs_a;
+                std::vector<stage_copy_job> gate_jobs_b;
+                split_stage_jobs(up_jobs, up_jobs_a, up_jobs_b);
+                split_stage_jobs(gate_jobs, gate_jobs_a, gate_jobs_b);
 
-            if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
-            gate_thread.join();
-            if (!gate_copy_ok) {
-                clear_stage_jobs(up_jobs);
-                clear_stage_jobs(gate_jobs);
-                return parallel_fail();
-            }
-            if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
-                return parallel_fail();
+                bool up_a_ok = true;
+                bool up_b_ok = true;
+                bool gate_a_ok = true;
+                bool gate_b_ok = true;
+                std::thread up_a_thread([&]() {
+                    up_a_ok = copy_stage_jobs(up_jobs_a, bc.up_stream, bc.stage_ring);
+                });
+                std::thread up_b_thread([&]() {
+                    up_b_ok = copy_stage_jobs(up_jobs_b, bc.up_copy_stream, bc.stage_ring_up_aux);
+                });
+                std::thread gate_a_thread([&]() {
+                    gate_a_ok = copy_stage_jobs(gate_jobs_a, bc.gate_stream, bc.stage_ring_gate);
+                });
+                std::thread gate_b_thread([&]() {
+                    gate_b_ok = copy_stage_jobs(gate_jobs_b, bc.gate_copy_stream, bc.stage_ring_gate_aux);
+                });
+
+                up_a_thread.join();
+                up_b_thread.join();
+                if (!up_a_ok || !up_b_ok) {
+                    gate_a_thread.join();
+                    gate_b_thread.join();
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return parallel_fail();
+                }
+                if (cudaEventRecord(bc.ev_up_copy_aux_done, bc.up_copy_stream) != cudaSuccess ||
+                        cudaStreamWaitEvent(bc.up_stream, bc.ev_up_copy_aux_done, 0) != cudaSuccess) {
+                    gate_a_thread.join();
+                    gate_b_thread.join();
+                    return parallel_fail();
+                }
+                if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                    gate_a_thread.join();
+                    gate_b_thread.join();
+                    return parallel_fail();
+                }
+                if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+                if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+                gate_a_thread.join();
+                gate_b_thread.join();
+                if (!gate_a_ok || !gate_b_ok) {
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return parallel_fail();
+                }
+                if (cudaEventRecord(bc.ev_gate_copy_aux_done, bc.gate_copy_stream) != cudaSuccess ||
+                        cudaStreamWaitEvent(bc.gate_stream, bc.ev_gate_copy_aux_done, 0) != cudaSuccess) {
+                    return parallel_fail();
+                }
+                if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                    return parallel_fail();
+                }
+            } else {
+                bool up_copy_ok = true;
+                bool gate_copy_ok = true;
+                std::thread up_thread([&]() {
+                    up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
+                });
+                std::thread gate_thread([&]() {
+                    gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
+                });
+
+                up_thread.join();
+                if (!up_copy_ok) {
+                    gate_thread.join();
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return parallel_fail();
+                }
+                if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                    gate_thread.join();
+                    return parallel_fail();
+                }
+                if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+                if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+                gate_thread.join();
+                if (!gate_copy_ok) {
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return parallel_fail();
+                }
+                if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                    return parallel_fail();
+                }
             }
         } else {
             if (!stage_tensor(
