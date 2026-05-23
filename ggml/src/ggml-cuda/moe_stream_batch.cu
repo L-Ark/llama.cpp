@@ -2073,6 +2073,14 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         cudaStreamSynchronize(bc.prefetch_stream);
     }
     const bool profile = g_bprof.enabled && bc.ev_start && bc.ev_stage && bc.ev_quant && bc.ev_kernel && bc.ev_d2h;
+    const char *down_parallel_stage_env = std::getenv("GGML_MOE_DOWN_PARALLEL_STAGE");
+    const bool down_parallel_stage =
+        down_parallel_stage_env && down_parallel_stage_env[0] && down_parallel_stage_env[0] != '0' &&
+        bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
+    static std::atomic<int> first_down_parallel_stage{0};
+    if (down_parallel_stage && first_down_parallel_stage.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] down parallel CPU staging active\n");
+    }
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     const size_t src0_all_bytes = (size_t)n_active * src0_bytes;
@@ -2109,6 +2117,38 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 
+    struct down_stage_copy_job {
+        int slot = -1;
+        void *dst = nullptr;
+        const void *host_data = nullptr;
+        const expert_pack_entry *pack_entry = nullptr;
+    };
+
+    auto clear_down_stage_jobs = [&](const std::vector<down_stage_copy_job> &jobs) {
+        for (const down_stage_copy_job &job : jobs) {
+            batch_cache_clear_slot(cache, job.slot);
+        }
+    };
+
+    auto copy_down_stage_jobs = [&](const std::vector<down_stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) -> bool {
+        if (cudaSetDevice(0) != cudaSuccess) return false;
+        for (const down_stage_copy_job &job : jobs) {
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry)) {
+                if (!job.pack_entry ||
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr)) {
+                    return false;
+                }
+            }
+            if (cudaGetLastError() != cudaSuccess) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    std::vector<down_stage_copy_job> down_jobs_a;
+    std::vector<down_stage_copy_job> down_jobs_b;
+
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
         const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
@@ -2116,7 +2156,17 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
         if (cache_slot < 0) {
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
-                    nullptr, 0, true, src0_name, active_experts[j]);
+                    nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
+            if (down_parallel_stage && cache_slot >= 0) {
+                const expert_pack_entry *pack_entry = expert_pack_lookup(src0_name, active_experts[j], src0_bytes);
+                void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
+                down_stage_copy_job job{cache_slot, dst_slot, expert_host, pack_entry};
+                if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
+                    down_jobs_b.push_back(job);
+                } else {
+                    down_jobs_a.push_back(job);
+                }
+            }
         }
         if (cache_slot < 0) return false;
         bc.h_x_ids[j] = cache_slot;
@@ -2131,6 +2181,28 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         bc.h_bounds[j] = j;
     }
     bc.h_bounds[n_active] = n_active;
+
+    if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
+        bool copy_a_ok = true;
+        bool copy_b_ok = true;
+        std::thread copy_a([&]() {
+            copy_a_ok = copy_down_stage_jobs(down_jobs_a, bc.up_stream, bc.stage_ring);
+        });
+        std::thread copy_b([&]() {
+            copy_b_ok = copy_down_stage_jobs(down_jobs_b, bc.gate_stream, bc.stage_ring_gate);
+        });
+        copy_a.join();
+        copy_b.join();
+        if (!copy_a_ok || !copy_b_ok) {
+            clear_down_stage_jobs(down_jobs_a);
+            clear_down_stage_jobs(down_jobs_b);
+            return false;
+        }
+        if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return false;
+        if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return false;
+    }
 
     if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
