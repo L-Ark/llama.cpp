@@ -446,6 +446,17 @@ static void batch_cache_report_atexit() {
         std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
                      hits, misses, preloads, 100.0 * hits / total);
     }
+    for (int ic = 0; ic < 2; ++ic) {
+        const batch_vram_cache &c = g_bcaches[ic];
+        const uint64_t c_total = c.hits + c.misses;
+        if (c_total == 0) continue;
+        const char *label = ic == 1 ? "upgate" : "down";
+        std::fprintf(stderr,
+            "[moe_stream_batch] VRAM cache %s: slots=%d slot=%.2f MiB "
+            "hits=%lu misses=%lu preloads=%lu pinned=%lu hit_rate=%.1f%%\n",
+            label, c.n_slots, c.slot_sz / (1024.0 * 1024.0),
+            c.hits, c.misses, c.preloads, c.pinned, 100.0 * c.hits / c_total);
+    }
     if (down_prefetch_loads > 0) {
         std::fprintf(stderr, "[moe_stream_batch] down prefetch: loads=%lu hits=%lu evicted_unused=%lu useful_rate=%.1f%%\n",
                      down_prefetch_loads, down_prefetch_hits, down_prefetch_evicted,
