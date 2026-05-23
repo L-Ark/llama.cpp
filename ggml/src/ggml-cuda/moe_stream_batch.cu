@@ -18,6 +18,7 @@
 #include <cstring>
 #include <cmath>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #if !defined(_WIN32)
@@ -163,6 +164,7 @@ struct batch_ctx {
     void * h_src1 = nullptr;     size_t h_src1_sz = 0;
     void * h_dst = nullptr;      size_t h_dst_sz = 0;
     pinned_stage_ring stage_ring;
+    pinned_stage_ring stage_ring_gate;
     cudaEvent_t ev_stage_ready = nullptr;
     cudaEvent_t ev_up_done = nullptr;
     cudaEvent_t ev_gate_done = nullptr;
@@ -187,6 +189,7 @@ struct batch_ctx {
 static batch_ctx g_batch;
 static std::mutex g_batch_mu;
 static std::atomic<bool> g_batch_inited{false};
+static std::atomic<bool> g_pinned_stage_report_registered{false};
 
 struct registered_tensor {
     int type = 0;
@@ -246,11 +249,11 @@ struct expert_pack_state {
     bool reported_io_backend = false;
     int io_backend = 0; // 0=buffered, 1=direct
     std::mutex mu;
-    uint64_t hits = 0;
-    uint64_t misses = 0;
-    uint64_t read_failures = 0;
-    uint64_t direct_reads = 0;
-    uint64_t direct_fallbacks = 0;
+    std::atomic<uint64_t> hits{0};
+    std::atomic<uint64_t> misses{0};
+    std::atomic<uint64_t> read_failures{0};
+    std::atomic<uint64_t> direct_reads{0};
+    std::atomic<uint64_t> direct_fallbacks{0};
 };
 
 static expert_pack_state g_expert_pack;
@@ -689,6 +692,18 @@ static bool batch_cache_contains_slot(const batch_vram_cache *c, uintptr_t key) 
     return false;
 }
 
+static void batch_cache_clear_slot(batch_vram_cache *c, int slot) {
+    if (!c || slot < 0 || slot >= c->n_slots) return;
+    c->slot_key[slot] = 0;
+    c->slot_used[slot] = 0;
+    c->slot_hits[slot] = 0;
+    if (c->slot_pinned[slot] && c->pinned > 0) {
+        --c->pinned;
+    }
+    c->slot_pinned[slot] = false;
+    c->slot_prefetch_down[slot] = false;
+}
+
 static int batch_cache_find_slot(batch_vram_cache *c, uintptr_t key) {
     if (!c || !c->pool || c->n_slots == 0) return -1;
     for (int slot = 0; slot < c->n_slots; ++slot) {
@@ -730,9 +745,9 @@ static void expert_pack_report_atexit() {
     if (!g_expert_pack.enabled) return;
     std::fprintf(stderr,
                  "[moe_stream_batch] expert pack: hits=%lu misses=%lu read_failures=%lu direct_reads=%lu direct_fallbacks=%lu entries=%zu\n",
-                 g_expert_pack.hits, g_expert_pack.misses,
-                 g_expert_pack.read_failures, g_expert_pack.direct_reads,
-                 g_expert_pack.direct_fallbacks, g_expert_pack.entries.size());
+                 g_expert_pack.hits.load(), g_expert_pack.misses.load(),
+                 g_expert_pack.read_failures.load(), g_expert_pack.direct_reads.load(),
+                 g_expert_pack.direct_fallbacks.load(), g_expert_pack.entries.size());
 }
 
 static bool expert_pack_read_exact(FILE *file, void *dst, size_t sz) {
@@ -877,7 +892,6 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
 
 static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, size_t sz) {
     if (!entry || !g_expert_pack.file || entry->nbytes != sz) return false;
-    std::lock_guard<std::mutex> lk(g_expert_pack.mu);
 
 #if !defined(_WIN32)
     if (g_expert_pack.io_backend == 1 && g_expert_pack.fd_direct >= 0) {
@@ -907,6 +921,7 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
     }
 #endif
 
+    std::lock_guard<std::mutex> lk(g_expert_pack.mu);
 #if defined(_WIN32)
     if (_fseeki64(g_expert_pack.file, (int64_t)entry->offset, SEEK_SET) != 0) {
 #else
@@ -956,16 +971,18 @@ static void pinned_stage_release(pinned_stage_ring &ring) {
 }
 
 static void pinned_stage_report_atexit() {
-    const pinned_stage_ring &ring = g_batch.stage_ring;
-    if (ring.copies == 0 && ring.fallbacks == 0) return;
-    std::fprintf(stderr,
-        "[moe_stream_batch] pinned staging: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB\n",
-        ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0));
+    auto report_ring = [](const char *name, const pinned_stage_ring &ring) {
+        if (ring.copies == 0 && ring.fallbacks == 0) return;
+        std::fprintf(stderr,
+            "[moe_stream_batch] pinned staging%s: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB\n",
+            name, ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0));
+    };
+    report_ring("", g_batch.stage_ring);
+    report_ring(" gate", g_batch.stage_ring_gate);
 }
 
-static bool pinned_stage_ensure(size_t need, bool force) {
+static bool pinned_stage_ensure(pinned_stage_ring &ring, size_t need, bool force) {
     if (!force && !stage_pinned_enabled()) return false;
-    pinned_stage_ring &ring = g_batch.stage_ring;
     if (ring.failed) return false;
     const size_t alloc_need = (size_t)align_up_u64((uint64_t)need, (uint64_t)expert_pack_direct_alignment());
 
@@ -989,22 +1006,22 @@ static bool pinned_stage_ensure(size_t need, bool force) {
         }
     }
 
-    if (!ring.report_registered) {
+    if (!g_pinned_stage_report_registered.exchange(true)) {
         std::atexit(pinned_stage_report_atexit);
-        ring.report_registered = true;
     }
+    ring.report_registered = true;
     std::fprintf(stderr, "[moe_stream_batch] pinned staging: enabled, %d slots of %.2f MiB\n",
                  n_slots, need / (1024.0 * 1024.0));
     return true;
 }
 
 static bool batch_cache_copy_h2d(
+        pinned_stage_ring &ring,
         void *dst, const void *host_data, size_t sz, cudaStream_t st,
         const expert_pack_entry *pack_entry) {
     const bool use_pinned_stage = stage_pinned_enabled() || pack_entry;
     if (use_pinned_stage) {
-        pinned_stage_ring &ring = g_batch.stage_ring;
-        if (pinned_stage_ensure(sz, pack_entry != nullptr)) {
+        if (pinned_stage_ensure(ring, sz, pack_entry != nullptr)) {
             pinned_stage_slot &slot = ring.slots[ring.next++ % ring.slots.size()];
             if (slot.pending) {
                 if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
@@ -1032,6 +1049,12 @@ static bool batch_cache_copy_h2d(
     }
 
     return cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st) == cudaSuccess;
+}
+
+static bool batch_cache_copy_h2d(
+        void *dst, const void *host_data, size_t sz, cudaStream_t st,
+        const expert_pack_entry *pack_entry) {
+    return batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, pack_entry);
 }
 
 static int batch_cache_insert_slot(
@@ -1083,6 +1106,7 @@ static int batch_cache_insert_slot(
         ++c->pinned;
     }
     c->slot_pinned[slot] = pin_slot;
+    c->slot_prefetch_down[slot] = prefetch_down;
     void *dst = (char *)c->pool + (size_t)slot * c->slot_sz;
     auto clear_slot = [&]() {
         c->slot_key[slot] = 0;
@@ -1116,7 +1140,6 @@ static int batch_cache_insert_slot(
     } else {
         ++c->misses;
     }
-    c->slot_prefetch_down[slot] = prefetch_down;
     if (prefetch_down) {
         ++c->down_prefetch_loads;
     }
@@ -1614,6 +1637,13 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (parallel_up_gate && first_parallel_up_gate.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] IQ2_S parallel up/gate streams active\n");
     }
+    const char *parallel_stage_env = std::getenv("GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE");
+    const bool parallel_stage =
+        parallel_up_gate && parallel_stage_env && parallel_stage_env[0] && parallel_stage_env[0] != '0';
+    static std::atomic<int> first_parallel_stage{0};
+    if (parallel_stage && first_parallel_stage.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream] up/gate parallel CPU staging active\n");
+    }
 
     auto stage_tensor = [&](
             const char *key_name, const void *host_base, void *d_out,
@@ -1681,6 +1711,71 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             d_x_ids, (float *)d_out, ne00, ne01, nb01, src0_bytes, n_active, dst_cols, run_stream);
     };
 
+    struct stage_copy_job {
+        int slot = -1;
+        void *dst = nullptr;
+        const void *host_data = nullptr;
+        const expert_pack_entry *pack_entry = nullptr;
+    };
+
+    auto clear_stage_jobs = [&](const std::vector<stage_copy_job> &jobs) {
+        for (const stage_copy_job &job : jobs) {
+            batch_cache_clear_slot(cache, job.slot);
+        }
+    };
+
+    auto plan_tensor = [&](
+            const char *key_name, const void *host_base,
+            int32_t *h_x_ids, int *slots_out,
+            const int *avoid_slots, int n_avoid_slots,
+            std::vector<stage_copy_job> &jobs) -> bool {
+        jobs.clear();
+        for (int j = 0; j < n_active; ++j) {
+            const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * nb02;
+            const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
+            int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            if (cache_slot < 0) {
+                cache_slot = batch_cache_insert_slot(
+                    cache, cache_key, expert_host, src0_bytes, st, true, false,
+                    avoid_slots, n_avoid_slots, false, key_name, active_experts[j]);
+                if (cache_slot < 0) return false;
+                const expert_pack_entry *pack_entry = expert_pack_lookup(key_name, active_experts[j], src0_bytes);
+                void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
+                jobs.push_back({cache_slot, dst_slot, expert_host, pack_entry});
+            }
+            h_x_ids[j] = cache_slot;
+            if (slots_out) slots_out[j] = cache_slot;
+            batch_route_profile_hit(key_name, active_experts[j], src0_bytes);
+        }
+        return true;
+    };
+
+    auto copy_stage_jobs = [&](const std::vector<stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) -> bool {
+        if (cudaSetDevice(0) != cudaSuccess) return false;
+        for (const stage_copy_job &job : jobs) {
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry)) {
+                if (!job.pack_entry ||
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr)) {
+                    return false;
+                }
+            }
+            if (cudaGetLastError() != cudaSuccess) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    auto launch_tensor = [&](
+            void *d_out, cudaStream_t run_stream, int32_t *d_x_ids, void *d_src1_q8,
+            int32_t *h_x_ids) -> bool {
+        if (cudaMemsetAsync(d_out, 0, dst_bytes, run_stream) != cudaSuccess) return false;
+        if (cudaMemcpyAsync(d_x_ids, h_x_ids, ids_bytes, cudaMemcpyHostToDevice, run_stream) != cudaSuccess) return false;
+        return ggml_cuda_moe_stream_mmvq_batch_dev(
+            src0_type, cache->pool, ne01, ne00, (const float *)bc.d_src1_f32, d_src1_q8,
+            (float *)d_out, d_x_ids, n_active, cache->slot_sz, run_stream);
+    };
+
     for (int j = 0; j < n_active; ++j) {
         const char *src1_base = (const char *)src1_f32;
         const char *src_row = src1_base + (size_t)token_ids[j] * src1_nb2;
@@ -1727,17 +1822,64 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         };
 
         int up_slots[128] = {};
-        if (!stage_tensor(
-                up_key_name, src0_up_data, bc.d_up, bc.up_stream,
-                bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
-            return parallel_fail();
-        }
-        if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
-        if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
-        if (!stage_tensor(
-                gate_key_name, src0_gate_data, bc.d_gate, bc.gate_stream,
-                bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
-            return parallel_fail();
+        if (parallel_stage) {
+            std::vector<stage_copy_job> up_jobs;
+            std::vector<stage_copy_job> gate_jobs;
+            if (!plan_tensor(up_key_name, src0_up_data, bc.h_x_ids_up, up_slots, nullptr, 0, up_jobs)) {
+                clear_stage_jobs(up_jobs);
+                return parallel_fail();
+            }
+            if (!plan_tensor(gate_key_name, src0_gate_data, bc.h_x_ids_gate, nullptr, up_slots, n_active, gate_jobs)) {
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return parallel_fail();
+            }
+
+            bool up_copy_ok = true;
+            bool gate_copy_ok = true;
+            std::thread up_thread([&]() {
+                up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
+            });
+            std::thread gate_thread([&]() {
+                gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
+            });
+
+            up_thread.join();
+            if (!up_copy_ok) {
+                gate_thread.join();
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return parallel_fail();
+            }
+            if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                gate_thread.join();
+                return parallel_fail();
+            }
+            if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+            if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+            gate_thread.join();
+            if (!gate_copy_ok) {
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return parallel_fail();
+            }
+            if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                return parallel_fail();
+            }
+        } else {
+            if (!stage_tensor(
+                    up_key_name, src0_up_data, bc.d_up, bc.up_stream,
+                    bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
+                return parallel_fail();
+            }
+            if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+            if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+            if (!stage_tensor(
+                    gate_key_name, src0_gate_data, bc.d_gate, bc.gate_stream,
+                    bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
+                return parallel_fail();
+            }
         }
         if (profile) cudaEventRecord(bc.ev_gate, bc.gate_stream);
         if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return parallel_fail();
