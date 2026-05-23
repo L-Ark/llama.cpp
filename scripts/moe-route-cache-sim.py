@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +36,47 @@ class Hotset:
     full_hit_bytes: int
     protected_hits: int
     protected_hit_bytes: int
+
+
+@dataclass(frozen=True)
+class RuntimeCache:
+    label: str
+    slots: int
+    slot_mib: float
+    hits: int
+    misses: int
+    preloads: int
+    pinned: int
+
+
+@dataclass(frozen=True)
+class RuntimeProfile:
+    label: str
+    calls: int
+    avg_active: float
+    stage_ms: float = 0.0
+    quant_ms: float = 0.0
+    up_ms: float = 0.0
+    gate_ms: float = 0.0
+    fuse_ms: float = 0.0
+    kernel_ms: float = 0.0
+    d2h_ms: float = 0.0
+    scatter_ms: float = 0.0
+    total_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class RuntimeTiming:
+    eval_ms: float
+    eval_runs: int
+    eval_tok_s: float
+
+
+@dataclass(frozen=True)
+class RuntimeReport:
+    profiles: dict[str, RuntimeProfile]
+    caches: dict[str, RuntimeCache]
+    timing: RuntimeTiming | None
 
 
 def bucket(tensor: str) -> str:
@@ -71,6 +113,81 @@ def load_trace(path: Path) -> list[TraceEvent]:
                 expert_bytes=int(row["expert_bytes"]),
             ))
     return sorted(events, key=lambda e: e.seq)
+
+
+def parse_runtime_stderr(path: Path) -> RuntimeReport:
+    profile_re = re.compile(r"([a-z_]+)=([0-9.]+)")
+    cache_re = re.compile(
+        r"VRAM cache (down|upgate): slots=(\d+) slot=([0-9.]+) MiB "
+        r"hits=(\d+) misses=(\d+) preloads=(\d+) pinned=(\d+)")
+    timing_re = re.compile(
+        r"eval time =\s+([0-9.]+) ms /\s+(\d+) runs.*?,\s+([0-9.]+) tokens per second")
+
+    profiles: dict[str, RuntimeProfile] = {}
+    caches: dict[str, RuntimeCache] = {}
+    timing: RuntimeTiming | None = None
+    with path.open("r", errors="replace") as f:
+        for line in f:
+            if "[moe_stream_batch] up/gate profile:" in line:
+                values = {k: float(v) for k, v in profile_re.findall(line)}
+                profiles["upgate"] = RuntimeProfile(
+                    label="upgate",
+                    calls=int(values.get("calls", 0)),
+                    avg_active=values.get("avg_active", 0.0),
+                    stage_ms=values.get("stage", 0.0),
+                    quant_ms=values.get("quant", 0.0),
+                    up_ms=values.get("up", 0.0),
+                    gate_ms=values.get("gate", 0.0),
+                    fuse_ms=values.get("fuse", 0.0),
+                    kernel_ms=values.get("kernel", 0.0),
+                    d2h_ms=values.get("d2h", 0.0),
+                    scatter_ms=values.get("scatter", 0.0),
+                    total_ms=values.get("total", 0.0),
+                )
+            elif "[moe_stream_batch] profile:" in line:
+                values = {k: float(v) for k, v in profile_re.findall(line)}
+                profiles["down"] = RuntimeProfile(
+                    label="down",
+                    calls=int(values.get("calls", 0)),
+                    avg_active=values.get("avg_active", 0.0),
+                    stage_ms=values.get("stage", 0.0),
+                    quant_ms=values.get("quant", 0.0),
+                    kernel_ms=values.get("kernel", 0.0),
+                    d2h_ms=values.get("d2h", 0.0),
+                    scatter_ms=values.get("scatter", 0.0),
+                    total_ms=values.get("total", 0.0),
+                )
+            elif "[moe_stream_batch] VRAM cache " in line:
+                match = cache_re.search(line)
+                if match:
+                    label, slots, slot_mib, hits, misses, preloads, pinned = match.groups()
+                    caches[label] = RuntimeCache(
+                        label=label,
+                        slots=int(slots),
+                        slot_mib=float(slot_mib),
+                        hits=int(hits),
+                        misses=int(misses),
+                        preloads=int(preloads),
+                        pinned=int(pinned),
+                    )
+            elif "llama_print_timings:" in line and "eval time =" in line:
+                match = timing_re.search(line)
+                if match:
+                    eval_ms, runs, tok_s = match.groups()
+                    timing = RuntimeTiming(float(eval_ms), int(runs), float(tok_s))
+    return RuntimeReport(profiles=profiles, caches=caches, timing=timing)
+
+
+def merge_runtime_reports(reports: list[RuntimeReport]) -> RuntimeReport:
+    profiles: dict[str, RuntimeProfile] = {}
+    caches: dict[str, RuntimeCache] = {}
+    timing: RuntimeTiming | None = None
+    for report in reports:
+        profiles.update(report.profiles)
+        caches.update(report.caches)
+        if report.timing:
+            timing = report.timing
+    return RuntimeReport(profiles=profiles, caches=caches, timing=timing)
 
 
 def static_hotset(entries: list[Entry], budget_bytes: int) -> tuple[int, int, int]:
@@ -355,6 +472,90 @@ def split_estimate(
     }
 
 
+def print_runtime_calibration(report: RuntimeReport, paths: list[Path]) -> None:
+    print()
+    joined_paths = ",".join(str(path) for path in paths)
+    print(f"runtime_profile stderr={joined_paths}")
+    if report.timing:
+        print(
+            f"runtime_timing eval_ms={report.timing.eval_ms:.2f} "
+            f"runs={report.timing.eval_runs} tok_s={report.timing.eval_tok_s:.2f}"
+        )
+
+    down_profile = report.profiles.get("down")
+    upgate_profile = report.profiles.get("upgate")
+    down_cache = report.caches.get("down")
+    upgate_cache = report.caches.get("upgate")
+
+    if down_profile and down_cache and down_profile.calls > 0:
+        miss_gib = down_cache.misses * down_cache.slot_mib / 1024.0
+        stage_total_ms = down_profile.stage_ms * down_profile.calls
+        print(
+            "calibrate_down "
+            f"calls={down_profile.calls} avg_active={down_profile.avg_active:.2f} "
+            f"misses_per_call={down_cache.misses / down_profile.calls:.2f} "
+            f"stage_ms_per_call={down_profile.stage_ms:.3f} "
+            f"stage_ms_per_miss={stage_total_ms / max(down_cache.misses, 1):.3f} "
+            f"stage_ms_per_gib={stage_total_ms / max(miss_gib, 1e-9):.2f} "
+            f"kernel_ms_per_call={down_profile.kernel_ms:.3f} "
+            f"total_ms_per_call={down_profile.total_ms:.3f}"
+        )
+
+    if upgate_profile and upgate_cache and upgate_profile.calls > 0:
+        miss_gib = upgate_cache.misses * upgate_cache.slot_mib / 1024.0
+        stage_total_ms = upgate_profile.stage_ms * upgate_profile.calls
+        span_ms = max(upgate_profile.up_ms, upgate_profile.gate_ms)
+        span_total_ms = span_ms * upgate_profile.calls
+        print(
+            "calibrate_upgate "
+            f"calls={upgate_profile.calls} avg_active={upgate_profile.avg_active:.2f} "
+            f"misses_per_call={upgate_cache.misses / upgate_profile.calls:.2f} "
+            f"host_stage_ms_per_call={upgate_profile.stage_ms:.3f} "
+            f"host_stage_ms_per_gib={stage_total_ms / max(miss_gib, 1e-9):.2f} "
+            f"stream_span_ms_per_call={span_ms:.3f} "
+            f"stream_span_ms_per_miss={span_total_ms / max(upgate_cache.misses, 1):.3f} "
+            f"kernel_ms_per_call={upgate_profile.kernel_ms:.3f} "
+            f"total_ms_per_call={upgate_profile.total_ms:.3f}"
+        )
+        print(
+            "calibrate_note upgate staging is measured inside the up/gate stream spans; "
+            "use host_stage as a lower bound and stream_span as an upper bound, not as an isolated copy cost."
+        )
+
+    if down_profile and upgate_profile and down_cache and upgate_cache:
+        down_miss_gib = down_cache.misses * down_cache.slot_mib / 1024.0
+        upgate_miss_gib = upgate_cache.misses * upgate_cache.slot_mib / 1024.0
+        down_exposed = down_profile.stage_ms * down_profile.calls / max(down_miss_gib, 1e-9)
+        upgate_host = upgate_profile.stage_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
+        print(
+            "calibrate_compare "
+            f"down_exposed_stage_ms_per_gib={down_exposed:.2f} "
+            f"upgate_host_stage_ms_per_gib={upgate_host:.2f} "
+            f"ratio={down_exposed / max(upgate_host, 1e-9):.2f}"
+        )
+
+
+def runtime_calibration_costs(report: RuntimeReport) -> dict[str, float]:
+    down_profile = report.profiles.get("down")
+    upgate_profile = report.profiles.get("upgate")
+    down_cache = report.caches.get("down")
+    upgate_cache = report.caches.get("upgate")
+    if not (down_profile and upgate_profile and down_cache and upgate_cache):
+        return {}
+
+    down_miss_gib = down_cache.misses * down_cache.slot_mib / 1024.0
+    upgate_miss_gib = upgate_cache.misses * upgate_cache.slot_mib / 1024.0
+    down_stage_ms_per_gib = down_profile.stage_ms * down_profile.calls / max(down_miss_gib, 1e-9)
+    upgate_host_ms_per_gib = upgate_profile.stage_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
+    upgate_span_ms = max(upgate_profile.up_ms, upgate_profile.gate_ms)
+    upgate_span_ms_per_gib = upgate_span_ms * upgate_profile.calls / max(upgate_miss_gib, 1e-9)
+    return {
+        "down_stage_ms_per_gib": down_stage_ms_per_gib,
+        "upgate_host_ms_per_gib": upgate_host_ms_per_gib,
+        "upgate_span_ms_per_gib": upgate_span_ms_per_gib,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Estimate hot-expert VRAM cache coverage from GGML_MOE_BATCH_PROFILE_OUT CSV.")
     parser.add_argument("profile", type=Path)
@@ -373,6 +574,7 @@ def main() -> None:
     parser.add_argument("--policy", choices=("lru", "lfu_lru"), default="lfu_lru", help="Cache eviction policy for --trace replay.")
     parser.add_argument("--preload", choices=("protected", "none", "full"), default="protected", help="Preload mode for --trace replay.")
     parser.add_argument("--admit-after", type=int, default=1, help="Only insert an uncached expert into the replay cache after this many misses.")
+    parser.add_argument("--profile-stderr", type=Path, action="append", help="Parse one or more bench stderr logs and print critical-path calibration from runtime counters.")
     parser.set_defaults(protect_profile=True)
     args = parser.parse_args()
 
@@ -415,6 +617,12 @@ def main() -> None:
         print(f"{name}: entries={len(sub)} routes={sub_routes} budget={sub_budget // (1024**2)} MiB stored={s} used={u / (1024**2):.1f} MiB hit_est={100.0 * h / max(sub_routes, 1):.1f}%")
 
     print(f"split_cache upgate_pct={args.upgate_pct} stored={split_stored} used={split_used / (1024**2):.1f} MiB hit_est={100.0 * split_hits / max(total_routes, 1):.1f}%")
+
+    runtime_report = None
+    if args.profile_stderr:
+        reports = [parse_runtime_stderr(path) for path in args.profile_stderr]
+        runtime_report = merge_runtime_reports(reports)
+        print_runtime_calibration(runtime_report, args.profile_stderr)
 
     if args.sweep:
         print()
@@ -479,6 +687,24 @@ def main() -> None:
                 f"miss={best['miss_gib']:.2f} GiB hit_est={best['hit_pct']:.2f}% "
                 f"events={best['events']} other_events={best['other_events']}"
             )
+            if runtime_report:
+                costs = runtime_calibration_costs(runtime_report)
+                if costs:
+                    print()
+                    print("trace_calibrated_pct,down_exposed_ms,upgate_host_lower_ms,upgate_stream_upper_ms")
+                    for est in trace_estimates:
+                        down_exposed_ms = est["down_miss_gib"] * costs["down_stage_ms_per_gib"]
+                        upgate_host_ms = est["upgate_miss_gib"] * costs["upgate_host_ms_per_gib"]
+                        upgate_span_ms = est["upgate_miss_gib"] * costs["upgate_span_ms_per_gib"]
+                        print(
+                            f"{est['pct']},{down_exposed_ms:.0f},"
+                            f"{upgate_host_ms:.0f},{upgate_span_ms:.0f}"
+                        )
+                    print(
+                        "trace_calibrated_note down_exposed_ms is a critical-path estimate; "
+                        "upgate_host_lower_ms and upgate_stream_upper_ms bound an overlapped span, "
+                        "so do not minimize them as a single linear objective."
+                    )
         else:
             est = simulate_trace(
                 entries, trace_events, args.budget_mib, args.upgate_pct, args.reserve_pct,
