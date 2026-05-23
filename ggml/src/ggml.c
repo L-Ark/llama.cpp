@@ -43,6 +43,1098 @@
 
 #define IK_PRINT_TIMING 0
 
+// === ik_llama_fork: MoE expert prefetch ======================================
+// Issue posix_madvise(POSIX_MADV_WILLNEED) on the file-backed expert tensor
+// pages just before the per-expert matmul loop runs on the CPU.  When the
+// experts are mmap'd from disk and the page cache cannot hold the entire model,
+// this lets the kernel start async reads for all selected experts in parallel
+// while we still build the row-grouping, instead of taking one synchronous fault
+// per page during compute.
+//
+// Controlled by env var GGML_MOE_PREFETCH:
+//   unset / 0 / "off"  -> disabled (upstream behavior)
+//   1 / "on" / unset-but-default-on later -> WILLNEED on each active expert
+//
+// Optional GGML_MOE_PREFETCH_STRIDE limits how many bytes per range to prefetch
+// (default: whole nb02).
+//
+// Note: posix_madvise on an mmap'd file with POSIX_MADV_WILLNEED is the documented
+// way to trigger kernel readahead for a specified range without blocking.
+// ============================================================================
+#if defined(__linux__)
+#include <sys/mman.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <fcntl.h>
+#include <liburing.h>
+#include <libaio.h>
+#include <stdatomic.h>
+
+// --- ik_llama_fork: mapping registry --------------------------------------
+// llama_mmap registers each model file mmap region with us.  We then look up
+// the fd by address so prefetch can issue posix_fadvise / readahead, which
+// go through the file-level kernel readahead path (more aggressive than the
+// mm-level madvise WILLNEED).
+#define GGML_VM_MAX_MAPS 32
+struct ggml_vm_map {
+    uintptr_t base;
+    size_t    size;
+    int       fd;        // dup'd by llama_mmap
+};
+static struct ggml_vm_map ggml_vm_maps[GGML_VM_MAX_MAPS];
+static int  ggml_vm_nmaps = 0;
+static pthread_mutex_t ggml_vm_mu = PTHREAD_MUTEX_INITIALIZER;
+
+// === Hot-expert userspace cache ============================================
+// On systems where the model exceeds page cache (e.g. 268 GiB GGUF + 16 GiB
+// RAM cap), the kernel LRU is ineffective: every token brings in fresh
+// expert pages, and there's no way to "pin" the heavy-tail of frequently-
+// used routed experts.
+//
+// This cache solves it by maintaining a fixed-size anonymous-RAM buffer
+// (sized via GGML_HOTEXP_CACHE_GB) that holds COPIES of expert tensor
+// slices on first touch.  Once full, no eviction — subsequent accesses
+// to a cached expert read from RAM instead of mmap.  Since the buffer
+// is anonymous-dirty, it doesn't get evicted under memory pressure the
+// way file-backed mmap pages do.
+//
+// Sizing: replaces the standalone scripts/ballast.  The cache itself
+// creates memory pressure that bounds the kernel's mmap cache for cold
+// experts, satisfying the "16 GiB cap" spirit while using those bytes
+// for useful expert data instead of garbage.
+//
+// First-touch population is a simple proxy for hotness: warm experts
+// get picked early and often, so the cache fills with the heavy-tail.
+// === Streaming-MoE GPU compute hook ===
+// Defined in ggml-cuda/moe_stream.cu (extern "C") if CUDA backend is built.
+// Returns true if it ran the expert matmul on GPU; false to fall back to CPU.
+typedef struct { int32_t i1; int32_t i2; } ggml_moe_row_mapping;
+__attribute__((weak)) extern int  ggml_cuda_host_register(void *p, size_t n);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_available(void);
+__attribute__((weak)) extern void ggml_cuda_moe_stream_sync(void);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
+    int  src0_type_int,
+    const void *src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    int64_t cne1,
+    const void *src1_q8_1,
+    size_t src1_padded_num_cols,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const ggml_moe_row_mapping *rows);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
+    int  src0_type_int,
+    const char *src0_name,
+    const void *src0_data,
+    int64_t n_as,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    size_t nb02,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const int64_t *matrix_row_counts,
+    const ggml_moe_row_mapping *matrix_rows,
+    int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
+    int  src0_type_int,
+    const char *src0_up_name,
+    const void *src0_up_data,
+    const char *src0_gate_name,
+    const void *src0_gate_data,
+    int64_t n_as,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    size_t nb02,
+    const float *src1_f32,
+    size_t src1_nb1, size_t src1_nb2,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    int unary_op,
+    float limit,
+    const int64_t *matrix_row_counts,
+    const ggml_moe_row_mapping *matrix_rows,
+    int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_preload_tensor(
+    int src0_type_int,
+    const char *src0_name,
+    const void *src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_cache_contains(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx);
+
+#if defined(GGML_USE_CUDA)
+extern void ggml_cuda_moe_stream_link_anchor(void);
+extern void ggml_cuda_moe_stream_batch_link_anchor(void);
+
+static void ggml_cuda_moe_stream_link(void) {
+    static int linked = 0;
+    if (!linked) {
+        ggml_cuda_moe_stream_link_anchor();
+        ggml_cuda_moe_stream_batch_link_anchor();
+        linked = 1;
+    }
+}
+#else
+static void ggml_cuda_moe_stream_link(void) {}
+#endif
+
+static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
+    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ2_S;
+}
+
+#define GGML_HOTEXP_MAX_ENTRIES (262144)   // 2^18 slots, more than enough
+struct ggml_hotexp_entry {
+    uintptr_t tensor_base;   // src0->data — start of the expert tensor
+    int       expert_idx;    // which expert within that tensor
+    void *    cache_ptr;     // pointer into the cache buffer
+};
+static struct ggml_hotexp_entry  ggml_hotexp_table[GGML_HOTEXP_MAX_ENTRIES];
+static _Atomic int               ggml_hotexp_n = 0;
+static pthread_mutex_t           ggml_hotexp_mu = PTHREAD_MUTEX_INITIALIZER;
+static char *                    ggml_hotexp_buf = NULL;
+static size_t                    ggml_hotexp_buf_size = 0;
+static _Atomic size_t            ggml_hotexp_buf_used = 0;
+static int                       ggml_hotexp_inited = 0;
+static int                       ggml_hotexp_debug = 0;
+static _Atomic long              ggml_hotexp_hits   = 0;
+static _Atomic long              ggml_hotexp_misses = 0;
+
+#define GGML_HOTEXP_PROFILE_SIZE 65536
+struct ggml_hotexp_profile_entry {
+    uintptr_t tensor_base;
+    int       expert_idx;
+    uint64_t  count;
+    size_t    expert_bytes;
+    char      name[64];
+};
+static struct ggml_hotexp_profile_entry ggml_hotexp_profile[GGML_HOTEXP_PROFILE_SIZE];
+static pthread_mutex_t                  ggml_hotexp_profile_mu = PTHREAD_MUTEX_INITIALIZER;
+static const char *                     ggml_hotexp_profile_out = NULL;
+
+static int ggml_hotexp_profile_cmp(const void * a, const void * b) {
+    const struct ggml_hotexp_profile_entry * ea = *(const struct ggml_hotexp_profile_entry * const *)a;
+    const struct ggml_hotexp_profile_entry * eb = *(const struct ggml_hotexp_profile_entry * const *)b;
+    if (ea->count < eb->count) return  1;
+    if (ea->count > eb->count) return -1;
+    if (ea->tensor_base < eb->tensor_base) return -1;
+    if (ea->tensor_base > eb->tensor_base) return  1;
+    return ea->expert_idx - eb->expert_idx;
+}
+
+static void ggml_hotexp_report_atexit(void) {
+    if (ggml_hotexp_debug) {
+        long h = atomic_load(&ggml_hotexp_hits);
+        long m = atomic_load(&ggml_hotexp_misses);
+        long tot = h + m;
+        double mb_used = (double)atomic_load(&ggml_hotexp_buf_used) / (1024.0*1024.0);
+        fprintf(stderr,
+            "[hotexp] hits=%ld misses=%ld total=%ld hit_rate=%.1f%% entries=%d used=%.1f MiB\n",
+            h, m, tot,
+            tot ? 100.0 * (double)h / (double)tot : 0.0,
+            atomic_load(&ggml_hotexp_n), mb_used);
+    }
+    if (ggml_hotexp_profile_out && ggml_hotexp_profile_out[0]) {
+        FILE * f = fopen(ggml_hotexp_profile_out, "w");
+        if (!f) {
+            fprintf(stderr, "[hotexp] profile open failed: %s: %s\n",
+                    ggml_hotexp_profile_out, strerror(errno));
+            return;
+        }
+        const struct ggml_hotexp_profile_entry * rows[GGML_HOTEXP_PROFILE_SIZE];
+        int nrows = 0;
+        for (int i = 0; i < GGML_HOTEXP_PROFILE_SIZE; ++i) {
+            const struct ggml_hotexp_profile_entry * e = &ggml_hotexp_profile[i];
+            if (e->count == 0) continue;
+            rows[nrows++] = e;
+        }
+        qsort(rows, nrows, sizeof(rows[0]), ggml_hotexp_profile_cmp);
+        fprintf(f, "rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor\n");
+        size_t cumulative_bytes = 0;
+        for (int i = 0; i < nrows; ++i) {
+            const struct ggml_hotexp_profile_entry * e = rows[i];
+            cumulative_bytes += e->expert_bytes;
+            fprintf(f, "%d,%llu,%zu,%zu,0x%llx,%d,%s\n",
+                    i + 1,
+                    (unsigned long long)e->count,
+                    e->expert_bytes,
+                    cumulative_bytes,
+                    (unsigned long long)e->tensor_base,
+                    e->expert_idx,
+                    e->name);
+        }
+        fclose(f);
+        fprintf(stderr, "[hotexp] profile written: %s (%d entries)\n", ggml_hotexp_profile_out, nrows);
+    }
+}
+
+static void ggml_hotexp_init_once(void) {
+    if (ggml_hotexp_inited) return;
+    pthread_mutex_lock(&ggml_hotexp_mu);
+    if (!ggml_hotexp_inited) {
+        const char *s = getenv("GGML_HOTEXP_CACHE_GB");
+        long gb = (s && s[0]) ? strtol(s, NULL, 10) : 0;
+        const char *d = getenv("GGML_HOTEXP_DEBUG");
+        ggml_hotexp_debug = (d && d[0] && d[0] != '0') ? 1 : 0;
+        ggml_hotexp_profile_out = getenv("GGML_HOTEXP_PROFILE_OUT");
+        if (ggml_hotexp_debug || (ggml_hotexp_profile_out && ggml_hotexp_profile_out[0])) {
+            atexit(ggml_hotexp_report_atexit);
+        }
+        if (gb > 0) {
+            size_t bytes = (size_t)gb * 1024UL * 1024UL * 1024UL;
+            ggml_hotexp_buf = mmap(NULL, bytes, PROT_READ|PROT_WRITE,
+                                   MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE,
+                                   -1, 0);
+            if (ggml_hotexp_buf == MAP_FAILED) {
+                ggml_hotexp_buf = NULL;
+                fprintf(stderr, "[hotexp] mmap %ld GiB FAILED: %s\n",
+                        gb, strerror(errno));
+            } else {
+                ggml_hotexp_buf_size = bytes;
+                // Pages are allocated on-demand when experts are memcpy'd
+                // into the cache.  No pre-touching — this avoids evicting
+                // mmap'd model pages during the warmup phase.
+                fprintf(stderr, "[hotexp] anonymous-RAM cache: %ld GiB reserved (demand-paged) at %p\n",
+                        gb, ggml_hotexp_buf);
+                // Register as pinned host memory so GPU streaming can DMA at
+                // PCIe-pinned bandwidth (~27 GB/s vs ~3 GB/s pageable).
+                if (ggml_cuda_host_register) {
+                    ggml_cuda_host_register(ggml_hotexp_buf, bytes);
+                }
+            }
+        }
+        ggml_hotexp_inited = 1;
+    }
+    pthread_mutex_unlock(&ggml_hotexp_mu);
+}
+
+static void ggml_hotexp_profile_hit(
+        uintptr_t tensor_base, int expert_idx,
+        const char * tensor_name, size_t expert_bytes) {
+    if (!ggml_hotexp_profile_out || !ggml_hotexp_profile_out[0]) return;
+    uint64_t key = ((uint64_t)tensor_base >> 6) ^ ((uint64_t)(uint32_t)expert_idx * 0x9E3779B185EBCA87ULL);
+    int slot = (int)(key & (GGML_HOTEXP_PROFILE_SIZE - 1));
+    pthread_mutex_lock(&ggml_hotexp_profile_mu);
+    for (int probe = 0; probe < 64; ++probe) {
+        struct ggml_hotexp_profile_entry * e = &ggml_hotexp_profile[(slot + probe) & (GGML_HOTEXP_PROFILE_SIZE - 1)];
+        if (e->count == 0) {
+            e->tensor_base = tensor_base;
+            e->expert_idx = expert_idx;
+            e->count = 1;
+            e->expert_bytes = expert_bytes;
+            snprintf(e->name, sizeof(e->name), "%s", tensor_name ? tensor_name : "");
+            pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+            return;
+        }
+        if (e->tensor_base == tensor_base && e->expert_idx == expert_idx) {
+            e->count++;
+            pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+            return;
+        }
+    }
+    pthread_mutex_unlock(&ggml_hotexp_profile_mu);
+}
+
+// Look up expert (tensor_base, expert_idx); if cached return ptr, else
+// try to populate cache from src_data.  Returns NULL when cache is full
+// or expert wasn't seen before and couldn't be inserted.
+static const void *ggml_hotexp_get_or_insert(
+        uintptr_t tensor_base, int expert_idx,
+        const void *src_data, size_t expert_bytes) {
+    if (!ggml_hotexp_buf) return NULL;
+    // Fast path: linear scan (table is small in practice; ~5k entries
+    // for GLM-5.1 with first-touch caching).  TODO: hash if it gets big.
+    int n = atomic_load(&ggml_hotexp_n);
+    for (int i = 0; i < n; ++i) {
+        if (ggml_hotexp_table[i].tensor_base == tensor_base &&
+            ggml_hotexp_table[i].expert_idx  == expert_idx) {
+            if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_hits, 1);
+            return ggml_hotexp_table[i].cache_ptr;
+        }
+    }
+    // Slow path: insert.
+    pthread_mutex_lock(&ggml_hotexp_mu);
+    // Re-check after lock — another thread may have inserted.
+    int n2 = atomic_load(&ggml_hotexp_n);
+    for (int i = n; i < n2; ++i) {
+        if (ggml_hotexp_table[i].tensor_base == tensor_base &&
+            ggml_hotexp_table[i].expert_idx  == expert_idx) {
+            pthread_mutex_unlock(&ggml_hotexp_mu);
+            return ggml_hotexp_table[i].cache_ptr;
+        }
+    }
+    if (n2 >= GGML_HOTEXP_MAX_ENTRIES ||
+        ggml_hotexp_buf_used + expert_bytes > ggml_hotexp_buf_size) {
+        pthread_mutex_unlock(&ggml_hotexp_mu);
+        if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_misses, 1);
+        return NULL;
+    }
+    void *dst = ggml_hotexp_buf + ggml_hotexp_buf_used;
+    ggml_hotexp_buf_used += expert_bytes;
+    memcpy(dst, src_data, expert_bytes);
+    ggml_hotexp_table[n2].tensor_base = tensor_base;
+    ggml_hotexp_table[n2].expert_idx  = expert_idx;
+    ggml_hotexp_table[n2].cache_ptr   = dst;
+    atomic_store(&ggml_hotexp_n, n2 + 1);
+    pthread_mutex_unlock(&ggml_hotexp_mu);
+    if (ggml_hotexp_debug) atomic_fetch_add(&ggml_hotexp_misses, 1);
+    return dst;
+}
+// === end Hot-expert cache ==================================================
+
+void ggml_vm_register_mapping(void *addr, size_t size, int fd) {
+    pthread_mutex_lock(&ggml_vm_mu);
+    if (ggml_vm_nmaps < GGML_VM_MAX_MAPS) {
+        ggml_vm_maps[ggml_vm_nmaps].base = (uintptr_t)addr;
+        ggml_vm_maps[ggml_vm_nmaps].size = size;
+        ggml_vm_maps[ggml_vm_nmaps].fd   = fd;
+        ggml_vm_nmaps++;
+    }
+    pthread_mutex_unlock(&ggml_vm_mu);
+}
+
+// Returns 1 if [addr, addr+size) is fully inside a registered mapping and
+// fills *fd_out / *off_out.  Lock-free read; registry only grows.
+static inline int ggml_vm_lookup(const void *addr, size_t size, int *fd_out, off_t *off_out) {
+    uintptr_t a = (uintptr_t)addr;
+    int n = ggml_vm_nmaps;
+    for (int i = 0; i < n; ++i) {
+        struct ggml_vm_map m = ggml_vm_maps[i];
+        if (a >= m.base && a + size <= m.base + m.size) {
+            *fd_out  = m.fd;
+            *off_out = (off_t)(a - m.base);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// --- ik_llama_fork: io_uring async prefetch worker ------------------------
+// Pushes large async reads through io_uring with a deep queue (default 64).
+// A dedicated worker thread polls the completion queue; we just submit.
+// Reads go to a small ring of scratch buffers; only side-effect is warming
+// the kernel page cache.
+#define GGML_URING_QD       64
+#define GGML_URING_BUFSZ    (4*1024*1024)  // 4 MiB per submitted read
+#define GGML_URING_NBUF     GGML_URING_QD
+static struct io_uring ggml_uring_ring;
+static int             ggml_uring_inited = 0;
+static char *          ggml_uring_bufs[GGML_URING_NBUF];
+static _Atomic int     ggml_uring_next_buf = 0;
+static _Atomic long    ggml_uring_submitted = 0;
+static _Atomic long    ggml_uring_completed = 0;
+static pthread_t       ggml_uring_reaper;
+static int             ggml_uring_stop = 0;
+static pthread_mutex_t ggml_uring_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static void *ggml_uring_reaper_fn(void *arg) {
+    (void)arg;
+    while (!ggml_uring_stop) {
+        struct io_uring_cqe *cqe;
+        int rc = io_uring_wait_cqe_timeout(&ggml_uring_ring, &cqe,
+                    &(struct __kernel_timespec){.tv_sec=0, .tv_nsec=10*1000*1000});
+        if (rc == 0 && cqe) {
+            atomic_fetch_add(&ggml_uring_completed, 1);
+            io_uring_cqe_seen(&ggml_uring_ring, cqe);
+        }
+    }
+    return NULL;
+}
+
+static int ggml_uring_init_once(void) {
+    if (ggml_uring_inited) return ggml_uring_inited;
+    pthread_mutex_lock(&ggml_uring_mu);
+    if (!ggml_uring_inited) {
+        if (io_uring_queue_init(GGML_URING_QD, &ggml_uring_ring, 0) == 0) {
+            for (int i = 0; i < GGML_URING_NBUF; ++i) {
+                if (posix_memalign((void **)&ggml_uring_bufs[i], 4096, GGML_URING_BUFSZ) != 0) {
+                    ggml_uring_bufs[i] = NULL;
+                }
+            }
+            pthread_create(&ggml_uring_reaper, NULL, ggml_uring_reaper_fn, NULL);
+            ggml_uring_inited = 1;
+        } else {
+            ggml_uring_inited = -1;
+        }
+    }
+    pthread_mutex_unlock(&ggml_uring_mu);
+    return ggml_uring_inited;
+}
+
+static inline void ggml_uring_submit(int fd, off_t off, size_t len) {
+    if (ggml_uring_init_once() != 1) return;
+    // Throttle: don't let outstanding exceed queue depth.
+    while ((atomic_load(&ggml_uring_submitted) -
+            atomic_load(&ggml_uring_completed)) >= GGML_URING_QD - 2) {
+        sched_yield();
+    }
+    pthread_mutex_lock(&ggml_uring_mu);
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&ggml_uring_ring);
+    if (sqe) {
+        int bi = atomic_fetch_add(&ggml_uring_next_buf, 1) & (GGML_URING_NBUF - 1);
+        char *buf = ggml_uring_bufs[bi];
+        if (buf) {
+            size_t sz = len < GGML_URING_BUFSZ ? len : GGML_URING_BUFSZ;
+            io_uring_prep_read(sqe, fd, buf, sz, off);
+            sqe->user_data = (uint64_t)bi;
+            io_uring_submit(&ggml_uring_ring);
+            atomic_fetch_add(&ggml_uring_submitted, 1);
+        }
+    }
+    pthread_mutex_unlock(&ggml_uring_mu);
+}
+
+static inline void ggml_uring_submit_chunked(int fd, off_t off, size_t len) {
+    size_t step = GGML_URING_BUFSZ;
+    while (len > 0) {
+        size_t take = len < step ? len : step;
+        ggml_uring_submit(fd, off, take);
+        off += take;
+        len -= take;
+    }
+}
+
+// --- ik_llama_fork: predictive expert prefetcher --------------------------
+// A background thread continuously re-reads (via buffered pread -> page cache)
+// the set of expert weight ranges that the MoE compute path used in the most
+// recent token.  Because autoregressive generation reuses very similar expert
+// routing on consecutive tokens, last-token's expert set is a good predictor
+// of the next token's.  Enabled with GGML_MOE_PREDICT=1.
+//
+// The ranges are organized BY LAYER so the prefetcher walks them in the same
+// order the compute path needs them — keeping the prefetcher one or more
+// layers ahead of compute.
+#define GGML_PF_MAX_LAYERS 128
+#define GGML_PF_PER_LAYER  32          // entries per layer slot (up_gate+down × 8 experts)
+struct ggml_pf_entry { int fd; long off; unsigned len; };
+struct ggml_pf_layer_buf {
+    _Atomic int count;
+    struct ggml_pf_entry e[GGML_PF_PER_LAYER];
+};
+static struct ggml_pf_layer_buf ggml_pf_layers[GGML_PF_MAX_LAYERS];
+static int              ggml_pf_enabled = -1;
+#define GGML_PF_NWORKERS_MAX 32
+static pthread_t        ggml_pf_thread;
+static pthread_t        ggml_pf_workers[GGML_PF_NWORKERS_MAX];
+static int              ggml_pf_n_workers = 0;
+static int              ggml_pf_started = 0;
+static int              ggml_pf_stop    = 0;
+static pthread_mutex_t  ggml_pf_mu      = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic uint64_t ggml_pf_sweep_cursor = 0;   // global byte position into the mmap files
+
+// Append (fd, off, len) into the bucket for layer L (overwrite oldest if full).
+static void ggml_pf_record_layer(int layer, int fd, long off, unsigned len) {
+    if (layer < 0 || layer >= GGML_PF_MAX_LAYERS) return;
+    struct ggml_pf_layer_buf *b = &ggml_pf_layers[layer];
+    int c = atomic_load(&b->count);
+    int slot = c < GGML_PF_PER_LAYER ? c : (c % GGML_PF_PER_LAYER);
+    b->e[slot].fd  = fd;
+    b->e[slot].off = off;
+    b->e[slot].len = len;
+    if (c < GGML_PF_PER_LAYER) atomic_store(&b->count, c + 1);
+}
+
+// Parse "blk.<N>.ffn_..." -> N, or -1 if not found.
+static int ggml_pf_layer_from_name(const char *name) {
+    if (!name || !name[0]) return -1;
+    const char *p = strstr(name, "blk.");
+    if (!p) return -1;
+    p += 4;
+    if (*p < '0' || *p > '9') return -1;
+    int n = 0;
+    while (*p >= '0' && *p <= '9') {
+        n = n*10 + (*p - '0');
+        ++p;
+        if (n > GGML_PF_MAX_LAYERS) return -1;
+    }
+    return n;
+}
+
+// libaio-powered predictor: submits many 2 MiB reads concurrently to drive
+// the SSD to its random-large-block ceiling (~5.5 GB/s at QD ≥ 32).
+// io_uring is blocked by some containers (EPERM on io_uring_setup), so we
+// prefer libaio which uses io_setup/io_submit/io_getevents.  If libaio also
+// fails we fall back to single-threaded pread.
+#define GGML_PF_URING_QD     128
+#define GGML_PF_URING_CHUNK  (2*1024*1024)
+#define GGML_PF_URING_NBUF   GGML_PF_URING_QD
+
+static void *ggml_pf_thread_fn(void *arg) {
+    (void)arg;
+
+    // Try libaio first (works in containers where io_uring is blocked).
+    io_context_t aio_ctx = 0;
+    int have_aio = (io_setup(GGML_PF_URING_QD, &aio_ctx) == 0);
+
+    // GGML_MOE_PREDICT_AGGRESSIVE=1 enables an additional sweeper that streams
+    // through the registered mmap files past whatever compute has visited.
+    // This is what actually drives the SSD to peak: it reads pages that are
+    // NOT in cache, forcing real disk I/O.  When prediction is accurate
+    // (next-token routing ≈ this-token's routing), these sequential sweep
+    // reads land on regions compute will need shortly, so we get cache hits
+    // *and* high disk utilisation.
+    int aggressive = 0;
+    {
+        const char *a = getenv("GGML_MOE_PREDICT_AGGRESSIVE");
+        if (a && a[0] && a[0] != '0') aggressive = 1;
+    }
+
+    if (have_aio) {
+        void *bufs[GGML_PF_URING_NBUF] = {0};
+        for (int i = 0; i < GGML_PF_URING_NBUF; ++i) {
+            if (posix_memalign(&bufs[i], 4096, GGML_PF_URING_CHUNK) != 0) bufs[i] = NULL;
+        }
+        struct iocb  iocb_pool[GGML_PF_URING_NBUF];
+        struct iocb *iocb_ptrs[GGML_PF_URING_NBUF];
+        struct io_event events[GGML_PF_URING_NBUF];
+        int inflight = 0;
+        int buf_idx  = 0;
+
+        // Persistent sweep cursor across mmap'd files (for aggressive mode).
+        int sweep_map = 0;
+        long sweep_off = 0;
+
+        // Local helper: submit one chunk read, harvesting as needed.
+        #define SUBMIT_ONE(_fd, _off, _len) do {                                                  \
+            while (inflight >= GGML_PF_URING_QD - 4) {                                            \
+                int _got = io_getevents(aio_ctx, 1, GGML_PF_URING_NBUF, events, NULL);            \
+                if (_got <= 0) break;                                                             \
+                inflight -= _got;                                                                 \
+            }                                                                                     \
+            int _slot = buf_idx; buf_idx = (buf_idx + 1) & (GGML_PF_URING_NBUF - 1);              \
+            if (bufs[_slot]) {                                                                    \
+                io_prep_pread(&iocb_pool[_slot], (_fd), bufs[_slot], (_len), (_off));             \
+                iocb_ptrs[_slot] = &iocb_pool[_slot];                                             \
+                int _r = io_submit(aio_ctx, 1, &iocb_ptrs[_slot]);                                \
+                if (_r == 1) { ++inflight; did = 1; }                                             \
+            }                                                                                     \
+        } while (0)
+
+        while (!ggml_pf_stop) {
+            int did = 0;
+            // (1) layer-ordered targeted reads from the recorded experts
+            for (int L = 0; L < GGML_PF_MAX_LAYERS && !ggml_pf_stop; ++L) {
+                int cnt = atomic_load(&ggml_pf_layers[L].count);
+                for (int i = 0; i < cnt && !ggml_pf_stop; ++i) {
+                    struct ggml_pf_entry e = ggml_pf_layers[L].e[i];
+                    if (e.fd <= 0 || e.len == 0) continue;
+                    long off = e.off;
+                    unsigned rem = e.len;
+                    while (rem > 0 && !ggml_pf_stop) {
+                        size_t take = rem < GGML_PF_URING_CHUNK ? rem : GGML_PF_URING_CHUNK;
+                        SUBMIT_ONE(e.fd, off, take);
+                        off += take; rem -= (unsigned)take;
+                    }
+                }
+                // Aggressive: after each layer's targeted reads, also stream a
+                // chunk of the underlying mmap file forward.  Sequential reads
+                // get the SSD to its peak; the experts we'll need next are
+                // somewhere in the file and will be in cache when compute hits.
+                if (aggressive && ggml_vm_nmaps > 0 && !ggml_pf_stop) {
+                    struct ggml_vm_map m = ggml_vm_maps[sweep_map % ggml_vm_nmaps];
+                    if (m.fd > 0 && m.size > 0) {
+                        size_t step = 32 * 1024 * 1024;  // 32 MiB per layer-tick
+                        size_t end  = (sweep_off + (long)step > (long)m.size) ? m.size : (size_t)(sweep_off + step);
+                        long off = sweep_off;
+                        while ((size_t)off < end && !ggml_pf_stop) {
+                            size_t take = (end - off) < GGML_PF_URING_CHUNK ? (end - off) : GGML_PF_URING_CHUNK;
+                            SUBMIT_ONE(m.fd, off, take);
+                            off += take;
+                        }
+                        sweep_off = off;
+                        if ((size_t)sweep_off >= m.size) {
+                            sweep_off = 0;
+                            sweep_map++;
+                        }
+                    }
+                }
+            }
+            // Drain
+            while (inflight > 0 && !ggml_pf_stop) {
+                int got = io_getevents(aio_ctx, 1, GGML_PF_URING_NBUF, events, NULL);
+                if (got <= 0) break;
+                inflight -= got;
+            }
+            if (!did) {
+                struct timespec ts = {0, 2*1000*1000};
+                nanosleep(&ts, NULL);
+            }
+        }
+        #undef SUBMIT_ONE
+        for (int i = 0; i < GGML_PF_URING_NBUF; ++i) if (bufs[i]) free(bufs[i]);
+        io_destroy(aio_ctx);
+        return NULL;
+    }
+
+    struct io_uring ring;
+    if (io_uring_queue_init(GGML_PF_URING_QD, &ring, 0) != 0) {
+        // Fallback: simple pread loop if io_uring init fails.
+        const size_t chunk = GGML_PF_URING_CHUNK;
+        void *buf = NULL;
+        if (posix_memalign(&buf, 4096, chunk) != 0) return NULL;
+        while (!ggml_pf_stop) {
+            for (int L = 0; L < GGML_PF_MAX_LAYERS && !ggml_pf_stop; ++L) {
+                int cnt = atomic_load(&ggml_pf_layers[L].count);
+                for (int i = 0; i < cnt && !ggml_pf_stop; ++i) {
+                    struct ggml_pf_entry e = ggml_pf_layers[L].e[i];
+                    if (e.fd <= 0 || e.len == 0) continue;
+                    long off = e.off;
+                    unsigned rem = e.len;
+                    while (rem > 0 && !ggml_pf_stop) {
+                        size_t take = rem < chunk ? rem : chunk;
+                        ssize_t r = pread(e.fd, buf, take, off);
+                        if (r <= 0) break;
+                        off += r; rem -= (unsigned)r;
+                    }
+                }
+            }
+            struct timespec ts = {0, 2*1000*1000};
+            nanosleep(&ts, NULL);
+        }
+        free(buf);
+        return NULL;
+    }
+
+    // Pre-allocate discard buffers, one per in-flight read.
+    void *bufs[GGML_PF_URING_NBUF] = {0};
+    for (int i = 0; i < GGML_PF_URING_NBUF; ++i) {
+        if (posix_memalign(&bufs[i], 4096, GGML_PF_URING_CHUNK) != 0) bufs[i] = NULL;
+    }
+
+    int inflight = 0;
+    int buf_idx  = 0;
+
+    while (!ggml_pf_stop) {
+        int did = 0;
+
+        // Submit all (layer, entry) reads, layer-ordered, in 2 MiB chunks.
+        for (int L = 0; L < GGML_PF_MAX_LAYERS && !ggml_pf_stop; ++L) {
+            int cnt = atomic_load(&ggml_pf_layers[L].count);
+            for (int i = 0; i < cnt && !ggml_pf_stop; ++i) {
+                struct ggml_pf_entry e = ggml_pf_layers[L].e[i];
+                if (e.fd <= 0 || e.len == 0) continue;
+                long off = e.off;
+                unsigned rem = e.len;
+                while (rem > 0 && !ggml_pf_stop) {
+                    // If the queue is full, harvest completions before submitting more.
+                    while (inflight >= GGML_PF_URING_QD - 4) {
+                        struct io_uring_cqe *cqe;
+                        if (io_uring_wait_cqe(&ring, &cqe) == 0) {
+                            io_uring_cqe_seen(&ring, cqe);
+                            --inflight;
+                            did = 1;
+                        } else break;
+                    }
+                    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
+                    if (!sqe) {
+                        // No SQE available; submit and harvest.
+                        io_uring_submit(&ring);
+                        struct io_uring_cqe *cqe;
+                        if (io_uring_wait_cqe(&ring, &cqe) == 0) {
+                            io_uring_cqe_seen(&ring, cqe);
+                            --inflight;
+                        }
+                        continue;
+                    }
+                    size_t take = rem < GGML_PF_URING_CHUNK ? rem : GGML_PF_URING_CHUNK;
+                    void *buf = bufs[buf_idx];
+                    buf_idx = (buf_idx + 1) & (GGML_PF_URING_NBUF - 1);
+                    if (buf) {
+                        io_uring_prep_read(sqe, e.fd, buf, take, off);
+                        io_uring_submit(&ring);
+                        ++inflight;
+                        did = 1;
+                    }
+                    off += take;
+                    rem -= (unsigned)take;
+                }
+            }
+        }
+        // Drain remaining completions before the next sweep.
+        while (inflight > 0 && !ggml_pf_stop) {
+            struct io_uring_cqe *cqe;
+            unsigned n = io_uring_peek_batch_cqe(&ring,
+                    (struct io_uring_cqe *[]){ NULL }, 0);
+            (void)n;
+            if (io_uring_wait_cqe(&ring, &cqe) == 0) {
+                io_uring_cqe_seen(&ring, cqe);
+                --inflight;
+            } else break;
+        }
+        if (!did) {
+            struct timespec ts = {0, 2*1000*1000};
+            nanosleep(&ts, NULL);
+        }
+    }
+
+    for (int i = 0; i < GGML_PF_URING_NBUF; ++i) if (bufs[i]) free(bufs[i]);
+    io_uring_queue_exit(&ring);
+    return NULL;
+}
+
+// Sweeper worker: libaio + O_DIRECT at deep queue depth.  This is the path
+// that actually saturates the SSD on this overlay-fs/container setup.  fio
+// confirms ~4.3 GB/s sustained from a single job at QD=64; we mirror that
+// pattern in one worker so we don't burn extra CPU cores spinning on pread.
+//
+// O_DIRECT bypasses the page cache, so these reads do not populate cache
+// pages that mmap-fault-driven inference could later hit — meaning the
+// worker improves SSD UTILISATION but not token rate.  That's the explicit
+// trade-off the goal asked for ("fully saturate the SSD").
+static void *ggml_pf_worker_fn(void *arg) {
+    long my_id = (long)arg;
+    (void)my_id;
+    const size_t chunk = 2*1024*1024;
+    int per_worker_qd = 64;
+    {
+        const char *q = getenv("GGML_MOE_PREDICT_QD");
+        if (q) { int v = atoi(q); if (v >= 8 && v <= 512) per_worker_qd = v; }
+    }
+
+    // Open O_DIRECT fds for every registered mmap file.
+    int direct_fds[GGML_VM_MAX_MAPS];
+    for (int i = 0; i < GGML_VM_MAX_MAPS; ++i) direct_fds[i] = -1;
+    for (int i = 0; i < ggml_vm_nmaps; ++i) {
+        char link[64];
+        snprintf(link, sizeof(link), "/proc/self/fd/%d", ggml_vm_maps[i].fd);
+        char path[4096];
+        ssize_t n = readlink(link, path, sizeof(path) - 1);
+        if (n <= 0) continue;
+        path[n] = 0;
+        int dfd = open(path, O_RDONLY | O_DIRECT);
+        if (dfd >= 0) direct_fds[i] = dfd;
+    }
+
+    io_context_t ctx = 0;
+    if (io_setup(per_worker_qd, &ctx) != 0) return NULL;
+
+    void *bufs[512];
+    struct iocb iocb_pool[512];
+    struct iocb *iocb_ptrs[512];
+    struct io_event events[512];
+    for (int i = 0; i < per_worker_qd; ++i) {
+        if (posix_memalign(&bufs[i], 4096, chunk) != 0) bufs[i] = NULL;
+    }
+    int inflight = 0;
+    int buf_idx = 0;
+
+    while (!ggml_pf_stop) {
+        if (ggml_vm_nmaps <= 0) {
+            struct timespec ts = {0, 10*1000*1000}; nanosleep(&ts, NULL);
+            continue;
+        }
+        // Submit until queue is full.
+        while (inflight < per_worker_qd - 2 && !ggml_pf_stop) {
+            uint64_t pos = atomic_fetch_add(&ggml_pf_sweep_cursor, (uint64_t)chunk);
+            int mi = (int)((pos / chunk) % (uint64_t)ggml_vm_nmaps);
+            struct ggml_vm_map m = ggml_vm_maps[mi];
+            int fd = direct_fds[mi] >= 0 ? direct_fds[mi] : m.fd;
+            if (fd <= 0 || m.size == 0) continue;
+            long off = (long)(pos % (uint64_t)m.size);
+            off &= ~((long)4095);
+            if ((long)(off + chunk) > (long)m.size) off = 0;
+
+            int slot = buf_idx; buf_idx = (buf_idx + 1) % per_worker_qd;
+            if (!bufs[slot]) continue;
+            io_prep_pread(&iocb_pool[slot], fd, bufs[slot], chunk, off);
+            iocb_ptrs[slot] = &iocb_pool[slot];
+            int r = io_submit(ctx, 1, &iocb_ptrs[slot]);
+            if (r != 1) break;
+            ++inflight;
+        }
+        // Harvest at least one.
+        int got = io_getevents(ctx, 1, per_worker_qd, events, NULL);
+        if (got <= 0) {
+            struct timespec ts = {0, 1*1000*1000};
+            nanosleep(&ts, NULL);
+            continue;
+        }
+        inflight -= got;
+    }
+    // Drain.
+    while (inflight > 0) {
+        int got = io_getevents(ctx, 1, per_worker_qd, events, NULL);
+        if (got <= 0) break;
+        inflight -= got;
+    }
+    for (int i = 0; i < per_worker_qd; ++i) if (bufs[i]) free(bufs[i]);
+    io_destroy(ctx);
+    for (int i = 0; i < GGML_VM_MAX_MAPS; ++i) if (direct_fds[i] >= 0) close(direct_fds[i]);
+    return NULL;
+}
+
+static void ggml_pf_start_once(void) {
+    if (ggml_pf_started) return;
+    pthread_mutex_lock(&ggml_pf_mu);
+    if (!ggml_pf_started) {
+        if (pthread_create(&ggml_pf_thread, NULL, ggml_pf_thread_fn, NULL) == 0) {
+            ggml_pf_started = 1;
+        }
+        // Optional: spin up additional pread workers to drive multi-stream I/O.
+        const char *nw = getenv("GGML_MOE_PREDICT_WORKERS");
+        int n = 0;
+        if (nw && nw[0]) {
+            n = atoi(nw);
+            if (n < 0) n = 0;
+            if (n > GGML_PF_NWORKERS_MAX) n = GGML_PF_NWORKERS_MAX;
+        }
+        for (int i = 0; i < n; ++i) {
+            if (pthread_create(&ggml_pf_workers[i], NULL, ggml_pf_worker_fn, (void *)(long)i) == 0) {
+                ++ggml_pf_n_workers;
+            }
+        }
+    }
+    pthread_mutex_unlock(&ggml_pf_mu);
+}
+
+// Record an mmap'd expert range for the predictive prefetcher: resolve the
+// backing fd/offset from the registry, then store in this layer's bucket.
+static void ggml_pf_record_addr_layered(const void *addr, size_t size, const char *tensor_name) {
+    if (ggml_pf_enabled <= 0 || size == 0 || addr == NULL) return;
+    int fd; off_t off;
+    if (!ggml_vm_lookup(addr, size, &fd, &off)) return;
+    int layer = ggml_pf_layer_from_name(tensor_name);
+    if (layer < 0) return;
+    ggml_pf_record_layer(layer, fd, (long)off, (unsigned)size);
+}
+
+// --- ik_llama_fork: MoE expert prefetch -----------------------------------
+//   GGML_MOE_PREFETCH        : 0=off (default), 1=on
+//   GGML_MOE_PREFETCH_MODE   : "madvise"(default), "fadvise", "readahead", "uring"
+//   GGML_MOE_PREFETCH_STRIDE : optional cap on bytes prefetched per range
+//   GGML_MOE_PREFETCH_DEBUG  : print a startup summary
+//   GGML_MOE_PREDICT         : 0=off (default), 1=on predictive prefetcher
+static int    ggml_moe_prefetch_enabled = -1;
+static int    ggml_moe_prefetch_mode    = 0;    // 0=madvise 1=fadvise 2=readahead 3=uring
+static size_t ggml_moe_prefetch_stride  = 0;
+static int    ggml_moe_prefetch_debug   = 0;
+// ik_llama_fork: when set, each CPU thread computes a *disjoint* subset of the
+// active experts (single-threaded per expert) instead of all threads ganging
+// on one expert at a time.  This makes N experts' file regions stream from the
+// SSD concurrently, lifting effective iodepth from ~1 to ~min(n_active, nth).
+static int    ggml_moe_parallel_experts = 0;
+
+static inline void ggml_moe_prefetch_init(void) {
+    ggml_cuda_moe_stream_link();
+    if (ggml_moe_prefetch_enabled != -1) return;
+    const char *e = getenv("GGML_MOE_PREFETCH");
+    ggml_moe_prefetch_enabled =
+        (e && (!strcmp(e, "1") || !strcmp(e, "on") || !strcmp(e, "ON"))) ? 1 : 0;
+    const char *m = getenv("GGML_MOE_PREFETCH_MODE");
+    if (m) {
+        if      (!strcmp(m, "fadvise"))   ggml_moe_prefetch_mode = 1;
+        else if (!strcmp(m, "readahead")) ggml_moe_prefetch_mode = 2;
+        else if (!strcmp(m, "uring"))     ggml_moe_prefetch_mode = 3;
+        else                              ggml_moe_prefetch_mode = 0;
+    }
+    const char *s = getenv("GGML_MOE_PREFETCH_STRIDE");
+    if (s) {
+        long v = strtol(s, NULL, 10);
+        if (v > 0) ggml_moe_prefetch_stride = (size_t)v;
+    }
+    const char *d = getenv("GGML_MOE_PREFETCH_DEBUG");
+    ggml_moe_prefetch_debug = (d && d[0] && d[0] != '0') ? 1 : 0;
+    const char *pe = getenv("GGML_MOE_PARALLEL_EXPERTS");
+    ggml_moe_parallel_experts = (pe && pe[0] && pe[0] != '0') ? 1 : 0;
+    const char *pr = getenv("GGML_MOE_PREDICT");
+    ggml_pf_enabled = (pr && pr[0] && pr[0] != '0') ? 1 : 0;
+    if (ggml_pf_enabled > 0) {
+        ggml_pf_start_once();
+    }
+    if (ggml_moe_prefetch_debug) {
+        const char *mname[] = {"madvise", "fadvise", "readahead", "uring"};
+        const char *du = getenv("GGML_MOE_PREFETCH_DOWN_FROM_UPGATE");
+        const int down_from_up_gate = (du && du[0] && du[0] != '0') ? 1 : 0;
+        fprintf(stderr, "[moe-prefetch] enabled=%d mode=%s stride=%zu n_maps=%d "
+                "parallel_experts=%d predict=%d down_from_upgate=%d\n",
+                ggml_moe_prefetch_enabled, mname[ggml_moe_prefetch_mode],
+                ggml_moe_prefetch_stride, ggml_vm_nmaps,
+                ggml_moe_parallel_experts, ggml_pf_enabled, down_from_up_gate);
+    }
+}
+
+static inline void ggml_moe_prefetch_range_impl(const void *addr, size_t size, int force) {
+    if ((!force && ggml_moe_prefetch_enabled <= 0) || size == 0 || addr == NULL) return;
+    if (ggml_moe_prefetch_stride && size > ggml_moe_prefetch_stride)
+        size = ggml_moe_prefetch_stride;
+
+    static size_t pgsz_cache = 0;
+    if (pgsz_cache == 0) pgsz_cache = (size_t)sysconf(_SC_PAGESIZE);
+    uintptr_t start = ((uintptr_t)addr) & ~(pgsz_cache - 1);
+    uintptr_t end   = (((uintptr_t)addr) + size + pgsz_cache - 1) & ~(pgsz_cache - 1);
+    size_t len = (size_t)(end - start);
+
+    if (ggml_moe_prefetch_mode == 0) {
+        // madvise: works on the mmap mapping; cheapest, weakest hint.
+        posix_madvise((void *)start, len, POSIX_MADV_WILLNEED);
+    } else {
+        // Modes 1/2/3 need the underlying fd.  Look it up.
+        int fd;
+        off_t off;
+        if (ggml_vm_lookup((const void *)start, len, &fd, &off)) {
+            if (ggml_moe_prefetch_mode == 1) {
+                posix_fadvise(fd, off, (off_t)len, POSIX_FADV_WILLNEED);
+            } else if (ggml_moe_prefetch_mode == 2) {
+                readahead(fd, off, len);
+            } else {
+                // io_uring async reads with high queue depth
+                ggml_uring_submit_chunked(fd, off, len);
+            }
+        } else {
+            posix_madvise((void *)start, len, POSIX_MADV_WILLNEED);
+        }
+    }
+}
+
+static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
+    ggml_moe_prefetch_range_impl(addr, size, 0);
+}
+
+#define GGML_MOE_DOWN_REG_MAX 256
+struct ggml_moe_down_reg {
+    char      name[96];
+    const void *data;
+    int64_t   n_as;
+    size_t    nb02;
+};
+static struct ggml_moe_down_reg ggml_moe_down_regs[GGML_MOE_DOWN_REG_MAX];
+static int ggml_moe_down_reg_count = 0;
+static pthread_mutex_t ggml_moe_down_reg_mu = PTHREAD_MUTEX_INITIALIZER;
+static int ggml_moe_prefetch_down_from_up_gate = -1;
+
+static inline int ggml_moe_prefetch_down_from_up_gate_enabled(void) {
+    if (ggml_moe_prefetch_down_from_up_gate != -1) return ggml_moe_prefetch_down_from_up_gate;
+    const char *env = getenv("GGML_MOE_PREFETCH_DOWN_FROM_UPGATE");
+    ggml_moe_prefetch_down_from_up_gate = (env && env[0] && env[0] != '0') ? 1 : 0;
+    return ggml_moe_prefetch_down_from_up_gate;
+}
+
+static bool ggml_moe_make_down_name(const char *name, char *out, size_t out_sz) {
+    if (!name || !name[0] || !out || out_sz == 0) return false;
+    const char *markers[] = {
+        ".ffn_up_exps.",
+        ".ffn_gate_exps.",
+        ".ffn_up_gate_exps.",
+    };
+    const char *marker = NULL;
+    const char *pos = NULL;
+    for (size_t i = 0; i < sizeof(markers)/sizeof(markers[0]); ++i) {
+        pos = strstr(name, markers[i]);
+        if (pos) {
+            marker = markers[i];
+            break;
+        }
+    }
+    if (!marker || !pos) return false;
+    const size_t prefix_len = (size_t)(pos - name);
+    if (prefix_len + strlen(".ffn_down_exps.") + strlen(pos + strlen(marker)) + 1 > out_sz) return false;
+    memcpy(out, name, prefix_len);
+    out[prefix_len] = '\0';
+    strcat(out, ".ffn_down_exps.");
+    strcat(out, pos + strlen(marker));
+    return true;
+}
+
+static void ggml_moe_register_down_tensor(const char *name, const void *data, int64_t n_as, size_t nb02) {
+    if (!name || !name[0] || !data || n_as <= 0 || nb02 == 0) return;
+    if (!strstr(name, ".ffn_down_exps.")) return;
+
+    pthread_mutex_lock(&ggml_moe_down_reg_mu);
+    for (int i = 0; i < ggml_moe_down_reg_count; ++i) {
+        if (strcmp(ggml_moe_down_regs[i].name, name) == 0) {
+            ggml_moe_down_regs[i].data = data;
+            ggml_moe_down_regs[i].n_as = n_as;
+            ggml_moe_down_regs[i].nb02 = nb02;
+            pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+            return;
+        }
+    }
+    if (ggml_moe_down_reg_count < GGML_MOE_DOWN_REG_MAX) {
+        struct ggml_moe_down_reg *r = &ggml_moe_down_regs[ggml_moe_down_reg_count++];
+        snprintf(r->name, sizeof(r->name), "%s", name);
+        r->data = data;
+        r->n_as = n_as;
+        r->nb02 = nb02;
+    }
+    pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+}
+
+static bool ggml_moe_lookup_down_tensor(const char *name, const void **data, int64_t *n_as, size_t *nb02) {
+    if (!name || !name[0]) return false;
+    bool found = false;
+    pthread_mutex_lock(&ggml_moe_down_reg_mu);
+    for (int i = 0; i < ggml_moe_down_reg_count; ++i) {
+        if (strcmp(ggml_moe_down_regs[i].name, name) == 0) {
+            if (data) *data = ggml_moe_down_regs[i].data;
+            if (n_as) *n_as = ggml_moe_down_regs[i].n_as;
+            if (nb02) *nb02 = ggml_moe_down_regs[i].nb02;
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&ggml_moe_down_reg_mu);
+    return found;
+}
+
+static void ggml_moe_prefetch_down_for_up_gate(
+        const char *up_gate_name,
+        const int64_t *matrix_row_counts,
+        int64_t n_as,
+        int ith,
+        int nth) {
+    if (!ggml_moe_prefetch_down_from_up_gate_enabled()) return;
+    if (!matrix_row_counts || n_as <= 0) return;
+
+    char down_name[96] = {0};
+    if (!ggml_moe_make_down_name(up_gate_name, down_name, sizeof(down_name))) return;
+
+    const void *down_data = NULL;
+    int64_t down_n_as = 0;
+    size_t down_nb02 = 0;
+    if (!ggml_moe_lookup_down_tensor(down_name, &down_data, &down_n_as, &down_nb02)) return;
+    if (!down_data || down_nb02 == 0) return;
+
+    const int64_t limit = n_as < down_n_as ? n_as : down_n_as;
+    for (int64_t cur_a = ith; cur_a < limit; cur_a += nth) {
+        if (matrix_row_counts[cur_a] == 0) continue;
+        if (ggml_cuda_moe_stream_cache_contains &&
+                ggml_cuda_moe_stream_cache_contains(down_name, down_nb02, (int)cur_a)) {
+            continue;
+        }
+        ggml_moe_prefetch_range_impl((const char *)down_data + cur_a*down_nb02, down_nb02, 1);
+    }
+}
+#else
+void ggml_vm_register_mapping(void *addr, size_t size, int fd) { (void)addr; (void)size; (void)fd; }
+static inline void ggml_moe_prefetch_init(void) {}
+static inline void ggml_moe_prefetch_range(const void *addr, size_t size) {
+    (void)addr; (void)size;
+}
+static void ggml_moe_register_down_tensor(const char *name, const void *data, int64_t n_as, size_t nb02) {
+    (void)name; (void)data; (void)n_as; (void)nb02;
+}
+static void ggml_moe_prefetch_down_for_up_gate(
+        const char *up_gate_name,
+        const int64_t *matrix_row_counts,
+        int64_t n_as,
+        int ith,
+        int nth) {
+    (void)up_gate_name; (void)matrix_row_counts; (void)n_as; (void)ith; (void)nth;
+}
+#endif
+// === end MoE expert prefetch =================================================
+
 #ifdef GGML_USE_OPENMP
 #include <omp.h>
 #endif
@@ -17272,7 +18364,8 @@ static void ggml_compute_forward_mul_mat_id(
     };
 
     int64_t * matrix_row_counts = (int64_t *) (wdata_src1_end); // [n_as]
-    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as); // [n_as][ne11]
+    atomic_int * cuda_batch_done = (atomic_int *)(matrix_row_counts + n_as); // one shared flag, padded as int64_t
+    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as + 1); // [n_as][ne11]
 
     if (src1->type != vec_dot_type) {
         char * wdata = params->wdata;
@@ -17312,6 +18405,7 @@ static void ggml_compute_forward_mul_mat_id(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+        atomic_store(cuda_batch_done, 0);
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -17325,9 +18419,123 @@ static void ggml_compute_forward_mul_mat_id(
                 matrix_row_counts[i02] += 1;
             }
         }
+
+        ggml_moe_prefetch_init();
+        ggml_hotexp_init_once();
+        ggml_moe_register_down_tensor(src0->name, src0->data, n_as, nb02);
     }
 
     ggml_barrier(params->shared);
+
+    // ik_llama_fork: each thread issues madvise(WILLNEED) on its assigned subset
+    // of active experts in parallel.  This drives kernel readahead with higher
+    // effective iodepth than a single thread can.  Also record the range for
+    // the predictive prefetcher.
+    for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
+        if (matrix_row_counts[cur_a] == 0) continue;
+        ggml_moe_prefetch_range((const char *)src0->data + cur_a*nb02, nb02);
+        ggml_pf_record_addr_layered((const char *)src0->data + cur_a*nb02, nb02, src0->name);
+    }
+
+    if (ith == 0 &&
+            ggml_cuda_moe_stream_preload_tensor &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            ggml_cuda_moe_stream_supports_type(src0->type) &&
+            getenv("GGML_MOE_VRAM_PROFILE")) {
+        ggml_cuda_moe_stream_preload_tensor(src0->type, src0->name, src0->data, n_as, nb02, nb02);
+    }
+
+    ggml_barrier(params->shared);
+
+#if GGML_USE_IQK_MULMAT
+    // ik_llama_fork: parallel-experts path — each thread takes a disjoint stripe
+    // of experts and runs each one single-threaded, so multiple experts' weights
+    // stream from the SSD concurrently.  Only valid for the IQK mulmat path.
+    if (ggml_moe_parallel_experts && ne13 == 1 && dst->type == GGML_TYPE_F32) {
+        ggml_hotexp_init_once();
+        const void * wdata    = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+        const size_t row_size = ggml_row_size(vec_dot_type, ne10);
+        const uintptr_t tbase = (uintptr_t)src0->data;
+        // GPU streaming-MoE: keep experts mmap/SSD-backed, stage only the
+        // routed expert slice into VRAM, and run the CUDA IQ3_XXS MMVQ kernel.
+        const char *batch_only_env = getenv("GGML_MOE_STREAM_BATCH_ONLY");
+        const bool stream_batch_only = batch_only_env && batch_only_env[0] && batch_only_env[0] != '0';
+        const bool use_gpu_stream =
+            ggml_cuda_moe_stream_one &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            ggml_cuda_moe_stream_supports_type(src0->type) &&
+            src1->type == GGML_TYPE_F32 &&
+            (!getenv("GGML_MOE_STREAM_DEFER") || ids->ne[1] == 1) &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32;
+        if (use_gpu_stream && ggml_cuda_moe_stream_batch && ids->ne[1] == 1) {
+            if (ith == 0) {
+                const bool done = ggml_cuda_moe_stream_batch(
+                    src0->type,
+                    src0->name,
+                    src0->data,
+                    n_as,
+                    ne01, ne00, nb01, nb02,
+                    (const float *)src1->data,
+                    nb11, nb12,
+                    (float *)dst->data,
+                    nb1, nb2,
+                    matrix_row_counts,
+                    (const ggml_moe_row_mapping *)matrix_rows,
+                    ne12);
+                if (!done) {
+                    static atomic_int warned = 0;
+                    if (atomic_fetch_add(&warned, 1) == 0) {
+                        fprintf(stderr, "[moe_stream] batched CUDA MoE down path declined; falling back to CPU path\n");
+                    }
+                } else {
+                    atomic_store(cuda_batch_done, 1);
+                }
+            }
+            ggml_barrier(params->shared);
+            if (atomic_load(cuda_batch_done)) {
+                return;
+            }
+        }
+        for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
+            const int64_t cne1 = matrix_row_counts[cur_a];
+            if (cne1 == 0) continue;
+            const char * src0_cur = (const char *) src0->data + cur_a*nb02;
+            ggml_hotexp_profile_hit(tbase, cur_a, src0->name, nb02);
+            // Hot-expert cache: if this expert has been seen before (or fits in
+            // the cache now), use the RAM-resident copy instead of the mmap addr.
+            const void *cached = ggml_hotexp_get_or_insert(tbase, cur_a, src0_cur, nb02);
+            if (cached) src0_cur = (const char *)cached;
+            bool done = false;
+            if (use_gpu_stream && !stream_batch_only) {
+                done = ggml_cuda_moe_stream_one(
+                    src0->type,
+                    src0_cur,
+                    ne01, ne00, nb01,
+                    (const float *)src1->data,
+                    nb11, nb12,
+                    cne1,
+                    NULL, 0,
+                    (float *)dst->data,
+                    nb1, nb2,
+                    (const ggml_moe_row_mapping *)(matrix_rows + cur_a*ne12));
+            }
+            if (!done) {
+                if (!iqk_mul_mat_moe(ne01, cne1, ne00, ne11,
+                            src0->type, (const char *)src0_cur, nb01,
+                            vec_dot_type, (const char *)wdata, row_size,
+                            (float *)dst->data, nb1, nb2,
+                            matrix_rows + cur_a*ne12, 0, 1)) GGML_ABORT("pe: iqk_mul_mat_moe failed");
+            }
+        }
+        if (ggml_cuda_moe_stream_sync) {
+            ggml_cuda_moe_stream_sync();
+        }
+        return;
+    }
+#endif
 
     // compute each matrix multiplication in sequence
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
@@ -17347,6 +18555,18 @@ static void ggml_compute_forward_mul_mat_id(
                                   //
 #if GGML_USE_IQK_MULMAT
         if (ne13 == 1 && dst->type == GGML_TYPE_F32) {
+           // ik_llama_fork: hot-expert cache.  All threads call concurrently;
+           // mutex-protected insert ensures exactly one thread does the
+           // memcpy, the rest hit the cached entry on the lock-free fast path.
+           const void *cached = ggml_hotexp_get_or_insert(
+               (uintptr_t)src0->data, cur_a, src0_cur, nb02);
+           ggml_hotexp_profile_hit((uintptr_t)src0->data, cur_a, src0->name, nb02);
+           if (cached) src0_cur = (const char *)cached;
+           // GPU streaming: disabled — see STREAMING_MOE_PLAN.md "Breakthrough 6"
+           // The current MMVQ kernels expect Q8_1 src1, but GLM-5.1's IQ3_XXS
+           // vec_dot_type is Q8_K.  Quantize-on-GPU adds per-call overhead that
+           // erases the streaming win.  Path forward: write IQ3_XXS×Q8_K CUDA
+           // kernel, OR refactor to batch all 8 experts per layer in one call.
            if (!iqk_mul_mat_moe(nr0, nr1, ne00, ne11,
                        src0->type, (const char *)src0_cur, nb01, ///ggml_type_size(src0->type),
                        vec_dot_type, (const char *)wdata, row_size, ///ggml_type_size(vec_dot_type),
@@ -17483,6 +18703,11 @@ IQK_MulMat_Not_Available:;
     }
 
 #undef MMID_MATRIX_ROW
+
+    // GPU streaming: thread 0 collected async dispatches; sync + scatter now.
+    if (ith == 0 && ggml_cuda_moe_stream_sync) {
+        ggml_cuda_moe_stream_sync();
+    }
 }
 
 #if GGML_USE_IQK_MULMAT
@@ -17539,7 +18764,8 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     };
 
     int64_t * matrix_row_counts = (int64_t *) (wdata_src1_end); // [n_as]
-    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as); // [n_as][ne11]
+    atomic_int * cuda_up_gate_done = (atomic_int *)(matrix_row_counts + n_as); // one shared flag, padded as int64_t
+    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as + 1); // [n_as][ne11]
 
     if (src1->type != vec_dot_type) {
 
@@ -17582,6 +18808,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+        atomic_store(cuda_up_gate_done, 0);
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -17595,16 +18822,127 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
                 matrix_row_counts[i02] += 1;
             }
         }
+
+        ggml_moe_prefetch_init();
+    }
+
+    ggml_barrier(params->shared);
+
+    // ik_llama_fork: parallel madvise(WILLNEED) on selected experts (gate+up halves).
+    // Also record ranges for the predictive prefetcher.
+    for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
+        if (matrix_row_counts[cur_a] == 0) continue;
+        ggml_moe_prefetch_range((const char *)src0_1->data + cur_a*nb02, nb02);
+        ggml_pf_record_addr_layered((const char *)src0_1->data + cur_a*nb02, nb02, src0_1->name);
+        if (src0_2) {
+            ggml_moe_prefetch_range((const char *)src0_2->data + cur_a*nb02, nb02);
+            ggml_pf_record_addr_layered((const char *)src0_2->data + cur_a*nb02, nb02, src0_2->name);
+        }
+    }
+    ggml_moe_prefetch_down_for_up_gate(src0_1->name, matrix_row_counts, n_as, ith, nth);
+
+    if (ith == 0 &&
+            ggml_cuda_moe_stream_preload_tensor &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            ggml_cuda_moe_stream_supports_type(src0_1->type) &&
+            getenv("GGML_MOE_VRAM_PROFILE") &&
+            getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
+        const char *profile_upgate_env = getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
+        const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
+        if (profile_upgate) {
+            if (src0_2) {
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, nb02);
+                ggml_cuda_moe_stream_preload_tensor(src0_2->type, src0_2->name, src0_2->data, n_as, nb02, nb02);
+            } else {
+                const size_t half = nb02/2;
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, (const char *)src0_1->data + half, n_as, nb02, half);
+                ggml_cuda_moe_stream_preload_tensor(src0_1->type, src0_1->name, src0_1->data, n_as, nb02, half);
+            }
+        }
     }
 
     ggml_barrier(params->shared);
 
     const float limit = *(const float *)(dst->op_params + 1);
+    float * cuda_validate = NULL;
+    size_t cuda_validate_bytes = 0;
+
+    const bool try_cuda_up_gate =
+            ggml_moe_parallel_experts &&
+            ggml_cuda_moe_stream_up_gate_batch &&
+            ggml_cuda_moe_stream_available &&
+            ggml_cuda_moe_stream_available() &&
+            ggml_cuda_moe_stream_supports_type(src0_1->type) &&
+            src1->type == GGML_TYPE_F32 &&
+            ids->ne[1] == 1 &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32 &&
+            !up_b && !gate_b &&
+            getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
+    if (try_cuda_up_gate) {
+        const bool validate_cuda = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_VALIDATE") != NULL;
+        if (ith == 0) {
+            const int64_t nr0 = src0_2 ? ne01 : ne01/2;
+            const char * up_name = src0_1->name;
+            const char * gate_name = src0_2 ? src0_2->name : src0_1->name;
+            const char * up_data = (const char *)src0_1->data;
+            const char * gate_data = src0_2 ? (const char *)src0_2->data : (const char *)src0_1->data;
+            const size_t expert_stride = src0_2 ? nb02 : nb02/2;
+            if (!src0_2) {
+                up_data += expert_stride;
+            }
+            const bool done = ggml_cuda_moe_stream_up_gate_batch(
+                src0_1->type,
+                up_name, up_data,
+                gate_name, gate_data,
+                n_as,
+                nr0, ne00, nb01, src0_2 ? nb02 : nb02,
+                (const float *)src1->data,
+                nb11, nb12,
+                (float *)dst->data,
+                nb1, nb2,
+                dst->op_params[0],
+                limit,
+                matrix_row_counts,
+                (const ggml_moe_row_mapping *)matrix_rows,
+                ne12);
+            if (!done) {
+                static atomic_int warned = 0;
+                if (atomic_fetch_add(&warned, 1) == 0) {
+                    fprintf(stderr, "[moe_stream] batched CUDA MoE up/gate path declined; falling back to CPU path\n");
+                }
+            } else if (validate_cuda) {
+                cuda_validate_bytes = ggml_nbytes(dst);
+                cuda_validate = (float *)malloc(cuda_validate_bytes);
+                if (cuda_validate) {
+                    memcpy(cuda_validate, dst->data, cuda_validate_bytes);
+                }
+            } else {
+                atomic_store(cuda_up_gate_done, 1);
+            }
+        }
+        ggml_barrier(params->shared);
+        if (!validate_cuda && atomic_load(cuda_up_gate_done)) {
+            return;
+        }
+    }
+
+    ggml_barrier(params->shared);
 
     // so GGML_TENSOR_BINARY_OP_LOCALS works
 
-    // compute each matrix multiplication in sequence
-    for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+    // ik_llama_fork: when parallel-experts is on, each thread owns a disjoint
+    // stripe of experts and runs each expert single-threaded.  This streams
+    // multiple experts' weights from the SSD concurrently instead of all
+    // threads serializing on one expert at a time.
+    const int pe         = ggml_moe_parallel_experts;
+    const int loop_start = pe ? ith : 0;
+    const int loop_step  = pe ? nth : 1;
+    const int inner_ith  = pe ? 0   : ith;
+    const int inner_nth  = pe ? 1   : nth;
+
+    for (int cur_a = loop_start; cur_a < n_as; cur_a += loop_step) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
         if (cne1 == 0) {
@@ -17638,8 +18976,58 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
                             vec_dot_type, (const char *)wdata, row_size,
                             up_b_cur, gate_b_cur,
                             (float *)dst->data, nb1, nb2,
-                            matrix_rows + cur_a*ne12, limit, ith, nth)) GGML_ABORT("fatal error");
+                            matrix_rows + cur_a*ne12, limit, inner_ith, inner_nth)) GGML_ABORT("fatal error");
 
+    }
+
+    ggml_barrier(params->shared);
+
+    if (ith == 0 && cuda_validate) {
+        const float *gpu = cuda_validate;
+        const float *cpu = (const float *)dst->data;
+        const size_t n = cuda_validate_bytes / sizeof(float);
+        double sse = 0.0;
+        double max_abs = 0.0;
+        size_t max_i = 0;
+        for (size_t i = 0; i < n; ++i) {
+            const double d = (double)gpu[i] - (double)cpu[i];
+            const double ad = fabs(d);
+            sse += d*d;
+            if (ad > max_abs) {
+                max_abs = ad;
+                max_i = i;
+            }
+        }
+        fprintf(stderr,
+                "[moe_stream] up/gate validate: tensor=%s n=%zu max_abs=%g rmse=%g max_i=%zu gpu=%g cpu=%g\n",
+                src0_1->name, n, max_abs, n ? sqrt(sse/(double)n) : 0.0, max_i,
+                n ? (double)gpu[max_i] : 0.0, n ? (double)cpu[max_i] : 0.0);
+        const char *row_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_VALIDATE_ROWS");
+        if (row_env && row_env[0] && row_env[0] != '0') {
+            const int64_t row_len = dst->ne[0];
+            const int64_t n_rows = dst->ne[1] * dst->ne[2];
+            for (int64_t r = 0; r < n_rows; ++r) {
+                double row_sse = 0.0;
+                double row_max = 0.0;
+                double gpu_abs = 0.0;
+                double cpu_abs = 0.0;
+                for (int64_t c = 0; c < row_len; ++c) {
+                    const size_t i = (size_t)r * (size_t)row_len + (size_t)c;
+                    const double gd = gpu[i];
+                    const double cd = cpu[i];
+                    const double d = gd - cd;
+                    const double ad = fabs(d);
+                    row_sse += d*d;
+                    gpu_abs += fabs(gd);
+                    cpu_abs += fabs(cd);
+                    if (ad > row_max) row_max = ad;
+                }
+                fprintf(stderr,
+                        "[moe_stream] up/gate validate row=%ld max_abs=%g rmse=%g gpu_l1=%g cpu_l1=%g\n",
+                        (long)r, row_max, sqrt(row_sse/(double)row_len), gpu_abs, cpu_abs);
+            }
+        }
+        free(cuda_validate);
     }
 
 #undef MMID_MATRIX_ROW
@@ -26643,6 +28031,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
                     const int n_as = src0->ne[2];
                     cur += GGML_PAD(cur, sizeof(int64_t));       // align
                     cur += n_as * sizeof(int64_t);               // matrix_row_counts
+                    cur += sizeof(int64_t);                      // cuda_batch_done shared flag
                     cur += n_as * src1->ne[2] * sizeof(int64_t); // matrix_rows
                 } break;
             case GGML_OP_MOE_FUSED_UP_GATE:
@@ -26658,6 +28047,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
                     const int n_as = src0->ne[2];
                     cur += GGML_PAD(cur, sizeof(int64_t));       // align
                     cur += n_as * sizeof(int64_t);               // matrix_row_counts
+                    cur += sizeof(int64_t);                      // cuda_up_gate_done shared flag
                     cur += n_as * src2->ne[2] * sizeof(int64_t); // matrix_rows
                 } break;
             case GGML_OP_FUSED_UP_GATE:

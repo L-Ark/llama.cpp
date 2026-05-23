@@ -3048,6 +3048,15 @@ static bool llm_load_tensors(
     int i_gpu_start = std::max((int) hparams.n_layer - n_gpu_layers, (int) 0);
     bool use_mmap_buffer = true;
 
+    if (model.devices.empty()) {
+        if (n_gpu_layers > 0) {
+            LLAMA_LOG_WARN("%s: no offload devices available; disabling GPU layer offload\n", __func__);
+        }
+        n_gpu_layers = 0;
+        model.n_gpu_layers = 0;
+        i_gpu_start = n_layer;
+    }
+
     // there is very little benefit to offloading the input layer, so always keep it on the CPU
     model.buft_input = llama_default_buffer_type_cpu(true);
 
@@ -3095,14 +3104,14 @@ static bool llm_load_tensors(
         model.splits = { 1.0f };
     }
 
-    int device_count = model.splits.size();
+    int device_count = model.devices.empty() ? 0 : model.splits.size();
     if (device_count < 2 && (model.split_mode == LLAMA_SPLIT_MODE_ATTN || model.split_mode == LLAMA_SPLIT_MODE_GRAPH)) {
         throw std::runtime_error("It is not possible to use split mode 'graph' with less than 2 devices");
     }
     if (fit && device_count > 1) {
         model.main_gpu = device_count - 1;
     }
-    model.default_layer_device = std::vector<int32_t>(hparams.n_layer+1, device_count-1);
+    model.default_layer_device = std::vector<int32_t>(hparams.n_layer+1, device_count > 0 ? device_count - 1 : -1);
     int act_gpu_layers = std::min(n_gpu_layers, (int)n_layer + 1);
     std::vector<llama_model_tensor_buft_override> overrides;
     if (device_count > 0) {
@@ -6708,6 +6717,24 @@ struct llama_context * llama_init_from_model(
                 LLAMA_LOG_INFO("%s: pipeline parallelism enabled (n_copies=%d)\n", __func__, ggml_backend_sched_get_n_copies(ctx->sched));
             }
 
+            if (params.only_active_experts) {
+                LLAMA_LOG_INFO("%s: enabling only_active_experts scheduling\n", __func__);
+                ggml_backend_sched_set_only_active_experts(ctx->sched, true);
+            }
+
+            if (params.offload_policy) {
+                const std::vector<std::pair<int, int>>& policy = *(const std::vector<std::pair<int, int>>*)params.offload_policy;
+                for (auto [op, on_off] : policy) {
+                    if (op < 0 || op >= int(GGML_OP_COUNT)) {
+                        LLAMA_LOG_INFO("XXXXXXXXXXXXXXXXXXXXX Setting offload policy for all ops to %s\n", on_off ? "ON" : "OFF");
+                    } else {
+                        LLAMA_LOG_INFO("XXXXXXXXXXXXXXXXXXXXX Setting offload policy for op %s to %s\n",
+                                ggml_op_name(ggml_op(op)), on_off ? "ON" : "OFF");
+                    }
+                    ggml_backend_sched_set_op_offload(ctx->sched, ggml_op(op), on_off);
+                }
+            }
+
             llama_repack_up_gate_exps(*ctx);
 
             // build worst-case graph
@@ -6749,23 +6776,6 @@ struct llama_context * llama_init_from_model(
         }
     }
 
-    if (params.offload_policy) {
-        const std::vector<std::pair<int, int>>& policy = *(const std::vector<std::pair<int, int>>*)params.offload_policy;
-        for (auto [op, on_off] : policy) {
-            if (op < 0 || op >= int(GGML_OP_COUNT)) {
-                LLAMA_LOG_INFO("XXXXXXXXXXXXXXXXXXXXX Setting offload policy for all ops to %s\n", on_off ? "ON" : "OFF");
-            } else {
-                LLAMA_LOG_INFO("XXXXXXXXXXXXXXXXXXXXX Setting offload policy for op %s to %s\n",
-                        ggml_op_name(ggml_op(op)), on_off ? "ON" : "OFF");
-            }
-            ggml_backend_sched_set_op_offload(ctx->sched, ggml_op(op), on_off);
-        }
-    }
-
-    if (params.only_active_experts) {
-        LLAMA_LOG_INFO("%s: enabling only_active_experts scheduling\n", __func__);
-        ggml_backend_sched_set_only_active_experts(ctx->sched, true);
-    }
     if (model->split_mode == LLAMA_SPLIT_MODE_GRAPH && (!model->has_tensor_overrides() || cparams.split_mode_graph_scheduling)) {
         ggml_backend_sched_set_split_mode_graph(ctx->sched, true, cparams.scheduler_async);
         ggml_backend_sched_set_max_extra_alloc(ctx->sched, params.max_extra_alloc);

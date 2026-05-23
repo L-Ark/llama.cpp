@@ -1088,9 +1088,12 @@ llm_expert_gating_func_type   gating_op,
         auto& hparams = lctx.model.hparams;
         selected_experts = ggml_grouped_topk(ctx, selection_probs, hparams.n_expert_groups, hparams.n_group_used, 2, n_expert_used);
     } else {
-        //selected_experts = ggml_top_k_thresh(ctx, selection_probs, n_expert_used,
-        //        lctx.cparams.min_experts, lctx.cparams.thresh_experts); // [n_expert_used, n_tokens]
-        selected_experts = ggml_top_k(ctx, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
+        if (lctx.cparams.min_experts > 0) {
+            selected_experts = ggml_top_k_thresh(ctx, selection_probs, n_expert_used,
+                    lctx.cparams.min_experts, lctx.cparams.thresh_experts); // [n_expert_used, n_tokens]
+        } else {
+            selected_experts = ggml_top_k(ctx, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
+        }
     }
     cb(selected_experts, "ffn_moe_topk", il);
     ggml_tensor * weights = ggml_get_rows(ctx,
@@ -2194,6 +2197,12 @@ ggml_cgraph * llm_build_context::llama_build_graph(
             }
         }
 
+        const char * stream_cpu_moe_env = getenv("GGML_MOE_STREAM_CPU_OPS");
+        if (stream_cpu_moe_env && stream_cpu_moe_env[0] && stream_cpu_moe_env[0] != '0' &&
+                (cur->op == GGML_OP_MUL_MAT_ID || cur->op == GGML_OP_MOE_FUSED_UP_GATE)) {
+            ggml_backend_sched_set_tensor_backend(lctx.sched, cur, lctx.backend_cpu);
+        }
+
         // norm may be automatically assigned to the backend of the previous layer, increasing data transfer between backends
         // FIXME: fix in ggml_backend_sched
         const bool full_offload = lctx.model.n_gpu_layers > (int)lctx.model.hparams.n_layer;
@@ -2215,7 +2224,9 @@ ggml_cgraph * llm_build_context::llama_build_graph(
     const llama_vocab * vocab = &lctx.model.vocab; //llama_get_vocab(&lctx);
     llama_token bos = vocab->token_bos();
     llama_token eos = vocab->token_eos();
-    bool is_warming_up = lctx.n_eval == 0 && (batch.n_tokens == 1 && (batch.token[0] == ((bos != -1) ? bos : eos)));
+    // Worst-case graph reservation should size MoE tensors for the routed expert
+    // count, not for a synthetic all-experts warmup pass.
+    bool is_warming_up = !worst_case && lctx.n_eval == 0 && (batch.n_tokens == 1 && (batch.token[0] == ((bos != -1) ? bos : eos)));
     struct llm_build_context llm(lctx, batch, cb, worst_case, is_warming_up, n_outputs);
 
     llm.init();

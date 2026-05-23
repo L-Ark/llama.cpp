@@ -1552,6 +1552,20 @@ target_compile_features   (ggml PRIVATE c_std_11) # don't bump
 
 target_link_libraries(ggml PRIVATE Threads::Threads ${GGML_EXTRA_LIBS})
 
+# ik_llama_fork: link liburing + libaio for the predictor's async I/O fast paths.
+if (UNIX AND NOT APPLE)
+    find_library(URING_LIBRARY uring)
+    if (URING_LIBRARY)
+        target_link_libraries(ggml PRIVATE ${URING_LIBRARY})
+        message(STATUS "Found liburing: ${URING_LIBRARY}")
+    endif()
+    find_library(AIO_LIBRARY aio)
+    if (AIO_LIBRARY)
+        target_link_libraries(ggml PRIVATE ${AIO_LIBRARY})
+        message(STATUS "Found libaio: ${AIO_LIBRARY}")
+    endif()
+endif()
+
 find_library(MATH_LIBRARY m)
 if (MATH_LIBRARY)
     if (NOT WIN32 OR NOT GGML_SYCL)
