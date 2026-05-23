@@ -227,6 +227,8 @@ struct batch_profile {
     bool enabled = false;
     uint64_t calls = 0;
     uint64_t active_experts = 0;
+    uint64_t up_stage_jobs = 0;
+    uint64_t gate_stage_jobs = 0;
     double stage_ms = 0.0;
     double quant_ms = 0.0;
     double kernel_ms = 0.0;
@@ -293,6 +295,7 @@ static void up_gate_profile_report_atexit() {
     std::fprintf(stderr,
         "[moe_stream_batch] up/gate profile: calls=%lu avg_active=%.2f "
         "stage=%.3f ms quant=%.3f ms up=%.3f ms gate=%.3f ms "
+        "up_stage_jobs=%.2f gate_stage_jobs=%.2f "
         "up_wait=%.3f ms gate_wait=%.3f ms up_compute=%.3f ms gate_compute=%.3f ms fuse=%.3f ms "
         "kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
         g_uprof.calls,
@@ -301,6 +304,8 @@ static void up_gate_profile_report_atexit() {
         g_uprof.quant_ms / calls,
         g_uprof.up_ms / calls,
         g_uprof.gate_ms / calls,
+        (double)g_uprof.up_stage_jobs / calls,
+        (double)g_uprof.gate_stage_jobs / calls,
         g_uprof.up_wait_ms / calls,
         g_uprof.gate_wait_ms / calls,
         g_uprof.up_compute_ms / calls,
@@ -1912,6 +1917,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (profile) cudaEventRecord(bc.ev_quant, st);
 
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
+    int up_stage_jobs_count = 0;
+    int gate_stage_jobs_count = 0;
     if (parallel_up_gate) {
         if (cudaEventRecord(bc.ev_stage_ready, st) != cudaSuccess) return false;
         if (cudaStreamWaitEvent(bc.up_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
@@ -1941,6 +1948,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 clear_stage_jobs(gate_jobs);
                 return parallel_fail();
             }
+            up_stage_jobs_count = (int)up_jobs.size();
+            gate_stage_jobs_count = (int)gate_jobs.size();
 
             const char *stage_split_env = std::getenv("GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT");
             const bool stage_split = stage_split_env && stage_split_env[0] && stage_split_env[0] != '0' &&
@@ -2147,6 +2156,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             cudaEventElapsedTime(&kernel_ms, bc.ev_quant, bc.ev_kernel);
             ++g_uprof.calls;
             g_uprof.active_experts += (uint64_t)n_active;
+            g_uprof.up_stage_jobs += (uint64_t)up_stage_jobs_count;
+            g_uprof.gate_stage_jobs += (uint64_t)gate_stage_jobs_count;
             g_uprof.stage_ms += stage_ms;
             g_uprof.quant_ms += quant_ms;
             g_uprof.up_ms += up_ms;
@@ -2208,6 +2219,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
         ++g_uprof.calls;
         g_uprof.active_experts += (uint64_t)n_active;
+        g_uprof.up_stage_jobs += (uint64_t)up_stage_jobs_count;
+        g_uprof.gate_stage_jobs += (uint64_t)gate_stage_jobs_count;
         g_uprof.stage_ms += stage_ms;
         g_uprof.quant_ms += quant_ms;
         g_uprof.up_ms += up_ms;

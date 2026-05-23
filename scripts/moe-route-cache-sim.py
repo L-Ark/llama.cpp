@@ -54,6 +54,8 @@ class RuntimeProfile:
     label: str
     calls: int
     avg_active: float
+    up_stage_jobs: float = 0.0
+    gate_stage_jobs: float = 0.0
     stage_ms: float = 0.0
     quant_ms: float = 0.0
     up_ms: float = 0.0
@@ -145,6 +147,8 @@ def parse_runtime_stderr(path: Path) -> RuntimeReport:
                     label="upgate",
                     calls=int(values.get("calls", 0)),
                     avg_active=values.get("avg_active", 0.0),
+                    up_stage_jobs=values.get("up_stage_jobs", 0.0),
+                    gate_stage_jobs=values.get("gate_stage_jobs", 0.0),
                     stage_ms=values.get("stage", 0.0),
                     quant_ms=values.get("quant", 0.0),
                     up_ms=values.get("up", 0.0),
@@ -577,11 +581,15 @@ def print_runtime_calibration(report: RuntimeReport, paths: list[Path]) -> None:
         compute_span_ms = max(upgate_profile.up_compute_ms, upgate_profile.gate_compute_ms)
         if wait_span_ms > 0.0 or compute_span_ms > 0.0:
             wait_total_ms = wait_span_ms * upgate_profile.calls
+            stage_jobs_per_call = upgate_profile.up_stage_jobs + upgate_profile.gate_stage_jobs
             print(
                 "calibrate_upgate_detail "
+                f"up_stage_jobs_per_call={upgate_profile.up_stage_jobs:.2f} "
+                f"gate_stage_jobs_per_call={upgate_profile.gate_stage_jobs:.2f} "
                 f"up_wait_ms_per_call={upgate_profile.up_wait_ms:.3f} "
                 f"gate_wait_ms_per_call={upgate_profile.gate_wait_ms:.3f} "
                 f"wait_span_ms_per_gib={wait_total_ms / max(miss_gib, 1e-9):.2f} "
+                f"wait_span_ms_per_stage_job={wait_span_ms / max(stage_jobs_per_call, 1e-9):.3f} "
                 f"up_compute_ms_per_call={upgate_profile.up_compute_ms:.3f} "
                 f"gate_compute_ms_per_call={upgate_profile.gate_compute_ms:.3f} "
                 f"compute_span_ms_per_call={compute_span_ms:.3f}"
