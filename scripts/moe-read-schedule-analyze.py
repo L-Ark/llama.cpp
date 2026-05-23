@@ -39,6 +39,15 @@ class PackEntry:
     nbytes: int
 
 
+@dataclass(frozen=True)
+class UpGateCall:
+    layer: int
+    up_tensor: str
+    gate_tensor: str
+    up_experts: tuple[int, ...]
+    gate_experts: tuple[int, ...]
+
+
 class CacheSim:
     def __init__(self, slots: int, policy: str) -> None:
         self.slots = slots
@@ -371,6 +380,27 @@ def layer_from_tensor(tensor: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def extract_upgate_calls(trace: list[TraceEvent]) -> list[UpGateCall]:
+    runs = grouped_tensor_runs(trace)
+    calls: list[UpGateCall] = []
+    for i in range(0, len(runs) - 2, 3):
+        up = runs[i]
+        gate = runs[i + 1]
+        if not up or not gate or ".ffn_up_exps." not in up[0].tensor or ".ffn_gate_exps." not in gate[0].tensor:
+            continue
+        layer = layer_from_tensor(up[0].tensor)
+        if layer is None:
+            continue
+        calls.append(UpGateCall(
+            layer=layer,
+            up_tensor=up[0].tensor,
+            gate_tensor=gate[0].tensor,
+            up_experts=tuple(e.expert_idx for e in up),
+            gate_experts=tuple(e.expert_idx for e in gate),
+        ))
+    return calls
+
+
 def previous_route_prediction_report(
         profile: list[ProfileEntry],
         trace: list[TraceEvent],
@@ -380,31 +410,15 @@ def previous_route_prediction_report(
         protect_profile: bool,
         policy: str,
         thresholds: list[float]) -> None:
-    runs = grouped_tensor_runs(trace)
-    up_calls: list[tuple[int, str, str, tuple[int, ...], tuple[int, ...]]] = []
-    for i in range(0, len(runs) - 2, 3):
-        up = runs[i]
-        gate = runs[i + 1]
-        if not up or not gate or ".ffn_up_exps." not in up[0].tensor or ".ffn_gate_exps." not in gate[0].tensor:
-            continue
-        layer = layer_from_tensor(up[0].tensor)
-        if layer is None:
-            continue
-        up_calls.append((
-            layer,
-            up[0].tensor,
-            gate[0].tensor,
-            tuple(e.expert_idx for e in up),
-            tuple(e.expert_idx for e in gate),
-        ))
+    up_calls = extract_upgate_calls(trace)
 
     prev: dict[int, set[int]] = {}
     layer_hits: dict[int, list[float]] = {}
-    for layer, _up_tensor, _gate_tensor, up_experts, _gate_experts in up_calls:
-        current = set(up_experts)
-        if layer in prev and current:
-            layer_hits.setdefault(layer, []).append(len(current & prev[layer]) / len(current))
-        prev[layer] = current
+    for call in up_calls:
+        current = set(call.up_experts)
+        if call.layer in prev and current:
+            layer_hits.setdefault(call.layer, []).append(len(current & prev[call.layer]) / len(current))
+        prev[call.layer] = current
     layer_score = {layer: sum(values) / len(values) for layer, values in layer_hits.items()}
 
     print("predict_prev_route,threshold,layers,pred_reads,useful_reads,waste_reads,precision,miss_cover,actual_misses")
@@ -416,23 +430,23 @@ def previous_route_prediction_report(
         pred_reads = 0
         useful_reads = 0
         actual_misses = 0
-        for layer, up_tensor, gate_tensor, up_experts, gate_experts in up_calls:
+        for call in up_calls:
             predicted: list[tuple[str, int]] = []
-            if layer in prev_experts and layer_score.get(layer, 0.0) >= threshold:
-                layers_used.add(layer)
-                for expert in prev_experts[layer]:
-                    predicted.append((up_tensor, expert))
-                    predicted.append((gate_tensor, expert))
+            if call.layer in prev_experts and layer_score.get(call.layer, 0.0) >= threshold:
+                layers_used.add(call.layer)
+                for expert in prev_experts[call.layer]:
+                    predicted.append((call.up_tensor, expert))
+                    predicted.append((call.gate_tensor, expert))
                 predicted = [key for key in predicted if not upgate_cache.contains(key)]
                 pred_reads += len(predicted)
 
-            actual_keys = [(up_tensor, e) for e in up_experts] + [(gate_tensor, e) for e in gate_experts]
+            actual_keys = [(call.up_tensor, e) for e in call.up_experts] + [(call.gate_tensor, e) for e in call.gate_experts]
             actual_miss_keys = {key for key in actual_keys if not upgate_cache.contains(key)}
             useful_reads += sum(1 for key in predicted if key in actual_miss_keys)
             for key in actual_keys:
                 if not upgate_cache.access(key, 0):
                     actual_misses += 1
-            prev_experts[layer] = set(up_experts)
+            prev_experts[call.layer] = set(call.up_experts)
 
         precision = useful_reads / pred_reads if pred_reads else 0.0
         miss_cover = useful_reads / actual_misses if actual_misses else 0.0
@@ -440,6 +454,136 @@ def previous_route_prediction_report(
             f"predict_prev_route,{threshold:.2f},{len(layers_used)},{pred_reads},"
             f"{useful_reads},{pred_reads - useful_reads},{precision:.3f},"
             f"{miss_cover:.3f},{actual_misses}")
+
+
+def predict_transition_experts(
+        table: dict[tuple[int, int], dict[int, dict[int, int]]],
+        src_layer: int,
+        dst_layer: int,
+        src_experts: tuple[int, ...],
+        top_k: int,
+        min_obs: int,
+        threshold: float) -> list[int]:
+    counts: dict[int, int] = {}
+    total = 0
+    by_src = table.get((src_layer, dst_layer), {})
+    for src in src_experts:
+        for dst, count in by_src.get(src, {}).items():
+            counts[dst] = counts.get(dst, 0) + count
+            total += count
+    if total < min_obs or not counts:
+        return []
+    ranked = sorted(counts.items(), key=lambda item: (item[1], -item[0]), reverse=True)
+    return [expert for expert, count in ranked[:top_k] if count / total >= threshold]
+
+
+def update_transition_table(
+        table: dict[tuple[int, int], dict[int, dict[int, int]]],
+        prev_call: UpGateCall,
+        call: UpGateCall) -> None:
+    key = (prev_call.layer, call.layer)
+    by_src = table.setdefault(key, {})
+    current = set(call.up_experts)
+    for src in prev_call.up_experts:
+        by_dst = by_src.setdefault(src, {})
+        for dst in current:
+            by_dst[dst] = by_dst.get(dst, 0) + 1
+
+
+def layer_transition_prediction_stats(
+        profile: list[ProfileEntry],
+        trace: list[TraceEvent],
+        budget_mib: int,
+        upgate_pct: int,
+        reserve_pct: int,
+        protect_profile: bool,
+        policy: str,
+        top_k_values: list[int],
+        min_obs_values: list[int],
+        thresholds: list[float]) -> list[dict[str, float | int]]:
+    up_calls = extract_upgate_calls(trace)
+    rows: list[dict[str, float | int]] = []
+    for top_k in top_k_values:
+        for min_obs in min_obs_values:
+            for threshold in thresholds:
+                caches = build_caches(profile, trace, budget_mib, upgate_pct, reserve_pct, protect_profile, policy)
+                upgate_cache = caches["upgate"]
+                table: dict[tuple[int, int], dict[int, dict[int, int]]] = {}
+                prev_call: UpGateCall | None = None
+                calls = 0
+                pred_reads = 0
+                useful_reads = 0
+                actual_misses = 0
+                for call in up_calls:
+                    predicted: list[tuple[str, int]] = []
+                    if prev_call and prev_call.layer + 1 == call.layer:
+                        predicted_experts = predict_transition_experts(
+                            table, prev_call.layer, call.layer, prev_call.up_experts, top_k, min_obs, threshold)
+                        if predicted_experts:
+                            calls += 1
+                            for expert in predicted_experts:
+                                predicted.append((call.up_tensor, expert))
+                                predicted.append((call.gate_tensor, expert))
+                            predicted = [key for key in predicted if not upgate_cache.contains(key)]
+                            pred_reads += len(predicted)
+
+                    actual_keys = [(call.up_tensor, e) for e in call.up_experts] + [(call.gate_tensor, e) for e in call.gate_experts]
+                    actual_miss_keys = {key for key in actual_keys if not upgate_cache.contains(key)}
+                    useful_reads += sum(1 for key in predicted if key in actual_miss_keys)
+                    for key in actual_keys:
+                        if not upgate_cache.access(key, 0):
+                            actual_misses += 1
+
+                    if prev_call and prev_call.layer + 1 == call.layer:
+                        update_transition_table(table, prev_call, call)
+                    prev_call = call
+
+                precision = useful_reads / pred_reads if pred_reads else 0.0
+                miss_cover = useful_reads / actual_misses if actual_misses else 0.0
+                rows.append({
+                    "top_k": top_k,
+                    "min_obs": min_obs,
+                    "threshold": threshold,
+                    "calls": calls,
+                    "pred_reads": pred_reads,
+                    "useful_reads": useful_reads,
+                    "waste_reads": pred_reads - useful_reads,
+                    "precision": precision,
+                    "miss_cover": miss_cover,
+                    "actual_misses": actual_misses,
+                })
+    return rows
+
+
+def layer_transition_prediction_report(
+        profile: list[ProfileEntry],
+        trace: list[TraceEvent],
+        budget_mib: int,
+        upgate_pct: int,
+        reserve_pct: int,
+        protect_profile: bool,
+        policy: str,
+        top_k_values: list[int],
+        min_obs_values: list[int],
+        thresholds: list[float]) -> None:
+    rows = layer_transition_prediction_stats(
+        profile,
+        trace,
+        budget_mib,
+        upgate_pct,
+        reserve_pct,
+        protect_profile,
+        policy,
+        top_k_values,
+        min_obs_values,
+        thresholds,
+    )
+    print("predict_layer_transition,top_k,min_obs,threshold,calls,pred_reads,useful_reads,waste_reads,precision,miss_cover,actual_misses")
+    for row in rows:
+        print(
+            f"predict_layer_transition,{row['top_k']},{row['min_obs']},{row['threshold']:.2f},"
+            f"{row['calls']},{row['pred_reads']},{row['useful_reads']},{row['waste_reads']},"
+            f"{row['precision']:.3f},{row['miss_cover']:.3f},{row['actual_misses']}")
 
 
 def main() -> None:
@@ -454,6 +598,9 @@ def main() -> None:
     parser.add_argument("--policy", choices=("lru", "lfu_lru"), default="lfu_lru")
     parser.add_argument("--coalesce-threshold-mib", type=int, nargs="*", default=[0, 4, 8, 16, 32, 64])
     parser.add_argument("--prediction-threshold", type=float, nargs="*", default=[0.0, 0.25, 0.35, 0.45, 0.5, 0.6])
+    parser.add_argument("--transition-top-k", type=int, nargs="*", default=[2, 4, 8, 12])
+    parser.add_argument("--transition-min-obs", type=int, nargs="*", default=[1, 4, 8, 16])
+    parser.add_argument("--transition-threshold", type=float, nargs="*", default=[0.0, 0.05, 0.10, 0.15, 0.20])
     args = parser.parse_args()
 
     profile = load_profile(args.profile)
@@ -487,6 +634,18 @@ def main() -> None:
         args.protect_profile,
         args.policy,
         args.prediction_threshold,
+    )
+    layer_transition_prediction_report(
+        profile,
+        trace,
+        args.budget_mib,
+        args.upgate_pct,
+        args.reserve_pct,
+        args.protect_profile,
+        args.policy,
+        args.transition_top_k,
+        args.transition_min_obs,
+        args.transition_threshold,
     )
 
 

@@ -383,6 +383,46 @@ def read_mechanism_recommendations(args: argparse.Namespace, best_cache: dict[st
         f"rule=precision>={args.prediction_min_precision:.2f}_miss_cover>={args.prediction_min_miss_cover:.2f}_useful>waste"
     )
 
+    transition = READ_SCHED.layer_transition_prediction_stats(
+        profile,
+        trace,
+        budget_mib,
+        upgate_pct,
+        args.reserve_pct,
+        args.protect_profile,
+        args.policy,
+        args.transition_top_k,
+        args.transition_min_obs,
+        args.transition_threshold,
+    )
+    eligible_transition = [
+        row for row in transition
+        if float(row["precision"]) >= args.transition_min_precision
+        and float(row["miss_cover"]) >= args.transition_min_miss_cover
+        and int(row["useful_reads"]) > int(row["waste_reads"])
+    ]
+    best_transition = max(transition, key=lambda row: (
+        int(row["useful_reads"]) > int(row["waste_reads"]),
+        float(row["precision"]),
+        float(row["miss_cover"]),
+        int(row["useful_reads"]),
+    ))
+    best_cover_transition = max(transition, key=lambda row: (float(row["miss_cover"]), float(row["precision"])))
+    print(
+        "mechanism,layer_transition_prediction,"
+        f"status={'candidate' if eligible_transition else 'reject'},"
+        f"top_k={best_transition['top_k']},"
+        f"min_obs={best_transition['min_obs']},"
+        f"threshold={best_transition['threshold']:.2f},"
+        f"precision={best_transition['precision']:.3f},"
+        f"miss_cover={best_transition['miss_cover']:.3f},"
+        f"useful_reads={best_transition['useful_reads']},"
+        f"waste_reads={best_transition['waste_reads']},"
+        f"best_cover={best_cover_transition['miss_cover']:.3f},"
+        f"best_cover_precision={best_cover_transition['precision']:.3f},"
+        f"rule=precision>={args.transition_min_precision:.2f}_miss_cover>={args.transition_min_miss_cover:.2f}_useful>waste"
+    )
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -411,6 +451,11 @@ def main() -> None:
     parser.add_argument("--prediction-threshold", type=float, nargs="*", default=[0.0, 0.25, 0.35, 0.45, 0.5, 0.6])
     parser.add_argument("--prediction-min-precision", type=float, default=0.70)
     parser.add_argument("--prediction-min-miss-cover", type=float, default=0.15)
+    parser.add_argument("--transition-top-k", type=int, nargs="*", default=[2, 4, 8, 12, 16])
+    parser.add_argument("--transition-min-obs", type=int, nargs="*", default=[1, 4, 8, 16, 32])
+    parser.add_argument("--transition-threshold", type=float, nargs="*", default=[0.0, 0.05, 0.10, 0.15, 0.20])
+    parser.add_argument("--transition-min-precision", type=float, default=0.65)
+    parser.add_argument("--transition-min-miss-cover", type=float, default=0.05)
     parser.add_argument("--verbose-table", action="store_true")
     parser.set_defaults(protect_profile=True)
     args = parser.parse_args()
@@ -428,6 +473,7 @@ def main() -> None:
     print("rule,coalesce,candidate_only_if_saved_calls_are_material_and_extra_bytes_are_near_zero")
     print("rule,pack_layout,candidate_only_if_jump_distance_improves_without_backward_seek_regression")
     print("rule,previous_route_prediction,candidate_only_if_precision_and_miss_coverage_clear_thresholds")
+    print("rule,layer_transition_prediction,candidate_only_if_online_transition_prediction_has_high_precision_and_material_miss_coverage")
 
     best_cache, score_kind, score, source = cache_recommendation(args, costs, measured_runs)
     budget_mib = int(best_cache["upgate_budget_mib"] + best_cache["down_budget_mib"])
