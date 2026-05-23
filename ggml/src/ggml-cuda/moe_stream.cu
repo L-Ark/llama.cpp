@@ -14,6 +14,7 @@
 #include "quantize.cuh"
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -29,6 +30,8 @@ typedef struct {
     int32_t i1;
     int32_t i2;
 } ggml_moe_row_mapping;
+
+void ggml_cuda_moe_stream_link_anchor(void) {}
 
 // src1_f32: F32 activations (will be Q8_1 quantized on GPU)
 //           Layout: cne1 rows × ne00 cols, with stride row_size_f32 bytes per row.
@@ -50,6 +53,27 @@ bool ggml_cuda_moe_stream_one(
 
 bool ggml_cuda_moe_stream_available(void);
 int  ggml_cuda_host_register(void *p, size_t n);
+bool ggml_cuda_moe_stream_mmvq_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    cudaStream_t stream);
+bool ggml_cuda_moe_stream_mmvq_batch_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    const int32_t *d_x_ids,
+    int64_t n_active,
+    int64_t src0_stride,
+    cudaStream_t stream);
 // Sync all outstanding GPU work submitted by ggml_cuda_moe_stream_one and
 // perform deferred dst scatter.  Call once at end of a mul_mat_id op (the
 // sequential path's thread 0 invokes this after the per-expert loop).
@@ -63,7 +87,7 @@ void ggml_cuda_moe_stream_sync(void);
 // On cache hit: kernel runs directly from VRAM (zero H2D latency).
 // On cache miss: H2D into a cache slot, then kernel.  FIFO eviction.
 //
-// Budget: GGML_MOE_VRAM_CACHE_GB env var (default 16 GiB).
+// Budget: GGML_MOE_STREAM_ONE_CACHE_MIB / GB, or the shared GGML_MOE_VRAM_CACHE_GB.
 // Each expert is ~4.6 MiB → ~3500 slots in 16 GiB.
 
 // Hash table for O(1) lookup.  Power-of-2 sized, linear probing.
@@ -103,10 +127,22 @@ static void vram_cache_report_atexit() {
 
 static void vram_cache_init(size_t expert_sz) {
     if (g_vcache_inited) return;
-    const char *env = std::getenv("GGML_MOE_VRAM_CACHE_GB");
-    size_t budget_gb = env ? (size_t)std::atoi(env) : 16;
-    if (budget_gb == 0) { g_vcache_inited = true; return; }
-    size_t budget = budget_gb * 1024ULL * 1024ULL * 1024ULL;
+    const char *env_one_mib = std::getenv("GGML_MOE_STREAM_ONE_CACHE_MIB");
+    const char *env_one_gb = std::getenv("GGML_MOE_STREAM_ONE_CACHE_GB");
+    const char *env_shared_mib = std::getenv("GGML_MOE_VRAM_CACHE_MIB");
+    const char *env_shared_gb = std::getenv("GGML_MOE_VRAM_CACHE_GB");
+    size_t budget_mib = 16ULL * 1024ULL;
+    if (env_one_mib && env_one_mib[0]) {
+        budget_mib = (size_t)std::strtoull(env_one_mib, nullptr, 10);
+    } else if (env_one_gb && env_one_gb[0]) {
+        budget_mib = (size_t)std::strtoull(env_one_gb, nullptr, 10) * 1024ULL;
+    } else if (env_shared_mib && env_shared_mib[0]) {
+        budget_mib = 0;
+    } else if (env_shared_gb && env_shared_gb[0]) {
+        budget_mib = (size_t)std::strtoull(env_shared_gb, nullptr, 10) * 1024ULL;
+    }
+    if (budget_mib == 0) { g_vcache_inited = true; return; }
+    size_t budget = budget_mib * 1024ULL * 1024ULL;
     g_vcache.slot_sz = expert_sz;
     g_vcache.n_slots = (int)(budget / expert_sz);
     if (g_vcache.n_slots > 16384) g_vcache.n_slots = 16384;
@@ -115,6 +151,7 @@ static void vram_cache_init(size_t expert_sz) {
     if (cudaMalloc(&g_vcache.pool, alloc) != cudaSuccess) {
         std::fprintf(stderr, "[moe_stream] VRAM cache: cudaMalloc %.1f GiB FAILED\n",
                      alloc / (1024.0*1024.0*1024.0));
+        cudaGetLastError();
         g_vcache.n_slots = 0;
         g_vcache_inited = true;
         return;
@@ -260,6 +297,115 @@ static void init_once() {
 extern "C" bool ggml_cuda_moe_stream_available(void) {
     init_once();
     return g_avail.load(std::memory_order_acquire);
+}
+
+extern "C" bool ggml_cuda_moe_stream_mmvq_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    cudaStream_t stream) {
+    const ggml_type t0 = (ggml_type)src0_type_int;
+    if (!d_src0 || !d_src1_f32 || !d_src1_q8 || !d_dst) return false;
+
+    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+    quantize_row_q8_1_cuda(d_src1_f32, d_src1_q8, ne00, 1, 1, src1_padded, t0, stream);
+    if (cudaGetLastError() != cudaSuccess) return false;
+
+    const mmvq_args args{
+        /* vx_u     */ d_src0,
+        /* vx_g     */ nullptr,
+        /* bias_u   */ nullptr,
+        /* bias_g   */ nullptr,
+        /* vy       */ d_src1_q8,
+        /* dst      */ d_dst,
+        /* ids_data */ nullptr,
+        /* ncols_x  */ (int)ne00,
+        /* nrows_x  */ (int)ne01,
+        /* nrows_y  */ (int)src1_padded,
+        /* ncols_y  */ 1,
+        /* nrows_dst*/ (int)ne01,
+        /* ne2      */ 1,
+        /* nb02     */ 0,
+        /* nb12     */ 0,
+        /* nb2      */ 0,
+        /* ids_nb0  */ 0,
+        /* bias_nb1 */ 0,
+        /* unary_op */ GGML_UNARY_OP_COUNT,
+        /* limit    */ INFINITY,
+    };
+
+    switch (t0) {
+        case GGML_TYPE_IQ2_S:
+            mul_mat_vec_iq2_s_q8_1_cuda(args, stream);
+            break;
+        case GGML_TYPE_IQ3_XXS:
+            mul_mat_vec_iq3_xxs_q8_1_cuda(args, stream);
+            break;
+        default:
+            return false;
+    }
+    return cudaGetLastError() == cudaSuccess;
+}
+
+extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    const int32_t *d_x_ids,
+    int64_t n_active,
+    int64_t src0_stride,
+    cudaStream_t stream) {
+    const ggml_type t0 = (ggml_type)src0_type_int;
+    if (!d_src0 || !d_src1_f32 || !d_src1_q8 || !d_dst || !d_x_ids || n_active <= 0 || src0_stride <= 0) return false;
+
+    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+    const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
+
+    quantize_row_q8_1_cuda(d_src1_f32, d_src1_q8, ne00, n_active, 1, src1_padded, t0, stream);
+    if (cudaGetLastError() != cudaSuccess) return false;
+
+    const mmvq_args args{
+        /* vx_u     */ d_src0,
+        /* vx_g     */ nullptr,
+        /* bias_u   */ nullptr,
+        /* bias_g   */ nullptr,
+        /* vy       */ d_src1_q8,
+        /* dst      */ d_dst,
+        /* ids_data */ (const char *)d_x_ids,
+        /* ncols_x  */ (int)ne00,
+        /* nrows_x  */ (int)ne01,
+        /* nrows_y  */ (int)src1_padded,
+        /* ncols_y  */ 1,
+        /* nrows_dst*/ (int)ne01,
+        /* ne2      */ (int)n_active,
+        /* nb02     */ (uint64_t)src0_stride,
+        /* nb12     */ (uint64_t)src1_q8_row_bytes,
+        /* nb2      */ (uint64_t)(ne01 * (int64_t)sizeof(float)),
+        /* ids_nb0  */ (uint64_t)sizeof(int32_t),
+        /* bias_nb1 */ 0,
+        /* unary_op */ GGML_UNARY_OP_COUNT,
+        /* limit    */ INFINITY,
+    };
+
+    switch (t0) {
+        case GGML_TYPE_IQ2_S:
+            mul_mat_vec_iq2_s_q8_1_cuda(args, stream);
+            break;
+        case GGML_TYPE_IQ3_XXS:
+            mul_mat_vec_iq3_xxs_q8_1_cuda(args, stream);
+            break;
+        default:
+            return false;
+    }
+    return cudaGetLastError() == cudaSuccess;
 }
 
 extern "C" int ggml_cuda_host_register(void *p, size_t n) {

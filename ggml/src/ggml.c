@@ -174,6 +174,26 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_cache_contains(
     size_t expert_bytes,
     int expert_idx);
 
+#if defined(GGML_USE_CUDA)
+extern void ggml_cuda_moe_stream_link_anchor(void);
+extern void ggml_cuda_moe_stream_batch_link_anchor(void);
+
+static void ggml_cuda_moe_stream_link(void) {
+    static int linked = 0;
+    if (!linked) {
+        ggml_cuda_moe_stream_link_anchor();
+        ggml_cuda_moe_stream_batch_link_anchor();
+        linked = 1;
+    }
+}
+#else
+static void ggml_cuda_moe_stream_link(void) {}
+#endif
+
+static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
+    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ2_S;
+}
+
 #define GGML_HOTEXP_MAX_ENTRIES (262144)   // 2^18 slots, more than enough
 struct ggml_hotexp_entry {
     uintptr_t tensor_base;   // src0->data — start of the expert tensor
@@ -906,6 +926,7 @@ static int    ggml_moe_prefetch_debug   = 0;
 static int    ggml_moe_parallel_experts = 0;
 
 static inline void ggml_moe_prefetch_init(void) {
+    ggml_cuda_moe_stream_link();
     if (ggml_moe_prefetch_enabled != -1) return;
     const char *e = getenv("GGML_MOE_PREFETCH");
     ggml_moe_prefetch_enabled =
@@ -18343,7 +18364,8 @@ static void ggml_compute_forward_mul_mat_id(
     };
 
     int64_t * matrix_row_counts = (int64_t *) (wdata_src1_end); // [n_as]
-    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as); // [n_as][ne11]
+    atomic_int * cuda_batch_done = (atomic_int *)(matrix_row_counts + n_as); // one shared flag, padded as int64_t
+    struct mmid_row_mapping * matrix_rows = (struct mmid_row_mapping *)(matrix_row_counts + n_as + 1); // [n_as][ne11]
 
     if (src1->type != vec_dot_type) {
         char * wdata = params->wdata;
@@ -18383,6 +18405,7 @@ static void ggml_compute_forward_mul_mat_id(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+        atomic_store(cuda_batch_done, 0);
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -18418,7 +18441,7 @@ static void ggml_compute_forward_mul_mat_id(
             ggml_cuda_moe_stream_preload_tensor &&
             ggml_cuda_moe_stream_available &&
             ggml_cuda_moe_stream_available() &&
-            src0->type == GGML_TYPE_IQ3_XXS &&
+            ggml_cuda_moe_stream_supports_type(src0->type) &&
             getenv("GGML_MOE_VRAM_PROFILE")) {
         ggml_cuda_moe_stream_preload_tensor(src0->type, src0->name, src0->data, n_as, nb02, nb02);
     }
@@ -18436,11 +18459,13 @@ static void ggml_compute_forward_mul_mat_id(
         const uintptr_t tbase = (uintptr_t)src0->data;
         // GPU streaming-MoE: keep experts mmap/SSD-backed, stage only the
         // routed expert slice into VRAM, and run the CUDA IQ3_XXS MMVQ kernel.
+        const char *batch_only_env = getenv("GGML_MOE_STREAM_BATCH_ONLY");
+        const bool stream_batch_only = batch_only_env && batch_only_env[0] && batch_only_env[0] != '0';
         const bool use_gpu_stream =
             ggml_cuda_moe_stream_one &&
             ggml_cuda_moe_stream_available &&
             ggml_cuda_moe_stream_available() &&
-            src0->type == GGML_TYPE_IQ3_XXS &&
+            ggml_cuda_moe_stream_supports_type(src0->type) &&
             src1->type == GGML_TYPE_F32 &&
             (!getenv("GGML_MOE_STREAM_DEFER") || ids->ne[1] == 1) &&
             ne13 == 1 &&
@@ -18461,11 +18486,18 @@ static void ggml_compute_forward_mul_mat_id(
                     (const ggml_moe_row_mapping *)matrix_rows,
                     ne12);
                 if (!done) {
-                    GGML_ABORT("batched CUDA MoE stream path failed after selection");
+                    static atomic_int warned = 0;
+                    if (atomic_fetch_add(&warned, 1) == 0) {
+                        fprintf(stderr, "[moe_stream] batched CUDA MoE down path declined; falling back to CPU path\n");
+                    }
+                } else {
+                    atomic_store(cuda_batch_done, 1);
                 }
             }
             ggml_barrier(params->shared);
-            return;
+            if (atomic_load(cuda_batch_done)) {
+                return;
+            }
         }
         for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
             const int64_t cne1 = matrix_row_counts[cur_a];
@@ -18477,7 +18509,7 @@ static void ggml_compute_forward_mul_mat_id(
             const void *cached = ggml_hotexp_get_or_insert(tbase, cur_a, src0_cur, nb02);
             if (cached) src0_cur = (const char *)cached;
             bool done = false;
-            if (use_gpu_stream) {
+            if (use_gpu_stream && !stream_batch_only) {
                 done = ggml_cuda_moe_stream_one(
                     src0->type,
                     src0_cur,
@@ -18813,7 +18845,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             ggml_cuda_moe_stream_preload_tensor &&
             ggml_cuda_moe_stream_available &&
             ggml_cuda_moe_stream_available() &&
-            src0_1->type == GGML_TYPE_IQ3_XXS &&
+            ggml_cuda_moe_stream_supports_type(src0_1->type) &&
             getenv("GGML_MOE_VRAM_PROFILE") &&
             getenv("GGML_MOE_STREAM_FUSED_UP_GATE")) {
         const char *profile_upgate_env = getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
@@ -18841,7 +18873,7 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             ggml_cuda_moe_stream_up_gate_batch &&
             ggml_cuda_moe_stream_available &&
             ggml_cuda_moe_stream_available() &&
-            src0_1->type == GGML_TYPE_IQ3_XXS &&
+            ggml_cuda_moe_stream_supports_type(src0_1->type) &&
             src1->type == GGML_TYPE_F32 &&
             ids->ne[1] == 1 &&
             ne13 == 1 &&
@@ -18876,9 +18908,11 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
                 (const ggml_moe_row_mapping *)matrix_rows,
                 ne12);
             if (!done) {
-                GGML_ABORT("batched CUDA MoE up/gate stream path failed after selection");
-            }
-            if (validate_cuda) {
+                static atomic_int warned = 0;
+                if (atomic_fetch_add(&warned, 1) == 0) {
+                    fprintf(stderr, "[moe_stream] batched CUDA MoE up/gate path declined; falling back to CPU path\n");
+                }
+            } else if (validate_cuda) {
                 cuda_validate_bytes = ggml_nbytes(dst);
                 cuda_validate = (float *)malloc(cuda_validate_bytes);
                 if (cuda_validate) {
@@ -27997,6 +28031,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
                     const int n_as = src0->ne[2];
                     cur += GGML_PAD(cur, sizeof(int64_t));       // align
                     cur += n_as * sizeof(int64_t);               // matrix_row_counts
+                    cur += sizeof(int64_t);                      // cuda_batch_done shared flag
                     cur += n_as * src1->ne[2] * sizeof(int64_t); // matrix_rows
                 } break;
             case GGML_OP_MOE_FUSED_UP_GATE:
