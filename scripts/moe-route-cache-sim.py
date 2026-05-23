@@ -50,6 +50,21 @@ class RuntimeCache:
 
 
 @dataclass(frozen=True)
+class RuntimePinnedStage:
+    label: str
+    copies: int
+    waits: int
+    fallbacks: int
+    slots: int
+    slot_mib: float
+    slot_wait_ms: float = 0.0
+    host_stage_ms: float = 0.0
+    enqueue_ms: float = 0.0
+    h2d_ms: float = 0.0
+    h2d_timed: int = 0
+
+
+@dataclass(frozen=True)
 class RuntimeProfile:
     label: str
     calls: int
@@ -82,6 +97,7 @@ class RuntimeTiming:
 class RuntimeReport:
     profiles: dict[str, RuntimeProfile]
     caches: dict[str, RuntimeCache]
+    pinned_staging: dict[str, RuntimePinnedStage]
     timing: RuntimeTiming | None
 
 
@@ -129,15 +145,19 @@ def load_trace(path: Path) -> list[TraceEvent]:
 
 
 def parse_runtime_stderr(path: Path) -> RuntimeReport:
-    profile_re = re.compile(r"([a-z_]+)=([0-9.]+)")
+    profile_re = re.compile(r"([a-z_][a-z0-9_]*)=([0-9.]+)")
     cache_re = re.compile(
         r"VRAM cache (down|upgate): slots=(\d+) slot=([0-9.]+) MiB "
         r"hits=(\d+) misses=(\d+) preloads=(\d+) pinned=(\d+)")
+    pinned_re = re.compile(
+        r"pinned staging(?: ([^:]+))?: copies=(\d+) waits=(\d+) fallbacks=(\d+) "
+        r"slots=(\d+) slot=([0-9.]+) MiB")
     timing_re = re.compile(
         r"eval time =\s+([0-9.]+) ms /\s+(\d+) runs.*?,\s+([0-9.]+) tokens per second")
 
     profiles: dict[str, RuntimeProfile] = {}
     caches: dict[str, RuntimeCache] = {}
+    pinned_staging: dict[str, RuntimePinnedStage] = {}
     timing: RuntimeTiming | None = None
     with path.open("r", errors="replace") as f:
         for line in f:
@@ -189,12 +209,31 @@ def parse_runtime_stderr(path: Path) -> RuntimeReport:
                         preloads=int(preloads),
                         pinned=int(pinned),
                     )
+            elif "[moe_stream_batch] pinned staging" in line:
+                match = pinned_re.search(line)
+                if match:
+                    label, copies, waits, fallbacks, slots, slot_mib = match.groups()
+                    label = (label or "main").strip()
+                    values = {k: float(v) for k, v in profile_re.findall(line)}
+                    pinned_staging[label] = RuntimePinnedStage(
+                        label=label,
+                        copies=int(copies),
+                        waits=int(waits),
+                        fallbacks=int(fallbacks),
+                        slots=int(slots),
+                        slot_mib=float(slot_mib),
+                        slot_wait_ms=values.get("slot_wait", 0.0),
+                        host_stage_ms=values.get("host_stage", 0.0),
+                        enqueue_ms=values.get("enqueue", 0.0),
+                        h2d_ms=values.get("h2d", 0.0),
+                        h2d_timed=int(values.get("h2d_timed", 0.0)),
+                    )
             elif "llama_print_timings:" in line and "eval time =" in line:
                 match = timing_re.search(line)
                 if match:
                     eval_ms, runs, tok_s = match.groups()
                     timing = RuntimeTiming(float(eval_ms), int(runs), float(tok_s))
-    return RuntimeReport(profiles=profiles, caches=caches, timing=timing)
+    return RuntimeReport(profiles=profiles, caches=caches, pinned_staging=pinned_staging, timing=timing)
 
 
 def measured_env_path(stderr_path: Path) -> Path:
@@ -241,13 +280,15 @@ def parse_measured_runs(paths: list[Path]) -> list[MeasuredRun]:
 def merge_runtime_reports(reports: list[RuntimeReport]) -> RuntimeReport:
     profiles: dict[str, RuntimeProfile] = {}
     caches: dict[str, RuntimeCache] = {}
+    pinned_staging: dict[str, RuntimePinnedStage] = {}
     timing: RuntimeTiming | None = None
     for report in reports:
         profiles.update(report.profiles)
         caches.update(report.caches)
+        pinned_staging.update(report.pinned_staging)
         if report.timing:
             timing = report.timing
-    return RuntimeReport(profiles=profiles, caches=caches, timing=timing)
+    return RuntimeReport(profiles=profiles, caches=caches, pinned_staging=pinned_staging, timing=timing)
 
 
 def static_hotset(entries: list[Entry], budget_bytes: int) -> tuple[int, int, int]:
@@ -598,6 +639,25 @@ def print_runtime_calibration(report: RuntimeReport, paths: list[Path]) -> None:
             "calibrate_note upgate staging is measured inside the up/gate stream spans; "
             "use host_stage as a lower bound and stream_span as an upper bound, not as an isolated copy cost."
         )
+
+    if report.pinned_staging:
+        for label in ("main", "gate", "up_aux", "gate_aux"):
+            stage = report.pinned_staging.get(label)
+            if not stage or stage.copies <= 0:
+                continue
+            gib = stage.copies * stage.slot_mib / 1024.0
+            h2d_gib_s = gib / max(stage.h2d_ms / 1000.0, 1e-9) if stage.h2d_timed > 0 else 0.0
+            host_gib_s = gib / max(stage.host_stage_ms / 1000.0, 1e-9) if stage.host_stage_ms > 0.0 else 0.0
+            print(
+                "calibrate_pinned_stage "
+                f"label={label} copies={stage.copies} waits={stage.waits} "
+                f"slot_mib={stage.slot_mib:.2f} "
+                f"slot_wait_ms_per_copy={stage.slot_wait_ms / stage.copies:.3f} "
+                f"host_stage_ms_per_copy={stage.host_stage_ms / stage.copies:.3f} "
+                f"enqueue_us_per_copy={1000.0 * stage.enqueue_ms / stage.copies:.2f} "
+                f"h2d_ms_per_copy={stage.h2d_ms / max(stage.h2d_timed, 1):.3f} "
+                f"host_stage_gib_s={host_gib_s:.2f} h2d_gib_s={h2d_gib_s:.2f}"
+            )
 
     if down_profile and upgate_profile and down_cache and upgate_cache:
         down_miss_gib = down_cache.misses * down_cache.slot_mib / 1024.0

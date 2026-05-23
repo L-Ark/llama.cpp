@@ -126,7 +126,10 @@ bool ggml_cuda_moe_stream_mmvq_batch_dev(
 struct pinned_stage_slot {
     void *host = nullptr;
     cudaEvent_t done = nullptr;
+    cudaEvent_t copy_start = nullptr;
+    cudaEvent_t copy_done = nullptr;
     bool pending = false;
+    bool timing_pending = false;
 };
 
 struct pinned_stage_ring {
@@ -138,6 +141,11 @@ struct pinned_stage_ring {
     uint64_t copies = 0;
     uint64_t waits = 0;
     uint64_t fallbacks = 0;
+    uint64_t h2d_timed = 0;
+    double slot_wait_ms = 0.0;
+    double host_stage_ms = 0.0;
+    double enqueue_ms = 0.0;
+    double h2d_ms = 0.0;
 };
 
 struct batch_ctx {
@@ -1029,12 +1037,29 @@ static int stage_pinned_slot_count() {
     return (int)n;
 }
 
+static bool pinned_stage_profile_enabled() {
+    return g_bprof.enabled || g_uprof.enabled;
+}
+
+static void pinned_stage_collect_timing(pinned_stage_ring &ring, pinned_stage_slot &slot) {
+    if (!slot.timing_pending || !slot.copy_start || !slot.copy_done) return;
+    if (cudaEventSynchronize(slot.copy_done) == cudaSuccess) {
+        float h2d_ms = 0.0f;
+        if (cudaEventElapsedTime(&h2d_ms, slot.copy_start, slot.copy_done) == cudaSuccess) {
+            ring.h2d_ms += h2d_ms;
+            ++ring.h2d_timed;
+        }
+    }
+    slot.timing_pending = false;
+}
+
 static void pinned_stage_release(pinned_stage_ring &ring) {
     for (pinned_stage_slot &slot : ring.slots) {
         if (slot.pending && slot.done) {
             cudaEventSynchronize(slot.done);
             slot.pending = false;
         }
+        pinned_stage_collect_timing(ring, slot);
         if (slot.host) {
             cudaFreeHost(slot.host);
             slot.host = nullptr;
@@ -1043,6 +1068,14 @@ static void pinned_stage_release(pinned_stage_ring &ring) {
             cudaEventDestroy(slot.done);
             slot.done = nullptr;
         }
+        if (slot.copy_start) {
+            cudaEventDestroy(slot.copy_start);
+            slot.copy_start = nullptr;
+        }
+        if (slot.copy_done) {
+            cudaEventDestroy(slot.copy_done);
+            slot.copy_done = nullptr;
+        }
     }
     ring.slots.clear();
     ring.slot_sz = 0;
@@ -1050,11 +1083,26 @@ static void pinned_stage_release(pinned_stage_ring &ring) {
 }
 
 static void pinned_stage_report_atexit() {
-    auto report_ring = [](const char *name, const pinned_stage_ring &ring) {
+    auto report_ring = [](const char *name, pinned_stage_ring &ring) {
+        for (pinned_stage_slot &slot : ring.slots) {
+            if (slot.pending && slot.done) {
+                cudaEventSynchronize(slot.done);
+                slot.pending = false;
+            }
+            pinned_stage_collect_timing(ring, slot);
+        }
         if (ring.copies == 0 && ring.fallbacks == 0) return;
-        std::fprintf(stderr,
-            "[moe_stream_batch] pinned staging%s: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB\n",
-            name, ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0));
+        if (ring.h2d_timed > 0 || ring.host_stage_ms > 0.0 || ring.enqueue_ms > 0.0 || ring.slot_wait_ms > 0.0) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] pinned staging%s: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB "
+                "slot_wait=%.3f ms host_stage=%.3f ms enqueue=%.3f ms h2d=%.3f ms h2d_timed=%lu\n",
+                name, ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0),
+                ring.slot_wait_ms, ring.host_stage_ms, ring.enqueue_ms, ring.h2d_ms, ring.h2d_timed);
+        } else {
+            std::fprintf(stderr,
+                "[moe_stream_batch] pinned staging%s: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB\n",
+                name, ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0));
+        }
     };
     report_ring("", g_batch.stage_ring);
     report_ring(" gate", g_batch.stage_ring_gate);
@@ -1075,6 +1123,7 @@ static bool pinned_stage_ensure(pinned_stage_ring &ring, size_t need, bool force
     pinned_stage_release(ring);
     ring.slot_sz = alloc_need;
     ring.slots.resize((size_t)n_slots);
+    const bool profile_stage = pinned_stage_profile_enabled();
     for (pinned_stage_slot &slot : ring.slots) {
         if (cudaHostAlloc(&slot.host, ring.slot_sz, cudaHostAllocDefault) != cudaSuccess ||
                 cudaEventCreateWithFlags(&slot.done, cudaEventDisableTiming) != cudaSuccess) {
@@ -1084,6 +1133,19 @@ static bool pinned_stage_ensure(pinned_stage_ring &ring, size_t need, bool force
                 "[moe_stream_batch] pinned staging: init failed for %d slots of %.2f MiB; falling back to direct H2D\n",
                 n_slots, need / (1024.0 * 1024.0));
             return false;
+        }
+        if (profile_stage) {
+            if (cudaEventCreate(&slot.copy_start) != cudaSuccess ||
+                    cudaEventCreate(&slot.copy_done) != cudaSuccess) {
+                if (slot.copy_start) {
+                    cudaEventDestroy(slot.copy_start);
+                    slot.copy_start = nullptr;
+                }
+                if (slot.copy_done) {
+                    cudaEventDestroy(slot.copy_done);
+                    slot.copy_done = nullptr;
+                }
+            }
         }
     }
 
@@ -1103,13 +1165,21 @@ static bool batch_cache_copy_h2d(
     const bool use_pinned_stage = stage_pinned_enabled() || pack_entry;
     if (use_pinned_stage) {
         if (pinned_stage_ensure(ring, sz, pack_entry != nullptr)) {
+            const bool profile_stage = pinned_stage_profile_enabled();
             pinned_stage_slot &slot = ring.slots[ring.next++ % ring.slots.size()];
             if (slot.pending) {
+                const auto wait_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
+                if (profile_stage) {
+                    const auto wait_end = std::chrono::steady_clock::now();
+                    ring.slot_wait_ms += std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+                }
                 slot.pending = false;
                 ++ring.waits;
             }
+            pinned_stage_collect_timing(ring, slot);
 
+            const auto host_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (pack_entry) {
                 if (!expert_pack_read_entry(pack_entry, slot.host, sz)) {
                     return false;
@@ -1117,10 +1187,26 @@ static bool batch_cache_copy_h2d(
             } else {
                 std::memcpy(slot.host, host_data, sz);
             }
+            if (profile_stage) {
+                const auto host_end = std::chrono::steady_clock::now();
+                ring.host_stage_ms += std::chrono::duration<double, std::milli>(host_end - host_start).count();
+            }
+            const auto enqueue_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if (profile_stage && slot.copy_start) {
+                if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) return false;
+            }
             if (cudaMemcpyAsync(dst, slot.host, sz, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+            if (profile_stage && slot.copy_done) {
+                if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) return false;
+                slot.timing_pending = true;
+            }
             if (cudaEventRecord(slot.done, st) != cudaSuccess) {
                 cudaStreamSynchronize(st);
                 return false;
+            }
+            if (profile_stage) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                ring.enqueue_ms += std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
             slot.pending = true;
             ++ring.copies;
