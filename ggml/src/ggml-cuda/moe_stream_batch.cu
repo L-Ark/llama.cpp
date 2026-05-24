@@ -30,6 +30,7 @@
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #endif
 
 extern "C" {
@@ -277,6 +278,13 @@ struct expert_pack_state {
     std::atomic<uint64_t> read_failures{0};
     std::atomic<uint64_t> direct_reads{0};
     std::atomic<uint64_t> direct_fallbacks{0};
+    // RAM hot tier
+    void *ram_tier_base = nullptr;
+    size_t ram_tier_bytes = 0;
+    struct ram_tier_entry { size_t offset; size_t nbytes; };
+    std::vector<ram_tier_entry> ram_tier_index; // parallel to entries[], non-zero offset = resident
+    std::atomic<uint64_t> ram_tier_hits{0};
+    std::atomic<uint64_t> ram_tier_total{0};
 };
 
 static expert_pack_state g_expert_pack;
@@ -882,6 +890,14 @@ static void expert_pack_report_atexit() {
                  g_expert_pack.hits.load(), g_expert_pack.misses.load(),
                  g_expert_pack.read_failures.load(), g_expert_pack.direct_reads.load(),
                  g_expert_pack.direct_fallbacks.load(), g_expert_pack.entries.size());
+    if (g_expert_pack.ram_tier_base) {
+        std::fprintf(stderr,
+                     "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB\n",
+                     g_expert_pack.ram_tier_hits.load(), g_expert_pack.ram_tier_total.load(),
+                     g_expert_pack.ram_tier_total.load() > 0 ?
+                         100.0 * g_expert_pack.ram_tier_hits.load() / g_expert_pack.ram_tier_total.load() : 0.0,
+                     g_expert_pack.ram_tier_bytes / (1024.0 * 1024.0));
+    }
 }
 
 static bool expert_pack_read_exact(FILE *file, void *dst, size_t sz) {
@@ -1024,8 +1040,80 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
     return nullptr;
 }
 
+static std::once_flag g_ram_tier_once;
+
+static void ram_tier_init() {
+    if (!g_expert_pack.enabled) return;
+    const char *ram_tier_env = std::getenv("GGML_MOE_RAM_TIER_MIB");
+    if (!ram_tier_env || !ram_tier_env[0] || ram_tier_env[0] == '0') return;
+    const size_t budget = (size_t)std::atol(ram_tier_env) * 1024ULL * 1024ULL;
+    if (budget == 0) return;
+
+    load_profile_once();
+    if (g_profile.empty()) {
+        std::fprintf(stderr, "[moe_stream_batch] RAM tier: no profile loaded, skipping\n");
+        return;
+    }
+
+    // Skip the top entries that are already in the VRAM cache.
+    // The VRAM cache preloads ~n_slots entries per tensor from the profile.
+    // Default skip = 500 (approximate VRAM slot count); override with GGML_MOE_RAM_TIER_SKIP.
+    size_t skip = 500;
+    const char *skip_env = std::getenv("GGML_MOE_RAM_TIER_SKIP");
+    if (skip_env && skip_env[0]) skip = (size_t)std::atol(skip_env);
+
+    g_expert_pack.ram_tier_index.resize(g_expert_pack.entries.size());
+    void *region = ::mmap(nullptr, budget, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (region == MAP_FAILED) {
+        std::fprintf(stderr, "[moe_stream_batch] RAM tier: mmap %zu MiB failed\n", budget / (1024*1024));
+        return;
+    }
+    g_expert_pack.ram_tier_base = region;
+    g_expert_pack.ram_tier_bytes = budget;
+    size_t loaded = 0, n_loaded = 0, n_skipped = 0;
+    for (const profile_entry &pe : g_profile) {
+        if (loaded >= budget) break;
+        if (n_skipped < skip) { ++n_skipped; continue; }
+        size_t lo2 = 0, hi2 = g_expert_pack.entries.size();
+        while (lo2 < hi2) {
+            size_t mid2 = lo2 + (hi2 - lo2) / 2;
+            int cmp2 = expert_pack_entry_cmp(g_expert_pack.entries[mid2], pe.tensor, pe.expert_idx, pe.expert_bytes);
+            if (cmp2 < 0) lo2 = mid2 + 1; else hi2 = mid2;
+        }
+        if (lo2 >= g_expert_pack.entries.size() ||
+            expert_pack_entry_cmp(g_expert_pack.entries[lo2], pe.tensor, pe.expert_idx, pe.expert_bytes) != 0)
+            continue;
+        const expert_pack_entry &ent = g_expert_pack.entries[lo2];
+        if (loaded + ent.nbytes > budget) break;
+        char *dst_ptr = (char *)region + loaded;
+        {
+            std::lock_guard<std::mutex> lk2(g_expert_pack.mu);
+            if (::fseeko(g_expert_pack.file, (off_t)ent.offset, SEEK_SET) != 0) continue;
+            if (!expert_pack_read_exact(g_expert_pack.file, dst_ptr, (size_t)ent.nbytes)) continue;
+        }
+        g_expert_pack.ram_tier_index[lo2] = {loaded, (size_t)ent.nbytes};
+        loaded += (size_t)ent.nbytes;
+        ++n_loaded;
+    }
+    std::fprintf(stderr, "[moe_stream_batch] RAM tier: loaded %zu entries (skipped %zu), %.2f MiB into anonymous mmap\n",
+                 n_loaded, skip, loaded / (1024.0 * 1024.0));
+    if (loaded > 0) {
+        cudaError_t err = cudaHostRegister(region, loaded, cudaHostRegisterDefault);
+        if (err == cudaSuccess) {
+            std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister succeeded (%.2f MiB pinned)\n",
+                         loaded / (1024.0 * 1024.0));
+        } else {
+            std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister failed (%s), using unpinned path\n",
+                         cudaGetErrorString(err));
+        }
+    }
+}
+
 static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, size_t sz) {
     if (!entry || !g_expert_pack.file || entry->nbytes != sz) return false;
+
+    std::call_once(g_ram_tier_once, ram_tier_init);
 
 #if !defined(_WIN32)
     if (g_expert_pack.io_backend == 1 && g_expert_pack.fd_direct >= 0) {
@@ -1209,6 +1297,25 @@ static bool batch_cache_copy_h2d(
         pinned_stage_ring &ring,
         void *dst, const void *host_data, size_t sz, cudaStream_t st,
         const expert_pack_entry *pack_entry) {
+    // RAM tier fast path: if the entry is resident in the registered mmap,
+    // do a direct H2D from the pinned region, bypassing the staging slot.
+    if (pack_entry && g_expert_pack.ram_tier_base != nullptr) {
+        std::call_once(g_ram_tier_once, ram_tier_init);
+        const size_t idx = (size_t)(pack_entry - g_expert_pack.entries.data());
+        if (idx < g_expert_pack.ram_tier_index.size()) {
+            const auto &rt = g_expert_pack.ram_tier_index[idx];
+            if (rt.nbytes == sz) {
+                const void *src = (const char *)g_expert_pack.ram_tier_base + rt.offset;
+                if (cudaMemcpyAsync(dst, src, sz, cudaMemcpyHostToDevice, st) == cudaSuccess) {
+                    ++g_expert_pack.ram_tier_hits;
+                    ++g_expert_pack.ram_tier_total;
+                    return true;
+                }
+            }
+        }
+        ++g_expert_pack.ram_tier_total;
+    }
+
     const bool use_pinned_stage = stage_pinned_enabled() || pack_entry;
     if (use_pinned_stage) {
         if (pinned_stage_ensure(ring, sz, pack_entry != nullptr)) {
