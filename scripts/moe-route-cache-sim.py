@@ -415,7 +415,9 @@ def simulate_trace(
         preload: str,
         admit_after: int,
         upgate_weight: float,
-        down_weight: float) -> dict[str, float | int]:
+        down_weight: float,
+        upgate_temp_slots: int = 0,
+        down_temp_slots: int = 0) -> dict[str, float | int]:
     upgate_budget = budget_mib * upgate_pct // 100
     down_budget = budget_mib - upgate_budget
     by_bucket_entries = {
@@ -427,8 +429,12 @@ def simulate_trace(
         "down": [e for e in trace_events if bucket(e.tensor) == "down"],
     }
 
-    up_slots, up_slot_bytes = slot_count(by_bucket_entries["upgate"], by_bucket_events["upgate"], upgate_budget)
-    down_slots, down_slot_bytes = slot_count(by_bucket_entries["down"], by_bucket_events["down"], down_budget)
+    up_total_slots, up_slot_bytes = slot_count(by_bucket_entries["upgate"], by_bucket_events["upgate"], upgate_budget)
+    down_total_slots, down_slot_bytes = slot_count(by_bucket_entries["down"], by_bucket_events["down"], down_budget)
+    up_temp_slots = max(0, min(upgate_temp_slots, max(up_total_slots - 1, 0)))
+    down_temp_slots = max(0, min(down_temp_slots, max(down_total_slots - 1, 0)))
+    up_slots = up_total_slots - up_temp_slots
+    down_slots = down_total_slots - down_temp_slots
     caches = {
         "upgate": CacheSim(up_slots, policy, admit_after),
         "down": CacheSim(down_slots, policy, admit_after),
@@ -469,6 +475,10 @@ def simulate_trace(
         "down_budget_mib": down_budget,
         "upgate_slots": up_slots,
         "down_slots": down_slots,
+        "upgate_total_slots": up_total_slots,
+        "down_total_slots": down_total_slots,
+        "upgate_temp_slots": up_temp_slots,
+        "down_temp_slots": down_temp_slots,
         "upgate_protected_slots": up_protected,
         "down_protected_slots": down_protected,
         "upgate_slot_mib": up_slot_bytes / (1024 ** 2),
@@ -802,6 +812,8 @@ def main() -> None:
     parser.add_argument("--policy", choices=("lru", "lfu_lru"), default="lfu_lru", help="Cache eviction policy for --trace replay.")
     parser.add_argument("--preload", choices=("protected", "none", "full"), default="protected", help="Preload mode for --trace replay.")
     parser.add_argument("--admit-after", type=int, default=1, help="Only insert an uncached expert into the replay cache after this many misses.")
+    parser.add_argument("--upgate-temp-slots", type=int, default=0, help="Scratch slots reserved from the up/gate cache for non-admitted experts.")
+    parser.add_argument("--down-temp-slots", type=int, default=0, help="Scratch slots reserved from the down cache for non-admitted experts.")
     parser.add_argument("--profile-stderr", type=Path, action="append", help="Parse one or more bench stderr logs and print critical-path calibration from runtime counters.")
     parser.add_argument("--measured-stderr", type=Path, action="append", help="Parse benchmark stderrs for selected UPGATE_PCT values and compare measured timing against calibrated trace estimates.")
     parser.set_defaults(protect_profile=True)
@@ -817,6 +829,8 @@ def main() -> None:
         raise SystemExit("--sweep-min/--sweep-max must define a range within 1..99")
     if args.admit_after <= 0:
         raise SystemExit("--admit-after must be positive")
+    if args.upgate_temp_slots < 0 or args.down_temp_slots < 0:
+        raise SystemExit("--*-temp-slots must be non-negative")
 
     entries = load_entries(args.profile)
     total_routes = sum(e.count for e in entries)
@@ -889,19 +903,22 @@ def main() -> None:
             print()
             print(
                 "trace_pct,up_mib,down_mib,up_slots,down_slots,up_protected,down_protected,"
-                "up_hit_pct,down_hit_pct,hit_pct,up_miss_gib,down_miss_gib,miss_gib,weighted_miss_gib,bypassed,dropped"
+                "up_temp_slots,down_temp_slots,up_hit_pct,down_hit_pct,hit_pct,"
+                "up_miss_gib,down_miss_gib,miss_gib,weighted_miss_gib,bypassed,dropped"
             )
             trace_estimates = []
             for pct in range(args.sweep_min, args.sweep_max + 1, args.sweep_step):
                 est = simulate_trace(
                     entries, trace_events, args.budget_mib, pct, args.reserve_pct,
                     args.protect_profile, args.policy, args.preload, args.admit_after,
-                    args.upgate_weight, args.down_weight)
+                    args.upgate_weight, args.down_weight,
+                    args.upgate_temp_slots, args.down_temp_slots)
                 trace_estimates.append(est)
                 print(
                     f"{est['pct']},{est['upgate_budget_mib']},{est['down_budget_mib']},"
                     f"{est['upgate_slots']},{est['down_slots']},"
                     f"{est['upgate_protected_slots']},{est['down_protected_slots']},"
+                    f"{est['upgate_temp_slots']},{est['down_temp_slots']},"
                     f"{est['upgate_hit_pct']:.2f},{est['down_hit_pct']:.2f},{est['hit_pct']:.2f},"
                     f"{est['upgate_miss_gib']:.2f},{est['down_miss_gib']:.2f},"
                     f"{est['miss_gib']:.2f},{est['weighted_miss_gib']:.2f},{est['bypassed']},{est['dropped']}"
@@ -913,6 +930,7 @@ def main() -> None:
             print(
                 f"trace_recommend upgate_pct={best['pct']} policy={args.policy} "
                 f"preload={args.preload} admit_after={args.admit_after} "
+                f"upgate_temp_slots={best['upgate_temp_slots']} down_temp_slots={best['down_temp_slots']} "
                 f"valid={valid} "
                 f"weighted_miss={best['weighted_miss_gib']:.2f} GiB "
                 f"miss={best['miss_gib']:.2f} GiB hit_est={best['hit_pct']:.2f}% "
@@ -949,11 +967,13 @@ def main() -> None:
             est = simulate_trace(
                 entries, trace_events, args.budget_mib, args.upgate_pct, args.reserve_pct,
                 args.protect_profile, args.policy, args.preload, args.admit_after,
-                args.upgate_weight, args.down_weight)
+                args.upgate_weight, args.down_weight,
+                args.upgate_temp_slots, args.down_temp_slots)
             print()
             print(
                 f"trace_sim upgate_pct={est['pct']} policy={args.policy} "
                 f"preload={args.preload} admit_after={args.admit_after} "
+                f"upgate_temp_slots={est['upgate_temp_slots']} down_temp_slots={est['down_temp_slots']} "
                 f"up_hit={est['upgate_hit_pct']:.2f}% down_hit={est['down_hit_pct']:.2f}% "
                 f"hit={est['hit_pct']:.2f}% miss={est['miss_gib']:.2f} GiB "
                 f"weighted_miss={est['weighted_miss_gib']:.2f} GiB "

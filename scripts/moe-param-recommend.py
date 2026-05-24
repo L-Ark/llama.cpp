@@ -290,6 +290,106 @@ def prediction_stats(
     return rows
 
 
+def infer_admission_temp_slots(trace: list[Any]) -> tuple[int, int]:
+    runs = READ_SCHED.grouped_tensor_runs(trace)
+    upgate_slots = 0
+    down_slots = 0
+    i = 0
+    while i < len(runs):
+        run = runs[i]
+        if not run:
+            i += 1
+            continue
+        tensor = run[0].tensor
+        if ".ffn_up_exps." in tensor:
+            pair_slots = len(run)
+            if i + 1 < len(runs) and runs[i + 1] and ".ffn_gate_exps." in runs[i + 1][0].tensor:
+                pair_slots += len(runs[i + 1])
+                i += 1
+            upgate_slots = max(upgate_slots, pair_slots)
+        elif ".ffn_gate_exps." in tensor:
+            upgate_slots = max(upgate_slots, len(run))
+        elif ".ffn_down_exps." in tensor:
+            down_slots = max(down_slots, len(run))
+        i += 1
+    return upgate_slots, down_slots
+
+
+def admission_recommendation(
+        args: argparse.Namespace,
+        best_cache: dict[str, float | int],
+        trace: list[Any]) -> None:
+    candidates = sorted({n for n in args.admission_admit_after if n > 1})
+    if not candidates:
+        return
+
+    inferred_up_temp, inferred_down_temp = infer_admission_temp_slots(trace)
+    up_temp = args.admission_upgate_temp_slots
+    down_temp = args.admission_down_temp_slots
+    if up_temp is None:
+        up_temp = inferred_up_temp
+    if down_temp is None:
+        down_temp = inferred_down_temp
+
+    profile_entries = ROUTE_SIM.load_entries(args.profile)
+    trace_events = ROUTE_SIM.load_trace(args.trace)
+    budget_mib = int(best_cache["upgate_budget_mib"] + best_cache["down_budget_mib"])
+    upgate_pct = int(best_cache["pct"])
+    baseline = ROUTE_SIM.simulate_trace(
+        profile_entries,
+        trace_events,
+        budget_mib,
+        upgate_pct,
+        args.reserve_pct,
+        args.protect_profile,
+        args.policy,
+        args.preload,
+        1,
+        args.upgate_weight,
+        args.down_weight,
+        0,
+        0,
+    )
+    rows: list[tuple[int, dict[str, float | int]]] = []
+    for admit_after in candidates:
+        rows.append((admit_after, ROUTE_SIM.simulate_trace(
+            profile_entries,
+            trace_events,
+            budget_mib,
+            upgate_pct,
+            args.reserve_pct,
+            args.protect_profile,
+            args.policy,
+            args.preload,
+            admit_after,
+            args.upgate_weight,
+            args.down_weight,
+            up_temp,
+            down_temp,
+        )))
+    best_admit, best = min(rows, key=lambda item: (
+        float(item[1]["weighted_miss_gib"]),
+        float(item[1]["miss_gib"]),
+        int(item[1]["bypassed"]),
+    ))
+    baseline_score = float(baseline["weighted_miss_gib"])
+    gain_pct = 0.0 if baseline_score == 0.0 else 100.0 * (baseline_score - float(best["weighted_miss_gib"])) / baseline_score
+    status = "candidate" if gain_pct >= args.admission_min_miss_gain_pct and int(best["dropped"]) == 0 else "reject"
+    print(
+        "mechanism,admission_after,"
+        f"status={status},"
+        f"admit_after={best_admit},"
+        f"upgate_temp_slots={best['upgate_temp_slots']},"
+        f"down_temp_slots={best['down_temp_slots']},"
+        f"baseline_weighted_miss_gib={baseline['weighted_miss_gib']:.2f},"
+        f"weighted_miss_gib={best['weighted_miss_gib']:.2f},"
+        f"gain_pct={gain_pct:.2f},"
+        f"bypassed={best['bypassed']},"
+        f"dropped={best['dropped']},"
+        f"rule=gain_pct>={args.admission_min_miss_gain_pct:.2f}_after_pricing_scratch_slots"
+    )
+
+
 def read_mechanism_recommendations(args: argparse.Namespace, best_cache: dict[str, float | int]) -> None:
     profile = READ_SCHED.load_profile(args.profile)
     trace = READ_SCHED.load_trace(args.trace)
@@ -314,6 +414,7 @@ def read_mechanism_recommendations(args: argparse.Namespace, best_cache: dict[st
         )
         + f",total_miss_gib={miss_gib:.2f}"
     )
+    admission_recommendation(args, best_cache, trace)
 
     coalesce = coalesce_stats(misses, pack, args.coalesce_threshold_mib)
     safe_coalesce = [
@@ -441,6 +542,10 @@ def main() -> None:
     parser.add_argument("--policy", choices=("lru", "lfu_lru"), default="lfu_lru")
     parser.add_argument("--preload", choices=("protected", "none", "full"), default="protected")
     parser.add_argument("--admit-after", type=int, default=1)
+    parser.add_argument("--admission-admit-after", type=int, nargs="*", default=[4, 8, 16, 32], help="Admission-after-N candidates scored after pricing transient scratch slots.")
+    parser.add_argument("--admission-upgate-temp-slots", type=int, help="Up/gate scratch slots to price for admission gating; defaults to max simultaneous up+gate experts in the trace.")
+    parser.add_argument("--admission-down-temp-slots", type=int, help="Down scratch slots to price for admission gating; defaults to max simultaneous down experts in the trace.")
+    parser.add_argument("--admission-min-miss-gain-pct", type=float, default=2.0, help="Minimum weighted miss-byte reduction after scratch-slot pricing before admission is a candidate.")
     parser.add_argument("--upgate-weight", type=float, default=1.0)
     parser.add_argument("--down-weight", type=float, default=1.0)
     parser.add_argument("--coalesce-threshold-mib", type=int, nargs="*", default=[0, 4, 8, 16, 32, 64])
@@ -466,12 +571,19 @@ def main() -> None:
         raise SystemExit("--budget-mib must be positive")
     if args.admit_after <= 0:
         raise SystemExit("--admit-after must be positive")
+    if any(n <= 0 for n in args.admission_admit_after):
+        raise SystemExit("--admission-admit-after values must be positive")
+    if args.admission_upgate_temp_slots is not None and args.admission_upgate_temp_slots < 0:
+        raise SystemExit("--admission-upgate-temp-slots must be non-negative")
+    if args.admission_down_temp_slots is not None and args.admission_down_temp_slots < 0:
+        raise SystemExit("--admission-down-temp-slots must be non-negative")
 
     _runtime_report, costs = load_runtime_costs(args.runtime_stderr)
     measured_runs = ROUTE_SIM.parse_measured_runs(args.measured_stderr) if args.measured_stderr else []
     print("rule,cache_split,minimize=down_exposed_plus_upgate_wait_ms_when_available_else_weighted_miss_gib")
     print("rule,coalesce,candidate_only_if_saved_calls_are_material_and_extra_bytes_are_near_zero")
     print("rule,pack_layout,candidate_only_if_jump_distance_improves_without_backward_seek_regression")
+    print("rule,admission_after,candidate_only_if_miss_bytes_drop_after_pricing_transient_scratch_slots")
     print("rule,previous_route_prediction,candidate_only_if_precision_and_miss_coverage_clear_thresholds")
     print("rule,layer_transition_prediction,candidate_only_if_online_transition_prediction_has_high_precision_and_material_miss_coverage")
 
