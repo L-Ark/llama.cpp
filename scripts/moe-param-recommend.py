@@ -390,7 +390,72 @@ def admission_recommendation(
     )
 
 
-def read_mechanism_recommendations(args: argparse.Namespace, best_cache: dict[str, float | int]) -> None:
+def priority_readahead_recommendation(
+        args: argparse.Namespace,
+        transition: list[dict[str, float | int]],
+        runtime_report: Any | None) -> None:
+    if runtime_report is None or "upgate" not in runtime_report.profiles:
+        print("mechanism,priority_read_ahead,status=needs_runtime_profile,rule=requires_upgate_wait_and_compute_counters")
+        return
+    upgate_profile = runtime_report.profiles["upgate"]
+    stage_jobs_per_call = upgate_profile.up_stage_jobs + upgate_profile.gate_stage_jobs
+    wait_span_ms = max(upgate_profile.up_wait_ms, upgate_profile.gate_wait_ms)
+    compute_slack_ms = max(upgate_profile.up_compute_ms, upgate_profile.gate_compute_ms)
+    if upgate_profile.calls <= 0 or stage_jobs_per_call <= 0.0 or wait_span_ms <= 0.0 or compute_slack_ms <= 0.0:
+        print("mechanism,priority_read_ahead,status=needs_runtime_profile,rule=requires_nonzero_stage_jobs_wait_and_compute")
+        return
+
+    ms_per_stage_job = wait_span_ms / stage_jobs_per_call
+    free_read_budget = int((compute_slack_ms / max(ms_per_stage_job, 1e-9)) * upgate_profile.calls)
+    eligible = [
+        row for row in transition
+        if int(row["useful_reads"]) > 0
+        and int(row["pred_reads"]) <= free_read_budget
+        and float(row["precision"]) >= args.readahead_min_precision
+        and float(row["miss_cover"]) >= args.readahead_min_miss_cover
+    ]
+    if eligible:
+        best = max(eligible, key=lambda row: (float(row["miss_cover"]), int(row["useful_reads"]), float(row["precision"])))
+        status = "candidate"
+    else:
+        meaningful = [
+            row for row in transition
+            if int(row["pred_reads"]) > 0
+            and float(row["precision"]) >= args.readahead_min_precision
+            and int(row["useful_reads"]) > int(row["waste_reads"])
+        ]
+        pool = meaningful if meaningful else [row for row in transition if int(row["pred_reads"]) > 0]
+        if not pool:
+            pool = transition
+        best = max(pool, key=lambda row: (
+            float(row["miss_cover"]),
+            int(row["pred_reads"]) <= free_read_budget,
+            int(row["useful_reads"]),
+            float(row["precision"]),
+        ))
+        status = "reject"
+    print(
+        "mechanism,priority_read_ahead,"
+        f"status={status},"
+        f"free_read_budget={free_read_budget},"
+        f"ms_per_stage_job={ms_per_stage_job:.3f},"
+        f"compute_slack_ms_per_call={compute_slack_ms:.3f},"
+        f"top_k={best['top_k']},"
+        f"min_obs={best['min_obs']},"
+        f"threshold={best['threshold']:.2f},"
+        f"pred_reads={best['pred_reads']},"
+        f"useful_reads={best['useful_reads']},"
+        f"waste_reads={best['waste_reads']},"
+        f"precision={best['precision']:.3f},"
+        f"miss_cover={best['miss_cover']:.3f},"
+        f"rule=pred_reads<=free_read_budget_precision>={args.readahead_min_precision:.2f}_miss_cover>={args.readahead_min_miss_cover:.2f}"
+    )
+
+
+def read_mechanism_recommendations(
+        args: argparse.Namespace,
+        best_cache: dict[str, float | int],
+        runtime_report: Any | None) -> None:
     profile = READ_SCHED.load_profile(args.profile)
     trace = READ_SCHED.load_trace(args.trace)
     pack_order, pack = READ_SCHED.load_pack(args.expert_pack)
@@ -523,6 +588,7 @@ def read_mechanism_recommendations(args: argparse.Namespace, best_cache: dict[st
         f"best_cover_precision={best_cover_transition['precision']:.3f},"
         f"rule=precision>={args.transition_min_precision:.2f}_miss_cover>={args.transition_min_miss_cover:.2f}_useful>waste"
     )
+    priority_readahead_recommendation(args, transition, runtime_report)
 
 
 def main() -> None:
@@ -561,6 +627,8 @@ def main() -> None:
     parser.add_argument("--transition-threshold", type=float, nargs="*", default=[0.0, 0.05, 0.10, 0.15, 0.20])
     parser.add_argument("--transition-min-precision", type=float, default=0.65)
     parser.add_argument("--transition-min-miss-cover", type=float, default=0.05)
+    parser.add_argument("--readahead-min-precision", type=float, default=0.50)
+    parser.add_argument("--readahead-min-miss-cover", type=float, default=0.05)
     parser.add_argument("--verbose-table", action="store_true")
     parser.set_defaults(protect_profile=True)
     args = parser.parse_args()
@@ -578,7 +646,7 @@ def main() -> None:
     if args.admission_down_temp_slots is not None and args.admission_down_temp_slots < 0:
         raise SystemExit("--admission-down-temp-slots must be non-negative")
 
-    _runtime_report, costs = load_runtime_costs(args.runtime_stderr)
+    runtime_report, costs = load_runtime_costs(args.runtime_stderr)
     measured_runs = ROUTE_SIM.parse_measured_runs(args.measured_stderr) if args.measured_stderr else []
     print("rule,cache_split,minimize=down_exposed_plus_upgate_wait_ms_when_available_else_weighted_miss_gib")
     print("rule,coalesce,candidate_only_if_saved_calls_are_material_and_extra_bytes_are_near_zero")
@@ -586,6 +654,7 @@ def main() -> None:
     print("rule,admission_after,candidate_only_if_miss_bytes_drop_after_pricing_transient_scratch_slots")
     print("rule,previous_route_prediction,candidate_only_if_precision_and_miss_coverage_clear_thresholds")
     print("rule,layer_transition_prediction,candidate_only_if_online_transition_prediction_has_high_precision_and_material_miss_coverage")
+    print("rule,priority_read_ahead,candidate_only_if_predictions_fit_measured_compute_slack_and_cover_material_misses")
 
     best_cache, score_kind, score, source = cache_recommendation(args, costs, measured_runs)
     budget_mib = int(best_cache["upgate_budget_mib"] + best_cache["down_budget_mib"])
@@ -608,7 +677,7 @@ def main() -> None:
     print(f"env,GGML_MOE_VRAM_PROFILE_PROTECT={1 if args.protect_profile else 0}")
     print(f"env,GGML_MOE_VRAM_CACHE_POLICY={args.policy}")
 
-    read_mechanism_recommendations(args, best_cache)
+    read_mechanism_recommendations(args, best_cache, runtime_report)
 
 
 if __name__ == "__main__":
