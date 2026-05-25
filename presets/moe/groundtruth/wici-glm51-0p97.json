@@ -1,0 +1,55 @@
+{
+  "created_by": "scripts/moe-run.py",
+  "env": {
+    "CTX_SIZE": "2048",
+    "GGML_MOE_BATCH_PROFILE": "0",
+    "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
+    "GGML_MOE_EXPERT_PACK": "/home/wici/models/glm-5.1/glm51-iq3xxs.expert-pack",
+    "GGML_MOE_GPU_HANDOFF": "1",
+    "GGML_MOE_IO_BACKEND": "direct",
+    "GGML_MOE_RAM_TIER_MIB": "4096",
+    "GGML_MOE_RAM_TIER_SKIP": "500",
+    "GGML_MOE_STAGE_PINNED": "1",
+    "GGML_MOE_STREAM_UP_GATE_PARALLEL": "1",
+    "GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE": "1",
+    "GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT": "1",
+    "GGML_MOE_VRAM_CACHE_MIB": "2048",
+    "GGML_MOE_VRAM_CACHE_UPGATE_PCT": "50",
+    "GGML_MOE_VRAM_PROFILE": "bench/wici-glm51-moe/codex-route32-t8.route.csv",
+    "GGML_MOE_VRAM_PROFILE_PROTECT": "1",
+    "MODEL": "/home/wici/models/glm-5.1/UD-IQ3_XXS/GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
+    "N_GPU_LAYERS": "60"
+  },
+  "inputs": {
+    "model": {
+      "n_expert_used": 8
+    }
+  },
+  "match": {
+    "cpu_count": 10,
+    "cpu_model": "Intel(R) Core(TM) Ultra 5 230F",
+    "ctx_size": 2048,
+    "expert_pack_basename": "glm51-iq3xxs.expert-pack",
+    "expert_pack_path": "/home/wici/models/glm-5.1/glm51-iq3xxs.expert-pack",
+    "gpu_bus_id": "00000000:02:00.0",
+    "gpu_driver": "595.71.05",
+    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+    "gpu_total_mib": 16311,
+    "host": "wici",
+    "mem_total_mib": 15500,
+    "model_basename": "GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
+    "model_path": "/home/wici/models/glm-5.1/UD-IQ3_XXS/GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
+    "platform": "Linux-6.17.0-29-generic-x86_64-with-glibc2.39",
+    "profile_basename": "codex-route32-t8.route.csv",
+    "storage_disk": "/dev/nvme0n1",
+    "storage_fstype": "ext4",
+    "storage_model": "ZHITAI TiPro9000 2TB",
+    "storage_rotational": 0,
+    "storage_scheduler": "none",
+    "storage_source": "/dev/nvme0n1p2",
+    "storage_transport": "nvme",
+    "threads_per_core": 1
+  },
+  "name": "wici-glm51-0p97",
+  "notes": "Active concise 0.97 tok/s config. The original full env is preserved in presets/moe/groundtruth/archive/wici-glm51-0p97-full.json; scripts/moe-run.py adds base defaults at runtime."
+}

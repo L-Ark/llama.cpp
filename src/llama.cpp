@@ -2409,7 +2409,7 @@ static void llm_prepare_mla(llama_model & model, int mla) {
                     split.ggml.splits    = split.tensor_splits.data();
                     computed->extra = (void *)&split.ggml;
 
-                    printf("Computed %s as %d x %d x %d of type %s, split across %d devices on dim=2\n",
+                    LLAMA_LOG_DEBUG("Computed %s as %d x %d x %d of type %s, split across %d devices on dim=2\n",
                             tname.c_str(), (int)source->ne[0], (int)source->ne[1], (int)source->ne[2],
                             ggml_type_name(source->type), n_device);
                 } else {
@@ -2426,7 +2426,7 @@ static void llm_prepare_mla(llama_model & model, int mla) {
                         iqk_modify_tensor(computed.get());
                     }
 
-                    printf("Computed %s as %d x %d x %d of type %s and stored in buffer %s\n",
+                    LLAMA_LOG_DEBUG("Computed %s as %d x %d x %d of type %s and stored in buffer %s\n",
                             tname.c_str(), (int)source->ne[0], (int)source->ne[1], (int)source->ne[2],
                             ggml_type_name(source->type), ggml_backend_buffer_name(computed->buffer));
                 }
@@ -2583,7 +2583,7 @@ static void llm_prepare_mla(llama_model & model, int mla) {
         l.wkv_b = l.computed_wkv_b.get();
         model.tensors_by_name.push_back(std::make_pair(name, l.wkv_b));
 
-        printf("Computed %s as %d x %d of type %s and stored in buffer %s\n", name.c_str(), (int)wkv_b->ne[0], (int)wkv_b->ne[1],
+        LLAMA_LOG_DEBUG("Computed %s as %d x %d of type %s and stored in buffer %s\n", name.c_str(), (int)wkv_b->ne[0], (int)wkv_b->ne[1],
                     ggml_type_name(wkv_b->type), ggml_backend_buffer_name(l.computed_wkv_b->buffer));
 
         ggml_graph_clear(graph);

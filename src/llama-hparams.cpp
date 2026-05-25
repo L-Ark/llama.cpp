@@ -946,7 +946,7 @@ void llm_load_hparams(
                         printf("==========================================================================\n");
                         GGML_ABORT("Fatal error");
                     }
-                    printf("================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp\n");
+                    LLAMA_LOG_DEBUG("================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp\n");
                     for (auto& item : hparams.n_head_kv_arr) item = n_nead_kv;
                     hparams.n_embd_head_k_full = 192;
                     hparams.n_embd_head_v_full = 128;
@@ -1396,7 +1396,7 @@ void llm_load_hparams(
                         printf("==========================================================================\n");
                         GGML_ABORT("Fatal error");
                     }
-                    printf("================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp\n");
+                    LLAMA_LOG_DEBUG("================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp\n");
                     for (auto& item : hparams.n_head_kv_arr) item = n_nead_kv;
                     hparams.n_embd_head_k_full = 192;
                     hparams.n_embd_head_v_full = 128;

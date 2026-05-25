@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cinttypes>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -122,8 +123,37 @@ static std::string chat_add_and_format(struct llama_model * model, common_chat_t
     common_chat_msg new_msg{role, content};
     auto formatted = common_chat_format_single(&chat_templates, chat_msgs, new_msg, role == "user", g_params->use_jinja);
     chat_msgs.push_back({role, content});
-    fprintf(stdout, "formatted: %s\n", formatted.c_str());
+    LOG("formatted: %s\n", formatted.c_str());
     return formatted;
+}
+
+static void chat_active_prewarm(struct llama_model * model, struct llama_context * ctx, const gpt_params & params) {
+    const char * env = std::getenv("LLAMA_CHAT_ACTIVE_PREWARM");
+    if (!env || env[0] == '\0' || env[0] == '0') {
+        return;
+    }
+
+    std::vector<llama_token> tmp;
+    llama_token bos = llama_token_bos(model);
+    llama_token eos = llama_token_eos(model);
+    tmp.push_back(bos != LLAMA_TOKEN_NULL ? bos : eos);
+
+    LOG("%s: active chat prewarm\n", __func__);
+    if (llama_model_has_encoder(model)) {
+        llama_encode(ctx, llama_batch_get_one(tmp.data(), tmp.size(), 0, 0));
+        llama_token decoder_start_token_id = llama_model_decoder_start_token(model);
+        if (decoder_start_token_id == LLAMA_TOKEN_NULL) {
+            decoder_start_token_id = tmp.front();
+        }
+        tmp.clear();
+        tmp.push_back(decoder_start_token_id);
+    }
+    if (llama_model_has_decoder(model)) {
+        llama_decode(ctx, llama_batch_get_one(tmp.data(), std::min(tmp.size(), (size_t) params.n_batch), 0, 0));
+    }
+    llama_kv_cache_clear(ctx);
+    llama_synchronize(ctx);
+    llama_reset_timings(ctx);
 }
 
 int main(int argc, char ** argv) {
@@ -232,10 +262,13 @@ int main(int argc, char ** argv) {
     if (params.conversation) {
         if (params.enable_chat_template) {
             //LOG_TEE("%s: chat template example: %s\n", __func__, common_chat_format_example(model, *chat_templates.template_default, params.use_jinja).c_str());
-            LOG_TEE("%s: chat template example:\n%s\n", __func__, common_chat_format_example(chat_templates.get(), params.use_jinja, {}).c_str());
+            LOG("%s: chat template example:\n%s\n", __func__, common_chat_format_example(chat_templates.get(), params.use_jinja, {}).c_str());
         } else {
             LOG_TEE("%s: in-suffix/prefix is specified, chat template will be disabled\n", __func__);
         }
+    }
+    if (params.conversation) {
+        chat_active_prewarm(model, ctx, params);
     }
 
     // print system information
