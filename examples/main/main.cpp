@@ -13,10 +13,15 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <unordered_set>
 #include <vector>
 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+#include <fcntl.h>
 #include <signal.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #elif defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -39,6 +44,522 @@ static std::ostringstream       * g_output_ss;
 static std::vector<llama_token> * g_output_tokens;
 static bool is_interacting  = false;
 static bool need_insert_eot = false;
+static bool g_chat_startup_profile_preload_started = false;
+static bool g_chat_ttft_waiting_for_first_output = false;
+static std::thread g_chat_startup_profile_preload_worker;
+static std::vector<void *> g_chat_ttft_pack_mmaps;
+static std::vector<size_t> g_chat_ttft_pack_mmap_sizes;
+
+#if defined(__GNUC__) || defined(__clang__)
+extern "C" bool ggml_cuda_moe_stream_preload_tensor(
+    int src0_type_int,
+    const char * src0_name,
+    const void * src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes) __attribute__((weak));
+extern "C" bool ggml_cuda_moe_stream_preload_tensor_async(
+    int src0_type_int,
+    const char * src0_name,
+    const void * src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes) __attribute__((weak));
+extern "C" bool ggml_cuda_moe_stream_preload_expert_async(
+    int src0_type_int,
+    const char * src0_name,
+    const void * src0_data,
+    int64_t n_as,
+    size_t nb02,
+    size_t expert_bytes,
+    int expert_idx) __attribute__((weak));
+extern "C" bool ggml_cuda_moe_stream_preload_synchronize(void) __attribute__((weak));
+extern "C" void ggml_cuda_moe_ttft_trace_mark(const char * label) __attribute__((weak));
+extern "C" bool ggml_moe_hotexp_preload_expert(
+    const void * tensor_base,
+    int expert_idx,
+    const void * expert_data,
+    size_t expert_bytes,
+    const char * tensor_name) __attribute__((weak));
+extern "C" bool ggml_moe_hotexp_register_expert(
+    const void * tensor_base,
+    int expert_idx,
+    const void * expert_data,
+    size_t expert_bytes,
+    const char * tensor_name) __attribute__((weak));
+extern "C" bool ggml_moe_prefetch_expert_range(
+    const void * expert_data,
+    size_t expert_bytes) __attribute__((weak));
+#endif
+
+static void chat_ttft_trace_mark(const char * label) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (ggml_cuda_moe_ttft_trace_mark) {
+        ggml_cuda_moe_ttft_trace_mark(label);
+    }
+#else
+    (void) label;
+#endif
+}
+
+static bool chat_ready_marker_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_READY_MARKER");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_exit_command_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_EXIT_COMMAND");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_is_exit_command(const std::string & buffer) {
+    if (!chat_exit_command_enabled()) {
+        return false;
+    }
+
+    return buffer == "/exit\n" || buffer == "/exit\r\n";
+}
+
+static void chat_print_ready_marker() {
+    static uint64_t seq = 0;
+    chat_ttft_trace_mark("ready");
+    if (!chat_ready_marker_enabled()) {
+        return;
+    }
+
+    fprintf(stdout, "\n[[LLAMA_CHAT_READY:%" PRIu64 "]]\n", ++seq);
+    fflush(stdout);
+}
+
+static long chat_startup_profile_preload_limit() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS");
+    if (!value || !value[0]) {
+        return 0;
+    }
+    long limit = std::atol(value);
+    return limit > 0 ? limit : 0;
+}
+
+static long chat_startup_profile_preload_expert_row_limit() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_EXPERT_ROWS");
+    if (!value || !value[0]) {
+        return 0;
+    }
+    long limit = std::atol(value);
+    return limit > 0 ? limit : 0;
+}
+
+static int chat_profile_column_index(const std::vector<std::string> & header, const char * name, int fallback) {
+    for (size_t i = 0; i < header.size(); ++i) {
+        if (header[i] == name) {
+            return (int) i;
+        }
+    }
+    return fallback;
+}
+
+static bool chat_profile_op_allowed(const std::vector<std::string> & cols, int op_col) {
+    if (op_col < 0 || (int) cols.size() <= op_col) {
+        return true;
+    }
+    const std::string & op = cols[op_col];
+    return op == "cpu_up_route" || op == "cpu_gate_route" || op == "cpu_down_route";
+}
+
+static bool chat_startup_profile_preload_batch_sync_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_BATCH_SYNC");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_startup_profile_expert_rows_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_EXPERT_ROWS");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_startup_profile_cpu_hotexp_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_CPU_HOTEXP");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_startup_profile_pagecache_prefetch_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PAGECACHE_PREFETCH");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static long chat_ttft_expert_pack_limit() {
+    const char * value = std::getenv("LLAMA_CHAT_TTFT_EXPERT_PACK_MAX_ROWS");
+    if (!value || !value[0]) {
+        return 0;
+    }
+    char * end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    return end != value ? parsed : 0;
+}
+
+static bool chat_ttft_expert_pack_mmap_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_TTFT_EXPERT_PACK_MMAP");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_startup_profile_preload_after_ready_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_AFTER_READY");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static bool chat_startup_profile_preload_join_on_submit_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_JOIN_ON_SUBMIT");
+    return value == nullptr || value[0] == '\0' || std::strcmp(value, "0") != 0;
+}
+
+static bool chat_prefix_prefill_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_PREFIX_PREFILL");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
+static long chat_ttft_expert_pack_preload(struct llama_model * model) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (!ggml_moe_hotexp_preload_expert && !ggml_moe_hotexp_register_expert) {
+        return 0;
+    }
+#else
+    (void) model;
+    return 0;
+#endif
+
+    const char * path = std::getenv("LLAMA_CHAT_TTFT_EXPERT_PACK");
+    if (!path || !path[0]) {
+        return 0;
+    }
+    const bool mmap_register =
+        chat_ttft_expert_pack_mmap_enabled() &&
+        ggml_moe_hotexp_register_expert;
+    const char * mapped_base = nullptr;
+    size_t mapped_size = 0;
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+    if (mmap_register) {
+        int fd = open(path, O_RDONLY);
+        if (fd >= 0) {
+            struct stat st = {};
+            if (fstat(fd, &st) == 0 && st.st_size > 0) {
+                void * p = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                if (p != MAP_FAILED) {
+                    mapped_base = (const char *) p;
+                    mapped_size = (size_t) st.st_size;
+                    g_chat_ttft_pack_mmaps.push_back(p);
+                    g_chat_ttft_pack_mmap_sizes.push_back(mapped_size);
+                }
+            }
+            close(fd);
+        }
+        if (!mapped_base) {
+            fprintf(stderr, "[chat] TTFT expert pack mmap failed, falling back to copy preload: %s\n", path);
+        }
+    }
+#else
+    (void) mmap_register;
+#endif
+    std::ifstream f(path, std::ios::binary);
+    if (!f.good()) {
+        fprintf(stderr, "[chat] TTFT expert pack open failed: %s\n", path);
+        return 0;
+    }
+
+    char magic[16] = {};
+    uint32_t version = 0;
+    uint32_t header_size = 0;
+    uint64_t n_entries = 0;
+    uint64_t data_start = 0;
+    f.read(magic, sizeof(magic));
+    f.read(reinterpret_cast<char *>(&version), sizeof(version));
+    f.read(reinterpret_cast<char *>(&header_size), sizeof(header_size));
+    f.read(reinterpret_cast<char *>(&n_entries), sizeof(n_entries));
+    f.read(reinterpret_cast<char *>(&data_start), sizeof(data_start));
+    if (!f.good() || std::memcmp(magic, "GGMLMOEPACKv1", 13) != 0 || version != 1 || header_size < 40) {
+        fprintf(stderr, "[chat] TTFT expert pack invalid: %s\n", path);
+        return 0;
+    }
+    (void) data_start;
+
+    struct ttft_pack_entry {
+        char tensor[128];
+        int32_t expert_idx;
+        uint32_t reserved;
+        uint64_t offset;
+        uint64_t nbytes;
+    };
+    std::vector<ttft_pack_entry> entries;
+    entries.reserve((size_t) n_entries);
+    for (uint64_t i = 0; i < n_entries; ++i) {
+        ttft_pack_entry e = {};
+        f.read(e.tensor, sizeof(e.tensor));
+        f.read(reinterpret_cast<char *>(&e.expert_idx), sizeof(e.expert_idx));
+        f.read(reinterpret_cast<char *>(&e.reserved), sizeof(e.reserved));
+        f.read(reinterpret_cast<char *>(&e.offset), sizeof(e.offset));
+        f.read(reinterpret_cast<char *>(&e.nbytes), sizeof(e.nbytes));
+        if (!f.good()) {
+            fprintf(stderr, "[chat] TTFT expert pack index truncated: %s\n", path);
+            return 0;
+        }
+        entries.push_back(e);
+    }
+
+    const long limit = chat_ttft_expert_pack_limit();
+    long tried = 0;
+    long loaded = 0;
+    uint64_t loaded_bytes = 0;
+    std::vector<char> buffer;
+    for (const ttft_pack_entry & e : entries) {
+        if (limit > 0 && tried >= limit) {
+            break;
+        }
+        if (e.tensor[0] == '\0' || e.expert_idx < 0 || e.nbytes == 0) {
+            continue;
+        }
+        ggml_tensor * tensor = llama_get_model_tensor(model, e.tensor);
+        if (!tensor || !tensor->data || e.expert_idx >= tensor->ne[2] || (uint64_t) tensor->nb[2] != e.nbytes) {
+            continue;
+        }
+        ++tried;
+        bool ok = false;
+        if (mapped_base && e.offset <= mapped_size && e.nbytes <= mapped_size - e.offset) {
+            ok = ggml_moe_hotexp_register_expert(
+                tensor->data,
+                e.expert_idx,
+                mapped_base + e.offset,
+                (size_t) e.nbytes,
+                e.tensor);
+        } else if (ggml_moe_hotexp_preload_expert) {
+            buffer.resize((size_t) e.nbytes);
+            f.seekg((std::streamoff) e.offset, std::ios::beg);
+            f.read(buffer.data(), (std::streamsize) e.nbytes);
+            if (!f.good()) {
+                fprintf(stderr, "[chat] TTFT expert pack data truncated: %s tensor=%s expert=%d\n",
+                        path, e.tensor, (int) e.expert_idx);
+                break;
+            }
+            ok = ggml_moe_hotexp_preload_expert(
+                tensor->data,
+                e.expert_idx,
+                buffer.data(),
+                (size_t) e.nbytes,
+                e.tensor);
+        }
+        if (ok) {
+            ++loaded;
+            loaded_bytes += e.nbytes;
+        }
+    }
+    if (tried > 0 || loaded > 0) {
+        fprintf(stderr,
+                "[chat] TTFT expert pack preload: loaded %ld/%ld rows %.1f MiB from %s%s\n",
+                loaded, tried, loaded_bytes / (1024.0 * 1024.0), path,
+                mapped_base ? " (mmap)" : "");
+    }
+    return loaded;
+}
+
+static void chat_startup_profile_preload(struct llama_model * model) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (!ggml_cuda_moe_stream_preload_tensor && !ggml_moe_hotexp_preload_expert && !ggml_moe_prefetch_expert_range) {
+        return;
+    }
+#else
+    (void) model;
+    return;
+#endif
+
+    chat_ttft_expert_pack_preload(model);
+
+    const long limit = chat_startup_profile_preload_limit();
+    if (limit <= 0) {
+        return;
+    }
+
+    const char * profile = std::getenv("LLAMA_CHAT_STARTUP_PROFILE");
+    if (!profile || !profile[0]) {
+        profile = std::getenv("GGML_MOE_VRAM_PROFILE");
+    }
+    if (!profile || !profile[0]) {
+        return;
+    }
+
+    std::ifstream f(profile);
+    if (!f.good()) {
+        return;
+    }
+
+    std::string line;
+    std::getline(f, line);
+    std::vector<std::string> header;
+    {
+        std::stringstream ss(line);
+        std::string col;
+        while (std::getline(ss, col, ',')) {
+            header.push_back(col);
+        }
+    }
+    const int tensor_col = chat_profile_column_index(header, "tensor", header.size() >= 7 ? 6 : 4);
+    const int expert_col = chat_profile_column_index(header, "expert_idx", header.size() >= 7 ? 5 : 3);
+    const int op_col = chat_profile_column_index(header, "op", -1);
+    long tried = 0;
+    long loaded = 0;
+    long tried_experts = 0;
+    const long expert_row_limit = chat_startup_profile_preload_expert_row_limit();
+    std::unordered_set<std::string> seen;
+    std::unordered_set<std::string> selected;
+    std::unordered_set<std::string> seen_experts;
+    const bool expert_rows =
+        chat_startup_profile_expert_rows_enabled() &&
+        ggml_cuda_moe_stream_preload_expert_async &&
+        ggml_cuda_moe_stream_preload_synchronize;
+    const bool cpu_hotexp =
+        chat_startup_profile_cpu_hotexp_enabled() &&
+        ggml_moe_hotexp_preload_expert;
+    const bool pagecache_prefetch =
+        chat_startup_profile_pagecache_prefetch_enabled() &&
+        ggml_moe_prefetch_expert_range;
+    const bool batch_sync =
+        chat_startup_profile_preload_batch_sync_enabled() &&
+        ggml_cuda_moe_stream_preload_tensor_async &&
+        ggml_cuda_moe_stream_preload_synchronize;
+    while (std::getline(f, line)) {
+        std::vector<std::string> cols;
+        std::stringstream ss(line);
+        std::string col;
+        while (std::getline(ss, col, ',')) {
+            cols.push_back(col);
+        }
+        if ((int) cols.size() <= tensor_col || (int) cols.size() <= expert_col) {
+            continue;
+        }
+        if (!chat_profile_op_allowed(cols, op_col)) {
+            continue;
+        }
+        const std::string & name = cols[tensor_col];
+        if (name.empty()) {
+            continue;
+        }
+        if (!expert_rows && !cpu_hotexp && !pagecache_prefetch && tried >= limit) {
+            break;
+        }
+
+        ggml_tensor * tensor = llama_get_model_tensor(model, name.c_str());
+        if (!tensor || !tensor->data || tensor->ne[2] <= 0 || tensor->nb[2] == 0) {
+            continue;
+        }
+        if (expert_rows || cpu_hotexp || pagecache_prefetch) {
+            if (!selected.count(name)) {
+                if (tried >= limit) {
+                    break;
+                }
+                selected.insert(name);
+                ++tried;
+            }
+            if (expert_row_limit > 0 && tried_experts >= expert_row_limit) {
+                break;
+            }
+            const int expert_idx = std::atoi(cols[expert_col].c_str());
+            if (expert_idx < 0 || expert_idx >= tensor->ne[2]) {
+                continue;
+            }
+            const std::string expert_key = name + "#" + std::to_string(expert_idx);
+            if (!seen_experts.insert(expert_key).second) {
+                continue;
+            }
+            ++tried_experts;
+            bool ok = false;
+            if (cpu_hotexp) {
+                ok = ggml_moe_hotexp_preload_expert(
+                    tensor->data,
+                    expert_idx,
+                    (const char *) tensor->data + (size_t) expert_idx * tensor->nb[2],
+                    tensor->nb[2],
+                    name.c_str());
+            } else if (pagecache_prefetch) {
+                ok = ggml_moe_prefetch_expert_range(
+                    (const char *) tensor->data + (size_t) expert_idx * tensor->nb[2],
+                    tensor->nb[2]);
+            } else {
+                ok = ggml_cuda_moe_stream_preload_expert_async(
+                        (int) tensor->type,
+                        name.c_str(),
+                        tensor->data,
+                        tensor->ne[2],
+                        tensor->nb[2],
+                        tensor->nb[2],
+                        expert_idx);
+            }
+            if (ok) {
+                ++loaded;
+            }
+            continue;
+        }
+        if (tried >= limit || !seen.insert(name).second) {
+            continue;
+        }
+        ++tried;
+        bool ok = false;
+        if (batch_sync) {
+            ok = ggml_cuda_moe_stream_preload_tensor_async(
+                (int) tensor->type,
+                name.c_str(),
+                tensor->data,
+                tensor->ne[2],
+                tensor->nb[2],
+                tensor->nb[2]);
+        } else {
+            ok = ggml_cuda_moe_stream_preload_tensor(
+                (int) tensor->type,
+                name.c_str(),
+                tensor->data,
+                tensor->ne[2],
+                tensor->nb[2],
+                tensor->nb[2]);
+        }
+        if (ok) {
+            ++loaded;
+        }
+    }
+    if (loaded > 0 && batch_sync) {
+        ggml_cuda_moe_stream_preload_synchronize();
+    }
+    if (loaded > 0 && expert_rows) {
+        ggml_cuda_moe_stream_preload_synchronize();
+    }
+    if (loaded > 0) {
+        fprintf(stderr, "[chat] startup profile preload: loaded %ld/%ld entries from %ld tensors\n", loaded, tried_experts > 0 ? tried_experts : tried, tried);
+    }
+}
+
+static void chat_startup_profile_preload_after_ready(struct llama_model * model) {
+    if (g_chat_startup_profile_preload_started || !chat_startup_profile_preload_after_ready_enabled()) {
+        return;
+    }
+    g_chat_startup_profile_preload_started = true;
+    if (g_chat_startup_profile_preload_worker.joinable()) {
+        g_chat_startup_profile_preload_worker.join();
+    }
+    g_chat_startup_profile_preload_worker = std::thread([model]() {
+        chat_startup_profile_preload(model);
+    });
+    if (!chat_startup_profile_preload_join_on_submit_enabled()) {
+        g_chat_startup_profile_preload_worker.detach();
+    }
+}
+
+static void chat_wait_startup_profile_preload_after_ready() {
+    if (!chat_startup_profile_preload_after_ready_enabled()) {
+        return;
+    }
+    if (!chat_startup_profile_preload_join_on_submit_enabled()) {
+        return;
+    }
+    // The preload is started after the ready marker to improve time-to-type.
+    // Join before prompt processing so prompt eval does not race cache fills.
+    if (g_chat_startup_profile_preload_worker.joinable()) {
+        g_chat_startup_profile_preload_worker.join();
+    }
+}
 
 static bool file_exists(const std::string & path) {
     std::ifstream f(path.c_str());
@@ -125,6 +646,36 @@ static std::string chat_add_and_format(struct llama_model * model, common_chat_t
     chat_msgs.push_back({role, content});
     LOG("formatted: %s\n", formatted.c_str());
     return formatted;
+}
+
+static std::vector<llama_token> chat_first_user_prefix_tokens(
+        llama_context * ctx,
+        common_chat_templates & chat_templates,
+        const std::vector<common_chat_msg> & chat_msgs) {
+    if (!chat_prefix_prefill_enabled()) {
+        return {};
+    }
+
+    const std::string sentinel = "__LLAMA_CHAT_PREFIX_PREFILL_SENTINEL__";
+    common_chat_msg msg{"user", sentinel};
+    const std::string formatted = common_chat_format_single(&chat_templates, chat_msgs, msg, true, g_params->use_jinja);
+    const size_t pos = formatted.find(sentinel);
+    if (pos == std::string::npos || pos == 0) {
+        return {};
+    }
+    return ::common_tokenize(ctx, formatted.substr(0, pos), false, true);
+}
+
+static bool chat_tokens_start_with(const std::vector<llama_token> & tokens, const std::vector<llama_token> & prefix) {
+    if (prefix.empty() || tokens.size() < prefix.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < prefix.size(); ++i) {
+        if (tokens[i] != prefix[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void chat_active_prewarm(struct llama_model * model, struct llama_context * ctx, const gpt_params & params) {
@@ -269,6 +820,9 @@ int main(int argc, char ** argv) {
     }
     if (params.conversation) {
         chat_active_prewarm(model, ctx, params);
+        if (!chat_startup_profile_preload_after_ready_enabled()) {
+            chat_startup_profile_preload(model);
+        }
     }
 
     // print system information
@@ -605,6 +1159,41 @@ int main(int argc, char ** argv) {
         embd_inp.push_back(decoder_start_token_id);
     }
 
+    std::vector<llama_token> chat_prefix_prefill;
+    std::vector<llama_token> chat_prefix_prefill_sampler_tokens;
+    bool chat_prefix_prefilled = false;
+    if (waiting_for_first_input && params.conversation && params.enable_chat_template && llama_model_has_decoder(model)) {
+        chat_prefix_prefill = chat_first_user_prefix_tokens(ctx, *chat_templates, chat_msgs);
+        if (!chat_prefix_prefill.empty()) {
+            std::vector<llama_token> prefill_tokens;
+            prefill_tokens.reserve(embd_inp.size() + chat_prefix_prefill.size());
+            prefill_tokens.insert(prefill_tokens.end(), embd_inp.begin(), embd_inp.end());
+            prefill_tokens.insert(prefill_tokens.end(), chat_prefix_prefill.begin(), chat_prefix_prefill.end());
+
+            for (int i = 0; i < (int) prefill_tokens.size(); i += params.n_batch) {
+                int n_eval = (int) prefill_tokens.size() - i;
+                if (n_eval > params.n_batch) {
+                    n_eval = params.n_batch;
+                }
+                if (llama_decode(ctx, llama_batch_get_one(&prefill_tokens[i], n_eval, n_past, 0))) {
+                    LOG_TEE("%s : failed to prefix-prefill chat template\n", __func__);
+                    return 1;
+                }
+                for (int j = 0; j < n_eval; ++j) {
+                    common_sampler_accept(ctx_sampling, ctx, prefill_tokens[i + j], /* apply_grammar= */ false);
+                }
+                n_past += n_eval;
+            }
+            chat_prefix_prefill_sampler_tokens = prefill_tokens;
+            n_consumed = prefill_tokens.size();
+            llama_synchronize(ctx);
+            llama_reset_timings(ctx);
+            chat_prefix_prefilled = true;
+            fprintf(stderr, "[chat] prefix prefill: %zu tokens (+%zu initial)\n",
+                    chat_prefix_prefill.size(), embd_inp.size());
+        }
+    }
+
     while ((n_remain != 0 && !is_antiprompt) || params.interactive) {
         // predict
         if (!embd.empty()) {
@@ -829,6 +1418,10 @@ int main(int argc, char ** argv) {
                     input_tokens.push_back(id);
                 } else {
                     // Outgoing Generated Tokens
+                    if (g_chat_ttft_waiting_for_first_output) {
+                        chat_ttft_trace_mark("first_token");
+                        g_chat_ttft_waiting_for_first_output = false;
+                    }
                     output_tokens.push_back(id);
                     output_ss << token_str;
                 }
@@ -930,6 +1523,9 @@ int main(int argc, char ** argv) {
                     printf("%s", params.input_prefix.c_str());
                 }
 
+                chat_print_ready_marker();
+                chat_startup_profile_preload_after_ready(model);
+
                 // color user input only
                 console::set_display(console::user_input);
                 display = params.display_prompt;
@@ -944,6 +1540,14 @@ int main(int argc, char ** argv) {
                 // done taking input, reset color
                 console::set_display(console::reset);
                 display = true;
+                chat_ttft_trace_mark("submit");
+                g_chat_ttft_waiting_for_first_output = true;
+                chat_wait_startup_profile_preload_after_ready();
+
+                if (chat_is_exit_command(buffer)) {
+                    params.interactive = false;
+                    break;
+                }
 
                 // Add tokens to embd only if the input buffer is non-empty
                 // Entering a empty line lets the user pass control back
@@ -968,8 +1572,22 @@ int main(int argc, char ** argv) {
                         : std::move(buffer);
                     // TODO: one inconvenient of current chat template implementation is that we can't distinguish between user input and special tokens (prefix/postfix)
                     const auto line_pfx = ::common_tokenize(ctx, params.input_prefix, false, true);
-                    const auto line_inp = ::common_tokenize(ctx, user_inp,            false, format_chat);
+                    auto line_inp = ::common_tokenize(ctx, user_inp,            false, format_chat);
                     const auto line_sfx = ::common_tokenize(ctx, params.input_suffix, false, true);
+                    if (chat_prefix_prefilled) {
+                        if (chat_tokens_start_with(line_inp, chat_prefix_prefill)) {
+                            // Keep the logical prompt identical to the default path;
+                            // n_consumed already skips the prefetched prefix in KV.
+                        } else {
+                            llama_kv_cache_clear(ctx);
+                            common_sampler_reset(ctx_sampling);
+                            n_past = 0;
+                            n_consumed = 0;
+                            chat_prefix_prefilled = false;
+                            chat_prefix_prefill_sampler_tokens.clear();
+                            fprintf(stderr, "[chat] prefix prefill: mismatch, cleared KV cache\n");
+                        }
+                    }
 
                     LOG("input tokens: %s\n", LOG_TOKENS_TOSTR_PRETTY(ctx, line_inp).c_str());
 
@@ -1006,6 +1624,11 @@ int main(int argc, char ** argv) {
                 if (is_interacting) {
                     
                     common_sampler_reset(ctx_sampling);
+                    if (chat_prefix_prefilled) {
+                        for (llama_token token : chat_prefix_prefill_sampler_tokens) {
+                            common_sampler_accept(ctx_sampling, ctx, token, /* apply_grammar= */ false);
+                        }
+                    }
                 }
                 is_interacting = false;
                 waiting_for_first_input = false;

@@ -498,6 +498,11 @@ extern "C" IQK_API int iqk_dequant_type(int type, int Ny) {
     return MulMat::is_dequant_better(ggml_type(type), Ny);
 }
 
+extern "C" IQK_API bool iqk_convert_repack_q8_r8(int typeA, int n,
+        const void * vx, size_t bx, void * vy, size_t stride_y, int nrc_x) {
+    return iqk_convert_repack(typeA, n, vx, bx, vy, stride_y, nrc_x);
+}
+
 extern "C" IQK_API bool iqk_mul_mat(long Nx, long Ny, long ne00,
         int typeA, const void * A, long strideA,
         int typeB, const void * B, long strideB,
@@ -778,6 +783,179 @@ extern "C" IQK_API bool iqk_mul_mat_moe(long Nx, long Ny, long ne00, int ne11,
     return true;
 }
 
+extern "C" IQK_API bool iqk_mul_mat_moe_many(long Nx, long ne00, int ne11, int n_as, long rows_stride,
+        int typeA, const void * A, long strideA, long expert_strideA,
+        int typeB, const void * B, long strideB,
+        float * C, long nb1, long nb2, const int64_t * row_counts, const void * vrow_mapping,
+        int expert_ith, int expert_nth, int inner_ith, int inner_nth) {
+
+    if (!row_counts || !vrow_mapping || n_as <= 0 || rows_stride <= 0) {
+        return false;
+    }
+    if (expert_nth <= 0 || inner_nth <= 0) {
+        return false;
+    }
+
+    const mmid_row_mapping * rows = (const mmid_row_mapping *)vrow_mapping;
+    MulMat mm;
+
+    auto etypeA = ggml_type(typeA);
+    if (auto dequant_type = MulMat::is_dequant_better(etypeA, 1); dequant_type != etypeA) {
+        if (!MulMat::prepare(dequant_type, typeB, ne00, mm, 1)) {
+            return false;
+        }
+
+        constexpr int k_x_step = 32;
+        auto num_rows = MulMat::num_rows(ggml_type(dequant_type));
+        GGML_ASSERT(Nx%num_rows == 0);
+        auto nrc_x0 = (Nx/num_rows + inner_nth - 1)/inner_nth;
+        auto first_x0 = inner_ith*nrc_x0;
+        if (first_x0 + nrc_x0 > Nx/num_rows) nrc_x0 = Nx/num_rows - first_x0;
+        first_x0 *= num_rows;
+        nrc_x0 *= num_rows;
+        if (nrc_x0 <= 0) {
+            return true;
+        }
+
+        const size_t row_size_qx = ggml_row_size(dequant_type, ne00);
+        const size_t row_size_qy = strideB;
+        auto & f = thread_local_work_buffer();
+
+        for (int cur_a = expert_ith; cur_a < n_as; cur_a += expert_nth) {
+            const int64_t Ny = row_counts[cur_a];
+            if (Ny <= 0) {
+                continue;
+            }
+            const char * A_cur = (const char *)A + (size_t)cur_a * expert_strideA;
+            const mmid_row_mapping * row_mapping = rows + (size_t)cur_a * rows_stride;
+            DataInfo info{C + first_x0, (const char *)B, nb1/sizeof(float), row_size_qy, 0, ne11, row_mapping, nb2/sizeof(float)};
+
+            for (int ix = 0; ix < nrc_x0; ix += k_x_step) {
+                auto this_info = info;
+                this_info.s += ix;
+                int this_nrc_x = ix + k_x_step <= nrc_x0 ? k_x_step : nrc_x0 - ix;
+                if (f.size() < row_size_qx*this_nrc_x) f.resize(row_size_qx*this_nrc_x);
+                if (!iqk_convert_repack(typeA, ne00, A_cur + (first_x0 + ix)*strideA, strideA, f.data(), ne00, this_nrc_x)) {
+                    GGML_ABORT("Fatal error");
+                }
+                mm.mul_mat_NxM(ne00, f.data(), row_size_qx, this_info, this_nrc_x, Ny);
+            }
+        }
+
+        return true;
+    }
+
+    if (!MulMat::prepare(typeA, typeB, ne00, mm, 1)) {
+        return false;
+    }
+    const size_t row_size_qx = strideA;
+    const size_t row_size_qy = strideB;
+    auto num_rows = MulMat::num_rows(ggml_type(typeA));
+    GGML_ASSERT(Nx%num_rows == 0);
+    auto nrc_x = (Nx/num_rows + inner_nth - 1)/inner_nth;
+    auto first_x = inner_ith*nrc_x;
+    if (first_x + nrc_x > Nx/num_rows) nrc_x = Nx/num_rows - first_x;
+    first_x *= num_rows;
+    nrc_x *= num_rows;
+    if (nrc_x <= 0) {
+        return true;
+    }
+
+    for (int cur_a = expert_ith; cur_a < n_as; cur_a += expert_nth) {
+        const int64_t Ny = row_counts[cur_a];
+        if (Ny <= 0) {
+            continue;
+        }
+        const char * A_cur = (const char *)A + (size_t)cur_a * expert_strideA;
+        const mmid_row_mapping * row_mapping = rows + (size_t)cur_a * rows_stride;
+        DataInfo info{C + first_x, (const char *)B, nb1/sizeof(float),
+            row_size_qy, 0, ne11, row_mapping, nb2/sizeof(float)};
+        mm.mul_mat_NxM(ne00, A_cur + row_size_qx*first_x, row_size_qx, info, nrc_x, Ny);
+    }
+    return true;
+}
+
+static bool iqk_moe_hybrid_partition(
+        const int64_t * row_counts,
+        int n_as,
+        int ith,
+        int nth,
+        int * expert_idx,
+        int * inner_ith,
+        int * inner_nth) {
+    if (!row_counts || n_as <= 0 || ith < 0 || nth <= 0 || !expert_idx || !inner_ith || !inner_nth) {
+        return false;
+    }
+    int active_count = 0;
+    for (int e = 0; e < n_as; ++e) {
+        if (row_counts[e] > 0) {
+            ++active_count;
+        }
+    }
+    if (active_count <= 0) {
+        *expert_idx = -1;
+        *inner_ith = 0;
+        *inner_nth = 1;
+        return true;
+    }
+    if (active_count >= nth) {
+        *expert_idx = -2;
+        *inner_ith = ith;
+        *inner_nth = nth;
+        return true;
+    }
+    const int threads_per_expert = std::max(1, nth / active_count);
+    const int active_rank = ith / threads_per_expert;
+    if (active_rank >= active_count) {
+        *expert_idx = -1;
+        *inner_ith = 0;
+        *inner_nth = 1;
+        return true;
+    }
+    int rank = 0;
+    for (int e = 0; e < n_as; ++e) {
+        if (row_counts[e] <= 0) {
+            continue;
+        }
+        if (rank == active_rank) {
+            *expert_idx = e;
+            *inner_ith = ith % threads_per_expert;
+            *inner_nth = threads_per_expert;
+            return true;
+        }
+        ++rank;
+    }
+    return false;
+}
+
+extern "C" IQK_API bool iqk_mul_mat_moe_many_hybrid(long Nx, long ne00, int ne11, int n_as, long rows_stride,
+        int typeA, const void * A, long strideA, long expert_strideA,
+        int typeB, const void * B, long strideB,
+        float * C, long nb1, long nb2, const int64_t * row_counts, const void * vrow_mapping,
+        int ith, int nth) {
+    int expert_idx = -1;
+    int inner_ith = 0;
+    int inner_nth = 1;
+    if (!iqk_moe_hybrid_partition(row_counts, n_as, ith, nth, &expert_idx, &inner_ith, &inner_nth)) {
+        return false;
+    }
+    if (expert_idx < 0) {
+        if (expert_idx == -2) {
+            return iqk_mul_mat_moe_many(Nx, ne00, ne11, n_as, rows_stride,
+                    typeA, A, strideA, expert_strideA,
+                    typeB, B, strideB,
+                    C, nb1, nb2, row_counts, vrow_mapping,
+                    ith, nth, 0, 1);
+        }
+        return true;
+    }
+    return iqk_mul_mat_moe_many(Nx, ne00, ne11, n_as, rows_stride,
+            typeA, A, strideA, expert_strideA,
+            typeB, B, strideB,
+            C, nb1, nb2, row_counts, vrow_mapping,
+            expert_idx, n_as, inner_ith, inner_nth);
+}
+
 extern "C" IQK_API bool iqk_moe_fused_up_gate(long Nx, long Ny, long ne00, int ne11, int unary_op,
         int typeA, const void * Aup, const void * Agate, long strideA,
         int typeB, const void * B, long strideB,
@@ -852,6 +1030,141 @@ extern "C" IQK_API bool iqk_moe_fused_up_gate(long Nx, long Ny, long ne00, int n
     mm.mul_mat_up_gate_NxM(ne00, (const char *)Aup + row_size_qx*first_x, (const char *)Agate + row_size_qx*first_x, row_size_qx,
             up_b, gate_b, info, nrc_x, Ny, unary_op, limit);
     return true;
+}
+
+extern "C" IQK_API bool iqk_moe_fused_up_gate_many(long Nx, long ne00, int ne11, int n_as, long rows_stride, int unary_op,
+        int typeA, const void * Aup, const void * Agate, long strideA, long expert_strideA,
+        int typeB, const void * B, long strideB,
+        const char * up_b_c, const char * gate_b_c, long bias_stride,
+        float * C, long nb1, long nb2, const int64_t * row_counts, const void * vrow_mapping, float limit,
+        int expert_ith, int expert_nth, int inner_ith, int inner_nth) {
+
+    if (!row_counts || !vrow_mapping || n_as <= 0 || rows_stride <= 0) {
+        return false;
+    }
+    if (expert_nth <= 0 || inner_nth <= 0) {
+        return false;
+    }
+
+    const mmid_row_mapping * rows = (const mmid_row_mapping *)vrow_mapping;
+    MulMat mm;
+
+    auto etypeA = ggml_type(typeA);
+    if (auto dequant_type = MulMat::is_dequant_better(etypeA, 1); dequant_type != etypeA) {
+        if (!MulMat::prepare(dequant_type, typeB, ne00, mm, 1)) {
+            return false;
+        }
+
+        constexpr int k_x_step = 64;
+        auto num_rows = MulMat::num_rows(ggml_type(dequant_type));
+        GGML_ASSERT(Nx%num_rows == 0);
+        auto nrc_x0 = (Nx/num_rows + inner_nth - 1)/inner_nth;
+        auto first_x0 = inner_ith*nrc_x0;
+        if (first_x0 + nrc_x0 > Nx/num_rows) nrc_x0 = Nx/num_rows - first_x0;
+        first_x0 *= num_rows;
+        nrc_x0 *= num_rows;
+        if (nrc_x0 <= 0) {
+            return true;
+        }
+
+        const size_t row_size_qx = ggml_row_size(dequant_type, ne00);
+        const size_t row_size_qy = strideB;
+        auto & f = thread_local_work_buffer();
+
+        for (int cur_a = expert_ith; cur_a < n_as; cur_a += expert_nth) {
+            const int64_t Ny = row_counts[cur_a];
+            if (Ny <= 0) {
+                continue;
+            }
+            const char * Aup_cur = (const char *)Aup + (size_t)cur_a * expert_strideA;
+            const char * Agate_cur = (const char *)Agate + (size_t)cur_a * expert_strideA;
+            const mmid_row_mapping * row_mapping = rows + (size_t)cur_a * rows_stride;
+            DataInfo info{C + first_x0, (const char *)B, nb1/sizeof(float), row_size_qy, 0, ne11, row_mapping, nb2/sizeof(float)};
+
+            for (int ix = 0; ix < nrc_x0; ix += k_x_step) {
+                auto this_info = info;
+                this_info.s += ix;
+                int this_nrc_x = ix + k_x_step <= nrc_x0 ? k_x_step : nrc_x0 - ix;
+                if (f.size() < 2*row_size_qx*this_nrc_x) f.resize(2*row_size_qx*this_nrc_x);
+                auto Xu = f.data();
+                auto Xg = f.data() + row_size_qx*this_nrc_x;
+                if (!iqk_convert_repack(typeA, ne00, Aup_cur + (first_x0 + ix)*strideA, strideA, Xu, ne00, this_nrc_x)) {
+                    GGML_ABORT("Fatal error");
+                }
+                if (!iqk_convert_repack(typeA, ne00, Agate_cur + (first_x0 + ix)*strideA, strideA, Xg, ne00, this_nrc_x)) {
+                    GGML_ABORT("Fatal error");
+                }
+                auto up_b   = up_b_c   ? (const float *)(up_b_c   + (size_t)cur_a * bias_stride) + first_x0 + ix : nullptr;
+                auto gate_b = gate_b_c ? (const float *)(gate_b_c + (size_t)cur_a * bias_stride) + first_x0 + ix : nullptr;
+                mm.mul_mat_up_gate_NxM(ne00, Xu, Xg, row_size_qx, up_b, gate_b, this_info, this_nrc_x, Ny, unary_op, limit);
+            }
+        }
+
+        return true;
+    }
+
+    if (!MulMat::prepare(typeA, typeB, ne00, mm, 1)) {
+        return false;
+    }
+    const size_t row_size_qx = strideA;
+    const size_t row_size_qy = strideB;
+    auto num_rows = MulMat::num_rows(ggml_type(typeA));
+    GGML_ASSERT(Nx%num_rows == 0);
+    auto nrc_x = (Nx/num_rows + inner_nth - 1)/inner_nth;
+    auto first_x = inner_ith*nrc_x;
+    if (first_x + nrc_x > Nx/num_rows) nrc_x = Nx/num_rows - first_x;
+    first_x *= num_rows;
+    nrc_x *= num_rows;
+    if (nrc_x <= 0) {
+        return true;
+    }
+
+    for (int cur_a = expert_ith; cur_a < n_as; cur_a += expert_nth) {
+        const int64_t Ny = row_counts[cur_a];
+        if (Ny <= 0) {
+            continue;
+        }
+        const char * Aup_cur = (const char *)Aup + (size_t)cur_a * expert_strideA;
+        const char * Agate_cur = (const char *)Agate + (size_t)cur_a * expert_strideA;
+        const mmid_row_mapping * row_mapping = rows + (size_t)cur_a * rows_stride;
+        DataInfo info{C + first_x, (const char *)B, nb1/sizeof(float), row_size_qy, 0, ne11, row_mapping, nb2/sizeof(float)};
+        auto up_b   = up_b_c   ? (const float *)(up_b_c   + (size_t)cur_a * bias_stride) + first_x : nullptr;
+        auto gate_b = gate_b_c ? (const float *)(gate_b_c + (size_t)cur_a * bias_stride) + first_x : nullptr;
+        mm.mul_mat_up_gate_NxM(ne00, Aup_cur + row_size_qx*first_x, Agate_cur + row_size_qx*first_x, row_size_qx,
+                up_b, gate_b, info, nrc_x, Ny, unary_op, limit);
+    }
+    return true;
+}
+
+extern "C" IQK_API bool iqk_moe_fused_up_gate_many_hybrid(long Nx, long ne00, int ne11, int n_as, long rows_stride, int unary_op,
+        int typeA, const void * Aup, const void * Agate, long strideA, long expert_strideA,
+        int typeB, const void * B, long strideB,
+        const char * up_b, const char * gate_b, long bias_stride,
+        float * C, long nb1, long nb2, const int64_t * row_counts, const void * vrow_mapping, float limit,
+        int ith, int nth) {
+    int expert_idx = -1;
+    int inner_ith = 0;
+    int inner_nth = 1;
+    if (!iqk_moe_hybrid_partition(row_counts, n_as, ith, nth, &expert_idx, &inner_ith, &inner_nth)) {
+        return false;
+    }
+    if (expert_idx < 0) {
+        if (expert_idx == -2) {
+            return iqk_moe_fused_up_gate_many(Nx, ne00, ne11, n_as, rows_stride, unary_op,
+                    typeA, Aup, Agate, strideA, expert_strideA,
+                    typeB, B, strideB,
+                    up_b, gate_b, bias_stride,
+                    C, nb1, nb2, row_counts, vrow_mapping, limit,
+                    ith, nth, 0, 1);
+        }
+        return true;
+    }
+    return iqk_moe_fused_up_gate_many(Nx, ne00, ne11, n_as, rows_stride, unary_op,
+            typeA, Aup, Agate, strideA, expert_strideA,
+            typeB, B, strideB,
+            up_b, gate_b, bias_stride,
+            C, nb1, nb2, row_counts, vrow_mapping, limit,
+            expert_idx, n_as, inner_ith, inner_nth);
 }
 
 #if defined __x86_64__
@@ -1761,10 +2074,49 @@ extern "C" IQK_API bool iqk_mul_mat_moe(long, long, long, int, int, const void *
     return false;
 }
 
+extern "C" IQK_API bool iqk_mul_mat_moe_many(long, long, int, int, long,
+        int, const void *, long, long,
+        int, const void *, long,
+        float *, long, long, const int64_t *, const void *,
+        int, int, int, int) {
+    GGML_ABORT("Unsupported CPU. You may need to manually set compilation flags\n");
+    return false;
+}
+
+extern "C" IQK_API bool iqk_mul_mat_moe_many_hybrid(long, long, int, int, long,
+        int, const void *, long, long,
+        int, const void *, long,
+        float *, long, long, const int64_t *, const void *,
+        int, int) {
+    GGML_ABORT("Unsupported CPU. You may need to manually set compilation flags\n");
+    return false;
+}
+
 extern "C" IQK_API bool iqk_moe_fused_up_gate(long /*Nx*/, long /*Ny*/, long /*ne00*/, int /*ne11*/, int /*unary_op*/,
         int /*typeA*/, const void * /*Aup*/, const void * /*Agate*/, long /*strideA*/,
         int /*typeB*/, const void * /*B*/, long /*strideB*/,
+        const char * /*up_b*/, const char * /*gate_b*/,
         float * /*C*/, long /*nb1*/, long /*nb2*/, const void * /*vrow_mapping*/, float, int /*ith*/, int /*nth*/) {
+    GGML_ABORT("Unsupported CPU. You may need to manually set compilation flags\n");
+    return false;
+}
+
+extern "C" IQK_API bool iqk_moe_fused_up_gate_many(long, long, int, int, long, int,
+        int, const void *, const void *, long, long,
+        int, const void *, long,
+        const char *, const char *, long,
+        float *, long, long, const int64_t *, const void *, float,
+        int, int, int, int) {
+    GGML_ABORT("Unsupported CPU. You may need to manually set compilation flags\n");
+    return false;
+}
+
+extern "C" IQK_API bool iqk_moe_fused_up_gate_many_hybrid(long, long, int, int, long, int,
+        int, const void *, const void *, long, long,
+        int, const void *, long,
+        const char *, const char *, long,
+        float *, long, long, const int64_t *, const void *, float,
+        int, int) {
     GGML_ABORT("Unsupported CPU. You may need to manually set compilation flags\n");
     return false;
 }

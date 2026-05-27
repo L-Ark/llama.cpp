@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCRIPT_VERSION = 1
+SCRIPT_VERSION = 2
 REPO = Path(__file__).resolve().parents[1]
 REPO_PRESETS = REPO / "presets" / "moe"
 MIB = 1024 ** 2
@@ -469,7 +469,38 @@ def discover_pack(model: Path, explicit: str | None) -> Path:
     raise SystemExit("missing expert pack: set GGML_MOE_EXPERT_PACK=/path/pack or pass --expert-pack")
 
 
-def discover_profile(explicit: str | None) -> Path | None:
+def discover_groundtruth_profile(model_path: Path, pack_path: Path, chat: bool) -> Path | None:
+    groundtruth_dir = REPO_PRESETS / "groundtruth"
+    if not groundtruth_dir.is_dir():
+        return None
+    candidates: list[tuple[int, Path]] = []
+    for preset in sorted(groundtruth_dir.glob("*.json")):
+        try:
+            data = json.loads(preset.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        match = data.get("match", {})
+        env = effective_env(data)
+        profile = env.get("GGML_MOE_VRAM_PROFILE")
+        if not profile:
+            continue
+        if match.get("model_basename") != model_path.name:
+            continue
+        if match.get("expert_pack_basename") != pack_path.name:
+            continue
+        profile_path = (REPO / profile).resolve() if not Path(profile).is_absolute() else Path(profile)
+        if not profile_path.is_file():
+            continue
+        score = 0
+        if chat and "interactive" in preset.stem:
+            score -= 10
+        candidates.append((score, profile_path))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item[0])[1]
+
+
+def discover_profile(explicit: str | None, chat: bool = False, model_path: Path | None = None, pack_path: Path | None = None) -> Path | None:
     if explicit:
         profile = existing_file(explicit)
         if not profile:
@@ -478,6 +509,15 @@ def discover_profile(explicit: str | None) -> Path | None:
     profile = existing_file(os.environ.get("GGML_MOE_VRAM_PROFILE"))
     if profile:
         return profile
+
+    if model_path is not None and pack_path is not None:
+        groundtruth_profile = discover_groundtruth_profile(model_path, pack_path, chat)
+        if groundtruth_profile is not None:
+            return groundtruth_profile
+    elif chat:
+        chat_preferred = REPO_PRESETS / "groundtruth" / "wici-glm51-interactive-n84.route.csv"
+        if chat_preferred.is_file():
+            return chat_preferred.resolve()
 
     preferred = REPO / "bench" / "wici-glm51-moe" / "codex-route32-t8.route.csv"
     if preferred.is_file():
@@ -489,6 +529,16 @@ def discover_profile(explicit: str | None) -> Path | None:
         if routes:
             return routes[0].resolve()
     return None
+
+
+def discover_route_trace(explicit: str | None) -> Path | None:
+    value = explicit or os.environ.get("MOE_RUN_ROUTE_TRACE")
+    if not value:
+        return None
+    trace = existing_file(value)
+    if not trace:
+        raise SystemExit(f"route trace not found: {value}")
+    return trace.resolve()
 
 
 def is_nvme_path(path: Path) -> bool:
@@ -556,6 +606,15 @@ def compute_vram_cache_mib(gpu: GpuInfo | None, gpu_model_mib: int, pack: PackSt
     return floor_to(max(0, int(budget)), max(128, slot_mib))
 
 
+def compute_chat_vram_cache_safety_mib(gpu: GpuInfo | None) -> int:
+    env = os.environ.get("MOE_RUN_CHAT_VRAM_CACHE_SAFETY_MIB")
+    if env:
+        return max(0, int(env))
+    if gpu is None:
+        return 256
+    return floor_to(max(256, int(gpu.total_mib * 0.015)), 64)
+
+
 def read_env_log(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.is_file():
@@ -597,7 +656,92 @@ def measured_upgate_pct(profile: Path, cache_mib: int) -> int | None:
     return best[1] if best is not None else None
 
 
-def compute_upgate_pct(pack: PackStats, profile: Path | None, cache_mib: int) -> int:
+def trace_scratch_slots(trace_events: list[Any] | None, n_expert_used: int | None) -> tuple[int, int]:
+    fallback = max(1, int(n_expert_used or 8))
+    if not trace_events:
+        return 2 * fallback, fallback
+    by_seq: dict[int, dict[str, int]] = {}
+    for event in trace_events:
+        bucket = "down" if ".ffn_down_exps." in event.tensor else "upgate"
+        counts = by_seq.setdefault(int(event.seq), {"upgate": 0, "down": 0})
+        counts[bucket] += 1
+    upgate = max((counts["upgate"] for counts in by_seq.values()), default=2 * fallback)
+    down = max((counts["down"] for counts in by_seq.values()), default=fallback)
+    return max(upgate, 1), max(down, 1)
+
+
+def reserve_satisfies_scratch(est: dict[str, float | int], upgate_scratch: int, down_scratch: int) -> bool:
+    upgate_reserve = int(est.get("upgate_total_slots", est["upgate_slots"])) - int(est["upgate_protected_slots"])
+    down_reserve = int(est.get("down_total_slots", est["down_slots"])) - int(est["down_protected_slots"])
+    return upgate_reserve >= upgate_scratch and down_reserve >= down_scratch
+
+
+def compute_profile_reserve_pct(profile: Path | None, route_trace: Path | None, interactive: bool) -> int:
+    env = os.environ.get("GGML_MOE_VRAM_PROFILE_RESERVE_PCT")
+    if env:
+        return max(0, min(95, int(env)))
+    if route_trace is not None:
+        return 0
+    if interactive and profile is not None and profile.name == "wici-glm51-interactive-n84.route.csv":
+        return 10
+    return 20
+
+
+def recommend_trace_cache(
+    profile: Path,
+    route_trace: Path,
+    cache_mib: int,
+    reserve_pct: int | None,
+    n_expert_used: int | None,
+) -> tuple[int, int] | None:
+    try:
+        route_sim = load_helper("moe_route_cache_sim_for_runner", REPO / "scripts" / "moe-route-cache-sim.py")
+        entries = route_sim.load_entries(profile)
+        trace_events = route_sim.load_trace(route_trace)
+        upgate_scratch, down_scratch = trace_scratch_slots(trace_events, n_expert_used)
+
+        reserve_candidates_by_pct: dict[int, list[int]] = {}
+        for pct in range(35, 76):
+            slots = route_sim.split_estimate(entries, cache_mib, pct, 0, True, 1.0, 1.0, "protected")
+            up_slots = max(1, int(slots["upgate_slots"]))
+            down_slots = max(1, int(slots["down_slots"]))
+            required = max(
+                math.ceil(100.0 * upgate_scratch / up_slots),
+                math.ceil(100.0 * down_scratch / down_slots),
+            )
+            # Short traces understate the live replacement pool needed during full generations.
+            required = max(required, int(os.environ.get("MOE_RUN_TRACE_MIN_RESERVE_PCT", "10")))
+            required = max(0, min(30, required))
+            if reserve_pct is not None:
+                reserve_candidates_by_pct[pct] = [reserve_pct]
+            else:
+                reserve_candidates_by_pct[pct] = sorted({required, min(30, required + 5)})
+
+        candidates: list[tuple[dict[str, float | int], int]] = []
+        for pct in range(35, 76):
+            for reserve in reserve_candidates_by_pct[pct]:
+                est = route_sim.simulate_trace(
+                    entries, trace_events, cache_mib, pct, reserve, True,
+                    "lfu_lru", "protected", 1, 1.0, 1.0)
+                candidates.append((est, int(reserve)))
+        usable = [(est, reserve) for est, reserve in candidates if reserve_satisfies_scratch(est, upgate_scratch, down_scratch)]
+        pool = usable if usable else candidates
+        best_score = min(float(est["weighted_miss_gib"]) for est, _reserve in pool)
+        tolerance_pct = float(os.environ.get("MOE_RUN_TRACE_RESERVE_SCORE_TOLERANCE_PCT", "2.0"))
+        tolerance = best_score * tolerance_pct / 100.0
+        near_best = [(est, reserve) for est, reserve in pool if float(est["weighted_miss_gib"]) <= best_score + tolerance]
+        best, best_reserve = min(near_best, key=lambda item: (item[1], float(item[0]["miss_gib"]), int(item[0]["pct"])))
+        return int(best["pct"]), int(best_reserve)
+    except Exception as exc:
+        print(f"[moe-run] warning: route trace cache estimate failed: {exc}", file=sys.stderr)
+        return None
+
+
+def compute_upgate_pct(pack: PackStats, profile: Path | None, route_trace: Path | None, cache_mib: int, reserve_pct: int, n_expert_used: int | None) -> int:
+    if profile is not None and route_trace is not None and cache_mib > 0:
+        recommended = recommend_trace_cache(profile, route_trace, cache_mib, reserve_pct, n_expert_used)
+        if recommended is not None:
+            return recommended[0]
     if profile is not None and cache_mib > 0:
         try:
             measured = measured_upgate_pct(profile, cache_mib)
@@ -606,20 +750,23 @@ def compute_upgate_pct(pack: PackStats, profile: Path | None, cache_mib: int) ->
             route_sim = load_helper("moe_route_cache_sim_for_runner", REPO / "scripts" / "moe-route-cache-sim.py")
             entries = route_sim.load_entries(profile)
             estimates = [
-                route_sim.split_estimate(entries, cache_mib, pct, 20, True, 1.0, 1.0, "protected")
-                for pct in range(35, 76, 5)
+                route_sim.split_estimate(entries, cache_mib, pct, reserve_pct, True, 1.0, 1.0, "protected")
+                for pct in range(35, 76)
             ]
-            best = min(estimates, key=lambda est: (float(est["weighted_miss_gib"]), float(est["miss_gib"]), int(est["pct"])))
+            best_score = min(float(est["weighted_miss_gib"]) for est in estimates)
+            tolerance = float(os.environ.get("MOE_RUN_UPGATE_SCORE_TOLERANCE_GIB", "0.10"))
+            near_best = [est for est in estimates if float(est["weighted_miss_gib"]) <= best_score + tolerance]
+            best = min(near_best, key=lambda est: (int(est["pct"]), float(est["miss_gib"])))
             return int(best["pct"])
         except Exception as exc:
             print(f"[moe-run] warning: route profile split estimate failed: {exc}", file=sys.stderr)
     total = pack.upgate_bytes + pack.down_bytes
     if total <= 0:
         return 50
-    return max(35, min(75, round(100 * pack.upgate_bytes / total / 5) * 5))
+    return max(35, min(75, round(100 * pack.upgate_bytes / total)))
 
 
-def compute_ram_tier_mib(mem: MemInfo, pack: PackStats) -> int:
+def legacy_ram_tier_mib(mem: MemInfo, pack: PackStats) -> int:
     if mem.available_mib <= 0 or pack.max_entry_bytes <= 0:
         return 0
     safety = max(2048, int(mem.total_mib * 0.10))
@@ -627,6 +774,91 @@ def compute_ram_tier_mib(mem: MemInfo, pack: PackStats) -> int:
     useful_cap = max(0, int(pack.payload_bytes / MIB * 0.02))
     budget = min(int(available * 0.36), useful_cap)
     return floor_to(budget, 1024)
+
+
+def estimate_ram_tier_hit_bytes(entries: list[Any], skip: int, budget_mib: int) -> int:
+    budget = budget_mib * MIB
+    loaded = 0
+    hit_bytes = 0
+    for entry in entries[skip:]:
+        if loaded + entry.expert_bytes > budget:
+            break
+        loaded += entry.expert_bytes
+        hit_bytes += entry.count * entry.expert_bytes
+    return hit_bytes
+
+
+def compute_ram_tier_mib(
+    mem: MemInfo,
+    pack: PackStats,
+    profile: Path | None,
+    cache_mib: int,
+    upgate_pct: int,
+    reserve_pct: int,
+    interactive: bool,
+) -> int:
+    if profile is None or cache_mib <= 0:
+        return legacy_ram_tier_mib(mem, pack)
+    try:
+        route_sim = load_helper("moe_route_cache_sim_for_runner", REPO / "scripts" / "moe-route-cache-sim.py")
+        entries = route_sim.load_entries(profile)
+        split = route_sim.split_estimate(entries, cache_mib, upgate_pct, reserve_pct, True, 1.0, 1.0, "protected")
+        skip = int(split["upgate_protected_slots"]) + int(split["down_protected_slots"])
+    except Exception as exc:
+        print(f"[moe-run] warning: route profile RAM-tier estimate failed: {exc}", file=sys.stderr)
+        return legacy_ram_tier_mib(mem, pack)
+
+    safety = max(2048, int(mem.total_mib * 0.10))
+    available = max(0, mem.available_mib - safety)
+    useful_cap = max(0, int(pack.payload_bytes / MIB * 0.02))
+    available_fraction = 0.30 if interactive else 0.36
+    step_mib = 256 if interactive else 1024
+    max_budget = floor_to(min(int(available * available_fraction), useful_cap), step_mib)
+    max_env = os.environ.get("MOE_RUN_RAM_TIER_MAX_MIB")
+    if max_env:
+        max_budget = min(max_budget, floor_to(int(max_env), step_mib))
+    if max_budget <= 0:
+        return 0
+
+    threshold_default = "17.0" if interactive else "8.0"
+    marginal_threshold = float(os.environ.get("MOE_RUN_RAM_TIER_MIN_MARGINAL_GIB_PER_GIB", threshold_default))
+    target_hit_bytes = 0
+    if interactive:
+        target_pct = float(os.environ.get("MOE_RUN_RAM_TIER_HIT_TARGET_PCT", "16.0"))
+        target_hit_bytes = int(float(split["weighted_miss_gib"]) * (1024 ** 3) * max(0.0, target_pct) / 100.0)
+    min_budget = min(max_budget, 1024 if interactive else step_mib)
+    chosen = 0
+    prev_hit = 0
+    prev_mib = 0
+    for budget_mib in range(step_mib, max_budget + 1, step_mib):
+        hit = estimate_ram_tier_hit_bytes(entries, skip, budget_mib)
+        if budget_mib <= min_budget:
+            chosen = budget_mib
+        else:
+            delta_gib = (hit - prev_hit) / (1024 ** 3)
+            delta_budget_gib = (budget_mib - prev_mib) / 1024.0
+            marginal = delta_gib / max(delta_budget_gib, 1e-9)
+            if marginal < marginal_threshold:
+                break
+            chosen = budget_mib
+        if target_hit_bytes > 0 and hit >= target_hit_bytes:
+            break
+        prev_hit = hit
+        prev_mib = budget_mib
+    return chosen
+
+
+def compute_ram_tier_skip(pack: PackStats, profile: Path | None, cache_mib: int, upgate_pct: int, reserve_pct: int) -> int:
+    if profile is not None and cache_mib > 0:
+        try:
+            route_sim = load_helper("moe_route_cache_sim_for_runner", REPO / "scripts" / "moe-route-cache-sim.py")
+            entries = route_sim.load_entries(profile)
+            split = route_sim.split_estimate(entries, cache_mib, upgate_pct, reserve_pct, True, 1.0, 1.0, "protected")
+            return int(split["upgate_protected_slots"]) + int(split["down_protected_slots"])
+        except Exception as exc:
+            print(f"[moe-run] warning: route profile RAM-tier skip estimate failed: {exc}", file=sys.stderr)
+    avg_slot_mib = max(1.0, pack.payload_bytes / max(pack.entries, 1) / MIB)
+    return round(cache_mib / avg_slot_mib) if avg_slot_mib > 0 else 0
 
 
 def compute_env(
@@ -638,15 +870,30 @@ def compute_env(
     gpu: GpuInfo | None,
     mem: MemInfo,
     ctx_size: int,
+    route_trace: Path | None = None,
+    interactive: bool = False,
 ) -> dict[str, str]:
     cache_mib = compute_vram_cache_mib(gpu, 0, pack, ctx_size)
+    if interactive and gpu is not None and cache_mib > 0:
+        chat_cache_fraction = float(os.environ.get("MOE_RUN_CHAT_VRAM_CACHE_FRACTION", "0.095"))
+        slot_mib = max(128, math.ceil(pack.max_entry_bytes / MIB))
+        chat_cap = floor_to(int(gpu.total_mib * chat_cache_fraction), slot_mib)
+        if chat_cap > 0:
+            cache_mib = min(cache_mib, chat_cap)
     n_gpu_layers, _gpu_model_mib = compute_n_gpu_layers(model, gpu, ctx_size, cache_mib_floor=cache_mib)
 
     gpu_enabled = gpu is not None and n_gpu_layers > 0
     direct_io = is_nvme_path(pack_path)
-    ram_tier_mib = compute_ram_tier_mib(mem, pack)
-    avg_slot_mib = max(1.0, pack.payload_bytes / max(pack.entries, 1) / MIB)
-    ram_skip = round(cache_mib / avg_slot_mib) if avg_slot_mib > 0 else 0
+    reserve_pct = compute_profile_reserve_pct(profile_path, route_trace, interactive)
+    trace_recommended = None
+    if profile_path is not None and route_trace is not None and cache_mib > 0:
+        trace_recommended = recommend_trace_cache(profile_path, route_trace, cache_mib, None, model.n_expert_used)
+    if trace_recommended is not None:
+        upgate_pct, reserve_pct = trace_recommended
+    else:
+        upgate_pct = compute_upgate_pct(pack, profile_path, route_trace, cache_mib, reserve_pct, model.n_expert_used)
+    ram_tier_mib = compute_ram_tier_mib(mem, pack, profile_path, cache_mib, upgate_pct, reserve_pct, interactive)
+    ram_skip = compute_ram_tier_skip(pack, profile_path, cache_mib, upgate_pct, reserve_pct)
 
     env = {
         "MODEL": str(model_path),
@@ -655,7 +902,7 @@ def compute_env(
         "GGML_MOE_BATCH_PROFILE": "0",
         "GGML_MOE_GPU_HANDOFF": "1" if gpu_enabled else "0",
         "GGML_MOE_VRAM_CACHE_MIB": str(cache_mib),
-        "GGML_MOE_VRAM_CACHE_UPGATE_PCT": str(compute_upgate_pct(pack, profile_path, cache_mib)),
+        "GGML_MOE_VRAM_CACHE_UPGATE_PCT": str(upgate_pct),
         "GGML_MOE_STAGE_PINNED": "1" if gpu_enabled and direct_io else "0",
         "GGML_MOE_STREAM_UP_GATE_PARALLEL": "1" if gpu_enabled else "0",
         "GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE": "1" if gpu_enabled and direct_io else "0",
@@ -666,9 +913,18 @@ def compute_env(
         "GGML_MOE_RAM_TIER_MIB": str(ram_tier_mib),
         "GGML_MOE_RAM_TIER_SKIP": str(ram_skip),
     }
+    if interactive and gpu_enabled and cache_mib > 0:
+        env["GGML_CUDA_EAGER_CUBLAS"] = "1"
+        env["GGML_MOE_VRAM_CACHE_AUTO_CLAMP"] = "1"
+        env["GGML_MOE_VRAM_CACHE_SAFETY_MIB"] = str(compute_chat_vram_cache_safety_mib(gpu))
     if profile_path is not None:
         env["GGML_MOE_VRAM_PROFILE"] = repo_relative_or_absolute(profile_path)
         env["GGML_MOE_VRAM_PROFILE_PROTECT"] = "1"
+        env["GGML_MOE_VRAM_PROFILE_RESERVE_PCT"] = str(reserve_pct)
+        if interactive and gpu_enabled:
+            env["LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS"] = os.environ.get(
+                "MOE_RUN_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS", "3"
+            )
     else:
         env["GGML_MOE_VRAM_PROFILE_PROTECT"] = "0"
     return env
@@ -678,6 +934,7 @@ def build_fingerprint(
     model_paths: list[Path],
     pack_path: Path,
     profile_path: Path | None,
+    route_trace: Path | None,
     model: ModelStats,
     pack: PackStats,
     gpu: GpuInfo | None,
@@ -686,24 +943,50 @@ def build_fingerprint(
     storage: StorageInfo,
     ctx_size: int,
 ) -> tuple[str, dict[str, Any]]:
-    payload: dict[str, Any] = {
+    stable_gpu = None
+    if gpu is not None:
+        stable_gpu = {
+            "name": gpu.name,
+            "total_mib": gpu.total_mib,
+            "bus_id": gpu.bus_id,
+        }
+    stable_mem = {
+        "total_mib": mem.total_mib,
+    }
+    stable_storage = {
+        "disk": storage.disk,
+        "fstype": storage.fstype,
+        "transport": storage.transport,
+        "rotational": storage.rotational,
+        "scheduler": storage.scheduler,
+        "model": storage.model,
+        "size": storage.size,
+    }
+    fingerprint_payload: dict[str, Any] = {
         "script_version": SCRIPT_VERSION,
         "host": socket.gethostname(),
-        "platform": platform.platform(),
-        "python": platform.python_version(),
         "ctx_size": ctx_size,
         "model_files": [stat_fingerprint(path) for path in model_paths],
         "pack_file": stat_fingerprint(pack_path),
         "profile_file": stat_fingerprint(profile_path) if profile_path else None,
+        "route_trace_file": stat_fingerprint(route_trace) if route_trace else None,
         "model": model.__dict__,
         "pack": pack.__dict__,
-        "gpu": gpu.__dict__ if gpu else None,
+        "gpu": stable_gpu,
         "cpu": cpu.__dict__,
+        "mem": stable_mem,
+        "storage": stable_storage,
+    }
+    inputs = dict(fingerprint_payload)
+    inputs["observed"] = {
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "gpu": gpu.__dict__ if gpu else None,
         "mem": mem.__dict__,
         "storage": storage.__dict__,
     }
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest(), payload
+    raw = json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest(), inputs
 
 
 def write_text_atomic(path: Path, text: str) -> None:
@@ -728,6 +1011,18 @@ def effective_env(data: dict[str, Any]) -> dict[str, str]:
     env = {key: str(value) for key, value in BASE_ENV.items()}
     env.update({key: str(value) for key, value in data["env"].items()})
     return env
+
+
+def apply_runtime_env_overrides(env: dict[str, str]) -> None:
+    for key in list(env):
+        if key in os.environ:
+            env[key] = os.environ[key]
+
+
+def apply_chat_env_defaults(env: dict[str, str]) -> None:
+    profile = env.get("GGML_MOE_VRAM_PROFILE", "")
+    if Path(profile).name == "wici-glm51-interactive-n84.route.csv":
+        env.setdefault("GGML_MOE_VRAM_PROFILE_RESERVE_PCT", "10")
 
 
 CHEAP_GROUNDTRUTH_MATCH_KEYS = {
@@ -948,11 +1243,19 @@ def read_matching_preset(path: Path, fingerprint: str) -> dict[str, Any] | None:
 
 
 def load_or_create_preset(args: argparse.Namespace) -> tuple[dict[str, Any], Path, Path]:
+    if args.preset:
+        preset_path = existing_file(args.preset)
+        if not preset_path:
+            raise SystemExit(f"preset not found: {args.preset}")
+        data = json.loads(preset_path.read_text(encoding="utf-8"))
+        return data, preset_path, preset_path.with_suffix(".env")
+
     model_path = discover_model(args.model)
     model_paths = model_shards(model_path)
     model_path = model_paths[0]
     pack_path = discover_pack(model_path, args.expert_pack)
-    profile_path = discover_profile(args.profile)
+    profile_path = discover_profile(args.profile, args.chat, model_path, pack_path)
+    route_trace = discover_route_trace(args.route_trace)
 
     ctx_size = args.ctx_size or int(os.environ.get("CTX_SIZE", "2048"))
     gpu = read_gpu_info()
@@ -960,7 +1263,7 @@ def load_or_create_preset(args: argparse.Namespace) -> tuple[dict[str, Any], Pat
     mem = read_mem_info()
     storage = read_storage_info(pack_path)
 
-    if not args.force:
+    if not args.force and route_trace is None:
         groundtruth = load_groundtruth_preset_fast(model_path, pack_path, profile_path, gpu, cpu, mem, storage, ctx_size)
         if groundtruth is not None:
             return groundtruth
@@ -968,12 +1271,12 @@ def load_or_create_preset(args: argparse.Namespace) -> tuple[dict[str, Any], Pat
     model = read_model_stats(model_paths)
     pack = read_pack_stats(pack_path)
 
-    if not args.force:
+    if not args.force and route_trace is None:
         groundtruth = load_groundtruth_preset(model_path, pack_path, profile_path, model, gpu, cpu, mem, storage, ctx_size)
         if groundtruth is not None:
             return groundtruth
 
-    fingerprint, inputs = build_fingerprint(model_paths, pack_path, profile_path, model, pack, gpu, cpu, mem, storage, ctx_size)
+    fingerprint, inputs = build_fingerprint(model_paths, pack_path, profile_path, route_trace, model, pack, gpu, cpu, mem, storage, ctx_size)
 
     slug = sanitize_slug(model.name or model_path.stem)
     preset_name = f"{fingerprint[:16]}"
@@ -991,13 +1294,15 @@ def load_or_create_preset(args: argparse.Namespace) -> tuple[dict[str, Any], Pat
         if cache_preset is not None:
             return cache_preset, json_path, env_path
 
-    env = compute_env(model_path, pack_path, profile_path, model, pack, gpu, mem, ctx_size)
+    env = compute_env(model_path, pack_path, profile_path, model, pack, gpu, mem, ctx_size, route_trace=route_trace, interactive=args.chat)
     data = {
         "fingerprint": fingerprint,
         "created_by": "scripts/moe-run.py",
         "inputs": inputs,
         "env": env,
     }
+    if args.dry_run:
+        return data, json_path, env_path
     write_preset(json_path, env_path, data)
     if args.save_repo_preset or os.environ.get("MOE_RUN_SAVE_REPO_PRESET") == "1":
         write_preset(repo_json_path, repo_env_path, data)
@@ -1068,7 +1373,7 @@ def chat_gpu_layers(args: argparse.Namespace, data: dict[str, Any]) -> int:
     if env_value:
         return int(env_value)
     env = effective_env(data)
-    return max(int(env["N_GPU_LAYERS"]), 70)
+    return int(env["N_GPU_LAYERS"])
 
 
 def build_command(args: argparse.Namespace, data: dict[str, Any], extra: list[str]) -> list[str]:
@@ -1132,6 +1437,8 @@ def main() -> int:
     parser.add_argument("--model", help="GGUF model shard. Defaults to MODEL or known local model paths.")
     parser.add_argument("--expert-pack", help="MoE expert pack. Defaults to GGML_MOE_EXPERT_PACK or nearby *.expert-pack.")
     parser.add_argument("--profile", help="Route profile CSV. Defaults to GGML_MOE_VRAM_PROFILE or latest bench route profile.")
+    parser.add_argument("--route-trace", help="Optional route trace CSV from GGML_MOE_ROUTE_TRACE_OUT used for trace-aware preset recommendation.")
+    parser.add_argument("--preset", help="Load a generated preset JSON directly, bypassing model/pack discovery.")
     parser.add_argument("--ctx-size", type=int, help="Context size used for memory budgeting. Defaults to CTX_SIZE or 2048.")
     parser.add_argument("--tokens", type=int, help="Tokens for the benchmark harness. Defaults to TOKENS or the harness default.")
     parser.add_argument("--threads", type=int, help="CPU threads passed to llama-cli as -t unless already supplied after --.")
@@ -1144,6 +1451,7 @@ def main() -> int:
     parser.add_argument("--chat-no-active-prewarm", action="store_true", help="Deprecated compatibility flag; active prewarm is off unless --chat-active-prewarm is set.")
     parser.add_argument("--force", action="store_true", help="Recompute the preset even if the fingerprint already exists.")
     parser.add_argument("--save-repo-preset", action="store_true", help="Also write the generated matching preset under presets/moe for reuse.")
+    parser.add_argument("--print-preset-json", action="store_true", help="With --dry-run, print the computed preset JSON on a single preset_json= line.")
     parser.add_argument("--dry-run", action="store_true", help="Print the preset and command without executing.")
     parser.add_argument("extra", nargs=argparse.REMAINDER, help="Arguments after -- are passed to llama-cli.")
     args = parser.parse_args()
@@ -1166,6 +1474,8 @@ def main() -> int:
         raise SystemExit("--chat-no-active-prewarm requires --chat")
     if args.chat_active_prewarm and args.chat_no_active_prewarm:
         raise SystemExit("--chat-active-prewarm conflicts with --chat-no-active-prewarm")
+    if args.print_preset_json and not args.dry_run:
+        raise SystemExit("--print-preset-json requires --dry-run")
     if args.chat and not args.dry_run and not sys.stdin.isatty():
         raise SystemExit(
             "--chat needs an interactive terminal. Run it from a shell on wici, "
@@ -1178,6 +1488,9 @@ def main() -> int:
 
     env = os.environ.copy()
     env.update(effective_env(data))
+    apply_runtime_env_overrides(env)
+    if args.chat:
+        apply_chat_env_defaults(env)
     if args.tokens is not None:
         env["TOKENS"] = str(args.tokens)
     if args.chat and args.chat_active_prewarm and args.chat_load_mode == "fast-prompt":
@@ -1187,8 +1500,12 @@ def main() -> int:
         print(f"preset={json_path}")
         print(f"env_file={env_path}")
         print(f"cwd={REPO}")
+        if args.route_trace:
+            print(f"route_trace={discover_route_trace(args.route_trace)}")
         if args.chat and not args.chat_verbose:
             print(f"chat_stderr_log={chat_stderr_log_path()}")
+        if args.print_preset_json:
+            print("preset_json=" + json.dumps(data, sort_keys=True, separators=(",", ":")))
         print("command=" + " ".join(shlex.quote(part) for part in cmd))
         return 0
 

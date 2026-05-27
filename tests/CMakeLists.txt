@@ -204,6 +204,10 @@ llama_build_and_test(test-regex-partial.cpp)
 
 # llama_target_and_test(test-opt.cpp) # SLOW
 
+if (GGML_IQK_MUL_MAT AND NOT WIN32)
+    llama_build_and_test(test-iqk-iq2-repack.cpp)
+endif()
+
 llama_target_and_test(test-model-load-cancel.cpp  LABEL "model")
 llama_target_and_test(test-autorelease.cpp        LABEL "model")
 
@@ -212,5 +216,4 @@ llama_target_and_test(test-autorelease.cpp        LABEL "model")
 get_filename_component(TEST_TARGET test-c.c NAME_WE)
 add_executable(${TEST_TARGET} test-c.c)
 target_link_libraries(${TEST_TARGET} PRIVATE llama)
-
 

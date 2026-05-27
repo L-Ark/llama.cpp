@@ -515,6 +515,10 @@ ggml_backend_cuda_context::ggml_backend_cuda_context(int device) :
     } else{
         info->all_ctx[device] = this;
     }
+    const char * eager_cublas = std::getenv("GGML_CUDA_EAGER_CUBLAS");
+    if (eager_cublas && eager_cublas[0] && eager_cublas[0] != '0') {
+        (void)cublas_handle(device);
+    }
 }
 
 ggml_backend_cuda_context::~ggml_backend_cuda_context() {

@@ -41,6 +41,7 @@ lcov-report/
 
 # Build Artifacts
 
+/bench/
 tags
 .build/
 build*
