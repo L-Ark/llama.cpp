@@ -27,6 +27,8 @@ SCRIPT_VERSION = 2
 REPO = Path(__file__).resolve().parents[1]
 REPO_PRESETS = REPO / "presets" / "moe"
 MIB = 1024 ** 2
+DEFAULT_GLM51_MODEL_GLOB = str(REPO / "models" / "GLM-5.1-UD-IQ3_XXS" / "*-00001-of-*.gguf")
+DEFAULT_MODELS_GLOB = str(REPO / "models" / "**" / "*.gguf")
 
 BASE_ENV = {
     "MLA": "3",
@@ -58,6 +60,44 @@ CHAT_DEFAULT_ARGS = [
     ("--presence-penalty", "0.1"),
     ("--frequency-penalty", "0.2"),
 ]
+
+LOW_HOST_RAM_PROFILE_PATH = "presets/moe/groundtruth/wici-glm51-interactive-n84-expert-top8.runtime.csv"
+LOW_HOST_RAM_PROFILES = {
+    "glm51-2gb-vram8": {
+        "chat_gpu_layers": 79,
+        "env": {
+            "N_GPU_LAYERS": "79",
+            "GGML_MOE_RAM_TIER_MIB": "0",
+            "GGML_MOE_RAM_TIER_SKIP": "0",
+            "GGML_MOE_VRAM_CACHE_MIB": "8192",
+            "GGML_MOE_VRAM_CACHE_UPGATE_PCT": "60",
+            "GGML_MOE_VRAM_CACHE_POLICY": "lfu_lru",
+            "GGML_MOE_VRAM_PROFILE": LOW_HOST_RAM_PROFILE_PATH,
+            "GGML_MOE_VRAM_PROFILE_PROTECT": "1",
+            "GGML_MOE_VRAM_PROFILE_RESERVE_PCT": "10",
+            "GGML_MOE_IO_BACKEND": "direct",
+            "GGML_MOE_STAGE_PINNED": "0",
+            "LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS": "3",
+        },
+    },
+    "glm51-2gb-vram12": {
+        "chat_gpu_layers": 79,
+        "env": {
+            "N_GPU_LAYERS": "79",
+            "GGML_MOE_RAM_TIER_MIB": "0",
+            "GGML_MOE_RAM_TIER_SKIP": "0",
+            "GGML_MOE_VRAM_CACHE_MIB": "12288",
+            "GGML_MOE_VRAM_CACHE_UPGATE_PCT": "60",
+            "GGML_MOE_VRAM_CACHE_POLICY": "lfu_lru",
+            "GGML_MOE_VRAM_PROFILE": LOW_HOST_RAM_PROFILE_PATH,
+            "GGML_MOE_VRAM_PROFILE_PROTECT": "1",
+            "GGML_MOE_VRAM_PROFILE_RESERVE_PCT": "10",
+            "GGML_MOE_IO_BACKEND": "direct",
+            "GGML_MOE_STAGE_PINNED": "0",
+            "LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS": "3",
+        },
+    },
+}
 
 PACK_HEADER = struct.Struct("<16sIIQQ")
 PACK_ENTRY = struct.Struct("<128siIQQ")
@@ -416,7 +456,13 @@ def existing_file(value: str | None) -> Path | None:
     if not value:
         return None
     path = Path(value).expanduser()
-    return path.resolve() if path.is_file() else None
+    if path.is_file():
+        return path.resolve()
+    if not path.is_absolute():
+        repo_path = (REPO / path).resolve()
+        if repo_path.is_file():
+            return repo_path
+    return None
 
 
 def first_existing(patterns: list[str]) -> Path | None:
@@ -439,9 +485,8 @@ def discover_model(explicit: str | None) -> Path:
         return model
 
     candidates = [
-        "/home/wici/models/glm-5.1/UD-IQ3_XXS/*-00001-of-*.gguf",
-        "/home/wici/models/glm-5.1/**/*.gguf",
-        "/home/wici/models/**/*.gguf",
+        DEFAULT_GLM51_MODEL_GLOB,
+        DEFAULT_MODELS_GLOB,
     ]
     found = first_existing(candidates)
     if found:
@@ -459,11 +504,11 @@ def discover_pack(model: Path, explicit: str | None) -> Path:
     if pack:
         return pack
 
-    search_roots = [model.parent, model.parent.parent, Path("/home/wici/models/glm-5.1"), Path("/home/wici/models")]
+    search_roots = [model.parent, model.parent.parent, REPO / "models"]
     for root in search_roots:
         if not root.is_dir():
             continue
-        files = sorted(root.glob("*.expert-pack"))
+        files = sorted(root.glob("*.expert-pack")) or sorted(root.glob("**/*.expert-pack"))
         if files:
             return files[0].resolve()
     raise SystemExit("missing expert pack: set GGML_MOE_EXPERT_PACK=/path/pack or pass --expert-pack")
@@ -519,7 +564,7 @@ def discover_profile(explicit: str | None, chat: bool = False, model_path: Path 
         if chat_preferred.is_file():
             return chat_preferred.resolve()
 
-    preferred = REPO / "bench" / "wici-glm51-moe" / "codex-route32-t8.route.csv"
+    preferred = REPO_PRESETS / "groundtruth" / "wici-glm51-interactive-n84.route.csv"
     if preferred.is_file():
         return preferred.resolve()
 
@@ -1007,9 +1052,20 @@ def write_preset(json_path: Path, env_path: Path, data: dict[str, Any]) -> None:
     write_text_atomic(env_path, "\n".join(env_lines) + "\n")
 
 
+def repo_path_env_value(value: str) -> str:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return str(path)
+    candidate = REPO / path
+    return str(candidate.resolve()) if candidate.exists() else value
+
+
 def effective_env(data: dict[str, Any]) -> dict[str, str]:
     env = {key: str(value) for key, value in BASE_ENV.items()}
     env.update({key: str(value) for key, value in data["env"].items()})
+    for key in ("MODEL", "GGML_MOE_EXPERT_PACK", "GGML_MOE_VRAM_PROFILE"):
+        if key in env:
+            env[key] = repo_path_env_value(env[key])
     return env
 
 
@@ -1023,6 +1079,13 @@ def apply_chat_env_defaults(env: dict[str, str]) -> None:
     profile = env.get("GGML_MOE_VRAM_PROFILE", "")
     if Path(profile).name == "wici-glm51-interactive-n84.route.csv":
         env.setdefault("GGML_MOE_VRAM_PROFILE_RESERVE_PCT", "10")
+
+
+def apply_low_host_ram_profile(env: dict[str, str], profile_name: str | None) -> None:
+    if profile_name is None:
+        return
+    profile = LOW_HOST_RAM_PROFILES[profile_name]
+    env.update(profile["env"])
 
 
 CHEAP_GROUNDTRUTH_MATCH_KEYS = {
@@ -1447,6 +1510,11 @@ def main() -> int:
     parser.add_argument("--chat-verbose", action="store_true", help="Keep llama-cli chat startup logs visible instead of redirecting stderr to LLAMA_CACHE/moe-chat.")
     parser.add_argument("--chat-gpu-layers", type=int, help="GPU layers for chat mode. Defaults to CHAT_N_GPU_LAYERS or the measured wici fast-prompt value.")
     parser.add_argument("--chat-threads-batch", type=int, default=int(os.environ.get("CHAT_THREADS_BATCH", "24")), help="Batch/prompt processing threads for chat mode unless -tb/--threads-batch is passed after --.")
+    parser.add_argument(
+        "--low-host-ram-profile",
+        choices=tuple(LOW_HOST_RAM_PROFILES),
+        help="Apply a measured GLM-5.1 low-host-RAM overlay. Requires --chat and is intended for MemoryMax=2G style runs.",
+    )
     parser.add_argument("--chat-active-prewarm", action="store_true", help="Run an optional prewarm decode before the first chat prompt.")
     parser.add_argument("--chat-no-active-prewarm", action="store_true", help="Deprecated compatibility flag; active prewarm is off unless --chat-active-prewarm is set.")
     parser.add_argument("--force", action="store_true", help="Recompute the preset even if the fingerprint already exists.")
@@ -1474,20 +1542,25 @@ def main() -> int:
         raise SystemExit("--chat-no-active-prewarm requires --chat")
     if args.chat_active_prewarm and args.chat_no_active_prewarm:
         raise SystemExit("--chat-active-prewarm conflicts with --chat-no-active-prewarm")
+    if args.low_host_ram_profile and not args.chat:
+        raise SystemExit("--low-host-ram-profile requires --chat")
     if args.print_preset_json and not args.dry_run:
         raise SystemExit("--print-preset-json requires --dry-run")
     if args.chat and not args.dry_run and not sys.stdin.isatty():
         raise SystemExit(
             "--chat needs an interactive terminal. Run it from a shell on wici, "
-            "or use: ssh -t wici 'cd /home/wici/venti/ik_llama && python3 scripts/moe-run.py --chat'"
+            "or allocate a TTY before running python3 scripts/moe-run.py --chat"
         )
 
     data, json_path, env_path = load_or_create_preset(args)
     extra = normalize_extra(args.extra)
+    if args.low_host_ram_profile and args.chat_gpu_layers is None and "CHAT_N_GPU_LAYERS" not in os.environ:
+        args.chat_gpu_layers = int(LOW_HOST_RAM_PROFILES[args.low_host_ram_profile]["chat_gpu_layers"])
     cmd = build_command(args, data, extra)
 
     env = os.environ.copy()
     env.update(effective_env(data))
+    apply_low_host_ram_profile(env, args.low_host_ram_profile)
     apply_runtime_env_overrides(env)
     if args.chat:
         apply_chat_env_defaults(env)
@@ -1500,6 +1573,10 @@ def main() -> int:
         print(f"preset={json_path}")
         print(f"env_file={env_path}")
         print(f"cwd={REPO}")
+        if args.low_host_ram_profile:
+            print(f"low_host_ram_profile={args.low_host_ram_profile}")
+            for key in sorted(LOW_HOST_RAM_PROFILES[args.low_host_ram_profile]["env"]):
+                print(f"low_host_ram_env:{key}={env[key]}")
         if args.route_trace:
             print(f"route_trace={discover_route_trace(args.route_trace)}")
         if args.chat and not args.chat_verbose:

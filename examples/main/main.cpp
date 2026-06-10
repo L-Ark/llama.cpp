@@ -75,6 +75,7 @@ extern "C" bool ggml_cuda_moe_stream_preload_expert_async(
     int expert_idx) __attribute__((weak));
 extern "C" bool ggml_cuda_moe_stream_preload_synchronize(void) __attribute__((weak));
 extern "C" void ggml_cuda_moe_ttft_trace_mark(const char * label) __attribute__((weak));
+extern "C" void ggml_cuda_moe_stream_batch_report_counters(void) __attribute__((weak));
 extern "C" bool ggml_moe_hotexp_preload_expert(
     const void * tensor_base,
     int expert_idx,
@@ -112,12 +113,17 @@ static bool chat_exit_command_enabled() {
     return value != nullptr && std::strcmp(value, "1") == 0;
 }
 
+static bool chat_turn_timings_enabled() {
+    const char * value = std::getenv("LLAMA_CHAT_TURN_TIMINGS");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+}
+
 static bool chat_is_exit_command(const std::string & buffer) {
     if (!chat_exit_command_enabled()) {
         return false;
     }
 
-    return buffer == "/exit\n" || buffer == "/exit\r\n";
+    return buffer.find("/exit") != std::string::npos;
 }
 
 static void chat_print_ready_marker() {
@@ -1523,6 +1529,14 @@ int main(int argc, char ** argv) {
                     printf("%s", params.input_prefix.c_str());
                 }
 
+                if (chat_turn_timings_enabled() && !waiting_for_first_input) {
+                    llama_print_timings(ctx);
+#if defined(__GNUC__) || defined(__clang__)
+                    if (ggml_cuda_moe_stream_batch_report_counters) {
+                        ggml_cuda_moe_stream_batch_report_counters();
+                    }
+#endif
+                }
                 chat_print_ready_marker();
                 chat_startup_profile_preload_after_ready(model);
 

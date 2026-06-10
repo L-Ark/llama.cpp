@@ -1108,6 +1108,12 @@ static void expert_pack_report_atexit() {
     }
 }
 
+extern "C" void ggml_cuda_moe_stream_batch_report_counters(void) {
+    batch_cache_report_atexit();
+    expert_pack_report_atexit();
+    std::fflush(stderr);
+}
+
 static bool expert_pack_read_exact(FILE *file, void *dst, size_t sz) {
     char *out = (char *)dst;
     size_t done = 0;

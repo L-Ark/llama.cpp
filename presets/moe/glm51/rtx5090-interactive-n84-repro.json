@@ -1,9 +1,9 @@
 {
-  "created_by": "scripts/moe-run.py",
+  "created_by": "Codex 5090 reproduction from presets/moe/groundtruth/wici-glm51-interactive-n84.json; paths normalized for repo-local standalone use",
   "env": {
     "CTX_SIZE": "2048",
-    "GGML_MOE_BATCH_PROFILE": "0",
     "GGML_CUDA_EAGER_CUBLAS": "1",
+    "GGML_MOE_BATCH_PROFILE": "0",
     "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
     "GGML_MOE_EXPERT_PACK": "models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack",
     "GGML_MOE_GPU_HANDOFF": "1",
@@ -36,9 +36,9 @@
     "expert_pack_basename": "glm51-iq3xxs.expert-pack",
     "gpu_bus_id": "00000000:02:00.0",
     "gpu_driver": "595.71.05",
-    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "gpu_total_mib": 16311,
-    "host": "wici",
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_total_mib": 32607,
+    "host": "92.180.27.82",
     "model_basename": "GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
     "profile_basename": "wici-glm51-interactive-n84.route.csv",
     "storage_disk": "/dev/nvme0n1",
@@ -49,6 +49,6 @@
     "storage_source": "/dev/nvme0n1p2",
     "storage_transport": "nvme"
   },
-  "name": "wici-glm51-interactive-n84",
-  "notes": "Interactive GLM-5.1 chat preset for the fixed n84 latency harness. The 1536 MiB cache budget plus auto-clamp and a 256 MiB runtime safety margin leaves CUDA graph and startup-preload headroom on the current wici driver state; 128 MiB and 192 MiB safety margins can allocate a larger cache and then OOM during first-prompt CUDA graph instantiation when background VRAM use is about 883 MiB. Startup preloads warm the first three route-profile tensors to reduce first prompt TTFT while preserving the n36 canary. Dynamic prompt expert scheduling replaces static per-thread expert striping with an atomic work queue for prompt MoE only; it preserves IQK arithmetic and was accepted after n36 canary plus two-run n84 confirmation."
+  "name": "rtx5090-glm51-interactive-n84-repro",
+  "notes": "Interactive GLM-5.1 chat preset for the fixed n84 latency harness. The 1536 MiB cache budget plus auto-clamp and a 256 MiB runtime safety margin leaves CUDA graph and startup-preload headroom on the current wici driver state. Standalone normalization: MODEL and GGML_MOE_EXPERT_PACK are repo-relative paths under models/GLM-5.1-UD-IQ3_XXS."
 }
