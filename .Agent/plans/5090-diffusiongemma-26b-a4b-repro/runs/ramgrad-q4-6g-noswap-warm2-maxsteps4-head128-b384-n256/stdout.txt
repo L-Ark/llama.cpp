@@ -1,0 +1,23 @@
+
+> 
+<|channel>thought
+"Warm up."
+The user wants to start a conversation, a creative session, or a mental exercise.. It a a a a a a--
+total time: 721.20ms, time per step: 180.30ms (4 steps over 1 blocks, entropy-bound)
+throughput: 355.0 tok/s (256 tok in 721.20ms), in-step parallel 1420 tok/s (256-tok canvas x 4.0 steps/block)
+
+> 
+<|channel>thought
+*   Question: Why is the sky blue?
+    *   Constraint: One concise paragraph.
+
+    *   Mechanism: Rayleigh scattering.
+    *   Process: Sunlight ( all light) contains all colors..
+    *   Interaction: molecules molecules molecules molecules molecules molecules            **       Blue Blue Blue ( ( shorter)))) longer longer longer longerred longer    
+               :    blue blue blue blue blue blue
+
+     skyThe sky is blue blue of Rayleigh scattering scattering scattering scattering. the sunlight of the the the the
+total time: 242.79ms, time per step: 60.70ms (4 steps over 1 blocks, entropy-bound)
+throughput: 1054.4 tok/s (256 tok in 242.79ms), in-step parallel 4218 tok/s (256-tok canvas x 4.0 steps/block)
+
+> 

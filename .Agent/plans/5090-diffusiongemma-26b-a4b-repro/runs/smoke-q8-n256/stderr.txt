@@ -1,0 +1,11 @@
+Running as unit: run-u1738.service
+0.01.176.789 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.16.888.836 I diffusion: -n 256 -> 1 blocks, n_ubatch=2304 n_batch=2304 n_ctx=2304 (canvas_length=256)
+0.16.888.850 I diffusion: --fit has no effect here; context is sized from -n and the canvas. Set -ngl / --n-cpu-moe to control device memory.
+0.16.894.661 W llama_context: n_ctx_seq (2304) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.16.914.418 W sched_reserve: layer 5 is assigned to device CUDA0 but the Flash Attention tensor is assigned to device CPU (usually due to missing support)
+0.16.914.424 W sched_reserve: Flash Attention was auto, set to disabled
+Finished with result: oom-kill
+Main processes terminated with: code=killed/status=KILL
+Service runtime: 20.658s
+CPU time consumed: 16.897s

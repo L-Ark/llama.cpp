@@ -1,0 +1,14 @@
+Running as unit: run-u1747.service
+0.00.239.350 W llama_model_loader: direct I/O is enabled, disabling mmap
+0.01.118.893 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.119.582 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.156.928 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.06.101.249 I diffusion: -n 64 -> 1 blocks, n_ubatch=320 n_batch=320 n_ctx=320 (canvas_length=256 prompt_headroom=64)
+0.06.101.261 I diffusion: --fit has no effect here; context is sized from -n and the canvas. Set -ngl / --n-cpu-moe to control device memory.
+0.06.101.981 W llama_context: n_ctx_seq (512) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.06.107.325 W sched_reserve: layer 5 is assigned to device CUDA0 but the Flash Attention tensor is assigned to device CPU (usually due to missing support)
+0.06.107.338 W sched_reserve: Flash Attention was auto, set to disabled
+Finished with result: oom-kill
+Main processes terminated with: code=killed/status=KILL
+Service runtime: 7.461s
+CPU time consumed: 5.727s
