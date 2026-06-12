@@ -578,7 +578,8 @@ static void batch_ttft_trace_record(
     if (!batch_ttft_trace_enabled()) return;
     const auto now = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lk(g_ttft_trace_mu);
-    if (g_ttft_trace.size() >= g_ttft_trace_cap) return;
+    const bool is_marker = op && std::strncmp(op, "mark_", 5) == 0;
+    if (!is_marker && g_ttft_trace.size() >= g_ttft_trace_cap) return;
 
     batch_ttft_trace_entry e;
     e.seq = ++g_ttft_trace_seq;
@@ -2587,6 +2588,24 @@ extern "C" bool ggml_cuda_moe_stream_preload_expert_async(
     if (batch_cache_find_slot(cache, key) >= 0) return true;
     const char *expert_host = (const char *)src0_data + (size_t)expert_idx * nb02;
     return batch_cache_insert_slot(cache, key, expert_host, expert_bytes, g_batch.stream, false, true,
+            nullptr, 0, true, src0_name, expert_idx) >= 0;
+}
+
+extern "C" bool ggml_cuda_moe_stream_preload_expert_from_pack_async(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    int expert_idx) {
+    if (!init_batch_once()) return false;
+    if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0]) return false;
+    if (expert_idx < 0 || expert_idx >= n_as) return false;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) return false;
+    const uintptr_t key = batch_key_hash(src0_name, expert_idx);
+    if (batch_cache_find_slot(cache, key) >= 0) return true;
+    return batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.stream, false, true,
             nullptr, 0, true, src0_name, expert_idx) >= 0;
 }
 
