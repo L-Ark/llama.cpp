@@ -224,15 +224,16 @@ def main() -> int:
 
                 if submitted and first_visible_t is None:
                     tail_start = post_submit_text.rfind(PROMPT)
-                    if tail_start >= 0:
-                        tail = post_submit_text[tail_start + len(PROMPT):]
-                        if not prompt_echo_seen:
-                            if "\n" not in tail:
-                                continue
-                            prompt_echo_seen = True
-                            tail = tail.split("\n", 1)[1]
+                    if not prompt_echo_seen:
+                        if tail_start < 0:
+                            continue
+                        tail_after_prompt = post_submit_text[tail_start + len(PROMPT):]
+                        if "\n" not in tail_after_prompt:
+                            continue
+                        prompt_echo_seen = True
+                        tail = tail_after_prompt.split("\n", 1)[1]
                     else:
-                        tail = post_submit_text
+                        tail = post_submit_text[tail_start + len(PROMPT):] if tail_start >= 0 else post_submit_text
                     for marker in READY_RE.finditer(tail):
                         tail = tail.replace(marker.group(0), "")
                     tail = tail.replace("> ", "").strip()

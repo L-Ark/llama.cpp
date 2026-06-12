@@ -1,0 +1,12 @@
+Running as unit: run-u1814.service
+Press ^] three times within 1s to disconnect TTY.
+[moe-run] preset=/root/.cache/llama.cpp/moe-presets/glm-5.1/dd8901069bb38c32.json
+[moe-run] stderr_log=/root/.cache/llama.cpp/moe-chat/20260612-053923-416590.stderr.log
+[33m[0m
+> 
+[[LLAMA_CHAT_READY:1]]
+[1m[32mWrite a concise explanation of why NVMe latency matters for MoE inference.
+[0mIn Mixture-of-Experts (MoE) inference, only a fraction of
+> 
+[[LLAMA_CHAT_READY:2]]
+[1m[32m

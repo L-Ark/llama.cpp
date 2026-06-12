@@ -329,3 +329,215 @@ Progress update before committing `.Agent/`:
 - Before commit, removed nested `.git` metadata from cloned research repos so
   `.Agent/` can be committed as a normal source/document snapshot rather than
   as unresolved gitlinks/submodules.
+
+Continuation after `.Agent/` commit:
+
+- 2026-06-12: Re-read `.Agent/Agent.md` and this plan. Worktree is clean on
+  `feat/glm51-5090-2gb-vram-standalone`; GPU is idle (`223 MiB` used,
+  `31887 MiB` free, `0%` util).
+- Rechecked `run_smoke_accuracy.py`: `--inner-no-systemd` runs each sample
+  directly, so the whole dataset can be placed under a single outer
+  `systemd-run -p MemoryMax=2G -p MemorySwapMax=0` cgroup and avoids the
+  earlier per-sample `systemd-run --wait` hang.
+- Rechecked `/root/lfz/data/glm_resource_eval/processed/smoke.jsonl`: 4
+  scored multiple-choice samples (`D`, `D`, `B`, `C`).
+- Target run plan:
+  - `smoke4-baseline-v3`: SER off;
+  - `smoke4-ser-1-095-v3`: `--smart-expert-reduction 1,0.95`;
+  - both with `VRAM=12288`, `RAM=0`, top8 profile, direct I/O, seed `42`,
+    `predict_tokens=4`, host RAM `MemoryMax=2G`, swap disabled.
+- The direct-completion scoring runner reports accuracy, prompt/eval token
+  rate, total runtime, direct reads, VRAM hit, RAM hit, read failures, and wall
+  time. It does not measure interactive TTFT/time-to-type; if the full smoke
+  result supports `SER=1,0.95`, run a separate interactive TTFT check for the
+  selected candidate.
+
+E4 scored results:
+
+| run | SER | accuracy | direct_reads | VRAM hit avg | RAM hit | prompt tok/s | eval tok/s | total_ms | wall_s | read_failures | summary |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| smoke4-baseline-v3 | off | 3/4 | 22578 | 14.7% | 0.0% | 0.904 | 0.451 | 642134.90 | 656.51 | 0 | `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/accuracy/smoke4-baseline-v3.summary.json` |
+| smoke4-ser-1-095-v3 | 1,0.95 | 3/4 | 20580 | 21.5% | 0.0% | 0.978 | 0.590 | 607250.91 | 619.24 | 0 | `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/accuracy/smoke4-ser-1-095-v3.summary.json` |
+
+Per-sample outputs:
+
+| sample | expected | baseline output | SER output | baseline direct_reads | SER direct_reads | baseline eval tok/s | SER eval tok/s |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| ceval_computer_network_0009 | D | D | D | 3384 | 5401 | 0.44 | 0.57 |
+| cmmlu_chinese_civil_service_exam_0098 | D | D | D | 6408 | 4872 | 0.44 | 0.64 |
+| ceval_computer_network_0010 | B | B | B | 6378 | 5172 | 0.45 | 0.55 |
+| cmmlu_chinese_civil_service_exam_0150 | C | D | D | 6408 | 5135 | 0.47 | 0.60 |
+
+Interpretation:
+
+- `SER=1,0.95` preserved the 4-item smoke accuracy (`3/4`) relative to the
+  baseline. Both configurations missed the same fourth sample.
+- `SER=1,0.95` improved aggregate performance:
+  - direct reads: `22578 -> 20580` (`-8.9%`);
+  - average VRAM hit: `14.7% -> 21.5%`;
+  - prompt eval: `0.904 -> 0.978 tok/s` (`+8.2%`);
+  - eval: `0.451 -> 0.590 tok/s` (`+30.8%`);
+  - total runtime: `642134.90 -> 607250.91 ms` (`-5.4%`);
+  - wall time: `656.51 -> 619.24 s` (`-5.7%`);
+  - read failures remained `0`.
+- The first sample is an exception: direct reads increased (`3384 -> 5401`).
+  This means the SER threshold is not uniformly reducing traffic per prompt;
+  it changes routed expert sets and may improve or worsen cache interaction per
+  sample.
+- Because accuracy did not regress on smoke and decode speed improved, run one
+  interactive TTFT check for the selected candidate before promoting it beyond
+  "experimental optional candidate".
+
+E4 interactive TTFT follow-up:
+
+- Planned run: `ttft-ser-1-095-v3` with existing
+  `run_local_interactive.py`, `--smart-expert-reduction 1,0.95`,
+  `MemoryMax=2G`, `MemorySwapMax=0`, `VRAM=12288`, `RAM=0`, top8 profile,
+  seed `42`, predict tokens `36`.
+
+Interactive TTFT results:
+
+| run | SER | time_to_type_s | interactive_ttft_s | first_visible_s | eval tok/s | direct_reads | VRAM hit | RAM hit | read_failures | stderr log |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| ttft-ser-1-095-v3 | 1,0.95 | 44.79 | invalid (`0.0003`, prompt echo parse bug) | invalid | 0.51 | 22115 | 11.1% | 0.0% | 0 | `/root/.cache/llama.cpp/moe-chat/20260612-053615-414798.stderr.log` |
+| ttft-ser-1-095-v4 | 1,0.95 | 45.75 | 57.14 | 102.90 | 0.56 | 22115 | 11.1% | 0.0% | 0 | `/root/.cache/llama.cpp/moe-chat/20260612-053923-416590.stderr.log` |
+
+TTFT parser fix:
+
+- `run_local_interactive.py` previously could mark the prompt echo as first
+  visible output if the PTY chunk did not yet contain the whole prompt string.
+- Fixed the parser so it must first observe the full prompt echo plus the
+  following newline before model output can count as first visible text.
+- `ttft-ser-1-095-v4` is the valid TTFT measurement. Treat v3 as invalid for
+  TTFT only; its throughput/cache counters still match the same SER setup.
+
+### Final E4 Decision
+
+`--smart-expert-reduction 1,0.95` is a viable experimental optional candidate
+for the 5090 strict-2GB GLM path:
+
+- It preserved 4-item smoke accuracy (`3/4`) relative to baseline.
+- It improved decode throughput (`0.451 -> 0.590 tok/s`) and reduced wall time
+  (`656.51 -> 619.24 s`) in the direct-completion scoring run.
+- It did not reduce interactive TTFT versus the earlier E1 baseline family;
+  the valid candidate TTFT is still high (`57.14 s`) and startup
+  `time_to_type_s` remains around `45.75 s`.
+- It changes routing/cache behavior non-uniformly across prompts; direct reads
+  increased on one smoke sample. This reinforces that it should not become a
+  default without daily-set validation.
+
+Do not implement a new cache-aware routing patch yet:
+
+- The existing no-code dynamic-k path already exposes the main tradeoff:
+  modest speed gains at `1,0.95`, quality collapse by `>=1.0`, and no effect at
+  lower thresholds.
+- A residency-aware patch would need a new bridge from router selection to
+  cache residency. Current evidence is not strong enough to justify touching
+  that runtime path before route-trace simulation or daily-set validation.
+- Next implementation-worthy step is a trace/simulator for candidate routing
+  policies, not a direct runtime patch.
+
+## E5: Trace/Simulation Check
+
+Purpose: satisfy the plan requirement to use trace/simulation before adding
+new cache-aware routing code.
+
+Existing repo support found:
+
+- `GGML_MOE_ROUTE_TRACE_OUT=<path>` writes a sequence trace CSV:
+  `seq,expert_bytes,tensor_base,expert_idx,tensor`.
+- `GGML_MOE_TTFT_TRACE_OUT=<path>` writes TTFT/cache/load events:
+  `seq,t_ms,op,tensor,expert_idx,expert_bytes,cache_hit,pack_hit,ram_hit,copy_ms`.
+- `scripts/moe-route-cache-sim.py` can replay `GGML_MOE_ROUTE_TRACE_OUT` with
+  protected/full/no preload, LRU/LFU-LRU, split upgate/down budgets, and
+  admission thresholds.
+- `scripts/analyze-moe-route-predictability.py` can read route or TTFT traces
+  and estimate whether profile/adjacent-layer predictors are promising.
+
+E4 limitation:
+
+- The `smoke4-*-v3` summaries and stderr logs have only aggregate cache
+  counters. They prove the measured runtime behavior, but they cannot replay
+  alternative cache/admission policies because they do not preserve the
+  per-route sequence. A route trace is required.
+
+Minimal E5 run:
+
+- Dataset: `/root/lfz/data/glm_resource_eval/processed/smoke_one.jsonl`.
+- Config: baseline SER off, `VRAM=12288`, `RAM=0`, top8 profile, direct I/O,
+  `MemoryMax=2G`, `MemorySwapMax=0`, seed `42`, `predict_tokens=4`.
+- Output trace:
+  `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/traces/smoke-one-baseline.route.csv`.
+- Then run `scripts/moe-route-cache-sim.py` against the top8 runtime profile
+  and this trace with `--budget-mib 12288 --upgate-pct 60 --reserve-pct 10
+  --policy lfu_lru --preload protected --sweep`.
+
+E5 results:
+
+- Trace run completed under `MemoryMax=2G`, `MemorySwapMax=0`; service memory
+  observed at `1.9G (max 2.0G, swap max 0B)`.
+- Trace file:
+  `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/traces/smoke-one-baseline.route.csv`
+- Trace size: `5424` route events plus header (`wc -l = 5425`).
+- Scored output: `1/1`, answer `B`.
+- Runtime counters for the traced run:
+  - `direct_reads=6378`;
+  - `VRAM hit=15.6%`;
+  - `RAM hit=0.0%`;
+  - `prompt_eval_tokens_per_s=0.591`;
+  - `eval_tokens_per_s=0.463`;
+  - `total_ms=134999.93`;
+  - `read_failures=0`.
+- Summary:
+  `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/accuracy/smoke-one-trace-baseline.summary.json`
+
+Simulator output:
+
+- Cache simulator output:
+  `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/traces/smoke-one-baseline.cache-sim.txt`
+- Static top8 profile has `1800` entries and `39759` counted routes.
+- Static profile accounting reports `100%` coverage because the protected
+  profile itself fits in the 12 GiB budget; this is not the runtime trace
+  hit-rate estimate.
+- Trace replay at the measured split (`upgate_pct=60`, protected preload,
+  LFU-LRU) estimates:
+  - `hit_pct=15.60%`;
+  - `up_hit_pct=15.60%`;
+  - `down_hit_pct=15.60%`;
+  - `miss_gib=18.30`;
+  - no dropped events.
+- This exactly matches the measured traced run's aggregate `VRAM hit=15.6%`,
+  so the existing simulator is a credible offline tool for cache-policy
+  exploration.
+- In the tested sweep, the simulator recommended `upgate_pct=75` for this
+  one trace, with estimated `hit_pct=30.24%` and `miss_gib=15.32`. This is
+  only a one-prompt simulation, not enough to change defaults.
+
+Predictability analyzer output:
+
+- Output:
+  `.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/traces/smoke-one-baseline.predictability.json`
+- Single trace report:
+  - `route_events=5424`;
+  - `unique_routes=3696`;
+  - `working_set_gib=14.776`;
+  - adjacent causal predictor byte recall `0.0497`;
+  - adjacent expert-id predictor byte recall `0.0487`;
+  - oracle recall at 4096 MiB budget `0.2705`.
+- Recommendation: `collect_more_traces_before_runtime_prefetch`.
+
+E5 decision:
+
+- The plan's trace/simulation requirement is satisfied at the minimal level:
+  the repo already has the right trace and simulator tooling, and the simulator
+  reproduces the measured cache hit rate on a real 2GB-constrained GLM run.
+- One trace is insufficient for cache-aware routing/prefetch implementation.
+  The next evidence-building step should collect route traces across the smoke
+  or daily set for baseline and `SER=1,0.95`, then run the simulator/analyzer
+  as holdout validation.
+- Do not implement runtime residency-aware routing from this single trace.
+  A runtime patch should require at least:
+  - multiple disjoint traces;
+  - simulator improvement that preserves accuracy candidates;
+  - a clear policy that does not rely on same-prompt overfitting;
+  - an explicit TTFT/token-rate target and rollback condition.

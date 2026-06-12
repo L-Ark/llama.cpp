@@ -1,0 +1,26 @@
+entries=1800 routes=39759 routed_bytes=158.95 GiB
+single_cache budget=12288 MiB stored=1800 used=7368.8 MiB hit_est=100.0%
+upgate: entries=1200 routes=26506 budget=7372 MiB stored=1200 used=4612.5 MiB hit_est=100.0%
+down: entries=600 routes=13253 budget=4915 MiB stored=600 used=2756.2 MiB hit_est=100.0%
+other: entries=0 routes=0 budget=0 MiB
+split_cache upgate_pct=60 stored=1800 used=7368.8 MiB hit_est=100.0%
+
+pct,up_mib,down_mib,up_slots,down_slots,up_protected,down_protected,up_hit_pct,down_hit_pct,hit_pct,miss_gib,weighted_miss_gib
+45,5529,6759,1438,1471,1294,1323,100.00,100.00,100.00,0.00,0.00
+50,6144,6144,1598,1337,1438,1203,100.00,100.00,100.00,0.00,0.00
+55,6758,5530,1758,1203,1582,1082,100.00,100.00,100.00,0.00,0.00
+60,7372,4916,1917,1070,1725,963,100.00,100.00,100.00,0.00,0.00
+65,7987,4301,2077,936,1869,842,100.00,100.00,100.00,0.00,0.00
+70,8601,3687,2237,802,2013,721,100.00,100.00,100.00,0.00,0.00
+75,9216,3072,2397,668,2157,601,100.00,100.00,100.00,0.00,0.00
+recommend upgate_pct=45 objective=protected weighted_miss=0.00 GiB miss=0.00 GiB hit_est=100.00%
+
+trace_pct,up_mib,down_mib,up_slots,down_slots,up_protected,down_protected,up_temp_slots,down_temp_slots,up_hit_pct,down_hit_pct,hit_pct,up_miss_gib,down_miss_gib,miss_gib,weighted_miss_gib,bypassed,dropped
+45,5529,6759,1438,1471,1294,1323,0,0,15.60,39.88,23.69,11.46,4.88,16.33,16.33,0,0
+50,6144,6144,1598,1337,1438,1203,0,0,15.60,37.56,22.92,11.46,5.06,16.52,16.52,0,0
+55,6758,5530,1758,1203,1582,1082,0,0,15.60,37.56,22.92,11.46,5.06,16.52,16.52,0,0
+60,7372,4916,1917,1070,1725,963,0,0,15.60,15.60,15.60,11.46,6.85,18.30,18.30,0,0
+65,7987,4301,2077,936,1869,842,0,0,15.60,15.60,15.60,11.46,6.85,18.30,18.30,0,0
+70,8601,3687,2237,802,2013,721,0,0,35.43,15.60,28.82,8.76,6.85,15.61,15.61,0,0
+75,9216,3072,2397,668,2157,601,0,0,37.56,15.60,30.24,8.48,6.85,15.32,15.32,0,0
+trace_recommend upgate_pct=75 policy=lfu_lru preload=protected admit_after=1 upgate_temp_slots=0 down_temp_slots=0 valid=yes weighted_miss=15.32 GiB miss=15.32 GiB hit_est=30.24% events=5424 other_events=0

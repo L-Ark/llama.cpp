@@ -1,0 +1,87 @@
+{
+  "budgets_mib": [
+    512.0,
+    1024.0,
+    2048.0,
+    4096.0
+  ],
+  "recommendation": "collect_more_traces_before_runtime_prefetch",
+  "reports": [
+    {
+      "adjacent_causal_predictor": {
+        "byte_precision": 0.04942339373970346,
+        "byte_recall": 0.04966887417218543,
+        "hit_gib": 0.7196044921875,
+        "hit_routes": 180,
+        "predicted_gib": 14.55999755859375,
+        "predicted_routes": 3642,
+        "route_precision": 0.04942339373970346,
+        "route_recall": 0.04966887417218543,
+        "target_gib": 14.488037109375,
+        "target_routes": 3624
+      },
+      "adjacent_expert_id_predictor": {
+        "byte_recall": 0.048701298701298704,
+        "expert_id_recall": 0.048701298701298704,
+        "hit_bytes": 772669440,
+        "total_bytes": 15865479168
+      },
+      "budgets": [
+        {
+          "budget_mib": 512.0,
+          "oracle": {
+            "byte_recall": 0.03370055517002082,
+            "hit_bytes": 534675456,
+            "hit_gib": 0.497955322265625,
+            "selected_routes": 111,
+            "total_bytes": 15865479168,
+            "total_gib": 14.77587890625,
+            "total_routes": 3696
+          }
+        },
+        {
+          "budget_mib": 1024.0,
+          "oracle": {
+            "byte_recall": 0.06765515019331814,
+            "hit_bytes": 1073381376,
+            "hit_gib": 0.999664306640625,
+            "selected_routes": 223,
+            "total_bytes": 15865479168,
+            "total_gib": 14.77587890625,
+            "total_routes": 3696
+          }
+        },
+        {
+          "budget_mib": 2048.0,
+          "oracle": {
+            "byte_recall": 0.1351058292852186,
+            "hit_bytes": 2143518720,
+            "hit_gib": 1.996307373046875,
+            "selected_routes": 445,
+            "total_bytes": 15865479168,
+            "total_gib": 14.77587890625,
+            "total_routes": 3696
+          }
+        },
+        {
+          "budget_mib": 4096.0,
+          "oracle": {
+            "byte_recall": 0.2705152671755725,
+            "hit_bytes": 4291854336,
+            "hit_gib": 3.997100830078125,
+            "selected_routes": 891,
+            "total_bytes": 15865479168,
+            "total_gib": 14.77587890625,
+            "total_routes": 3696
+          }
+        }
+      ],
+      "path": "/root/lfz/ik_llama/.Agent/plans/glm-dynamic-k-cache-aware-routing/runs/ser-local-2gb/traces/smoke-one-baseline.route.csv",
+      "route_events": 5424,
+      "unique_routes": 3696,
+      "working_set_gib": 14.77587890625
+    }
+  ],
+  "schema": "moe_route_predictability_v1",
+  "trace_count": 1
+}
