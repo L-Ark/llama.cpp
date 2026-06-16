@@ -1,0 +1,1 @@
+What is the benefit of separating train prompts from test prompts? I think it would be more effective if

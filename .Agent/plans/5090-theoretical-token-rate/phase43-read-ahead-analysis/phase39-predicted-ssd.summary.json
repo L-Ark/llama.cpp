@@ -1,0 +1,24 @@
+{
+  "events": 149424,
+  "out_trace": ".Agent/plans/5090-theoretical-token-rate/phase43-read-ahead-analysis/phase39-predicted-ssd.trace.csv",
+  "policy": "lfu_lru",
+  "predicted_pack_reads": 58460,
+  "prefix_events": 12624,
+  "prefix_ssd_events": 7169,
+  "preloads": {
+    "down": 1010,
+    "upgate": 2241
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "ram_hits": 0,
+  "ram_tier_profile": null,
+  "reserve_pct": 3,
+  "slots": {
+    "down": 1041,
+    "upgate": 2310
+  },
+  "ssd_events": 58460,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv",
+  "vram_hits": 90964,
+  "vram_misses": 58460
+}

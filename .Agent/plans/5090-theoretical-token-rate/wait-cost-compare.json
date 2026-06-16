@@ -1,0 +1,110 @@
+[
+  {
+    "batches": 22560,
+    "bytes": 269486456832,
+    "eval_tps": 1.92,
+    "inflight_avg": 2.38,
+    "label": "offset-sort-n84",
+    "reads": 62582,
+    "rings": {
+      "gate": {
+        "batches": 10911,
+        "copies": 29741,
+        "hist_1": 3032,
+        "hist_2_4": 6143,
+        "hist_5_8": 1736,
+        "inflight_avg": 2.38,
+        "jobs": 29741,
+        "wait_calls": 29712,
+        "waits": 29718
+      },
+      "main": {
+        "batches": 11649,
+        "copies": 35819,
+        "hist_1": 2662,
+        "hist_2_4": 7248,
+        "hist_5_8": 1739,
+        "inflight_avg": 2.38,
+        "jobs": 32841,
+        "wait_calls": 32806,
+        "waits": 35787
+      }
+    },
+    "submit_us": 4712270,
+    "total_ms": 64918.76,
+    "vram_hit": 58.1,
+    "wait_us": 50943841
+  },
+  {
+    "batches": 22546,
+    "bytes": 267540332544,
+    "eval_tps": 1.93,
+    "inflight_avg": 2.37,
+    "label": "ctx512-offset-sort-n84",
+    "reads": 62129,
+    "rings": {
+      "gate": {
+        "batches": 10900,
+        "copies": 29507,
+        "hist_1": 3078,
+        "hist_2_4": 6112,
+        "hist_5_8": 1710,
+        "inflight_avg": 2.37,
+        "jobs": 29507,
+        "wait_calls": 29474,
+        "waits": 29484
+      },
+      "main": {
+        "batches": 11646,
+        "copies": 35629,
+        "hist_1": 2696,
+        "hist_2_4": 7239,
+        "hist_5_8": 1711,
+        "inflight_avg": 2.36,
+        "jobs": 32622,
+        "wait_calls": 32587,
+        "waits": 35597
+      }
+    },
+    "submit_us": 4448092,
+    "total_ms": 66336.61,
+    "vram_hit": 58.4,
+    "wait_us": 47897342
+  },
+  {
+    "batches": 22485,
+    "bytes": 264879341568,
+    "eval_tps": 1.78,
+    "inflight_avg": 2.35,
+    "label": "ctx256-offset-sort-n84",
+    "reads": 61508,
+    "rings": {
+      "gate": {
+        "batches": 10869,
+        "copies": 29213,
+        "hist_1": 3111,
+        "hist_2_4": 6085,
+        "hist_5_8": 1673,
+        "inflight_avg": 2.36,
+        "jobs": 29213,
+        "wait_calls": 29175,
+        "waits": 29190
+      },
+      "main": {
+        "batches": 11616,
+        "copies": 35342,
+        "hist_1": 2729,
+        "hist_2_4": 7210,
+        "hist_5_8": 1677,
+        "inflight_avg": 2.35,
+        "jobs": 32295,
+        "wait_calls": 32253,
+        "waits": 35310
+      }
+    },
+    "submit_us": 4454705,
+    "total_ms": 66979.88,
+    "vram_hit": 58.8,
+    "wait_us": 53633437
+  }
+]

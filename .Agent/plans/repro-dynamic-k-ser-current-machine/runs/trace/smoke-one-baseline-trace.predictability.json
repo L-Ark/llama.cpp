@@ -1,0 +1,100 @@
+{
+  "budgets_mib": [
+    128.0,
+    256.0,
+    512.0,
+    1024.0,
+    2048.0
+  ],
+  "recommendation": "collect_more_traces_before_runtime_prefetch",
+  "reports": [
+    {
+      "adjacent_causal_predictor": {
+        "byte_precision": 0.0665044606650446,
+        "byte_recall": 0.06581059390048154,
+        "hit_gib": 0.98345947265625,
+        "hit_routes": 246,
+        "predicted_gib": 14.787872314453125,
+        "predicted_routes": 3699,
+        "route_precision": 0.0665044606650446,
+        "route_recall": 0.06581059390048154,
+        "target_gib": 14.94378662109375,
+        "target_routes": 3738
+      },
+      "adjacent_expert_id_predictor": {
+        "byte_recall": 0.06539074960127592,
+        "expert_id_recall": 0.06539074960127592,
+        "hit_bytes": 1055981568,
+        "total_bytes": 16148791296
+      },
+      "budgets": [
+        {
+          "budget_mib": 128.0,
+          "oracle": {
+            "byte_recall": 0.00830320074996652,
+            "hit_bytes": 134086656,
+            "hit_gib": 0.1248779296875,
+            "selected_routes": 28,
+            "total_bytes": 16148791296,
+            "total_gib": 15.03973388671875,
+            "total_routes": 3762
+          }
+        },
+        {
+          "budget_mib": 256.0,
+          "oracle": {
+            "byte_recall": 0.016405517610820944,
+            "hit_bytes": 264929280,
+            "hit_gib": 0.246734619140625,
+            "selected_routes": 55,
+            "total_bytes": 16148791296,
+            "total_gib": 15.03973388671875,
+            "total_routes": 3762
+          }
+        },
+        {
+          "budget_mib": 512.0,
+          "oracle": {
+            "byte_recall": 0.03310931736002045,
+            "hit_bytes": 534675456,
+            "hit_gib": 0.497955322265625,
+            "selected_routes": 111,
+            "total_bytes": 16148791296,
+            "total_gib": 15.03973388671875,
+            "total_routes": 3762
+          }
+        },
+        {
+          "budget_mib": 1024.0,
+          "oracle": {
+            "byte_recall": 0.06646821773378624,
+            "hit_bytes": 1073381376,
+            "hit_gib": 0.999664306640625,
+            "selected_routes": 223,
+            "total_bytes": 16148791296,
+            "total_gib": 15.03973388671875,
+            "total_routes": 3762
+          }
+        },
+        {
+          "budget_mib": 2048.0,
+          "oracle": {
+            "byte_recall": 0.13273555157846037,
+            "hit_bytes": 2143518720,
+            "hit_gib": 1.996307373046875,
+            "selected_routes": 445,
+            "total_bytes": 16148791296,
+            "total_gib": 15.03973388671875,
+            "total_routes": 3762
+          }
+        }
+      ],
+      "path": ".Agent/plans/repro-dynamic-k-ser-current-machine/runs/trace/smoke-one-baseline-trace/smoke-one-baseline-trace.ceval_computer_network_0010.route.csv",
+      "route_events": 5424,
+      "unique_routes": 3762,
+      "working_set_gib": 15.03973388671875
+    }
+  ],
+  "schema": "moe_route_predictability_v1",
+  "trace_count": 1
+}

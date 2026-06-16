@@ -1,0 +1,2 @@
+Error creating textual authentication agent: Error opening current controlling terminal for the process (`/dev/tty'): No such device or address (polkit-error-quark, 0)
+Failed to start transient service unit: Interactive authentication required.

@@ -1,0 +1,8 @@
+Running as unit: run-u47.service; invocation ID: 581e2986e77f41348fdc85fcd5431f83
+Press ^] three times within 1s to disconnect TTY.
+[moe-run] preset=/home/wici/lfz/ik_llama/presets/moe/glm51/rtx5090-interactive-n84-repro.json
+[moe-run] stderr_log=/home/wici/lfz/ik_llama/.Agent/plans/repro-dynamic-k-ser-current-machine/runs/interactive/interactive-ser-1-110/llama-cache/moe-chat/20260612-153619-204470.stderr.log
+[33m[0m
+> 
+[[LLAMA_CHAT_READY:1]]
+[1m[32m

@@ -1,0 +1,4 @@
+{"id": "ceval_computer_network_0009", "output": "A", "expected": "D", "correct": false}
+{"id": "cmmlu_chinese_civil_service_exam_0098", "output": "D", "expected": "D", "correct": true}
+{"id": "ceval_computer_network_0010", "output": "C", "expected": "B", "correct": false}
+{"id": "cmmlu_chinese_civil_service_exam_0150", "output": "D", "expected": "C", "correct": false}

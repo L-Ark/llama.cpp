@@ -1,0 +1,17 @@
+{
+  "assistant_sha256": "347a8103d81157433b38628c3b5674e664d509ef4ce863261fb4040578c76831",
+  "config": "optimized-candidate2-vram12288-top8",
+  "elapsed_process_s": 82.93201538200083,
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate2-vram12288-top8-n84/env.txt",
+  "first_visible_s": 22.017083898001147,
+  "generation_visible_duration_s": 60.54452703499919,
+  "interactive_ttft_s": 10.604000556000756,
+  "ready_seq_after_generation": "2",
+  "returncode": 0,
+  "route_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate2-vram12288-top8-n84/route.trace.csv",
+  "stderr_log": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate2-vram12288-top8-n84/llama-cache/moe-chat/20260612-142100-87824.stderr.log",
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate2-vram12288-top8-n84/stdout.txt",
+  "time_to_type_s": 11.412513302000661,
+  "ttft_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate2-vram12288-top8-n84/ttft.trace.csv",
+  "visible_token_estimate": 68
+}

@@ -1,0 +1,20 @@
+{"id":"fact_001","category":"factual","prompt":"Answer briefly: What planet is known as the Red Planet?","expected":"Mars","scoring":"contains"}
+{"id":"fact_002","category":"factual","prompt":"Answer briefly: Who wrote the novel Pride and Prejudice?","expected":"Jane Austen","scoring":"contains"}
+{"id":"fact_003","category":"factual","prompt":"Answer briefly: What is the chemical symbol for water?","expected":"H2O","scoring":"contains"}
+{"id":"fact_004","category":"factual","prompt":"Answer briefly: In computing, what does CPU stand for?","expected":"central processing unit","scoring":"contains_ci"}
+{"id":"math_001","category":"math","prompt":"Compute exactly: 17 + 28 = ?","expected":"45","scoring":"contains"}
+{"id":"math_002","category":"math","prompt":"Compute exactly: 9 * 13 = ?","expected":"117","scoring":"contains"}
+{"id":"math_003","category":"math","prompt":"If a box has 24 apples and 6 are removed, how many remain? Answer with just the number.","expected":"18","scoring":"contains"}
+{"id":"math_004","category":"math","prompt":"What is the next number in the sequence 2, 4, 8, 16, ? Answer with just the number.","expected":"32","scoring":"contains"}
+{"id":"code_001","category":"coding","prompt":"Write a Python expression that returns the length of list x.","expected":"len(x)","scoring":"contains"}
+{"id":"code_002","category":"coding","prompt":"In Python, write one line to import the math module.","expected":"import math","scoring":"contains"}
+{"id":"code_003","category":"coding","prompt":"Write a minimal JavaScript function named add that returns a + b.","expected":"function add","scoring":"contains_ci"}
+{"id":"code_004","category":"coding","prompt":"In SQL, select all columns from a table named users.","expected":"SELECT * FROM users","scoring":"contains_ci"}
+{"id":"json_001","category":"json","prompt":"Return only valid JSON with key status set to ok.","expected":"{\"status\":\"ok\"}","scoring":"json_contains"}
+{"id":"json_002","category":"json","prompt":"Return only valid JSON with key count set to 3.","expected":"{\"count\":3}","scoring":"json_contains"}
+{"id":"json_003","category":"json","prompt":"Return only valid JSON array containing the numbers 1 and 2.","expected":"[1,2]","scoring":"json_array_contains"}
+{"id":"json_004","category":"json","prompt":"Return only valid JSON with boolean key enabled set to true.","expected":"{\"enabled\":true}","scoring":"json_contains"}
+{"id":"multi_001","category":"multilingual","prompt":"Translate to English: Bonjour","expected":"hello","scoring":"contains_ci"}
+{"id":"multi_002","category":"multilingual","prompt":"Translate to English: gracias","expected":"thank","scoring":"contains_ci"}
+{"id":"multi_003","category":"multilingual","prompt":"用中文简短回答：天空通常是什么颜色？","expected":"蓝","scoring":"contains"}
+{"id":"multi_004","category":"multilingual","prompt":"用中文简短回答：一周有几天？","expected":"7","scoring":"contains"}

@@ -1,0 +1,17 @@
+{
+  "assistant_sha256": "10c0cbdac9f6c6d16efc415d09828d852f76fc206730f88d7b33fec52bc2e5e0",
+  "config": "smoke-baseline-vram1536",
+  "elapsed_process_s": 21.484810465999544,
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/smoke-baseline-vram1536-n4-user/env.txt",
+  "first_visible_s": 11.471594702999937,
+  "generation_visible_duration_s": 9.695266087999698,
+  "interactive_ttft_s": 0.0004305789989302866,
+  "ready_seq_after_generation": "2",
+  "returncode": 0,
+  "route_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/smoke-baseline-vram1536-n4-user/route.trace.csv",
+  "stderr_log": null,
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/smoke-baseline-vram1536-n4-user/stdout.txt",
+  "time_to_type_s": 11.470543479999833,
+  "ttft_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/smoke-baseline-vram1536-n4-user/ttft.trace.csv",
+  "visible_token_estimate": 2700
+}

@@ -1,0 +1,23 @@
+{
+  "backend": "iouring",
+  "command": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase1-clamp/clamp20480-up75-n8-debug/command.txt",
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase1-clamp/clamp20480-up75-n8-debug/env.json",
+  "gpu_handoff": true,
+  "label": "clamp20480-up75-n8-debug",
+  "predict_tokens": 8,
+  "profile": "top8",
+  "prompt_dynamic_experts": true,
+  "prompt_startup_preload": true,
+  "ram_tier_mib": 0,
+  "returncode": 1,
+  "stage_pinned": false,
+  "status": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase1-clamp/clamp20480-up75-n8-debug/status.txt",
+  "stderr": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase1-clamp/clamp20480-up75-n8-debug/stderr.txt",
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase1-clamp/clamp20480-up75-n8-debug/stdout.txt",
+  "stdout_prefix": "",
+  "strict_2gb": true,
+  "systemd_stderr": "",
+  "systemd_stdout": "",
+  "vram_cache_mib": 20480,
+  "wall_s": 14.410918609000873
+}

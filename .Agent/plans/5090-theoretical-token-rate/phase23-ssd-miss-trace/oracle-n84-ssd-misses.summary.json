@@ -1,0 +1,24 @@
+{
+  "events": 149424,
+  "out_trace": ".Agent/plans/5090-theoretical-token-rate/phase23-ssd-miss-trace/oracle-n84-ssd-misses.trace.csv",
+  "policy": "lfu_lru",
+  "predicted_pack_reads": 40502,
+  "prefix_events": 12624,
+  "prefix_ssd_events": 5999,
+  "preloads": {
+    "down": 785,
+    "upgate": 1743
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "ram_hits": 29591,
+  "ram_tier_profile": ".Agent/plans/5090-theoretical-token-rate/ramtier-residual-graphreserve2048-9216.route.csv",
+  "reserve_pct": 10,
+  "slots": {
+    "down": 872,
+    "upgate": 1936
+  },
+  "ssd_events": 40502,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv",
+  "vram_hits": 79331,
+  "vram_misses": 70093
+}

@@ -1,0 +1,2 @@
+Answer with one short sentence: why does NVMe latency matter for MoE inference? (Hint: think about the communication pattern)
+NVMe latency matters for MoE inference because the dynamic routing of tokens to experts requires frequent, random data access patterns that are highly sensitive to storage delays. (Or: Because tokens are dynamically routed to different experts, causing random, fine-grained data accesses where high latency creates a bottleneck.)

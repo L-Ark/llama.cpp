@@ -1,0 +1,290 @@
+{
+  "interactive": [
+    {
+      "assistant_sha256": "b6979b5fc3a64d80879672c40f3409a491e582f1e6d511ed4fd79eba7979dd5d",
+      "direct_reads": 28302,
+      "eval_tps": 1.04,
+      "first_visible_s": 21.36250342099993,
+      "label": "interactive-baseline",
+      "prompt_eval_tps": 1.85,
+      "read_failures": 0,
+      "ser": null,
+      "time_to_type_s": 10.54113864700048,
+      "ttft_s": 10.820633427998473,
+      "vram_hit_pct": 8.1
+    },
+    {
+      "assistant_sha256": "b6979b5fc3a64d80879672c40f3409a491e582f1e6d511ed4fd79eba7979dd5d",
+      "direct_reads": 28302,
+      "eval_tps": 1.03,
+      "first_visible_s": 21.73363302600046,
+      "label": "interactive-ser-4-005",
+      "prompt_eval_tps": 1.9,
+      "read_failures": 0,
+      "ser": "4,0.05",
+      "time_to_type_s": 11.209522092998668,
+      "ttft_s": 10.523597958999744,
+      "vram_hit_pct": 8.1
+    },
+    {
+      "assistant_sha256": "b6979b5fc3a64d80879672c40f3409a491e582f1e6d511ed4fd79eba7979dd5d",
+      "direct_reads": 28302,
+      "eval_tps": 1.04,
+      "first_visible_s": 22.040380419999565,
+      "label": "interactive-ser-2-020",
+      "prompt_eval_tps": 1.87,
+      "read_failures": 0,
+      "ser": "2,0.2",
+      "time_to_type_s": 11.36787406700023,
+      "ttft_s": 10.671771989000263,
+      "vram_hit_pct": 8.1
+    },
+    {
+      "assistant_sha256": "b6979b5fc3a64d80879672c40f3409a491e582f1e6d511ed4fd79eba7979dd5d",
+      "direct_reads": 28302,
+      "eval_tps": 1.03,
+      "first_visible_s": 20.021247569999105,
+      "label": "interactive-ser-1-080",
+      "prompt_eval_tps": 1.88,
+      "read_failures": 0,
+      "ser": "1,0.8",
+      "time_to_type_s": 9.4023153119997,
+      "ttft_s": 10.618237403999956,
+      "vram_hit_pct": 8.1
+    },
+    {
+      "assistant_sha256": "8229eaff2793334be0f5f3995c72f199229e7a5552c1a1e4adf6f22b6f7dbd6c",
+      "direct_reads": 22917,
+      "eval_tps": 1.23,
+      "first_visible_s": 21.209010827000384,
+      "label": "interactive-ser-1-095",
+      "prompt_eval_tps": 2.13,
+      "read_failures": 0,
+      "ser": "1,0.95",
+      "time_to_type_s": 11.00590528199973,
+      "ttft_s": 10.202260754000235,
+      "vram_hit_pct": 11.8
+    },
+    {
+      "assistant_sha256": "1c4021cc0519c5935e34adb2a55637f122805d16dcce298cded0a21c66cac574",
+      "direct_reads": 4364,
+      "eval_tps": 4.81,
+      "first_visible_s": 15.727045388999613,
+      "label": "interactive-ser-1-100",
+      "prompt_eval_tps": 4.56,
+      "read_failures": 0,
+      "ser": "1,1.0",
+      "time_to_type_s": 11.335339932998977,
+      "ttft_s": 4.390997141999833,
+      "vram_hit_pct": 34.9
+    },
+    {
+      "assistant_sha256": "1c4021cc0519c5935e34adb2a55637f122805d16dcce298cded0a21c66cac574",
+      "direct_reads": 4347,
+      "eval_tps": 4.86,
+      "first_visible_s": 15.571475327998996,
+      "label": "interactive-ser-1-110",
+      "prompt_eval_tps": 4.64,
+      "read_failures": 0,
+      "ser": "1,1.1",
+      "time_to_type_s": 11.257200924001154,
+      "ttft_s": 4.313605513998482,
+      "vram_hit_pct": 29.3
+    }
+  ],
+  "smoke4": [
+    {
+      "accuracy": "3/4",
+      "direct_reads": 25962,
+      "eval_tps": 0.8806072667711654,
+      "label": "smoke4-baseline",
+      "outputs": [
+        "D",
+        "D",
+        "B",
+        "D"
+      ],
+      "prompt_eval_tps": 3.52501926688613,
+      "read_failures": 0,
+      "ser": null,
+      "total_ms": 179778.3,
+      "vram_hit_pct": 13.525,
+      "wall_s": 183.3820510379992
+    },
+    {
+      "accuracy": "3/4",
+      "direct_reads": 19740,
+      "eval_tps": 1.225637893455298,
+      "label": "smoke4-ser-1-095",
+      "outputs": [
+        "D",
+        "D",
+        "B",
+        "D"
+      ],
+      "prompt_eval_tps": 3.7412366016964205,
+      "read_failures": 0,
+      "ser": "1,0.95",
+      "total_ms": 167435.74,
+      "vram_hit_pct": 25.375,
+      "wall_s": 170.57234835999952
+    },
+    {
+      "accuracy": "2/4",
+      "direct_reads": 17316,
+      "eval_tps": 1.4649832381501169,
+      "label": "smoke4-ser-1-096",
+      "outputs": [
+        "C",
+        "D",
+        "B",
+        "D"
+      ],
+      "prompt_eval_tps": 3.835149848848689,
+      "read_failures": 0,
+      "ser": "1,0.96",
+      "total_ms": 162708.43,
+      "vram_hit_pct": 31.6,
+      "wall_s": 166.12951125899963
+    },
+    {
+      "accuracy": "1/4",
+      "direct_reads": 14590,
+      "eval_tps": 1.7837898101007097,
+      "label": "smoke4-ser-1-0975",
+      "outputs": [
+        "A",
+        "D",
+        "C",
+        "D"
+      ],
+      "prompt_eval_tps": 3.98766337129079,
+      "read_failures": 0,
+      "ser": "1,0.975",
+      "total_ms": 158401.97,
+      "vram_hit_pct": 35.775,
+      "wall_s": 161.92944557900046
+    }
+  ],
+  "smoke_one": [
+    {
+      "accuracy": "1/1",
+      "direct_reads": 6678,
+      "eval_tps": 0.8610545047501507,
+      "label": "smoke-one-baseline",
+      "outputs": [
+        "B"
+      ],
+      "prompt_eval_tps": 2.093329775941399,
+      "read_failures": 0,
+      "ser": null,
+      "total_ms": 40339.95,
+      "vram_hit_pct": 10.1,
+      "wall_s": 41.27920491700024
+    },
+    {
+      "accuracy": "1/1",
+      "direct_reads": 5180,
+      "eval_tps": 1.1693216764954648,
+      "label": "smoke-one-ser-1-095",
+      "outputs": [
+        "B"
+      ],
+      "prompt_eval_tps": 2.2563667490308905,
+      "read_failures": 0,
+      "ser": "1,0.95",
+      "total_ms": 37489.38,
+      "vram_hit_pct": 21.7,
+      "wall_s": 38.430048920001354
+    },
+    {
+      "accuracy": "1/1",
+      "direct_reads": 4390,
+      "eval_tps": 1.460308806635643,
+      "label": "smoke-one-ser-1-096",
+      "outputs": [
+        "B"
+      ],
+      "prompt_eval_tps": 2.315853830043277,
+      "read_failures": 0,
+      "ser": "1,0.96",
+      "total_ms": 36494.28,
+      "vram_hit_pct": 30.7,
+      "wall_s": 37.21539873999973
+    },
+    {
+      "accuracy": "1/1",
+      "direct_reads": 4060,
+      "eval_tps": 1.5867810559499,
+      "label": "smoke-one-ser-1-097",
+      "outputs": [
+        "B"
+      ],
+      "prompt_eval_tps": 2.4373447300618554,
+      "read_failures": 0,
+      "ser": "1,0.97",
+      "total_ms": 34819.93,
+      "vram_hit_pct": 32.8,
+      "wall_s": 35.543179065000004
+    },
+    {
+      "accuracy": "0/1",
+      "direct_reads": 3505,
+      "eval_tps": 1.9991337087262184,
+      "label": "smoke-one-ser-1-0975",
+      "outputs": [
+        "C"
+      ],
+      "prompt_eval_tps": 2.4450203825790076,
+      "read_failures": 0,
+      "ser": "1,0.975",
+      "total_ms": 34599.3,
+      "vram_hit_pct": 36.5,
+      "wall_s": 35.32102012999894
+    },
+    {
+      "accuracy": "0/1",
+      "direct_reads": 3729,
+      "eval_tps": 1.7958049995211187,
+      "label": "smoke-one-ser-1-098",
+      "outputs": [
+        "A"
+      ],
+      "prompt_eval_tps": 2.528780975842785,
+      "read_failures": 0,
+      "ser": "1,0.98",
+      "total_ms": 33849.22,
+      "vram_hit_pct": 30.3,
+      "wall_s": 34.57974524099882
+    },
+    {
+      "accuracy": "0/1",
+      "direct_reads": 3315,
+      "eval_tps": 1.464007378597188,
+      "label": "smoke-one-ser-1-099",
+      "outputs": [
+        "A"
+      ],
+      "prompt_eval_tps": 2.7887510907819606,
+      "read_failures": 0,
+      "ser": "1,0.99",
+      "total_ms": 32206.13,
+      "vram_hit_pct": 25.0,
+      "wall_s": 32.924640612000076
+    }
+  ],
+  "trace_run": {
+    "direct_reads": 6678,
+    "eval_ms": 3537.02,
+    "eval_tokens": 3,
+    "eval_tokens_per_s": 0.8481716247010195,
+    "prompt_eval_ms": 26192.64,
+    "prompt_eval_tokens": 55,
+    "prompt_eval_tokens_per_s": 2.099826516151102,
+    "ram_hit_rate_pct": 0.0,
+    "read_failures": 0,
+    "total_ms": 40286.7,
+    "vram_cache_hit_rate_pct_avg": 10.1,
+    "wall_s": 41.15751828199973
+  }
+}

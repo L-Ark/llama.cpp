@@ -1,0 +1,42 @@
+{
+  "cache_replay": {
+    "down": {
+      "hits": 23218,
+      "misses": 26590,
+      "resident": 872
+    },
+    "hits": 72275,
+    "misses": 77149,
+    "upgate": {
+      "hits": 49057,
+      "misses": 50559,
+      "resident": 1936
+    }
+  },
+  "covered_miss_pct": 33.542,
+  "covered_misses": 25877,
+  "covered_prefix_miss_pct": 32.28,
+  "covered_prefix_misses": 2237,
+  "out_profile": ".Agent/plans/5090-theoretical-token-rate/phase20-route-stable/pin4096-n84-ramtier9216.route.csv",
+  "policy": "lfu_lru",
+  "prefix_events": 12624,
+  "prefix_residual_misses": 6930,
+  "preloads": {
+    "down": 785,
+    "upgate": 1743
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/phase20-route-stable/pin4096-n84.route.csv",
+  "ram_tier_mib": 9216,
+  "reserve_pct": 10,
+  "residual_misses": 77149,
+  "residual_unique": 20440,
+  "selected_bytes": 9663381504,
+  "selected_entries": 2269,
+  "selected_mib": 9215.719,
+  "slots": {
+    "down": 872,
+    "upgate": 1936
+  },
+  "total_events": 149424,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/phase20-route-stable/pin4096-n84.trace.csv"
+}

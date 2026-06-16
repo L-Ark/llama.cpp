@@ -1,0 +1,23 @@
+{
+  "backend": "iouring",
+  "command": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-headroom/replay-oracle-n84-up65-safety128/command.txt",
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-headroom/replay-oracle-n84-up65-safety128/env.json",
+  "gpu_handoff": true,
+  "label": "replay-oracle-n84-up65-safety128",
+  "predict_tokens": 84,
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "prompt_dynamic_experts": true,
+  "prompt_startup_preload": true,
+  "ram_tier_mib": 0,
+  "returncode": 1,
+  "stage_pinned": false,
+  "status": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-headroom/replay-oracle-n84-up65-safety128/status.txt",
+  "stderr": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-headroom/replay-oracle-n84-up65-safety128/stderr.txt",
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-headroom/replay-oracle-n84-up65-safety128/stdout.txt",
+  "stdout_prefix": "Answer with one short sentence: why does NVMe latency matter for MoE inference?Could not attach to process.  If your uid matches the uid of the target\nprocess, check the setting of /proc/sys/kernel/yama/ptrace_scope, or try\nagain as the roo",
+  "strict_2gb": true,
+  "systemd_stderr": "",
+  "systemd_stdout": "",
+  "vram_cache_mib": 20480,
+  "wall_s": 20.195272872000714
+}

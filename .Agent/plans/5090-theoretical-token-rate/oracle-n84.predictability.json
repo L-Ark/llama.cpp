@@ -1,0 +1,113 @@
+{
+  "budgets_mib": [
+    512.0,
+    1024.0,
+    2048.0,
+    4096.0,
+    8192.0,
+    12288.0
+  ],
+  "recommendation": "collect_more_traces_before_runtime_prefetch",
+  "reports": [
+    {
+      "adjacent_causal_predictor": {
+        "byte_precision": 0.35716550412175013,
+        "byte_recall": 0.3530794546309356,
+        "hit_gib": 27.021148681640625,
+        "hit_routes": 6759,
+        "predicted_gib": 75.6544189453125,
+        "predicted_routes": 18924,
+        "route_precision": 0.35716550412175013,
+        "route_recall": 0.3530794546309356,
+        "target_gib": 76.52993774414062,
+        "target_routes": 19143
+      },
+      "adjacent_expert_id_predictor": {
+        "byte_recall": 0.35263734543747066,
+        "expert_id_recall": 0.35263734543747066,
+        "hit_bytes": 29013737472,
+        "total_bytes": 82276417536
+      },
+      "budgets": [
+        {
+          "budget_mib": 512.0,
+          "oracle": {
+            "byte_recall": 0.006498526212156151,
+            "hit_bytes": 534675456,
+            "hit_gib": 0.497955322265625,
+            "selected_routes": 111,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        },
+        {
+          "budget_mib": 1024.0,
+          "oracle": {
+            "byte_recall": 0.013046039292247291,
+            "hit_bytes": 1073381376,
+            "hit_gib": 0.999664306640625,
+            "selected_routes": 223,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        },
+        {
+          "budget_mib": 2048.0,
+          "oracle": {
+            "byte_recall": 0.0260526501298152,
+            "hit_bytes": 2143518720,
+            "hit_gib": 1.996307373046875,
+            "selected_routes": 445,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        },
+        {
+          "budget_mib": 4096.0,
+          "oracle": {
+            "byte_recall": 0.052163845540821,
+            "hit_bytes": 4291854336,
+            "hit_gib": 3.997100830078125,
+            "selected_routes": 891,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        },
+        {
+          "budget_mib": 8192.0,
+          "oracle": {
+            "byte_recall": 0.10438623636283259,
+            "hit_bytes": 8588525568,
+            "hit_gib": 7.998687744140625,
+            "selected_routes": 1783,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        },
+        {
+          "budget_mib": 12288.0,
+          "oracle": {
+            "byte_recall": 0.15659906877158858,
+            "hit_bytes": 12884410368,
+            "hit_gib": 11.999542236328125,
+            "selected_routes": 2675,
+            "total_bytes": 82276417536,
+            "total_gib": 76.62588500976562,
+            "total_routes": 19167
+          }
+        }
+      ],
+      "path": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv",
+      "route_events": 149424,
+      "unique_routes": 19167,
+      "working_set_gib": 76.62588500976562
+    }
+  ],
+  "schema": "moe_route_predictability_v1",
+  "trace_count": 1
+}

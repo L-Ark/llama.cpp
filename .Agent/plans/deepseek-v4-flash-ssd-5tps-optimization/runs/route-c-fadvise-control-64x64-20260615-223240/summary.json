@@ -1,0 +1,115 @@
+{
+  "command": [
+    "/home/wici/lfz/fastllm/.venv-ftllm/bin/ftllm",
+    "bench",
+    "/home/wici/lfz/models/DeepSeek-V4-Flash",
+    "--low",
+    "--device",
+    "cuda",
+    "--moe_device",
+    "{'cuda':16,'disk':84}",
+    "--moe_device_layers",
+    "-1",
+    "--cuda_shared_expert",
+    "true",
+    "--gpu_mem_ratio",
+    "0.9",
+    "--cuda_slab",
+    "256",
+    "--input_tokens",
+    "64",
+    "--output_tokens",
+    "64",
+    "--batch",
+    "1",
+    "--warmup",
+    "0",
+    "--temperature",
+    "0",
+    "--threads",
+    "8"
+  ],
+  "created_at_unix": 1781534080.7174222,
+  "environment": {
+    "FASTLLM_CACHEDIR": "/home/wici/lfz/fastllm_cache",
+    "FASTLLM_DISK_MOE_LOAD_THREADS": "8",
+    "FASTLLM_DISK_MOE_STATS": "1"
+  },
+  "metrics": {
+    "decode_tok_s_p50": 1.35,
+    "decode_tok_s_values": [
+      1.35
+    ],
+    "decode_tok_s_worst": 1.35,
+    "ttft_s_p50": 13.43368,
+    "ttft_s_values": [
+      13.43368
+    ],
+    "ttft_s_worst": 13.43368
+  },
+  "repo": {
+    "head": "92e4547edccf84c78bed3728ae3a02bebcc65cbf",
+    "remotes": "origin\thttps://github.com/ztxz16/fastllm.git (fetch)\norigin\thttps://github.com/ztxz16/fastllm.git (push)\nprivate\tgit@github.com:L-Ark/fastllm-deepseek-v4-flash-ssd-5tps.git (fetch)\nprivate\tgit@github.com:L-Ark/fastllm-deepseek-v4-flash-ssd-5tps.git (push)",
+    "status_short": "## master...private/master\n M src/devices/disk/diskdevice.cpp\n?? .venv-ftllm/"
+  },
+  "resource_start": {
+    "gpu": {
+      "available": true,
+      "memory_free_mib": 32071,
+      "memory_used_mib": 41,
+      "raw": "41, 32071, 0",
+      "utilization_gpu_pct": 0
+    },
+    "memory": {
+      "available": true,
+      "mem_available": "12976844 kB",
+      "mem_total": "15874416 kB",
+      "swap_free": "9919304 kB",
+      "swap_total": "12582904 kB"
+    }
+  },
+  "runs": [
+    {
+      "actual_output_tokens": 64,
+      "batch_decode_tokens_per_s": 1.35,
+      "batch_total_tokens_per_s": 1.07,
+      "disk_moe_stats": {
+        "fadvise_bytes": 0,
+        "fadvise_calls": 0,
+        "fadvise_enabled": 0,
+        "fadvise_failures": 0,
+        "fadvise_seconds": 0.0,
+        "load_requests": 31688,
+        "load_seconds": 183.489931,
+        "load_weights": 31688,
+        "merge_runs": 2405,
+        "ram_cache_bytes": 0,
+        "ram_cache_enabled": 0,
+        "ram_cache_evictions": 0,
+        "ram_cache_hits": 0,
+        "ram_cache_misses": 0,
+        "read_bytes": 211823886336,
+        "read_calls": 95064,
+        "read_gib": 197.276367,
+        "read_gib_per_s": 1.077298,
+        "read_seconds": 183.12137,
+        "selected_expert_refs": 16946,
+        "vram_cache_bytes": 1069547520,
+        "vram_cache_enabled": 1,
+        "vram_cache_hits": 2204,
+        "vram_cache_misses": 174,
+        "vram_cache_stores": 160,
+        "vram_hit_estimate": "na"
+      },
+      "elapsed_s": 119.67988872528076,
+      "log_path": "/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/runs/route-c-fadvise-control-64x64-20260615-223240/bench_repeat_1.log",
+      "output_token_sha256": "6bf00d4277c4dc997b9417c26687d348ee9d24c7ca3408c519282e822f5c8511",
+      "per_request_tokens_per_s": 1.07,
+      "prefill_tokens_per_s": 4.76,
+      "repeat": 1,
+      "returncode": 0,
+      "total_time_s": 59.9474,
+      "ttft_avg_ms": 13433.68
+    }
+  ]
+}

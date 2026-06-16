@@ -1,0 +1,389 @@
+[
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 24166,
+      "hit_rate_pct": 51.305,
+      "hits": 25554,
+      "misses": 24254,
+      "resident": 881
+    },
+    "events": 149424,
+    "evictions": 62088,
+    "hit_rate_pct": 58.226,
+    "hits": 87003,
+    "misses": 62421,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.58,
+    "prefix_hits": 5249,
+    "prefix_misses": 7375,
+    "preloads": {
+      "down": 793,
+      "upgate": 2213
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 881,
+      "upgate": 2458
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 37922,
+      "hit_rate_pct": 61.686,
+      "hits": 61449,
+      "misses": 38167,
+      "resident": 2458
+    },
+    "upgate_pct": 70
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 24657,
+      "hit_rate_pct": 50.325,
+      "hits": 25066,
+      "misses": 24742,
+      "resident": 852
+    },
+    "events": 149424,
+    "evictions": 62096,
+    "hit_rate_pct": 58.22,
+    "hits": 86994,
+    "misses": 62430,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.532,
+    "prefix_hits": 5243,
+    "prefix_misses": 7381,
+    "preloads": {
+      "down": 767,
+      "upgate": 2244
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 852,
+      "upgate": 2493
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 37439,
+      "hit_rate_pct": 62.167,
+      "hits": 61928,
+      "misses": 37688,
+      "resident": 2493
+    },
+    "upgate_pct": 71
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 23695,
+      "hit_rate_pct": 52.245,
+      "hits": 26022,
+      "misses": 23786,
+      "resident": 910
+    },
+    "events": 149424,
+    "evictions": 62109,
+    "hit_rate_pct": 58.212,
+    "hits": 86982,
+    "misses": 62442,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.556,
+    "prefix_hits": 5246,
+    "prefix_misses": 7378,
+    "preloads": {
+      "down": 819,
+      "upgate": 2181
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 910,
+      "upgate": 2423
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 38414,
+      "hit_rate_pct": 61.195,
+      "hits": 60960,
+      "misses": 38656,
+      "resident": 2423
+    },
+    "upgate_pct": 69
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 25173,
+      "hit_rate_pct": 49.295,
+      "hits": 24553,
+      "misses": 25255,
+      "resident": 822
+    },
+    "events": 149424,
+    "evictions": 62127,
+    "hit_rate_pct": 58.199,
+    "hits": 86963,
+    "misses": 62461,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.453,
+    "prefix_hits": 5233,
+    "prefix_misses": 7391,
+    "preloads": {
+      "down": 740,
+      "upgate": 2276
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 822,
+      "upgate": 2528
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 36954,
+      "hit_rate_pct": 62.651,
+      "hits": 62410,
+      "misses": 37206,
+      "resident": 2528
+    },
+    "upgate_pct": 72
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 23206,
+      "hit_rate_pct": 53.22,
+      "hits": 26508,
+      "misses": 23300,
+      "resident": 940
+    },
+    "events": 149424,
+    "evictions": 62153,
+    "hit_rate_pct": 58.183,
+    "hits": 86939,
+    "misses": 62485,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.793,
+    "prefix_hits": 5276,
+    "prefix_misses": 7348,
+    "preloads": {
+      "down": 846,
+      "upgate": 2149
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 940,
+      "upgate": 2387
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 38947,
+      "hit_rate_pct": 60.664,
+      "hits": 60431,
+      "misses": 39185,
+      "resident": 2387
+    },
+    "upgate_pct": 68
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 22725,
+      "hit_rate_pct": 54.182,
+      "hits": 26987,
+      "misses": 22821,
+      "resident": 969
+    },
+    "events": 149424,
+    "evictions": 62163,
+    "hit_rate_pct": 58.177,
+    "hits": 86930,
+    "misses": 62494,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.635,
+    "prefix_hits": 5256,
+    "prefix_misses": 7368,
+    "preloads": {
+      "down": 873,
+      "upgate": 2117
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 969,
+      "upgate": 2352
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 39438,
+      "hit_rate_pct": 60.174,
+      "hits": 59943,
+      "misses": 39673,
+      "resident": 2352
+    },
+    "upgate_pct": 67
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 25670,
+      "hit_rate_pct": 48.303,
+      "hits": 24059,
+      "misses": 25749,
+      "resident": 793
+    },
+    "events": 149424,
+    "evictions": 62164,
+    "hit_rate_pct": 58.173,
+    "hits": 86925,
+    "misses": 62499,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.532,
+    "prefix_hits": 5243,
+    "prefix_misses": 7381,
+    "preloads": {
+      "down": 714,
+      "upgate": 2307
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 793,
+      "upgate": 2563
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 36494,
+      "hit_rate_pct": 63.108,
+      "hits": 62866,
+      "misses": 36750,
+      "resident": 2563
+    },
+    "upgate_pct": 73
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 22263,
+      "hit_rate_pct": 55.104,
+      "hits": 27446,
+      "misses": 22362,
+      "resident": 999
+    },
+    "events": 149424,
+    "evictions": 62182,
+    "hit_rate_pct": 58.165,
+    "hits": 86912,
+    "misses": 62512,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.651,
+    "prefix_hits": 5258,
+    "prefix_misses": 7366,
+    "preloads": {
+      "down": 900,
+      "upgate": 2086
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 999,
+      "upgate": 2317
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 39919,
+      "hit_rate_pct": 59.695,
+      "hits": 59466,
+      "misses": 40150,
+      "resident": 2317
+    },
+    "upgate_pct": 66
+  },
+  {
+    "admit_min_count": 1,
+    "bypasses": 0,
+    "down": {
+      "bypasses": 0,
+      "evictions": 26192,
+      "hit_rate_pct": 47.261,
+      "hits": 23540,
+      "misses": 26268,
+      "resident": 763
+    },
+    "events": 149424,
+    "evictions": 62233,
+    "hit_rate_pct": 58.127,
+    "hits": 86856,
+    "misses": 62568,
+    "policy": "lfu_lru",
+    "prefix_events": 12624,
+    "prefix_hit_rate_pct": 41.635,
+    "prefix_hits": 5256,
+    "prefix_misses": 7368,
+    "preloads": {
+      "down": 687,
+      "upgate": 2339
+    },
+    "profile_after": 0,
+    "protect_min_count": 1,
+    "reserve_pct": 10,
+    "slots": {
+      "down": 763,
+      "upgate": 2598
+    },
+    "total_mib": 13498,
+    "upgate": {
+      "bypasses": 0,
+      "evictions": 36041,
+      "hit_rate_pct": 63.56,
+      "hits": 63316,
+      "misses": 36300,
+      "resident": 2598
+    },
+    "upgate_pct": 74
+  }
+]

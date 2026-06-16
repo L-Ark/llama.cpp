@@ -1,0 +1,2 @@
+Why should output text stay unchanged when testing cache scheduling? The
+output text should stay unchanged because

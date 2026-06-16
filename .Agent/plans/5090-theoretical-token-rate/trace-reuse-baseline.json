@@ -1,0 +1,60 @@
+{
+  "events": 149424,
+  "final_cache": {
+    "down": {
+      "hits": 27888,
+      "misses": 21920
+    },
+    "upgate": {
+      "hits": 58986,
+      "misses": 40630
+    }
+  },
+  "misses_replayed": 62550,
+  "prefix_reuse_distance_buckets": {
+    "1025-4096": 2449,
+    "gt4096": 3079,
+    "never": 1854
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "profile_count_buckets": {
+    "1": 5742,
+    "17-32": 289,
+    "2-4": 16101,
+    "5-8": 15876,
+    "9-16": 24542
+  },
+  "profile_count_by_cache": {
+    "down": {
+      "1": 1914,
+      "17-32": 289,
+      "2-4": 5367,
+      "5-8": 5292,
+      "9-16": 9058
+    },
+    "upgate": {
+      "1": 3828,
+      "2-4": 10734,
+      "5-8": 10584,
+      "9-16": 15484
+    }
+  },
+  "reuse_distance_buckets": {
+    "1025-4096": 8384,
+    "gt4096": 37979,
+    "never": 16187
+  },
+  "reuse_distance_by_cache": {
+    "down": {
+      "1025-4096": 3004,
+      "gt4096": 13453,
+      "never": 5463
+    },
+    "upgate": {
+      "1025-4096": 5380,
+      "gt4096": 24526,
+      "never": 10724
+    }
+  },
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv"
+}

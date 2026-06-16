@@ -1,0 +1,132 @@
+{
+  "events": 149424,
+  "keep_first_n_experts": {
+    "1": {
+      "dropped_events": 130746,
+      "dropped_ram_hits": 28147,
+      "dropped_resident_events": 97215,
+      "dropped_vram_hits": 69068,
+      "resident_drop_pct": 74.354,
+      "saved_ssd_misses": 33531,
+      "saved_ssd_pct_of_current_ssd": 87.638
+    },
+    "2": {
+      "dropped_events": 112068,
+      "dropped_ram_hits": 24477,
+      "dropped_resident_events": 83165,
+      "dropped_vram_hits": 58688,
+      "resident_drop_pct": 74.209,
+      "saved_ssd_misses": 28903,
+      "saved_ssd_pct_of_current_ssd": 75.542
+    },
+    "3": {
+      "dropped_events": 93390,
+      "dropped_ram_hits": 20672,
+      "dropped_resident_events": 69334,
+      "dropped_vram_hits": 48662,
+      "resident_drop_pct": 74.241,
+      "saved_ssd_misses": 24056,
+      "saved_ssd_pct_of_current_ssd": 62.873
+    },
+    "4": {
+      "dropped_events": 74712,
+      "dropped_ram_hits": 16798,
+      "dropped_resident_events": 55570,
+      "dropped_vram_hits": 38772,
+      "resident_drop_pct": 74.379,
+      "saved_ssd_misses": 19142,
+      "saved_ssd_pct_of_current_ssd": 50.03
+    },
+    "5": {
+      "dropped_events": 56034,
+      "dropped_ram_hits": 13037,
+      "dropped_resident_events": 41526,
+      "dropped_vram_hits": 28489,
+      "resident_drop_pct": 74.109,
+      "saved_ssd_misses": 14508,
+      "saved_ssd_pct_of_current_ssd": 37.919
+    },
+    "6": {
+      "dropped_events": 37356,
+      "dropped_ram_hits": 8920,
+      "dropped_resident_events": 27545,
+      "dropped_vram_hits": 18625,
+      "resident_drop_pct": 73.736,
+      "saved_ssd_misses": 9811,
+      "saved_ssd_pct_of_current_ssd": 25.642
+    },
+    "7": {
+      "dropped_events": 18678,
+      "dropped_ram_hits": 4500,
+      "dropped_resident_events": 13892,
+      "dropped_vram_hits": 9392,
+      "resident_drop_pct": 74.376,
+      "saved_ssd_misses": 4786,
+      "saved_ssd_pct_of_current_ssd": 12.509
+    }
+  },
+  "preloads": {
+    "down": 785,
+    "upgate": 1743
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "ram_hits": 31832,
+  "ram_tier_profile": ".Agent/plans/5090-theoretical-token-rate/ramtier-residual-graphreserve2048-10240.route.csv",
+  "ranks": {
+    "0": {
+      "events": 18678,
+      "ram_hits": 3685,
+      "ssd_misses": 4730,
+      "vram_hits": 10263
+    },
+    "1": {
+      "events": 18678,
+      "ram_hits": 3670,
+      "ssd_misses": 4628,
+      "vram_hits": 10380
+    },
+    "2": {
+      "events": 18678,
+      "ram_hits": 3805,
+      "ssd_misses": 4847,
+      "vram_hits": 10026
+    },
+    "3": {
+      "events": 18678,
+      "ram_hits": 3874,
+      "ssd_misses": 4914,
+      "vram_hits": 9890
+    },
+    "4": {
+      "events": 18678,
+      "ram_hits": 3761,
+      "ssd_misses": 4634,
+      "vram_hits": 10283
+    },
+    "5": {
+      "events": 18678,
+      "ram_hits": 4117,
+      "ssd_misses": 4697,
+      "vram_hits": 9864
+    },
+    "6": {
+      "events": 18678,
+      "ram_hits": 4420,
+      "ssd_misses": 5025,
+      "vram_hits": 9233
+    },
+    "7": {
+      "events": 18678,
+      "ram_hits": 4500,
+      "ssd_misses": 4786,
+      "vram_hits": 9392
+    }
+  },
+  "slots": {
+    "down": 872,
+    "upgate": 1936
+  },
+  "ssd_misses": 38261,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv",
+  "vram_hits": 79331
+}

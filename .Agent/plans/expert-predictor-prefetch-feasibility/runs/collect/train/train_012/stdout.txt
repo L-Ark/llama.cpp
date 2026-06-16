@@ -1,0 +1,1 @@
+Why might a static expert profile fail on broad prompts? It may be too rigid, over-f

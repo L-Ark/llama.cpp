@@ -1,0 +1,7 @@
+{
+  "config": "smoke-baseline-vram1536",
+  "error": "pty read failed before ready: [Errno 5] Input/output error",
+  "returncode": 1,
+  "stderr_log": null,
+  "time_to_type_s": null
+}

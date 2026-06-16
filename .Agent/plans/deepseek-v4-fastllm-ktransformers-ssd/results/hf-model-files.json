@@ -1,0 +1,583 @@
+{
+  "file_count": 74,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "size_bytes": 1603,
+      "size_gib": 1e-06
+    },
+    {
+      "path": "DeepSeek_V4.pdf",
+      "size_bytes": 4480407,
+      "size_gib": 0.004173
+    },
+    {
+      "path": "LICENSE",
+      "size_bytes": 1084,
+      "size_gib": 1e-06
+    },
+    {
+      "path": "README.md",
+      "size_bytes": 13193,
+      "size_gib": 1.2e-05
+    },
+    {
+      "path": "assets/dsv4_performance.png",
+      "size_bytes": 1000354,
+      "size_gib": 0.000932
+    },
+    {
+      "path": "config.json",
+      "size_bytes": 1749,
+      "size_gib": 2e-06
+    },
+    {
+      "path": "encoding/README.md",
+      "size_bytes": 8118,
+      "size_gib": 8e-06
+    },
+    {
+      "path": "encoding/encoding_dsv4.py",
+      "size_bytes": 27908,
+      "size_gib": 2.6e-05
+    },
+    {
+      "path": "encoding/test_encoding_dsv4.py",
+      "size_bytes": 3741,
+      "size_gib": 3e-06
+    },
+    {
+      "path": "encoding/tests/test_input_1.json",
+      "size_bytes": 2748,
+      "size_gib": 3e-06
+    },
+    {
+      "path": "encoding/tests/test_input_2.json",
+      "size_bytes": 526,
+      "size_gib": 0.0
+    },
+    {
+      "path": "encoding/tests/test_input_3.json",
+      "size_bytes": 4546,
+      "size_gib": 4e-06
+    },
+    {
+      "path": "encoding/tests/test_input_4.json",
+      "size_bytes": 2730,
+      "size_gib": 3e-06
+    },
+    {
+      "path": "encoding/tests/test_output_1.txt",
+      "size_bytes": 2390,
+      "size_gib": 2e-06
+    },
+    {
+      "path": "encoding/tests/test_output_2.txt",
+      "size_bytes": 342,
+      "size_gib": 0.0
+    },
+    {
+      "path": "encoding/tests/test_output_3.txt",
+      "size_bytes": 3313,
+      "size_gib": 3e-06
+    },
+    {
+      "path": "encoding/tests/test_output_4.txt",
+      "size_bytes": 2552,
+      "size_gib": 2e-06
+    },
+    {
+      "path": "generation_config.json",
+      "size_bytes": 170,
+      "size_gib": 0.0
+    },
+    {
+      "path": "inference/README.md",
+      "size_bytes": 951,
+      "size_gib": 1e-06
+    },
+    {
+      "path": "inference/config.json",
+      "size_bytes": 991,
+      "size_gib": 1e-06
+    },
+    {
+      "path": "inference/convert.py",
+      "size_bytes": 7075,
+      "size_gib": 7e-06
+    },
+    {
+      "path": "inference/generate.py",
+      "size_bytes": 6296,
+      "size_gib": 6e-06
+    },
+    {
+      "path": "inference/kernel.py",
+      "size_bytes": 22198,
+      "size_gib": 2.1e-05
+    },
+    {
+      "path": "inference/model.py",
+      "size_bytes": 38632,
+      "size_gib": 3.6e-05
+    },
+    {
+      "path": "inference/requirements.txt",
+      "size_bytes": 92,
+      "size_gib": 0.0
+    },
+    {
+      "path": "model-00001-of-00046.safetensors",
+      "size_bytes": 1059061856,
+      "size_gib": 0.986328
+    },
+    {
+      "path": "model-00002-of-00046.safetensors",
+      "size_bytes": 3566321192,
+      "size_gib": 3.321395
+    },
+    {
+      "path": "model-00003-of-00046.safetensors",
+      "size_bytes": 3566321192,
+      "size_gib": 3.321395
+    },
+    {
+      "path": "model-00004-of-00046.safetensors",
+      "size_bytes": 3596229272,
+      "size_gib": 3.34925
+    },
+    {
+      "path": "model-00005-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    },
+    {
+      "path": "model-00006-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00007-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    },
+    {
+      "path": "model-00008-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00009-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    },
+    {
+      "path": "model-00010-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00011-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    },
+    {
+      "path": "model-00012-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00013-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00014-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00015-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00016-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00017-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00018-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00019-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00020-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00021-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00022-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00023-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00024-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00025-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00026-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00027-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00028-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00029-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00030-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00031-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00032-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00033-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00034-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00035-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00036-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00037-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00038-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00039-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00040-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00041-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00042-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00043-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00044-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00045-of-00046.safetensors",
+      "size_bytes": 1059332516,
+      "size_gib": 0.98658
+    },
+    {
+      "path": "model-00046-of-00046.safetensors",
+      "size_bytes": 3593956092,
+      "size_gib": 3.347132
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "size_bytes": 5371381,
+      "size_gib": 0.005002
+    },
+    {
+      "path": "tokenizer.json",
+      "size_bytes": 6367146,
+      "size_gib": 0.00593
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size_bytes": 801,
+      "size_gib": 1e-06
+    }
+  ],
+  "gated": false,
+  "largest_files": [
+    {
+      "path": "model-00004-of-00046.safetensors",
+      "size_bytes": 3596229272,
+      "size_gib": 3.34925
+    },
+    {
+      "path": "model-00046-of-00046.safetensors",
+      "size_bytes": 3593956092,
+      "size_gib": 3.347132
+    },
+    {
+      "path": "model-00012-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00014-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00016-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00018-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00020-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00022-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00024-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00026-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00028-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00030-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00032-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00034-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00036-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00038-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00040-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00042-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00044-of-00046.safetensors",
+      "size_bytes": 3590026352,
+      "size_gib": 3.343473
+    },
+    {
+      "path": "model-00006-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00008-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00010-of-00046.safetensors",
+      "size_bytes": 3590024776,
+      "size_gib": 3.343471
+    },
+    {
+      "path": "model-00013-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00015-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00017-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00019-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00021-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00023-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00025-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00027-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00029-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00031-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00033-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00035-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00037-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00039-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00041-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00043-of-00046.safetensors",
+      "size_bytes": 3568770544,
+      "size_gib": 3.323677
+    },
+    {
+      "path": "model-00005-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    },
+    {
+      "path": "model-00007-of-00046.safetensors",
+      "size_bytes": 3568768976,
+      "size_gib": 3.323675
+    }
+  ],
+  "private": false,
+  "repo": "deepseek-ai/DeepSeek-V4-Flash",
+  "sha": "553034d7dd9e06c2eeaee68cf85a17d6d4754cf0",
+  "total_size_bytes": 159634522077,
+  "total_size_gib": 148.671
+}

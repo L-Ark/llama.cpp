@@ -1,0 +1,37 @@
+{
+  "last_case_id": "multi_004",
+  "summary": {
+    "categories": {
+      "coding": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "factual": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "json": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "math": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "multilingual": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      }
+    },
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 20,
+    "total": 20
+  },
+  "updated_at_unix": 1781547918.7856977
+}
