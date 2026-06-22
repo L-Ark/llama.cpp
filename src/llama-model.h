@@ -116,6 +116,7 @@ enum e_model {
     MODEL_119B_A6B,
     MODEL_122B_A10B,
     MODEL_230B_A10B, // Minimax M2
+    MODEL_128X16B,   // MiniMax M3
     MODEL_235B_A22B,
     MODEL_310B_A15B,
     MODEL_300B_A47B, // Ernie MoE big
@@ -588,4 +589,3 @@ struct LLM_TN {
 std::string llama_model_ftype_name(llama_ftype ftype);
 
 const char * llama_model_type_name(e_model type);
-

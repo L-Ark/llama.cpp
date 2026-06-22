@@ -309,6 +309,8 @@ struct llm_build_context {
 
     ggml_cgraph * build_minimaxm2();
 
+    ggml_cgraph * build_minimaxm3();
+
     ggml_cgraph * build_smollm3();
 
     ggml_cgraph * build_mimo2();
