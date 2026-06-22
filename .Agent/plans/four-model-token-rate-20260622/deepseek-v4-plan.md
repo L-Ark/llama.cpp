@@ -503,4 +503,31 @@ Apply previous-task routes in this order:
 | record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | deepseek-v4-a10-hotexp32-n64 | 2026-06-22T17:20Z | 3e4a9ec1 | unpromoted-hotexp | 1.39 | 1.25 | n/a | n/a | n/a | 54147.41 | 63 | no improvement | n/a | time_maxrss=27445.75 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 63 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 GGML_HOTEXP_CACHE_GB=32 GGML_HOTEXP_DEBUG=1 EXTRA_ARGS="-ub 1"` | `/root/lfz/runs/ik_llama/deepseek-v4-a10-hotexp32-n64/bench.log` | n/a |
-| deepseek-v4-a11-t24-full | 2026-06-22T17:38Z | 3e4a9ec1 | promoted-thread-tuning | 1.81 | 1.57 | n/a | n/a | n/a | 149141.48 | 255 | +0.39 tok/s vs A6 | n/a | time_maxrss=27445.27 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t 24 -tb 24"` | `/root/lfz/runs/ik_llama/deepseek-v4-a11-t24-full/bench.log` | pending |
+| deepseek-v4-a11-t24-full | 2026-06-22T17:38Z | 3e4a9ec1 | promoted-thread-tuning | 1.81 | 1.57 | n/a | n/a | n/a | 149141.48 | 255 | +0.39 tok/s vs A6 | n/a | time_maxrss=27445.27 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t 24 -tb 24"` | `/root/lfz/runs/ik_llama/deepseek-v4-a11-t24-full/bench.log` | e5a1fb8a |
+
+### 2026-06-22 17:58Z - A12/A13 Thread Retest Results
+
+- A12 fine-grained 64-token thread sweep:
+  - `T=18`: `eval_tok_s = 1.82`
+  - `T=20`: `eval_tok_s = 1.76`
+  - `T=22`: `eval_tok_s = 1.79`
+  - `T=24`: `eval_tok_s = 1.78`
+  - `T=26`: `eval_tok_s = 1.81`
+  - `T=28`: `eval_tok_s = 1.82`
+- `-ub 2` with `T=18` improved prompt eval but not decode eval (`1.78 tok/s`), so keep `-ub 1`.
+- A12 full validation with `T=18`:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a12-t18-full/bench.log`
+  exited code `0`, `eval_tok_s = 1.77`. Do not promote.
+- A13 16 GB cgroup validation with promoted `T=24`:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a13-t24-full-16g/bench.log`
+  exited code `0`, `eval_tok_s = 1.79`, `prompt_eval_tok_s = 1.53`,
+  `gen_tokens = 255`, `total_ms = 151203.08`.
+- Decision: keep A11 `T=24` as the best absolute run (`1.81 tok/s`) and record A13 as the
+  16 GB cgroup-compatible reproduction (`1.79 tok/s`). The remaining gap to fastllm `1.94 tok/s`
+  is likely from missing F8 routed-expert GPU stream/cache support in ik_llama; current
+  IQ2/IQ3 MoE stream code explicitly excludes `GGML_TYPE_F8_E4M3_B128`.
+
+| record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| deepseek-v4-a12-t18-full | 2026-06-22T17:52Z | e5a1fb8a | unpromoted-thread-retune | 1.77 | 1.53 | n/a | n/a | n/a | 152846.62 | 255 | -0.04 tok/s vs A11 | n/a | time_maxrss=27445.74 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t 18 -tb 18"` | `/root/lfz/runs/ik_llama/deepseek-v4-a12-t18-full/bench.log` | n/a |
+| deepseek-v4-a13-t24-full-16g | 2026-06-22T17:58Z | e5a1fb8a | 16g-reproduction | 1.79 | 1.53 | n/a | n/a | n/a | 151203.08 | 255 | +0.37 tok/s vs A6 | n/a | time_maxrss=27445.27; MemoryMax=16G exit_ok | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24"` | `/root/lfz/runs/ik_llama/deepseek-v4-a13-t24-full-16g/bench.log` | pending |
