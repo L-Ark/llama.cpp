@@ -33,6 +33,8 @@ git config user.name "L-Ark"
 git config user.email "fliangae@connect.ust.hk"
 ```
 
+Optimization ideas may be chosen independently based on MiniMax M3's actual architecture and bottlenecks. Before starting any optimization attempt, write a concrete optimization plan in this file, including the hypothesis, code/config changes to try, benchmark command, success metric, rollback condition, and expected logs. During the attempt, record the full process in this same plan: commands, metrics, failures, reverted ideas, elapsed time, log paths, and whether the result was pushed.
+
 Model source and target:
 
 - Download name: `unsloth/MiniMax-M3-GGUF`
