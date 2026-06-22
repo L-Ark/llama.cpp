@@ -542,3 +542,46 @@ Apply previous-task routes in this order:
   exited code `0`, `eval_tok_s = 1.82`.
 - Decision: do not promote or full-run. The CUDA backend flags did not improve decode speed for
   this DeepSeek F8 path.
+
+### 2026-06-23 10:20Z - Optimization Attempt A15: Parallel Experts Without CPU-OPS
+
+- Source reading: the existing `ggml_hotexp_*` and per-expert parallel path are guarded by
+  `GGML_MOE_PARALLEL_EXPERTS`, while A10 did not enable that variable. A9 enabled it but also
+  forced `GGML_MOE_STREAM_CPU_OPS=1` and `GGML_MOE_STREAM_BATCH_ONLY=1`, causing a severe CPU
+  fallback regression.
+- Hypothesis: enabling only `GGML_MOE_PARALLEL_EXPERTS=1` with the promoted `-t 24 -tb 24`
+  settings may activate the lower-overhead parallel expert path/hotexp hooks without forcing the
+  broken IQ2/IQ3 batch-stream path.
+- Short benchmark command:
+  `MEMORY_MAX=16G GGML_MOE_PARALLEL_EXPERTS=1 GGML_HOTEXP_DEBUG=1 GGML_HOTEXP_PROFILE_OUT=<run>/hotexp.profile.csv EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=64 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a15-parallel-experts-n64 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: short-run eval exceeds the current 64-token control range (`~1.82 tok/s`) and
+  full 256-token validation exceeds A11 (`1.81 tok/s`) or A13 under 16 GB (`1.79 tok/s`).
+- Rollback condition: if no hotexp/profile output is produced or speed does not improve, record as
+  unpromoted and return to F8-aware stream/cache implementation work.
+
+#### A15 First Pass Result
+
+- Run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a15-parallel-experts-n64/bench.log`
+  exited code `0`, `eval_tok_s = 1.55`.
+- Diagnostic: the runner did not forward `GGML_HOTEXP_*` into the systemd unit, so this result
+  only proves that `GGML_MOE_PARALLEL_EXPERTS=1` alone regresses. It does not test hotexp.
+- Runner fix: forward `GGML_HOTEXP_CACHE_GB`, `GGML_HOTEXP_DEBUG`,
+  `GGML_HOTEXP_PROFILE_OUT`, and `GGML_HOTEXP_INSERT_ON_MISS`.
+- Retest command:
+  `MEMORY_MAX=0 GGML_MOE_PARALLEL_EXPERTS=1 GGML_HOTEXP_CACHE_GB=32 GGML_HOTEXP_DEBUG=1 GGML_HOTEXP_PROFILE_OUT=<run>/hotexp.profile.csv EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=64 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a15b-parallel-hotexp32-n64 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+
+#### A15b Result
+
+- Run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a15b-parallel-hotexp32-n64/bench.log`
+  exited code `0`, `eval_tok_s = 1.56`, `prompt_eval_tok_s = 0.19`,
+  `gen_tokens = 63`, `host_rss_peak_mb = 42927.60`.
+- Hotexp evidence:
+  - `[hotexp] anonymous-RAM cache: 32 GiB reserved`
+  - `[hotexp] hits=44550 misses=666 total=45216 hit_rate=98.5% entries=666 used=2830.5 MiB`
+  - profile written:
+    `/root/lfz/runs/ik_llama/deepseek-v4-a15b-parallel-hotexp32-n64/hotexp.profile.csv`
+- Decision: do not promote. Even with a high hotexp hit rate, the parallel/hotexp CPU path is
+  slower than the promoted T24 baseline. This rules out "missing RAM hot expert cache" as the
+  remaining fastllm gap for DeepSeek F8.
