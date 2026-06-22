@@ -415,3 +415,92 @@ Apply previous-task routes in this order:
 | record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | deepseek-v4-a8-stream-full-monitor | 2026-06-22T16:22Z | f0d29342 | unpromoted-moe-stream | 1.40 | 1.28 | n/a | n/a | n/a | 191363.47 | 255 | -0.02 tok/s vs A6 | n/a | time_maxrss=27445.27; observed_sampled_rss=10246.60; cgroup_memory_peak=785.01 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MemoryMax=16G MemorySwapMax=0 GGML_CUDA_NO_PINNED=1 GGML_MOE_STREAM=1 GGML_MOE_STREAM_DEFER=1 EXTRA_ARGS="-ub 1"` | `/root/lfz/runs/ik_llama/deepseek-v4-a8-stream-full-monitor/bench.log` | n/a |
+
+### 2026-06-22 16:35Z - Optimization Attempt A9: Batch MoE Stream + Route Trace
+
+- Finding from ik_llama source and prior 5090 plan artifacts: the GLM SOTA path used more than
+  `GGML_MOE_STREAM=1`; it also set `GGML_MOE_STREAM_BATCH_ONLY=1`,
+  `GGML_MOE_STREAM_CPU_OPS=1`, parallel/staged up-gate/down flags, and route/profile-driven
+  VRAM cache preloads.
+- A8 did not show `[moe_stream_batch] VRAM cache` or expert-pack logs, so it likely only enabled
+  the basic stream path.
+- Runner update: forward batch-only/CPU-ops/profile/trace/expert-pack/iouring/staging env vars so
+  DeepSeek-V4 can reuse the same ik_llama optimization mechanisms without downloading another
+  model.
+- Short benchmark command:
+  `GGML_MOE_STREAM=1 GGML_MOE_STREAM_BATCH_ONLY=1 GGML_MOE_STREAM_CPU_OPS=1 GGML_MOE_PARALLEL_EXPERTS=1 GGML_MOE_ROUTE_TRACE_OUT=<run>/route.trace.csv GGML_MOE_BATCH_PROFILE=1 GGML_MOE_BATCH_PROFILE_OUT=<run>/route.profile.csv EXTRA_ARGS="-ub 1" N_PREDICT=32 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a9-batch-stream-trace-n32 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: short run exits code `0`, writes route trace/profile, and either improves
+  short-run eval speed materially or unlocks a profile artifact usable for A10.
+- Rollback condition: if batch-only CPU-ops crashes or is slower with no trace/profile output,
+  keep A6 and move to selective expert-pack generation by patching `gguf-py` for type 42
+  (`GGML_TYPE_F8_E4M3_B128`) and filtering pack entries by route/profile to fit available disk.
+
+### 2026-06-22 17:05Z - Optimization Attempt A10: Uncapped Host RAM Hot Expert Cache
+
+- Current task no longer requires a 16 GB host-RAM cap, and the server has about `86 GiB` RAM
+  with no swap.
+- DeepSeek-V4 routed experts use `GGML_TYPE_F8_E4M3_B128`, while ik_llama's MoE stream/cache
+  fast path currently supports only `IQ3_XXS` and `IQ2_S`. Therefore F8 routed experts cannot
+  immediately reuse the GLM IQ2/IQ3 GPU-stream SOTA path.
+- Hypothesis: enabling the existing CPU-side hot expert cache (`GGML_HOTEXP_CACHE_GB`) can reduce
+  repeated mmap/page-cache expert reads for the same prompt without requiring an expert-pack or a
+  new F8 CUDA stream kernel.
+- Runner update: add `MEMORY_MAX=0` support so experiments can run without the previous
+  `MemoryMax=16G` systemd cap while keeping the 16 GB baseline reproducible.
+- Short benchmark command:
+  `MEMORY_MAX=0 GGML_HOTEXP_CACHE_GB=32 GGML_HOTEXP_DEBUG=1 GGML_HOTEXP_PROFILE_OUT=<run>/hotexp.profile.csv EXTRA_ARGS="-ub 1" N_PREDICT=64 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a10-hotexp32-n64 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: eval tok/s improves over the proportional A6/A8 short-run range and the full
+  run can exceed the accepted A6 `1.42 tok/s` baseline.
+- Rollback condition: if cache fill overhead dominates or memory pressure causes instability, do
+  not promote; proceed to a F8-aware stream/cache implementation or selective expert-pack work.
+
+#### A10 Result
+
+- Run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a10-hotexp32-n64/bench.log`
+  exited code `0`, `eval_tok_s = 1.39`, `gen_tokens = 63`.
+- No `hotexp` debug/profile output was emitted. The DeepSeek F8 expert path did not hit the
+  `ggml_hotexp_*` hooks used by the IQK CPU MoE path.
+- Decision: do not promote. This confirmed that the current bottleneck is not solved by the
+  existing hot expert RAM cache for this F8 path.
+
+### 2026-06-22 17:25Z - Optimization Attempt A11: CPU Thread Count Sweep
+
+- Finding from A10: no `hotexp` logs were emitted, major page faults were zero, and the process
+  spent very high aggregate CPU time. This points to CPU-side F8 expert compute/scheduling overhead
+  rather than SSD page faults as the immediate bottleneck for the current ik_llama DeepSeek-V4
+  path.
+- Hypothesis: defaulting to all 61 CPU threads over-parallelizes the routed expert CPU work and
+  increases scheduling/cache contention. A smaller thread count may improve decode throughput.
+- Short sweep command:
+  `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t <T> -tb <T>" N_PREDICT=32 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a11-t<T>-n32 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Short sweep results:
+  - `T=16`: `eval_tok_s = 1.78`, `prompt_eval_tok_s = 1.53`
+  - `T=24`: `eval_tok_s = 1.79`, `prompt_eval_tok_s = 1.55`
+  - `T=32`: `eval_tok_s = 1.77`, `prompt_eval_tok_s = 1.53`
+  - `T=48`: `eval_tok_s = 1.72`, `prompt_eval_tok_s = 1.47`
+- Decision: run a full 256-token validation with `-t 24 -tb 24`.
+- Success metric: full run must exceed accepted A6 `1.42 tok/s`; if confirmed, commit and push
+  immediately because this is a verified performance improvement.
+
+### 2026-06-22 17:38Z - A11 Result
+
+- Full run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a11-t24-full/bench.log`
+  exited code `0`, `eval_tok_s = 1.81`, `prompt_eval_tok_s = 1.57`,
+  `gen_tokens = 255`, `total_ms = 149141.48`.
+- Improvement versus accepted A6:
+  - A6 full: `1.42 tok/s`
+  - A11 full: `1.81 tok/s`
+  - Delta: `+0.39 tok/s` (`+27.5%`)
+- Comparison with fastllm SOTA target:
+  - fastllm SOTA reference: `1.94 tok/s`
+  - current ik_llama best: `1.81 tok/s`
+  - remaining gap: `0.13 tok/s` (`~6.7%`)
+- Decision: promote A11 as the new ik_llama DeepSeek-V4-Flash baseline. The promoted runtime
+  setting is `EXTRA_ARGS="-ub 1 -t 24 -tb 24"` with the existing native GGUF model.
+
+| record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| deepseek-v4-a10-hotexp32-n64 | 2026-06-22T17:20Z | 3e4a9ec1 | unpromoted-hotexp | 1.39 | 1.25 | n/a | n/a | n/a | 54147.41 | 63 | no improvement | n/a | time_maxrss=27445.75 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 63 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 GGML_HOTEXP_CACHE_GB=32 GGML_HOTEXP_DEBUG=1 EXTRA_ARGS="-ub 1"` | `/root/lfz/runs/ik_llama/deepseek-v4-a10-hotexp32-n64/bench.log` | n/a |
+| deepseek-v4-a11-t24-full | 2026-06-22T17:38Z | 3e4a9ec1 | promoted-thread-tuning | 1.81 | 1.57 | n/a | n/a | n/a | 149141.48 | 255 | +0.39 tok/s vs A6 | n/a | time_maxrss=27445.27 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t 24 -tb 24"` | `/root/lfz/runs/ik_llama/deepseek-v4-a11-t24-full/bench.log` | pending |
