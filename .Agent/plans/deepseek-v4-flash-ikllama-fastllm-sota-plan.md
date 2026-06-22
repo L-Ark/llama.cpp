@@ -108,6 +108,8 @@ Completed:
 - Added a minimal short-context `build_deepseek4()` graph and dispatch entry.
 - Added conservative DeepSeek4 fallbacks that disable unsupported fused up/gate FFN and fused MoE up/gate paths for this architecture only.
 - Added a CUDA Flash Attention dispatch for 512-dim Q/K/V with GQA ratios divisible by 16.
+- Applied DeepSeek4 `swiglu_clamp_exp` / shared clamp limits to the active FFN and MoE elementwise paths.
+- Added `inventory/summary.json` from the sparse/header GGUF probe and a watcher that launches strict16g direct baseline automatically after the full GGUF finishes downloading.
 - Verified sparse/header GGUF probe can load dense tensors, defer experts, initialize KV cache, build the graph, and run one token with default Flash Attention and default fused flags using:
   - `--defer-experts`
   - `GGML_CUDA_NO_PINNED=1`
@@ -122,7 +124,7 @@ Current blockers:
 Next steps:
 
 1. Finish the native GGUF download with resumable `aria2c`.
-2. Run direct baseline with the conservative working flags above.
+2. Let `watch/run_baseline_when_ready.sh` run direct baseline automatically after the full GGUF reaches `156148189760` bytes and the `.aria2` control file disappears.
 3. Restore performance one subsystem at a time:
    - first Flash Attention compatibility for 512-dim latent KV,
    - then FP4/FP8 fused expert up/gate,

@@ -919,9 +919,9 @@ ggml_tensor * llm_build_context::llm_build_ffn(
        (type_op == LLM_FFN_SILU || type_op == LLM_FFN_RELU || (type_op == LLM_FFN_GELU && !act_scales))) {
         cur = ggml_fused_mul_unary(ctx, cur, tmp, type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU :
                                                   type_op == LLM_FFN_RELU ? GGML_UNARY_OP_RELU : GGML_UNARY_OP_GELU);
-        if (lctx.model.arch == LLM_ARCH_STEP35) {
-            *((float *)(cur->op_params + 1)) = lctx.model.hparams.swiglu_limits_shared[il];
-        }
+            if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
+                *((float *)(cur->op_params + 1)) = lctx.model.hparams.swiglu_limits_shared[il];
+            }
     }
     else {
 
@@ -1192,7 +1192,7 @@ llm_expert_gating_func_type   gating_op,
             par = ggml_moe_up_gate(ctx, up_exps, gate_exps, cur, selected_experts,
                     type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU : GGML_UNARY_OP_GELU);
         }
-        if (lctx.model.arch == LLM_ARCH_STEP35) {
+        if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
             *(float *)(par->op_params + 1) = lctx.model.hparams.swiglu_limits[il];
         }
     } else {
@@ -1220,7 +1220,7 @@ llm_expert_gating_func_type   gating_op,
 
         if (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU) {
             par = ggml_fused_mul_unary(ctx, gate, up, type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU : GGML_UNARY_OP_GELU);
-            if (lctx.model.arch == LLM_ARCH_STEP35) {
+            if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
                 *((float *)(par->op_params + 1)) = lctx.model.hparams.swiglu_limits[il];
             }
         } else if (type_op == LLM_FFN_SWIGLU_OAI_MOE) {
