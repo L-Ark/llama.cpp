@@ -19,6 +19,20 @@ git push -u origin deepseek-v4-flash
 
 All DeepSeek V4 Flash integration commits, baseline records, token-rate improvements, and immediate improvement pushes must go to the `deepseek-v4-flash` branch.
 
+All commits and pushes for this model task must use the GitHub account and commit identity:
+
+```text
+L-Ark <fliangae@connect.ust.hk>
+```
+
+Before the first task commit on the server, verify:
+
+```bash
+gh auth status
+git config user.name "L-Ark"
+git config user.email "fliangae@connect.ust.hk"
+```
+
 Model source and target:
 
 - Download name: `deepseek-ai/DeepSeek-V4-Flash`

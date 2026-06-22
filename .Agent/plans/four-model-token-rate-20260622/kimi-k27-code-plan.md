@@ -19,6 +19,20 @@ git push -u origin kimi-k2.7-code
 
 All Kimi K2.7 Code integration commits, baseline records, token-rate improvements, and immediate improvement pushes must go to the `kimi-k2.7-code` branch.
 
+All commits and pushes for this model task must use the GitHub account and commit identity:
+
+```text
+L-Ark <fliangae@connect.ust.hk>
+```
+
+Before the first task commit on the server, verify:
+
+```bash
+gh auth status
+git config user.name "L-Ark"
+git config user.email "fliangae@connect.ust.hk"
+```
+
 Model source and target:
 
 - Default download name: `moonshotai/Kimi-K2.7-Code`

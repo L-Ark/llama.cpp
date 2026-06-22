@@ -19,6 +19,20 @@ git push -u origin minimax-m3
 
 All MiniMax M3 integration commits, baseline records, token-rate improvements, and immediate improvement pushes must go to the `minimax-m3` branch.
 
+All commits and pushes for this model task must use the GitHub account and commit identity:
+
+```text
+L-Ark <fliangae@connect.ust.hk>
+```
+
+Before the first task commit on the server, verify:
+
+```bash
+gh auth status
+git config user.name "L-Ark"
+git config user.email "fliangae@connect.ust.hk"
+```
+
 Model source and target:
 
 - Download name: `unsloth/MiniMax-M3-GGUF`
