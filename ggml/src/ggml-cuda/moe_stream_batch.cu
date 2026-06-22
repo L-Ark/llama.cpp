@@ -42,6 +42,14 @@
 #if defined(__linux__) && __has_include(<liburing.h>)
 #include <liburing.h>
 #define GGML_MOE_HAS_LIBURING 1
+static inline void ggml_moe_io_uring_sqe_set_data64(struct io_uring_sqe * sqe, uint64_t data) {
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void *>(static_cast<uintptr_t>(data)));
+}
+static inline uint64_t ggml_moe_io_uring_cqe_get_data64(const struct io_uring_cqe * cqe) {
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(io_uring_cqe_get_data(cqe)));
+}
+#define io_uring_sqe_set_data64 ggml_moe_io_uring_sqe_set_data64
+#define io_uring_cqe_get_data64 ggml_moe_io_uring_cqe_get_data64
 #endif
 #endif
 
