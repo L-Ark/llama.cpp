@@ -370,3 +370,48 @@ Apply previous-task routes in this order:
 | record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | deepseek-v4-a6-baseline-flash-ub1-monitor | 2026-06-22T15:25Z | f0d29342 | baseline | 1.42 | 1.24 | n/a | n/a | n/a | 188983.14 | 255 | first accepted ik_llama baseline | n/a | time_maxrss=27445.27; observed_sampled_rss=10246.48; cgroup_memory_peak=785.25 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MemoryMax=16G MemorySwapMax=0 GGML_CUDA_NO_PINNED=1 EXTRA_ARGS="-ub 1"` | `/root/lfz/runs/ik_llama/deepseek-v4-a6-baseline-flash-ub1-monitor/bench.log` | f0d29342 |
+
+### 2026-06-22 16:05Z - Optimization Attempt A8: Enable ik_llama MoE Stream/Cache
+
+- Reuse existing GGUF model file instead of downloading another copy:
+  `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`.
+- Current accepted baseline A6 uses `--defer-experts`, `GGML_CUDA_NO_PINNED=1`, and `-ub 1`,
+  but the runner did not explicitly enable ik_llama's MoE streaming/cache path.
+- Hypothesis: enabling `GGML_MOE_STREAM=1` with the existing VRAM/RAM cache budget variables will
+  use ik_llama's first-class MoE stream/cache code rather than only the generic deferred-expert mmap
+  path, reducing expert transfer overhead during decode.
+- Runner update:
+  - Forward `GGML_MOE_STREAM`.
+  - Forward `GGML_MOE_STREAM_DEFER`.
+  - Forward `GGML_MOE_STREAM_FUSED_UP_GATE`.
+  - Forward `GGML_MOE_PREFETCH`.
+  - Forward `GGML_MOE_PREDICT`.
+- Short benchmark command:
+  `GGML_MOE_STREAM=1 GGML_MOE_STREAM_DEFER=1 EXTRA_ARGS="-ub 1" N_PREDICT=32 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a8-stream-n32 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Full benchmark trigger: only run a full 256-token monitor if the short run exits code `0` and
+  does not regress the current `1.42 tok/s` eval baseline.
+- Success metric: full run must exceed A6 eval speed and remain inside the enforced
+  `MemoryMax=16G` cgroup. If confirmed, immediately commit and push.
+- Rollback condition: CUDA error, OOM, generation failure, or full-run eval token rate `<= 1.42`
+  means this is recorded as an unpromoted attempt and the next path should move to ik_llama's SSD
+  staging/prefetch implementation details.
+
+### 2026-06-22 16:22Z - A8 Result
+
+- Short run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a8-stream-n32/bench.log`
+  exited code `0`, `eval_tok_s = 1.48`, `gen_tokens = 31`.
+- Full monitor run:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a8-stream-full-monitor/bench.log`
+  exited code `0`, `eval_tok_s = 1.40`, `gen_tokens = 255`,
+  `prompt_eval_tok_s = 1.28`, `total_ms = 191363.47`.
+- Runtime monitor:
+  - cgroup `memory.peak = 823144448` bytes (`785.01 MiB`)
+  - observed max sampled `llama-cli` RSS = `10492516 KB` (`10246.60 MiB`)
+- Decision: do not promote A8. The short 32-token run looked better, but the complete 256-token
+  run regressed versus A6 (`1.40 tok/s` vs `1.42 tok/s`). Keep A6 as the accepted ik_llama
+  baseline and move to lower-level SSD staging/prefetch or route-trace-driven cache work.
+
+| record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| deepseek-v4-a8-stream-full-monitor | 2026-06-22T16:22Z | f0d29342 | unpromoted-moe-stream | 1.40 | 1.28 | n/a | n/a | n/a | 191363.47 | 255 | -0.02 tok/s vs A6 | n/a | time_maxrss=27445.27; observed_sampled_rss=10246.60; cgroup_memory_peak=785.01 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MemoryMax=16G MemorySwapMax=0 GGML_CUDA_NO_PINNED=1 GGML_MOE_STREAM=1 GGML_MOE_STREAM_DEFER=1 EXTRA_ARGS="-ub 1"` | `/root/lfz/runs/ik_llama/deepseek-v4-a8-stream-full-monitor/bench.log` | n/a |
