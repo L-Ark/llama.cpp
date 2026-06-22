@@ -33,7 +33,7 @@ git config user.name "L-Ark"
 git config user.email "fliangae@connect.ust.hk"
 ```
 
-Optimization ideas may be chosen independently based on MiniMax M3's actual architecture and bottlenecks. Before starting any optimization attempt, write a concrete optimization plan in this file, including the hypothesis, code/config changes to try, benchmark command, success metric, rollback condition, and expected logs. During the attempt, record the full process in this same plan: commands, metrics, failures, reverted ideas, elapsed time, log paths, and whether the result was pushed.
+Optimization ideas may be chosen independently based on MiniMax M3's actual architecture and bottlenecks, and may reference previous ik_llama optimization experience such as GLM/DeepSeek expert packing, VRAM cache/profile placement, startup preload, direct-read/io_uring, prompt scheduling, and decode prefetch. Before starting any optimization attempt, write a concrete optimization plan in this file, including the hypothesis, code/config changes to try, benchmark command, success metric, rollback condition, and expected logs. During the attempt, record the full process in this same plan: commands, metrics, failures, reverted ideas, elapsed time, log paths, and whether the result was pushed. If any key metric regresses versus the previous recorded best, including eval tok/s, TTFT, first_visible_s, total_ms, RSS, VRAM stability, read_failures, or smoke accuracy, immediately roll back to the previous best commit/config and record the rollback reason and verification run in this plan before trying another route.
 
 Model source and target:
 
