@@ -531,3 +531,14 @@ Apply previous-task routes in this order:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | deepseek-v4-a12-t18-full | 2026-06-22T17:52Z | e5a1fb8a | unpromoted-thread-retune | 1.77 | 1.53 | n/a | n/a | n/a | 152846.62 | 255 | -0.04 tok/s vs A11 | n/a | time_maxrss=27445.74 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=0 EXTRA_ARGS="-ub 1 -t 18 -tb 18"` | `/root/lfz/runs/ik_llama/deepseek-v4-a12-t18-full/bench.log` | n/a |
 | deepseek-v4-a13-t24-full-16g | 2026-06-22T17:58Z | e5a1fb8a | 16g-reproduction | 1.79 | 1.53 | n/a | n/a | n/a | 151203.08 | 255 | +0.37 tok/s vs A6 | n/a | time_maxrss=27445.27; MemoryMax=16G exit_ok | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 0 | prompt-only smoke generated 255 tokens | `/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh` | `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24"` | `/root/lfz/runs/ik_llama/deepseek-v4-a13-t24-full-16g/bench.log` | pending |
+
+### 2026-06-22 18:08Z - A14 CUDA Backend Flag Check
+
+- Short control with promoted thread settings:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a14-control-n64/bench.log`
+  exited code `0`, `eval_tok_s = 1.82`.
+- Short run with `GGML_CUDA_FORCE_MMQ=1 GGML_CUDA_FORCE_CUBLAS=0`:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a14-mmq-n64/bench.log`
+  exited code `0`, `eval_tok_s = 1.82`.
+- Decision: do not promote or full-run. The CUDA backend flags did not improve decode speed for
+  this DeepSeek F8 path.
