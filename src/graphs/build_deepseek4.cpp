@@ -23,10 +23,6 @@ ggml_cgraph * llm_build_context::build_deepseek4() {
     const float kq_scale = 1.0f / std::sqrt(float(head_dim));
     const auto rope_mode = rope_type == LLAMA_ROPE_TYPE_NONE ? LLAMA_ROPE_TYPE_NEOX : rope_type;
 
-    if (n_tokens + kv_self.used > (int32_t) hparams.n_swa) {
-        GGML_ABORT("deepseek4: minimal ik_llama path currently supports only short contexts <= sliding window (%u tokens)", hparams.n_swa);
-    }
-
     ggml_tensor * inpL = llm_build_inp_embd(ctx0, lctx, hparams, batch, model.tok_embd, cb);
     ggml_tensor * inp_pos = build_inp_pos();
     ggml_tensor * KQ_mask = build_inp_KQ_mask();
@@ -102,7 +98,7 @@ ggml_cgraph * llm_build_context::build_deepseek4() {
         ggml_tensor * out = llm_build_kv(ctx0, lctx, kv_self, gf,
                 nullptr, nullptr,
                 k_states, v_states, q_states, KQ_mask,
-                n_tokens, kv_head, n_kv, kq_scale, cb, il, layer.attn_sinks);
+                n_tokens, kv_head, n_kv, kq_scale, cb, il, layer.attn_sinks, hparams.n_swa);
         out = ggml_reshape_3d(ctx0, out, head_dim, n_head, n_tokens);
         out = ggml_reshape_2d(ctx0, out, total_q_dim, n_tokens);
         cb(out, "attn_out", il);
