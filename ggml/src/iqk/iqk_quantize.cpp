@@ -4294,6 +4294,123 @@ void  vec_dot_mxfp4_q8_0_x4(int n, float * s, size_t bs, const void * vx, size_t
     //*s = sumf;
 }
 
+static inline float f8_e4m3fn_to_fp32(uint8_t x) {
+    if ((x & 0x7f) == 0) {
+        return 0.0f;
+    }
+    if ((x & 0x7f) == 0x7f) {
+        return NAN;
+    }
+
+    const int sign = x >> 7;
+    const int exp  = (x >> 3) & 0x0f;
+    const int man  = x & 0x07;
+    const float val = exp == 0 ? ldexpf(float(man), -9) : ldexpf(1.0f + float(man) * 0.125f, exp - 7);
+    return sign ? -val : val;
+}
+
+static inline uint8_t fp32_to_f8_e4m3fn(float x) {
+    if (x == 0.0f || !std::isfinite(x)) {
+        return 0;
+    }
+
+    const uint8_t sign = x < 0.0f ? 0x80 : 0x00;
+    const float ax = std::fabs(x);
+    int exp = 0;
+    float mant = std::frexp(ax, &exp);
+    exp -= 1;
+    int e = exp + 7;
+    if (e <= 0) {
+        const int m = std::min(7, std::max(0, int(std::nearbyint(ax * 512.0f))));
+        return sign | uint8_t(m);
+    }
+    if (e >= 15) {
+        return sign | 0x7e;
+    }
+    mant = mant * 2.0f - 1.0f;
+    int m = std::min(7, std::max(0, int(std::nearbyint(mant * 8.0f))));
+    if (m == 8) {
+        m = 0;
+        e = std::min(15, e + 1);
+    }
+    if (e == 15 && m == 7) {
+        m = 6;
+    }
+    return sign | uint8_t((e << 3) | m);
+}
+
+void quantize_row_f8_e4m3_b128_ref(const float * x, block_f8_e4m3_b128 * y, int64_t k) {
+    GGML_ASSERT(k % QK_F8_E4M3_B128 == 0);
+    const int nb = k / QK_F8_E4M3_B128;
+    for (int ib = 0; ib < nb; ++ib) {
+        float amax = 0.0f;
+        for (int j = 0; j < QK_F8_E4M3_B128; ++j) {
+            amax = std::max(amax, std::fabs(x[ib * QK_F8_E4M3_B128 + j]));
+        }
+        const float scale = amax > 0.0f ? amax / 448.0f : 1.0f;
+        int exp = 0;
+        std::frexp(scale, &exp);
+        y[ib].e = uint8_t(std::max(0, std::min(255, exp + 126)));
+        const float inv = 1.0f / GGML_E8M0_TO_FP32(y[ib].e);
+        for (int j = 0; j < QK_F8_E4M3_B128; ++j) {
+            y[ib].qs[j] = fp32_to_f8_e4m3fn(x[ib * QK_F8_E4M3_B128 + j] * inv);
+        }
+    }
+}
+
+void quantize_row_f8_e4m3_b128(const float * x, void * y, int64_t k) {
+    quantize_row_f8_e4m3_b128_ref(x, (block_f8_e4m3_b128 *) y, k);
+}
+
+size_t quantize_f8_e4m3_b128(const float * src, void * dst, int64_t nrows, int64_t n_per_row, const float * imatrix, const struct quantize_user_data *) {
+    GGML_ASSERT(n_per_row % QK_F8_E4M3_B128 == 0);
+    GGML_UNUSED(imatrix);
+    const size_t row_size = ggml_row_size(GGML_TYPE_F8_E4M3_B128, n_per_row);
+    for (int64_t row = 0; row < nrows; ++row) {
+        quantize_row_f8_e4m3_b128_ref(src + row * n_per_row, (block_f8_e4m3_b128 *) ((char *) dst + row * row_size), n_per_row);
+    }
+    return nrows * row_size;
+}
+
+void dequantize_row_f8_e4m3_b128(const block_f8_e4m3_b128 * x, float * y, int64_t k) {
+    GGML_ASSERT(k % QK_F8_E4M3_B128 == 0);
+    const int nb = k / QK_F8_E4M3_B128;
+    for (int ib = 0; ib < nb; ++ib) {
+        const float d = GGML_E8M0_TO_FP32(x[ib].e);
+        for (int j = 0; j < QK_F8_E4M3_B128; ++j) {
+            y[ib * QK_F8_E4M3_B128 + j] = d * f8_e4m3fn_to_fp32(x[ib].qs[j]);
+        }
+    }
+}
+
+void vec_dot_f8_e4m3_b128_q8_0_x4(int n, float * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
+    GGML_ASSERT(nrc == 1);
+    GGML_UNUSED(nrc);
+    GGML_UNUSED(bs);
+    GGML_UNUSED(bx);
+    GGML_UNUSED(by);
+    GGML_ASSERT(n % QK_F8_E4M3_B128 == 0);
+
+    const block_f8_e4m3_b128 * x = (const block_f8_e4m3_b128 *) vx;
+    const block_q8_0 * y = (const block_q8_0 *) vy;
+    const int nb = n / QK_F8_E4M3_B128;
+
+    float sum = 0.0f;
+    for (int ib = 0; ib < nb; ++ib) {
+        const float dx = GGML_E8M0_TO_FP32(x[ib].e);
+        for (int q8b = 0; q8b < QK_F8_E4M3_B128 / QK8_0; ++q8b) {
+            const block_q8_0 * yb = &y[ib * (QK_F8_E4M3_B128 / QK8_0) + q8b];
+            const float dy = GGML_FP16_TO_FP32(yb->d);
+            float sumi = 0.0f;
+            for (int j = 0; j < QK8_0; ++j) {
+                sumi += f8_e4m3fn_to_fp32(x[ib].qs[q8b * QK8_0 + j]) * yb->qs[j];
+            }
+            sum += dx * dy * sumi;
+        }
+    }
+    *s = sum;
+}
+
 namespace {
 static void quantize_row_iq4_k_impl_bs128(const int super_block_size, const int block_size,
         int n_per_row, const float * x, char * cy,

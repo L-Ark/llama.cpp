@@ -1,0 +1,42 @@
+{
+  "cache_replay": {
+    "down": {
+      "hits": 27888,
+      "misses": 21920,
+      "resident": 1028
+    },
+    "hits": 86874,
+    "misses": 62550,
+    "upgate": {
+      "hits": 58986,
+      "misses": 40630,
+      "resident": 2282
+    }
+  },
+  "covered_miss_pct": 21.845,
+  "covered_misses": 13664,
+  "covered_prefix_miss_pct": 10.878,
+  "covered_prefix_misses": 803,
+  "out_profile": ".Agent/plans/5090-theoretical-token-rate/ramtier-residual-4096.route.csv",
+  "policy": "lfu_lru",
+  "prefix_events": 12624,
+  "prefix_residual_misses": 7382,
+  "preloads": {
+    "down": 926,
+    "upgate": 2054
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "ram_tier_mib": 4096,
+  "reserve_pct": 10,
+  "residual_misses": 62550,
+  "residual_unique": 16187,
+  "selected_bytes": 4294901760,
+  "selected_entries": 1018,
+  "selected_mib": 4095.938,
+  "slots": {
+    "down": 1028,
+    "upgate": 2282
+  },
+  "total_events": 149424,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv"
+}

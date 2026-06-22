@@ -1,0 +1,22 @@
+{
+  "accuracy": 1.0,
+  "correct": 1,
+  "dataset": "/root/lfz/data/glm_resource_eval/processed/smoke_one.jsonl",
+  "missing": 0,
+  "predictions": "/root/lfz/ik_llama/.Agent/plans/glm-ser-midrange-sweep/runs/accuracy/smoke-one-ser-1-0.97.predictions.jsonl",
+  "rows": [
+    {
+      "correct": true,
+      "expected": "B",
+      "id": "ceval_computer_network_0010",
+      "output": "B",
+      "source": "ceval",
+      "status": "scored",
+      "task_type": "zh_multiple_choice",
+      "turn_count": 0
+    }
+  ],
+  "scored": 1,
+  "total": 1,
+  "unscored": 0
+}

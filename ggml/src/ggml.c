@@ -218,6 +218,152 @@ __attribute__((weak)) extern void ggml_cuda_moe_ttft_trace_event(
     double elapsed_ms);
 
 int64_t ggml_time_us(void);
+
+static atomic_int ggml_moe_skip_est_inited = 0;
+static atomic_int ggml_moe_skip_est_enabled = 0;
+static atomic_int ggml_moe_skip_est_keep = 7;
+static atomic_ulong ggml_moe_skip_est_groups = 0;
+static atomic_ulong ggml_moe_skip_est_events = 0;
+static atomic_ulong ggml_moe_skip_est_candidates = 0;
+static atomic_ulong ggml_moe_skip_est_nonresident = 0;
+static atomic_ulong ggml_moe_skip_est_resident = 0;
+static atomic_ulong ggml_moe_skip_est_upgate_nonresident = 0;
+static atomic_ulong ggml_moe_skip_est_down_nonresident = 0;
+
+static atomic_int ggml_moe_skip_exec_inited = 0;
+static atomic_int ggml_moe_skip_exec_enabled = 0;
+static atomic_int ggml_moe_skip_exec_keep = 7;
+static atomic_ulong ggml_moe_skip_exec_routes = 0;
+static atomic_ulong ggml_moe_skip_exec_candidates = 0;
+static atomic_ulong ggml_moe_skip_exec_skipped = 0;
+static atomic_ulong ggml_moe_skip_exec_preserved_resident = 0;
+static atomic_ulong ggml_moe_skip_exec_preserved_missing_meta = 0;
+static atomic_ulong ggml_moe_skip_exec_upgate_skipped = 0;
+static atomic_ulong ggml_moe_skip_exec_down_skipped = 0;
+
+#define GGML_MOE_SKIP_EXEC_MAX_ROUTES 262144
+struct ggml_moe_skip_exec_route {
+    char    down_name[96];
+    int32_t expert_idx;
+    int32_t rank;
+    int32_t token;
+};
+static struct ggml_moe_skip_exec_route ggml_moe_skip_exec_routes_tbl[GGML_MOE_SKIP_EXEC_MAX_ROUTES];
+static atomic_int ggml_moe_skip_exec_routes_n = 0;
+static pthread_mutex_t ggml_moe_skip_exec_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static void ggml_moe_skip_est_report(void) {
+    if (!atomic_load(&ggml_moe_skip_est_enabled)) return;
+    const unsigned long events = atomic_load(&ggml_moe_skip_est_events);
+    const unsigned long candidates = atomic_load(&ggml_moe_skip_est_candidates);
+    const unsigned long nonresident = atomic_load(&ggml_moe_skip_est_nonresident);
+    const unsigned long resident = atomic_load(&ggml_moe_skip_est_resident);
+    fprintf(stderr,
+        "[moe_skip_est] groups=%lu events=%lu keep=%d candidates=%lu nonresident=%lu resident=%lu "
+        "nonresident_pct_events=%.1f resident_pct_candidates=%.1f upgate_nonresident=%lu down_nonresident=%lu\n",
+        atomic_load(&ggml_moe_skip_est_groups),
+        events,
+        atomic_load(&ggml_moe_skip_est_keep),
+        candidates,
+        nonresident,
+        resident,
+        events ? 100.0 * (double)nonresident / (double)events : 0.0,
+        candidates ? 100.0 * (double)resident / (double)candidates : 0.0,
+        atomic_load(&ggml_moe_skip_est_upgate_nonresident),
+        atomic_load(&ggml_moe_skip_est_down_nonresident));
+}
+
+static void ggml_moe_skip_exec_report(void) {
+    if (!atomic_load(&ggml_moe_skip_exec_enabled)) return;
+    const unsigned long routes = atomic_load(&ggml_moe_skip_exec_routes);
+    const unsigned long candidates = atomic_load(&ggml_moe_skip_exec_candidates);
+    const unsigned long skipped = atomic_load(&ggml_moe_skip_exec_skipped);
+    fprintf(stderr,
+        "[moe_skip_exec] routes=%lu keep=%d candidates=%lu skipped=%lu "
+        "skipped_pct_routes=%.1f skipped_pct_candidates=%.1f preserved_resident=%lu "
+        "preserved_missing_meta=%lu upgate_skipped=%lu down_skipped=%lu\n",
+        routes,
+        atomic_load(&ggml_moe_skip_exec_keep),
+        candidates,
+        skipped,
+        routes ? 100.0 * (double)skipped / (double)routes : 0.0,
+        candidates ? 100.0 * (double)skipped / (double)candidates : 0.0,
+        atomic_load(&ggml_moe_skip_exec_preserved_resident),
+        atomic_load(&ggml_moe_skip_exec_preserved_missing_meta),
+        atomic_load(&ggml_moe_skip_exec_upgate_skipped),
+        atomic_load(&ggml_moe_skip_exec_down_skipped));
+}
+
+static int ggml_moe_skip_est_is_enabled(void) {
+    if (atomic_load(&ggml_moe_skip_est_inited)) return atomic_load(&ggml_moe_skip_est_enabled);
+    const char *env = getenv("GGML_MOE_SKIP_ESTIMATE");
+    const int enabled = env && env[0] && env[0] != '0';
+    if (enabled) {
+        const char *keep_env = getenv("GGML_MOE_SKIP_ESTIMATE_KEEP");
+        int keep = keep_env && keep_env[0] ? atoi(keep_env) : 7;
+        if (keep < 1) keep = 1;
+        if (keep > 8) keep = 8;
+        atomic_store(&ggml_moe_skip_est_keep, keep);
+        atexit(ggml_moe_skip_est_report);
+    }
+    atomic_store(&ggml_moe_skip_est_enabled, enabled);
+    atomic_store(&ggml_moe_skip_est_inited, 1);
+    return enabled;
+}
+
+static int ggml_moe_skip_exec_is_enabled(void) {
+    if (atomic_load(&ggml_moe_skip_exec_inited)) return atomic_load(&ggml_moe_skip_exec_enabled);
+    const char *env = getenv("GGML_MOE_SKIP_NONRESIDENT");
+    const int enabled = env && env[0] && env[0] != '0';
+    if (enabled) {
+        const char *keep_env = getenv("GGML_MOE_SKIP_NONRESIDENT_KEEP");
+        int keep = keep_env && keep_env[0] ? atoi(keep_env) : 7;
+        if (keep < 1) keep = 1;
+        if (keep > 8) keep = 8;
+        atomic_store(&ggml_moe_skip_exec_keep, keep);
+        atexit(ggml_moe_skip_exec_report);
+    }
+    atomic_store(&ggml_moe_skip_exec_enabled, enabled);
+    atomic_store(&ggml_moe_skip_exec_inited, 1);
+    return enabled;
+}
+
+static void ggml_moe_skip_est_record(
+        const char *tensor_name,
+        size_t expert_bytes,
+        const int64_t *matrix_row_counts,
+        const ggml_moe_row_mapping *matrix_rows,
+        int64_t n_as,
+        int64_t rows_stride,
+        int tensor_multiplier) {
+    if (!ggml_moe_skip_est_is_enabled()) return;
+    if (!ggml_cuda_moe_stream_cache_contains || !tensor_name || !tensor_name[0] || !matrix_row_counts || !matrix_rows) return;
+    const int keep = atomic_load(&ggml_moe_skip_est_keep);
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t n = matrix_row_counts[e];
+        if (n <= 0) continue;
+        atomic_fetch_add(&ggml_moe_skip_est_groups, 1);
+        for (int64_t ir = 0; ir < n; ++ir) {
+            const ggml_moe_row_mapping r = matrix_rows[e*rows_stride + ir];
+            const int rank = r.i1;
+            atomic_fetch_add(&ggml_moe_skip_est_events, (unsigned long)tensor_multiplier);
+            if (rank < keep) continue;
+            atomic_fetch_add(&ggml_moe_skip_est_candidates, (unsigned long)tensor_multiplier);
+            const int resident = ggml_cuda_moe_stream_cache_contains(tensor_name, expert_bytes, (int)e);
+            if (resident) {
+                atomic_fetch_add(&ggml_moe_skip_est_resident, (unsigned long)tensor_multiplier);
+            } else {
+                atomic_fetch_add(&ggml_moe_skip_est_nonresident, (unsigned long)tensor_multiplier);
+                if (tensor_multiplier == 2) {
+                    atomic_fetch_add(&ggml_moe_skip_est_upgate_nonresident, 2);
+                } else {
+                    atomic_fetch_add(&ggml_moe_skip_est_down_nonresident, 1);
+                }
+            }
+        }
+    }
+}
+
 bool ggml_moe_hotexp_preload_expert(
         const void *tensor_base,
         int expert_idx,
@@ -1343,6 +1489,183 @@ static bool ggml_moe_lookup_down_tensor(const char *name, const void **data, int
     }
     pthread_mutex_unlock(&ggml_moe_down_reg_mu);
     return found;
+}
+
+static void ggml_moe_upgate_key_names(
+        const char *up_name,
+        const char *gate_name,
+        const void *up_data,
+        const void *gate_data,
+        char *up_key,
+        size_t up_key_sz,
+        char *gate_key,
+        size_t gate_key_sz) {
+    const bool shared_name = up_name && gate_name && strcmp(up_name, gate_name) == 0;
+    const bool disambiguate = shared_name || up_data == gate_data;
+    if (up_key && up_key_sz > 0) {
+        snprintf(up_key, up_key_sz, "%s%s", up_name ? up_name : "up", disambiguate ? ":up" : "");
+    }
+    if (gate_key && gate_key_sz > 0) {
+        snprintf(gate_key, gate_key_sz, "%s%s", gate_name ? gate_name : "gate", disambiguate ? ":gate" : "");
+    }
+}
+
+static bool ggml_moe_skip_exec_upgate_should_skip(
+        const char *up_name,
+        const char *gate_name,
+        const void *up_data,
+        const void *gate_data,
+        size_t upgate_expert_bytes,
+        int expert_idx,
+        int rank,
+        int token) {
+    if (!ggml_moe_skip_exec_is_enabled()) return false;
+    atomic_fetch_add(&ggml_moe_skip_exec_routes, 1);
+    if (rank < atomic_load(&ggml_moe_skip_exec_keep)) return false;
+    atomic_fetch_add(&ggml_moe_skip_exec_candidates, 1);
+    if (!ggml_cuda_moe_stream_cache_contains || !up_name || !up_name[0] || !gate_name || !gate_name[0] ||
+            upgate_expert_bytes == 0 || expert_idx < 0) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_missing_meta, 1);
+        return false;
+    }
+
+    char up_key[128] = {0};
+    char gate_key[128] = {0};
+    ggml_moe_upgate_key_names(up_name, gate_name, up_data, gate_data, up_key, sizeof(up_key), gate_key, sizeof(gate_key));
+    if (ggml_cuda_moe_stream_cache_contains(up_key, upgate_expert_bytes, expert_idx) ||
+            ggml_cuda_moe_stream_cache_contains(gate_key, upgate_expert_bytes, expert_idx)) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_resident, 1);
+        return false;
+    }
+
+    char down_name[96] = {0};
+    if (!ggml_moe_make_down_name(up_name, down_name, sizeof(down_name))) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_missing_meta, 1);
+        return false;
+    }
+    size_t down_nb02 = 0;
+    int64_t down_n_as = 0;
+    if (!ggml_moe_lookup_down_tensor(down_name, NULL, &down_n_as, &down_nb02) ||
+            down_nb02 == 0 || expert_idx >= down_n_as) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_missing_meta, 1);
+        return false;
+    }
+    if (ggml_cuda_moe_stream_cache_contains(down_name, down_nb02, expert_idx)) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_resident, 1);
+        return false;
+    }
+
+    pthread_mutex_lock(&ggml_moe_skip_exec_mu);
+    const int pos = atomic_load(&ggml_moe_skip_exec_routes_n);
+    if (pos < GGML_MOE_SKIP_EXEC_MAX_ROUTES) {
+        struct ggml_moe_skip_exec_route *route = &ggml_moe_skip_exec_routes_tbl[pos];
+        snprintf(route->down_name, sizeof(route->down_name), "%s", down_name);
+        route->expert_idx = expert_idx;
+        route->rank = rank;
+        route->token = token;
+        atomic_store(&ggml_moe_skip_exec_routes_n, pos + 1);
+    } else {
+        pthread_mutex_unlock(&ggml_moe_skip_exec_mu);
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_missing_meta, 1);
+        return false;
+    }
+    pthread_mutex_unlock(&ggml_moe_skip_exec_mu);
+
+    atomic_fetch_add(&ggml_moe_skip_exec_skipped, 1);
+    atomic_fetch_add(&ggml_moe_skip_exec_upgate_skipped, 1);
+    return true;
+}
+
+static bool ggml_moe_skip_exec_down_should_skip(
+        const char *down_name,
+        int expert_idx,
+        int rank,
+        int token) {
+    if (!ggml_moe_skip_exec_is_enabled()) return false;
+    atomic_fetch_add(&ggml_moe_skip_exec_routes, 1);
+    if (rank < atomic_load(&ggml_moe_skip_exec_keep)) return false;
+    atomic_fetch_add(&ggml_moe_skip_exec_candidates, 1);
+    if (!down_name || !down_name[0] || expert_idx < 0) {
+        atomic_fetch_add(&ggml_moe_skip_exec_preserved_missing_meta, 1);
+        return false;
+    }
+    bool found = false;
+    pthread_mutex_lock(&ggml_moe_skip_exec_mu);
+    const int n = atomic_load(&ggml_moe_skip_exec_routes_n);
+    for (int i = 0; i < n; ++i) {
+        const struct ggml_moe_skip_exec_route *route = &ggml_moe_skip_exec_routes_tbl[i];
+        if (route->expert_idx == expert_idx &&
+                route->rank == rank &&
+                route->token == token &&
+                strcmp(route->down_name, down_name) == 0) {
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&ggml_moe_skip_exec_mu);
+    if (found) {
+        atomic_fetch_add(&ggml_moe_skip_exec_skipped, 1);
+        atomic_fetch_add(&ggml_moe_skip_exec_down_skipped, 1);
+    }
+    return found;
+}
+
+static void ggml_moe_skip_exec_filter_down_rows(
+        const char *down_name,
+        int64_t *matrix_row_counts,
+        ggml_moe_row_mapping *matrix_rows,
+        int64_t n_as,
+        int64_t rows_stride,
+        float *dst,
+        size_t dst_nb1,
+        size_t dst_nb2,
+        int64_t dst_ne0) {
+    if (!ggml_moe_skip_exec_is_enabled() || !matrix_row_counts || !matrix_rows || !dst) return;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t n = matrix_row_counts[e];
+        int64_t out = 0;
+        for (int64_t ir = 0; ir < n; ++ir) {
+            ggml_moe_row_mapping r = matrix_rows[e*rows_stride + ir];
+            if (ggml_moe_skip_exec_down_should_skip(down_name, (int)e, r.i1, r.i2)) {
+                memset((char *)dst + (size_t)r.i1*dst_nb1 + (size_t)r.i2*dst_nb2, 0, (size_t)dst_ne0*sizeof(float));
+                continue;
+            }
+            matrix_rows[e*rows_stride + out++] = r;
+        }
+        matrix_row_counts[e] = out;
+    }
+}
+
+static void ggml_moe_skip_exec_filter_upgate_rows(
+        const char *up_name,
+        const char *gate_name,
+        const void *up_data,
+        const void *gate_data,
+        size_t upgate_expert_bytes,
+        int64_t *matrix_row_counts,
+        ggml_moe_row_mapping *matrix_rows,
+        int64_t n_as,
+        int64_t rows_stride,
+        float *dst,
+        size_t dst_nb1,
+        size_t dst_nb2,
+        int64_t dst_ne0) {
+    if (!ggml_moe_skip_exec_is_enabled() || !matrix_row_counts || !matrix_rows || !dst) return;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t n = matrix_row_counts[e];
+        int64_t out = 0;
+        for (int64_t ir = 0; ir < n; ++ir) {
+            ggml_moe_row_mapping r = matrix_rows[e*rows_stride + ir];
+            if (ggml_moe_skip_exec_upgate_should_skip(
+                        up_name, gate_name, up_data, gate_data, upgate_expert_bytes,
+                        (int)e, r.i1, r.i2)) {
+                memset((char *)dst + (size_t)r.i1*dst_nb1 + (size_t)r.i2*dst_nb2, 0, (size_t)dst_ne0*sizeof(float));
+                continue;
+            }
+            matrix_rows[e*rows_stride + out++] = r;
+        }
+        matrix_row_counts[e] = out;
+    }
 }
 
 static void ggml_moe_prefetch_down_for_up_gate(
@@ -2699,6 +3022,19 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
 #else
         .vec_dot_type             = GGML_TYPE_Q8_0_X4,
 #endif
+        .nrows                    = 1,
+        .row_meta_size            = 0,
+    },
+    [GGML_TYPE_F8_E4M3_B128] = {
+        .type_name                = "f8_e4m3_b128",
+        .blck_size                = QK_F8_E4M3_B128,
+        .type_size                = sizeof(block_f8_e4m3_b128),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_f8_e4m3_b128,
+        .from_float               = quantize_row_f8_e4m3_b128,
+        .from_float_ref           = (ggml_from_float_t)quantize_row_f8_e4m3_b128_ref,
+        .vec_dot                  = vec_dot_f8_e4m3_b128_q8_0_x4,
+        .vec_dot_type             = GGML_TYPE_Q8_0,
         .nrows                    = 1,
         .row_meta_size            = 0,
     },
@@ -6267,6 +6603,7 @@ enum ggml_type ggml_ftype_to_ggml_type(enum ggml_ftype ftype) {
         case GGML_FTYPE_MOSTLY_Q8_0_R8:       wtype = GGML_TYPE_Q8_0_R8;  break;
         case GGML_FTYPE_MOSTLY_IQ4_XS:        wtype = GGML_TYPE_IQ4_XS;   break;
         case GGML_FTYPE_MOSTLY_MXFP4:         wtype = GGML_TYPE_MXFP4;    break;
+        case GGML_FTYPE_MOSTLY_F8_E4M3_MXFP4: wtype = GGML_TYPE_F8_E4M3_B128; break;
         case GGML_FTYPE_MOSTLY_IQ4_KS:        wtype = GGML_TYPE_IQ4_KS;   break;
         case GGML_FTYPE_MOSTLY_IQ4_KS_R4:     wtype = GGML_TYPE_IQ4_KS_R4;break;
         case GGML_FTYPE_MOSTLY_IQ5_KS_R4:     wtype = GGML_TYPE_IQ5_KS_R4;break;
@@ -18733,6 +19070,19 @@ static void ggml_compute_forward_mul_mat_id(
     }
 
     ggml_barrier(params->shared);
+    if (ith == 0 && ids->ne[1] == 1) {
+        ggml_moe_skip_exec_filter_down_rows(
+            src0->name,
+            matrix_row_counts,
+            (ggml_moe_row_mapping *)matrix_rows,
+            n_as,
+            ne12,
+            (float *)dst->data,
+            nb1,
+            nb2,
+            dst->ne[0]);
+    }
+    ggml_barrier(params->shared);
     if (ith == 0) {
         ggml_moe_ttft_trace_event("cpu_down_prep", src0->name, (int)ids->ne[1], nb02, ttft_prepare_start_us);
     }
@@ -18758,13 +19108,21 @@ static void ggml_compute_forward_mul_mat_id(
             (!ggml_env_enabled("GGML_MOE_STREAM_DEFER") || ids->ne[1] == 1) &&
             ne13 == 1 &&
             dst->type == GGML_TYPE_F32;
-        const int64_t ttft_compute_start_us = ith == 0 ? ggml_moe_ttft_trace_start(ttft_start_us) : 0;
-        const struct ggml_moe_rusage_snapshot ttft_compute_rusage = ith == 0 ? ggml_moe_rusage_now() : (struct ggml_moe_rusage_snapshot){0, 0};
-        if (use_gpu_stream && ggml_cuda_moe_stream_batch && ids->ne[1] == 1) {
-            if (ith == 0) {
-                const bool done = ggml_cuda_moe_stream_batch(
-                    src0->type,
-                    src0->name,
+    const int64_t ttft_compute_start_us = ith == 0 ? ggml_moe_ttft_trace_start(ttft_start_us) : 0;
+    const struct ggml_moe_rusage_snapshot ttft_compute_rusage = ith == 0 ? ggml_moe_rusage_now() : (struct ggml_moe_rusage_snapshot){0, 0};
+    if (use_gpu_stream && ggml_cuda_moe_stream_batch && ids->ne[1] == 1) {
+        if (ith == 0) {
+            ggml_moe_skip_est_record(
+                src0->name,
+                nb02,
+                matrix_row_counts,
+                (const ggml_moe_row_mapping *)matrix_rows,
+                n_as,
+                ne12,
+                1);
+            const bool done = ggml_cuda_moe_stream_batch(
+                src0->type,
+                src0->name,
                     src0->data,
                     n_as,
                     ne01, ne00, nb01, nb02,
@@ -19275,6 +19633,32 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
     }
 
     ggml_barrier(params->shared);
+    if (ith == 0 && ids->ne[1] == 1) {
+        const int64_t nr0_for_skip = src0_2 ? ne01 : ne01/2;
+        const char *up_name_for_skip = src0_1->name;
+        const char *gate_name_for_skip = src0_2 ? src0_2->name : src0_1->name;
+        const char *up_data_for_skip = (const char *)src0_1->data;
+        const char *gate_data_for_skip = src0_2 ? (const char *)src0_2->data : (const char *)src0_1->data;
+        const size_t expert_stride_for_skip = src0_2 ? nb02 : nb02/2;
+        if (!src0_2) {
+            up_data_for_skip += expert_stride_for_skip;
+        }
+        ggml_moe_skip_exec_filter_upgate_rows(
+            up_name_for_skip,
+            gate_name_for_skip,
+            up_data_for_skip,
+            gate_data_for_skip,
+            expert_stride_for_skip,
+            matrix_row_counts,
+            (ggml_moe_row_mapping *)matrix_rows,
+            n_as,
+            ne12,
+            (float *)dst->data,
+            nb1,
+            nb2,
+            nr0_for_skip);
+    }
+    ggml_barrier(params->shared);
     if (ith == 0) {
         ggml_moe_ttft_trace_event("cpu_up_prep", src0_1->name, (int)ids->ne[1], nb02, ttft_prepare_start_us);
     }
@@ -19310,6 +19694,14 @@ static void ggml_compute_forward_mul_mat_id_up_gate(
             if (!src0_2) {
                 up_data += expert_stride;
             }
+            ggml_moe_skip_est_record(
+                up_name,
+                expert_stride,
+                matrix_row_counts,
+                (const ggml_moe_row_mapping *)matrix_rows,
+                n_as,
+                ne12,
+                2);
             const bool done = ggml_cuda_moe_stream_up_gate_batch(
                 src0_1->type,
                 up_name, up_data,
@@ -30718,6 +31110,7 @@ size_t ggml_quantize_chunk(
         case GGML_TYPE_Q6_0_R4: result = quantize_q6_0_r4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_Q8_0_R8: result = quantize_q8_0_r8(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_MXFP4:   result = quantize_mxfp4  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
+        case GGML_TYPE_F8_E4M3_B128: result = quantize_f8_e4m3_b128(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_XS:  result = quantize_iq4_xs (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_KS:  result = quantize_iq4_ks (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_KS_R4:result = quantize_iq4_ks_r4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;

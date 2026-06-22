@@ -1,0 +1,162 @@
+diff --git a/src/devices/disk/diskdevice.cpp b/src/devices/disk/diskdevice.cpp
+index 1efaa671..b0c6cf5e 100644
+--- a/src/devices/disk/diskdevice.cpp
++++ b/src/devices/disk/diskdevice.cpp
+@@ -170,6 +170,11 @@ namespace fastllm {
+         return DiskMoeRamProfileCacheLimitBytes() > 0 && DiskMoeRamProfileCachePath() != nullptr;
+     }
+ 
++    static bool DiskMoeRamCacheShareDecodeEnabled() {
++        static bool enabled = ParseEnvFlag(std::getenv("FASTLLM_DISK_MOE_RAM_CACHE_SHARE_DECODE"), false);
++        return enabled;
++    }
++
+     struct DiskMoeStats {
+         std::atomic<uint64_t> mergeRuns {0};
+         std::atomic<uint64_t> selectedExpertRefs {0};
+@@ -187,6 +192,7 @@ namespace fastllm {
+         std::atomic<uint64_t> ramCacheMisses {0};
+         std::atomic<uint64_t> ramCacheStores {0};
+         std::atomic<uint64_t> ramCacheBytes {0};
++        std::atomic<uint64_t> ramCacheSharedHits {0};
+     };
+ 
+     static DiskMoeStats &GetDiskMoeStats() {
+@@ -309,7 +315,8 @@ namespace fastllm {
+                          "load_seconds=%.6f ram_cache_hits=%llu "
+                          "ram_cache_misses=%llu ram_cache_evictions=0 "
+                          "ram_cache_bytes=%llu ram_cache_enabled=%d "
+-                         "ram_cache_stores=%llu vram_cache_hits=%llu "
++                         "ram_cache_stores=%llu ram_cache_shared_hits=%llu "
++                         "vram_cache_hits=%llu "
+                          "vram_cache_misses=%llu vram_cache_stores=%llu "
+                          "vram_cache_bytes=%llu vram_cache_enabled=%d "
+                          "vram_hit_estimate=na\n",
+@@ -328,6 +335,7 @@ namespace fastllm {
+                          (unsigned long long)stats.ramCacheBytes.load(),
+                          DiskMoeRamProfileCacheEnabled() ? 1 : 0,
+                          (unsigned long long)stats.ramCacheStores.load(),
++                         (unsigned long long)stats.ramCacheSharedHits.load(),
+                          (unsigned long long)stats.vramCacheHits.load(),
+                          (unsigned long long)stats.vramCacheMisses.load(),
+                          (unsigned long long)stats.vramCacheStores.load(),
+@@ -662,7 +670,10 @@ namespace fastllm {
+ 
+     class DiskMoeRamWeightCache {
+     public:
+-        Data *Get(const Data *weight) {
++        Data *Get(const Data *weight, bool allowShared = false, bool *sharedHit = nullptr) {
++            if (sharedHit != nullptr) {
++                *sharedHit = false;
++            }
+             if (!DiskMoeRamProfileCacheEnabled() || weight == nullptr ||
+                 !GetDiskMoeRamProfileHotSet().IsHot(weight)) {
+                 return nullptr;
+@@ -673,6 +684,15 @@ namespace fastllm {
+                 GetDiskMoeStats().ramCacheMisses.fetch_add(1, std::memory_order_relaxed);
+                 return nullptr;
+             }
++            if (allowShared) {
++                if (sharedHit != nullptr) {
++                    *sharedHit = true;
++                }
++                DiskMoeStats &stats = GetDiskMoeStats();
++                stats.ramCacheHits.fetch_add(1, std::memory_order_relaxed);
++                stats.ramCacheSharedHits.fetch_add(1, std::memory_order_relaxed);
++                return it->second;
++            }
+             Data *ret = CloneLoadedDiskWeightCpu(it->second);
+             if (ret != nullptr) {
+                 GetDiskMoeStats().ramCacheHits.fetch_add(1, std::memory_order_relaxed);
+@@ -992,8 +1012,12 @@ namespace fastllm {
+         return plan.loaded;
+     }
+ 
+-    static Data *LoadDiskWeightWithRamCache(const Data *weight) {
+-        if (Data *cached = GetDiskMoeRamWeightCache().Get(weight)) {
++    static Data *LoadDiskWeightWithRamCache(const Data *weight, bool allowSharedRamCache = false,
++                                            bool *sharedRamHit = nullptr) {
++        if (sharedRamHit != nullptr) {
++            *sharedRamHit = false;
++        }
++        if (Data *cached = GetDiskMoeRamWeightCache().Get(weight, allowSharedRamCache, sharedRamHit)) {
+             return cached;
+         }
+         Data *loaded = LoadDiskWeight(weight);
+@@ -1278,17 +1302,26 @@ namespace fastllm {
+     struct LoadDiskWeightsOp : MultiThreadBaseOp {
+         Data **weights;
+         std::vector<Data*> *tempWeights;
++        std::vector<uint8_t> *sharedRamFlags;
+         const std::vector<int> *indices;
+         int tid, threadCnt;
++        bool allowSharedRamCache;
+ 
+         LoadDiskWeightsOp(Data **weights, std::vector<Data*> *tempWeights,
+-                          const std::vector<int> *indices, int tid, int threadCnt) :
+-            weights(weights), tempWeights(tempWeights), indices(indices), tid(tid), threadCnt(threadCnt) {}
++                          std::vector<uint8_t> *sharedRamFlags,
++                          const std::vector<int> *indices, int tid, int threadCnt,
++                          bool allowSharedRamCache) :
++            weights(weights), tempWeights(tempWeights), sharedRamFlags(sharedRamFlags),
++            indices(indices), tid(tid), threadCnt(threadCnt), allowSharedRamCache(allowSharedRamCache) {}
+ 
+         void Run() {
+             for (int i = tid; i < (int)indices->size(); i += threadCnt) {
+                 int index = (*indices)[i];
+-                (*tempWeights)[index] = LoadDiskWeightWithRamCache(weights[index]);
++                bool sharedRamHit = false;
++                (*tempWeights)[index] = LoadDiskWeightWithRamCache(weights[index], allowSharedRamCache, &sharedRamHit);
++                if (sharedRamHit && sharedRamFlags != nullptr) {
++                    (*sharedRamFlags)[index] = 1;
++                }
+             }
+         }
+     };
+@@ -1422,6 +1455,7 @@ namespace fastllm {
+         std::vector<Data*> tempWeights(weightsBatch, nullptr);
+         std::vector<Data*> ownedWeights;
+         std::unordered_set<Data*> cachedWeightsThisRun;
++        std::vector<uint8_t> sharedRamFlags(weightsBatch, 0);
+         for (int i = 0; i < weightsBatch; i++) {
+             tempWeights[i] = weights[i];
+         }
+@@ -1463,17 +1497,26 @@ namespace fastllm {
+             if (DiskMoeStatsEnabled()) {
+                 GetDiskMoeStats().loadRequests.fetch_add((uint64_t)loadIndices.size(), std::memory_order_relaxed);
+             }
++            bool mayPrepareCudaWeights = DiskMoeGpuPrefillEnabled() && input.cudaData != nullptr &&
++                                         input.dims.size() >= 2 &&
++                                         input.dims[0] >= DiskMoeGpuPrefillMinTokens();
++            bool allowSharedRamCache = DiskMoeRamCacheShareDecodeEnabled() && !mayPrepareCudaWeights;
+             auto *pool = GetAlivePool();
+             int threadCnt = std::min((int)loadIndices.size(), DiskMoeLoadThreads());
+             threadCnt = std::min(threadCnt, (int)pool->threads.size());
+             if (threadCnt <= 1) {
+                 for (int index : loadIndices) {
+-                    tempWeights[index] = LoadDiskWeightWithRamCache(weights[index]);
++                    bool sharedRamHit = false;
++                    tempWeights[index] = LoadDiskWeightWithRamCache(weights[index], allowSharedRamCache, &sharedRamHit);
++                    if (sharedRamHit) {
++                        sharedRamFlags[index] = 1;
++                    }
+                 }
+             } else {
+                 std::vector<LoadDiskWeightsOp*> ops;
+                 for (int i = 0; i < threadCnt; i++) {
+-                    ops.push_back(new LoadDiskWeightsOp(weights, &tempWeights, &loadIndices, i, threadCnt));
++                    ops.push_back(new LoadDiskWeightsOp(weights, &tempWeights, &sharedRamFlags,
++                                                        &loadIndices, i, threadCnt, allowSharedRamCache));
+                     pool->PushOp(i, ops.back());
+                 }
+                 for (int i = 0; i < threadCnt; i++) {
+@@ -1483,6 +1526,9 @@ namespace fastllm {
+             }
+             for (int index : loadIndices) {
+                 ownedWeights.push_back(tempWeights[index]);
++                if (index >= 0 && index < (int)sharedRamFlags.size() && sharedRamFlags[index]) {
++                    cachedWeightsThisRun.insert(tempWeights[index]);
++                }
+             }
+         }
+         auto releaseOwnedWeights = [&]() {

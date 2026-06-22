@@ -82,6 +82,10 @@ models-mnt
 !models/.editorconfig
 !models/ggml-vocab-*.gguf*
 
+# Agent-local generated expert packs
+.Agent/plans/**/*.expert-pack
+.Agent/plans/**/.hf/
+
 # Zig
 zig-out/
 zig-cache/

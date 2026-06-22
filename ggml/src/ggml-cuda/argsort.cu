@@ -7,6 +7,192 @@
 #include "argsort.cuh"
 #include "sumrows.cuh"
 
+#include <atomic>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+
+static bool moe_score_trace_debug_enabled() {
+    const char *env = std::getenv("GGML_MOE_SCORE_TRACE_DEBUG");
+    return env && env[0] && env[0] != '0';
+}
+
+static void moe_score_trace_debug_argsort(const char *op, const ggml_tensor *dst, const ggml_tensor *src0, int64_t ncols, int64_t nrows) {
+    static std::atomic<int> printed{0};
+    if (!moe_score_trace_debug_enabled()) return;
+    if (!src0 || !dst) return;
+    const bool maybe_moe = std::strstr(src0->name, "ffn_moe") || std::strstr(dst->name, "ffn_moe") || ncols >= 64;
+    if (!maybe_moe) return;
+    const int idx = printed.fetch_add(1, std::memory_order_relaxed);
+    if (idx >= 96) return;
+    std::fprintf(stderr,
+        "[moe_score_trace] %s dst=%s src=%s ncols=%lld nrows=%lld ne_dst=(%lld,%lld,%lld,%lld) ne_src=(%lld,%lld,%lld,%lld)\n",
+        op,
+        dst->name,
+        src0->name,
+        (long long)ncols,
+        (long long)nrows,
+        (long long)dst->ne[0],
+        (long long)dst->ne[1],
+        (long long)dst->ne[2],
+        (long long)dst->ne[3],
+        (long long)src0->ne[0],
+        (long long)src0->ne[1],
+        (long long)src0->ne[2],
+        (long long)src0->ne[3]);
+}
+
+struct moe_score_trace_state {
+    std::mutex mu;
+    bool inited = false;
+    bool registered = false;
+    FILE *file = nullptr;
+    size_t cap = 1000000;
+    uint64_t rows = 0;
+};
+
+static moe_score_trace_state g_moe_score_trace;
+
+static void moe_score_trace_close() {
+    std::lock_guard<std::mutex> lk(g_moe_score_trace.mu);
+    if (g_moe_score_trace.file) {
+        std::fprintf(stderr, "[moe_score_trace] rows=%lu\n", g_moe_score_trace.rows);
+        std::fclose(g_moe_score_trace.file);
+        g_moe_score_trace.file = nullptr;
+    }
+}
+
+static FILE * moe_score_trace_file() {
+    std::lock_guard<std::mutex> lk(g_moe_score_trace.mu);
+    if (!g_moe_score_trace.inited) {
+        const char *cap_env = std::getenv("GGML_MOE_SCORE_TRACE_MAX_ROWS");
+        if (cap_env && cap_env[0]) {
+            const long cap = std::atol(cap_env);
+            if (cap > 0) g_moe_score_trace.cap = (size_t)cap;
+        }
+        const char *out = std::getenv("GGML_MOE_SCORE_TRACE_OUT");
+        if (out && out[0]) {
+            g_moe_score_trace.file = std::fopen(out, "w");
+            if (!g_moe_score_trace.file) {
+                std::fprintf(stderr, "[moe_score_trace] open failed: %s\n", out);
+            } else {
+                std::fprintf(g_moe_score_trace.file,
+                    "seq,layer,row,rank,expert_idx,weight,sort_score,logit,bias,topk_tensor,weights_tensor\n");
+            }
+        }
+        g_moe_score_trace.inited = true;
+    }
+    if (g_moe_score_trace.file && !g_moe_score_trace.registered) {
+        std::atexit(moe_score_trace_close);
+        g_moe_score_trace.registered = true;
+    }
+    return g_moe_score_trace.file;
+}
+
+static int moe_score_trace_parse_layer(const char *name) {
+    if (!name) return -1;
+    const char *dash = std::strrchr(name, '-');
+    if (!dash || !dash[1]) return -1;
+    return std::atoi(dash + 1);
+}
+
+static void moe_score_trace_debug_glm45(
+        const ggml_tensor *dst, const ggml_tensor *topk_view, const ggml_tensor *topk,
+        const ggml_tensor *probs, const ggml_tensor *bias, int ne00, int64_t nrows, int ne0) {
+    static std::atomic<int> printed{0};
+    if (!moe_score_trace_debug_enabled()) return;
+    const int idx = printed.fetch_add(1, std::memory_order_relaxed);
+    if (idx >= 96) return;
+    std::fprintf(stderr,
+        "[moe_score_trace] glm45 dst=%s topk_view=%s topk=%s probs=%s bias=%s n_experts=%d nrows=%lld topk=%d topk_nb1=%zu\n",
+        dst ? dst->name : "",
+        topk_view ? topk_view->name : "",
+        topk ? topk->name : "",
+        probs ? probs->name : "",
+        bias ? bias->name : "",
+        ne00,
+        (long long)nrows,
+        ne0,
+        topk ? topk->nb[1] : 0);
+}
+
+static void moe_score_trace_glm45(
+        cudaStream_t stream,
+        const ggml_tensor *dst,
+        const ggml_tensor *topk_view,
+        const ggml_tensor *topk,
+        const ggml_tensor *probs,
+        const ggml_tensor *bias,
+        int ne00,
+        int64_t nrows,
+        int ne0) {
+    FILE *file = moe_score_trace_file();
+    if (!file || nrows <= 0 || ne00 <= 0 || ne0 <= 0) return;
+
+    cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+    if (cudaStreamIsCapturing(stream, &capture_status) == cudaSuccess && capture_status != cudaStreamCaptureStatusNone) {
+        static std::atomic<int> warned{0};
+        if (warned.fetch_add(1, std::memory_order_relaxed) == 0) {
+            std::fprintf(stderr, "[moe_score_trace] stream is capturing; skipping trace rows (use --no-graph-reuse for diagnostics)\n");
+        }
+        return;
+    }
+
+    if (cudaStreamSynchronize(stream) != cudaSuccess) {
+        std::fprintf(stderr, "[moe_score_trace] stream sync failed\n");
+        return;
+    }
+
+    const size_t ids_pitch = topk->nb[1];
+    const size_t ids_bytes = (size_t)(nrows - 1) * ids_pitch + (size_t)ne0 * sizeof(int);
+    const size_t weights_bytes = (size_t)nrows * (size_t)ne0 * sizeof(float);
+    const size_t probs_bytes = (size_t)nrows * (size_t)ne00 * sizeof(float);
+    const size_t bias_bytes = (size_t)ne00 * sizeof(float);
+    std::vector<char> ids_raw(ids_bytes);
+    std::vector<float> weights((size_t)nrows * (size_t)ne0);
+    std::vector<float> probs_h((size_t)nrows * (size_t)ne00);
+    std::vector<float> bias_h((size_t)ne00);
+
+    if (cudaMemcpy(ids_raw.data(), topk->data, ids_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+            cudaMemcpy(weights.data(), dst->data, weights_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+            cudaMemcpy(probs_h.data(), probs->data, probs_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+            cudaMemcpy(bias_h.data(), bias->data, bias_bytes, cudaMemcpyDeviceToHost) != cudaSuccess) {
+        std::fprintf(stderr, "[moe_score_trace] device-to-host copy failed\n");
+        return;
+    }
+
+    const int layer = moe_score_trace_parse_layer(topk_view ? topk_view->name : nullptr);
+    std::lock_guard<std::mutex> lk(g_moe_score_trace.mu);
+    for (int64_t row = 0; row < nrows && g_moe_score_trace.rows < g_moe_score_trace.cap; ++row) {
+        const int *row_ids = (const int *)(ids_raw.data() + (size_t)row * ids_pitch);
+        for (int rank = 0; rank < ne0 && g_moe_score_trace.rows < g_moe_score_trace.cap; ++rank) {
+            const int expert = row_ids[rank];
+            if (expert < 0 || expert >= ne00) continue;
+            const float logit = probs_h[(size_t)row * (size_t)ne00 + expert];
+            const float sig = 1.0f / (1.0f + std::exp(-logit));
+            const float b = bias_h[expert];
+            const float sort_score = sig + b;
+            const float weight = weights[(size_t)row * (size_t)ne0 + rank];
+            const uint64_t seq = ++g_moe_score_trace.rows;
+            std::fprintf(file,
+                "%lu,%d,%lld,%d,%d,%.9g,%.9g,%.9g,%.9g,%s,%s\n",
+                seq,
+                layer,
+                (long long)row,
+                rank,
+                expert,
+                weight,
+                sort_score,
+                logit,
+                b,
+                topk_view ? topk_view->name : "",
+                dst ? dst->name : "");
+        }
+    }
+    std::fflush(file);
+}
+
 template<typename T>
 static inline __device__ void ggml_cuda_swap(T & a, T & b) {
     T tmp = a;
@@ -441,6 +627,7 @@ void ggml_cuda_op_argsort(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
 
     enum ggml_sort_order order = (enum ggml_sort_order) dst->op_params[0];
 
+    moe_score_trace_debug_argsort("argsort", dst, src0, ncols, nrows);
     argsort_f32_T_cuda(src0_d, (int *)dst_d, ncols, nrows, ncols, order, -1, 0.f, stream);
 }
 
@@ -461,6 +648,7 @@ void ggml_cuda_op_argsort_thresh(ggml_backend_cuda_context & ctx, ggml_tensor * 
     float thresh;
     memcpy(&thresh, dst->op_params + 1, sizeof(float));
 
+    moe_score_trace_debug_argsort("argsort_thresh", dst, src0, ncols, nrows);
     argsort_f32_T_cuda(src0_d, (int *)dst_d, ncols, nrows, ncols, GGML_SORT_ORDER_DESC, min_experts, thresh, stream);
 }
 
@@ -585,8 +773,10 @@ void cuda_glm45moe_experts(ggml_backend_cuda_context & ctx, ggml_tensor * dst, g
     GGML_ASSERT(ne0 == dst->ne[1]);
     GGML_ASSERT(ne0 <= ne00);
 
+    moe_score_trace_debug_glm45(dst, topk_view, topk, probs, bias, ne00, nrows, ne0);
     argsort_biased_f32_f32_i32_cuda((const float *)probs->data, (const float *)bias->data, (float *)dst->data, (int *)topk->data,
             ne00, nrows, ne0, topk->nb[1], GGML_SORT_ORDER_DESC, ctx.stream());
+    moe_score_trace_glm45(ctx.stream(), dst, topk_view, topk, probs, bias, ne00, nrows, ne0);
 
 }
 

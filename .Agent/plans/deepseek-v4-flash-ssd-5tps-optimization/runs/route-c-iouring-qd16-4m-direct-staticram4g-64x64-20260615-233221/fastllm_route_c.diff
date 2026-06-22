@@ -1,0 +1,463 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 00a92195..3b5d29f0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -234,6 +234,15 @@ if (USE_MMAP)
+     add_compile_definitions(USE_MMAP)
+ endif()
+ 
++find_library(LIBURING_LIBRARY uring)
++if (LIBURING_LIBRARY)
++    add_compile_definitions(FASTLLM_USE_LIBURING)
++    set(FASTLLM_LINKED_LIBS ${FASTLLM_LINKED_LIBS} ${LIBURING_LIBRARY})
++    message(STATUS "liburing support enabled: ${LIBURING_LIBRARY}")
++else()
++    message(STATUS "liburing not found; disk MoE io_uring backend disabled")
++endif()
++
+ if (USE_SENTENCEPIECE)
+     set(CMAKE_CXX_STANDARD 17)
+     add_compile_definitions(USE_SENTENCEPIECE)
+diff --git a/src/devices/disk/diskdevice.cpp b/src/devices/disk/diskdevice.cpp
+index 1efaa671..a4ea9692 100644
+--- a/src/devices/disk/diskdevice.cpp
++++ b/src/devices/disk/diskdevice.cpp
+@@ -12,6 +12,7 @@
+ #include <cstdio>
+ #include <fstream>
+ #include <fcntl.h>
++#include <memory>
+ #include <mutex>
+ #include <set>
+ #include <sstream>
+@@ -19,6 +20,10 @@
+ #include <unordered_map>
+ #include <unordered_set>
+ 
++#ifdef FASTLLM_USE_LIBURING
++#include <liburing.h>
++#endif
++
+ #ifdef USE_CUDA
+ #include "devices/cuda/fastllm-cuda.cuh"
+ #endif
+@@ -170,6 +175,41 @@ namespace fastllm {
+         return DiskMoeRamProfileCacheLimitBytes() > 0 && DiskMoeRamProfileCachePath() != nullptr;
+     }
+ 
++    static const char *DiskMoeReadBackend() {
++        static const char *backend = []() {
++            const char *env = std::getenv("FASTLLM_DISK_MOE_READ_BACKEND");
++            return env == nullptr || env[0] == '\0' ? "pread" : env;
++        }();
++        return backend;
++    }
++
++    static bool DiskMoeIouringReadEnabled() {
++        return std::string(DiskMoeReadBackend()) == "iouring";
++    }
++
++    static int DiskMoeIouringQueueDepth() {
++        static int depth = []() {
++            const char *env = std::getenv("FASTLLM_DISK_MOE_IORING_QD");
++            int v = env == nullptr ? 16 : atoi(env);
++            return std::max(1, v);
++        }();
++        return depth;
++    }
++
++    static uint64_t DiskMoeIouringUnitBytes() {
++        static uint64_t bytes = []() {
++            const char *env = std::getenv("FASTLLM_DISK_MOE_IORING_UNIT_BYTES");
++            uint64_t v = env == nullptr ? (uint64_t)4 * 1024 * 1024 : (uint64_t)strtoull(env, nullptr, 10);
++            return std::max((uint64_t)4096, v);
++        }();
++        return bytes;
++    }
++
++    static bool DiskMoeIouringDirectEnabled() {
++        static bool enabled = ParseEnvFlag(std::getenv("FASTLLM_DISK_MOE_IORING_DIRECT"), true);
++        return enabled;
++    }
++
+     struct DiskMoeStats {
+         std::atomic<uint64_t> mergeRuns {0};
+         std::atomic<uint64_t> selectedExpertRefs {0};
+@@ -187,6 +227,12 @@ namespace fastllm {
+         std::atomic<uint64_t> ramCacheMisses {0};
+         std::atomic<uint64_t> ramCacheStores {0};
+         std::atomic<uint64_t> ramCacheBytes {0};
++        std::atomic<uint64_t> iouringBatches {0};
++        std::atomic<uint64_t> iouringSubmits {0};
++        std::atomic<uint64_t> iouringCompletions {0};
++        std::atomic<uint64_t> iouringFallbacks {0};
++        std::atomic<uint64_t> iouringBytes {0};
++        std::atomic<uint64_t> iouringNs {0};
+     };
+ 
+     static DiskMoeStats &GetDiskMoeStats() {
+@@ -312,6 +358,10 @@ namespace fastllm {
+                          "ram_cache_stores=%llu vram_cache_hits=%llu "
+                          "vram_cache_misses=%llu vram_cache_stores=%llu "
+                          "vram_cache_bytes=%llu vram_cache_enabled=%d "
++                         "read_backend=%s iouring_batches=%llu "
++                         "iouring_submits=%llu iouring_completions=%llu "
++                         "iouring_fallbacks=%llu iouring_bytes=%llu "
++                         "iouring_seconds=%.6f "
+                          "vram_hit_estimate=na\n",
+                          (unsigned long long)stats.mergeRuns.load(),
+                          (unsigned long long)stats.selectedExpertRefs.load(),
+@@ -332,7 +382,14 @@ namespace fastllm {
+                          (unsigned long long)stats.vramCacheMisses.load(),
+                          (unsigned long long)stats.vramCacheStores.load(),
+                          (unsigned long long)stats.vramCacheBytes.load(),
+-                         DiskMoeVramCacheEnabled() ? 1 : 0);
++                         DiskMoeVramCacheEnabled() ? 1 : 0,
++                         DiskMoeReadBackend(),
++                         (unsigned long long)stats.iouringBatches.load(),
++                         (unsigned long long)stats.iouringSubmits.load(),
++                         (unsigned long long)stats.iouringCompletions.load(),
++                         (unsigned long long)stats.iouringFallbacks.load(),
++                         (unsigned long long)stats.iouringBytes.load(),
++                         (double)stats.iouringNs.load() / 1000000000.0);
+         }
+     };
+ 
+@@ -370,6 +427,47 @@ namespace fastllm {
+         return cache;
+     }
+ 
++    class DiskDirectFileCache {
++    public:
++        ~DiskDirectFileCache() {
++            for (auto &it : fds) {
++                close(it.second);
++            }
++        }
++
++        int Get(const std::string &fileName) {
++            std::lock_guard<std::mutex> guard(locker);
++            auto it = fds.find(fileName);
++            if (it != fds.end()) {
++                return it->second;
++            }
++            int flags = O_RDONLY;
++#ifdef O_DIRECT
++            if (DiskMoeIouringDirectEnabled()) {
++                flags |= O_DIRECT;
++            }
++#endif
++            int fd = open(fileName.c_str(), flags);
++            if (fd < 0 && DiskMoeIouringDirectEnabled()) {
++                fd = open(fileName.c_str(), O_RDONLY);
++            }
++            if (fd < 0) {
++                ErrorInFastLLM("Disk MoE can't open weight file: " + fileName + "\n");
++            }
++            fds[fileName] = fd;
++            return fd;
++        }
++
++    private:
++        std::mutex locker;
++        std::unordered_map<std::string, int> fds;
++    };
++
++    static DiskDirectFileCache &GetDiskDirectFileCache() {
++        static DiskDirectFileCache cache;
++        return cache;
++    }
++
+     static uint64_t DiskWeightStoredBytes(const Data *weight) {
+         if (weight == nullptr) {
+             return 0;
+@@ -760,7 +858,206 @@ namespace fastllm {
+         uint64_t bytes = 0;
+     };
+ 
++#ifdef FASTLLM_USE_LIBURING
++    struct DiskIouringChunk {
++        const DiskReadTask *task = nullptr;
++        uint64_t taskOffset = 0;
++        uint64_t bytes = 0;
++    };
++
++    struct DiskIouringPending {
++        bool active = false;
++        DiskIouringChunk chunk;
++        uint8_t *bounce = nullptr;
++    };
++
++    class DiskIouringBouncePool {
++    public:
++        DiskIouringBouncePool(int depth, uint64_t unitBytes) : unitBytes(unitBytes) {
++            buffers.resize(depth, nullptr);
++            for (int i = 0; i < depth; i++) {
++                void *ptr = nullptr;
++                if (posix_memalign(&ptr, 4096, unitBytes) != 0 || ptr == nullptr) {
++                    ErrorInFastLLM("Disk MoE io_uring bounce buffer allocation failed.\n");
++                }
++                buffers[i] = (uint8_t*)ptr;
++            }
++        }
++
++        ~DiskIouringBouncePool() {
++            for (uint8_t *ptr : buffers) {
++                free(ptr);
++            }
++        }
++
++        uint8_t *operator[](size_t i) {
++            return buffers[i];
++        }
++
++        size_t Size() const {
++            return buffers.size();
++        }
++
++        uint64_t UnitBytes() const {
++            return unitBytes;
++        }
++
++    private:
++        std::vector<uint8_t*> buffers;
++        uint64_t unitBytes;
++    };
++
++    static bool SubmitDiskIouringRead(io_uring &ring, int fd, DiskIouringPending &pending,
++                                      int slot, const DiskIouringChunk &chunk) {
++        io_uring_sqe *sqe = io_uring_get_sqe(&ring);
++        if (sqe == nullptr) {
++            int submitted = io_uring_submit(&ring);
++            if (submitted < 0) {
++                return false;
++            }
++            GetDiskMoeStats().iouringSubmits.fetch_add(1, std::memory_order_relaxed);
++            sqe = io_uring_get_sqe(&ring);
++            if (sqe == nullptr) {
++                return false;
++            }
++        }
++        pending.active = true;
++        pending.chunk = chunk;
++        io_uring_prep_read(sqe, fd, pending.bounce, (unsigned int)chunk.bytes,
++                           chunk.task->part->fileOffset + (long long)chunk.taskOffset);
++        io_uring_sqe_set_data64(sqe, (uint64_t)slot + 1);
++        return true;
++    }
++
++    static bool ReadDiskTasksIouring(const std::vector<DiskReadTask> &tasks) {
++        if (tasks.empty()) {
++            return true;
++        }
++        uint64_t startNs = DiskMoeStatsEnabled() ? DiskMoeNowNs() : 0;
++        int depth = std::max(1, DiskMoeIouringQueueDepth());
++        uint64_t unitBytes = DiskMoeIouringUnitBytes();
++        io_uring ring;
++        if (io_uring_queue_init((unsigned int)depth, &ring, 0) < 0) {
++            GetDiskMoeStats().iouringFallbacks.fetch_add(1, std::memory_order_relaxed);
++            return false;
++        }
++
++        bool ok = true;
++        uint64_t readBytes = 0;
++        uint64_t completions = 0;
++        uint64_t readCalls = 0;
++        std::vector<DiskIouringChunk> chunks;
++        chunks.reserve(tasks.size());
++        for (const DiskReadTask &task : tasks) {
++            uint64_t offset = 0;
++            while (offset < task.bytes) {
++                uint64_t chunkBytes = std::min(unitBytes, task.bytes - offset);
++                chunks.push_back({&task, offset, chunkBytes});
++                offset += chunkBytes;
++            }
++        }
++
++        DiskIouringBouncePool bounces(depth, unitBytes);
++        std::vector<DiskIouringPending> pending(depth);
++        for (int i = 0; i < depth; i++) {
++            pending[i].bounce = bounces[i];
++        }
++
++        size_t next = 0;
++        size_t submitted = 0;
++        size_t completed = 0;
++        while (submitted < (size_t)depth && next < chunks.size()) {
++            int slot = (int)submitted;
++            int fd = GetDiskDirectFileCache().Get(chunks[next].task->part->fileName);
++            if (!SubmitDiskIouringRead(ring, fd, pending[slot], slot, chunks[next])) {
++                ok = false;
++                break;
++            }
++            next++;
++            submitted++;
++        }
++        if (ok && submitted > 0) {
++            int ret = io_uring_submit(&ring);
++            if (ret < 0) {
++                ok = false;
++            } else {
++                GetDiskMoeStats().iouringSubmits.fetch_add(1, std::memory_order_relaxed);
++            }
++        }
++
++        while (ok && completed < submitted) {
++            io_uring_cqe *cqe = nullptr;
++            int ret = io_uring_wait_cqe(&ring, &cqe);
++            if (ret < 0 || cqe == nullptr) {
++                ok = false;
++                break;
++            }
++            uint64_t userData = io_uring_cqe_get_data64(cqe);
++            if (userData == 0 || userData > (uint64_t)pending.size()) {
++                io_uring_cqe_seen(&ring, cqe);
++                ok = false;
++                break;
++            }
++            int slot = (int)userData - 1;
++            DiskIouringPending &entry = pending[slot];
++            int result = cqe->res;
++            io_uring_cqe_seen(&ring, cqe);
++            if (!entry.active || result < 0 || (uint64_t)result != entry.chunk.bytes) {
++                ok = false;
++                break;
++            }
++            memcpy(entry.chunk.task->dst + entry.chunk.taskOffset, entry.bounce, entry.chunk.bytes);
++            readBytes += entry.chunk.bytes;
++            readCalls++;
++            completions++;
++            completed++;
++            entry.active = false;
++
++            if (next < chunks.size()) {
++                int fd = GetDiskDirectFileCache().Get(chunks[next].task->part->fileName);
++                if (!SubmitDiskIouringRead(ring, fd, entry, slot, chunks[next])) {
++                    ok = false;
++                    break;
++                }
++                next++;
++                submitted++;
++                int submitRet = io_uring_submit(&ring);
++                if (submitRet < 0) {
++                    ok = false;
++                    break;
++                }
++                GetDiskMoeStats().iouringSubmits.fetch_add(1, std::memory_order_relaxed);
++            }
++        }
++
++        io_uring_queue_exit(&ring);
++        if (!ok) {
++            GetDiskMoeStats().iouringFallbacks.fetch_add(1, std::memory_order_relaxed);
++            return false;
++        }
++        DiskMoeStats &stats = GetDiskMoeStats();
++        stats.iouringBatches.fetch_add(1, std::memory_order_relaxed);
++        stats.iouringCompletions.fetch_add(completions, std::memory_order_relaxed);
++        stats.iouringBytes.fetch_add(readBytes, std::memory_order_relaxed);
++        if (DiskMoeStatsEnabled()) {
++            stats.readCalls.fetch_add(readCalls, std::memory_order_relaxed);
++            stats.readBytes.fetch_add(readBytes, std::memory_order_relaxed);
++            uint64_t elapsed = DiskMoeNowNs() - startNs;
++            stats.readNs.fetch_add(elapsed, std::memory_order_relaxed);
++            stats.iouringNs.fetch_add(elapsed, std::memory_order_relaxed);
++        }
++        return true;
++    }
++#endif
++
+     static void ReadDiskTasks(const std::vector<DiskReadTask> &tasks) {
++#ifdef FASTLLM_USE_LIBURING
++        if (DiskMoeIouringReadEnabled()) {
++            if (ReadDiskTasksIouring(tasks)) {
++                return;
++            }
++        }
++#endif
+         for (const auto &task : tasks) {
+             ReadDiskRangeBytes(task.part->fileName, task.part->fileOffset, task.bytes, task.dst);
+         }
+@@ -1001,6 +1298,40 @@ namespace fastllm {
+         return loaded;
+     }
+ 
++    static void LoadDiskWeightsBatchWithRamCache(Data **weights,
++                                                 std::vector<Data*> &tempWeights,
++                                                 const std::vector<int> &indices) {
++        std::vector<std::unique_ptr<DiskWeightLoadPlan>> plans;
++        std::vector<const Data*> sourceWeights;
++        std::vector<int> targetIndices;
++        std::vector<DiskReadTask> readTasks;
++        plans.reserve(indices.size());
++        sourceWeights.reserve(indices.size());
++        targetIndices.reserve(indices.size());
++
++        for (int index : indices) {
++            if (Data *cached = GetDiskMoeRamWeightCache().Get(weights[index])) {
++                tempWeights[index] = cached;
++                continue;
++            }
++            std::unique_ptr<DiskWeightLoadPlan> plan(new DiskWeightLoadPlan(PrepareDiskWeightLoad(weights[index])));
++            for (const DiskReadTask &task : plan->readTasks) {
++                readTasks.push_back(task);
++            }
++            sourceWeights.push_back(weights[index]);
++            targetIndices.push_back(index);
++            plans.push_back(std::move(plan));
++        }
++
++        ReadDiskTasks(readTasks);
++
++        for (size_t i = 0; i < plans.size(); i++) {
++            FinishDiskWeightLoad(*plans[i]);
++            tempWeights[targetIndices[i]] = plans[i]->loaded;
++            GetDiskMoeRamWeightCache().Put(sourceWeights[i], plans[i]->loaded);
++        }
++    }
++
+     static bool CudaSupportsDiskMoeWeight(DataType inputType, DataType weightType) {
+         if (inputType != DataType::FLOAT32 &&
+             inputType != DataType::FLOAT16 &&
+@@ -1463,22 +1794,26 @@ namespace fastllm {
+             if (DiskMoeStatsEnabled()) {
+                 GetDiskMoeStats().loadRequests.fetch_add((uint64_t)loadIndices.size(), std::memory_order_relaxed);
+             }
+-            auto *pool = GetAlivePool();
+-            int threadCnt = std::min((int)loadIndices.size(), DiskMoeLoadThreads());
+-            threadCnt = std::min(threadCnt, (int)pool->threads.size());
+-            if (threadCnt <= 1) {
+-                for (int index : loadIndices) {
+-                    tempWeights[index] = LoadDiskWeightWithRamCache(weights[index]);
+-                }
++            if (DiskMoeIouringReadEnabled()) {
++                LoadDiskWeightsBatchWithRamCache(weights, tempWeights, loadIndices);
+             } else {
+-                std::vector<LoadDiskWeightsOp*> ops;
+-                for (int i = 0; i < threadCnt; i++) {
+-                    ops.push_back(new LoadDiskWeightsOp(weights, &tempWeights, &loadIndices, i, threadCnt));
+-                    pool->PushOp(i, ops.back());
+-                }
+-                for (int i = 0; i < threadCnt; i++) {
+-                    pool->Wait(i);
+-                    delete ops[i];
++                auto *pool = GetAlivePool();
++                int threadCnt = std::min((int)loadIndices.size(), DiskMoeLoadThreads());
++                threadCnt = std::min(threadCnt, (int)pool->threads.size());
++                if (threadCnt <= 1) {
++                    for (int index : loadIndices) {
++                        tempWeights[index] = LoadDiskWeightWithRamCache(weights[index]);
++                    }
++                } else {
++                    std::vector<LoadDiskWeightsOp*> ops;
++                    for (int i = 0; i < threadCnt; i++) {
++                        ops.push_back(new LoadDiskWeightsOp(weights, &tempWeights, &loadIndices, i, threadCnt));
++                        pool->PushOp(i, ops.back());
++                    }
++                    for (int i = 0; i < threadCnt; i++) {
++                        pool->Wait(i);
++                        delete ops[i];
++                    }
+                 }
+             }
+             for (int index : loadIndices) {

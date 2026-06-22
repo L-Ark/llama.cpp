@@ -1,0 +1,113 @@
+{
+  "distance_summary": {
+    "all": {
+      "257-1024": 3670,
+      "gt1024": 38874,
+      "never": 15916
+    },
+    "by_type": {
+      "down": {
+        "257-1024": 1318,
+        "gt1024": 13873,
+        "never": 5379
+      },
+      "upgate": {
+        "257-1024": 2352,
+        "gt1024": 25001,
+        "never": 10537
+      }
+    }
+  },
+  "events": 58460,
+  "trace": ".Agent/plans/5090-theoretical-token-rate/phase43-read-ahead-analysis/phase39-predicted-ssd.trace.csv",
+  "window_sim": {
+    "1": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 100.0,
+      "hits": 58459,
+      "max_ready_mib": 9.19,
+      "misses": 1
+    },
+    "1024": {
+      "duplicate_prefetches": 2995,
+      "evictions": 2972,
+      "hit_rate_pct": 93.16,
+      "hits": 54464,
+      "max_ready_mib": 4218.09,
+      "misses": 3996
+    },
+    "128": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.78,
+      "hits": 58332,
+      "max_ready_mib": 539.34,
+      "misses": 128
+    },
+    "16": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.97,
+      "hits": 58444,
+      "max_ready_mib": 73.59,
+      "misses": 16
+    },
+    "2": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 100.0,
+      "hits": 58458,
+      "max_ready_mib": 13.78,
+      "misses": 2
+    },
+    "256": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.56,
+      "hits": 58204,
+      "max_ready_mib": 1064.34,
+      "misses": 256
+    },
+    "32": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.95,
+      "hits": 58428,
+      "max_ready_mib": 140.34,
+      "misses": 32
+    },
+    "4": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.99,
+      "hits": 58456,
+      "max_ready_mib": 22.97,
+      "misses": 4
+    },
+    "512": {
+      "duplicate_prefetches": 406,
+      "evictions": 406,
+      "hit_rate_pct": 98.43,
+      "hits": 57542,
+      "max_ready_mib": 2118.09,
+      "misses": 918
+    },
+    "64": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.89,
+      "hits": 58396,
+      "max_ready_mib": 273.09,
+      "misses": 64
+    },
+    "8": {
+      "duplicate_prefetches": 0,
+      "evictions": 0,
+      "hit_rate_pct": 99.99,
+      "hits": 58452,
+      "max_ready_mib": 40.59,
+      "misses": 8
+    }
+  }
+}

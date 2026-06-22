@@ -1,0 +1,51 @@
+diff --git a/src/devices/disk/diskdevice.cpp b/src/devices/disk/diskdevice.cpp
+index 1efaa671..ae3e2512 100644
+--- a/src/devices/disk/diskdevice.cpp
++++ b/src/devices/disk/diskdevice.cpp
+@@ -170,6 +170,11 @@ namespace fastllm {
+         return DiskMoeRamProfileCacheLimitBytes() > 0 && DiskMoeRamProfileCachePath() != nullptr;
+     }
+ 
++    static bool DiskMoeCoalesceReadsEnabled() {
++        static bool enabled = ParseEnvFlag(std::getenv("FASTLLM_DISK_MOE_COALESCE_READS"), true);
++        return enabled;
++    }
++
+     struct DiskMoeStats {
+         std::atomic<uint64_t> mergeRuns {0};
+         std::atomic<uint64_t> selectedExpertRefs {0};
+@@ -761,8 +766,32 @@ namespace fastllm {
+     };
+ 
+     static void ReadDiskTasks(const std::vector<DiskReadTask> &tasks) {
+-        for (const auto &task : tasks) {
+-            ReadDiskRangeBytes(task.part->fileName, task.part->fileOffset, task.bytes, task.dst);
++        if (!DiskMoeCoalesceReadsEnabled()) {
++            for (const auto &task : tasks) {
++                ReadDiskRangeBytes(task.part->fileName, task.part->fileOffset, task.bytes, task.dst);
++            }
++            return;
++        }
++        size_t i = 0;
++        while (i < tasks.size()) {
++            const DiskReadTask &first = tasks[i];
++            const std::string &fileName = first.part->fileName;
++            long long fileOffset = first.part->fileOffset;
++            uint8_t *dst = first.dst;
++            uint64_t bytes = first.bytes;
++            size_t j = i + 1;
++            while (j < tasks.size()) {
++                const DiskReadTask &next = tasks[j];
++                if (next.part->fileName != fileName ||
++                    next.part->fileOffset != fileOffset + (long long)bytes ||
++                    next.dst != dst + bytes) {
++                    break;
++                }
++                bytes += next.bytes;
++                j++;
++            }
++            ReadDiskRangeBytes(fileName, fileOffset, bytes, dst);
++            i = j;
+         }
+     }
+ 

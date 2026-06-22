@@ -1,0 +1,271 @@
+{
+  "by_rank": {
+    "0": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "1": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "2": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "3": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "4": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "5": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "6": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    },
+    "7": {
+      "events": 24,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 24
+    }
+  },
+  "by_weight_ratio": {
+    "0.05_0.10": {
+      "events": 0,
+      "ram": 0,
+      "resident_pct": 0.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 0
+    },
+    "0.10_0.20": {
+      "events": 0,
+      "ram": 0,
+      "resident_pct": 0.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 0
+    },
+    "0.20_0.40": {
+      "events": 0,
+      "ram": 0,
+      "resident_pct": 0.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 0
+    },
+    "0.40_0.70": {
+      "events": 0,
+      "ram": 0,
+      "resident_pct": 0.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 0
+    },
+    "ge_0.70": {
+      "events": 192,
+      "ram": 0,
+      "resident_pct": 100.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 192
+    },
+    "lt_0.05": {
+      "events": 0,
+      "ram": 0,
+      "resident_pct": 0.0,
+      "ssd": 0,
+      "ssd_pct": 0.0,
+      "vram": 0
+    }
+  },
+  "drop_rules": {
+    "keep_rank_lt_1": {
+      "dropped": 168,
+      "dropped_resident": 168,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_2": {
+      "dropped": 144,
+      "dropped_resident": 144,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_3": {
+      "dropped": 120,
+      "dropped_resident": 120,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_4": {
+      "dropped": 96,
+      "dropped_resident": 96,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_5": {
+      "dropped": 72,
+      "dropped_resident": 72,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_6": {
+      "dropped": 48,
+      "dropped_resident": 48,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "keep_rank_lt_7": {
+      "dropped": 24,
+      "dropped_resident": 24,
+      "resident_drop_pct": 100.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.05": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.10": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.15": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.20": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.30": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "ssd_and_weight_ratio_lt_0.40": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.05": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.10": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.15": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.20": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.30": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    },
+    "weight_ratio_lt_0.40": {
+      "dropped": 0,
+      "dropped_resident": 0,
+      "resident_drop_pct": 0.0,
+      "saved_ssd": 0,
+      "saved_ssd_pct_of_current_ssd": 0.0
+    }
+  },
+  "matched_groups": 8,
+  "preloads": {
+    "down": 900,
+    "upgate": 1614
+  },
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "ram_tier_profile": null,
+  "route_groups": 526,
+  "route_trace": ".Agent/plans/5090-theoretical-token-rate/runs/phase27-score-trace/score-trace-oracle-n8-disable-cudagraphs/route-trace.csv",
+  "score_groups": 1784,
+  "score_trace": ".Agent/plans/5090-theoretical-token-rate/runs/phase27-score-trace/score-trace-oracle-n8-disable-cudagraphs/score-trace.csv",
+  "total": {
+    "events": 12624,
+    "ram": 0,
+    "ssd": 7811,
+    "vram": 4813
+  },
+  "unmatched_groups": 518
+}

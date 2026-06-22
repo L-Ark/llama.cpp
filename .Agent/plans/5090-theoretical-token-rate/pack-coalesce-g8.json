@@ -1,0 +1,28 @@
+{
+  "coalesced_jobs": 10272,
+  "coalesced_jobs_pct": 6.874,
+  "coalesced_runs": 143481,
+  "extra_bytes": 0,
+  "group_hist": {
+    "1": 0,
+    "2": 0,
+    "3-4": 0,
+    "5-8": 18678
+  },
+  "group_size": 8,
+  "groups": 18678,
+  "indexed_events": 149424,
+  "jobs": 149424,
+  "missing_events": 0,
+  "pack": "models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack",
+  "possible_read_reduction": 5943,
+  "possible_read_reduction_pct": 3.977,
+  "run_hist": {
+    "1": 249,
+    "2": 0,
+    "3-4": 3,
+    "5-8": 18426
+  },
+  "trace": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv",
+  "trace_events": 149424
+}

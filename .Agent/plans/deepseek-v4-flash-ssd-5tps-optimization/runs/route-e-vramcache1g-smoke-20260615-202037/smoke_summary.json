@@ -1,0 +1,282 @@
+{
+  "created_at_unix": 1781526912.3755524,
+  "max_new_tokens": 64,
+  "mode": "model",
+  "model": "/home/wici/lfz/models/DeepSeek-V4-Flash",
+  "results": [
+    {
+      "category": "factual",
+      "elapsed_s": 27.094119548797607,
+      "expected": "Mars",
+      "id": "fact_001",
+      "output": "We need to answer briefly: \"What planet is known as the Red Planet?\" The answer is Mars.</think>Mars.",
+      "output_sha256": "44cedc899167da56d459bfe5a20dd042e93af10919652f2ae8ddae3966c3b628",
+      "passed": true,
+      "prompt": "Answer briefly: What planet is known as the Red Planet?",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "factual",
+      "elapsed_s": 25.627092361450195,
+      "expected": "Jane Austen",
+      "id": "fact_002",
+      "output": "We need to answer: Who wrote the novel Pride and Prejudice? Brief answer: Jane Austen.</think>Jane Austen.",
+      "output_sha256": "ea1361d60a09dcb916a92ac9076077214feebcf2461009cfb225b1da07003603",
+      "passed": true,
+      "prompt": "Answer briefly: Who wrote the novel Pride and Prejudice?",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "factual",
+      "elapsed_s": 36.55422234535217,
+      "expected": "H2O",
+      "id": "fact_003",
+      "output": "We need to answer: \"What is the chemical symbol for water?\" The answer is H2O. But the user says \"briefly\", so just state H2O.</think>H₂O",
+      "output_sha256": "08673a919b34512081ae0a2c17344595e16a8de6fc09a4d566205c444b0659ab",
+      "passed": true,
+      "prompt": "Answer briefly: What is the chemical symbol for water?",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "factual",
+      "elapsed_s": 30.351240158081055,
+      "expected": "central processing unit",
+      "id": "fact_004",
+      "output": "We need to answer briefly: In computing, what does CPU stand for? The answer is Central Processing Unit.</think>CPU stands for Central Processing Unit.",
+      "output_sha256": "de9ccd41b7d162e3ba9527946f945799921c74e85211e8fdd15b8f24666ede75",
+      "passed": true,
+      "prompt": "Answer briefly: In computing, what does CPU stand for?",
+      "reason": "matched case-insensitive substring",
+      "scoring": "contains_ci"
+    },
+    {
+      "category": "math",
+      "elapsed_s": 39.533613443374634,
+      "expected": "45",
+      "id": "math_001",
+      "output": "We need to compute 17 + 28. This is a simple addition. 17 + 28 = 45. So the answer is 45.</think>The sum of 17 and 28 is 45.",
+      "output_sha256": "741706c032cdabb01331dbb4163f16a2fcb6523c37a61432d7765fe82b5b99c3",
+      "passed": true,
+      "prompt": "Compute exactly: 17 + 28 = ?",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "math",
+      "elapsed_s": 43.67479157447815,
+      "expected": "117",
+      "id": "math_002",
+      "output": "We need to compute 9 * 13. This is a simple multiplication. 9 times 13 is 117. So the answer is 117.</think>The product of 9 and 13 is 117.\n\n\\boxed{117}",
+      "output_sha256": "a99f3d7d87b62275db5bbefdeb215cb433de4dc9a65b683bc5717355c2a837c4",
+      "passed": true,
+      "prompt": "Compute exactly: 9 * 13 = ?",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "math",
+      "elapsed_s": 45.83394479751587,
+      "expected": "18",
+      "id": "math_003",
+      "output": "We need to answer: \"If a box has 24 apples and 6 are removed, how many remain?\" Answer with just the number. So 24 - 6 = 18. Answer: 18.</think>18",
+      "output_sha256": "35c39c432b33d44b4a7b5d995a55d81cf0b5fcaaad2267f10b8b3bd514752994",
+      "passed": true,
+      "prompt": "If a box has 24 apples and 6 are removed, how many remain? Answer with just the number.",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "math",
+      "elapsed_s": 56.65803050994873,
+      "expected": "32",
+      "id": "math_004",
+      "output": "We are asked: \"What is the next number in the sequence 2, 4, 8, 16, ? Answer with just the number.\" This is a simple geometric progression with common ratio 2. The next number is 32. So answer: 32.</think>32",
+      "output_sha256": "37f01b9ab87d6e1378674b149c899ccfac0fb7c80aa39c17209806d20a9bd3a8",
+      "passed": true,
+      "prompt": "What is the next number in the sequence 2, 4, 8, 16, ? Answer with just the number.",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "coding",
+      "elapsed_s": 54.06399488449097,
+      "expected": "len(x)",
+      "id": "code_001",
+      "output": "We need to write a Python expression that returns the length of list x. The answer is simply `len(x)`. That's the standard built-in function. The user wants \"Write a Python expression that returns the length of list x.\" So the expression is `len(x)`. I should provide that. Possibly also",
+      "output_sha256": "d666ab9788ac30c4fbeb3a4d48940205a23ad899637dc6531b81e1fd9942d2cd",
+      "passed": true,
+      "prompt": "Write a Python expression that returns the length of list x.",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "coding",
+      "elapsed_s": 54.01699733734131,
+      "expected": "import math",
+      "id": "code_002",
+      "output": "We need to provide a one-line import statement for the math module in Python. The user says: \"In Python, write one line to import the math module.\" That's straightforward. Answer: `import math` or could also be `import math as m` but the simplest is `import math`. Provide that as",
+      "output_sha256": "64baa68100a005d217f97519b9a7ed52a8ade50c41fd4e8dbf9d1bd290f9e2c2",
+      "passed": true,
+      "prompt": "In Python, write one line to import the math module.",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "coding",
+      "elapsed_s": 54.0901894569397,
+      "expected": "function add",
+      "id": "code_003",
+      "output": "We need to write a minimal JavaScript function named add that returns a + b. The user asks for \"minimal\", so we should keep it concise. The function should take two parameters a and b and return their sum.\n\nPotential implementation: function add(a, b) { return a + b; }\n\nOr arrow function",
+      "output_sha256": "3dc44a77e256a9ab47acd6a0d20371fdb59830a99d64873d9ae86f9ff3e05abe",
+      "passed": true,
+      "prompt": "Write a minimal JavaScript function named add that returns a + b.",
+      "reason": "matched case-insensitive substring",
+      "scoring": "contains_ci"
+    },
+    {
+      "category": "coding",
+      "elapsed_s": 53.883618116378784,
+      "expected": "SELECT * FROM users",
+      "id": "code_004",
+      "output": "We need to provide SQL code to select all columns from a table named \"users\". Simple SELECT * FROM users; But the instruction says \"In SQL, select all columns from a table named users.\" So answer should be the SQL statement. Possibly include explanation? The user likely expects just the SQL. However, as an",
+      "output_sha256": "b6a5c850679ffdd6a817ab0fc6b384eb861dad15c7fbc447b32285e721f0b052",
+      "passed": true,
+      "prompt": "In SQL, select all columns from a table named users.",
+      "reason": "matched case-insensitive substring",
+      "scoring": "contains_ci"
+    },
+    {
+      "category": "json",
+      "elapsed_s": 35.03185248374939,
+      "expected": "{\"status\":\"ok\"}",
+      "id": "json_001",
+      "output": "We need to return only valid JSON with key status set to ok. So the output should be: {\"status\": \"ok\"}. No additional text.</think>{\"status\": \"ok\"}",
+      "output_sha256": "555e28d25460a772bf5d579e77b477f73a0fa0c97ac6c1c323d933aaba39c1b4",
+      "passed": true,
+      "prompt": "Return only valid JSON with key status set to ok.",
+      "reason": "matched JSON expectation",
+      "scoring": "json_contains"
+    },
+    {
+      "category": "json",
+      "elapsed_s": 36.1231415271759,
+      "expected": "{\"count\":3}",
+      "id": "json_002",
+      "output": "We need to return only valid JSON with key \"count\" set to 3. The instruction is straightforward: just output {\"count\":3}. No additional text.</think>{\"count\":3}",
+      "output_sha256": "6aa366d3c59e70462349fe26c1c27e210092594713a6a041ae237af6d80b90f8",
+      "passed": true,
+      "prompt": "Return only valid JSON with key count set to 3.",
+      "reason": "matched JSON expectation",
+      "scoring": "json_contains"
+    },
+    {
+      "category": "json",
+      "elapsed_s": 54.37115287780762,
+      "expected": "[1,2]",
+      "id": "json_003",
+      "output": "We need to return only valid JSON array containing numbers 1 and 2. So the output should be: [1,2] or [1, 2]? JSON allows spaces. But the instruction says \"valid JSON array containing the numbers 1 and 2\". So I'll output [1,2",
+      "output_sha256": "9fbd5207b6a7894a82e74a595d440c587a079ffb20b6e09cdb2e0a30f0759441",
+      "passed": true,
+      "prompt": "Return only valid JSON array containing the numbers 1 and 2.",
+      "reason": "matched JSON expectation",
+      "scoring": "json_array_contains"
+    },
+    {
+      "category": "json",
+      "elapsed_s": 39.127605676651,
+      "expected": "{\"enabled\":true}",
+      "id": "json_004",
+      "output": "We need to return only valid JSON with boolean key enabled set to true. The user wants a JSON object like {\"enabled\": true}. That's it. No extra text.</think>{\"enabled\": true}",
+      "output_sha256": "c44dd95eee15f7fb9325f58f0a2da7ebbd09b1318b344d3975c802b77a9ed315",
+      "passed": true,
+      "prompt": "Return only valid JSON with boolean key enabled set to true.",
+      "reason": "matched JSON expectation",
+      "scoring": "json_contains"
+    },
+    {
+      "category": "multilingual",
+      "elapsed_s": 50.94866752624512,
+      "expected": "hello",
+      "id": "multi_001",
+      "output": "We need to translate the French word \"Bonjour\" to English. \"Bonjour\" is a common greeting in French, typically used in the morning or during the day, meaning \"hello\" or \"good day\". The most direct translation is \"Hello\" or \"Good morning\" depending on context. Since no context",
+      "output_sha256": "8ea9cd9978db9e4c337095a7d1ee89ee2960dcf934b071e22eb7c189df4350b1",
+      "passed": true,
+      "prompt": "Translate to English: Bonjour",
+      "reason": "matched case-insensitive substring",
+      "scoring": "contains_ci"
+    },
+    {
+      "category": "multilingual",
+      "elapsed_s": 40.46216583251953,
+      "expected": "thank",
+      "id": "multi_002",
+      "output": "We need to translate \"gracias\" from Spanish to English. \"Gracias\" means \"thank you\" or \"thanks\". The user just said \"Translate to English: gracias\". So the response should be the English translation.</think>Thank you",
+      "output_sha256": "f2a332311a77b52c298ba8f5b4f629ad9b38c6689edb1af42c95c9090b7b03e8",
+      "passed": true,
+      "prompt": "Translate to English: gracias",
+      "reason": "matched case-insensitive substring",
+      "scoring": "contains_ci"
+    },
+    {
+      "category": "multilingual",
+      "elapsed_s": 23.229981899261475,
+      "expected": "蓝",
+      "id": "multi_003",
+      "output": "我们要求用中文简短回答：天空通常是蓝色。但需要简短，直接回答即可。</think>蓝色。",
+      "output_sha256": "86a7e10614801f28af847e0dda600c850d2cae96ed351192a05b4a47e69dc15d",
+      "passed": true,
+      "prompt": "用中文简短回答：天空通常是什么颜色？",
+      "reason": "matched substring",
+      "scoring": "contains"
+    },
+    {
+      "category": "multilingual",
+      "elapsed_s": 22.163432121276855,
+      "expected": "7",
+      "id": "multi_004",
+      "output": "我们要求用中文简短回答：一周有几天？答案是7天。</think>一周有7天。",
+      "output_sha256": "f2911fccf72026e43e8bf12d89da6570c35d5a76f2623b73eb893794071d9473",
+      "passed": true,
+      "prompt": "用中文简短回答：一周有几天？",
+      "reason": "matched substring",
+      "scoring": "contains"
+    }
+  ],
+  "smoke_file": "/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/smoke_eval.jsonl",
+  "summary": {
+    "categories": {
+      "coding": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "factual": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "json": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "math": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      },
+      "multilingual": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "total": 4
+      }
+    },
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 20,
+    "total": 20
+  }
+}

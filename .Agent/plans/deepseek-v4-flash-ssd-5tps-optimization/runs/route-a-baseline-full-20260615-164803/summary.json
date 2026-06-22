@@ -1,0 +1,173 @@
+{
+  "command": [
+    "/home/wici/lfz/fastllm/.venv-ftllm/bin/ftllm",
+    "bench",
+    "/home/wici/lfz/models/DeepSeek-V4-Flash",
+    "--low",
+    "--device",
+    "cuda",
+    "--moe_device",
+    "{'cuda':16,'disk':84}",
+    "--moe_device_layers",
+    "-1",
+    "--cuda_shared_expert",
+    "true",
+    "--gpu_mem_ratio",
+    "0.98",
+    "--cuda_slab",
+    "256",
+    "--input_tokens",
+    "128",
+    "--output_tokens",
+    "256",
+    "--batch",
+    "1",
+    "--warmup",
+    "0",
+    "--temperature",
+    "0",
+    "--threads",
+    "8"
+  ],
+  "created_at_unix": 1781514091.725269,
+  "environment": {
+    "FASTLLM_CACHEDIR": "/home/wici/lfz/fastllm_cache",
+    "FASTLLM_DISK_MOE_LOAD_THREADS": "8",
+    "FASTLLM_DISK_MOE_STATS": "1"
+  },
+  "metrics": {
+    "decode_tok_s_p50": 1.29,
+    "decode_tok_s_values": [
+      1.21,
+      1.35,
+      1.29
+    ],
+    "decode_tok_s_worst": 1.21,
+    "ttft_s_p50": 16.00929,
+    "ttft_s_values": [
+      16.530369999999998,
+      16.00929,
+      15.98457
+    ],
+    "ttft_s_worst": 16.530369999999998
+  },
+  "repo": {
+    "head": "9482f64fc89401fadcc399444e7800c8a7b8dfb4",
+    "remotes": "origin\thttps://github.com/ztxz16/fastllm.git (fetch)\norigin\thttps://github.com/ztxz16/fastllm.git (push)\nprivate\tgit@github.com:L-Ark/fastllm-deepseek-v4-flash-ssd-5tps.git (fetch)\nprivate\tgit@github.com:L-Ark/fastllm-deepseek-v4-flash-ssd-5tps.git (push)",
+    "status_short": "## master...private/master\n?? .venv-ftllm/"
+  },
+  "resource_start": {
+    "gpu": {
+      "available": true,
+      "memory_free_mib": 32071,
+      "memory_used_mib": 41,
+      "raw": "41, 32071, 0",
+      "utilization_gpu_pct": 0
+    },
+    "memory": {
+      "available": true,
+      "mem_available": "12291712 kB",
+      "mem_total": "15874416 kB",
+      "swap_free": "34491376 kB",
+      "swap_total": "37748728 kB"
+    }
+  },
+  "runs": [
+    {
+      "actual_output_tokens": 256,
+      "batch_decode_tokens_per_s": 1.21,
+      "batch_total_tokens_per_s": 1.13,
+      "disk_moe_stats": {
+        "load_requests": 120390,
+        "load_seconds": 735.025021,
+        "load_weights": 120390,
+        "merge_runs": 9509,
+        "ram_cache_bytes": 0,
+        "ram_cache_enabled": 0,
+        "ram_cache_evictions": 0,
+        "ram_cache_hits": 0,
+        "ram_cache_misses": 0,
+        "read_bytes": 804767662080,
+        "read_calls": 361170,
+        "read_gib": 749.498291,
+        "read_gib_per_s": 1.022457,
+        "read_seconds": 733.036538,
+        "selected_expert_refs": 60195,
+        "vram_hit_estimate": "na"
+      },
+      "elapsed_s": 277.2745599746704,
+      "log_path": "/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/runs/route-a-baseline-full-20260615-164803/bench_repeat_1.log",
+      "output_token_sha256": "109e541e1ab08e6d9272ebe30ec01550aa510d303e0f9c1f1796e1887baead81",
+      "per_request_tokens_per_s": 1.13,
+      "prefill_tokens_per_s": 7.74,
+      "repeat": 1,
+      "returncode": 0,
+      "total_time_s": 227.3151,
+      "ttft_avg_ms": 16530.37
+    },
+    {
+      "actual_output_tokens": 256,
+      "batch_decode_tokens_per_s": 1.35,
+      "batch_total_tokens_per_s": 1.25,
+      "disk_moe_stats": {
+        "load_requests": 120390,
+        "load_seconds": 602.448235,
+        "load_weights": 120390,
+        "merge_runs": 9509,
+        "ram_cache_bytes": 0,
+        "ram_cache_enabled": 0,
+        "ram_cache_evictions": 0,
+        "ram_cache_hits": 0,
+        "ram_cache_misses": 0,
+        "read_bytes": 804767662080,
+        "read_calls": 361170,
+        "read_gib": 749.498291,
+        "read_gib_per_s": 1.246818,
+        "read_seconds": 601.129074,
+        "selected_expert_refs": 60195,
+        "vram_hit_estimate": "na"
+      },
+      "elapsed_s": 262.53515243530273,
+      "log_path": "/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/runs/route-a-baseline-full-20260615-164803/bench_repeat_2.log",
+      "output_token_sha256": "109e541e1ab08e6d9272ebe30ec01550aa510d303e0f9c1f1796e1887baead81",
+      "per_request_tokens_per_s": 1.25,
+      "prefill_tokens_per_s": 8.0,
+      "repeat": 2,
+      "returncode": 0,
+      "total_time_s": 204.4281,
+      "ttft_avg_ms": 16009.29
+    },
+    {
+      "actual_output_tokens": 256,
+      "batch_decode_tokens_per_s": 1.29,
+      "batch_total_tokens_per_s": 1.2,
+      "disk_moe_stats": {
+        "load_requests": 120390,
+        "load_seconds": 679.215037,
+        "load_weights": 120390,
+        "merge_runs": 9509,
+        "ram_cache_bytes": 0,
+        "ram_cache_enabled": 0,
+        "ram_cache_evictions": 0,
+        "ram_cache_hits": 0,
+        "ram_cache_misses": 0,
+        "read_bytes": 804767662080,
+        "read_calls": 361170,
+        "read_gib": 749.498291,
+        "read_gib_per_s": 1.105631,
+        "read_seconds": 677.891698,
+        "selected_expert_refs": 60195,
+        "vram_hit_estimate": "na"
+      },
+      "elapsed_s": 268.65064311027527,
+      "log_path": "/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/runs/route-a-baseline-full-20260615-164803/bench_repeat_3.log",
+      "output_token_sha256": "109e541e1ab08e6d9272ebe30ec01550aa510d303e0f9c1f1796e1887baead81",
+      "per_request_tokens_per_s": 1.2,
+      "prefill_tokens_per_s": 8.01,
+      "repeat": 3,
+      "returncode": 0,
+      "total_time_s": 213.0171,
+      "ttft_avg_ms": 15984.57
+    }
+  ]
+}

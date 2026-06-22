@@ -5,7 +5,7 @@
     "GGML_MOE_BATCH_PROFILE": "0",
     "GGML_CUDA_EAGER_CUBLAS": "1",
     "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
-    "GGML_MOE_EXPERT_PACK": "/home/wici/models/glm-5.1/glm51-iq3xxs.expert-pack",
+    "GGML_MOE_EXPERT_PACK": "models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack",
     "GGML_MOE_GPU_HANDOFF": "1",
     "GGML_MOE_IO_BACKEND": "direct",
     "GGML_MOE_PROMPT_DYNAMIC_EXPERTS": "1",
@@ -23,7 +23,7 @@
     "GGML_MOE_VRAM_PROFILE_PROTECT": "1",
     "GGML_MOE_VRAM_PROFILE_RESERVE_PCT": "10",
     "LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS": "3",
-    "MODEL": "/home/wici/models/glm-5.1/UD-IQ3_XXS/GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
+    "MODEL": "models/GLM-5.1-UD-IQ3_XXS/GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf",
     "N_GPU_LAYERS": "60"
   },
   "inputs": {

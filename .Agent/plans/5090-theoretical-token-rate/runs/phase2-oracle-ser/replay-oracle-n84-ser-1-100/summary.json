@@ -1,0 +1,23 @@
+{
+  "backend": "iouring",
+  "command": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-ser/replay-oracle-n84-ser-1-100/command.txt",
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-ser/replay-oracle-n84-ser-1-100/env.json",
+  "gpu_handoff": true,
+  "label": "replay-oracle-n84-ser-1-100",
+  "predict_tokens": 84,
+  "profile": ".Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "prompt_dynamic_experts": true,
+  "prompt_startup_preload": true,
+  "ram_tier_mib": 0,
+  "returncode": 1,
+  "stage_pinned": false,
+  "status": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-ser/replay-oracle-n84-ser-1-100/status.txt",
+  "stderr": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-ser/replay-oracle-n84-ser-1-100/stderr.txt",
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/runs/phase2-oracle-ser/replay-oracle-n84-ser-1-100/stdout.txt",
+  "stdout_prefix": "",
+  "strict_2gb": true,
+  "systemd_stderr": "",
+  "systemd_stdout": "",
+  "vram_cache_mib": 20480,
+  "wall_s": 16.196886710999024
+}

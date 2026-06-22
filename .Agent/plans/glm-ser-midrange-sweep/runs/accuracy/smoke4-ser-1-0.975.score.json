@@ -1,0 +1,52 @@
+{
+  "accuracy": 0.5,
+  "correct": 2,
+  "dataset": "/root/lfz/data/glm_resource_eval/processed/smoke.jsonl",
+  "missing": 0,
+  "predictions": "/root/lfz/ik_llama/.Agent/plans/glm-ser-midrange-sweep/runs/accuracy/smoke4-ser-1-0.975.predictions.jsonl",
+  "rows": [
+    {
+      "correct": true,
+      "expected": "D",
+      "id": "ceval_computer_network_0009",
+      "output": "D",
+      "source": "ceval",
+      "status": "scored",
+      "task_type": "zh_multiple_choice",
+      "turn_count": 0
+    },
+    {
+      "correct": false,
+      "expected": "D",
+      "id": "cmmlu_chinese_civil_service_exam_0098",
+      "output": "C",
+      "source": "cmmlu",
+      "status": "scored",
+      "task_type": "zh_multiple_choice",
+      "turn_count": 0
+    },
+    {
+      "correct": true,
+      "expected": "B",
+      "id": "ceval_computer_network_0010",
+      "output": "B",
+      "source": "ceval",
+      "status": "scored",
+      "task_type": "zh_multiple_choice",
+      "turn_count": 0
+    },
+    {
+      "correct": false,
+      "expected": "C",
+      "id": "cmmlu_chinese_civil_service_exam_0150",
+      "output": "D",
+      "source": "cmmlu",
+      "status": "scored",
+      "task_type": "zh_multiple_choice",
+      "turn_count": 0
+    }
+  ],
+  "scored": 4,
+  "total": 4,
+  "unscored": 0
+}

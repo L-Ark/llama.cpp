@@ -2,7 +2,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${1:-/home/wici/models/glm-5.1/glm51-iq3xxs.expert-pack}"
+TARGET="${1:-$ROOT/models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack}"
 OUT_DIR="${OUT_DIR:-$ROOT/bench/wici-storage}"
 RUN_FIO="${RUN_FIO:-1}"
 RUN_GDSIO="${RUN_GDSIO:-1}"

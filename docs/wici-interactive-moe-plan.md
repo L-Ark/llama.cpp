@@ -97,6 +97,92 @@ graph instantiation. Keep 1536 MiB plus runtime auto-clamp and a 256 MiB
 safety margin as the stable interactive default unless a later change proves
 more graph headroom or dynamic cache resizing with canary preserved.
 
+## Low-Host-RAM Variant
+
+There is one accepted constrained-memory variant for the same GLM-5.1
+interactive path when the process must fit under `MemoryMax=2G` with
+`MemorySwapMax=0` on an RTX 5090 32 GB host.
+
+This is related to the main Wici interactive plan, but it is not the promoted
+default TTFT preset above. The normal interactive default relies on a RAM tier
+(`GGML_MOE_RAM_TIER_MIB=3072`), which is invalid under a strict 2 GiB process
+cap. The accepted workaround removes RAM-tier residency and shifts the useful
+working set into VRAM plus SSD-backed direct expert reads.
+
+Accepted low-host-RAM profile:
+
+- CLI: `python3 scripts/moe-run.py --chat --low-host-ram-profile glm51-2gb-vram8`
+- `N_GPU_LAYERS=79`
+- `GGML_MOE_RAM_TIER_MIB=0`
+- `GGML_MOE_RAM_TIER_SKIP=0`
+- `GGML_MOE_IO_BACKEND=direct`
+- `GGML_MOE_VRAM_CACHE_MIB=8192`
+- `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`
+- `GGML_MOE_VRAM_PROFILE=presets/moe/groundtruth/wici-glm51-interactive-n84-expert-top8.runtime.csv`
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+- `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=10`
+- `LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS=3`
+
+Measured n84 results under `MemoryMax=2G`, `MemorySwapMax=0`,
+RTX 5090 32 GB, GLM-5.1 UD-IQ3_XXS, and `glm51-iq3xxs.expert-pack`:
+
+- pre-optimization baseline, top4 profile, `VRAM=1536`, `RAM=0`:
+  `direct_reads=118824`, `VRAM hit=6.0%`, `RAM hit=0.0%`,
+  `total_ms=105695.33`, `read_failures=0`
+- optimized candidate, top8 profile, `VRAM=8192`, `RAM=0`:
+  `direct_reads=91145`, `VRAM hit=29.1%`, `RAM hit=0.0%`,
+  `total_ms=88138.02`, `read_failures=0`
+- optimized candidate, top8 profile, `VRAM=12288`, `RAM=0`:
+  `direct_reads=87729`, `VRAM hit=31.8%`, `RAM hit=0.0%`,
+  `total_ms=109228.67`, `read_failures=0`
+
+Interpretation:
+
+- `glm51-2gb-vram8` is the accepted operational default for strict 2 GiB host
+  limits. It materially improves VRAM hit rate over the small-cache baseline
+  without reintroducing RAM-tier pressure.
+- `glm51-2gb-vram12` is available as a higher-hit-rate variant, but it pushes
+  runtime VRAM to about 30.8 GiB and did not improve end-to-end latency in the
+  measured runs on the 5090 32 GB card. Treat it as a narrower fit-check
+  option, not the default.
+- The win here comes from moving hot experts into a protected VRAM cache seeded
+  by the top-8 runtime profile while leaving cold misses on direct SSD expert
+  reads. It is not a RAM-cache optimization.
+
+Current integrated reproduction check:
+
+- preset:
+  `presets/moe/glm51/rtx5090-interactive-n84-repro.json`
+- host-RAM overlay:
+  `--low-host-ram-profile glm51-2gb-vram8`
+- result: exit status `0`, `direct_reads=91145`, `VRAM hit=29.1%`,
+  `read_failures=0`
+- parsed answer SHA:
+  `a2331ca78c18fcf3b30ae07521fc8746f097e8220c29b1c28f61fff220fcd990`
+
+Reference run:
+
+```sh
+systemd-run --pty --wait --collect \
+  -p WorkingDirectory="$(pwd)" \
+  -p MemoryMax=2G \
+  -p MemorySwapMax=0 \
+  python3 scripts/moe-run.py \
+    --chat \
+    --chat-load-mode fast-prompt \
+    --preset presets/moe/glm51/rtx5090-interactive-n84-repro.json \
+    --low-host-ram-profile glm51-2gb-vram8 \
+    -- \
+    -n 84 \
+    -b 2048 \
+    -tb 24 \
+    -t 8 \
+    --simple-io \
+    --seed 42 \
+    --ignore-eos
+```
+
 ## Recent Mechanism Filter
 
 Ignore papers older than two years for new mechanism choices. As of

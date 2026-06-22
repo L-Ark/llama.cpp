@@ -1,0 +1,3846 @@
+{
+  "cache_replay": [
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3798,
+        "misses": 38202,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 114433,
+      "extra_reads": 0,
+      "hit_rate_pct": 8.988888888888889,
+      "hits": 11326,
+      "lookahead": 1,
+      "m": 0,
+      "misses": 114674,
+      "predictor": "baseline",
+      "prefetch_cache_hits": 0,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7528,
+        "misses": 76472,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 16940
+      },
+      "events": 126000,
+      "evictions": 165102,
+      "extra_reads": 50960,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 12040,
+      "prefetch_evictions": 50719,
+      "prefetch_reads": 50960,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 34020
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3874,
+        "misses": 38126,
+        "prefetch_reads": 16143
+      },
+      "events": 126000,
+      "evictions": 162680,
+      "extra_reads": 48475,
+      "hit_rate_delta_abs": 0.1809523809523803,
+      "hit_rate_pct": 9.16984126984127,
+      "hits": 11554,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.19882449378237438,
+      "miss_reduction_sim": 228,
+      "misses": 114446,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 5525,
+      "prefetch_evictions": 48475,
+      "prefetch_reads": 48475,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7680,
+        "misses": 76320,
+        "prefetch_reads": 32332
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4038,
+        "misses": 37962,
+        "prefetch_reads": 16415
+      },
+      "events": 126000,
+      "evictions": 162978,
+      "extra_reads": 49265,
+      "hit_rate_delta_abs": 0.5714285714285712,
+      "hit_rate_pct": 9.56031746031746,
+      "hits": 12046,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.627866822470656,
+      "miss_reduction_sim": 720,
+      "misses": 113954,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 4735,
+      "prefetch_evictions": 49265,
+      "prefetch_reads": 49265,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8008,
+        "misses": 75992,
+        "prefetch_reads": 32850
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 15540
+      },
+      "events": 126000,
+      "evictions": 160788,
+      "extra_reads": 46646,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 7354,
+      "prefetch_evictions": 46646,
+      "prefetch_reads": 46646,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 31106
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 221613,
+      "extra_reads": 107660,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.36984126984127,
+      "hits": 11806,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.41857788164710397,
+      "miss_reduction_sim": 480,
+      "misses": 114194,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18340,
+      "prefetch_evictions": 107419,
+      "prefetch_reads": 107660,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7848,
+        "misses": 76152,
+        "prefetch_reads": 71820
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 211910,
+      "extra_reads": 97990,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.396031746031746,
+      "hits": 11839,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.44735511101034237,
+      "miss_reduction_sim": 513,
+      "misses": 114161,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10010,
+      "prefetch_evictions": 97990,
+      "prefetch_reads": 97990,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7870,
+        "misses": 76130,
+        "prefetch_reads": 65346
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4278,
+        "misses": 37722,
+        "prefetch_reads": 32825
+      },
+      "events": 126000,
+      "evictions": 211522,
+      "extra_reads": 98529,
+      "hit_rate_delta_abs": 1.1428571428571423,
+      "hit_rate_pct": 10.131746031746031,
+      "hits": 12766,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 1.255733644941312,
+      "miss_reduction_sim": 1440,
+      "misses": 113234,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9471,
+      "prefetch_evictions": 98529,
+      "prefetch_reads": 98529,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8488,
+        "misses": 75512,
+        "prefetch_reads": 65704
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 210411,
+      "extra_reads": 96365,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.296031746031746,
+      "hits": 11713,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.33747841707797754,
+      "miss_reduction_sim": 387,
+      "misses": 114287,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11635,
+      "prefetch_evictions": 96365,
+      "prefetch_reads": 96365,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7786,
+        "misses": 76214,
+        "prefetch_reads": 64270
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 16940
+      },
+      "events": 126000,
+      "evictions": 165102,
+      "extra_reads": 50960,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 12040,
+      "prefetch_evictions": 50719,
+      "prefetch_reads": 50960,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 34020
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3874,
+        "misses": 38126,
+        "prefetch_reads": 16143
+      },
+      "events": 126000,
+      "evictions": 162680,
+      "extra_reads": 48475,
+      "hit_rate_delta_abs": 0.1809523809523803,
+      "hit_rate_pct": 9.16984126984127,
+      "hits": 11554,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.19882449378237438,
+      "miss_reduction_sim": 228,
+      "misses": 114446,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 5525,
+      "prefetch_evictions": 48475,
+      "prefetch_reads": 48475,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7680,
+        "misses": 76320,
+        "prefetch_reads": 32332
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4038,
+        "misses": 37962,
+        "prefetch_reads": 16133
+      },
+      "events": 126000,
+      "evictions": 162136,
+      "extra_reads": 48423,
+      "hit_rate_delta_abs": 0.5714285714285712,
+      "hit_rate_pct": 9.56031746031746,
+      "hits": 12046,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.627866822470656,
+      "miss_reduction_sim": 720,
+      "misses": 113954,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 5577,
+      "prefetch_evictions": 48423,
+      "prefetch_reads": 48423,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8008,
+        "misses": 75992,
+        "prefetch_reads": 32290
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 15540
+      },
+      "events": 126000,
+      "evictions": 160788,
+      "extra_reads": 46646,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 7354,
+      "prefetch_evictions": 46646,
+      "prefetch_reads": 46646,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 31106
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 221613,
+      "extra_reads": 107660,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.36984126984127,
+      "hits": 11806,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.41857788164710397,
+      "miss_reduction_sim": 480,
+      "misses": 114194,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18340,
+      "prefetch_evictions": 107419,
+      "prefetch_reads": 107660,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7848,
+        "misses": 76152,
+        "prefetch_reads": 71820
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 211910,
+      "extra_reads": 97990,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.396031746031746,
+      "hits": 11839,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.44735511101034237,
+      "miss_reduction_sim": 513,
+      "misses": 114161,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10010,
+      "prefetch_evictions": 97990,
+      "prefetch_reads": 97990,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7870,
+        "misses": 76130,
+        "prefetch_reads": 65346
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4278,
+        "misses": 37722,
+        "prefetch_reads": 32825
+      },
+      "events": 126000,
+      "evictions": 211522,
+      "extra_reads": 98529,
+      "hit_rate_delta_abs": 1.1428571428571423,
+      "hit_rate_pct": 10.131746031746031,
+      "hits": 12766,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 1.255733644941312,
+      "miss_reduction_sim": 1440,
+      "misses": 113234,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9471,
+      "prefetch_evictions": 98529,
+      "prefetch_reads": 98529,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8488,
+        "misses": 75512,
+        "prefetch_reads": 65704
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 210411,
+      "extra_reads": 96365,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.296031746031746,
+      "hits": 11713,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.33747841707797754,
+      "miss_reduction_sim": 387,
+      "misses": 114287,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11635,
+      "prefetch_evictions": 96365,
+      "prefetch_reads": 96365,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7786,
+        "misses": 76214,
+        "prefetch_reads": 64270
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 16940
+      },
+      "events": 126000,
+      "evictions": 165102,
+      "extra_reads": 50960,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 12040,
+      "prefetch_evictions": 50719,
+      "prefetch_reads": 50960,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 34020
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3874,
+        "misses": 38126,
+        "prefetch_reads": 16143
+      },
+      "events": 126000,
+      "evictions": 162680,
+      "extra_reads": 48475,
+      "hit_rate_delta_abs": 0.1809523809523803,
+      "hit_rate_pct": 9.16984126984127,
+      "hits": 11554,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.19882449378237438,
+      "miss_reduction_sim": 228,
+      "misses": 114446,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 5525,
+      "prefetch_evictions": 48475,
+      "prefetch_reads": 48475,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7680,
+        "misses": 76320,
+        "prefetch_reads": 32332
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4007,
+        "misses": 37993,
+        "prefetch_reads": 16055
+      },
+      "events": 126000,
+      "evictions": 161997,
+      "extra_reads": 48191,
+      "hit_rate_delta_abs": 0.49761904761904674,
+      "hit_rate_pct": 9.486507936507936,
+      "hits": 11953,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.5467673579015295,
+      "miss_reduction_sim": 627,
+      "misses": 114047,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 5809,
+      "prefetch_evictions": 48191,
+      "prefetch_reads": 48191,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7946,
+        "misses": 76054,
+        "prefetch_reads": 32136
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3895,
+        "misses": 38105,
+        "prefetch_reads": 15540
+      },
+      "events": 126000,
+      "evictions": 160788,
+      "extra_reads": 46646,
+      "hit_rate_delta_abs": 0.23095238095238102,
+      "hit_rate_pct": 9.21984126984127,
+      "hits": 11617,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.25376284074855676,
+      "miss_reduction_sim": 291,
+      "misses": 114383,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 7354,
+      "prefetch_evictions": 46646,
+      "prefetch_reads": 46646,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7722,
+        "misses": 76278,
+        "prefetch_reads": 31106
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 221613,
+      "extra_reads": 107660,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.36984126984127,
+      "hits": 11806,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.41857788164710397,
+      "miss_reduction_sim": 480,
+      "misses": 114194,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18340,
+      "prefetch_evictions": 107419,
+      "prefetch_reads": 107660,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7848,
+        "misses": 76152,
+        "prefetch_reads": 71820
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 211910,
+      "extra_reads": 97990,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.396031746031746,
+      "hits": 11839,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.44735511101034237,
+      "miss_reduction_sim": 513,
+      "misses": 114161,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10010,
+      "prefetch_evictions": 97990,
+      "prefetch_reads": 97990,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7870,
+        "misses": 76130,
+        "prefetch_reads": 65346
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 4192,
+        "misses": 37808,
+        "prefetch_reads": 32799
+      },
+      "events": 126000,
+      "evictions": 211698,
+      "extra_reads": 98447,
+      "hit_rate_delta_abs": 0.9380952380952383,
+      "hit_rate_pct": 9.926984126984127,
+      "hits": 12508,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 1.0307480335559935,
+      "miss_reduction_sim": 1182,
+      "misses": 113492,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9553,
+      "prefetch_evictions": 98447,
+      "prefetch_reads": 98447,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8316,
+        "misses": 75684,
+        "prefetch_reads": 65648
+      }
+    },
+    {
+      "budget_mib": 8192,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 210411,
+      "extra_reads": 96365,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.296031746031746,
+      "hits": 11713,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.33747841707797754,
+      "miss_reduction_sim": 387,
+      "misses": 114287,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11635,
+      "prefetch_evictions": 96365,
+      "prefetch_reads": 96365,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7786,
+        "misses": 76214,
+        "prefetch_reads": 64270
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3798,
+        "misses": 38202,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 113419,
+      "extra_reads": 0,
+      "hit_rate_pct": 9.042857142857143,
+      "hits": 11394,
+      "lookahead": 1,
+      "m": 0,
+      "misses": 114606,
+      "predictor": "baseline",
+      "prefetch_cache_hits": 0,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7596,
+        "misses": 76404,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8631,
+        "misses": 33369,
+        "prefetch_reads": 12503
+      },
+      "events": 126000,
+      "evictions": 146231,
+      "extra_reads": 42385,
+      "hit_rate_delta_abs": 7.597619047619046,
+      "hit_rate_pct": 16.64047619047619,
+      "hits": 20967,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 8.352965813308204,
+      "miss_reduction_sim": 9573,
+      "misses": 105033,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 20615,
+      "prefetch_evictions": 41659,
+      "prefetch_reads": 42385,
+      "recent_window": null,
+      "upgate": {
+        "hits": 12336,
+        "misses": 71664,
+        "prefetch_reads": 29882
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8773,
+        "misses": 33227,
+        "prefetch_reads": 4258
+      },
+      "events": 126000,
+      "evictions": 130023,
+      "extra_reads": 25779,
+      "hit_rate_delta_abs": 7.281746031746033,
+      "hit_rate_pct": 16.324603174603176,
+      "hits": 20569,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 8.005689056419385,
+      "miss_reduction_sim": 9175,
+      "misses": 105431,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 28221,
+      "prefetch_evictions": 25779,
+      "prefetch_reads": 25779,
+      "recent_window": null,
+      "upgate": {
+        "hits": 11796,
+        "misses": 72204,
+        "prefetch_reads": 21521
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 15542,
+        "misses": 26458,
+        "prefetch_reads": 10680
+      },
+      "events": 126000,
+      "evictions": 129379,
+      "extra_reads": 38096,
+      "hit_rate_delta_abs": 17.56825396825397,
+      "hit_rate_pct": 26.61111111111111,
+      "hits": 33530,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 19.3148700766103,
+      "miss_reduction_sim": 22136,
+      "misses": 92470,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 15904,
+      "prefetch_evictions": 38096,
+      "prefetch_reads": 38096,
+      "recent_window": null,
+      "upgate": {
+        "hits": 17988,
+        "misses": 66012,
+        "prefetch_reads": 27416
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8843,
+        "misses": 33157,
+        "prefetch_reads": 6699
+      },
+      "events": 126000,
+      "evictions": 133121,
+      "extra_reads": 29131,
+      "hit_rate_delta_abs": 7.4833333333333325,
+      "hit_rate_pct": 16.526190476190475,
+      "hits": 20823,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 8.227317941469034,
+      "miss_reduction_sim": 9429,
+      "misses": 105177,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 24869,
+      "prefetch_evictions": 29131,
+      "prefetch_reads": 29131,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 11980,
+        "misses": 72020,
+        "prefetch_reads": 22432
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 220459,
+      "extra_reads": 107520,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.423809523809524,
+      "hits": 11874,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.4188262394639024,
+      "miss_reduction_sim": 480,
+      "misses": 114126,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18480,
+      "prefetch_evictions": 106333,
+      "prefetch_reads": 107520,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7916,
+        "misses": 76084,
+        "prefetch_reads": 71680
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 210838,
+      "extra_reads": 97932,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.45,
+      "hits": 11907,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.4476205434270457,
+      "miss_reduction_sim": 513,
+      "misses": 114093,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10068,
+      "prefetch_evictions": 97932,
+      "prefetch_reads": 97932,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7938,
+        "misses": 76062,
+        "prefetch_reads": 65288
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 4278,
+        "misses": 37722,
+        "prefetch_reads": 32825
+      },
+      "events": 126000,
+      "evictions": 210454,
+      "extra_reads": 98475,
+      "hit_rate_delta_abs": 1.1428571428571423,
+      "hit_rate_pct": 10.185714285714285,
+      "hits": 12834,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 1.2564787183917072,
+      "miss_reduction_sim": 1440,
+      "misses": 113166,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9525,
+      "prefetch_evictions": 98475,
+      "prefetch_reads": 98475,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8556,
+        "misses": 75444,
+        "prefetch_reads": 65650
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 209317,
+      "extra_reads": 96285,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.35,
+      "hits": 11781,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.3376786555677713,
+      "miss_reduction_sim": 387,
+      "misses": 114219,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11715,
+      "prefetch_evictions": 96285,
+      "prefetch_reads": 96285,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7854,
+        "misses": 76146,
+        "prefetch_reads": 64190
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8631,
+        "misses": 33369,
+        "prefetch_reads": 12503
+      },
+      "events": 126000,
+      "evictions": 146231,
+      "extra_reads": 42385,
+      "hit_rate_delta_abs": 7.597619047619046,
+      "hit_rate_pct": 16.64047619047619,
+      "hits": 20967,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 8.352965813308204,
+      "miss_reduction_sim": 9573,
+      "misses": 105033,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 20615,
+      "prefetch_evictions": 41659,
+      "prefetch_reads": 42385,
+      "recent_window": null,
+      "upgate": {
+        "hits": 12336,
+        "misses": 71664,
+        "prefetch_reads": 29882
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8773,
+        "misses": 33227,
+        "prefetch_reads": 4258
+      },
+      "events": 126000,
+      "evictions": 130023,
+      "extra_reads": 25779,
+      "hit_rate_delta_abs": 7.281746031746033,
+      "hit_rate_pct": 16.324603174603176,
+      "hits": 20569,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 8.005689056419385,
+      "miss_reduction_sim": 9175,
+      "misses": 105431,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 28221,
+      "prefetch_evictions": 25779,
+      "prefetch_reads": 25779,
+      "recent_window": null,
+      "upgate": {
+        "hits": 11796,
+        "misses": 72204,
+        "prefetch_reads": 21521
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 15377,
+        "misses": 26623,
+        "prefetch_reads": 9657
+      },
+      "events": 126000,
+      "evictions": 126811,
+      "extra_reads": 35631,
+      "hit_rate_delta_abs": 17.65,
+      "hit_rate_pct": 26.692857142857143,
+      "hits": 33633,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 19.40474320716193,
+      "miss_reduction_sim": 22239,
+      "misses": 92367,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 18369,
+      "prefetch_evictions": 35631,
+      "prefetch_reads": 35631,
+      "recent_window": null,
+      "upgate": {
+        "hits": 18256,
+        "misses": 65744,
+        "prefetch_reads": 25974
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8843,
+        "misses": 33157,
+        "prefetch_reads": 6699
+      },
+      "events": 126000,
+      "evictions": 133121,
+      "extra_reads": 29131,
+      "hit_rate_delta_abs": 7.4833333333333325,
+      "hit_rate_pct": 16.526190476190475,
+      "hits": 20823,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 8.227317941469034,
+      "miss_reduction_sim": 9429,
+      "misses": 105177,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 24869,
+      "prefetch_evictions": 29131,
+      "prefetch_reads": 29131,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 11980,
+        "misses": 72020,
+        "prefetch_reads": 22432
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 220459,
+      "extra_reads": 107520,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.423809523809524,
+      "hits": 11874,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.4188262394639024,
+      "miss_reduction_sim": 480,
+      "misses": 114126,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18480,
+      "prefetch_evictions": 106333,
+      "prefetch_reads": 107520,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7916,
+        "misses": 76084,
+        "prefetch_reads": 71680
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 210838,
+      "extra_reads": 97932,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.45,
+      "hits": 11907,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.4476205434270457,
+      "miss_reduction_sim": 513,
+      "misses": 114093,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10068,
+      "prefetch_evictions": 97932,
+      "prefetch_reads": 97932,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7938,
+        "misses": 76062,
+        "prefetch_reads": 65288
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 4278,
+        "misses": 37722,
+        "prefetch_reads": 32825
+      },
+      "events": 126000,
+      "evictions": 210454,
+      "extra_reads": 98475,
+      "hit_rate_delta_abs": 1.1428571428571423,
+      "hit_rate_pct": 10.185714285714285,
+      "hits": 12834,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 1.2564787183917072,
+      "miss_reduction_sim": 1440,
+      "misses": 113166,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9525,
+      "prefetch_evictions": 98475,
+      "prefetch_reads": 98475,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8556,
+        "misses": 75444,
+        "prefetch_reads": 65650
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 209317,
+      "extra_reads": 96285,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.35,
+      "hits": 11781,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.3376786555677713,
+      "miss_reduction_sim": 387,
+      "misses": 114219,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11715,
+      "prefetch_evictions": 96285,
+      "prefetch_reads": 96285,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7854,
+        "misses": 76146,
+        "prefetch_reads": 64190
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8631,
+        "misses": 33369,
+        "prefetch_reads": 12503
+      },
+      "events": 126000,
+      "evictions": 146231,
+      "extra_reads": 42385,
+      "hit_rate_delta_abs": 7.597619047619046,
+      "hit_rate_pct": 16.64047619047619,
+      "hits": 20967,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 8.352965813308204,
+      "miss_reduction_sim": 9573,
+      "misses": 105033,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 20615,
+      "prefetch_evictions": 41659,
+      "prefetch_reads": 42385,
+      "recent_window": null,
+      "upgate": {
+        "hits": 12336,
+        "misses": 71664,
+        "prefetch_reads": 29882
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8773,
+        "misses": 33227,
+        "prefetch_reads": 4258
+      },
+      "events": 126000,
+      "evictions": 130023,
+      "extra_reads": 25779,
+      "hit_rate_delta_abs": 7.281746031746033,
+      "hit_rate_pct": 16.324603174603176,
+      "hits": 20569,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 8.005689056419385,
+      "miss_reduction_sim": 9175,
+      "misses": 105431,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 28221,
+      "prefetch_evictions": 25779,
+      "prefetch_reads": 25779,
+      "recent_window": null,
+      "upgate": {
+        "hits": 11796,
+        "misses": 72204,
+        "prefetch_reads": 21521
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 14097,
+        "misses": 27903,
+        "prefetch_reads": 9670
+      },
+      "events": 126000,
+      "evictions": 129214,
+      "extra_reads": 35451,
+      "hit_rate_delta_abs": 15.6,
+      "hit_rate_pct": 24.642857142857142,
+      "hits": 31050,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 17.150934506046802,
+      "miss_reduction_sim": 19656,
+      "misses": 94950,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 18549,
+      "prefetch_evictions": 35451,
+      "prefetch_reads": 35451,
+      "recent_window": null,
+      "upgate": {
+        "hits": 16953,
+        "misses": 67047,
+        "prefetch_reads": 25781
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 8843,
+        "misses": 33157,
+        "prefetch_reads": 6699
+      },
+      "events": 126000,
+      "evictions": 133121,
+      "extra_reads": 29131,
+      "hit_rate_delta_abs": 7.4833333333333325,
+      "hit_rate_pct": 16.526190476190475,
+      "hits": 20823,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 8.227317941469034,
+      "miss_reduction_sim": 9429,
+      "misses": 105177,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 24869,
+      "prefetch_evictions": 29131,
+      "prefetch_reads": 29131,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 11980,
+        "misses": 72020,
+        "prefetch_reads": 22432
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3958,
+        "misses": 38042,
+        "prefetch_reads": 35840
+      },
+      "events": 126000,
+      "evictions": 220459,
+      "extra_reads": 107520,
+      "hit_rate_delta_abs": 0.3809523809523814,
+      "hit_rate_pct": 9.423809523809524,
+      "hits": 11874,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.4188262394639024,
+      "miss_reduction_sim": 480,
+      "misses": 114126,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 18480,
+      "prefetch_evictions": 106333,
+      "prefetch_reads": 107520,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7916,
+        "misses": 76084,
+        "prefetch_reads": 71680
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3969,
+        "misses": 38031,
+        "prefetch_reads": 32644
+      },
+      "events": 126000,
+      "evictions": 210838,
+      "extra_reads": 97932,
+      "hit_rate_delta_abs": 0.4071428571428566,
+      "hit_rate_pct": 9.45,
+      "hits": 11907,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.4476205434270457,
+      "miss_reduction_sim": 513,
+      "misses": 114093,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 10068,
+      "prefetch_evictions": 97932,
+      "prefetch_reads": 97932,
+      "recent_window": null,
+      "upgate": {
+        "hits": 7938,
+        "misses": 76062,
+        "prefetch_reads": 65288
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 4192,
+        "misses": 37808,
+        "prefetch_reads": 32799
+      },
+      "events": 126000,
+      "evictions": 210634,
+      "extra_reads": 98397,
+      "hit_rate_delta_abs": 0.9380952380952383,
+      "hit_rate_pct": 9.980952380952381,
+      "hits": 12576,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 1.0313596146798596,
+      "miss_reduction_sim": 1182,
+      "misses": 113424,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 9603,
+      "prefetch_evictions": 98397,
+      "prefetch_reads": 98397,
+      "recent_window": null,
+      "upgate": {
+        "hits": 8384,
+        "misses": 75616,
+        "prefetch_reads": 65598
+      }
+    },
+    {
+      "budget_mib": 12288,
+      "down": {
+        "hits": 3927,
+        "misses": 38073,
+        "prefetch_reads": 32095
+      },
+      "events": 126000,
+      "evictions": 209317,
+      "extra_reads": 96285,
+      "hit_rate_delta_abs": 0.30714285714285694,
+      "hit_rate_pct": 9.35,
+      "hits": 11781,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.3376786555677713,
+      "miss_reduction_sim": 387,
+      "misses": 114219,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 11715,
+      "prefetch_evictions": 96285,
+      "prefetch_reads": 96285,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 7854,
+        "misses": 76146,
+        "prefetch_reads": 64190
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 19248,
+        "misses": 22752,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 95472,
+      "extra_reads": 0,
+      "hit_rate_pct": 22.891269841269843,
+      "hits": 28843,
+      "lookahead": 1,
+      "m": 0,
+      "misses": 97157,
+      "predictor": "baseline",
+      "prefetch_cache_hits": 0,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 9595,
+        "misses": 74405,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 10622,
+        "misses": 31378,
+        "prefetch_reads": 10020
+      },
+      "events": 126000,
+      "evictions": 127832,
+      "extra_reads": 33029,
+      "hit_rate_delta_abs": 0.5309523809523782,
+      "hit_rate_pct": 23.42222222222222,
+      "hits": 29512,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.6885762219912102,
+      "miss_reduction_sim": 669,
+      "misses": 96488,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 29971,
+      "prefetch_evictions": 32303,
+      "prefetch_reads": 33029,
+      "recent_window": null,
+      "upgate": {
+        "hits": 18890,
+        "misses": 65110,
+        "prefetch_reads": 23009
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16735,
+        "misses": 25265,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 89649,
+      "extra_reads": 2603,
+      "hit_rate_delta_abs": 6.687301587301587,
+      "hit_rate_pct": 29.57857142857143,
+      "hits": 37269,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 8.672560906573896,
+      "miss_reduction_sim": 8426,
+      "misses": 88731,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 51397,
+      "prefetch_evictions": 2603,
+      "prefetch_reads": 2603,
+      "recent_window": null,
+      "upgate": {
+        "hits": 20534,
+        "misses": 63466,
+        "prefetch_reads": 2603
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 26639,
+        "misses": 15361,
+        "prefetch_reads": 9074
+      },
+      "events": 126000,
+      "evictions": 88873,
+      "extra_reads": 28284,
+      "hit_rate_delta_abs": 27.684920634920633,
+      "hit_rate_pct": 50.576190476190476,
+      "hits": 63726,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 35.90374342558951,
+      "miss_reduction_sim": 34883,
+      "misses": 62274,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 25716,
+      "prefetch_evictions": 28164,
+      "prefetch_reads": 28284,
+      "recent_window": null,
+      "upgate": {
+        "hits": 37087,
+        "misses": 46913,
+        "prefetch_reads": 19210
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 15403,
+        "misses": 26597,
+        "prefetch_reads": 2632
+      },
+      "events": 126000,
+      "evictions": 100861,
+      "extra_reads": 12429,
+      "hit_rate_delta_abs": 5.587301587301585,
+      "hit_rate_pct": 28.478571428571428,
+      "hits": 35883,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 7.2460038906100435,
+      "miss_reduction_sim": 7040,
+      "misses": 90117,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 41571,
+      "prefetch_evictions": 12429,
+      "prefetch_reads": 12429,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 20480,
+        "misses": 63520,
+        "prefetch_reads": 9797
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 13895,
+        "misses": 28105,
+        "prefetch_reads": 25992
+      },
+      "events": 126000,
+      "evictions": 182938,
+      "extra_reads": 85911,
+      "hit_rate_delta_abs": -1.2341269841269842,
+      "hit_rate_pct": 21.65714285714286,
+      "hits": 27288,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": -1.6005022798151445,
+      "miss_reduction_sim": -1555,
+      "misses": 98712,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 40089,
+      "prefetch_evictions": 84375,
+      "prefetch_reads": 85911,
+      "recent_window": null,
+      "upgate": {
+        "hits": 13393,
+        "misses": 70607,
+        "prefetch_reads": 59919
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 19283,
+        "misses": 22717,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 147665,
+      "extra_reads": 52211,
+      "hit_rate_delta_abs": 0.014285714285712459,
+      "hit_rate_pct": 22.905555555555555,
+      "hits": 28861,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.01852671449303704,
+      "miss_reduction_sim": 18,
+      "misses": 97139,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 55789,
+      "prefetch_evictions": 52211,
+      "prefetch_reads": 52211,
+      "recent_window": null,
+      "upgate": {
+        "hits": 9578,
+        "misses": 74422,
+        "prefetch_reads": 52211
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 37337,
+        "misses": 4663,
+        "prefetch_reads": 18260
+      },
+      "events": 126000,
+      "evictions": 152382,
+      "extra_reads": 79358,
+      "hit_rate_delta_abs": 17.815873015873013,
+      "hit_rate_pct": 40.707142857142856,
+      "hits": 51291,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 23.104871496649753,
+      "miss_reduction_sim": 22448,
+      "misses": 74709,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 28642,
+      "prefetch_evictions": 79238,
+      "prefetch_reads": 79358,
+      "recent_window": null,
+      "upgate": {
+        "hits": 13954,
+        "misses": 70046,
+        "prefetch_reads": 61098
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16504,
+        "misses": 25496,
+        "prefetch_reads": 13431
+      },
+      "events": 126000,
+      "evictions": 167772,
+      "extra_reads": 69462,
+      "hit_rate_delta_abs": -2.2523809523809533,
+      "hit_rate_pct": 20.63888888888889,
+      "hits": 26005,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": -2.921045318402174,
+      "miss_reduction_sim": -2838,
+      "misses": 99995,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 38538,
+      "prefetch_evictions": 69462,
+      "prefetch_reads": 69462,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 9501,
+        "misses": 74499,
+        "prefetch_reads": 56031
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 10622,
+        "misses": 31378,
+        "prefetch_reads": 10020
+      },
+      "events": 126000,
+      "evictions": 127832,
+      "extra_reads": 33029,
+      "hit_rate_delta_abs": 0.5309523809523782,
+      "hit_rate_pct": 23.42222222222222,
+      "hits": 29512,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.6885762219912102,
+      "miss_reduction_sim": 669,
+      "misses": 96488,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 29971,
+      "prefetch_evictions": 32303,
+      "prefetch_reads": 33029,
+      "recent_window": null,
+      "upgate": {
+        "hits": 18890,
+        "misses": 65110,
+        "prefetch_reads": 23009
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16735,
+        "misses": 25265,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 89649,
+      "extra_reads": 2603,
+      "hit_rate_delta_abs": 6.687301587301587,
+      "hit_rate_pct": 29.57857142857143,
+      "hits": 37269,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 8.672560906573896,
+      "miss_reduction_sim": 8426,
+      "misses": 88731,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 51397,
+      "prefetch_evictions": 2603,
+      "prefetch_reads": 2603,
+      "recent_window": null,
+      "upgate": {
+        "hits": 20534,
+        "misses": 63466,
+        "prefetch_reads": 2603
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 26060,
+        "misses": 15940,
+        "prefetch_reads": 7788
+      },
+      "events": 126000,
+      "evictions": 86289,
+      "extra_reads": 24640,
+      "hit_rate_delta_abs": 26.84365079365079,
+      "hit_rate_pct": 49.734920634920634,
+      "hits": 62666,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 34.812725794332884,
+      "miss_reduction_sim": 33823,
+      "misses": 63334,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 29360,
+      "prefetch_evictions": 24535,
+      "prefetch_reads": 24640,
+      "recent_window": null,
+      "upgate": {
+        "hits": 36606,
+        "misses": 47394,
+        "prefetch_reads": 16852
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 15403,
+        "misses": 26597,
+        "prefetch_reads": 2632
+      },
+      "events": 126000,
+      "evictions": 100861,
+      "extra_reads": 12429,
+      "hit_rate_delta_abs": 5.587301587301585,
+      "hit_rate_pct": 28.478571428571428,
+      "hits": 35883,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 7.2460038906100435,
+      "miss_reduction_sim": 7040,
+      "misses": 90117,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 41571,
+      "prefetch_evictions": 12429,
+      "prefetch_reads": 12429,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 20480,
+        "misses": 63520,
+        "prefetch_reads": 9797
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 13895,
+        "misses": 28105,
+        "prefetch_reads": 25992
+      },
+      "events": 126000,
+      "evictions": 182938,
+      "extra_reads": 85911,
+      "hit_rate_delta_abs": -1.2341269841269842,
+      "hit_rate_pct": 21.65714285714286,
+      "hits": 27288,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": -1.6005022798151445,
+      "miss_reduction_sim": -1555,
+      "misses": 98712,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 40089,
+      "prefetch_evictions": 84375,
+      "prefetch_reads": 85911,
+      "recent_window": null,
+      "upgate": {
+        "hits": 13393,
+        "misses": 70607,
+        "prefetch_reads": 59919
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 19283,
+        "misses": 22717,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 147665,
+      "extra_reads": 52211,
+      "hit_rate_delta_abs": 0.014285714285712459,
+      "hit_rate_pct": 22.905555555555555,
+      "hits": 28861,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.01852671449303704,
+      "miss_reduction_sim": 18,
+      "misses": 97139,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 55789,
+      "prefetch_evictions": 52211,
+      "prefetch_reads": 52211,
+      "recent_window": null,
+      "upgate": {
+        "hits": 9578,
+        "misses": 74422,
+        "prefetch_reads": 52211
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 37337,
+        "misses": 4663,
+        "prefetch_reads": 18260
+      },
+      "events": 126000,
+      "evictions": 152382,
+      "extra_reads": 79358,
+      "hit_rate_delta_abs": 17.815873015873013,
+      "hit_rate_pct": 40.707142857142856,
+      "hits": 51291,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 23.104871496649753,
+      "miss_reduction_sim": 22448,
+      "misses": 74709,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 28642,
+      "prefetch_evictions": 79238,
+      "prefetch_reads": 79358,
+      "recent_window": null,
+      "upgate": {
+        "hits": 13954,
+        "misses": 70046,
+        "prefetch_reads": 61098
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16504,
+        "misses": 25496,
+        "prefetch_reads": 13431
+      },
+      "events": 126000,
+      "evictions": 167772,
+      "extra_reads": 69462,
+      "hit_rate_delta_abs": -2.2523809523809533,
+      "hit_rate_pct": 20.63888888888889,
+      "hits": 26005,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": -2.921045318402174,
+      "miss_reduction_sim": -2838,
+      "misses": 99995,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 38538,
+      "prefetch_evictions": 69462,
+      "prefetch_reads": 69462,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 9501,
+        "misses": 74499,
+        "prefetch_reads": 56031
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 10622,
+        "misses": 31378,
+        "prefetch_reads": 10020
+      },
+      "events": 126000,
+      "evictions": 127832,
+      "extra_reads": 33029,
+      "hit_rate_delta_abs": 0.5309523809523782,
+      "hit_rate_pct": 23.42222222222222,
+      "hits": 29512,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.6885762219912102,
+      "miss_reduction_sim": 669,
+      "misses": 96488,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 29971,
+      "prefetch_evictions": 32303,
+      "prefetch_reads": 33029,
+      "recent_window": null,
+      "upgate": {
+        "hits": 18890,
+        "misses": 65110,
+        "prefetch_reads": 23009
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16735,
+        "misses": 25265,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 89649,
+      "extra_reads": 2603,
+      "hit_rate_delta_abs": 6.687301587301587,
+      "hit_rate_pct": 29.57857142857143,
+      "hits": 37269,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 8.672560906573896,
+      "miss_reduction_sim": 8426,
+      "misses": 88731,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 51397,
+      "prefetch_evictions": 2603,
+      "prefetch_reads": 2603,
+      "recent_window": null,
+      "upgate": {
+        "hits": 20534,
+        "misses": 63466,
+        "prefetch_reads": 2603
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 24490,
+        "misses": 17510,
+        "prefetch_reads": 6927
+      },
+      "events": 126000,
+      "evictions": 90086,
+      "extra_reads": 23832,
+      "hit_rate_delta_abs": 23.188888888888886,
+      "hit_rate_pct": 46.08015873015873,
+      "hits": 58061,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 30.07297466986424,
+      "miss_reduction_sim": 29218,
+      "misses": 67939,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 30168,
+      "prefetch_evictions": 23713,
+      "prefetch_reads": 23832,
+      "recent_window": null,
+      "upgate": {
+        "hits": 33571,
+        "misses": 50429,
+        "prefetch_reads": 16905
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 15403,
+        "misses": 26597,
+        "prefetch_reads": 2632
+      },
+      "events": 126000,
+      "evictions": 100861,
+      "extra_reads": 12429,
+      "hit_rate_delta_abs": 5.587301587301585,
+      "hit_rate_pct": 28.478571428571428,
+      "hits": 35883,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 7.2460038906100435,
+      "miss_reduction_sim": 7040,
+      "misses": 90117,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 41571,
+      "prefetch_evictions": 12429,
+      "prefetch_reads": 12429,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 20480,
+        "misses": 63520,
+        "prefetch_reads": 9797
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 13895,
+        "misses": 28105,
+        "prefetch_reads": 25992
+      },
+      "events": 126000,
+      "evictions": 182938,
+      "extra_reads": 85911,
+      "hit_rate_delta_abs": -1.2341269841269842,
+      "hit_rate_pct": 21.65714285714286,
+      "hits": 27288,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": -1.6005022798151445,
+      "miss_reduction_sim": -1555,
+      "misses": 98712,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 40089,
+      "prefetch_evictions": 84375,
+      "prefetch_reads": 85911,
+      "recent_window": null,
+      "upgate": {
+        "hits": 13393,
+        "misses": 70607,
+        "prefetch_reads": 59919
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 19283,
+        "misses": 22717,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 147665,
+      "extra_reads": 52211,
+      "hit_rate_delta_abs": 0.014285714285712459,
+      "hit_rate_pct": 22.905555555555555,
+      "hits": 28861,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.01852671449303704,
+      "miss_reduction_sim": 18,
+      "misses": 97139,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 55789,
+      "prefetch_evictions": 52211,
+      "prefetch_reads": 52211,
+      "recent_window": null,
+      "upgate": {
+        "hits": 9578,
+        "misses": 74422,
+        "prefetch_reads": 52211
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 31575,
+        "misses": 10425,
+        "prefetch_reads": 18965
+      },
+      "events": 126000,
+      "evictions": 161477,
+      "extra_reads": 80846,
+      "hit_rate_delta_abs": 11.778571428571428,
+      "hit_rate_pct": 34.66984126984127,
+      "hits": 43684,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 15.275276099509043,
+      "miss_reduction_sim": 14841,
+      "misses": 82316,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 27154,
+      "prefetch_evictions": 80726,
+      "prefetch_reads": 80846,
+      "recent_window": null,
+      "upgate": {
+        "hits": 12109,
+        "misses": 71891,
+        "prefetch_reads": 61881
+      }
+    },
+    {
+      "budget_mib": 14336,
+      "down": {
+        "hits": 16504,
+        "misses": 25496,
+        "prefetch_reads": 13431
+      },
+      "events": 126000,
+      "evictions": 167772,
+      "extra_reads": 69462,
+      "hit_rate_delta_abs": -2.2523809523809533,
+      "hit_rate_pct": 20.63888888888889,
+      "hits": 26005,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": -2.921045318402174,
+      "miss_reduction_sim": -2838,
+      "misses": 99995,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 38538,
+      "prefetch_evictions": 69462,
+      "prefetch_reads": 69462,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 9501,
+        "misses": 74499,
+        "prefetch_reads": 56031
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23085,
+        "misses": 18915,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55278,
+      "extra_reads": 0,
+      "hit_rate_pct": 53.605555555555554,
+      "hits": 67543,
+      "lookahead": 1,
+      "m": 0,
+      "misses": 58457,
+      "predictor": "baseline",
+      "prefetch_cache_hits": 0,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44458,
+        "misses": 39542,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23949,
+        "misses": 18051,
+        "prefetch_reads": 242
+      },
+      "events": 126000,
+      "evictions": 53900,
+      "extra_reads": 726,
+      "hit_rate_delta_abs": 1.669841269841271,
+      "hit_rate_pct": 55.275396825396825,
+      "hits": 69647,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 3.599226782079135,
+      "miss_reduction_sim": 2104,
+      "misses": 56353,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 62274,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 726,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45698,
+        "misses": 38302,
+        "prefetch_reads": 484
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23159,
+        "misses": 18841,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55416,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": -0.10952380952380736,
+      "hit_rate_pct": 53.49603174603175,
+      "hits": 67405,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": -0.2360709581401714,
+      "miss_reduction_sim": -138,
+      "misses": 58595,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44246,
+        "misses": 39754,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 30246,
+        "misses": 11754,
+        "prefetch_reads": 7148
+      },
+      "events": 126000,
+      "evictions": 55372,
+      "extra_reads": 22211,
+      "hit_rate_delta_abs": 17.55317460317461,
+      "hit_rate_pct": 71.15873015873017,
+      "hits": 89660,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 37.83464768975486,
+      "miss_reduction_sim": 22117,
+      "misses": 36340,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 31789,
+      "prefetch_evictions": 21403,
+      "prefetch_reads": 22211,
+      "recent_window": null,
+      "upgate": {
+        "hits": 59414,
+        "misses": 24586,
+        "prefetch_reads": 15063
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23309,
+        "misses": 18691,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 54828,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.3571428571428612,
+      "hit_rate_pct": 53.962698412698415,
+      "hits": 67993,
+      "lookahead": 1,
+      "m": 4,
+      "miss_reduction_pct": 0.7697966026309937,
+      "miss_reduction_sim": 450,
+      "misses": 58007,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44684,
+        "misses": 39316,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 24343,
+        "misses": 17657,
+        "prefetch_reads": 512
+      },
+      "events": 126000,
+      "evictions": 56059,
+      "extra_reads": 3198,
+      "hit_rate_delta_abs": 1.9182539682539712,
+      "hit_rate_pct": 55.523809523809526,
+      "hits": 69960,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 4.134663085686915,
+      "miss_reduction_sim": 2417,
+      "misses": 56040,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 122802,
+      "prefetch_evictions": 1662,
+      "prefetch_reads": 3198,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45617,
+        "misses": 38383,
+        "prefetch_reads": 2686
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23088,
+        "misses": 18912,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55263,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.011904761904766303,
+      "hit_rate_pct": 53.61746031746032,
+      "hits": 67558,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 0.025659886754366458,
+      "miss_reduction_sim": 15,
+      "misses": 58442,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 108000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44470,
+        "misses": 39530,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 37726,
+        "misses": 4274,
+        "prefetch_reads": 14639
+      },
+      "events": 126000,
+      "evictions": 55303,
+      "extra_reads": 45472,
+      "hit_rate_delta_abs": 36.06904761904762,
+      "hit_rate_pct": 89.67460317460318,
+      "hits": 112990,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": 77.7443248883795,
+      "miss_reduction_sim": 45447,
+      "misses": 13010,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 62528,
+      "prefetch_evictions": 43877,
+      "prefetch_reads": 45472,
+      "recent_window": null,
+      "upgate": {
+        "hits": 75264,
+        "misses": 8736,
+        "prefetch_reads": 30833
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23261,
+        "misses": 18739,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55491,
+      "extra_reads": 100,
+      "hit_rate_delta_abs": -0.08968253968253492,
+      "hit_rate_pct": 53.51587301587302,
+      "hits": 67430,
+      "lookahead": 1,
+      "m": 8,
+      "miss_reduction_pct": -0.19330448021622731,
+      "miss_reduction_sim": -113,
+      "misses": 58570,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 107900,
+      "prefetch_evictions": 100,
+      "prefetch_reads": 100,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44169,
+        "misses": 39831,
+        "prefetch_reads": 100
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23949,
+        "misses": 18051,
+        "prefetch_reads": 242
+      },
+      "events": 126000,
+      "evictions": 53900,
+      "extra_reads": 726,
+      "hit_rate_delta_abs": 1.669841269841271,
+      "hit_rate_pct": 55.275396825396825,
+      "hits": 69647,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 3.599226782079135,
+      "miss_reduction_sim": 2104,
+      "misses": 56353,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 62274,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 726,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45698,
+        "misses": 38302,
+        "prefetch_reads": 484
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23159,
+        "misses": 18841,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55416,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": -0.10952380952380736,
+      "hit_rate_pct": 53.49603174603175,
+      "hits": 67405,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": -0.2360709581401714,
+      "miss_reduction_sim": -138,
+      "misses": 58595,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44246,
+        "misses": 39754,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 29208,
+        "misses": 12792,
+        "prefetch_reads": 6099
+      },
+      "events": 126000,
+      "evictions": 55282,
+      "extra_reads": 18999,
+      "hit_rate_delta_abs": 15.075396825396822,
+      "hit_rate_pct": 68.68095238095238,
+      "hits": 86538,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 32.49396992661272,
+      "miss_reduction_sim": 18995,
+      "misses": 39462,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 35001,
+      "prefetch_evictions": 18383,
+      "prefetch_reads": 18999,
+      "recent_window": null,
+      "upgate": {
+        "hits": 57330,
+        "misses": 26670,
+        "prefetch_reads": 12900
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23309,
+        "misses": 18691,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 54828,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.3571428571428612,
+      "hit_rate_pct": 53.962698412698415,
+      "hits": 67993,
+      "lookahead": 2,
+      "m": 4,
+      "miss_reduction_pct": 0.7697966026309937,
+      "miss_reduction_sim": 450,
+      "misses": 58007,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44684,
+        "misses": 39316,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 24343,
+        "misses": 17657,
+        "prefetch_reads": 512
+      },
+      "events": 126000,
+      "evictions": 56059,
+      "extra_reads": 3198,
+      "hit_rate_delta_abs": 1.9182539682539712,
+      "hit_rate_pct": 55.523809523809526,
+      "hits": 69960,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 4.134663085686915,
+      "miss_reduction_sim": 2417,
+      "misses": 56040,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 122802,
+      "prefetch_evictions": 1662,
+      "prefetch_reads": 3198,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45617,
+        "misses": 38383,
+        "prefetch_reads": 2686
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23088,
+        "misses": 18912,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55263,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.011904761904766303,
+      "hit_rate_pct": 53.61746031746032,
+      "hits": 67558,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 0.025659886754366458,
+      "miss_reduction_sim": 15,
+      "misses": 58442,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 108000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44470,
+        "misses": 39530,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 37726,
+        "misses": 4274,
+        "prefetch_reads": 14639
+      },
+      "events": 126000,
+      "evictions": 55303,
+      "extra_reads": 45472,
+      "hit_rate_delta_abs": 36.06904761904762,
+      "hit_rate_pct": 89.67460317460318,
+      "hits": 112990,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": 77.7443248883795,
+      "miss_reduction_sim": 45447,
+      "misses": 13010,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 62528,
+      "prefetch_evictions": 43877,
+      "prefetch_reads": 45472,
+      "recent_window": null,
+      "upgate": {
+        "hits": 75264,
+        "misses": 8736,
+        "prefetch_reads": 30833
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23261,
+        "misses": 18739,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55491,
+      "extra_reads": 100,
+      "hit_rate_delta_abs": -0.08968253968253492,
+      "hit_rate_pct": 53.51587301587302,
+      "hits": 67430,
+      "lookahead": 2,
+      "m": 8,
+      "miss_reduction_pct": -0.19330448021622731,
+      "miss_reduction_sim": -113,
+      "misses": 58570,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 107900,
+      "prefetch_evictions": 100,
+      "prefetch_reads": 100,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44169,
+        "misses": 39831,
+        "prefetch_reads": 100
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23949,
+        "misses": 18051,
+        "prefetch_reads": 242
+      },
+      "events": 126000,
+      "evictions": 53900,
+      "extra_reads": 726,
+      "hit_rate_delta_abs": 1.669841269841271,
+      "hit_rate_pct": 55.275396825396825,
+      "hits": 69647,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 3.599226782079135,
+      "miss_reduction_sim": 2104,
+      "misses": 56353,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 62274,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 726,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45698,
+        "misses": 38302,
+        "prefetch_reads": 484
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23159,
+        "misses": 18841,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55416,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": -0.10952380952380736,
+      "hit_rate_pct": 53.49603174603175,
+      "hits": 67405,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": -0.2360709581401714,
+      "miss_reduction_sim": -138,
+      "misses": 58595,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44246,
+        "misses": 39754,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 28123,
+        "misses": 13877,
+        "prefetch_reads": 4986
+      },
+      "events": 126000,
+      "evictions": 55255,
+      "extra_reads": 15539,
+      "hit_rate_delta_abs": 12.350793650793648,
+      "hit_rate_pct": 65.9563492063492,
+      "hits": 83105,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 26.621277178096722,
+      "miss_reduction_sim": 15562,
+      "misses": 42895,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 38461,
+      "prefetch_evictions": 14926,
+      "prefetch_reads": 15539,
+      "recent_window": null,
+      "upgate": {
+        "hits": 54982,
+        "misses": 29018,
+        "prefetch_reads": 10553
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23309,
+        "misses": 18691,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 54828,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.3571428571428612,
+      "hit_rate_pct": 53.962698412698415,
+      "hits": 67993,
+      "lookahead": 4,
+      "m": 4,
+      "miss_reduction_pct": 0.7697966026309937,
+      "miss_reduction_sim": 450,
+      "misses": 58007,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 54000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44684,
+        "misses": 39316,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 24343,
+        "misses": 17657,
+        "prefetch_reads": 512
+      },
+      "events": 126000,
+      "evictions": 56059,
+      "extra_reads": 3198,
+      "hit_rate_delta_abs": 1.9182539682539712,
+      "hit_rate_pct": 55.523809523809526,
+      "hits": 69960,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 4.134663085686915,
+      "miss_reduction_sim": 2417,
+      "misses": 56040,
+      "predictor": "global-hot-per-layer",
+      "prefetch_cache_hits": 122802,
+      "prefetch_evictions": 1662,
+      "prefetch_reads": 3198,
+      "recent_window": null,
+      "upgate": {
+        "hits": 45617,
+        "misses": 38383,
+        "prefetch_reads": 2686
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23088,
+        "misses": 18912,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55263,
+      "extra_reads": 0,
+      "hit_rate_delta_abs": 0.011904761904766303,
+      "hit_rate_pct": 53.61746031746032,
+      "hits": 67558,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 0.025659886754366458,
+      "miss_reduction_sim": 15,
+      "misses": 58442,
+      "predictor": "last-token-repeat",
+      "prefetch_cache_hits": 108000,
+      "prefetch_evictions": 0,
+      "prefetch_reads": 0,
+      "recent_window": null,
+      "upgate": {
+        "hits": 44470,
+        "misses": 39530,
+        "prefetch_reads": 0
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 34063,
+        "misses": 7937,
+        "prefetch_reads": 10940
+      },
+      "events": 126000,
+      "evictions": 55211,
+      "extra_reads": 33881,
+      "hit_rate_delta_abs": 26.94285714285715,
+      "hit_rate_pct": 80.5484126984127,
+      "hits": 101491,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": 58.073455702482164,
+      "miss_reduction_sim": 33948,
+      "misses": 24509,
+      "predictor": "oracle-upper-bound",
+      "prefetch_cache_hits": 74119,
+      "prefetch_evictions": 32610,
+      "prefetch_reads": 33881,
+      "recent_window": null,
+      "upgate": {
+        "hits": 67428,
+        "misses": 16572,
+        "prefetch_reads": 22941
+      }
+    },
+    {
+      "budget_mib": 20480,
+      "down": {
+        "hits": 23261,
+        "misses": 18739,
+        "prefetch_reads": 0
+      },
+      "events": 126000,
+      "evictions": 55491,
+      "extra_reads": 100,
+      "hit_rate_delta_abs": -0.08968253968253492,
+      "hit_rate_pct": 53.51587301587302,
+      "hits": 67430,
+      "lookahead": 4,
+      "m": 8,
+      "miss_reduction_pct": -0.19330448021622731,
+      "miss_reduction_sim": -113,
+      "misses": 58570,
+      "predictor": "recent-hot-w8",
+      "prefetch_cache_hits": 107900,
+      "prefetch_evictions": 100,
+      "prefetch_reads": 100,
+      "recent_window": 8,
+      "upgate": {
+        "hits": 44169,
+        "misses": 39831,
+        "prefetch_reads": 100
+      }
+    }
+  ],
+  "config": {
+    "budgets_mib": [
+      8192,
+      12288,
+      14336,
+      20480
+    ],
+    "events_per_token": 1800,
+    "lookaheads": [
+      1,
+      2,
+      4
+    ],
+    "metric_widths": [
+      2,
+      4,
+      8,
+      16
+    ],
+    "metric_windows": [
+      4,
+      8,
+      16
+    ],
+    "replay_widths": [
+      4,
+      8
+    ],
+    "replay_windows": [
+      8
+    ],
+    "reserve_pct": 10,
+    "upgate_pct": 60
+  },
+  "layer_transition_metrics": [
+    {
+      "actual": 37520,
+      "cases": 70,
+      "early_layers": 8,
+      "hits": 0,
+      "m": 2,
+      "precision": 0.0,
+      "predicted": 0,
+      "predictor": "layer-transition",
+      "top_m_recall": 0.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 37520,
+      "cases": 70,
+      "early_layers": 8,
+      "hits": 0,
+      "m": 4,
+      "precision": 0.0,
+      "predicted": 0,
+      "predictor": "layer-transition",
+      "top_m_recall": 0.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 37520,
+      "cases": 70,
+      "early_layers": 8,
+      "hits": 0,
+      "m": 8,
+      "precision": 0.0,
+      "predicted": 0,
+      "predictor": "layer-transition",
+      "top_m_recall": 0.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 37520,
+      "cases": 70,
+      "early_layers": 8,
+      "hits": 0,
+      "m": 16,
+      "precision": 0.0,
+      "predicted": 0,
+      "predictor": "layer-transition",
+      "top_m_recall": 0.0,
+      "wasted_prefetch": 0
+    }
+  ],
+  "predictor_metrics": [
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 4030,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 0.4477777777777778,
+      "predicted": 9000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.11194444444444444,
+      "wasted_prefetch": 4970
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 4249,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 0.4721111111111111,
+      "predicted": 9000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.11802777777777777,
+      "wasted_prefetch": 4751
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 9000,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 1.0,
+      "predicted": 9000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.25,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 5119,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 0.5687777777777778,
+      "predicted": 9000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.14219444444444446,
+      "wasted_prefetch": 3881
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 5027,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 0.5585555555555556,
+      "predicted": 9000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.1396388888888889,
+      "wasted_prefetch": 3973
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 5027,
+      "lookahead": 1,
+      "m": 2,
+      "precision": 0.5585555555555556,
+      "predicted": 9000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.1396388888888889,
+      "wasted_prefetch": 3973
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 6636,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 0.36866666666666664,
+      "predicted": 18000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.18433333333333332,
+      "wasted_prefetch": 11364
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 8472,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 0.4706666666666667,
+      "predicted": 18000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.23533333333333334,
+      "wasted_prefetch": 9528
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 18000,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 1.0,
+      "predicted": 18000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.5,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 8975,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 0.4986111111111111,
+      "predicted": 18000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.24930555555555556,
+      "wasted_prefetch": 9025
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 8837,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 0.49094444444444446,
+      "predicted": 18000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.24547222222222223,
+      "wasted_prefetch": 9163
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 8837,
+      "lookahead": 1,
+      "m": 4,
+      "precision": 0.49094444444444446,
+      "predicted": 18000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.24547222222222223,
+      "wasted_prefetch": 9163
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 10298,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 0.28605555555555556,
+      "predicted": 36000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.28605555555555556,
+      "wasted_prefetch": 25702
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 16852,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 0.4681111111111111,
+      "predicted": 36000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.4681111111111111,
+      "wasted_prefetch": 19148
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 36000,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 1.0,
+      "predicted": 36000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 1.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 14302,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 0.3972777777777778,
+      "predicted": 36000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.3972777777777778,
+      "wasted_prefetch": 21698
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 14049,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 0.39025,
+      "predicted": 36000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.39025,
+      "wasted_prefetch": 21951
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 14049,
+      "lookahead": 1,
+      "m": 8,
+      "precision": 0.39025,
+      "predicted": 36000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.39025,
+      "wasted_prefetch": 21951
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 14380,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 0.20242117117117117,
+      "predicted": 71040,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.39944444444444444,
+      "wasted_prefetch": 56660
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 16852,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 0.4681111111111111,
+      "predicted": 36000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.4681111111111111,
+      "wasted_prefetch": 19148
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 36000,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 1.0,
+      "predicted": 36000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 1.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 18783,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 0.3067664015417531,
+      "predicted": 61229,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.52175,
+      "wasted_prefetch": 42446
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 18499,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 0.2994383204648829,
+      "predicted": 61779,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.5138611111111111,
+      "wasted_prefetch": 43280
+    },
+    {
+      "actual": 36000,
+      "cases": 60,
+      "hits": 18499,
+      "lookahead": 1,
+      "m": 16,
+      "precision": 0.2994383204648829,
+      "predicted": 61779,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.5138611111111111,
+      "wasted_prefetch": 43280
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 4128,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 0.5504,
+      "predicted": 7500,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.09027686655294581,
+      "wasted_prefetch": 3372
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 4205,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 0.5606666666666666,
+      "predicted": 7500,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.09196081004242662,
+      "wasted_prefetch": 3295
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 7500,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 1.0,
+      "predicted": 7500,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.16402046975462536,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 4873,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 0.6497333333333334,
+      "predicted": 7500,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.10656956654857193,
+      "wasted_prefetch": 2627
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 4840,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 0.6453333333333333,
+      "predicted": 7500,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.10584787648165157,
+      "wasted_prefetch": 2660
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 4840,
+      "lookahead": 2,
+      "m": 2,
+      "precision": 0.6453333333333333,
+      "predicted": 7500,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.10584787648165157,
+      "wasted_prefetch": 2660
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 6972,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 0.4648,
+      "predicted": 15000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.15247342868389976,
+      "wasted_prefetch": 8028
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 8390,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 0.5593333333333333,
+      "predicted": 15000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.18348423216550758,
+      "wasted_prefetch": 6610
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 15000,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 1.0,
+      "predicted": 15000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.32804093950925073,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 8735,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 0.5823333333333334,
+      "predicted": 15000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.19102917377422035,
+      "wasted_prefetch": 6265
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 8700,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 0.58,
+      "predicted": 15000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.19026374491536543,
+      "wasted_prefetch": 6300
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 8700,
+      "lookahead": 2,
+      "m": 4,
+      "precision": 0.58,
+      "predicted": 15000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.19026374491536543,
+      "wasted_prefetch": 6300
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 11167,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 0.37223333333333336,
+      "predicted": 30000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.24421554476665355,
+      "wasted_prefetch": 18833
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 16768,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 0.5589333333333333,
+      "predicted": 30000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.3667060315794078,
+      "wasted_prefetch": 13232
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 30000,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 1.0,
+      "predicted": 30000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.6560818790185015,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 14321,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 0.47736666666666666,
+      "predicted": 30000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.31319161964746534,
+      "wasted_prefetch": 15679
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 14224,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 0.47413333333333335,
+      "predicted": 30000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.31107028823863886,
+      "wasted_prefetch": 15776
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 14224,
+      "lookahead": 2,
+      "m": 8,
+      "precision": 0.47413333333333335,
+      "predicted": 30000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.31107028823863886,
+      "wasted_prefetch": 15776
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 16232,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 0.27418918918918916,
+      "predicted": 59200,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.35498403534094386,
+      "wasted_prefetch": 42968
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 16768,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 0.5589333333333333,
+      "predicted": 30000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.3667060315794078,
+      "wasted_prefetch": 13232
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 45726,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 1.0,
+      "predicted": 45726,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 1.0,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 19537,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 0.3933280988907008,
+      "predicted": 49671,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.4272623890128155,
+      "wasted_prefetch": 30134
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 19374,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 0.38789116463451256,
+      "predicted": 49947,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.42369767747014825,
+      "wasted_prefetch": 30573
+    },
+    {
+      "actual": 45726,
+      "cases": 50,
+      "hits": 19374,
+      "lookahead": 2,
+      "m": 16,
+      "precision": 0.38789116463451256,
+      "predicted": 49947,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.42369767747014825,
+      "wasted_prefetch": 30573
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 2980,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 0.6622222222222223,
+      "predicted": 4500,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.07051418565580558,
+      "wasted_prefetch": 1520
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 2804,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 0.6231111111111111,
+      "predicted": 4500,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.06634958945599963,
+      "wasted_prefetch": 1696
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 4500,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 1.0,
+      "predicted": 4500,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.10648115283594804,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 3104,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 0.6897777777777778,
+      "predicted": 4500,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.07344833297839616,
+      "wasted_prefetch": 1396
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 3104,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 0.6897777777777778,
+      "predicted": 4500,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.07344833297839616,
+      "wasted_prefetch": 1396
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 3104,
+      "lookahead": 4,
+      "m": 2,
+      "precision": 0.6897777777777778,
+      "predicted": 4500,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.07344833297839616,
+      "wasted_prefetch": 1396
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 5204,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 0.5782222222222222,
+      "predicted": 9000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.12313953763517191,
+      "wasted_prefetch": 3796
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 5609,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 0.6232222222222222,
+      "predicted": 9000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.13272284139040724,
+      "wasted_prefetch": 3391
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 9000,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 1.0,
+      "predicted": 9000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.21296230567189608,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 5754,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 0.6393333333333333,
+      "predicted": 9000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.13615390075956554,
+      "wasted_prefetch": 3246
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 5754,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 0.6393333333333333,
+      "predicted": 9000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.13615390075956554,
+      "wasted_prefetch": 3246
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 5754,
+      "lookahead": 4,
+      "m": 4,
+      "precision": 0.6393333333333333,
+      "predicted": 9000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.13615390075956554,
+      "wasted_prefetch": 3246
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 8652,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 0.4806666666666667,
+      "predicted": 18000,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.2047277631859161,
+      "wasted_prefetch": 9348
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 11183,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 0.6212777777777778,
+      "predicted": 18000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.2646174960365349,
+      "wasted_prefetch": 6817
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 18000,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 1.0,
+      "predicted": 18000,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.42592461134379217,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 9775,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 0.5430555555555555,
+      "predicted": 18000,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.23130072643808713,
+      "wasted_prefetch": 8225
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 9775,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 0.5430555555555555,
+      "predicted": 18000,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.23130072643808713,
+      "wasted_prefetch": 8225
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 9775,
+      "lookahead": 4,
+      "m": 8,
+      "precision": 0.5430555555555555,
+      "predicted": 18000,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.23130072643808713,
+      "wasted_prefetch": 8225
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 13143,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 0.3700168918918919,
+      "predicted": 35520,
+      "predictor": "global-hot-per-layer",
+      "top_m_recall": 0.3109959537161922,
+      "wasted_prefetch": 22377
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 11183,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 0.6212777777777778,
+      "predicted": 18000,
+      "predictor": "last-token-repeat",
+      "top_m_recall": 0.2646174960365349,
+      "wasted_prefetch": 6817
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 34675,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 1.0,
+      "predicted": 34675,
+      "predictor": "oracle-upper-bound",
+      "top_m_recall": 0.8204964387969996,
+      "wasted_prefetch": 0
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 13388,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 0.5042751139402614,
+      "predicted": 26549,
+      "predictor": "recent-hot-w4",
+      "top_m_recall": 0.3167932609261494,
+      "wasted_prefetch": 13161
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 13388,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 0.5042751139402614,
+      "predicted": 26549,
+      "predictor": "recent-hot-w8",
+      "top_m_recall": 0.3167932609261494,
+      "wasted_prefetch": 13161
+    },
+    {
+      "actual": 42261,
+      "cases": 30,
+      "hits": 13388,
+      "lookahead": 4,
+      "m": 16,
+      "precision": 0.5042751139402614,
+      "predicted": 26549,
+      "predictor": "recent-hot-w16",
+      "top_m_recall": 0.3167932609261494,
+      "wasted_prefetch": 13161
+    }
+  ],
+  "test_tokens": 70,
+  "test_trace_count": 10,
+  "train_tokens": 140,
+  "train_trace_count": 20
+}

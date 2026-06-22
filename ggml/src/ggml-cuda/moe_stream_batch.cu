@@ -14,13 +14,17 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <deque>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #if !defined(_WIN32)
@@ -35,6 +39,18 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#if defined(__linux__) && __has_include(<liburing.h>)
+#include <liburing.h>
+#define GGML_MOE_HAS_LIBURING 1
+static inline void ggml_moe_io_uring_sqe_set_data64(struct io_uring_sqe * sqe, uint64_t data) {
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void *>(static_cast<uintptr_t>(data)));
+}
+static inline uint64_t ggml_moe_io_uring_cqe_get_data64(const struct io_uring_cqe * cqe) {
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(io_uring_cqe_get_data(cqe)));
+}
+#define io_uring_sqe_set_data64 ggml_moe_io_uring_sqe_set_data64
+#define io_uring_cqe_get_data64 ggml_moe_io_uring_cqe_get_data64
+#endif
 #endif
 
 extern "C" {
@@ -176,6 +192,10 @@ struct pinned_stage_ring {
     size_t next = 0;
     bool failed = false;
     bool report_registered = false;
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    io_uring *uring = nullptr;
+    size_t uring_depth = 0;
+#endif
     uint64_t copies = 0;
     uint64_t waits = 0;
     uint64_t fallbacks = 0;
@@ -184,6 +204,15 @@ struct pinned_stage_ring {
     double host_stage_ms = 0.0;
     double enqueue_ms = 0.0;
     double h2d_ms = 0.0;
+    uint64_t iouring_batches = 0;
+    uint64_t iouring_jobs = 0;
+    uint64_t iouring_submit_calls = 0;
+    uint64_t iouring_wait_calls = 0;
+    uint64_t iouring_cqes = 0;
+    uint64_t iouring_inflight_sum = 0;
+    uint64_t iouring_inflight_samples = 0;
+    uint64_t iouring_inflight_max = 0;
+    uint64_t iouring_batch_hist[6] = {};
 };
 
 struct batch_ctx {
@@ -309,18 +338,38 @@ struct expert_pack_state {
     bool inited = false;
     bool enabled = false;
     bool reported_io_backend = false;
-    int io_backend = 0; // 0=buffered, 1=direct
+    int io_backend = 0; // 0=buffered, 1=direct, 2=io_uring
     std::mutex mu;
     std::atomic<uint64_t> hits{0};
     std::atomic<uint64_t> misses{0};
     std::atomic<uint64_t> read_failures{0};
     std::atomic<uint64_t> direct_reads{0};
     std::atomic<uint64_t> direct_fallbacks{0};
+    std::atomic<uint64_t> iouring_reads{0};
+    std::atomic<uint64_t> iouring_bytes{0};
+    std::atomic<uint64_t> iouring_fallbacks{0};
+    std::atomic<uint64_t> iouring_submit_us{0};
+    std::atomic<uint64_t> iouring_wait_us{0};
+    std::atomic<uint64_t> iouring_h2d_enqueues{0};
+    std::atomic<uint64_t> iouring_batches{0};
+    std::atomic<uint64_t> iouring_submit_calls{0};
+    std::atomic<uint64_t> iouring_wait_calls{0};
+    std::atomic<uint64_t> iouring_cqes{0};
+    std::atomic<uint64_t> iouring_inflight_sum{0};
+    std::atomic<uint64_t> iouring_inflight_samples{0};
+    std::atomic<uint64_t> iouring_inflight_max{0};
+    std::atomic<uint64_t> iouring_batch_hist_1{0};
+    std::atomic<uint64_t> iouring_batch_hist_2_4{0};
+    std::atomic<uint64_t> iouring_batch_hist_5_8{0};
+    std::atomic<uint64_t> iouring_batch_hist_9_16{0};
+    std::atomic<uint64_t> iouring_batch_hist_17_32{0};
+    std::atomic<uint64_t> iouring_batch_hist_gt32{0};
     // RAM hot tier
     void *ram_tier_base = nullptr;
     size_t ram_tier_bytes = 0;
     struct ram_tier_entry { size_t offset; size_t nbytes; };
     std::vector<ram_tier_entry> ram_tier_index; // parallel to entries[], non-zero offset = resident
+    size_t ram_tier_pinned_bytes = 0;
     std::atomic<uint64_t> ram_tier_hits{0};
     std::atomic<uint64_t> ram_tier_total{0};
 };
@@ -378,8 +427,11 @@ struct batch_vram_cache {
     uintptr_t slot_key[16384] = {};
     uint64_t slot_used[16384] = {};
     uint32_t slot_hits[16384] = {};
+    uint32_t slot_profile_count[16384] = {};
     bool slot_pinned[16384] = {};
     bool slot_prefetch_down[16384] = {};
+    bool slot_pending[16384] = {};
+    cudaEvent_t slot_ready[16384] = {};
     uint64_t clock = 1;
     uint64_t hits = 0;
     uint64_t misses = 0;
@@ -388,25 +440,43 @@ struct batch_vram_cache {
     uint64_t down_prefetch_loads = 0;
     uint64_t down_prefetch_hits = 0;
     uint64_t down_prefetch_evicted = 0;
+    uint64_t async_prefetch_waits = 0;
 };
 
 static batch_vram_cache g_bcaches[2];
 static bool g_bcache_inited[2] = {};
 
+struct cache_policy_diag {
+    std::atomic<uint64_t> profile_count_lookups{0};
+    std::atomic<uint64_t> profile_count_hits{0};
+    std::atomic<uint64_t> inserted_profile_count_sum{0};
+    std::atomic<uint64_t> inserted_profile_count_nonzero{0};
+    std::atomic<uint64_t> profile_policy_evictions{0};
+    std::atomic<uint64_t> profile_policy_victim_count_sum{0};
+    std::atomic<uint64_t> profile_policy_victim_count_nonzero{0};
+};
+
+static cache_policy_diag g_cache_policy_diag;
+static std::atomic<bool> g_cache_policy_diag_registered{false};
+
 struct profile_entry {
     int expert_idx = -1;
+    uint64_t count = 0;
     size_t expert_bytes = 0;
-    char tensor[96] = {};
+    char tensor[128] = {};
 };
 
 static std::vector<profile_entry> g_profile;
+static std::unordered_map<uint64_t, uint32_t> g_profile_counts;
+static std::unordered_set<uint64_t> g_profile_pinned_keys;
 static bool g_profile_loaded = false;
 static bool g_profile_enabled = false;
 static std::vector<profile_entry> g_prompt_profile;
 static bool g_prompt_profile_loaded = false;
 static bool g_prompt_profile_enabled = false;
 static std::mutex g_profile_mu;
-static char g_preloaded_tensors[256][96] = {};
+static std::mutex g_profile_pinned_mu;
+static char g_preloaded_tensors[256][128] = {};
 static int g_n_preloaded_tensors = 0;
 static std::atomic<int> g_profile_preload_calls{0};
 
@@ -414,14 +484,86 @@ struct batch_route_profile_entry {
     int expert_idx = -1;
     uint64_t count = 0;
     size_t expert_bytes = 0;
-    char tensor[96] = {};
+    char tensor[128] = {};
 };
 
 struct batch_route_trace_entry {
     uint64_t seq = 0;
     int expert_idx = -1;
     size_t expert_bytes = 0;
-    char tensor[96] = {};
+    char tensor[128] = {};
+};
+
+struct trace_prefetch_state {
+    bool inited = false;
+    bool enabled = false;
+    bool reported = false;
+    size_t cursor = 0;
+    size_t prefetch_cursor = 0;
+    size_t lead_events = 0;
+    size_t window = 96;
+    int max_loads = 8;
+    std::vector<batch_route_trace_entry> trace;
+    std::mutex mu;
+    uint64_t calls = 0;
+    uint64_t matched = 0;
+    uint64_t resync = 0;
+    uint64_t loads = 0;
+    uint64_t cached = 0;
+    uint64_t missing_tensor = 0;
+    uint64_t cache_unavailable = 0;
+};
+
+struct host_prefetch_slot {
+    void *host = nullptr;
+    cudaEvent_t done = nullptr;
+    size_t capacity = 0;
+    const expert_pack_entry *entry = nullptr;
+    size_t nbytes = 0;
+    char tensor[128] = {};
+    int expert_idx = -1;
+    bool ready = false;
+    bool reserved = false;
+    bool in_use = false;
+};
+
+struct host_prefetch_state {
+    bool inited = false;
+    bool enabled = false;
+    bool planned_enabled = false;
+    bool stop = false;
+    bool failed = false;
+    size_t cursor = 0;
+    size_t produce_cursor = 0;
+    size_t skip_events = 0;
+    size_t lead_events = 2048;
+    size_t max_bytes = 512ULL * 1024ULL * 1024ULL;
+    size_t used_bytes = 0;
+    std::vector<batch_route_trace_entry> trace;
+    std::deque<batch_route_trace_entry> planned;
+    std::vector<host_prefetch_slot> slots;
+    std::unordered_map<uint64_t, size_t> ready;
+    std::unordered_map<uint64_t, size_t> planned_queued;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::thread worker;
+    uint64_t calls = 0;
+    uint64_t matched = 0;
+    uint64_t resync = 0;
+    uint64_t submitted = 0;
+    uint64_t hits = 0;
+    uint64_t misses = 0;
+    uint64_t evicted = 0;
+    uint64_t read_failures = 0;
+    uint64_t alloc_failures = 0;
+    uint64_t duplicate_skips = 0;
+    uint64_t profile_pinned_skips = 0;
+    uint64_t no_slot = 0;
+    uint64_t scan_passes = 0;
+    uint64_t reserved_skips = 0;
+    uint64_t planned_enqueued = 0;
+    uint64_t planned_dequeued = 0;
+    uint64_t planned_duplicate_skips = 0;
 };
 
 struct batch_ttft_trace_entry {
@@ -434,11 +576,13 @@ struct batch_ttft_trace_entry {
     int ram_hit = 0;
     size_t expert_bytes = 0;
     char op[24] = {};
-    char tensor[96] = {};
+    char tensor[128] = {};
 };
 
 static std::vector<batch_route_profile_entry> g_route_profile;
 static std::vector<batch_route_trace_entry> g_route_trace;
+static trace_prefetch_state g_trace_prefetch;
+static host_prefetch_state g_host_prefetch;
 static std::mutex g_route_profile_mu;
 static const char * g_route_profile_out = nullptr;
 static const char * g_route_trace_out = nullptr;
@@ -524,6 +668,95 @@ static void batch_route_profile_init_once() {
     g_route_profile_inited = true;
 }
 
+static int trace_prefetch_env_int(const char *name, int fallback, int lo, int hi) {
+    const char *env = std::getenv(name);
+    long value = (env && env[0]) ? std::atol(env) : fallback;
+    if (value < lo) value = lo;
+    if (value > hi) value = hi;
+    return (int)value;
+}
+
+static void trim_csv_field_tail(char *s) {
+    if (!s) return;
+    size_t n = std::strlen(s);
+    while (n > 0 && (s[n - 1] == '\r' || s[n - 1] == '\n')) {
+        s[--n] = '\0';
+    }
+}
+
+static bool load_route_trace_csv(const char *path, std::vector<batch_route_trace_entry> &trace, const char *label) {
+    if (!path || !path[0]) return false;
+    FILE *f = std::fopen(path, "r");
+    if (!f) {
+        std::fprintf(stderr, "[moe_stream_batch] %s: open failed: %s\n", label, path);
+        return false;
+    }
+    char line[512];
+    if (std::fgets(line, sizeof(line), f)) {
+        while (std::fgets(line, sizeof(line), f)) {
+            batch_route_trace_entry e;
+            unsigned long long seq = 0;
+            unsigned long long tensor_base = 0;
+            if (std::sscanf(line, "%llu,%zu,0x%llx,%d,%127[^\n]",
+                        &seq, &e.expert_bytes, &tensor_base, &e.expert_idx, e.tensor) == 5 &&
+                    e.expert_idx >= 0 && e.expert_bytes > 0 && e.tensor[0]) {
+                trim_csv_field_tail(e.tensor);
+                e.seq = (uint64_t)seq;
+                trace.push_back(e);
+            }
+        }
+    }
+    std::fclose(f);
+    return !trace.empty();
+}
+
+static void trace_prefetch_report_atexit() {
+    std::lock_guard<std::mutex> lk(g_trace_prefetch.mu);
+    if (!g_trace_prefetch.enabled || g_trace_prefetch.calls == 0) return;
+    std::fprintf(stderr,
+        "[moe_stream_batch] trace prefetch: calls=%lu matched=%lu resync=%lu loads=%lu cached=%lu missing_tensor=%lu cache_unavailable=%lu cursor=%zu prefetch_cursor=%zu/%zu\n",
+        g_trace_prefetch.calls,
+        g_trace_prefetch.matched,
+        g_trace_prefetch.resync,
+        g_trace_prefetch.loads,
+        g_trace_prefetch.cached,
+        g_trace_prefetch.missing_tensor,
+        g_trace_prefetch.cache_unavailable,
+        g_trace_prefetch.cursor,
+        g_trace_prefetch.prefetch_cursor,
+        g_trace_prefetch.trace.size());
+}
+
+static void trace_prefetch_init_once() {
+    if (g_trace_prefetch.inited) return;
+    std::lock_guard<std::mutex> lk(g_trace_prefetch.mu);
+    if (g_trace_prefetch.inited) return;
+
+    const char *path = std::getenv("GGML_MOE_TRACE_PREFETCH");
+    if (!path || !path[0]) {
+        g_trace_prefetch.inited = true;
+        return;
+    }
+
+    load_route_trace_csv(path, g_trace_prefetch.trace, "trace prefetch");
+
+    g_trace_prefetch.window = (size_t)trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_WINDOW", 96, 1, 4096);
+    g_trace_prefetch.max_loads = trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_MAX_LOADS", 8, 1, 256);
+    g_trace_prefetch.lead_events = (size_t)trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS", 0, 0, 4096);
+    g_trace_prefetch.enabled = !g_trace_prefetch.trace.empty();
+    g_trace_prefetch.inited = true;
+    if (g_trace_prefetch.enabled) {
+        std::atexit(trace_prefetch_report_atexit);
+        std::fprintf(stderr,
+            "[moe_stream_batch] trace prefetch: loaded %zu events from %s window=%zu max_loads=%d lead_events=%zu\n",
+            g_trace_prefetch.trace.size(), path, g_trace_prefetch.window, g_trace_prefetch.max_loads,
+            g_trace_prefetch.lead_events);
+    }
+}
+
+static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_t expert_bytes);
+static void host_prefetch_on_route(const char *tensor_name, int expert_idx, size_t expert_bytes);
+
 static void batch_ttft_trace_report_atexit() {
     std::vector<batch_ttft_trace_entry> rows;
     {
@@ -578,7 +811,8 @@ static void batch_ttft_trace_record(
     if (!batch_ttft_trace_enabled()) return;
     const auto now = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lk(g_ttft_trace_mu);
-    if (g_ttft_trace.size() >= g_ttft_trace_cap) return;
+    const bool is_marker = op && std::strncmp(op, "mark_", 5) == 0;
+    if (!is_marker && g_ttft_trace.size() >= g_ttft_trace_cap) return;
 
     batch_ttft_trace_entry e;
     e.seq = ++g_ttft_trace_seq;
@@ -641,6 +875,8 @@ struct batch_ttft_call_scope {
 static void batch_route_profile_hit(const char *tensor_name, int expert_idx, size_t expert_bytes) {
     batch_route_profile_init_once();
     if (!tensor_name || !tensor_name[0]) return;
+    trace_prefetch_on_hit(tensor_name, expert_idx, expert_bytes);
+    host_prefetch_on_route(tensor_name, expert_idx, expert_bytes);
     const bool profile_enabled = g_route_profile_out && g_route_profile_out[0];
     const bool trace_enabled = g_route_trace_out && g_route_trace_out[0];
     if (!profile_enabled && !trace_enabled) return;
@@ -682,6 +918,7 @@ static void batch_cache_report_atexit() {
     uint64_t down_prefetch_loads = 0;
     uint64_t down_prefetch_hits = 0;
     uint64_t down_prefetch_evicted = 0;
+    uint64_t async_prefetch_waits = 0;
     for (batch_vram_cache &c : g_bcaches) {
         hits += c.hits;
         misses += c.misses;
@@ -690,6 +927,7 @@ static void batch_cache_report_atexit() {
         down_prefetch_loads += c.down_prefetch_loads;
         down_prefetch_hits += c.down_prefetch_hits;
         down_prefetch_evicted += c.down_prefetch_evicted;
+        async_prefetch_waits += c.async_prefetch_waits;
     }
     const uint64_t total = hits + misses;
     if (total == 0) return;
@@ -716,11 +954,26 @@ static void batch_cache_report_atexit() {
                      down_prefetch_loads, down_prefetch_hits, down_prefetch_evicted,
                      100.0 * down_prefetch_hits / down_prefetch_loads);
     }
+    if (async_prefetch_waits > 0) {
+        std::fprintf(stderr, "[moe_stream_batch] async prefetch waits=%lu\n", async_prefetch_waits);
+    }
 }
 
 static bool profile_protect_enabled() {
     const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PROTECT");
     return env && env[0] && env[0] != '0';
+}
+
+static void profile_pinned_key_record(uint64_t key) {
+    if (key == 0) return;
+    std::lock_guard<std::mutex> lk(g_profile_pinned_mu);
+    g_profile_pinned_keys.insert(key);
+}
+
+static bool profile_pinned_key_contains(uint64_t key) {
+    if (key == 0) return false;
+    std::lock_guard<std::mutex> lk(g_profile_pinned_mu);
+    return g_profile_pinned_keys.find(key) != g_profile_pinned_keys.end();
 }
 
 static size_t profile_reserve_slots(const batch_vram_cache *c) {
@@ -838,9 +1091,11 @@ static bool load_profile_file(const char *path, std::vector<profile_entry> &entr
         profile_entry e;
         unsigned long long rank = 0, count = 0, cumulative = 0, tensor_base = 0;
         size_t expert_bytes = 0;
-        if (std::sscanf(line, "%llu,%llu,%zu,%llu,0x%llx,%d,%95[^\n]",
+        if (std::sscanf(line, "%llu,%llu,%zu,%llu,0x%llx,%d,%127[^\n]",
                     &rank, &count, &expert_bytes, &cumulative, &tensor_base, &e.expert_idx, e.tensor) == 7 &&
                 e.expert_idx >= 0 && e.tensor[0]) {
+            trim_csv_field_tail(e.tensor);
+            e.count = (uint64_t)count;
             e.expert_bytes = expert_bytes;
             entries.push_back(e);
         }
@@ -853,12 +1108,32 @@ static bool load_profile_file(const char *path, std::vector<profile_entry> &entr
     return !entries.empty();
 }
 
+static void rebuild_profile_count_index_locked() {
+    g_profile_counts.clear();
+    for (const profile_entry &e : g_profile) {
+        const uint64_t count = e.count > UINT32_MAX ? UINT32_MAX : e.count;
+        g_profile_counts[batch_key_hash(e.tensor, e.expert_idx)] = (uint32_t)count;
+    }
+}
+
+static uint32_t profile_count_for_key(uintptr_t key) {
+    std::lock_guard<std::mutex> lk(g_profile_mu);
+    ++g_cache_policy_diag.profile_count_lookups;
+    const auto it = g_profile_counts.find((uint64_t)key);
+    if (it == g_profile_counts.end()) return 0;
+    ++g_cache_policy_diag.profile_count_hits;
+    return it->second;
+}
+
 static void load_profile_once() {
     if (g_profile_loaded) return;
     std::lock_guard<std::mutex> lk(g_profile_mu);
     if (g_profile_loaded) return;
     const char *path = std::getenv("GGML_MOE_VRAM_PROFILE");
     g_profile_enabled = load_profile_file(path, g_profile, "profile");
+    if (g_profile_enabled) {
+        rebuild_profile_count_index_locked();
+    }
     g_profile_loaded = true;
 }
 
@@ -967,8 +1242,16 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         std::fill_n(c->slot_key, 16384, (uintptr_t)0);
         std::fill_n(c->slot_used, 16384, (uint64_t)0);
         std::fill_n(c->slot_hits, 16384, (uint32_t)0);
+        std::fill_n(c->slot_profile_count, 16384, (uint32_t)0);
         std::fill_n(c->slot_pinned, 16384, false);
         std::fill_n(c->slot_prefetch_down, 16384, false);
+        for (cudaEvent_t &ev : c->slot_ready) {
+            if (ev) {
+                cudaEventDestroy(ev);
+                ev = nullptr;
+            }
+        }
+        std::fill_n(c->slot_pending, 16384, false);
         c->clock = 1;
         c->hits = 0;
         c->misses = 0;
@@ -977,6 +1260,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         c->down_prefetch_loads = 0;
         c->down_prefetch_hits = 0;
         c->down_prefetch_evicted = 0;
+        c->async_prefetch_waits = 0;
         g_bcache_inited[cid] = false;
     }
     const char *env = std::getenv("GGML_MOE_VRAM_CACHE_GB");
@@ -998,14 +1282,32 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
-    const size_t alloc = (size_t)c->n_slots * expert_sz;
-    if (cudaMalloc(&c->pool, alloc) != cudaSuccess) {
-        std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc %.1f GiB FAILED\n",
+    int alloc_slots = c->n_slots;
+    size_t alloc = (size_t)alloc_slots * expert_sz;
+    cudaError_t alloc_err = cudaMalloc(&c->pool, alloc);
+    if (alloc_err != cudaSuccess) {
+        std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc %.1f GiB FAILED; retrying smaller pool\n",
                      alloc / (1024.0*1024.0*1024.0));
         cudaGetLastError();
-        c->n_slots = 0;
-        g_bcache_inited[cid] = true;
-        return nullptr;
+        const char *retry_env = std::getenv("GGML_MOE_VRAM_CACHE_ALLOC_RETRY");
+        const bool retry = !retry_env || !retry_env[0] || retry_env[0] != '0';
+        while (retry && alloc_slots > 1) {
+            int next_slots = (alloc_slots * 7) / 8;
+            if (next_slots >= alloc_slots) next_slots = alloc_slots - 1;
+            alloc_slots = next_slots;
+            alloc = (size_t)alloc_slots * expert_sz;
+            alloc_err = cudaMalloc(&c->pool, alloc);
+            if (alloc_err == cudaSuccess) break;
+            cudaGetLastError();
+        }
+        if (alloc_err != cudaSuccess) {
+            std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc retry failed; disabling %s cache\n",
+                         cid == 1 ? "upgate" : "down");
+            c->n_slots = 0;
+            g_bcache_inited[cid] = true;
+            return nullptr;
+        }
+        c->n_slots = alloc_slots;
     }
     std::fprintf(stderr, "[moe_stream_batch] VRAM cache: %.1f GiB, %d slots (%.2f MiB each)\n",
                  alloc / (1024.0*1024.0*1024.0), c->n_slots,
@@ -1015,10 +1317,23 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     return c;
 }
 
+static bool batch_cache_wait_slot_ready(batch_vram_cache *c, int slot) {
+    if (!c || slot < 0 || slot >= c->n_slots || !c->slot_pending[slot]) return true;
+    if (c->slot_ready[slot]) {
+        if (cudaEventSynchronize(c->slot_ready[slot]) != cudaSuccess) {
+            return false;
+        }
+    }
+    c->slot_pending[slot] = false;
+    ++c->async_prefetch_waits;
+    return true;
+}
+
 static int batch_cache_lookup_slot(batch_vram_cache *c, uintptr_t key) {
     if (!c || !c->pool || c->n_slots == 0) return -1;
     for (int slot = 0; slot < c->n_slots; ++slot) {
         if (c->slot_key[slot] == key) {
+            if (!batch_cache_wait_slot_ready(c, slot)) return -1;
             c->slot_used[slot] = c->clock++;
             if (c->slot_hits[slot] != UINT32_MAX) {
                 ++c->slot_hits[slot];
@@ -1044,14 +1359,17 @@ static bool batch_cache_contains_slot(const batch_vram_cache *c, uintptr_t key) 
 
 static void batch_cache_clear_slot(batch_vram_cache *c, int slot) {
     if (!c || slot < 0 || slot >= c->n_slots) return;
+    batch_cache_wait_slot_ready(c, slot);
     c->slot_key[slot] = 0;
     c->slot_used[slot] = 0;
     c->slot_hits[slot] = 0;
+    c->slot_profile_count[slot] = 0;
     if (c->slot_pinned[slot] && c->pinned > 0) {
         --c->pinned;
     }
     c->slot_pinned[slot] = false;
     c->slot_prefetch_down[slot] = false;
+    c->slot_pending[slot] = false;
 }
 
 static int batch_cache_find_slot(batch_vram_cache *c, uintptr_t key) {
@@ -1060,6 +1378,21 @@ static int batch_cache_find_slot(batch_vram_cache *c, uintptr_t key) {
         if (c->slot_key[slot] == key) return slot;
     }
     return -1;
+}
+
+static bool batch_cache_promote_profile_slot(batch_vram_cache *c, int slot, uint64_t profile_count) {
+    if (!c || slot < 0 || slot >= c->n_slots || c->slot_key[slot] == 0) return false;
+    if (c->slot_pinned[slot]) {
+        if (profile_count > 0) {
+            c->slot_profile_count[slot] = profile_count > UINT32_MAX ? UINT32_MAX : (uint32_t)profile_count;
+        }
+        return true;
+    }
+    if (c->pinned >= profile_preload_slot_budget(c)) return false;
+    c->slot_pinned[slot] = true;
+    ++c->pinned;
+    c->slot_profile_count[slot] = profile_count > UINT32_MAX ? UINT32_MAX : (uint32_t)profile_count;
+    return true;
 }
 
 static bool batch_slot_is_avoided(int slot, const int *avoid_slots, int n_avoid_slots) {
@@ -1073,6 +1406,40 @@ static bool batch_slot_is_avoided(int slot, const int *avoid_slots, int n_avoid_
 static bool cache_policy_lfu_lru_enabled() {
     const char *env = std::getenv("GGML_MOE_VRAM_CACHE_POLICY");
     return env && std::strcmp(env, "lfu_lru") == 0;
+}
+
+static bool cache_policy_profile_lfu_lru_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_CACHE_POLICY");
+    return env && std::strcmp(env, "profile_lfu_lru") == 0;
+}
+
+static bool cache_policy_hybrid_profile_lfu_lru_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_CACHE_POLICY");
+    return env && std::strcmp(env, "hybrid_profile_lfu_lru") == 0;
+}
+
+static uint64_t cache_policy_hybrid_after() {
+    const char *env = std::getenv("GGML_MOE_VRAM_CACHE_PROFILE_AFTER");
+    if (!env || !env[0]) return 12624;
+    return std::strtoull(env, nullptr, 10);
+}
+
+static void cache_policy_diag_report_atexit() {
+    const uint64_t lookups = g_cache_policy_diag.profile_count_lookups.load();
+    const uint64_t evictions = g_cache_policy_diag.profile_policy_evictions.load();
+    if (lookups == 0 && evictions == 0) return;
+    const uint64_t lookup_hits = g_cache_policy_diag.profile_count_hits.load();
+    const uint64_t inserted_nonzero = g_cache_policy_diag.inserted_profile_count_nonzero.load();
+    const uint64_t inserted_sum = g_cache_policy_diag.inserted_profile_count_sum.load();
+    const uint64_t victim_nonzero = g_cache_policy_diag.profile_policy_victim_count_nonzero.load();
+    const uint64_t victim_sum = g_cache_policy_diag.profile_policy_victim_count_sum.load();
+    std::fprintf(stderr,
+        "[moe_stream_batch] cache policy diag: profile_count_lookups=%lu hits=%lu "
+        "inserted_nonzero=%lu inserted_avg=%.2f evictions=%lu victim_nonzero=%lu victim_avg=%.2f\n",
+        lookups, lookup_hits, inserted_nonzero,
+        inserted_nonzero > 0 ? (double)inserted_sum / (double)inserted_nonzero : 0.0,
+        evictions, victim_nonzero,
+        victim_nonzero > 0 ? (double)victim_sum / (double)victim_nonzero : 0.0);
 }
 
 static int expert_pack_entry_cmp(const expert_pack_entry &e, const char *tensor_name, int expert_idx, size_t nbytes) {
@@ -1091,13 +1458,92 @@ static uint64_t align_up_u64(uint64_t value, uint64_t alignment) {
     return ((value + alignment - 1) / alignment) * alignment;
 }
 
+static size_t expert_pack_env_size(const char *name, size_t default_value, size_t min_value, size_t max_value) {
+    const char *env = std::getenv(name);
+    if (!env || !env[0]) return default_value;
+    const unsigned long long parsed = std::strtoull(env, nullptr, 10);
+    if (parsed == 0) return default_value;
+    size_t value = (size_t)parsed;
+    if (value < min_value) value = min_value;
+    if (value > max_value) value = max_value;
+    return value;
+}
+
+static bool expert_pack_env_bool(const char *name, bool default_value) {
+    const char *env = std::getenv(name);
+    if (!env || !env[0]) return default_value;
+    return env[0] != '0';
+}
+
+static size_t expert_pack_io_bytes() {
+    return expert_pack_env_size("GGML_MOE_IO_BYTES", 2ULL * 1024ULL * 1024ULL,
+            expert_pack_direct_alignment(), 64ULL * 1024ULL * 1024ULL);
+}
+
+static size_t expert_pack_io_depth() {
+    return expert_pack_env_size("GGML_MOE_IO_DEPTH", 32, 1, 256);
+}
+
+static size_t expert_pack_io_refill_batch() {
+    return expert_pack_env_size("GGML_MOE_IO_REFILL_BATCH", 1, 1, 256);
+}
+
+static void expert_pack_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
+    uint64_t current = target.load(std::memory_order_relaxed);
+    while (current < value &&
+            !target.compare_exchange_weak(current, value, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
+}
+
+static size_t expert_pack_iouring_batch_bucket(size_t jobs) {
+    if (jobs <= 1) return 0;
+    if (jobs <= 4) return 1;
+    if (jobs <= 8) return 2;
+    if (jobs <= 16) return 3;
+    if (jobs <= 32) return 4;
+    return 5;
+}
+
+static void expert_pack_record_iouring_batch(size_t jobs) {
+    ++g_expert_pack.iouring_batches;
+    switch (expert_pack_iouring_batch_bucket(jobs)) {
+        case 0: ++g_expert_pack.iouring_batch_hist_1; break;
+        case 1: ++g_expert_pack.iouring_batch_hist_2_4; break;
+        case 2: ++g_expert_pack.iouring_batch_hist_5_8; break;
+        case 3: ++g_expert_pack.iouring_batch_hist_9_16; break;
+        case 4: ++g_expert_pack.iouring_batch_hist_17_32; break;
+        default: ++g_expert_pack.iouring_batch_hist_gt32; break;
+    }
+}
+
 static void expert_pack_report_atexit() {
     if (!g_expert_pack.enabled) return;
     std::fprintf(stderr,
-                 "[moe_stream_batch] expert pack: hits=%lu misses=%lu read_failures=%lu direct_reads=%lu direct_fallbacks=%lu entries=%zu\n",
+                 "[moe_stream_batch] expert pack: hits=%lu misses=%lu read_failures=%lu direct_reads=%lu direct_fallbacks=%lu "
+                 "iouring_reads=%lu iouring_bytes=%lu iouring_fallbacks=%lu iouring_submit_us=%lu iouring_wait_us=%lu iouring_h2d_enqueues=%lu entries=%zu\n",
                  g_expert_pack.hits.load(), g_expert_pack.misses.load(),
                  g_expert_pack.read_failures.load(), g_expert_pack.direct_reads.load(),
-                 g_expert_pack.direct_fallbacks.load(), g_expert_pack.entries.size());
+                 g_expert_pack.direct_fallbacks.load(),
+                 g_expert_pack.iouring_reads.load(), g_expert_pack.iouring_bytes.load(),
+                 g_expert_pack.iouring_fallbacks.load(), g_expert_pack.iouring_submit_us.load(),
+                 g_expert_pack.iouring_wait_us.load(), g_expert_pack.iouring_h2d_enqueues.load(),
+                 g_expert_pack.entries.size());
+    const uint64_t inflight_samples = g_expert_pack.iouring_inflight_samples.load();
+    const double inflight_avg = inflight_samples > 0 ?
+        (double)g_expert_pack.iouring_inflight_sum.load() / (double)inflight_samples : 0.0;
+    if (g_expert_pack.iouring_batches.load() > 0 ||
+            g_expert_pack.iouring_submit_calls.load() > 0 ||
+            g_expert_pack.iouring_wait_calls.load() > 0) {
+        std::fprintf(stderr,
+                     "[moe_stream_batch] expert pack iouring detail: batches=%lu submit_calls=%lu wait_calls=%lu cqes=%lu "
+                     "inflight_avg=%.2f inflight_max=%lu batch_hist=1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
+                     g_expert_pack.iouring_batches.load(), g_expert_pack.iouring_submit_calls.load(),
+                     g_expert_pack.iouring_wait_calls.load(), g_expert_pack.iouring_cqes.load(),
+                     inflight_avg, g_expert_pack.iouring_inflight_max.load(),
+                     g_expert_pack.iouring_batch_hist_1.load(), g_expert_pack.iouring_batch_hist_2_4.load(),
+                     g_expert_pack.iouring_batch_hist_5_8.load(), g_expert_pack.iouring_batch_hist_9_16.load(),
+                     g_expert_pack.iouring_batch_hist_17_32.load(), g_expert_pack.iouring_batch_hist_gt32.load());
+    }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
                      "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB\n",
@@ -1106,6 +1552,12 @@ static void expert_pack_report_atexit() {
                          100.0 * g_expert_pack.ram_tier_hits.load() / g_expert_pack.ram_tier_total.load() : 0.0,
                      g_expert_pack.ram_tier_bytes / (1024.0 * 1024.0));
     }
+}
+
+extern "C" void ggml_cuda_moe_stream_batch_report_counters(void) {
+    batch_cache_report_atexit();
+    expert_pack_report_atexit();
+    std::fflush(stderr);
 }
 
 static bool expert_pack_read_exact(FILE *file, void *dst, size_t sz) {
@@ -1128,11 +1580,14 @@ static void expert_pack_init_once() {
     if (io_backend_env && io_backend_env[0]) {
         if (std::strcmp(io_backend_env, "direct") == 0) {
             g_expert_pack.io_backend = 1;
+        } else if (std::strcmp(io_backend_env, "iouring") == 0 ||
+                   std::strcmp(io_backend_env, "io_uring") == 0) {
+            g_expert_pack.io_backend = 2;
         } else if (std::strcmp(io_backend_env, "mmap") == 0) {
             g_expert_pack.io_backend = 0;
         } else if (!g_expert_pack.reported_io_backend) {
             std::fprintf(stderr,
-                "[moe_stream_batch] GGML_MOE_IO_BACKEND=%s requested; v1 runtime supports mmap/buffered and direct expert-pack reads\n",
+                "[moe_stream_batch] GGML_MOE_IO_BACKEND=%s requested; runtime supports mmap/buffered, direct, and iouring expert-pack reads\n",
                 io_backend_env);
             g_expert_pack.reported_io_backend = true;
         }
@@ -1197,7 +1652,7 @@ static void expert_pack_init_once() {
 
     g_expert_pack.file = file;
 #if !defined(_WIN32)
-    if (g_expert_pack.io_backend == 1) {
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
 #if defined(O_DIRECT)
         g_expert_pack.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
 #else
@@ -1207,12 +1662,25 @@ static void expert_pack_init_once() {
             std::fprintf(stderr, "[moe_stream_batch] expert pack: direct open failed; using buffered reads: %s\n", path);
             g_expert_pack.io_backend = 0;
         } else {
-            std::fprintf(stderr, "[moe_stream_batch] expert pack: direct reads enabled: %s\n", path);
+            if (g_expert_pack.io_backend == 2) {
+#if defined(GGML_MOE_HAS_LIBURING)
+                std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring direct reads enabled: %s io_bytes=%zu depth=%zu\n",
+                             path, expert_pack_io_bytes(), expert_pack_io_depth());
+#else
+                const bool require_direct = expert_pack_env_bool("GGML_MOE_IO_REQUIRE_DIRECT", false);
+                std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring requested but liburing headers are unavailable; %s\n",
+                             require_direct ? "using direct fallback anyway" : "using direct fallback");
+                g_expert_pack.io_backend = 1;
+#endif
+            }
+            if (g_expert_pack.io_backend == 1) {
+                std::fprintf(stderr, "[moe_stream_batch] expert pack: direct reads enabled: %s\n", path);
+            }
         }
     }
 #else
-    if (g_expert_pack.io_backend == 1) {
-        std::fprintf(stderr, "[moe_stream_batch] expert pack: direct reads are not supported on this platform; using buffered reads\n");
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack: direct/io_uring reads are not supported on this platform; using buffered reads\n");
         g_expert_pack.io_backend = 0;
     }
 #endif
@@ -1250,6 +1718,420 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
     return nullptr;
 }
 
+static bool trace_entry_matches(const batch_route_trace_entry &e, const char *tensor_name, int expert_idx, size_t expert_bytes);
+
+static uint64_t host_prefetch_key(const char *tensor_name, int expert_idx, size_t nbytes) {
+    uint64_t h = 1469598103934665603ULL;
+    if (tensor_name) {
+        for (const unsigned char *p = (const unsigned char *)tensor_name; *p; ++p) {
+            h ^= (uint64_t)(*p);
+            h *= 1099511628211ULL;
+        }
+    }
+    h ^= (uint64_t)(uint32_t)expert_idx;
+    h *= 1099511628211ULL;
+    h ^= (uint64_t)nbytes;
+    h *= 1099511628211ULL;
+    return h;
+}
+
+static void host_prefetch_report_atexit() {
+    std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+    if (!g_host_prefetch.enabled) return;
+    std::fprintf(stderr,
+        "[moe_stream_batch] host prefetch: calls=%lu matched=%lu resync=%lu submitted=%lu hits=%lu misses=%lu "
+        "evicted=%lu read_failures=%lu alloc_failures=%lu duplicate_skips=%lu profile_pinned_skips=%lu reserved_skips=%lu no_slot=%lu "
+        "planned_enqueued=%lu planned_dequeued=%lu planned_duplicate_skips=%lu scan_passes=%lu "
+        "cursor=%zu produce_cursor=%zu/%zu skip=%zu used=%.2f MiB slots=%zu\n",
+        g_host_prefetch.calls,
+        g_host_prefetch.matched,
+        g_host_prefetch.resync,
+        g_host_prefetch.submitted,
+        g_host_prefetch.hits,
+        g_host_prefetch.misses,
+        g_host_prefetch.evicted,
+        g_host_prefetch.read_failures,
+        g_host_prefetch.alloc_failures,
+        g_host_prefetch.duplicate_skips,
+        g_host_prefetch.profile_pinned_skips,
+        g_host_prefetch.reserved_skips,
+        g_host_prefetch.no_slot,
+        g_host_prefetch.planned_enqueued,
+        g_host_prefetch.planned_dequeued,
+        g_host_prefetch.planned_duplicate_skips,
+        g_host_prefetch.scan_passes,
+        g_host_prefetch.cursor,
+        g_host_prefetch.produce_cursor,
+        g_host_prefetch.trace.size(),
+        g_host_prefetch.skip_events,
+        g_host_prefetch.used_bytes / (1024.0 * 1024.0),
+        g_host_prefetch.slots.size());
+}
+
+static int host_prefetch_env_int(const char *name, int fallback, int lo, int hi) {
+    const char *env = std::getenv(name);
+    long value = (env && env[0]) ? std::atol(env) : fallback;
+    if (value < lo) value = lo;
+    if (value > hi) value = hi;
+    return (int)value;
+}
+
+static size_t host_prefetch_env_mib(const char *name, size_t fallback_mib, size_t lo_mib, size_t hi_mib) {
+    const char *env = std::getenv(name);
+    size_t value = (env && env[0]) ? (size_t)std::strtoull(env, nullptr, 10) : fallback_mib;
+    if (value < lo_mib) value = lo_mib;
+    if (value > hi_mib) value = hi_mib;
+    return value * 1024ULL * 1024ULL;
+}
+
+static bool host_prefetch_slot_alloc(host_prefetch_slot &slot, size_t nbytes) {
+    if (slot.capacity >= nbytes && slot.host) return true;
+    if (slot.host) {
+        cudaFreeHost(slot.host);
+        slot.host = nullptr;
+        slot.capacity = 0;
+    }
+    const size_t alloc_sz = (size_t)align_up_u64((uint64_t)nbytes, (uint64_t)expert_pack_direct_alignment());
+    if (cudaHostAlloc(&slot.host, alloc_sz, cudaHostAllocDefault) != cudaSuccess) {
+        slot.host = nullptr;
+        slot.capacity = 0;
+        return false;
+    }
+    if (!slot.done && cudaEventCreateWithFlags(&slot.done, cudaEventDisableTiming) != cudaSuccess) {
+        cudaFreeHost(slot.host);
+        slot.host = nullptr;
+        slot.capacity = 0;
+        return false;
+    }
+    slot.capacity = alloc_sz;
+    return true;
+}
+
+static int host_prefetch_find_free_slot_locked(size_t nbytes) {
+    int best = -1;
+    for (size_t i = 0; i < g_host_prefetch.slots.size(); ++i) {
+        const host_prefetch_slot &slot = g_host_prefetch.slots[i];
+        if (slot.in_use) continue;
+        if (slot.reserved) continue;
+        if (!slot.ready) {
+            best = (int)i;
+            break;
+        }
+        if (best < 0) best = (int)i;
+    }
+    if (best >= 0 && g_host_prefetch.slots[(size_t)best].ready) {
+        host_prefetch_slot &slot = g_host_prefetch.slots[(size_t)best];
+        g_host_prefetch.ready.erase(host_prefetch_key(slot.tensor, slot.expert_idx, slot.nbytes));
+        slot.ready = false;
+        slot.reserved = false;
+        slot.entry = nullptr;
+        ++g_host_prefetch.evicted;
+    }
+    const size_t alloc_sz = (size_t)align_up_u64((uint64_t)nbytes, (uint64_t)expert_pack_direct_alignment());
+    const size_t cur_capacity = best >= 0 ? g_host_prefetch.slots[(size_t)best].capacity : 0;
+    const size_t extra = alloc_sz > cur_capacity ? alloc_sz - cur_capacity : 0;
+    if (best >= 0 && g_host_prefetch.used_bytes + extra > g_host_prefetch.max_bytes) {
+        return -1;
+    }
+    return best;
+}
+
+static void host_prefetch_worker() {
+    while (true) {
+        batch_route_trace_entry e;
+        size_t slot_idx = SIZE_MAX;
+        const expert_pack_entry *entry = nullptr;
+        {
+            std::unique_lock<std::mutex> lk(g_host_prefetch.mu);
+            g_host_prefetch.cv.wait(lk, [] {
+                return g_host_prefetch.stop ||
+                    (g_host_prefetch.enabled &&
+                     (!g_host_prefetch.planned.empty() ||
+                      g_host_prefetch.cursor < g_host_prefetch.trace.size()));
+            });
+            if (g_host_prefetch.stop) break;
+
+            ++g_host_prefetch.scan_passes;
+            if (!g_host_prefetch.planned.empty()) {
+                e = g_host_prefetch.planned.front();
+                g_host_prefetch.planned.pop_front();
+                const uint64_t key = host_prefetch_key(e.tensor, e.expert_idx, e.expert_bytes);
+                g_host_prefetch.planned_queued.erase(key);
+                ++g_host_prefetch.planned_dequeued;
+            } else {
+                const size_t start = std::max(g_host_prefetch.cursor, g_host_prefetch.skip_events);
+                const size_t end = std::min(g_host_prefetch.trace.size(), start + g_host_prefetch.lead_events);
+                size_t selected = SIZE_MAX;
+                for (size_t i = start; i < end; ++i) {
+                    const batch_route_trace_entry &candidate = g_host_prefetch.trace[i];
+                    const uint64_t key = host_prefetch_key(candidate.tensor, candidate.expert_idx, candidate.expert_bytes);
+                    if (profile_pinned_key_contains(batch_key_hash(candidate.tensor, candidate.expert_idx))) {
+                        ++g_host_prefetch.profile_pinned_skips;
+                        continue;
+                    }
+                    auto it = g_host_prefetch.ready.find(key);
+                    if (it != g_host_prefetch.ready.end()) {
+                        const host_prefetch_slot &slot = g_host_prefetch.slots[it->second];
+                        if (slot.ready) {
+                            ++g_host_prefetch.duplicate_skips;
+                        } else {
+                            ++g_host_prefetch.reserved_skips;
+                        }
+                        continue;
+                    }
+                    selected = i;
+                    break;
+                }
+                if (selected == SIZE_MAX) {
+                    g_host_prefetch.cv.wait_for(lk, std::chrono::milliseconds(1));
+                    continue;
+                }
+
+                e = g_host_prefetch.trace[selected];
+                g_host_prefetch.produce_cursor = selected + 1;
+            }
+            const uint64_t key = host_prefetch_key(e.tensor, e.expert_idx, e.expert_bytes);
+            entry = expert_pack_lookup(e.tensor, e.expert_idx, e.expert_bytes);
+            if (!entry) {
+                ++g_host_prefetch.read_failures;
+                continue;
+            }
+            const int free_slot = host_prefetch_find_free_slot_locked(e.expert_bytes);
+            if (free_slot < 0) {
+                ++g_host_prefetch.no_slot;
+                continue;
+            }
+            slot_idx = (size_t)free_slot;
+            host_prefetch_slot &slot = g_host_prefetch.slots[slot_idx];
+            slot.in_use = true;
+            slot.reserved = true;
+            slot.ready = false;
+            slot.nbytes = e.expert_bytes;
+            slot.expert_idx = e.expert_idx;
+            std::snprintf(slot.tensor, sizeof(slot.tensor), "%s", e.tensor);
+            g_host_prefetch.ready[key] = slot_idx;
+        }
+
+        bool ok = false;
+        host_prefetch_slot *slot_ptr = &g_host_prefetch.slots[slot_idx];
+        const size_t old_capacity = slot_ptr->capacity;
+        if (host_prefetch_slot_alloc(*slot_ptr, e.expert_bytes)) {
+            if (slot_ptr->done) {
+                cudaEventSynchronize(slot_ptr->done);
+            }
+            if (g_expert_pack.fd_direct >= 0 &&
+                    ((entry->offset % expert_pack_direct_alignment()) == 0) &&
+                    (((uintptr_t)slot_ptr->host % expert_pack_direct_alignment()) == 0)) {
+                const size_t read_sz = (size_t)align_up_u64((uint64_t)e.expert_bytes, (uint64_t)expert_pack_direct_alignment());
+                ok = ::pread(g_expert_pack.fd_direct, slot_ptr->host, read_sz, (off_t)entry->offset) == (ssize_t)read_sz;
+            } else {
+                std::lock_guard<std::mutex> lk(g_expert_pack.mu);
+                ok = ::fseeko(g_expert_pack.file, (off_t)entry->offset, SEEK_SET) == 0 &&
+                    expert_pack_read_exact(g_expert_pack.file, slot_ptr->host, e.expert_bytes);
+            }
+        } else {
+            std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+            ++g_host_prefetch.alloc_failures;
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+            host_prefetch_slot &slot = g_host_prefetch.slots[slot_idx];
+            if (slot.capacity > old_capacity) {
+                g_host_prefetch.used_bytes += slot.capacity - old_capacity;
+            } else if (slot.capacity < old_capacity) {
+                const size_t delta = old_capacity - slot.capacity;
+                g_host_prefetch.used_bytes = delta < g_host_prefetch.used_bytes ? g_host_prefetch.used_bytes - delta : 0;
+            }
+            if (ok) {
+                slot.entry = entry;
+                slot.nbytes = e.expert_bytes;
+                slot.expert_idx = e.expert_idx;
+                std::snprintf(slot.tensor, sizeof(slot.tensor), "%s", e.tensor);
+                slot.reserved = false;
+                slot.ready = true;
+                g_host_prefetch.ready[host_prefetch_key(slot.tensor, slot.expert_idx, slot.nbytes)] = slot_idx;
+                ++g_host_prefetch.submitted;
+            } else {
+                slot.ready = false;
+                slot.reserved = false;
+                slot.entry = nullptr;
+                g_host_prefetch.ready.erase(host_prefetch_key(e.tensor, e.expert_idx, e.expert_bytes));
+                ++g_host_prefetch.read_failures;
+            }
+            slot.in_use = false;
+        }
+    }
+}
+
+static void host_prefetch_shutdown() {
+    {
+        std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+        g_host_prefetch.stop = true;
+        g_host_prefetch.cv.notify_all();
+    }
+    if (g_host_prefetch.worker.joinable()) {
+        g_host_prefetch.worker.join();
+    }
+    for (host_prefetch_slot &slot : g_host_prefetch.slots) {
+        if (slot.host) {
+            if (slot.done) {
+                cudaEventSynchronize(slot.done);
+            }
+            cudaFreeHost(slot.host);
+            slot.host = nullptr;
+        }
+        if (slot.done) {
+            cudaEventDestroy(slot.done);
+            slot.done = nullptr;
+        }
+    }
+}
+
+static void host_prefetch_init_once() {
+    if (g_host_prefetch.inited) return;
+    std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+    if (g_host_prefetch.inited) return;
+    const char *path = std::getenv("GGML_MOE_HOST_PREFETCH");
+    const char *planned_env = std::getenv("GGML_MOE_PLANNED_HOST_PREFETCH");
+    g_host_prefetch.planned_enabled = planned_env && planned_env[0] && planned_env[0] != '0';
+    if ((!path || !path[0]) && !g_host_prefetch.planned_enabled) {
+        g_host_prefetch.inited = true;
+        return;
+    }
+    if (path && path[0] && !load_route_trace_csv(path, g_host_prefetch.trace, "host prefetch")) {
+        g_host_prefetch.inited = true;
+        return;
+    }
+    const int slots = host_prefetch_env_int("GGML_MOE_HOST_PREFETCH_SLOTS", 64, 1, 512);
+    g_host_prefetch.lead_events = (size_t)host_prefetch_env_int("GGML_MOE_HOST_PREFETCH_LEAD_EVENTS", 2048, 1, 32768);
+    g_host_prefetch.skip_events = (size_t)host_prefetch_env_int("GGML_MOE_HOST_PREFETCH_SKIP_EVENTS", 0, 0, 100000000);
+    if (g_host_prefetch.skip_events > g_host_prefetch.trace.size()) {
+        g_host_prefetch.skip_events = g_host_prefetch.trace.size();
+    }
+    g_host_prefetch.produce_cursor = g_host_prefetch.skip_events;
+    g_host_prefetch.max_bytes = host_prefetch_env_mib("GGML_MOE_HOST_PREFETCH_MAX_MIB", 512, 16, 8192);
+    g_host_prefetch.slots.resize((size_t)slots);
+    g_host_prefetch.enabled = true;
+    g_host_prefetch.inited = true;
+    std::atexit(host_prefetch_report_atexit);
+    std::atexit(host_prefetch_shutdown);
+    g_host_prefetch.worker = std::thread(host_prefetch_worker);
+    g_host_prefetch.cv.notify_all();
+    std::fprintf(stderr,
+        "[moe_stream_batch] host prefetch: loaded %zu events from %s lead_events=%zu skip_events=%zu slots=%d max=%.2f MiB planned=%d\n",
+        g_host_prefetch.trace.size(), (path && path[0]) ? path : "(none)",
+        g_host_prefetch.lead_events, g_host_prefetch.skip_events, slots,
+        g_host_prefetch.max_bytes / (1024.0 * 1024.0),
+        g_host_prefetch.planned_enabled ? 1 : 0);
+}
+
+static void host_prefetch_on_route(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    host_prefetch_init_once();
+    if (!g_host_prefetch.enabled || !tensor_name || !tensor_name[0]) return;
+    std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+    ++g_host_prefetch.calls;
+    if (g_host_prefetch.cursor < g_host_prefetch.trace.size() &&
+            trace_entry_matches(g_host_prefetch.trace[g_host_prefetch.cursor], tensor_name, expert_idx, expert_bytes)) {
+        ++g_host_prefetch.cursor;
+        ++g_host_prefetch.matched;
+    } else {
+        const size_t scan_end = std::min(g_host_prefetch.trace.size(), g_host_prefetch.cursor + (size_t)128);
+        for (size_t i = g_host_prefetch.cursor; i < scan_end; ++i) {
+            if (trace_entry_matches(g_host_prefetch.trace[i], tensor_name, expert_idx, expert_bytes)) {
+                g_host_prefetch.cursor = i + 1;
+                ++g_host_prefetch.matched;
+                ++g_host_prefetch.resync;
+                break;
+            }
+        }
+    }
+    if (g_host_prefetch.produce_cursor < g_host_prefetch.cursor) {
+        g_host_prefetch.produce_cursor = g_host_prefetch.cursor;
+    }
+    g_host_prefetch.cv.notify_one();
+}
+
+static void host_prefetch_submit_planned(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    host_prefetch_init_once();
+    if (!g_host_prefetch.enabled || !g_host_prefetch.planned_enabled ||
+            !tensor_name || !tensor_name[0] || expert_idx < 0 || expert_bytes == 0) {
+        return;
+    }
+    batch_route_trace_entry e;
+    e.seq = 0;
+    e.expert_idx = expert_idx;
+    e.expert_bytes = expert_bytes;
+    std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
+
+    std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+    const uint64_t key = host_prefetch_key(e.tensor, e.expert_idx, e.expert_bytes);
+    auto ready_it = g_host_prefetch.ready.find(key);
+    if (ready_it != g_host_prefetch.ready.end()) {
+        ++g_host_prefetch.planned_duplicate_skips;
+        return;
+    }
+    if (g_host_prefetch.planned_queued.find(key) != g_host_prefetch.planned_queued.end()) {
+        ++g_host_prefetch.planned_duplicate_skips;
+        return;
+    }
+    g_host_prefetch.planned_queued[key] = g_host_prefetch.planned.size();
+    g_host_prefetch.planned.push_back(e);
+    ++g_host_prefetch.planned_enqueued;
+    g_host_prefetch.cv.notify_one();
+}
+
+static bool host_prefetch_copy_h2d(
+        const expert_pack_entry *pack_entry,
+        const char *tensor_name,
+        int expert_idx,
+        void *dst,
+        size_t sz,
+        cudaStream_t st) {
+    host_prefetch_init_once();
+    if (!g_host_prefetch.enabled || !pack_entry || !tensor_name || !tensor_name[0]) return false;
+    void *host = nullptr;
+    size_t slot_idx = SIZE_MAX;
+    {
+        std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+        const uint64_t key = host_prefetch_key(tensor_name, expert_idx, sz);
+        auto it = g_host_prefetch.ready.find(key);
+        if (it == g_host_prefetch.ready.end()) {
+            ++g_host_prefetch.misses;
+            return false;
+        }
+        host_prefetch_slot &slot = g_host_prefetch.slots[it->second];
+        if (!slot.ready || slot.nbytes != sz || !slot.host) {
+            if (slot.reserved) {
+                ++g_host_prefetch.reserved_skips;
+            } else {
+                g_host_prefetch.ready.erase(it);
+            }
+            ++g_host_prefetch.misses;
+            return false;
+        }
+        slot_idx = it->second;
+        host = slot.host;
+        slot.in_use = true;
+        slot.ready = false;
+        slot.reserved = false;
+        slot.entry = nullptr;
+        g_host_prefetch.ready.erase(it);
+        ++g_host_prefetch.hits;
+    }
+    const bool ok = host && cudaMemcpyAsync(dst, host, sz, cudaMemcpyHostToDevice, st) == cudaSuccess;
+    {
+        std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
+        if (slot_idx < g_host_prefetch.slots.size()) {
+            if (ok && g_host_prefetch.slots[slot_idx].done) {
+                cudaEventRecord(g_host_prefetch.slots[slot_idx].done, st);
+            }
+            g_host_prefetch.slots[slot_idx].in_use = false;
+        }
+    }
+    return ok;
+}
+
 static std::once_flag g_ram_tier_once;
 
 static void ram_tier_init() {
@@ -1259,8 +2141,18 @@ static void ram_tier_init() {
     const size_t budget = (size_t)std::atol(ram_tier_env) * 1024ULL * 1024ULL;
     if (budget == 0) return;
 
-    load_profile_once();
-    if (g_profile.empty()) {
+    std::vector<profile_entry> ram_profile;
+    const char *ram_profile_path = std::getenv("GGML_MOE_RAM_TIER_PROFILE");
+    if (ram_profile_path && ram_profile_path[0]) {
+        if (!load_profile_file(ram_profile_path, ram_profile, "RAM tier profile")) {
+            std::fprintf(stderr, "[moe_stream_batch] RAM tier: no RAM tier profile loaded, skipping\n");
+            return;
+        }
+    } else {
+        load_profile_once();
+        ram_profile = g_profile;
+    }
+    if (ram_profile.empty()) {
         std::fprintf(stderr, "[moe_stream_batch] RAM tier: no profile loaded, skipping\n");
         return;
     }
@@ -1281,8 +2173,13 @@ static void ram_tier_init() {
     }
     g_expert_pack.ram_tier_base = region;
     g_expert_pack.ram_tier_bytes = budget;
-    size_t loaded = 0, n_loaded = 0, n_skipped = 0;
-    for (const profile_entry &pe : g_profile) {
+    const char *pin_mib_env = std::getenv("GGML_MOE_RAM_TIER_PIN_MIB");
+    const bool pin_budget_set = pin_mib_env && pin_mib_env[0];
+    const size_t pin_budget = pin_budget_set ?
+        (size_t)std::atol(pin_mib_env) * 1024ULL * 1024ULL : budget;
+
+    size_t loaded = 0, n_loaded = 0, n_skipped = 0, pin_prefix_bytes = 0, pin_prefix_entries = 0;
+    for (const profile_entry &pe : ram_profile) {
         if (loaded >= budget) break;
         if (n_skipped < skip) { ++n_skipped; continue; }
         size_t lo2 = 0, hi2 = g_expert_pack.entries.size();
@@ -1305,19 +2202,108 @@ static void ram_tier_init() {
         g_expert_pack.ram_tier_index[lo2] = {loaded, (size_t)ent.nbytes};
         loaded += (size_t)ent.nbytes;
         ++n_loaded;
+        if (pin_prefix_bytes + (size_t)ent.nbytes <= pin_budget) {
+            pin_prefix_bytes += (size_t)ent.nbytes;
+            ++pin_prefix_entries;
+        }
     }
     std::fprintf(stderr, "[moe_stream_batch] RAM tier: loaded %zu entries (skipped %zu), %.2f MiB into anonymous mmap\n",
                  n_loaded, skip, loaded / (1024.0 * 1024.0));
-    if (loaded > 0) {
-        cudaError_t err = cudaHostRegister(region, loaded, cudaHostRegisterDefault);
-        if (err == cudaSuccess) {
-            std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister succeeded (%.2f MiB pinned)\n",
+    if (loaded > 0 && expert_pack_env_bool("GGML_MOE_RAM_TIER_PIN", true)) {
+        const size_t pin_bytes = std::min(loaded, pin_prefix_bytes);
+        if (pin_bytes == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister prefix budget is 0, using unpinned path (%.2f MiB)\n",
                          loaded / (1024.0 * 1024.0));
+            return;
+        }
+        cudaError_t err = cudaHostRegister(region, pin_bytes, cudaHostRegisterDefault);
+        if (err == cudaSuccess) {
+            g_expert_pack.ram_tier_pinned_bytes = pin_bytes;
+            if (pin_budget_set) {
+                std::fprintf(stderr,
+                             "[moe_stream_batch] RAM tier: cudaHostRegister succeeded (%.2f MiB pinned prefix, %zu entries, %.2f MiB resident)\n",
+                             pin_bytes / (1024.0 * 1024.0), pin_prefix_entries, loaded / (1024.0 * 1024.0));
+            } else {
+                std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister succeeded (%.2f MiB pinned)\n",
+                             pin_bytes / (1024.0 * 1024.0));
+            }
         } else {
             std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister failed (%s), using unpinned path\n",
                          cudaGetErrorString(err));
         }
+    } else if (loaded > 0) {
+        std::fprintf(stderr, "[moe_stream_batch] RAM tier: cudaHostRegister disabled, using unpinned path (%.2f MiB)\n",
+                     loaded / (1024.0 * 1024.0));
     }
+}
+
+static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void *dst, size_t sz) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (!entry || g_expert_pack.fd_direct < 0 || entry->nbytes != sz) return false;
+    const uint64_t alignment = expert_pack_direct_alignment();
+    const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
+    if ((entry->offset % alignment) != 0 ||
+            ((uintptr_t)dst % alignment) != 0 ||
+            read_sz < sz) {
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+
+    io_uring ring_io;
+    const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
+    if (io_uring_queue_init(1, &ring_io, flags) != 0) {
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+
+    io_uring_sqe *sqe = io_uring_get_sqe(&ring_io);
+    if (!sqe) {
+        io_uring_queue_exit(&ring_io);
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+
+    io_uring_prep_read(sqe, g_expert_pack.fd_direct, dst, (unsigned)read_sz, (off_t)entry->offset);
+    io_uring_sqe_set_data64(sqe, 1);
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    const int submit_rc = io_uring_submit(&ring_io);
+    const auto submit_end = std::chrono::steady_clock::now();
+    g_expert_pack.iouring_submit_us.fetch_add(
+            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(submit_end - submit_start).count());
+    if (submit_rc < 0) {
+        io_uring_queue_exit(&ring_io);
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+
+    io_uring_cqe *cqe = nullptr;
+    const auto wait_start = std::chrono::steady_clock::now();
+    const int wait_rc = io_uring_wait_cqe(&ring_io, &cqe);
+    const auto wait_end = std::chrono::steady_clock::now();
+    g_expert_pack.iouring_wait_us.fetch_add(
+            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(wait_end - wait_start).count());
+    bool ok = false;
+    if (wait_rc == 0 && cqe && cqe->res == (int)read_sz) {
+        ok = true;
+    }
+    if (cqe) io_uring_cqe_seen(&ring_io, cqe);
+    io_uring_queue_exit(&ring_io);
+
+    if (ok) {
+        ++g_expert_pack.iouring_reads;
+        g_expert_pack.iouring_bytes.fetch_add(sz);
+        return true;
+    }
+
+    ++g_expert_pack.iouring_fallbacks;
+    return false;
+#else
+    (void)entry;
+    (void)dst;
+    (void)sz;
+    return false;
+#endif
 }
 
 static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, size_t sz) {
@@ -1326,7 +2312,13 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
     std::call_once(g_ram_tier_once, ram_tier_init);
 
 #if !defined(_WIN32)
-    if (g_expert_pack.io_backend == 1 && g_expert_pack.fd_direct >= 0) {
+    if (g_expert_pack.io_backend == 2 && g_expert_pack.fd_direct >= 0 &&
+            expert_pack_env_bool("GGML_MOE_IO_URING_SINGLE", false)) {
+        if (expert_pack_read_entry_iouring(entry, dst, sz)) {
+            return true;
+        }
+    }
+    if ((g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) && g_expert_pack.fd_direct >= 0) {
         const uint64_t alignment = expert_pack_direct_alignment();
         const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
         if ((entry->offset % alignment) == 0 &&
@@ -1391,6 +2383,34 @@ struct batch_copy_trace {
     bool ram_hit = false;
 };
 
+static bool expert_pack_ram_tier_copy_h2d(
+        const expert_pack_entry *pack_entry,
+        void *dst,
+        size_t sz,
+        cudaStream_t st,
+        batch_copy_trace *copy_trace = nullptr) {
+    if (!pack_entry) return false;
+    std::call_once(g_ram_tier_once, ram_tier_init);
+    if (g_expert_pack.ram_tier_base == nullptr) return false;
+
+    const size_t idx = (size_t)(pack_entry - g_expert_pack.entries.data());
+    if (idx < g_expert_pack.ram_tier_index.size()) {
+        const auto &rt = g_expert_pack.ram_tier_index[idx];
+        if (rt.nbytes == sz) {
+            const void *src = (const char *)g_expert_pack.ram_tier_base + rt.offset;
+            if (cudaMemcpyAsync(dst, src, sz, cudaMemcpyHostToDevice, st) == cudaSuccess) {
+                ++g_expert_pack.ram_tier_hits;
+                ++g_expert_pack.ram_tier_total;
+                if (copy_trace) copy_trace->ram_hit = true;
+                return true;
+            }
+        }
+    }
+
+    ++g_expert_pack.ram_tier_total;
+    return false;
+}
+
 static void pinned_stage_collect_timing(pinned_stage_ring &ring, pinned_stage_slot &slot) {
     if (!slot.timing_pending || !slot.copy_start || !slot.copy_done) return;
     if (cudaEventSynchronize(slot.copy_done) == cudaSuccess) {
@@ -1404,6 +2424,14 @@ static void pinned_stage_collect_timing(pinned_stage_ring &ring, pinned_stage_sl
 }
 
 static void pinned_stage_release(pinned_stage_ring &ring) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (ring.uring) {
+        io_uring_queue_exit(ring.uring);
+        delete ring.uring;
+        ring.uring = nullptr;
+        ring.uring_depth = 0;
+    }
+#endif
     for (pinned_stage_slot &slot : ring.slots) {
         if (slot.pending && slot.done) {
             cudaEventSynchronize(slot.done);
@@ -1452,6 +2480,17 @@ static void pinned_stage_report_atexit() {
             std::fprintf(stderr,
                 "[moe_stream_batch] pinned staging%s: copies=%lu waits=%lu fallbacks=%lu slots=%zu slot=%.2f MiB\n",
                 name, ring.copies, ring.waits, ring.fallbacks, ring.slots.size(), ring.slot_sz / (1024.0 * 1024.0));
+        }
+        if (ring.iouring_batches > 0) {
+            const double inflight_avg = ring.iouring_inflight_samples > 0 ?
+                (double)ring.iouring_inflight_sum / (double)ring.iouring_inflight_samples : 0.0;
+            std::fprintf(stderr,
+                "[moe_stream_batch] pinned staging%s iouring: batches=%lu jobs=%lu submit_calls=%lu wait_calls=%lu cqes=%lu "
+                "inflight_avg=%.2f inflight_max=%lu batch_hist=1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
+                name, ring.iouring_batches, ring.iouring_jobs, ring.iouring_submit_calls,
+                ring.iouring_wait_calls, ring.iouring_cqes, inflight_avg, ring.iouring_inflight_max,
+                ring.iouring_batch_hist[0], ring.iouring_batch_hist[1], ring.iouring_batch_hist[2],
+                ring.iouring_batch_hist[3], ring.iouring_batch_hist[4], ring.iouring_batch_hist[5]);
         }
     };
     report_ring("", g_batch.stage_ring);
@@ -1520,22 +2559,8 @@ static bool batch_cache_copy_h2d(
 
     // RAM tier fast path: if the entry is resident in the registered mmap,
     // do a direct H2D from the pinned region, bypassing the staging slot.
-    if (pack_entry && g_expert_pack.ram_tier_base != nullptr) {
-        std::call_once(g_ram_tier_once, ram_tier_init);
-        const size_t idx = (size_t)(pack_entry - g_expert_pack.entries.data());
-        if (idx < g_expert_pack.ram_tier_index.size()) {
-            const auto &rt = g_expert_pack.ram_tier_index[idx];
-            if (rt.nbytes == sz) {
-                const void *src = (const char *)g_expert_pack.ram_tier_base + rt.offset;
-                if (cudaMemcpyAsync(dst, src, sz, cudaMemcpyHostToDevice, st) == cudaSuccess) {
-                    ++g_expert_pack.ram_tier_hits;
-                    ++g_expert_pack.ram_tier_total;
-                    if (copy_trace) copy_trace->ram_hit = true;
-                    return true;
-                }
-            }
-        }
-        ++g_expert_pack.ram_tier_total;
+    if (expert_pack_ram_tier_copy_h2d(pack_entry, dst, sz, st, copy_trace)) {
+        return true;
     }
 
     const bool use_pinned_stage = stage_pinned_enabled() || pack_entry;
@@ -1600,11 +2625,336 @@ static bool batch_cache_copy_h2d(
     return batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, pack_entry, nullptr);
 }
 
+template <typename Job>
+static bool expert_pack_iouring_copy_jobs(
+        const std::vector<Job> &jobs,
+        size_t expert_bytes,
+        cudaStream_t st,
+        pinned_stage_ring &ring,
+        const char *trace_op) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (jobs.empty()) return true;
+    if (g_expert_pack.io_backend != 2 || g_expert_pack.fd_direct < 0) return false;
+    if (!pinned_stage_ensure(ring, expert_bytes, true)) return false;
+
+    const size_t alignment = expert_pack_direct_alignment();
+    const size_t read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
+    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
+    if (depth == 0 || read_sz == 0) return false;
+
+    std::vector<size_t> read_jobs;
+    read_jobs.reserve(jobs.size());
+    for (size_t i = 0; i < jobs.size(); ++i) {
+        const Job &job = jobs[i];
+        if (!job.pack_entry ||
+                job.pack_entry->nbytes != expert_bytes ||
+                (job.pack_entry->offset % alignment) != 0) {
+            return false;
+        }
+        batch_copy_trace copy_trace;
+        copy_trace.pack_hit = true;
+        const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        if (expert_pack_ram_tier_copy_h2d(job.pack_entry, job.dst, expert_bytes, st, &copy_trace)) {
+            if (copy_start != std::chrono::steady_clock::time_point{}) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                batch_ttft_trace_record(
+                    trace_op,
+                    job.tensor,
+                    job.expert_idx,
+                    expert_bytes,
+                    false,
+                    copy_trace.pack_hit,
+                    copy_trace.ram_hit,
+                    std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
+            }
+            continue;
+        }
+        if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, expert_bytes, st)) {
+            copy_trace.pack_hit = true;
+            copy_trace.ram_hit = false;
+            if (copy_start != std::chrono::steady_clock::time_point{}) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                batch_ttft_trace_record(
+                    trace_op,
+                    job.tensor,
+                    job.expert_idx,
+                    expert_bytes,
+                    false,
+                    copy_trace.pack_hit,
+                    copy_trace.ram_hit,
+                    std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
+            }
+            continue;
+        }
+        read_jobs.push_back(i);
+    }
+    if (read_jobs.empty()) {
+        return true;
+    }
+    expert_pack_record_iouring_batch(read_jobs.size());
+    ring.iouring_batches += 1;
+    ring.iouring_jobs += read_jobs.size();
+    const size_t bucket = expert_pack_iouring_batch_bucket(read_jobs.size());
+    if (bucket < 6) {
+        ring.iouring_batch_hist[bucket] += 1;
+    }
+
+    struct pending_job {
+        size_t job_idx = 0;
+        size_t slot_idx = 0;
+        size_t bytes = 0;
+        std::chrono::steady_clock::time_point copy_start;
+    };
+
+    std::vector<size_t> job_order;
+    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
+    if (sort_by_offset && read_jobs.size() > 1) {
+        job_order.resize(read_jobs.size());
+        for (size_t i = 0; i < read_jobs.size(); ++i) {
+            job_order[i] = i;
+        }
+        std::stable_sort(job_order.begin(), job_order.end(),
+            [&](size_t a, size_t b) {
+                return jobs[read_jobs[a]].pack_entry->offset < jobs[read_jobs[b]].pack_entry->offset;
+            });
+    }
+    auto ordered_job_idx = [&](size_t seq_idx) -> size_t {
+        const size_t read_idx = job_order.empty() ? seq_idx : job_order[seq_idx];
+        return read_jobs[read_idx];
+    };
+
+    const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
+    if (!ring.uring || ring.uring_depth != depth) {
+        if (ring.uring) {
+            io_uring_queue_exit(ring.uring);
+            delete ring.uring;
+            ring.uring = nullptr;
+            ring.uring_depth = 0;
+        }
+        ring.uring = new io_uring();
+        if (io_uring_queue_init((unsigned)depth, ring.uring, flags) != 0) {
+            delete ring.uring;
+            ring.uring = nullptr;
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        ring.uring_depth = depth;
+    }
+    io_uring *ring_io = ring.uring;
+
+    std::vector<pending_job> pending(depth);
+    std::vector<size_t> free_pending;
+    free_pending.reserve(depth);
+    for (size_t i = 0; i < depth; ++i) {
+        free_pending.push_back(depth - 1 - i);
+    }
+
+    const bool profile_stage = pinned_stage_profile_enabled();
+    auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
+        const Job &job = jobs[job_idx];
+        pinned_stage_slot &slot = ring.slots[slot_idx];
+        if (slot.pending) {
+            const auto wait_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
+            if (profile_stage) {
+                const auto wait_end = std::chrono::steady_clock::now();
+                ring.slot_wait_ms += std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+            }
+            slot.pending = false;
+            ++ring.waits;
+        }
+        pinned_stage_collect_timing(ring, slot);
+
+        io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
+        if (!sqe) return false;
+        pending[pending_idx] = {
+            job_idx,
+            slot_idx,
+            read_sz,
+            batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
+        };
+        io_uring_prep_read(sqe, g_expert_pack.fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
+        io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
+        return true;
+    };
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    size_t next_job = 0;
+    size_t inflight = 0;
+    const size_t refill_batch = std::min(expert_pack_io_refill_batch(), depth);
+    struct reusable_pending {
+        size_t pending_idx = 0;
+        size_t slot_idx = 0;
+    };
+    std::vector<reusable_pending> reusable_pending_slots;
+    reusable_pending_slots.reserve(depth);
+    while (next_job < read_jobs.size() && inflight < depth) {
+        const size_t pending_idx = free_pending.back();
+        free_pending.pop_back();
+        const size_t slot_idx = ring.next++ % ring.slots.size();
+        if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        ++next_job;
+        ++inflight;
+    }
+    if (io_uring_submit(ring_io) < 0) {
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+    ++g_expert_pack.iouring_submit_calls;
+    ++ring.iouring_submit_calls;
+    const auto submit_end = std::chrono::steady_clock::now();
+    g_expert_pack.iouring_submit_us.fetch_add(
+            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(submit_end - submit_start).count());
+
+    size_t completed = 0;
+    while (completed < read_jobs.size()) {
+        g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
+        ++g_expert_pack.iouring_inflight_samples;
+        expert_pack_atomic_max(g_expert_pack.iouring_inflight_max, inflight);
+        ring.iouring_inflight_sum += inflight;
+        ++ring.iouring_inflight_samples;
+        if (ring.iouring_inflight_max < inflight) {
+            ring.iouring_inflight_max = inflight;
+        }
+        auto handle_cqe = [&](io_uring_cqe *cqe) -> bool {
+            const uint64_t data = io_uring_cqe_get_data64(cqe);
+            const size_t pending_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
+            if (pending_idx >= pending.size() || cqe->res != (int)pending[pending_idx].bytes) {
+                io_uring_cqe_seen(ring_io, cqe);
+                ++g_expert_pack.iouring_fallbacks;
+                return false;
+            }
+
+            const pending_job done = pending[pending_idx];
+            const Job &job = jobs[done.job_idx];
+            pinned_stage_slot &slot = ring.slots[done.slot_idx];
+            io_uring_cqe_seen(ring_io, cqe);
+            ++g_expert_pack.iouring_cqes;
+            ++ring.iouring_cqes;
+
+            const auto enqueue_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if (profile_stage && slot.copy_start) {
+                if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
+                    return false;
+                }
+            }
+            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                return false;
+            }
+            if (profile_stage && slot.copy_done) {
+                if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) {
+                    return false;
+                }
+                slot.timing_pending = true;
+            }
+            if (cudaEventRecord(slot.done, st) != cudaSuccess) {
+                cudaStreamSynchronize(st);
+                return false;
+            }
+            if (profile_stage) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                ring.enqueue_ms += std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+            }
+            slot.pending = true;
+            ++ring.copies;
+            ++g_expert_pack.iouring_reads;
+            g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
+            ++g_expert_pack.iouring_h2d_enqueues;
+
+            if (done.copy_start != std::chrono::steady_clock::time_point{}) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                batch_ttft_trace_record(
+                    trace_op,
+                    job.tensor,
+                    job.expert_idx,
+                    expert_bytes,
+                    false,
+                    true,
+                    false,
+                    std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count());
+            }
+
+            ++completed;
+            --inflight;
+            reusable_pending_slots.push_back({pending_idx, done.slot_idx});
+            return true;
+        };
+
+        auto refill_pending = [&]() -> bool {
+            size_t submitted = 0;
+            while (next_job < read_jobs.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
+                const reusable_pending reusable = reusable_pending_slots.back();
+                reusable_pending_slots.pop_back();
+                const size_t pending_idx = reusable.pending_idx;
+                const size_t slot_idx = reusable.slot_idx;
+                if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+                    ++g_expert_pack.iouring_fallbacks;
+                    return false;
+                }
+                ++next_job;
+                ++inflight;
+                ++submitted;
+            }
+            if (submitted > 0) {
+                if (io_uring_submit(ring_io) < 0) {
+                    ++g_expert_pack.iouring_fallbacks;
+                    return false;
+                }
+                ++g_expert_pack.iouring_submit_calls;
+                ++ring.iouring_submit_calls;
+            }
+            return true;
+        };
+
+        const auto wait_start = std::chrono::steady_clock::now();
+        io_uring_cqe *cqe = nullptr;
+        ++g_expert_pack.iouring_wait_calls;
+        ++ring.iouring_wait_calls;
+        const int wait_rc = io_uring_wait_cqe(ring_io, &cqe);
+        const auto wait_end = std::chrono::steady_clock::now();
+        g_expert_pack.iouring_wait_us.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(wait_end - wait_start).count());
+        if (wait_rc != 0 || !cqe) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        if (!handle_cqe(cqe)) return false;
+        if (refill_batch == 1 && !refill_pending()) return false;
+
+        while (completed < read_jobs.size() && inflight > 0) {
+            io_uring_cqe *extra_cqe = nullptr;
+            const int peek_rc = io_uring_peek_cqe(ring_io, &extra_cqe);
+            if (peek_rc != 0 || !extra_cqe) {
+                break;
+            }
+            if (!handle_cqe(extra_cqe)) return false;
+            if (refill_batch == 1 && !refill_pending()) return false;
+        }
+        if (refill_batch > 1 && !refill_pending()) {
+            return false;
+        }
+    }
+
+    return true;
+#else
+    (void)jobs;
+    (void)expert_bytes;
+    (void)st;
+    (void)ring;
+    (void)trace_op;
+    return false;
+#endif
+}
+
 static int batch_cache_insert_slot(
         batch_vram_cache *c, uintptr_t key, const void *host_data, size_t sz, cudaStream_t st,
         bool allow_evict, bool preload, const int *avoid_slots = nullptr, int n_avoid_slots = 0,
         bool do_copy = true, const char *tensor_name = nullptr, int expert_idx = -1,
-        bool prefetch_down = false, bool pin_preload = true) {
+        bool prefetch_down = false, bool pin_preload = true, bool async_prefetch = false,
+        uint64_t profile_count = 0) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
     const bool pin_slot = preload && pin_preload && profile_protect_enabled();
     if (pin_slot && c->pinned >= profile_preload_slot_budget(c)) return -1;
@@ -1612,7 +2962,15 @@ static int batch_cache_insert_slot(
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
     uint32_t lowest_hits = UINT32_MAX;
+    uint32_t lowest_profile_count = UINT32_MAX;
     const bool lfu_lru = cache_policy_lfu_lru_enabled();
+    const bool profile_lfu_lru = cache_policy_profile_lfu_lru_enabled();
+    const bool hybrid_profile_lfu_lru = cache_policy_hybrid_profile_lfu_lru_enabled();
+    const bool use_profile_score =
+        profile_lfu_lru || (hybrid_profile_lfu_lru && c->clock >= cache_policy_hybrid_after());
+    if ((profile_lfu_lru || hybrid_profile_lfu_lru) && !g_cache_policy_diag_registered.exchange(true)) {
+        std::atexit(cache_policy_diag_report_atexit);
+    }
     for (int i = 0; i < c->n_slots; ++i) {
         if (batch_slot_is_avoided(i, avoid_slots, n_avoid_slots)) continue;
         if (c->slot_key[i] == 0) {
@@ -1621,7 +2979,17 @@ static int batch_cache_insert_slot(
         }
         if (!allow_evict) continue;
         if (c->slot_pinned[i]) continue;
-        if (lfu_lru) {
+        if (use_profile_score) {
+            if (c->slot_profile_count[i] < lowest_profile_count ||
+                    (c->slot_profile_count[i] == lowest_profile_count &&
+                     (c->slot_hits[i] < lowest_hits ||
+                      (c->slot_hits[i] == lowest_hits && c->slot_used[i] < oldest)))) {
+                lowest_profile_count = c->slot_profile_count[i];
+                lowest_hits = c->slot_hits[i];
+                oldest = c->slot_used[i];
+                slot = i;
+            }
+        } else if (lfu_lru) {
             if (c->slot_hits[i] < lowest_hits ||
                     (c->slot_hits[i] == lowest_hits && c->slot_used[i] < oldest)) {
                 lowest_hits = c->slot_hits[i];
@@ -1636,30 +3004,52 @@ static int batch_cache_insert_slot(
         }
     }
     if (slot < 0) return -1;
+    if (!batch_cache_wait_slot_ready(c, slot)) return -1;
     if (c->slot_pinned[slot] && !pin_slot && c->pinned > 0) {
         --c->pinned;
     }
     if (c->slot_key[slot] != 0 && c->slot_prefetch_down[slot]) {
         ++c->down_prefetch_evicted;
     }
+    if (profile_count == 0 && (profile_lfu_lru || hybrid_profile_lfu_lru)) {
+        profile_count = profile_count_for_key(key);
+    }
+    if ((profile_lfu_lru || hybrid_profile_lfu_lru) && c->slot_key[slot] != 0) {
+        ++g_cache_policy_diag.profile_policy_evictions;
+        if (c->slot_profile_count[slot] > 0) {
+            ++g_cache_policy_diag.profile_policy_victim_count_nonzero;
+            g_cache_policy_diag.profile_policy_victim_count_sum.fetch_add(c->slot_profile_count[slot]);
+        }
+    }
     c->slot_key[slot] = key;
     c->slot_used[slot] = c->clock++;
     c->slot_hits[slot] = 0;
+    c->slot_profile_count[slot] = profile_count > UINT32_MAX ? UINT32_MAX : (uint32_t)profile_count;
+    if ((profile_lfu_lru || hybrid_profile_lfu_lru) && c->slot_profile_count[slot] > 0) {
+        ++g_cache_policy_diag.inserted_profile_count_nonzero;
+        g_cache_policy_diag.inserted_profile_count_sum.fetch_add(c->slot_profile_count[slot]);
+    }
     if (pin_slot && !c->slot_pinned[slot]) {
         ++c->pinned;
     }
     c->slot_pinned[slot] = pin_slot;
+    if (pin_slot) {
+        profile_pinned_key_record((uint64_t)key);
+    }
     c->slot_prefetch_down[slot] = prefetch_down;
+    c->slot_pending[slot] = false;
     void *dst = (char *)c->pool + (size_t)slot * c->slot_sz;
     auto clear_slot = [&]() {
         c->slot_key[slot] = 0;
         c->slot_used[slot] = 0;
         c->slot_hits[slot] = 0;
+        c->slot_profile_count[slot] = 0;
         if (c->slot_pinned[slot] && c->pinned > 0) {
             --c->pinned;
         }
         c->slot_pinned[slot] = false;
         c->slot_prefetch_down[slot] = false;
+        c->slot_pending[slot] = false;
     };
     if (do_copy) {
         const expert_pack_entry *pack_entry = expert_pack_lookup(tensor_name, expert_idx, sz);
@@ -1678,6 +3068,18 @@ static int batch_cache_insert_slot(
         if (cudaGetLastError() != cudaSuccess) {
             clear_slot();
             return -1;
+        }
+        if (async_prefetch) {
+            if (!c->slot_ready[slot] &&
+                    cudaEventCreateWithFlags(&c->slot_ready[slot], cudaEventDisableTiming) != cudaSuccess) {
+                clear_slot();
+                return -1;
+            }
+            if (cudaEventRecord(c->slot_ready[slot], st) != cudaSuccess) {
+                clear_slot();
+                return -1;
+            }
+            c->slot_pending[slot] = true;
         }
         if (copy_start != std::chrono::steady_clock::time_point{}) {
             const auto copy_end = std::chrono::steady_clock::now();
@@ -1746,10 +3148,18 @@ static void preload_profile_entries_for_tensor(
         if (!use_lookup && std::strcmp(e.tensor, tensor_name) != 0) continue;
         if (e.expert_idx < 0 || e.expert_idx >= n_as) continue;
         const uintptr_t key = batch_key_hash(tensor_name, e.expert_idx);
-        if (batch_cache_find_slot(cache, key) >= 0) continue;
+        const int existing_slot = batch_cache_find_slot(cache, key);
+        if (existing_slot >= 0) {
+            if (pin_preload && profile_protect_enabled()) {
+                if (batch_cache_promote_profile_slot(cache, existing_slot, e.count)) {
+                    profile_pinned_key_record((uint64_t)key);
+                }
+            }
+            continue;
+        }
         const char *expert_host = (const char *)src0_data + (size_t)e.expert_idx * nb02;
         if (batch_cache_insert_slot(cache, key, expert_host, src0_bytes, st, allow_evict, true,
-                nullptr, 0, true, tensor_name, e.expert_idx, false, pin_preload) < 0) break;
+                nullptr, 0, true, tensor_name, e.expert_idx, false, pin_preload, false, e.count) < 0) break;
         ++loaded;
     }
     if (loaded > 0) {
@@ -1771,10 +3181,165 @@ static void preload_prompt_profile_for_tensor(
         const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
     load_prompt_profile_once();
     if (!g_prompt_profile_enabled) return;
+    batch_vram_cache *cache = batch_cache_get(src0_bytes);
+    if (!cache) return;
+    if (profile_protect_enabled() && cache->pinned < profile_preload_slot_budget(cache)) return;
     std::lock_guard<std::mutex> lk(g_profile_mu);
     preload_profile_entries_for_tensor(
         g_prompt_profile, "prompt profile", tensor_name, src0_data, n_as, nb02, src0_bytes, st,
-        false, false, false, false, prompt_profile_preload_scan_budget(batch_cache_get(src0_bytes)));
+        false, false, false, false, prompt_profile_preload_scan_budget(cache));
+}
+
+static bool registered_tensor_lookup(const char *tensor_name, registered_tensor *out) {
+    if (!tensor_name || !tensor_name[0] || !out) return false;
+    std::lock_guard<std::mutex> lk(g_registered_mu);
+    for (const registered_tensor &t : g_registered_tensors) {
+        if (std::strcmp(t.name, tensor_name) == 0) {
+            *out = t;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool trace_entry_matches(const batch_route_trace_entry &e, const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    return e.expert_idx == expert_idx &&
+        e.expert_bytes == expert_bytes &&
+        tensor_name && std::strcmp(e.tensor, tensor_name) == 0;
+}
+
+static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    trace_prefetch_init_once();
+    if (!g_trace_prefetch.enabled || !g_batch.prefetch_stream || !tensor_name || !tensor_name[0]) return;
+
+    std::lock_guard<std::mutex> lk(g_trace_prefetch.mu);
+    ++g_trace_prefetch.calls;
+
+    if (g_trace_prefetch.cursor < g_trace_prefetch.trace.size() &&
+            trace_entry_matches(g_trace_prefetch.trace[g_trace_prefetch.cursor], tensor_name, expert_idx, expert_bytes)) {
+        ++g_trace_prefetch.cursor;
+        ++g_trace_prefetch.matched;
+    } else {
+        const size_t scan_end = std::min(g_trace_prefetch.trace.size(), g_trace_prefetch.cursor + g_trace_prefetch.window);
+        size_t found = SIZE_MAX;
+        for (size_t i = g_trace_prefetch.cursor; i < scan_end; ++i) {
+            if (trace_entry_matches(g_trace_prefetch.trace[i], tensor_name, expert_idx, expert_bytes)) {
+                found = i;
+                break;
+            }
+        }
+        if (found != SIZE_MAX) {
+            g_trace_prefetch.cursor = found + 1;
+            ++g_trace_prefetch.matched;
+            ++g_trace_prefetch.resync;
+        }
+    }
+
+    const size_t min_prefetch_cursor = std::min(
+        g_trace_prefetch.trace.size(),
+        g_trace_prefetch.cursor + g_trace_prefetch.lead_events);
+    if (g_trace_prefetch.prefetch_cursor < min_prefetch_cursor) {
+        g_trace_prefetch.prefetch_cursor = min_prefetch_cursor;
+    }
+
+    struct trace_prefetch_job {
+        int slot = -1;
+        void *dst = nullptr;
+        const void *host_data = nullptr;
+        const expert_pack_entry *pack_entry = nullptr;
+        int expert_idx = -1;
+        char tensor[128] = {};
+    };
+    std::vector<trace_prefetch_job> jobs;
+    size_t job_bytes = 0;
+
+    int examined = 0;
+    const size_t end = std::min(
+        g_trace_prefetch.trace.size(),
+        g_trace_prefetch.cursor + g_trace_prefetch.lead_events + g_trace_prefetch.window);
+    for (size_t i = g_trace_prefetch.prefetch_cursor; i < end && examined < g_trace_prefetch.max_loads; ++i, ++examined) {
+        g_trace_prefetch.prefetch_cursor = i + 1;
+        const batch_route_trace_entry &e = g_trace_prefetch.trace[i];
+        if (job_bytes != 0 && e.expert_bytes != job_bytes) {
+            continue;
+        }
+        const expert_pack_entry *pack_entry = expert_pack_lookup(e.tensor, e.expert_idx, e.expert_bytes);
+        registered_tensor rt;
+        const bool have_registered = registered_tensor_lookup(e.tensor, &rt);
+        const bool use_registered = !pack_entry && have_registered &&
+            rt.data && e.expert_idx >= 0 && e.expert_idx < rt.n_as && rt.expert_bytes == e.expert_bytes;
+        if (!pack_entry && !use_registered) {
+            ++g_trace_prefetch.missing_tensor;
+            continue;
+        }
+        batch_vram_cache *cache = batch_cache_get(e.expert_bytes);
+        if (!cache) {
+            ++g_trace_prefetch.cache_unavailable;
+            continue;
+        }
+        const uintptr_t key = batch_key_hash(e.tensor, e.expert_idx);
+        if (batch_cache_find_slot(cache, key) >= 0) {
+            ++g_trace_prefetch.cached;
+            continue;
+        }
+        const char *expert_host = use_registered ? (const char *)rt.data + (size_t)e.expert_idx * rt.nb02 : nullptr;
+        const int slot = batch_cache_insert_slot(cache, key, expert_host, e.expert_bytes, g_batch.prefetch_stream,
+                false, true, nullptr, 0, false, e.tensor, e.expert_idx, false, false, false);
+        if (slot >= 0) {
+            void *dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+            trace_prefetch_job job;
+            job.slot = slot;
+            job.dst = dst;
+            job.host_data = expert_host;
+            job.pack_entry = pack_entry;
+            job.expert_idx = e.expert_idx;
+            std::snprintf(job.tensor, sizeof(job.tensor), "%s", e.tensor);
+            jobs.push_back(job);
+            job_bytes = e.expert_bytes;
+        }
+    }
+
+    if (jobs.empty()) return;
+
+    auto mark_jobs_pending = [&](batch_vram_cache *cache, const std::vector<trace_prefetch_job> &pending_jobs) -> bool {
+        for (const trace_prefetch_job &job : pending_jobs) {
+            if (!cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                return false;
+            }
+            if (cudaEventRecord(cache->slot_ready[job.slot], g_batch.prefetch_stream) != cudaSuccess) {
+                return false;
+            }
+            cache->slot_pending[job.slot] = true;
+        }
+        return true;
+    };
+
+    batch_vram_cache *cache = batch_cache_get(job_bytes);
+    if (!cache) {
+        g_trace_prefetch.cache_unavailable += jobs.size();
+        return;
+    }
+
+    bool copied = expert_pack_iouring_copy_jobs(jobs, job_bytes, g_batch.prefetch_stream, g_batch.stage_ring, "trace_prefetch");
+    if (!copied) {
+        copied = true;
+        for (const trace_prefetch_job &job : jobs) {
+            batch_copy_trace copy_trace;
+            if (!batch_cache_copy_h2d(g_batch.stage_ring, job.dst, job.host_data, job_bytes,
+                    g_batch.prefetch_stream, job.pack_entry, &copy_trace)) {
+                copied = false;
+                break;
+            }
+        }
+    }
+    if (!copied || !mark_jobs_pending(cache, jobs)) {
+        for (const trace_prefetch_job &job : jobs) {
+            batch_cache_clear_slot(cache, job.slot);
+        }
+        return;
+    }
+    g_trace_prefetch.loads += jobs.size();
 }
 
 static bool ensure_dev(void *&p, size_t &cur, size_t need) {
@@ -2543,6 +4108,7 @@ extern "C" bool ggml_cuda_moe_stream_preload_tensor_prompt(
     if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_data || !src0_name) return false;
     std::lock_guard<std::mutex> lk(g_batch_mu);
     if (!batch_cache_get(expert_bytes)) return false;
+    preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, expert_bytes, g_batch.stream);
     preload_prompt_profile_for_tensor(src0_name, src0_data, n_as, nb02, expert_bytes, g_batch.stream);
     cudaStreamSynchronize(g_batch.stream);
     return true;
@@ -2584,6 +4150,24 @@ extern "C" bool ggml_cuda_moe_stream_preload_expert_async(
             nullptr, 0, true, src0_name, expert_idx) >= 0;
 }
 
+extern "C" bool ggml_cuda_moe_stream_preload_expert_from_pack_async(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    int expert_idx) {
+    if (!init_batch_once()) return false;
+    if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0]) return false;
+    if (expert_idx < 0 || expert_idx >= n_as) return false;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) return false;
+    const uintptr_t key = batch_key_hash(src0_name, expert_idx);
+    if (batch_cache_find_slot(cache, key) >= 0) return true;
+    return batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.stream, false, true,
+            nullptr, 0, true, src0_name, expert_idx) >= 0;
+}
+
 extern "C" bool ggml_cuda_moe_stream_preload_synchronize(void) {
     if (!init_batch_once()) return false;
     std::lock_guard<std::mutex> lk(g_batch_mu);
@@ -2611,7 +4195,11 @@ extern "C" bool ggml_cuda_moe_stream_register_tensor(
     size_t nb02,
     size_t expert_bytes) {
     if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] || !src0_data) return false;
-    if (!std::strstr(src0_name, ".ffn_down_exps.")) return true;
+    if (!std::strstr(src0_name, ".ffn_up_exps.") &&
+            !std::strstr(src0_name, ".ffn_gate_exps.") &&
+            !std::strstr(src0_name, ".ffn_down_exps.")) {
+        return true;
+    }
 
     std::lock_guard<std::mutex> lk(g_registered_mu);
     for (registered_tensor &t : g_registered_tensors) {
@@ -2918,6 +4506,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
 
+    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_up_name, src0_up_data, n_as, nb02, (size_t)ne01 * nb01);
+    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_gate_name, src0_gate_data, n_as, nb02, (size_t)ne01 * nb01);
+
     static std::atomic<int> first_up_gate{0};
     if (first_up_gate.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] batched up/gate %s path active: rows=%d ne01=%ld ne00=%ld\n",
@@ -3108,7 +4699,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
         int expert_idx = -1;
-        char tensor[96] = {};
+        char tensor[128] = {};
     };
 
     auto clear_stage_jobs = [&](const std::vector<stage_copy_job> &jobs) {
@@ -3154,6 +4745,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     auto copy_stage_jobs = [&](const std::vector<stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) -> bool {
         if (cudaSetDevice(0) != cudaSuccess) return false;
+        if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+            return cudaGetLastError() == cudaSuccess;
+        }
         for (const stage_copy_job &job : jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -3193,6 +4787,14 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 b.push_back(jobs[i]);
             } else {
                 a.push_back(jobs[i]);
+            }
+        }
+    };
+
+    auto submit_planned_host_prefetch = [&](const std::vector<stage_copy_job> &jobs) {
+        for (const stage_copy_job &job : jobs) {
+            if (job.pack_entry && job.tensor[0] && job.expert_idx >= 0) {
+                host_prefetch_submit_planned(job.tensor, job.expert_idx, src0_bytes);
             }
         }
     };
@@ -3246,6 +4848,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (profile) cudaEventRecord(bc.ev_quant, st);
 
     float * fused_d = use_handoff ? (float *)bc.d_handoff : (float *)bc.d_dst;
+    const char *skip_nonresident_env = std::getenv("GGML_MOE_SKIP_NONRESIDENT");
+    const bool skip_nonresident = skip_nonresident_env && skip_nonresident_env[0] && skip_nonresident_env[0] != '0';
+    if (skip_nonresident) {
+        if (cudaMemsetAsync(fused_d, 0, dst_bytes, st) != cudaSuccess) return false;
+    }
     int up_stage_jobs_count = 0;
     int gate_stage_jobs_count = 0;
     const char *point_tensor_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_TENSOR");
@@ -3423,8 +5030,13 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             }
             up_stage_jobs_count = (int)up_jobs.size();
             gate_stage_jobs_count = (int)gate_jobs.size();
+            submit_planned_host_prefetch(up_jobs);
+            submit_planned_host_prefetch(gate_jobs);
 
             const char *stage_split_env = std::getenv("GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT");
+            if (!stage_split_env || !stage_split_env[0]) {
+                stage_split_env = std::getenv("GGML_MOE_STREAM_UP_GATE_SPLIT_STAGE");
+            }
             const bool stage_split = stage_split_env && stage_split_env[0] && stage_split_env[0] != '0' &&
                 bc.up_copy_stream && bc.gate_copy_stream && bc.ev_up_copy_aux_done && bc.ev_gate_copy_aux_done;
             static std::atomic<int> first_stage_split{0};
@@ -3762,22 +5374,36 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride) {
-    if (!init_batch_once()) return false;
     ggml_type src0_type = (ggml_type)src0_type_int;
-    if (!moe_stream_type_supported(src0_type) || !src1_f32) return false;
-    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
-
+    const bool decline_debug = []() {
+        const char *env = std::getenv("GGML_MOE_STREAM_DECLINE_DEBUG");
+        return env && env[0] && env[0] != '0';
+    }();
     int active_experts[128];
     int32_t dst_ids[128];
     int32_t token_ids[128];
     int n_active = 0;
     int max_dst_id = -1;
+    auto decline = [&](const char *reason) -> bool {
+        if (decline_debug) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] down batch declined: reason=%s tensor=%s rows_stride=%ld type=%d active=%d ne01=%ld ne00=%ld\n",
+                reason, src0_name ? src0_name : "", (long)rows_stride, src0_type_int,
+                n_active, (long)ne01, (long)ne00);
+        }
+        return false;
+    };
+    if (!init_batch_once()) return decline("init_batch_once");
+    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
+    if (!src1_f32) return decline("missing_src1");
+    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
+
     for (int64_t e = 0; e < n_as; ++e) {
         if (matrix_row_counts[e] != 1) {
-            if (matrix_row_counts[e] > 1) return false;
+            if (matrix_row_counts[e] > 1) return decline("multirow_not_supported");
             continue;
         }
-        if (n_active >= 128) return false;
+        if (n_active >= 128) return decline("too_many_active_routes");
         const ggml_moe_row_mapping * r = matrix_rows + e*rows_stride;
         active_experts[n_active] = (int)e;
         dst_ids[n_active] = r[0].i1;
@@ -3785,7 +5411,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
         ++n_active;
     }
-    if (n_active <= 0 || max_dst_id < 0) return false;
+    if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
 
     static std::atomic<int> first_batch{0};
     const int batch_call = first_batch.fetch_add(1);
@@ -3843,10 +5469,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)
         && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
-    if (!ok) return false;
+    if (!ok) return decline("ensure_buffers");
 
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
-    if (!cache) return false;
+    if (!cache) return decline("cache_get");
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
@@ -3857,7 +5483,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
         int expert_idx = -1;
-        char tensor[96] = {};
+        char tensor[128] = {};
     };
 
     auto clear_down_stage_jobs = [&](const std::vector<down_stage_copy_job> &jobs) {
@@ -3868,6 +5494,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     auto copy_down_stage_jobs = [&](const std::vector<down_stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) -> bool {
         if (cudaSetDevice(0) != cudaSuccess) return false;
+        if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+            return cudaGetLastError() == cudaSuccess;
+        }
         for (const down_stage_copy_job &job : jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -3926,7 +5555,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         } else {
             batch_ttft_trace_record("cache_hit", src0_name, active_experts[j], src0_bytes, true, false, false, 0.0);
         }
-        if (cache_slot < 0) return false;
+        if (cache_slot < 0) return decline("cache_insert");
         bc.h_x_ids[j] = cache_slot;
 
         if (!use_handoff) {
@@ -3954,20 +5583,20 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (!copy_a_ok || !copy_b_ok) {
             clear_down_stage_jobs(down_jobs_a);
             clear_down_stage_jobs(down_jobs_b);
-            return false;
+            return decline("parallel_stage_copy");
         }
-        if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return false;
-        if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return false;
-        if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return false;
-        if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return false;
+        if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return decline("record_up_done");
+        if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return decline("record_gate_done");
+        if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return decline("wait_up_done");
+        if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return decline("wait_gate_done");
     }
 
-    if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
-    if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) return false;
+    if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_h2d");
+    if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_ids_src1_h2d");
+    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_ids_dst_h2d");
+    if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_x_ids_h2d");
+    if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_bounds_h2d");
+    if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) return decline("memset_dst");
     if (profile) cudaEventRecord(bc.ev_stage, st);
 
     if (use_handoff) {
@@ -3986,19 +5615,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             src0_type, ne00, ne00, n_active * ne00, n_active * ne00,
             ne00_padded, n_active, 1, 1, st);
     }
-    if (cudaGetLastError() != cudaSuccess) return false;
+    if (cudaGetLastError() != cudaSuccess) return decline("quantize_cuda_error");
     if (profile) cudaEventRecord(bc.ev_quant, st);
 
     if (!launch_moe_mmq_id_batch(
             src0_type,
             (const char *)cache->pool, (const int *)bc.d_src1_q8, bc.d_ids_dst, bc.d_bounds,
             bc.d_x_ids, (float *)bc.d_dst, ne00, ne01, nb01, src0_bytes, n_active, dst_cols, st, false)) {
-        return false;
+        return decline("launch_moe_mmq_id_batch");
     }
     if (profile) cudaEventRecord(bc.ev_kernel, st);
-    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
+    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
     if (profile) cudaEventRecord(bc.ev_d2h, st);
-    if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+    if (cudaStreamSynchronize(st) != cudaSuccess) return decline("sync_stream");
 
     float stage_ms = 0.0f;
     float quant_ms = 0.0f;

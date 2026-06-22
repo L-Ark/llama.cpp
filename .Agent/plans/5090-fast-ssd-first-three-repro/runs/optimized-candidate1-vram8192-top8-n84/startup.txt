@@ -1,0 +1,8 @@
+Running as unit: run-u16.service; invocation ID: 78e2666ad07e446bb3bf5680ade2e64d
+Press ^] three times within 1s to disconnect TTY.
+[moe-run] preset=/home/wici/lfz/ik_llama/presets/moe/glm51/rtx5090-interactive-n84-repro.json
+[moe-run] stderr_log=/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate1-vram8192-top8-n84/llama-cache/moe-chat/20260612-141654-29500.stderr.log
+[33m[0m
+> 
+[[LLAMA_CHAT_READY:1]]
+[1m[32m

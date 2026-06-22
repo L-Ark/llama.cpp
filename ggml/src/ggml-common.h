@@ -161,6 +161,9 @@ typedef sycl::half2 ggml_half2;
 #define QI_MXFP4 (QK_MXFP4 / (4 * QR_MXFP4))
 #define QR_MXFP4 2
 
+#define QI_F8_E4M3_B128 (QK_F8_E4M3_B128 / (4 * QR_F8_E4M3_B128))
+#define QR_F8_E4M3_B128 1
+
 #endif // GGML_COMMON_DECL_CUDA || GGML_COMMON_DECL_HIP
 
 #define QK4_0 32
@@ -185,6 +188,13 @@ typedef struct {
     uint8_t qs[QK_MXFP4/2];
 } block_mxfp4;
 static_assert(sizeof(block_mxfp4) == sizeof(uint8_t) + QK_MXFP4/2, "wrong mxfp4 block size/padding");
+
+#define QK_F8_E4M3_B128 128
+typedef struct {
+    uint8_t e; // E8M0
+    uint8_t qs[QK_F8_E4M3_B128];
+} block_f8_e4m3_b128;
+static_assert(sizeof(block_f8_e4m3_b128) == sizeof(uint8_t) + QK_F8_E4M3_B128, "wrong f8_e4m3_b128 block size/padding");
 
 #define QK5_0 32
 typedef struct {

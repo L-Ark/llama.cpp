@@ -1,0 +1,19 @@
+Running as unit: run-u15.service; invocation ID: b36a7b602cf2499687369fc4a177d8ad
+Press ^] three times within 1s to disconnect TTY.
+[moe-run] preset=/home/wici/lfz/ik_llama/presets/moe/glm51/rtx5090-interactive-n84-repro.json
+[moe-run] stderr_log=/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/smoke-baseline-vram1536-n4-user-quiet/llama-cache/moe-chat/20260612-141547-29137.stderr.log
+[33m[0m
+> 
+[[LLAMA_CHAT_READY:1]]
+[1m[32mWrite a concise explanation of why NVMe latency matters for MoE inference.
+[0m
+> 
+[[LLAMA_CHAT_READY:2]]
+[1m[32m/exit
+[0m
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 21.063s
+CPU time consumed: 1min 12.915s
+Memory peak: 256.0K
+Memory swap peak: 0B

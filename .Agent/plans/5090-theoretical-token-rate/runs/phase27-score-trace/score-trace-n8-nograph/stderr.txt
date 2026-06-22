@@ -1,0 +1,699 @@
+Log start
+main: build = 4973 (0be7a52c)
+main: built with cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 for x86_64-linux-gnu
+main: seed  = 42
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32110 MiB
+CUDA0: using device CUDA0 - 31564 MiB free
+llama_model_loader: additional 6 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 62 key-value pairs and 1809 tensors from /home/wici/lfz/ik_llama/models/GLM-5.1-UD-IQ3_XXS/GLM-5.1-UD-IQ3_XXS-00001-of-00007.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = glm-dsa
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                     general.sampling.top_p f32              = 0.950000
+llama_model_loader: - kv   3:                      general.sampling.temp f32              = 1.000000
+llama_model_loader: - kv   4:                               general.name str              = Glm-5.1
+llama_model_loader: - kv   5:                            general.version str              = 5.1
+llama_model_loader: - kv   6:                           general.basename str              = Glm-5.1
+llama_model_loader: - kv   7:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   8:                         general.size_label str              = 256x22B
+llama_model_loader: - kv   9:                            general.license str              = mit
+llama_model_loader: - kv  10:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv  11:                        glm-dsa.block_count u32              = 79
+llama_model_loader: - kv  12:                     glm-dsa.context_length u32              = 202752
+llama_model_loader: - kv  13:                   glm-dsa.embedding_length u32              = 6144
+llama_model_loader: - kv  14:                glm-dsa.feed_forward_length u32              = 12288
+llama_model_loader: - kv  15:               glm-dsa.attention.head_count u32              = 64
+llama_model_loader: - kv  16:            glm-dsa.attention.head_count_kv u32              = 1
+llama_model_loader: - kv  17:                     glm-dsa.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  18:   glm-dsa.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  19:                  glm-dsa.expert_used_count u32              = 8
+llama_model_loader: - kv  20:                 glm-dsa.expert_group_count u32              = 1
+llama_model_loader: - kv  21:            glm-dsa.expert_group_used_count u32              = 1
+llama_model_loader: - kv  22:                 glm-dsa.expert_gating_func u32              = 2
+llama_model_loader: - kv  23:          glm-dsa.leading_dense_block_count u32              = 3
+llama_model_loader: - kv  24:                         glm-dsa.vocab_size u32              = 154880
+llama_model_loader: - kv  25:              glm-dsa.attention.q_lora_rank u32              = 2048
+llama_model_loader: - kv  26:             glm-dsa.attention.kv_lora_rank u32              = 512
+llama_model_loader: - kv  27:               glm-dsa.attention.key_length u32              = 576
+llama_model_loader: - kv  28:             glm-dsa.attention.value_length u32              = 512
+llama_model_loader: - kv  29:           glm-dsa.attention.key_length_mla u32              = 256
+llama_model_loader: - kv  30:         glm-dsa.attention.value_length_mla u32              = 256
+llama_model_loader: - kv  31:         glm-dsa.expert_feed_forward_length u32              = 2048
+llama_model_loader: - kv  32:                       glm-dsa.expert_count u32              = 256
+llama_model_loader: - kv  33:                glm-dsa.expert_shared_count u32              = 1
+llama_model_loader: - kv  34:               glm-dsa.expert_weights_scale f32              = 2.500000
+llama_model_loader: - kv  35:                glm-dsa.expert_weights_norm bool             = true
+llama_model_loader: - kv  36:               glm-dsa.rope.dimension_count u32              = 64
+llama_model_loader: - kv  37:               glm-dsa.nextn_predict_layers u32              = 1
+llama_model_loader: - kv  38:       glm-dsa.attention.indexer.head_count u32              = 32
+llama_model_loader: - kv  39:       glm-dsa.attention.indexer.key_length u32              = 128
+llama_model_loader: - kv  40:            glm-dsa.attention.indexer.top_k u32              = 2048
+llama_model_loader: - kv  41:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  42:                         tokenizer.ggml.pre str              = glm4
+llama_model_loader: - kv  43:                      tokenizer.ggml.tokens arr[str,154880]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  44:                  tokenizer.ggml.token_type arr[i32,154880]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  45:                      tokenizer.ggml.merges arr[str,321649]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
+llama_model_loader: - kv  46:                tokenizer.ggml.eos_token_id u32              = 154820
+llama_model_loader: - kv  47:            tokenizer.ggml.padding_token_id u32              = 154821
+llama_model_loader: - kv  48:                tokenizer.ggml.bos_token_id u32              = 154822
+llama_model_loader: - kv  49:                tokenizer.ggml.eot_token_id u32              = 154827
+llama_model_loader: - kv  50:            tokenizer.ggml.unknown_token_id u32              = 154820
+llama_model_loader: - kv  51:                tokenizer.ggml.eom_token_id u32              = 154829
+llama_model_loader: - kv  52:                    tokenizer.chat_template str              = [gMASK]<sop>\n{%- if tools -%}\n{%- mac...
+llama_model_loader: - kv  53:               general.quantization_version u32              = 2
+llama_model_loader: - kv  54:                          general.file_type u32              = 23
+llama_model_loader: - kv  55:                      quantize.imatrix.file str              = GLM-5.1-GGUF/imatrix_unsloth.gguf
+llama_model_loader: - kv  56:                   quantize.imatrix.dataset str              = unsloth_calibration_GLM-5.1.txt
+llama_model_loader: - kv  57:             quantize.imatrix.entries_count u32              = 1002
+llama_model_loader: - kv  58:              quantize.imatrix.chunks_count u32              = 78
+llama_model_loader: - kv  59:                                   split.no u16              = 0
+llama_model_loader: - kv  60:                        split.tensors.count i32              = 1809
+llama_model_loader: - kv  61:                                split.count u16              = 7
+llama_model_loader: - type  f32:  709 tensors
+llama_model_loader: - type q8_0:  474 tensors
+llama_model_loader: - type q2_K:    2 tensors
+llama_model_loader: - type q3_K:    2 tensors
+llama_model_loader: - type q6_K:  397 tensors
+llama_model_loader: - type iq3_xxs:   75 tensors
+llama_model_loader: - type iq2_s:  150 tensors
+load: 0 unused tokens
+load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: special_eom_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: printing all EOG tokens:
+load:   - 154820 ('<|endoftext|>')
+load:   - 154827 ('<|user|>')
+load:   - 154829 ('<|observation|>')
+load: special tokens cache size = 36
+load: token to piece cache size = 0.9811 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = glm-dsa
+llm_load_print_meta: n_ctx_train      = 202752
+llm_load_print_meta: n_embd           = 6144
+llm_load_print_meta: n_layer          = 79
+llm_load_print_meta: n_head           = 64
+llm_load_print_meta: n_head_kv        = 64
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 256
+llm_load_print_meta: n_embd_head_v    = 256
+llm_load_print_meta: n_gqa            = 1
+llm_load_print_meta: n_embd_k_gqa     = 16384
+llm_load_print_meta: n_embd_v_gqa     = 16384
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 12288
+llm_load_print_meta: n_expert         = 256
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 0
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 202752
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: ssm_n_group      = 0
+llm_load_print_meta: model type       = 744B.A40B
+llm_load_print_meta: model ftype      = IQ3_XXS - 3.0625 bpw
+llm_load_print_meta: model params     = 753.864 B
+llm_load_print_meta: model size       = 249.833 GiB (2.847 BPW) 
+llm_load_print_meta: repeating layers = 248.380 GiB (2.837 BPW, 751.961 B parameters)
+llm_load_print_meta: general.name     = Glm-5.1
+llm_load_print_meta: n_layer_dense_lead   = 3
+llm_load_print_meta: n_lora_q             = 2048
+llm_load_print_meta: n_lora_kv            = 512
+llm_load_print_meta: n_ff_exp             = 2048
+llm_load_print_meta: n_expert_shared      = 1
+llm_load_print_meta: expert_weights_scale = 2.5
+llm_load_print_meta: expert_weights_norm  = 1
+llm_load_print_meta: expert_gating_func   = sigmoid
+llm_load_print_meta: rope_yarn_log_mul    = 0.0000
+print_info: vocab type            = BPE
+print_info: n_vocab               = 154880
+print_info: n_merges              = 321649
+print_info: BOS token             = 154822 '[gMASK]'
+print_info: EOS token             = 154820 '<|endoftext|>'
+print_info: EOT token             = 154827 '<|user|>'
+print_info: EOM token             = 154829 '<|observation|>'
+print_info: UNK token             = 154820 '<|endoftext|>'
+print_info: PAD token             = 154821 '[MASK]'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 154838 '<|code_prefix|>'
+print_info: FIM SUF token         = 154840 '<|code_suffix|>'
+print_info: FIM MID token         = 154839 '<|code_middle|>'
+print_info: EOG token             = 154820 '<|endoftext|>'
+print_info: EOG token             = 154827 '<|user|>'
+print_info: EOG token             = 154829 '<|observation|>'
+print_info: max token length      = 1024
+======================================= HAVE_FANCY_SIMD is NOT defined
+------------------- Layer sizes:
+Layer  0:    379.35,      2.25,    381.60      256.00  MiB
+Layer  1:    379.35,      2.25,    381.60      256.00  MiB
+Layer  2:    379.35,      2.25,    381.60      256.00  MiB
+Layer  3:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  4:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  5:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  6:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  7:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  8:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer  9:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 10:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 11:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 12:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 13:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 14:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 15:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 16:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 17:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 18:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 19:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 20:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 21:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 22:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 23:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 24:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 25:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 26:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 27:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 28:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 29:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 30:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 31:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 32:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 33:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 34:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 35:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 36:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 37:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 38:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 39:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 40:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 41:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 42:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 43:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 44:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 45:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 46:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 47:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 48:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 49:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 50:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 51:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 52:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 53:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 54:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 55:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 56:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 57:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 58:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 59:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 60:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 61:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 62:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 63:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 64:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 65:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 66:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 67:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 68:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 69:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 70:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 71:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 72:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 73:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 74:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 75:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 76:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 77:   3381.69,      2.25,   3383.94      256.00  MiB
+Layer 78:      0.00,      2.25,      2.25       12.00  MiB
+Layer 79:    744.43,     46.50,    790.93 MiB (output layer)
+--------------------------------------------------------------------------
+Total   : 254764.90,    224.25, 254989.15 MiB
+Memory required for model tensors + cache: 255734 MiB
+Memory available on all devices - compute: 30284 MiB
+llm_load_tensors: ggml ctx size =    1.50 MiB
+Tensor blk.3.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.3.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.3.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.61.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.61.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.61.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.62.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.62.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.62.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.63.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.63.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.63.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.64.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.64.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.64.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.65.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.65.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.65.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.66.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.66.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.66.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.67.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.67.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.67.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.68.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.68.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.68.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.69.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.69.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.69.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.70.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.70.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.70.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.71.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.71.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.71.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.72.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.72.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.72.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.73.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.73.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.73.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.74.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.74.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.74.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.75.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.75.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.75.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.76.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.76.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.76.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.77.ffn_gate_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.77.ffn_down_exps.weight (size = 1176.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.77.ffn_up_exps.weight (size = 984.00 MiB) buffer type overriden to CUDA_Host
+model has unused tensor blk.78.attn_norm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_a_norm.weight (size = 8192 bytes) -- ignoring
+model has unused tensor blk.78.attn_kv_a_norm.weight (size = 2048 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_a.weight (size = 10321920 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_b.weight (size = 35651584 bytes) -- ignoring
+model has unused tensor blk.78.attn_kv_a_mqa.weight (size = 3760128 bytes) -- ignoring
+model has unused tensor blk.78.attn_output.weight (size = 82575360 bytes) -- ignoring
+model has unused tensor blk.78.indexer.k_norm.weight (size = 512 bytes) -- ignoring
+model has unused tensor blk.78.indexer.k_norm.bias (size = 512 bytes) -- ignoring
+model has unused tensor blk.78.indexer.proj.weight (size = 786432 bytes) -- ignoring
+model has unused tensor blk.78.indexer.attn_k.weight (size = 835584 bytes) -- ignoring
+model has unused tensor blk.78.indexer.attn_q_b.weight (size = 8912896 bytes) -- ignoring
+model has unused tensor blk.78.ffn_norm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.ffn_gate_inp.weight (size = 6291456 bytes) -- ignoring
+model has unused tensor blk.78.exp_probs_b.bias (size = 1024 bytes) -- ignoring
+Tensor blk.78.ffn_gate_exps.weight (size = 1008.00 MiB) buffer type overriden to CUDA_Host
+model has unused tensor blk.78.ffn_gate_exps.weight (size = 1056964608 bytes) -- ignoring
+Tensor blk.78.ffn_down_exps.weight (size = 1320.00 MiB) buffer type overriden to CUDA_Host
+model has unused tensor blk.78.ffn_down_exps.weight (size = 1384120320 bytes) -- ignoring
+Tensor blk.78.ffn_up_exps.weight (size = 1008.00 MiB) buffer type overriden to CUDA_Host
+model has unused tensor blk.78.ffn_up_exps.weight (size = 1056964608 bytes) -- ignoring
+model has unused tensor blk.78.ffn_gate_shexp.weight (size = 10321920 bytes) -- ignoring
+model has unused tensor blk.78.ffn_down_shexp.weight (size = 10321920 bytes) -- ignoring
+model has unused tensor blk.78.ffn_up_shexp.weight (size = 10321920 bytes) -- ignoring
+model has unused tensor blk.78.nextn.eh_proj.weight (size = 32440320 bytes) -- ignoring
+model has unused tensor blk.78.nextn.enorm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.nextn.hnorm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.nextn.shared_head_norm.weight (size = 24576 bytes) -- ignoring
+llm_load_tensors: offloading 79 repeating layers to GPU
+llm_load_tensors: offloaded 79/80 layers to GPU
+llm_load_tensors:        CPU buffer size = 47090.01 MiB
+llm_load_tensors:        CPU buffer size = 47613.68 MiB
+llm_load_tensors:        CPU buffer size = 47613.68 MiB
+llm_load_tensors:        CPU buffer size = 46468.70 MiB
+llm_load_tensors:        CPU buffer size = 46468.70 MiB
+llm_load_tensors:        CPU buffer size = 16492.48 MiB
+llm_load_tensors:      CUDA0 buffer size = 15001.80 MiB
+....................................................................................................
+warning: madvise(..., MADV_DONTNEED) failed: Cannot allocate memory
+warning: madvise(..., MADV_DONTNEED) failed: Cannot allocate memory
+warning: madvise(..., MADV_DONTNEED) failed: Cannot allocate memory
+============ llm_prepare_mla: need to compute 79 wkv_b tensors
+llm_load_tensors: dense parameters loaded in 10.00s (16.30 GiB), expert parameters deferred (233.53 GiB)
+llama_init_from_model: n_ctx         = 2048
+llama_init_from_model: n_batch       = 2048
+llama_init_from_model: n_ubatch      = 512
+llama_init_from_model: flash_attn    = 1
+llama_init_from_model: mla_attn      = 3
+llama_init_from_model: attn_max_b    = 0
+llama_init_from_model: fused_moe     = 1
+llama_init_from_model: grouped er    = 0
+llama_init_from_model: fused_up_gate = 1
+llama_init_from_model: fused_mmad    = 1
+llama_init_from_model: rope_cache    = 0
+llama_init_from_model: graph_reuse   = 0
+llama_init_from_model: k_cache_hadam = 0
+llama_init_from_model: v_cache_hadam = 0
+llama_init_from_model: split_mode_graph_scheduling = 0
+llama_init_from_model: reduce_type   = f16
+llama_init_from_model: sched_async   = 0
+llama_init_from_model: ser           = -1, 0
+llama_init_from_model: freq_base     = 1000000.0
+llama_init_from_model: freq_scale    = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =   175.50 MiB
+llama_init_from_model: KV self size  =  175.50 MiB, c^KV (f16):  175.50 MiB, kv^T: not used
+llama_init_from_model:        CPU  output buffer size =     0.59 MiB
+llama_init_from_model: enabling only_active_experts scheduling
+llama_init_from_model:      CUDA0 compute buffer size =  1058.96 MiB
+llama_init_from_model:  CUDA_Host compute buffer size =   142.01 MiB
+llama_init_from_model: graph nodes  = 4166
+llama_init_from_model: graph splits = 154
+
+system_info: n_threads = 16 (n_threads_batch = 24) / 10 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | AVX512 = 0 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | 
+sampling: 
+	repeat_last_n = 512, repeat_penalty = 1.200, frequency_penalty = 0.200, presence_penalty = 0.100
+	top_k = 40, tfs_z = 1.000, top_p = 1.000, min_p = 0.000, typical_p = 1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
+	xtc_probability = 0.000, xtc_threshold = 1.000, top_n_sigma = 0.000
+	adaptive_target = -1.00, adaptive_decay = 0.90
+sampling order: 
+CFG -> Penalties -> dry -> top_k -> tfs_z -> typical_p -> top_p -> min_p -> xtc -> top_n_sigma -> temperature -> adaptive_p 
+generate: n_ctx = 2048, n_batch = 2048, n_predict = 8, n_keep = 0
+
+
+[moe_score_trace] glm45 dst=ffn_moe_weights-3 topk_view=ffn_moe_topk-3 topk=ffn_moe_probs_biased-3 (sort) probs=ffn_moe_logits-3 bias=blk.3.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] stream is capturing; skipping trace rows (use --no-graph-reuse for diagnostics)
+[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=1)
+[moe_stream_batch] VRAM cache budget: requested=12288 MiB actual=11450 MiB free=13754 MiB total=32110 MiB graph_reserve=2048 MiB safety=256 MiB clamp=1
+[moe_stream_batch] VRAM cache: 6.7 GiB, 1787 slots (3.84 MiB each)
+[moe_stream_batch] profile preload: open failed: /home/wici/lfz/ik_llama/oracle-n84
+[moe_stream_batch] VRAM cache: 4.5 GiB, 997 slots (4.59 MiB each)
+[moe_score_trace] glm45 dst=ffn_moe_weights-4 topk_view=ffn_moe_topk-4 topk=ffn_moe_probs_biased-4 (sort) probs=ffn_moe_logits-4 bias=blk.4.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-5 topk_view=ffn_moe_topk-5 topk=ffn_moe_probs_biased-5 (sort) probs=ffn_moe_logits-5 bias=blk.5.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-6 topk_view=ffn_moe_topk-6 topk=ffn_moe_probs_biased-6 (sort) probs=ffn_moe_logits-6 bias=blk.6.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-7 topk_view=ffn_moe_topk-7 topk=ffn_moe_probs_biased-7 (sort) probs=ffn_moe_logits-7 bias=blk.7.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-8 topk_view=ffn_moe_topk-8 topk=ffn_moe_probs_biased-8 (sort) probs=ffn_moe_logits-8 bias=blk.8.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-9 topk_view=ffn_moe_topk-9 topk=ffn_moe_probs_biased-9 (sort) probs=ffn_moe_logits-9 bias=blk.9.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-10 topk_view=ffn_moe_topk-10 topk=ffn_moe_probs_biased-10 (sort) probs=ffn_moe_logits-10 bias=blk.10.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-11 topk_view=ffn_moe_topk-11 topk=ffn_moe_probs_biased-11 (sort) probs=ffn_moe_logits-11 bias=blk.11.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-12 topk_view=ffn_moe_topk-12 topk=ffn_moe_probs_biased-12 (sort) probs=ffn_moe_logits-12 bias=blk.12.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-13 topk_view=ffn_moe_topk-13 topk=ffn_moe_probs_biased-13 (sort) probs=ffn_moe_logits-13 bias=blk.13.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-14 topk_view=ffn_moe_topk-14 topk=ffn_moe_probs_biased-14 (sort) probs=ffn_moe_logits-14 bias=blk.14.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-15 topk_view=ffn_moe_topk-15 topk=ffn_moe_probs_biased-15 (sort) probs=ffn_moe_logits-15 bias=blk.15.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-16 topk_view=ffn_moe_topk-16 topk=ffn_moe_probs_biased-16 (sort) probs=ffn_moe_logits-16 bias=blk.16.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-17 topk_view=ffn_moe_topk-17 topk=ffn_moe_probs_biased-17 (sort) probs=ffn_moe_logits-17 bias=blk.17.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-18 topk_view=ffn_moe_topk-18 topk=ffn_moe_probs_biased-18 (sort) probs=ffn_moe_logits-18 bias=blk.18.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-19 topk_view=ffn_moe_topk-19 topk=ffn_moe_probs_biased-19 (sort) probs=ffn_moe_logits-19 bias=blk.19.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-20 topk_view=ffn_moe_topk-20 topk=ffn_moe_probs_biased-20 (sort) probs=ffn_moe_logits-20 bias=blk.20.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-21 topk_view=ffn_moe_topk-21 topk=ffn_moe_probs_biased-21 (sort) probs=ffn_moe_logits-21 bias=blk.21.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-22 topk_view=ffn_moe_topk-22 topk=ffn_moe_probs_biased-22 (sort) probs=ffn_moe_logits-22 bias=blk.22.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-23 topk_view=ffn_moe_topk-23 topk=ffn_moe_probs_biased-23 (sort) probs=ffn_moe_logits-23 bias=blk.23.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-24 topk_view=ffn_moe_topk-24 topk=ffn_moe_probs_biased-24 (sort) probs=ffn_moe_logits-24 bias=blk.24.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-25 topk_view=ffn_moe_topk-25 topk=ffn_moe_probs_biased-25 (sort) probs=ffn_moe_logits-25 bias=blk.25.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-26 topk_view=ffn_moe_topk-26 topk=ffn_moe_probs_biased-26 (sort) probs=ffn_moe_logits-26 bias=blk.26.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-27 topk_view=ffn_moe_topk-27 topk=ffn_moe_probs_biased-27 (sort) probs=ffn_moe_logits-27 bias=blk.27.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-28 topk_view=ffn_moe_topk-28 topk=ffn_moe_probs_biased-28 (sort) probs=ffn_moe_logits-28 bias=blk.28.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-29 topk_view=ffn_moe_topk-29 topk=ffn_moe_probs_biased-29 (sort) probs=ffn_moe_logits-29 bias=blk.29.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-30 topk_view=ffn_moe_topk-30 topk=ffn_moe_probs_biased-30 (sort) probs=ffn_moe_logits-30 bias=blk.30.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-31 topk_view=ffn_moe_topk-31 topk=ffn_moe_probs_biased-31 (sort) probs=ffn_moe_logits-31 bias=blk.31.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-32 topk_view=ffn_moe_topk-32 topk=ffn_moe_probs_biased-32 (sort) probs=ffn_moe_logits-32 bias=blk.32.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-33 topk_view=ffn_moe_topk-33 topk=ffn_moe_probs_biased-33 (sort) probs=ffn_moe_logits-33 bias=blk.33.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-34 topk_view=ffn_moe_topk-34 topk=ffn_moe_probs_biased-34 (sort) probs=ffn_moe_logits-34 bias=blk.34.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-35 topk_view=ffn_moe_topk-35 topk=ffn_moe_probs_biased-35 (sort) probs=ffn_moe_logits-35 bias=blk.35.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-36 topk_view=ffn_moe_topk-36 topk=ffn_moe_probs_biased-36 (sort) probs=ffn_moe_logits-36 bias=blk.36.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-37 topk_view=ffn_moe_topk-37 topk=ffn_moe_probs_biased-37 (sort) probs=ffn_moe_logits-37 bias=blk.37.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-38 topk_view=ffn_moe_topk-38 topk=ffn_moe_probs_biased-38 (sort) probs=ffn_moe_logits-38 bias=blk.38.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-39 topk_view=ffn_moe_topk-39 topk=ffn_moe_probs_biased-39 (sort) probs=ffn_moe_logits-39 bias=blk.39.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-40 topk_view=ffn_moe_topk-40 topk=ffn_moe_probs_biased-40 (sort) probs=ffn_moe_logits-40 bias=blk.40.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-41 topk_view=ffn_moe_topk-41 topk=ffn_moe_probs_biased-41 (sort) probs=ffn_moe_logits-41 bias=blk.41.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-42 topk_view=ffn_moe_topk-42 topk=ffn_moe_probs_biased-42 (sort) probs=ffn_moe_logits-42 bias=blk.42.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-43 topk_view=ffn_moe_topk-43 topk=ffn_moe_probs_biased-43 (sort) probs=ffn_moe_logits-43 bias=blk.43.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-44 topk_view=ffn_moe_topk-44 topk=ffn_moe_probs_biased-44 (sort) probs=ffn_moe_logits-44 bias=blk.44.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-45 topk_view=ffn_moe_topk-45 topk=ffn_moe_probs_biased-45 (sort) probs=ffn_moe_logits-45 bias=blk.45.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-46 topk_view=ffn_moe_topk-46 topk=ffn_moe_probs_biased-46 (sort) probs=ffn_moe_logits-46 bias=blk.46.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-47 topk_view=ffn_moe_topk-47 topk=ffn_moe_probs_biased-47 (sort) probs=ffn_moe_logits-47 bias=blk.47.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-48 topk_view=ffn_moe_topk-48 topk=ffn_moe_probs_biased-48 (sort) probs=ffn_moe_logits-48 bias=blk.48.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-49 topk_view=ffn_moe_topk-49 topk=ffn_moe_probs_biased-49 (sort) probs=ffn_moe_logits-49 bias=blk.49.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-50 topk_view=ffn_moe_topk-50 topk=ffn_moe_probs_biased-50 (sort) probs=ffn_moe_logits-50 bias=blk.50.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-51 topk_view=ffn_moe_topk-51 topk=ffn_moe_probs_biased-51 (sort) probs=ffn_moe_logits-51 bias=blk.51.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-52 topk_view=ffn_moe_topk-52 topk=ffn_moe_probs_biased-52 (sort) probs=ffn_moe_logits-52 bias=blk.52.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-53 topk_view=ffn_moe_topk-53 topk=ffn_moe_probs_biased-53 (sort) probs=ffn_moe_logits-53 bias=blk.53.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-54 topk_view=ffn_moe_topk-54 topk=ffn_moe_probs_biased-54 (sort) probs=ffn_moe_logits-54 bias=blk.54.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-55 topk_view=ffn_moe_topk-55 topk=ffn_moe_probs_biased-55 (sort) probs=ffn_moe_logits-55 bias=blk.55.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-56 topk_view=ffn_moe_topk-56 topk=ffn_moe_probs_biased-56 (sort) probs=ffn_moe_logits-56 bias=blk.56.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-57 topk_view=ffn_moe_topk-57 topk=ffn_moe_probs_biased-57 (sort) probs=ffn_moe_logits-57 bias=blk.57.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-58 topk_view=ffn_moe_topk-58 topk=ffn_moe_probs_biased-58 (sort) probs=ffn_moe_logits-58 bias=blk.58.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-59 topk_view=ffn_moe_topk-59 topk=ffn_moe_probs_biased-59 (sort) probs=ffn_moe_logits-59 bias=blk.59.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-60 topk_view=ffn_moe_topk-60 topk=ffn_moe_probs_biased-60 (sort) probs=ffn_moe_logits-60 bias=blk.60.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-61 topk_view=ffn_moe_topk-61 topk=ffn_moe_probs_biased-61 (sort) probs=ffn_moe_logits-61 bias=blk.61.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-62 topk_view=ffn_moe_topk-62 topk=ffn_moe_probs_biased-62 (sort) probs=ffn_moe_logits-62 bias=blk.62.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-63 topk_view=ffn_moe_topk-63 topk=ffn_moe_probs_biased-63 (sort) probs=ffn_moe_logits-63 bias=blk.63.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-64 topk_view=ffn_moe_topk-64 topk=ffn_moe_probs_biased-64 (sort) probs=ffn_moe_logits-64 bias=blk.64.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-65 topk_view=ffn_moe_topk-65 topk=ffn_moe_probs_biased-65 (sort) probs=ffn_moe_logits-65 bias=blk.65.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-66 topk_view=ffn_moe_topk-66 topk=ffn_moe_probs_biased-66 (sort) probs=ffn_moe_logits-66 bias=blk.66.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-67 topk_view=ffn_moe_topk-67 topk=ffn_moe_probs_biased-67 (sort) probs=ffn_moe_logits-67 bias=blk.67.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-68 topk_view=ffn_moe_topk-68 topk=ffn_moe_probs_biased-68 (sort) probs=ffn_moe_logits-68 bias=blk.68.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-69 topk_view=ffn_moe_topk-69 topk=ffn_moe_probs_biased-69 (sort) probs=ffn_moe_logits-69 bias=blk.69.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-70 topk_view=ffn_moe_topk-70 topk=ffn_moe_probs_biased-70 (sort) probs=ffn_moe_logits-70 bias=blk.70.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-71 topk_view=ffn_moe_topk-71 topk=ffn_moe_probs_biased-71 (sort) probs=ffn_moe_logits-71 bias=blk.71.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-72 topk_view=ffn_moe_topk-72 topk=ffn_moe_probs_biased-72 (sort) probs=ffn_moe_logits-72 bias=blk.72.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-73 topk_view=ffn_moe_topk-73 topk=ffn_moe_probs_biased-73 (sort) probs=ffn_moe_logits-73 bias=blk.73.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-74 topk_view=ffn_moe_topk-74 topk=ffn_moe_probs_biased-74 (sort) probs=ffn_moe_logits-74 bias=blk.74.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-75 topk_view=ffn_moe_topk-75 topk=ffn_moe_probs_biased-75 (sort) probs=ffn_moe_logits-75 bias=blk.75.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-76 topk_view=ffn_moe_topk-76 topk=ffn_moe_probs_biased-76 (sort) probs=ffn_moe_logits-76 bias=blk.76.exp_probs_b.bias n_experts=256 nrows=17 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-77 topk_view=ffn_moe_topk-77 topk=ffn_moe_probs_biased-77 (sort) probs=ffn_moe_logits-77 bias=blk.77.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_stream] batched up/gate decode path active: rows=8 ne01=2048 ne00=6144
+[moe_stream] up/gate routes: #0:e24->dst3/flat3/tok0 #1:e55->dst2/flat2/tok0 #2:e112->dst5/flat5/tok0 #3:e137->dst6/flat6/tok0 #4:e163->dst4/flat4/tok0 #5:e190->dst7/flat7/tok0 #6:e191->dst1/flat1/tok0 #7:e201->dst0/flat0/tok0
+[moe_stream] IQ2_S batched MMVQ up/gate path active
+[moe_stream] IQ2_S parallel up/gate streams active
+[moe_stream] up/gate parallel CPU staging active
+[moe_stream_batch] expert pack: io_uring direct reads enabled: /home/wici/lfz/ik_llama/models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack io_bytes=2097152 depth=16
+[moe_stream_batch] expert pack: loaded 58368 entries from /home/wici/lfz/ik_llama/models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack
+[moe_stream] up/gate split CPU staging active
+[moe_stream_batch] pinned staging: enabled, 16 slots of 3.84 MiB
+[moe_stream_batch] pinned staging: enabled, 16 slots of 3.84 MiB
+[moe_stream_batch] pinned staging: enabled, 16 slots of 3.84 MiB
+[moe_stream_batch] pinned staging: enabled, 16 slots of 3.84 MiB
+[moe_stream] batched decode path active: experts=8 ne01=6144 ne00=2048
+[moe_stream_batch] down parallel CPU staging active
+[moe_stream_batch] pinned staging: enabled, 16 slots of 4.59 MiB
+[moe_stream_batch] pinned staging: enabled, 16 slots of 4.59 MiB
+[moe_stream_batch] GPU handoff consumed: ne00=2048 dst_cols=8
+[moe_score_trace] glm45 dst=ffn_moe_weights-3 topk_view=ffn_moe_topk-3 topk=ffn_moe_probs_biased-3 (sort) probs=ffn_moe_logits-3 bias=blk.3.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-4 topk_view=ffn_moe_topk-4 topk=ffn_moe_probs_biased-4 (sort) probs=ffn_moe_logits-4 bias=blk.4.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-5 topk_view=ffn_moe_topk-5 topk=ffn_moe_probs_biased-5 (sort) probs=ffn_moe_logits-5 bias=blk.5.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-6 topk_view=ffn_moe_topk-6 topk=ffn_moe_probs_biased-6 (sort) probs=ffn_moe_logits-6 bias=blk.6.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-7 topk_view=ffn_moe_topk-7 topk=ffn_moe_probs_biased-7 (sort) probs=ffn_moe_logits-7 bias=blk.7.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-8 topk_view=ffn_moe_topk-8 topk=ffn_moe_probs_biased-8 (sort) probs=ffn_moe_logits-8 bias=blk.8.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-9 topk_view=ffn_moe_topk-9 topk=ffn_moe_probs_biased-9 (sort) probs=ffn_moe_logits-9 bias=blk.9.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-10 topk_view=ffn_moe_topk-10 topk=ffn_moe_probs_biased-10 (sort) probs=ffn_moe_logits-10 bias=blk.10.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-11 topk_view=ffn_moe_topk-11 topk=ffn_moe_probs_biased-11 (sort) probs=ffn_moe_logits-11 bias=blk.11.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-12 topk_view=ffn_moe_topk-12 topk=ffn_moe_probs_biased-12 (sort) probs=ffn_moe_logits-12 bias=blk.12.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-13 topk_view=ffn_moe_topk-13 topk=ffn_moe_probs_biased-13 (sort) probs=ffn_moe_logits-13 bias=blk.13.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-14 topk_view=ffn_moe_topk-14 topk=ffn_moe_probs_biased-14 (sort) probs=ffn_moe_logits-14 bias=blk.14.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-15 topk_view=ffn_moe_topk-15 topk=ffn_moe_probs_biased-15 (sort) probs=ffn_moe_logits-15 bias=blk.15.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-16 topk_view=ffn_moe_topk-16 topk=ffn_moe_probs_biased-16 (sort) probs=ffn_moe_logits-16 bias=blk.16.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-17 topk_view=ffn_moe_topk-17 topk=ffn_moe_probs_biased-17 (sort) probs=ffn_moe_logits-17 bias=blk.17.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-18 topk_view=ffn_moe_topk-18 topk=ffn_moe_probs_biased-18 (sort) probs=ffn_moe_logits-18 bias=blk.18.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-19 topk_view=ffn_moe_topk-19 topk=ffn_moe_probs_biased-19 (sort) probs=ffn_moe_logits-19 bias=blk.19.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-20 topk_view=ffn_moe_topk-20 topk=ffn_moe_probs_biased-20 (sort) probs=ffn_moe_logits-20 bias=blk.20.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-21 topk_view=ffn_moe_topk-21 topk=ffn_moe_probs_biased-21 (sort) probs=ffn_moe_logits-21 bias=blk.21.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-22 topk_view=ffn_moe_topk-22 topk=ffn_moe_probs_biased-22 (sort) probs=ffn_moe_logits-22 bias=blk.22.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+[moe_score_trace] glm45 dst=ffn_moe_weights-23 topk_view=ffn_moe_topk-23 topk=ffn_moe_probs_biased-23 (sort) probs=ffn_moe_logits-23 bias=blk.23.exp_probs_b.bias n_experts=256 nrows=1 topk=8 topk_nb1=1024
+
+llama_print_timings:        load time =   18317.60 ms
+llama_print_timings:      sample time =       2.62 ms /     8 runs   (    0.33 ms per token,  3056.94 tokens per second)
+llama_print_timings: prompt eval time =    8289.22 ms /    17 tokens (  487.60 ms per token,     2.05 tokens per second)
+llama_print_timings:        eval time =    4791.76 ms /     7 runs   (  684.54 ms per token,     1.46 tokens per second)
+llama_print_timings:       total time =   23118.77 ms /    24 tokens
+~ggml_backend_cuda_context: have 149 graphs
+Log end
+[moe_stream_batch] pinned staging: copies=2702 waits=2682 fallbacks=0 slots=16 slot=4.59 MiB
+[moe_stream_batch] pinned staging iouring: batches=1027 jobs=2702 submit_calls=1027 wait_calls=2694 cqes=2702 inflight_avg=1.97 inflight_max=4 batch_hist=1:104,2-4:923,5-8:0,9-16:0,17-32:0,gt32:0
+[moe_stream_batch] pinned staging gate: copies=2467 waits=2447 fallbacks=0 slots=16 slot=4.59 MiB
+[moe_stream_batch] pinned staging gate iouring: batches=1002 jobs=2467 submit_calls=1002 wait_calls=2462 cqes=2467 inflight_avg=1.92 inflight_max=4 batch_hist=1:170,2-4:832,5-8:0,9-16:0,17-32:0,gt32:0
+[moe_stream_batch] pinned staging up_aux: copies=1166 waits=1150 fallbacks=0 slots=16 slot=3.84 MiB
+[moe_stream_batch] pinned staging up_aux iouring: batches=503 jobs=1166 submit_calls=503 wait_calls=1165 cqes=1166 inflight_avg=1.86 inflight_max=4 batch_hist=1:102,2-4:401,5-8:0,9-16:0,17-32:0,gt32:0
+[moe_stream_batch] pinned staging gate_aux: copies=1166 waits=1150 fallbacks=0 slots=16 slot=3.84 MiB
+[moe_stream_batch] pinned staging gate_aux iouring: batches=503 jobs=1166 submit_calls=503 wait_calls=1124 cqes=1166 inflight_avg=1.88 inflight_max=4 batch_hist=1:102,2-4:401,5-8:0,9-16:0,17-32:0,gt32:0
+[moe_stream_batch] route trace written: .Agent/plans/5090-theoretical-token-rate/runs/phase27-score-trace/score-trace-n8-nograph/route-trace.csv (12624 events)
+[moe_stream_batch] expert pack: hits=7501 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=7501 iouring_bytes=32106577920 iouring_fallbacks=0 iouring_submit_us=808019 iouring_wait_us=7878771 iouring_h2d_enqueues=7501 entries=58368
+[moe_stream_batch] expert pack iouring detail: batches=3035 submit_calls=3035 wait_calls=7445 cqes=7501 inflight_avg=1.93 inflight_max=4 batch_hist=1:478,2-4:2557,5-8:0,9-16:0,17-32:0,gt32:0
+[moe_stream_batch] VRAM cache: hits=5123 misses=7501 preloads=0 hit_rate=40.6%
+[moe_stream_batch] VRAM cache down: slots=997 slot=4.59 MiB hits=1825 misses=2383 preloads=0 pinned=0 hit_rate=43.4%
+[moe_stream_batch] VRAM cache upgate: slots=1787 slot=3.84 MiB hits=3298 misses=5118 preloads=0 pinned=0 hit_rate=39.2%
+[moe_stream_batch] VRAM cache: hits=5123 misses=7501 preloads=0 hit_rate=40.6%
+[moe_stream_batch] VRAM cache down: slots=997 slot=4.59 MiB hits=1825 misses=2383 preloads=0 pinned=0 hit_rate=43.4%
+[moe_stream_batch] VRAM cache upgate: slots=1787 slot=3.84 MiB hits=3298 misses=5118 preloads=0 pinned=0 hit_rate=39.2%
+[moe_score_trace] rows=0

@@ -1,0 +1,16 @@
+Running as unit: run-u1758.service
+0.00.237.512 W llama_model_loader: direct I/O is enabled, disabling mmap
+0.01.122.845 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.123.501 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.160.021 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.05.792.450 I diffusion: -n 256 -> 1 blocks, n_ubatch=384 n_batch=384 n_ctx=384 (canvas_length=256 prompt_headroom=128)
+0.05.792.464 I diffusion: --fit has no effect here; context is sized from -n and the canvas. Set -ngl / --n-cpu-moe to control device memory.
+0.05.793.206 W llama_context: n_ctx_seq (512) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.05.799.308 W sched_reserve: layer 5 is assigned to device CUDA0 but the Flash Attention tensor is assigned to device CPU (usually due to missing support)
+0.05.799.321 W sched_reserve: Flash Attention was auto, set to disabled
+0.08.625.932 I diffusion_params: steps=128 schedule=0 algorithm=4 temperature=0.800 eps=0.001000 mask_token=4
+0.08.625.959 I diffusion_eb: max_steps=4 t=[0.400,0.800] entropy_bound=0.1000 stability=1 confidence=0.0050 kv_cache=on gpu_sampling=on sample_reduce=on
+0.09.247.318 I diffusion step: 0/4 [                                                  ] 0%0.09.297.989 I diffusion step: 1/4 [============                                      ] 25%0.09.345.155 I diffusion step: 2/4 [=========================                         ] 50%0.09.392.519 I diffusion step: 3/4 [=====================================             ] 75%Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 10.086s
+CPU time consumed: 15.960s

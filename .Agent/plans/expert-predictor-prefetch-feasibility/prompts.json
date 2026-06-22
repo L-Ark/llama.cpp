@@ -1,0 +1,36 @@
+{
+  "train": [
+    {"id": "train_001", "prompt": "Answer in one sentence: why does NVMe latency matter for MoE inference?"},
+    {"id": "train_002", "prompt": "Give a concise explanation of why cache hit rate affects model throughput."},
+    {"id": "train_003", "prompt": "What is the difference between RAM bandwidth and SSD latency for inference?"},
+    {"id": "train_004", "prompt": "Summarize why batching expert reads can improve a MoE runtime."},
+    {"id": "train_005", "prompt": "Explain in simple terms what a router does in a mixture-of-experts model."},
+    {"id": "train_006", "prompt": "List two reasons a GPU can be underused during expert streaming."},
+    {"id": "train_007", "prompt": "Why can prefetching be harmful if predictions are wrong?"},
+    {"id": "train_008", "prompt": "Give a short answer: what is a held-out prompt used for?"},
+    {"id": "train_009", "prompt": "Explain the tradeoff between pinning hot experts and leaving cache space free."},
+    {"id": "train_010", "prompt": "What does token latency measure in autoregressive decoding?"},
+    {"id": "train_011", "prompt": "Write a one sentence definition of cache eviction."},
+    {"id": "train_012", "prompt": "Why might a static expert profile fail on broad prompts?"},
+    {"id": "train_013", "prompt": "Explain why SSD reads on the critical path reduce tokens per second."},
+    {"id": "train_014", "prompt": "What is the purpose of a shadow mode experiment?"},
+    {"id": "train_015", "prompt": "Briefly compare direct reads and asynchronous io_uring reads."},
+    {"id": "train_016", "prompt": "Give a compact reason why prompt overfitting is risky for profiling."},
+    {"id": "train_017", "prompt": "What is the benefit of separating train prompts from test prompts?"},
+    {"id": "train_018", "prompt": "Explain why a small predictor must be cheaper than the I/O it avoids."},
+    {"id": "train_019", "prompt": "What does a VRAM cache miss imply for streamed expert weights?"},
+    {"id": "train_020", "prompt": "Summarize why lookahead is important for useful prefetching."}
+  ],
+  "test": [
+    {"id": "test_001", "prompt": "Answer briefly: why can expert routing vary across prompts?"},
+    {"id": "test_002", "prompt": "Explain in one sentence how wrong prefetches can reduce cache quality."},
+    {"id": "test_003", "prompt": "What does it mean for a predictor to generalize?"},
+    {"id": "test_004", "prompt": "Give two short reasons a model runtime may not be compute-bound."},
+    {"id": "test_005", "prompt": "Describe why hot expert rows are useful for startup preload."},
+    {"id": "test_006", "prompt": "What is the difference between an oracle profile and a real profile?"},
+    {"id": "test_007", "prompt": "Explain why read queue backlog should suppress optional prefetch."},
+    {"id": "test_008", "prompt": "What metric tells us whether predicted experts were actually used?"},
+    {"id": "test_009", "prompt": "Give a concise reason to measure both recall and precision."},
+    {"id": "test_010", "prompt": "Why should output text stay unchanged when testing cache scheduling?"}
+  ]
+}

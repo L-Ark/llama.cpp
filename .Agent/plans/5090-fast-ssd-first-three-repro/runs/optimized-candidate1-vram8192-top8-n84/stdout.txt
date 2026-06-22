@@ -1,0 +1,19 @@
+Running as unit: run-u16.service; invocation ID: 78e2666ad07e446bb3bf5680ade2e64d
+Press ^] three times within 1s to disconnect TTY.
+[moe-run] preset=/home/wici/lfz/ik_llama/presets/moe/glm51/rtx5090-interactive-n84-repro.json
+[moe-run] stderr_log=/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/optimized-candidate1-vram8192-top8-n84/llama-cache/moe-chat/20260612-141654-29500.stderr.log
+[33m[0m
+> 
+[[LLAMA_CHAT_READY:1]]
+[1m[32mWrite a concise explanation of why NVMe latency matters for MoE inference.
+[0mIn MoE (Mixture of Experts) inference, expert GPUs must rapidly switch between experts' weight-parameter layers—this requires ultra-low-latency NVMe drives to avoid stall-out from weight-parameter shifts that stall-out expert GPUs' concurrent inference-running, stall-out delays stall MoE inference's expert-latency shift-over
+> 
+[[LLAMA_CHAT_READY:2]]
+[1m[32m/exit
+[0m
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 1min 22.785s
+CPU time consumed: 1min 50.793s
+Memory peak: 508.0K
+Memory swap peak: 0B

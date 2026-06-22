@@ -1,0 +1,3 @@
+NAME                                                                                                                                                     TYPE SIZE  USED PRIO
+/swap.img                                                                                                                                                file   4G    3G   -2
+/home/wici/lfz/ik_llama/.Agent/plans/deepseek-v4-flash-ssd-5tps-optimization/runs/route-e-vramcache1536m-gpumem095-ram4g-64x64-20260616-002631/temp.swap file   8G 60.8M   -3

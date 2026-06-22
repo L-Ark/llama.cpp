@@ -1,0 +1,17 @@
+{
+  "assistant_sha256": "347a8103d81157433b38628c3b5674e664d509ef4ce863261fb4040578c76831",
+  "config": "pre-opt-baseline-vram1536-route",
+  "elapsed_process_s": 78.41392466599973,
+  "env": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/pre-opt-baseline-vram1536-route-n84/env.txt",
+  "first_visible_s": 20.743548098998872,
+  "generation_visible_duration_s": 57.30059186000108,
+  "interactive_ttft_s": 9.33894329299983,
+  "ready_seq_after_generation": "2",
+  "returncode": 0,
+  "route_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/pre-opt-baseline-vram1536-route-n84/route.trace.csv",
+  "stderr_log": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/pre-opt-baseline-vram1536-route-n84/llama-cache/moe-chat/20260612-141905-58607.stderr.log",
+  "stdout": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/pre-opt-baseline-vram1536-route-n84/stdout.txt",
+  "time_to_type_s": 11.403932568999153,
+  "ttft_trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-fast-ssd-first-three-repro/runs/pre-opt-baseline-vram1536-route-n84/ttft.trace.csv",
+  "visible_token_estimate": 68
+}

@@ -51,6 +51,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
     { LLM_ARCH_OPENELM,         "openelm"      },
     { LLM_ARCH_ARCTIC,          "arctic"       },
     { LLM_ARCH_DEEPSEEK2,       "deepseek2"    },
+    { LLM_ARCH_DEEPSEEK4,       "deepseek4"    },
     { LLM_ARCH_CHATGLM,         "chatglm"      },
     { LLM_ARCH_GLM4,            "glm4"         },
     { LLM_ARCH_GLM4_MOE,        "glm4moe"      },
@@ -70,6 +71,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
     { LLM_ARCH_OPENAI_MOE,      "gpt-oss"      },
     { LLM_ARCH_BAILINGMOE2,     "bailingmoe2"  },
     { LLM_ARCH_MINIMAX_M2,      "minimax-m2"   },
+    { LLM_ARCH_MINIMAX_M3,      "minimax-m3"   },
     { LLM_ARCH_SMOLLM3,         "smollm3"      },
     { LLM_ARCH_MISTRAL3,        "mistral3"     },
     { LLM_ARCH_MIMO2,           "mimo2"        },
@@ -279,4 +281,3 @@ bool llm_arch_is_hybrid(const llm_arch & arch) {
         return false;
     }
 }
-

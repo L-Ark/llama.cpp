@@ -1,0 +1,21 @@
+{
+  "original": {
+    "runs": 3,
+    "avg_eval_tps": 1.72,
+    "avg_total_ms": 69577.18333333333,
+    "avg_wait_us": 52601268.666666664,
+    "avg_reads": 62582
+  },
+  "hotpack": {
+    "runs": 2,
+    "avg_eval_tps": 1.885,
+    "avg_total_ms": 64677.36,
+    "avg_wait_us": 45663687.5,
+    "avg_reads": 62582
+  },
+  "delta": {
+    "eval_tps_pct": 9.593023255813955,
+    "total_ms_pct": -7.042284695341936,
+    "wait_us_pct": -13.188999700045253
+  }
+}

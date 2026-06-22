@@ -1,0 +1,36 @@
+{
+  "accuracy": 1.0,
+  "complete": false,
+  "correct": 2,
+  "direct_reads": 9792,
+  "label": "smoke4-baseline-partial2",
+  "read_failures": 0,
+  "reason": "runner killed after systemd-run wait stuck after sample 2; sample stdout/stderr complete",
+  "rows": [
+    {
+      "correct": true,
+      "direct_reads": 3384,
+      "eval_tps": 0.42,
+      "expected": "D",
+      "id": "ceval_computer_network_0009",
+      "output": "D",
+      "prompt_tps": 0.73,
+      "read_failures": 0,
+      "total_ms": 148529.83,
+      "vram_hit": 13.2
+    },
+    {
+      "correct": true,
+      "direct_reads": 6408,
+      "eval_tps": 0.43,
+      "expected": "D",
+      "id": "cmmlu_chinese_civil_service_exam_0098",
+      "output": "D",
+      "prompt_tps": 1.31,
+      "read_failures": 0,
+      "total_ms": 185952.75,
+      "vram_hit": 15.0
+    }
+  ],
+  "scored": 2
+}

@@ -116,6 +116,7 @@ enum e_model {
     MODEL_119B_A6B,
     MODEL_122B_A10B,
     MODEL_230B_A10B, // Minimax M2
+    MODEL_128X16B,   // MiniMax M3
     MODEL_235B_A22B,
     MODEL_310B_A15B,
     MODEL_300B_A47B, // Ernie MoE big
@@ -178,6 +179,13 @@ struct llama_layer {
     struct ggml_tensor * wkv_b = nullptr;
     struct ggml_tensor * wk_b = nullptr;
     struct ggml_tensor * wv_b = nullptr;
+    struct ggml_tensor * attn_kv_latent = nullptr;
+    struct ggml_tensor * attn_out_a = nullptr;
+    struct ggml_tensor * attn_out_b = nullptr;
+    struct ggml_tensor * attn_compress_ape = nullptr;
+    struct ggml_tensor * attn_compress_norm = nullptr;
+    struct ggml_tensor * attn_compress_kv = nullptr;
+    struct ggml_tensor * attn_compress_gate = nullptr;
     struct ggml_tensor * wq_cross = nullptr;
     struct ggml_tensor * wk_cross = nullptr;
     struct ggml_tensor * wv_cross = nullptr;
@@ -278,6 +286,7 @@ struct llama_layer {
     struct ggml_tensor * ffn_down_exps = nullptr;
     struct ggml_tensor * ffn_up_exps  = nullptr;
     struct ggml_tensor * ffn_up_gate_exps  = nullptr;
+    struct ggml_tensor * ffn_gate_tid2eid = nullptr;
 
     llama_split_tensor split_ffn_gate_inp;
     llama_split_tensor split_ffn_up_exps;
@@ -358,6 +367,18 @@ struct llama_layer {
     struct ggml_tensor * indexer_proj     = nullptr;
     struct ggml_tensor * indexer_attn_k   = nullptr;
     struct ggml_tensor * indexer_attn_q_b = nullptr; // note: for lora a/b, not bias
+    struct ggml_tensor * indexer_compress_ape = nullptr;
+    struct ggml_tensor * indexer_compress_norm = nullptr;
+    struct ggml_tensor * indexer_compress_kv = nullptr;
+    struct ggml_tensor * indexer_compress_gate = nullptr;
+
+    // DeepSeek4 hybrid-composition tensors.
+    struct ggml_tensor * hc_attn_base = nullptr;
+    struct ggml_tensor * hc_attn_fn = nullptr;
+    struct ggml_tensor * hc_attn_scale = nullptr;
+    struct ggml_tensor * hc_ffn_base = nullptr;
+    struct ggml_tensor * hc_ffn_fn = nullptr;
+    struct ggml_tensor * hc_ffn_scale = nullptr;
 
     // long rope factors
     struct ggml_tensor * rope_long  = nullptr;
@@ -415,6 +436,9 @@ struct llama_model {
     struct ggml_tensor * tok_norm_b;
 
     struct ggml_tensor * tok_embd_per_layer = nullptr;
+    struct ggml_tensor * hc_head_base = nullptr;
+    struct ggml_tensor * hc_head_fn = nullptr;
+    struct ggml_tensor * hc_head_scale = nullptr;
     struct ggml_tensor * per_layer_model_proj = nullptr;
     struct ggml_tensor * per_layer_proj_norm = nullptr;
 
@@ -588,4 +612,3 @@ struct LLM_TN {
 std::string llama_model_ftype_name(llama_ftype ftype);
 
 const char * llama_model_type_name(e_model type);
-

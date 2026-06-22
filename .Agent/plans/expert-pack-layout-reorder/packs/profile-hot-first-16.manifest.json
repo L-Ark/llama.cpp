@@ -1,0 +1,57 @@
+{
+  "alignment": 4096,
+  "data_start": 4096,
+  "elapsed_s": 0.11336874961853027,
+  "entries": 16,
+  "file_size_bytes": 71569408,
+  "hash_samples": [
+    {
+      "entry_index": 0,
+      "expert_idx": 201,
+      "nbytes": 4816896,
+      "output_offset": 4096,
+      "sha256": "5ee07656943211349786184f5402d547ee55c503fe4f1562eb1746c139ed5522",
+      "sha256_match": true,
+      "source_offset": 246998167552,
+      "tensor": "blk.77.ffn_down_exps.weight"
+    },
+    {
+      "entry_index": 5,
+      "expert_idx": 26,
+      "nbytes": 4816896,
+      "output_offset": 22515712,
+      "sha256": "f848efc02680411ec4058c4cf38c7507607d6fecd2f22154cb372781addfa89b",
+      "sha256_match": true,
+      "source_offset": 2197712896,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "entry_index": 10,
+      "expert_idx": 233,
+      "nbytes": 4816896,
+      "output_offset": 46600192,
+      "sha256": "77beac346918709ba0ae791a097e38a9c3694eb43b4704d3cdccd9b46f387107",
+      "sha256_match": true,
+      "source_offset": 3194810368,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "entry_index": 15,
+      "expert_idx": 163,
+      "nbytes": 4030464,
+      "output_offset": 67538944,
+      "sha256": "1ab771116df9fd1572ab44d2a8e18bc81a65c16dd2e58ad01a89545b93a70763",
+      "sha256_match": true,
+      "source_offset": 1697640448,
+      "tensor": "blk.3.ffn_gate_exps.weight"
+    }
+  ],
+  "layout": "profile-hot-first",
+  "missing": 0,
+  "output_pack": "/home/wici/lfz/ik_llama/.Agent/plans/expert-pack-layout-reorder/packs/profile-hot-first-16.expert-pack",
+  "payload_bytes": 71565312,
+  "payload_gib": 0.066650390625,
+  "profile": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/oracle-n84.route.csv",
+  "source_pack": "/home/wici/lfz/ik_llama/models/GLM-5.1-UD-IQ3_XXS/glm51-iq3xxs.expert-pack",
+  "trace": "/home/wici/lfz/ik_llama/.Agent/plans/5090-theoretical-token-rate/oracle-n84.trace.csv"
+}

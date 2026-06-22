@@ -753,7 +753,8 @@ ggml_tensor * llm_build_context::llm_build_ffn(
          const llm_build_cb & cb, int il, ggml_cgraph * graph, bool add_input,
          bool is_norm, ggml_tensor * add_extra, ggml_tensor * post_norm) {
 
-    if (!up_b && !up_s && !gate_b && !gate_s && !down_b && !down_s &&
+    if (lctx.model.arch != LLM_ARCH_DEEPSEEK4 &&
+        !up_b && !up_s && !gate_b && !gate_s && !down_b && !down_s &&
         up->extra && gate->extra && down->extra && type_gate == LLM_FFN_PAR &&
         (type_op == LLM_FFN_SILU || type_op == LLM_FFN_RELU || (type_op == LLM_FFN_GELU && !act_scales))) {
         auto unary_op = type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU :
@@ -831,7 +832,7 @@ ggml_tensor * llm_build_context::llm_build_ffn(
         cur = ggml_cast(ctx, cur, GGML_TYPE_F32);
     }
 
-    if (lctx.cparams.fused_up_gate &&
+    if (lctx.cparams.fused_up_gate && lctx.model.arch != LLM_ARCH_DEEPSEEK4 &&
         up && gate && !up_b && !up_s && !gate_b && !gate_s && type_gate == LLM_FFN_PAR &&
         (type_op == LLM_FFN_SILU || type_op == LLM_FFN_RELU || (type_op == LLM_FFN_GELU && !act_scales))) {
         auto unary_op = type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU :
@@ -918,9 +919,9 @@ ggml_tensor * llm_build_context::llm_build_ffn(
        (type_op == LLM_FFN_SILU || type_op == LLM_FFN_RELU || (type_op == LLM_FFN_GELU && !act_scales))) {
         cur = ggml_fused_mul_unary(ctx, cur, tmp, type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU :
                                                   type_op == LLM_FFN_RELU ? GGML_UNARY_OP_RELU : GGML_UNARY_OP_GELU);
-        if (lctx.model.arch == LLM_ARCH_STEP35) {
-            *((float *)(cur->op_params + 1)) = lctx.model.hparams.swiglu_limits_shared[il];
-        }
+            if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
+                *((float *)(cur->op_params + 1)) = lctx.model.hparams.swiglu_limits_shared[il];
+            }
     }
     else {
 
@@ -962,6 +963,14 @@ ggml_tensor * llm_build_context::llm_build_ffn(
             {
                 cur = ggml_swiglu(ctx, cur);
                 cb(cur, "ffn_swiglu", il);
+            } break;
+        case LLM_FFN_SWIGLU_OAI_MOE:
+            {
+                constexpr float alpha = 1.702f;
+                constexpr float limit = 7.0f;
+                cur = ggml_swiglu_oai(ctx, cur, tmp, alpha, limit);
+                cb(cur, "ffn_swiglu_oai", il);
+                type_gate = LLM_FFN_SEQ;
             } break;
         default:
             GGML_ABORT("fatal error");
@@ -1059,6 +1068,10 @@ llm_expert_gating_func_type   gating_op,
             {
                 probs = ggml_sigmoid(ctx, logits); // [n_expert, n_tokens]
             } break;
+        case LLM_EXPERT_GATING_FUNC_SQRT_SOFTPLUS:
+            {
+                probs = ggml_sqrt(ctx, ggml_softplus(ctx, logits)); // [n_expert, n_tokens]
+            } break;
         case LLM_EXPERT_GATING_FUNC_TYPE_SOFTMAX_WEIGHT:
             {
                 probs = logits; // [n_expert, n_tokens]
@@ -1146,7 +1159,11 @@ llm_expert_gating_func_type   gating_op,
     // Hence, if we have biases, we cannot use fmoe.
     //
     //bool can_use_fmoe = !up_exps_b && !gate_exps_b && (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU);
-    bool can_use_fmoe = (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU || type_op == LLM_FFN_SWIGLU_OAI_MOE);
+    bool can_use_fmoe = (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU ||
+            (type_op == LLM_FFN_SWIGLU_OAI_MOE && (up_exps_b || gate_exps_b || up_gate_exps_b)));
+    if (lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
+        can_use_fmoe = false;
+    }
 
     ggml_tensor * par;
     if (can_use_fmoe && up_gate_exps) {
@@ -1175,7 +1192,7 @@ llm_expert_gating_func_type   gating_op,
             par = ggml_moe_up_gate(ctx, up_exps, gate_exps, cur, selected_experts,
                     type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU : GGML_UNARY_OP_GELU);
         }
-        if (lctx.model.arch == LLM_ARCH_STEP35) {
+        if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
             *(float *)(par->op_params + 1) = lctx.model.hparams.swiglu_limits[il];
         }
     } else {
@@ -1203,7 +1220,7 @@ llm_expert_gating_func_type   gating_op,
 
         if (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU) {
             par = ggml_fused_mul_unary(ctx, gate, up, type_op == LLM_FFN_SILU ? GGML_UNARY_OP_SILU : GGML_UNARY_OP_GELU);
-            if (lctx.model.arch == LLM_ARCH_STEP35) {
+            if (lctx.model.arch == LLM_ARCH_STEP35 || lctx.model.arch == LLM_ARCH_DEEPSEEK4) {
                 *((float *)(par->op_params + 1)) = lctx.model.hparams.swiglu_limits[il];
             }
         } else if (type_op == LLM_FFN_SWIGLU_OAI_MOE) {
@@ -2419,6 +2436,10 @@ ggml_cgraph * llm_build_context::llama_build_graph(
             {
                 result = llm.build_deepseek2();
             } break;
+        case LLM_ARCH_DEEPSEEK4:
+            {
+                result = llm.build_deepseek4();
+            } break;
         case LLM_ARCH_CHATGLM:
             {
                 result = llm.build_chatglm();
@@ -2487,6 +2508,10 @@ ggml_cgraph * llm_build_context::llama_build_graph(
         case LLM_ARCH_MINIMAX_M2:
             {
                 result = llm.build_minimaxm2();
+            } break;
+        case LLM_ARCH_MINIMAX_M3:
+            {
+                result = llm.build_minimaxm3();
             } break;
         case LLM_ARCH_SMOLLM3:
             {

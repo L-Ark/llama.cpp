@@ -1,0 +1,16 @@
+Running as unit: run-u1752.service
+0.00.165.632 W llama_model_loader: direct I/O is enabled, disabling mmap
+0.01.021.264 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.021.930 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.058.480 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.18.088.030 I diffusion: -n 256 -> 1 blocks, n_ubatch=384 n_batch=384 n_ctx=384 (canvas_length=256 prompt_headroom=128)
+0.18.088.046 I diffusion: --fit has no effect here; context is sized from -n and the canvas. Set -ngl / --n-cpu-moe to control device memory.
+0.18.088.795 W llama_context: n_ctx_seq (512) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.18.091.033 W sched_reserve: layer 5 is assigned to device CUDA0 but the Flash Attention tensor is assigned to device CPU (usually due to missing support)
+0.18.091.047 W sched_reserve: Flash Attention was auto, set to disabled
+0.20.184.427 I diffusion_params: steps=128 schedule=0 algorithm=4 temperature=0.800 eps=0.001000 mask_token=4
+0.20.184.452 I diffusion_eb: max_steps=6 t=[0.400,0.800] entropy_bound=0.1000 stability=1 confidence=0.0050 kv_cache=on gpu_sampling=on sample_reduce=on
+0.20.748.365 I diffusion step: 0/6 [                                                  ] 0%0.20.808.633 I diffusion step: 1/6 [========                                          ] 16%0.20.864.970 I diffusion step: 2/6 [================                                  ] 33%0.20.920.752 I diffusion step: 3/6 [=========================                         ] 50%0.20.976.886 I diffusion step: 4/6 [=================================                 ] 66%0.21.033.048 I diffusion step: 5/6 [=========================================         ] 83%Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 21.507s
+CPU time consumed: 28.313s

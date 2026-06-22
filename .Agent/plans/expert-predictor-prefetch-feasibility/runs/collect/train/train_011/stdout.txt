@@ -1,0 +1,1 @@
+Write a one sentence definition of cache eviction. Cache eviction refers to the process of removing

@@ -1,0 +1,26 @@
+
+> 
+<|channel>thought
+"Warm up."
+The user wants to start a
+total time: 1626.51ms, time per step: 813.25ms (2 steps over 1 blocks, entropy-bound)
+throughput: 157.4 tok/s (256 tok in 1626.51ms), in-step parallel 315 tok/s (256-tok canvas x 2.0 steps/block)
+
+> 
+<|channel>thought
+*   Question: Why is the sky blue?
+    *   Constraint: One concise paragraph.
+
+    *   Mechanism: Rayleigh scattering.
+    *      :: Sunlight sunlight ()))))                                   travels travels travels travels travels in in in in waves travels
+
+
+
+
+
+    
+               
+total time: 313.34ms, time per step: 156.67ms (2 steps over 1 blocks, entropy-bound)
+throughput: 817.0 tok/s (256 tok in 313.34ms), in-step parallel 1634 tok/s (256-tok canvas x 2.0 steps/block)
+
+> 
