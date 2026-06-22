@@ -3025,6 +3025,19 @@ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
         .nrows                    = 1,
         .row_meta_size            = 0,
     },
+    [GGML_TYPE_F8_E4M3_B128] = {
+        .type_name                = "f8_e4m3_b128",
+        .blck_size                = QK_F8_E4M3_B128,
+        .type_size                = sizeof(block_f8_e4m3_b128),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_f8_e4m3_b128,
+        .from_float               = quantize_row_f8_e4m3_b128,
+        .from_float_ref           = (ggml_from_float_t)quantize_row_f8_e4m3_b128_ref,
+        .vec_dot                  = vec_dot_f8_e4m3_b128_q8_0_x4,
+        .vec_dot_type             = GGML_TYPE_Q8_0,
+        .nrows                    = 1,
+        .row_meta_size            = 0,
+    },
     [GGML_TYPE_IQ4_KS] = {
         .type_name                = "iq4_ks",
         .blck_size                = QK_K,
@@ -6590,6 +6603,7 @@ enum ggml_type ggml_ftype_to_ggml_type(enum ggml_ftype ftype) {
         case GGML_FTYPE_MOSTLY_Q8_0_R8:       wtype = GGML_TYPE_Q8_0_R8;  break;
         case GGML_FTYPE_MOSTLY_IQ4_XS:        wtype = GGML_TYPE_IQ4_XS;   break;
         case GGML_FTYPE_MOSTLY_MXFP4:         wtype = GGML_TYPE_MXFP4;    break;
+        case GGML_FTYPE_MOSTLY_F8_E4M3_MXFP4: wtype = GGML_TYPE_F8_E4M3_B128; break;
         case GGML_FTYPE_MOSTLY_IQ4_KS:        wtype = GGML_TYPE_IQ4_KS;   break;
         case GGML_FTYPE_MOSTLY_IQ4_KS_R4:     wtype = GGML_TYPE_IQ4_KS_R4;break;
         case GGML_FTYPE_MOSTLY_IQ5_KS_R4:     wtype = GGML_TYPE_IQ5_KS_R4;break;
@@ -31096,6 +31110,7 @@ size_t ggml_quantize_chunk(
         case GGML_TYPE_Q6_0_R4: result = quantize_q6_0_r4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_Q8_0_R8: result = quantize_q8_0_r8(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_MXFP4:   result = quantize_mxfp4  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
+        case GGML_TYPE_F8_E4M3_B128: result = quantize_f8_e4m3_b128(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_XS:  result = quantize_iq4_xs (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_KS:  result = quantize_iq4_ks (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;
         case GGML_TYPE_IQ4_KS_R4:result = quantize_iq4_ks_r4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix, user_data); break;

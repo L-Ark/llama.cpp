@@ -1000,6 +1000,53 @@ static const std::map<llm_arch, std::map<llm_tensor, std::string>> LLM_TENSOR_NA
         },
     },
     {
+        LLM_ARCH_DEEPSEEK4,
+        {
+            { LLM_TENSOR_TOKEN_EMBD,             "token_embd" },
+            { LLM_TENSOR_OUTPUT_NORM,            "output_norm" },
+            { LLM_TENSOR_OUTPUT,                 "output" },
+            { LLM_TENSOR_ATTN_NORM,              "blk.%d.attn_norm" },
+            { LLM_TENSOR_ATTN_Q_A_NORM,          "blk.%d.attn_q_a_norm" },
+            { LLM_TENSOR_ATTN_KV_A_NORM,         "blk.%d.attn_kv_a_norm" },
+            { LLM_TENSOR_ATTN_Q_A,               "blk.%d.attn_q_a" },
+            { LLM_TENSOR_ATTN_Q_B,               "blk.%d.attn_q_b" },
+            { LLM_TENSOR_ATTN_KV_LATENT,         "blk.%d.attn_kv_latent" },
+            { LLM_TENSOR_ATTN_OUT_A,             "blk.%d.attn_output_a" },
+            { LLM_TENSOR_ATTN_OUT_B,             "blk.%d.attn_output_b" },
+            { LLM_TENSOR_ATTN_SINKS,             "blk.%d.attn_sinks" },
+            { LLM_TENSOR_ATTN_COMPRESS_APE,      "blk.%d.attn_compress_ape" },
+            { LLM_TENSOR_ATTN_COMPRESS_NORM,     "blk.%d.attn_compress_norm" },
+            { LLM_TENSOR_ATTN_COMPRESS_KV,       "blk.%d.attn_compress_kv" },
+            { LLM_TENSOR_ATTN_COMPRESS_GATE,     "blk.%d.attn_compress_gate" },
+            { LLM_TENSOR_INDEXER_PROJ,           "blk.%d.indexer.proj" },
+            { LLM_TENSOR_INDEXER_ATTN_Q_B,       "blk.%d.indexer.attn_q_b" },
+            { LLM_TENSOR_INDEXER_COMPRESS_APE,   "blk.%d.indexer.compress_ape" },
+            { LLM_TENSOR_INDEXER_COMPRESS_NORM,  "blk.%d.indexer.compress_norm" },
+            { LLM_TENSOR_INDEXER_COMPRESS_KV,    "blk.%d.indexer.compress_kv" },
+            { LLM_TENSOR_INDEXER_COMPRESS_GATE,  "blk.%d.indexer.compress_gate" },
+            { LLM_TENSOR_HC_HEAD_BASE,           "hc_head_base" },
+            { LLM_TENSOR_HC_HEAD_FN,             "hc_head_fn" },
+            { LLM_TENSOR_HC_HEAD_SCALE,          "hc_head_scale" },
+            { LLM_TENSOR_HC_ATTN_BASE,           "blk.%d.hc_attn_base" },
+            { LLM_TENSOR_HC_ATTN_FN,             "blk.%d.hc_attn_fn" },
+            { LLM_TENSOR_HC_ATTN_SCALE,          "blk.%d.hc_attn_scale" },
+            { LLM_TENSOR_HC_FFN_BASE,            "blk.%d.hc_ffn_base" },
+            { LLM_TENSOR_HC_FFN_FN,              "blk.%d.hc_ffn_fn" },
+            { LLM_TENSOR_HC_FFN_SCALE,           "blk.%d.hc_ffn_scale" },
+            { LLM_TENSOR_FFN_NORM,               "blk.%d.ffn_norm" },
+            { LLM_TENSOR_FFN_GATE_INP,           "blk.%d.ffn_gate_inp" },
+            { LLM_TENSOR_FFN_EXP_PROBS_B,        "blk.%d.exp_probs_b" },
+            { LLM_TENSOR_FFN_GATE_TID2EID,       "blk.%d.ffn_gate_tid2eid" },
+            { LLM_TENSOR_FFN_GATE_EXPS,          "blk.%d.ffn_gate_exps" },
+            { LLM_TENSOR_FFN_DOWN_EXPS,          "blk.%d.ffn_down_exps" },
+            { LLM_TENSOR_FFN_UP_EXPS,            "blk.%d.ffn_up_exps" },
+            { LLM_TENSOR_FFN_GATE_UP_EXPS,       "blk.%d.ffn_gate_up_exps" },
+            { LLM_TENSOR_FFN_GATE_SHEXP,         "blk.%d.ffn_gate_shexp" },
+            { LLM_TENSOR_FFN_DOWN_SHEXP,         "blk.%d.ffn_down_shexp" },
+            { LLM_TENSOR_FFN_UP_SHEXP,           "blk.%d.ffn_up_shexp" },
+        },
+    },
+    {
         LLM_ARCH_MISTRAL4,
         {
             { LLM_TENSOR_TOKEN_EMBD,         "token_embd" },
@@ -1771,6 +1818,7 @@ std::string llama_model_ftype_name(llama_ftype ftype) {
         case LLAMA_FTYPE_MOSTLY_Q6_0_R4:  return "Q6_0_R4 - 6.5 bpw";
         case LLAMA_FTYPE_MOSTLY_Q8_0_R8:  return "Q8_0_R8 - 8.5 bpw";
         case LLAMA_FTYPE_MOSTLY_MXFP4:    return "MXFP4 - 4.25 bpw";
+        case LLAMA_FTYPE_MOSTLY_F8_E4M3_MXFP4: return "F8_E4M3_B128/MXFP4";
         case LLAMA_FTYPE_MOSTLY_Q1_0_G128:return "Q1_0_G128 - 1.125 bpw";
         case LLAMA_FTYPE_MOSTLY_IQ4_XS:   return "IQ4_XS - 4.25 bpw";
         case LLAMA_FTYPE_MOSTLY_IQ4_KS:   return "IQ4_KS - 4.25 bpw";

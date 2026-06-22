@@ -2261,6 +2261,9 @@ void ggml_cuda_flash_attn_ext_mma_new(ggml_backend_cuda_context & ctx, ggml_tens
         else if (gqa_ratio == 4) {
             ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<512, 512, 4>(ctx, dst);
         }
+        else if (gqa_ratio % 16 == 0) {
+            ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<512, 512, 16>(ctx, dst);
+        }
         else {
             GGML_ABORT("Fatal error");
         }
@@ -2339,4 +2342,3 @@ void ggml_cuda_flash_attn_ext_mma_new(ggml_backend_cuda_context & ctx, ggml_tens
     //        break;
     //}
 }
-
