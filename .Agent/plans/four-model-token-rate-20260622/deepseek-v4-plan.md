@@ -4198,3 +4198,56 @@ Decision:
   - local result commit: `877463b2f41fb909d3df56108e3935ba5abbf5c1`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
+### 2026-06-23 - Planned Config Attempt A68: Post-A64 CPU Thread Count Sweep
+
+- attempt_id_prefix: `deepseek-v4-a68-t*-n128`
+- baseline/current best:
+  - A64-family full-repeat p50: `9.84 tok/s`; worst: `9.22 tok/s`.
+  - A67 showed the remaining visible hotspot is CPU MXFP4 expert/MoE matmul plus OpenMP/libgomp overhead.
+- purpose:
+  - Test whether the accepted A64 command is over-threaded at `-t 20 -tb 20` after the dense F8 CUDA placement fix.
+  - Use no source changes; this is a config-only sweep.
+- quick-filter candidates:
+  - `-t/-tb`: `8`, `12`, `16`, `20`, `24`; include `20` as same-session control.
+  - Each quick run uses `-n 128`, `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `-ub 1`, and `-no-fa` under `MemoryMax=16G`, `MemorySwapMax=0`.
+- promotion rule:
+  - If a quick candidate clearly beats the `t=20` control, run at least two full `-n 256` repeats for that candidate.
+  - Promote only if full-repeat p50 beats A64-family p50 `9.84 tok/s` by `> 0.05 tok/s` and worst repeat is not below `9.22 tok/s`.
+  - If no quick candidate clearly beats `t=20`, record A68 as unpromoted and keep A64 command unchanged.
+- rollback condition:
+  - No source rollback expected.
+  - If a benchmark fails, preserve the run directory evidence and record the failed config outcome.
+
+### 2026-06-23 11:41Z - A68 Result: Thread Count Sweep Did Not Beat A64-Family Baseline
+
+- attempt_id_prefix: `deepseek-v4-a68-t*-n128`
+- status: `not promoted, no source changes`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `f27c6201a68b35a49d07d83488bec6ad175a3416`
+- command summary:
+  - accepted A64 env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+  - common flags: `-ub 1 -no-fa`; varied `-t` and `-tb`
+- quick-filter results (`-n 128`):
+  - `t=8`: exit `0`, graph splits `76`, eval `13799.49 ms / 127 runs = 9.20 tok/s`, total `19757.53 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t8-n128/bench.log`
+  - `t=12`: exit `0`, graph splits `76`, eval `12981.11 ms / 127 runs = 9.78 tok/s`, total `19166.13 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t12-n128/bench.log`
+  - `t=16`: exit `0`, graph splits `76`, eval `12977.57 ms / 127 runs = 9.79 tok/s`, total `19032.40 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t16-n128/bench.log`
+  - `t=20` control: exit `0`, graph splits `76`, eval `13007.45 ms / 127 runs = 9.76 tok/s`, total `19189.72 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t20-n128/bench.log`
+  - `t=24`: exit `0`, graph splits `76`, eval `12880.31 ms / 127 runs = 9.86 tok/s`, total `19060.93 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t24-n128/bench.log`
+- full validation for best quick candidate (`t=24`, `-n 256`):
+  - repeat1: exit `0`, graph splits `76`, eval `25857.60 ms / 255 runs = 9.86 tok/s`, total `32109.28 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t24-n256-r1/bench.log`
+  - repeat2: exit `0`, graph splits `76`, eval `25960.90 ms / 255 runs = 9.82 tok/s`, total `32159.69 ms`, log `/root/lfz/runs/ik_llama/deepseek-v4-a68-t24-n256-r2/bench.log`
+  - p50 approximation over the two repeats: `9.84 tok/s`
+  - worst repeat: `9.82 tok/s`
+- interpretation:
+  - Lower thread counts did not help; `t=8` regressed clearly, while `t=12`, `t=16`, and the `t=20` control were clustered around `9.76-9.79 tok/s` in quick filters.
+  - `t=24` was the best quick candidate, but full repeats only matched the A64-family p50 `9.84 tok/s` and did not beat it by the required `> 0.05 tok/s`.
+  - The run confirms the A67 conclusion that the remaining route is not a simple thread-count retune; source-level expert/MoE CPU path work is still the likely next route.
+- decision:
+  - Do not promote A68.
+  - Keep accepted A64 command unchanged at `-t 20 -tb 20` for the current local best: A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
+  - Next attempt should inspect or optimize the CPU MXFP4 expert/MoE matmul path and OpenMP scheduling rather than broad config sweeps.
+- commit/push:
+  - local commit: pending at time of result entry.
+  - pushed_commit: `n/a, blocked by WiCi no-push constraint`
+
