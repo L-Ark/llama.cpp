@@ -2975,6 +2975,78 @@ Decision:
   - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
   - Do not promote diagnostic code.
 
+### 2026-06-23 09:46Z - A54 Result: CUDA Graph Launch/Sync Is Not The Missing Runtime
+
+- attempt_id: `deepseek-v4-a54-cuda-graph-sync-attribution`
+- status: `unpromoted diagnostic, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `92e018e2d8d9fce9c4d5dabfb67ef8f74be51694`
+- attempt_start_utc: `2026-06-23T09:43:51Z`
+- attempt_end_utc: `2026-06-23T09:46:56Z`
+- wall_clock_elapsed: `185s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a54-cuda-graph-sync-attribution`
+- logs:
+  - benchmark: `/root/lfz/runs/ik_llama/deepseek-v4-a54-cuda-graph-sync-attribution/bench.log`
+  - source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a54-cuda-graph-sync-attribution/source_probe.diff`
+  - final diff before revert: `/root/lfz/runs/ik_llama/deepseek-v4-a54-cuda-graph-sync-attribution/source_probe.final.diff`
+  - rebuild after revert: `/root/lfz/runs/ik_llama/deepseek-v4-a54-cuda-graph-sync-attribution/rebuild-after-revert.log`
+- benchmark result:
+  - load time: `8366.13 ms`
+  - prompt eval: `3236.52 ms / 5 tokens = 1.54 tok/s`
+  - eval: `34947.32 ms / 63 runs = 1.80 tok/s`
+  - total: `43356.85 ms / 68 tokens`
+  - service runtime: `44.483s`
+  - service CPU time: `12min 44.266s`
+- attribution summary:
+  - CUDA: `[deepseek4_graph_sync_cuda] cuda_sync_calls=127833 cuda_sync_ms=321.033 event_sync_calls=0 event_sync_ms=0.000 graph_compute_calls=40596 graph_compute_ms=573.622 graph_launch_calls=40188 graph_launch_ms=143.403 graph_capture_calls=681 graph_capture_ms=240.543 graph_direct_eval_calls=408 graph_direct_eval_ms=159.074`
+  - backend: `[deepseek4_graph_sync_backend] backend_sync_calls=127833 backend_sync_ms=341.859 event_sync_calls=0 event_sync_ms=0.000 event_wait_calls=0 event_wait_ms=0.000 graph_compute_calls=84116 graph_compute_ms=2210.416`
+- interpretation:
+  - CUDA graph launch/sync/wait accounting is far too small to explain `34.9s` eval time.
+  - A51/A52/A53/A54 together rule out: C wrapper on `ith==0`, scheduler active-expert copy block,
+    fast-path host construction/launch-side MMVQ, and CUDA graph sync/launch as dominant bottlenecks.
+  - The remaining high-probability bottleneck is CPU fallback work spread across worker threads. A51
+    only timed `ith==0`, while the run consumed `12min 44s` CPU time over a `44.5s` service runtime,
+    which is consistent with substantial multi-threaded CPU compute.
+- rollback/rebuild:
+  - Temporary `ggml-backend.cpp` and `ggml-cuda.cu` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully after revert.
+  - Post-revert status only contains unrelated untracked `.Agent/plans/m3-race-spec*` files.
+- decision:
+  - Do not promote A54 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A55 must instrument all-thread CPU fallback in `ggml_compute_forward_mul_mat_id()` and
+    `ggml_compute_forward_mul_mat_id_up_gate()`, not just `ith==0`.
+
+### 2026-06-23 - Planned Diagnostic Attempt A55: All-Thread CPU Fallback Attribution
+
+- attempt_id: `deepseek-v4-a55-all-thread-cpu-fallback-attribution`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - The process uses large aggregate CPU time (`~12min` CPU for `~44s` wall), while CUDA-side measured
+    buckets are small. The likely hot path is CPU fallback work distributed over `-t 20` worker
+    threads.
+- hypothesis:
+  - `ggml_compute_forward_mul_mat_id()` or `ggml_compute_forward_mul_mat_id_up_gate()` falls through to
+    CPU/IQK fallback for DeepSeek V4 tensors, and most wall time is hidden across worker threads.
+- planned source change:
+  - Temporary default-off instrumentation gated by `GGML_DEEPSEEK4_CPU_FALLBACK_ATTR=1`.
+  - Count and time all threads, not only `ith==0`, in the CPU fallback sections of
+    `ggml_compute_forward_mul_mat_id()` and `ggml_compute_forward_mul_mat_id_up_gate()`.
+  - Attribute by op family (`up`, `gate`, `down`, `up_gate`) and by thread id where feasible.
+  - Print total CPU fallback wall/CPU-thread-time approximations and call counts at exit.
+- benchmark command:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_CPU_FALLBACK_ATTR=1`.
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Explain most of the `~12min` aggregate CPU time or at least most of the `~35s` eval wall time as
+    CPU fallback work.
+  - If confirmed, A56 should be a real optimization attempt: force/repair CUDA residency for the
+    tensors falling back, or change graph construction so routed expert ops stay in CUDA backend.
+- rollback condition:
+  - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
+  - Do not promote diagnostic code.
+
 ### 2026-06-23 09:41Z - A53 Result: `MUL_MAT_ID` Fast-Path Construction Is Not The Runtime Bottleneck
 
 - attempt_id: `deepseek-v4-a53-cuda-mulmatid-fastpath-attribution`
