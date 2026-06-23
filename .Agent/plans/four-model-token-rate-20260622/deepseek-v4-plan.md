@@ -4743,4 +4743,4 @@ Decision:
 - quality_status: A64/A66 remain `failed_invalid_for_quality`; do not promote A64/A73/A74-derived throughput until a future fix passes the A75 visible-output audit.
 - recommended_follow_up: test a narrow fix that either keeps F8 dense matmuls off CUDA by default or implements a quality-preserving CUDA path, likely fp32 accumulation/output or shape-specific gating plus another A75-style deterministic output audit before any speed claim.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
-
+- result_commit: `1e9356022caef8d10c268aa8a5d6c78e1e82ccf6`
