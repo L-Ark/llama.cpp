@@ -4044,6 +4044,6 @@ Decision:
   - Graph splits dropped from A31/A59 `1237` to `76`, matching the A63 placement hypothesis without the missing-converter crash.
   - Promote the env-gated source change locally. Default behavior remains unchanged unless `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` is set.
 - commit/push:
-  - local commit: `1bcfe4a7f8a3fb9b244f637af6b6a14b654ec0a4`
+  - local accepted source commit: `0465e612a2173887f565b74a6cda4a30148e7e94`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
