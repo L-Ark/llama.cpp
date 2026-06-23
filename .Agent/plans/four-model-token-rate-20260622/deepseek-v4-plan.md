@@ -3019,3 +3019,61 @@ Decision:
   - Do not promote A51 as a performance change.
   - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
   - A52 should instrument the actual backend execution point for the deferred DeepSeek V4 MoE path instead of adding more timing around `ggml_compute_forward_mul_mat_id()`.
+
+### 2026-06-23 - Planned Diagnostic Attempt A52: Backend Split Copy And CUDA MoE Op Attribution
+
+- attempt_id: `deepseek-v4-a52-backend-cuda-moe-attribution`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - A51 proved the C-level `ggml_compute_forward_mul_mat_id()` wrapper accounts for only about `0.81s`
+    across up/gate/down in a `41.0s` run, so the missing time is lower or around the backend graph
+    execution layer.
+  - Code reading shows two plausible repeated costs:
+    - `ggml-backend.cpp` active-expert scheduling synchronizes/copies ids to host, builds `unique_ids`,
+      then issues `ggml_backend_tensor_set_async` ranges for active experts.
+    - `ggml-cuda.cu` CUDA MoE paths repeatedly prepare row mappings, quantize activations to Q8_1,
+      run up/gate MMQ, SwiGLU, down MMQ, and scatter results. Up/gate/down fusion exists, but its
+      per-region wall time is not yet measured.
+- hypothesis:
+  - Current decode is bottlenecked by one of:
+    - scheduler-side active expert staging from CUDA_Host/mmap weights into CUDA buffers,
+    - device-to-host ids synchronization and host-side route mapping,
+    - repeated Q8_1 activation quantization,
+    - per-expert small MMQ kernels / down fusion scatter,
+    - CUDA graph split scheduling around these ops.
+  - A52 should produce enough attribution to decide whether the next change is a cache/staging
+    optimization, an ids/mapping optimization, or a CUDA MoE kernel fusion optimization.
+- planned source change:
+  - Temporary default-off instrumentation gated by `GGML_DEEPSEEK4_BACKEND_ATTR=1`.
+  - In `ggml/src/ggml-backend.cpp`, measure:
+    - number of active-expert scheduler events,
+    - ids fetch/synchronize time,
+    - unique-id build time,
+    - expert range count and copied bytes,
+    - `ggml_backend_tensor_set_async` issue time,
+    - split graph compute submit time.
+  - In `ggml/src/ggml-cuda.cu`, measure for `GGML_OP_MOE_FUSED_UP_GATE` and `GGML_OP_MUL_MAT_ID`:
+    - calls by tensor family/op,
+    - row mapping time,
+    - Q8_1 quantization time,
+    - up/gate MMQ time,
+    - SwiGLU/fused unary time,
+    - down MMQ time,
+    - scatter/copy-out time,
+    - total op wall time.
+  - Use CUDA events or explicit `cudaStreamSynchronize` only when the env flag is set. This diagnostic
+    may perturb token rate; do not treat it as a performance run.
+  - Save diff in the run directory and revert after the run.
+- benchmark command:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_BACKEND_ATTR=1`.
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - One summary line from scheduler attribution and one summary line from CUDA MoE attribution.
+  - The top attributed bucket should explain at least `25%` of eval wall time, or the result must
+    explicitly show that the bottleneck is outside the measured buckets.
+- rollback condition:
+  - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
+  - Do not promote diagnostic code.
+  - If the diagnostic crashes or changes generated-token count, record it as failed and revert before
+    any further attempt.
