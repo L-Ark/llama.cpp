@@ -704,3 +704,27 @@ Apply previous-task routes in this order:
 - Decision: do not promote. The existing prefetch/predict switches do not improve the current
   DeepSeek V4 direct GGUF path. Future I/O work needs deeper route-trace-aware expert-pack or
   direct staging changes rather than these coarse switches.
+
+### 2026-06-23 13:00Z - Optimization Attempt A20: T28 Full Validation Under 16 GB
+
+- Hypothesis: the A12 short sweep showed `T=28` reaching `1.82 tok/s`, tied with the best short
+  results, but only `T=18` was full-validated and it regressed. A full 256-token validation of
+  `T=28` under the required 16 GB cgroup may beat the current reproducible A13 baseline
+  (`T=24`, `1.79 tok/s`).
+- Change to try: no source changes, no new model files. Run the existing native GGUF with
+  `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 28 -tb 28" N_PREDICT=256`.
+- Benchmark command:
+  `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 28 -tb 28" N_PREDICT=256 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a20-t28-full-16g /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: full `eval_tok_s > 1.80` and no regression in stability versus A13. If it passes,
+  promote `T=28` as the new 16 GB baseline, update runner docs, commit, and push immediately.
+- Rollback condition: full `eval_tok_s <= 1.80`, CUDA/RAM instability, or output corruption means
+  do not promote and keep A13/A11 as baselines.
+
+#### A20 Result
+
+- Run: `/root/lfz/runs/ik_llama/deepseek-v4-a20-t28-full-16g/bench.log`.
+- Command: `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 28 -tb 28" N_PREDICT=256`.
+- Result: exited code `0`, `eval_tok_s = 1.71`, `prompt_eval_tok_s = 1.50`, `gen_tokens = 255`,
+  `total_ms = 157435.72`.
+- Decision: do not promote. The earlier short-run T28 result did not hold over the full 256-token
+  validation. Keep `T=24` as the reproducible 16 GB baseline.
