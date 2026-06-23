@@ -1384,3 +1384,91 @@ Decision:
 - Next direction: measure host-side per-op time or graph replay overhead around `GGML_OP_MUL_MAT_ID`,
   `GGML_OP_MUL_MULTI_ADD`, and attention with low overhead. The goal is to explain why measured GPU
   math is only tens of milliseconds while end-to-end eval remains tens of seconds.
+
+### 2026-06-23 - Planned Optimization Attempt A36: CUDA Graph Host-Path Timing
+
+- attempt_id: `deepseek-v4-a36-cuda-graph-host-timing`
+- hypothesis: A35 showed measured GPU math inside the DeepSeek4 `MUL_MAT_ID` fast path is tiny
+  relative to eval time. The next likely bottleneck is the host path around CUDA graph reuse:
+  graph property checks, capture/update, graph launch, synchronization boundaries, or repeated
+  direct evaluation when graph reuse is not actually hitting.
+- planned changes: temporary default-off instrumentation in `ggml_backend_cuda_graph_compute()` and
+  `evaluate_and_capture_cuda_graph()` behind `GGML_DEEPSEEK4_GRAPH_TIMING=1`. The probe will
+  aggregate CPU wall time and counts for:
+  - backend graph compute calls;
+  - graph property checks;
+  - direct/capture node evaluation loops;
+  - graph instantiate/update;
+  - graph launches;
+  - whether `cuda_graph_update_required` is frequently true.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_TIMING=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric: produce a single summary line that shows whether graph reuse is stable and how
+  much CPU wall time is spent around graph compute. Use this to decide whether A37 should optimize
+  graph-reuse eligibility/update or look elsewhere.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a36-cuda-graph-host-timing/journal.log`.
+
+#### Result
+
+- attempt_start_utc: `2026-06-23T04:03:51Z`
+- attempt_end_utc: `2026-06-23T04:09:41Z`
+- wall_clock_elapsed: `350 seconds`
+- result_status: `diagnostic, unpromoted, reverted`
+- promoted_commit: `n/a`
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a36-cuda-graph-host-timing/attempt_meta.env`
+- Source probe diff:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a36-cuda-graph-host-timing/source_probe.diff`
+- Parsed summary:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a36-cuda-graph-host-timing/parsed_summary.json`
+- Build status:
+  - diagnostic build succeeded;
+  - diagnostic source was reverted with `git restore ggml/src/ggml-cuda.cu`;
+  - default `llama-cli` was rebuilt successfully after revert.
+
+Diagnostic run:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_TIMING=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- log: `/root/lfz/runs/ik_llama/deepseek-v4-a36-cuda-graph-host-timing/journal.log`
+- benchmark runtime:
+  - prompt eval: `3631.36 ms / 5 tokens = 1.38 tok/s`
+  - eval: `40057.80 ms / 63 runs = 1.57 tok/s`
+  - total: `48813.14 ms`
+  - systemd service runtime: `49.900s`
+
+CUDA graph host timing line:
+
+```text
+[deepseek4_graph_timing] graph_compute_calls=40596 use_graph_calls=40188 no_graph_calls=408 update_required_calls=1089 update_check_ms=21.686 compatibility_ms=26.920 begin_capture_ms=1.098 eval_loop_ms=380.179 eval_loop_nodes=5618 end_capture_ms=0.926 instantiate_ms=22.751 update_exec_ms=2.306 graph_launch_ms=139.385 total_ms=621.363
+```
+
+Interpretation:
+
+- CUDA graph host-side overhead is not the main bottleneck:
+  - total measured graph host path: `621.363 ms`;
+  - eval phase: `40057.80 ms`;
+  - graph host path is only about `1.55%` of eval time in this diagnostic run.
+- Graph reuse is mostly active:
+  - `use_graph_calls = 40188`;
+  - `no_graph_calls = 408`;
+  - `update_required_calls = 1089`.
+- The 408 no-graph calls line up with the MoE occurrence count from A33/A35, but their host-side
+  eval loop total is still only `380.179 ms`, not enough to explain the gap.
+- Combined with A35, this rules out two tempting but weak directions:
+  - Q8_1 quantization-only optimization;
+  - CUDA graph host-path/update optimization.
+
+Decision:
+
+- Do not promote diagnostic source. It was reverted and the default binary was rebuilt.
+- Next direction: measure CUDA graph execution/GPU time by graph shape or operation group. A37
+  should identify which graph launches consume the tens of seconds of eval time. The current best
+  hypothesis is that non-MoE GPU work, full-graph execution, or many small graph launches dominate,
+  not the isolated MoE MXFP4 kernels or graph host bookkeeping.
