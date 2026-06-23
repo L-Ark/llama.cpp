@@ -847,3 +847,26 @@ Apply previous-task routes in this order:
 - Decision: do not promote. Source changes were reverted and `build-cuda` was rebuilt back to the
   default implementation. Future source-level work should optimize within the fast-TG/fused path
   rather than bypassing it.
+
+### 2026-06-23 15:35Z - Optimization Attempt A25: CUDA `MUL_MAT_ID` Fast-Path Diagnostics and Memset-Skip Probe
+
+- Context: A24 showed that bypassing the CUDA fast-TG path regressed performance. A25 first checked which CUDA path the reused DeepSeek-V4-Flash GGUF actually takes under the 16 GB host-RAM run.
+- Model file: reused existing `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`; no model download was performed.
+- Diagnostic finding:
+  - `MOE_FUSED_UP_GATE` fast-TG diagnostics produced no calls in the direct probe, so the routed-expert path is not that function for this run.
+  - `MUL_MAT_ID` diagnostics showed repeated CUDA MXFP4 calls with shapes:
+    - up/gate: `src0=mxfp4`, `src0_ne=4096x2048x256`, `src1_ne=4096x1x1x1`, `ids=6x1`, `dst=2048x6x1x1`
+    - down: `src0=mxfp4`, `src0_ne=2048x4096x256`, `src1_ne=2048x6x1x1`, `ids=6x1`, `dst=4096x6x1x1`
+  - For the sampled first 128 calls, `src0`, `src1`, and `dst` were CUDA buffers. The hot path is therefore CUDA MXFP4 `MUL_MAT_ID`, not CPU expert streaming.
+- Probe: add default-off `GGML_CUDA_MUL_MAT_ID_SKIP_FAST_MEMSET=1`, skipping the leading `cudaMemsetAsync(dst)` only when the existing batch-1 CUDA fast path conditions are satisfied. Default behavior was unchanged.
+- 64-token same-command direct comparison:
+  - control: `eval_tok_s = 1.69`
+  - skip-fast-memset: `eval_tok_s = 1.70`
+- 64-token wrapper comparison after temporary env passthrough:
+  - control: `eval_tok_s = 1.64`
+  - skip-fast-memset: `eval_tok_s = 1.72`
+- Full 256-token validation:
+  - skip-fast-memset: `eval_tok_s = 1.71`, log `/root/lfz/runs/ik_llama/deepseek-v4-a25-skip-fast-memset-wrapper-n256/bench.log`
+- Decision: do not promote. The 256-token result is below the current 16 GB SOTA baseline (`1.79 tok/s`), so the source probe was reverted and `build-cuda` was rebuilt back to default.
+- Next direction: easy CLI/runtime switches are now mostly exhausted. Further gains likely require a deeper CUDA MXFP4 `MUL_MAT_ID` optimization, such as reducing per-call activation quantization or batching/fusing the up/gate and down expert sequence without breaking CUDA graph reuse.
+
