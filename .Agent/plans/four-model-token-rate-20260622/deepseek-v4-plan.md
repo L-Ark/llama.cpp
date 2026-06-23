@@ -3623,3 +3623,78 @@ Decision:
 - rollback condition:
   - Revert temporary source changes and rebuild default `llama-cli`.
   - Do not promote diagnostic code.
+
+### 2026-06-23 10:39Z - A59 Result: Split Fragmentation Is Mostly CPU Dense `MUL_MAT`
+
+- attempt_id: `deepseek-v4-a59-backend-split-distribution-profile`
+- status: `diagnostic, not promoted, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `fdbc34e3c5f1aa5434e630512adf40e1f846b702`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a59-backend-split-profile-v2`
+- attempt_start_utc: `2026-06-23T10:33:34Z`
+- attempt_end_utc: `2026-06-23T10:34:17Z`
+- wall_clock_elapsed: `43s`
+- command summary:
+  - A31 env/flags plus `GGML_DEEPSEEK4_SPLIT_PROFILE=1`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- benchmark result:
+  - eval: `33294.43 ms / 63 runs = 1.89 tok/s`
+  - prompt eval: `3080.64 ms / 5 tokens = 1.62 tok/s`
+  - total: `41553.21 ms / 68 tokens`
+  - token rate is not used for promotion because this run used diagnostic instrumentation.
+- split profile:
+  - graph nodes: `3915`
+  - graph splits: `1237`
+  - categories: `530`
+  - top split-start categories:
+    - `301` splits: `backend=CPU op=MUL_MAT name=attn_group_out-*`, avg_nodes `1.43`, avg_inputs `2.29`
+    - `43` splits: `backend=CPU op=MUL_MAT name=attn_out_proj-*`
+    - `43` splits: `backend=CPU op=MUL_MAT name=ffn_gate-*`
+    - `43` splits: `backend=CPU op=MUL_MAT name=ffn_shexp-*`
+    - `43` splits: `backend=CPU op=MUL_MAT name=ffn_up-*`
+    - `43` splits: `backend=CPU op=MUL_MAT name=q_a-*`
+    - `43` splits: `backend=CUDA0 op=ADD name=ffn_out-*`
+    - `43` splits: `backend=CUDA0 op=RMS_NORM name=q-*`
+    - `42` splits: `backend=CUDA0 op=ADD name=ffn_inp-*`
+    - `37` splits: `backend=CPU op=MUL_MAT_ID name=ffn_moe_up-*`
+    - `37` splits: `backend=CUDA0 op=MUL_MULTI_ADD name=ffn_moe_out-*`
+- interpretation:
+  - The largest graph fragmentation source is not routed expert I/O; it is many decode-batch dense
+    `MUL_MAT` nodes starting CPU splits.
+  - CUDA backend offload policy defaults to `GGML_CUDA_MIN_BATCH_OFFLOAD=32`; for decode `batch=1`,
+    ordinary `MUL_MAT` falls back to CPU unless explicitly placed or the CUDA offload threshold is
+    lowered.
+  - This directly explains the A56 `libgomp` bottleneck: CPU split execution and CPU/CUDA boundary
+    fragmentation dominate scheduler overhead.
+- rollback/rebuild:
+  - Temporary `ggml/src/ggml-backend.cpp` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully.
+- decision:
+  - Do not promote A59.
+  - Next config attempt A60 should test `--cuda-params offload-batch-size=1` under the A31 command to
+    force decode-size dense `MUL_MAT` offload to CUDA. This directly targets the top A59 bottleneck.
+
+### 2026-06-23 - Planned Config Attempt A60: Force Decode Dense `MUL_MAT` CUDA Offload
+
+- attempt_id: `deepseek-v4-a60-cuda-offload-batch-size-1`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A59 shows the top split category is CPU `MUL_MAT`, especially `attn_group_out-*` (`301` splits)
+    and per-layer dense `MUL_MAT` nodes (`q_a`, `attn_out_proj`, `ffn_gate`, `ffn_up`, `ffn_shexp`).
+  - Source inspection shows CUDA backend offloads ordinary ops only when `op->ne[1] >=
+    offload_batch_size`; default `GGML_CUDA_MIN_BATCH_OFFLOAD` is `32`, so decode batch `1` can stay
+    on CPU despite the model being mostly CUDA-resident.
+- hypothesis:
+  - `--cuda-params offload-batch-size=1` will move small decode dense `MUL_MAT` nodes to CUDA,
+    reducing CPU splits, OpenMP/libgomp wait overhead, and CPU/CUDA boundary fragmentation.
+  - Risk: launching many tiny CUDA kernels may be slower than CPU for some ops, so use a short quick
+    filter before full validation.
+- planned runs:
+  - A60a: A31 env/flags plus `--cuda-params offload-batch-size=1`, `-n 64`.
+  - If A60a reaches at least `1.93 tok/s`, run two full `-n 256` repeats.
+- success metric:
+  - Promotion requires repeated `-n 256` validation beating A31 p50 by `> 0.01 tok/s`, with host RAM
+    still capped at `16GB`.
+- rollback condition:
+  - Config-only attempt; no source rollback.
+  - If quick run regresses or full repeat is unstable, record and keep A31 as SOTA.
