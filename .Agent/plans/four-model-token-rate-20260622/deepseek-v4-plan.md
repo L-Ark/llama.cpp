@@ -70,7 +70,7 @@ Recommended command delta versus the original baseline:
 
 ```bash
 MEMORY_MAX=16G \
-EXTRA_ARGS="-ub 1 -t 24 -tb 24 -no-fa" \
+EXTRA_ARGS="-ub 1 -t 20 -tb 20 -no-fa" \
 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh
 ```
 
@@ -84,11 +84,14 @@ GGML_MOE_VRAM_CACHE_MIB=24576
 GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
 GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
 GGML_MOE_VRAM_CACHE_POLICY=lfu_lru
---defer-experts --fit -ngl 999 -c 512 -n 256 -ub 1 -t 24 -tb 24 -no-fa
+--defer-experts --fit -ngl 999 -c 512 -n 256 -ub 1 -t 20 -tb 20 -no-fa
 ```
 
 Validated result:
 
+- A31 `-no-fa -t 20 -tb 20` full 256-token run: `eval_tok_s = 1.90`,
+  `prompt_eval_tok_s = 1.66`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log`.
 - A30 `-no-fa` full 256-token runs: `eval_tok_s = 1.86 / 1.80 / 1.88`.
   - p50: `1.86 tok/s`
   - worst: `1.80 tok/s`
@@ -97,7 +100,8 @@ Validated result:
     - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat2/bench.log`
     - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat3/bench.log`
 - Previous 16 GB best A13: `eval_tok_s = 1.79`.
-- Delta: p50 `+0.07 tok/s` (`+3.9%`) versus A13. This still trails the fastllm reference
+- Delta: `+0.04 tok/s` versus A30 p50 and `+0.11 tok/s` (`+6.1%`) versus A13.
+  This still trails the fastllm reference
   `1.94 tok/s`, so optimization continues from A30.
 
 ## Baseline Command
@@ -989,3 +993,29 @@ Apply previous-task routes in this order:
   (`1.79 tok/s`) by p50 `+0.07 tok/s` and does not require new model files or source changes.
 - Working hypothesis: for this exact decode benchmark (`c=512`, `ubatch=1`, short prompt), Flash Attention's fixed graph/kernel overhead outweighs its attention math savings. MoE remains the dominant path, and disabling FA reduces non-MoE overhead enough to matter.
 - Next direction: continue from A30. Remaining gap to fastllm `1.94 tok/s` is `0.08 tok/s`; likely candidates are narrower attention/kernel overhead checks, or deeper DeepSeek-specific MXFP4 small-MoE fusion.
+
+### 2026-06-23 19:50Z - Optimization Attempt A31: Thread Retune After Disabling Flash Attention
+
+- Context: A30 changed the workload by disabling Flash Attention. The previous T24 baseline came
+  from the Flash-Attention-enabled path, so thread count should be retuned from the new A30 baseline.
+- Probe: no source changes. Run 64-token direct scans under `MemoryMax=16G`, keeping
+  `GGML_CUDA_NO_PINNED=1`, `--defer-experts --fit`, `-ub 1`, and `-no-fa`, while varying
+  `-t/-tb`:
+  - `T=20`
+  - `T=24`
+  - `T=28`
+  - `T=32`
+- 64-token results:
+  - `T=20`: `eval_tok_s = 1.93`, log `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n64/bench.log`.
+  - `T=24`: `eval_tok_s = 1.90`, log `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t24-n64/bench.log`.
+  - `T=28`: `eval_tok_s = 1.87`, log `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t28-n64/bench.log`.
+  - `T=32`: `eval_tok_s = 1.79`, log `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t32-n64/bench.log`.
+- Full 256-token validation for `T=20`:
+  - result: `eval_tok_s = 1.90`, `prompt_eval_tok_s = 1.66`, `gen_tokens = 255`,
+    `rss_mb = 27444.79`.
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log`.
+- Decision: promote `-t 20 -tb 20 -no-fa` as the new 16 GB ik_llama DeepSeek V4 baseline. It
+  improves over A30 p50 (`1.86 tok/s`) by `+0.04 tok/s` and over A13 (`1.79 tok/s`) by
+  `+0.11 tok/s`. It remains below the fastllm reference (`1.94 tok/s`) by `0.04 tok/s`.
+- Next direction: run A31 repeats to measure stability. If stable, continue from `T=20 -no-fa` and
+  scan narrower runtime knobs; otherwise keep A30's `T=24 -no-fa` as the conservative fallback.
