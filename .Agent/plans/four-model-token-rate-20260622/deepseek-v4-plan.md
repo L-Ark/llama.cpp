@@ -4195,6 +4195,6 @@ Decision:
   - Current local best remains A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
   - Next attempt should target the expert/MoE CPU path, such as a focused profile/instrumentation of `mul_mat_qX_q8_Helper` callers and expert cache/deferred expert scheduling, before attempting optimization.
 - commit/push:
-  - local commit: pending at time of result entry.
+  - local result commit: `877463b2f41fb909d3df56108e3935ba5abbf5c1`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
