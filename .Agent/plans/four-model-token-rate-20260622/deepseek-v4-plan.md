@@ -4848,3 +4848,4 @@ Decision:
 - A80 accepted_env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` with the existing benchmark command flags `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa` and MemoryMax=16G. The `ATTN_SAFE` marker is optional with the accepted source because broad mode requires the explicit `UNSAFE_BROAD=1` escape hatch.
 - decision: A80 is the first quality-valid F8 dense CUDA candidate in this run. Historical broad A64/A66 9.x tok/s measurements remain real throughput but invalid-for-quality. The accepted A80 candidate should replace broad A64 for any future F8 dense validation; future work may run larger prompt suites or n256 repeats before treating it as production-ready.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
+- result_commit: `d537cae482d27d652315a84cea3f20a65bb85f19`
