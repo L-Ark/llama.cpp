@@ -5007,3 +5007,31 @@ Rollback_status: temporary A86 source diagnostics were saved in , reverted after
 
 A86 result_commit: 2c291dd0
 A86 pushed_commit: n/a (WiCi no-push constraint)
+
+### Correction to Diagnostic Result A86 - OpenMP region granularity
+
+Status: completed_unpromoted_diagnostic. This correction supersedes the immediately preceding A86 result text where shell expansion accidentally stripped inline command/path literals from the plan body. The underlying run data and commits remain valid.
+
+Run directory: /root/lfz/runs/ik_llama/deepseek-v4-a86-openmp-region-granularity
+Input commit: b7639d5f
+Diagnostic result commit: 2c291dd0
+Correction/result-followup commits: 452d740f plus this correction commit.
+
+Accepted A80 env used for all runs: GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn, with MemoryMax=16G, MemorySwapMax=0, -ub 1, -t 20, -tb 20, -no-fa.
+
+Artifacts: /root/lfz/runs/ik_llama/deepseek-v4-a86-openmp-region-granularity/default_n128.log, trace_n128.log, trace_limit_n128.log, a86_trace_summary.txt, source_probe.diff, final_source_probe.diff, source_after_revert.diff, build.log, rebuild_after_revert.log.
+
+Observed metrics:
+- default_n128: exit=0, graph_splits=291, eval=5.05 tok/s, A86 markers=0.
+- trace_n128: exit=0, graph_splits=291, eval=5.10 tok/s, markers=4001, moe_direct_markers=2000, helper_markers=2000. Helper elapsed_us avg=121.6, p50=123.0, max=348.0. MoE direct elapsed_us avg=328.7, p50=157.0, max=16103.0.
+- trace_limit_n128: exit=0, graph_splits=291, eval=5.08 tok/s, markers=257, moe_direct_markers=128, helper_markers=128. Helper elapsed_us avg=137.8, p50=132.0, max=277.0. MoE direct elapsed_us avg=317.0, p50=187.5, max=1424.0.
+
+Representative traced shape: iqk_mul_mat_moe_direct with Nx=2048, Ny=1, ne00=4096, ne11=1, nth=20, row chunks mostly nrc_x=103 plus the tail nrc_x=91. Each direct call invokes one mul_mat_qX_q8_Helper call with nb=128, nrc_y=1, bx=2176. This proves the trace hit the same fallback CPU IQK MoE and MXFP4/Q8_2 helper route verified by A84/A85.
+
+A86 omp_overhead_mechanism: callsite_granularity / many_small_regions. The trace reached the 2000 marker cap in a short n128 decode, and representative helper work units are very small: one helper call per iqk_mul_mat_moe_direct, usually about 103 rows, with helper p50 around 123-132 us. MoE-direct p50 is only modestly larger, but large MoE outliers exceed helper time by orders of magnitude, matching surrounding scheduling/barrier/wait effects rather than raw helper arithmetic. A83-A85 already showed that runtime OpenMP knobs, wrapper-level scheduling, and lower-level cyclic/balanced partitioning do not improve this pattern.
+
+Recommendation: stop more low-level OpenMP partitioning probes unless implementing a true persistent-team/call-coalescing design that reduces tiny per-expert call sites. Next accepted-scope routes are: persistent-team/call-coalescing across experts or layers, quality-safe CUDA offload of additional classes, or deeper SIMD/kernel optimization inside mul_mat_qX_q8_Helper while preserving the current contiguous block partitioning.
+
+Rollback_status: temporary A86 source diagnostics were saved in source_probe.diff, final temporary source diff was saved, the patch was reverse-applied, default llama-cli was rebuilt, and source_after_revert.diff is empty. Remote tracked source is clean after commit; only pre-existing untracked .Agent/plans/m3-race-spec* files remain.
+
+Safety_note: while recording the first A86 result, an unquoted here-document expanded inline command-substitution text and executed git push from the plan prose. The observed push updated the remote branch only through b7639d5f, before the A86 commits were created. This was accidental and violated the WiCi no-push constraint; no further push was run, and A86 commits remain local to the remote repository.
