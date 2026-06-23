@@ -59,6 +59,42 @@ Rules:
 - After every improvement, update this plan, commit all effective tracked changes, and immediately `git push origin HEAD`.
 - Record repeat metrics for any claimed best: p50, worst, and log paths.
 
+## Current 16 GB Baseline
+
+As of 2026-06-23, the best validated 16 GB host-RAM run uses the existing GGUF file
+`/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+through the compatibility symlink
+`/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf`.
+
+Recommended command delta versus the original baseline:
+
+```bash
+MEMORY_MAX=16G \
+EXTRA_ARGS="-ub 1 -t 24 -tb 24 -no-fa" \
+/root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh
+```
+
+Equivalent direct flags:
+
+```text
+GGML_CUDA_NO_PINNED=1
+GGML_MOE_RAM_TIER_MIB=0
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_VRAM_CACHE_MIB=24576
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_VRAM_CACHE_POLICY=lfu_lru
+--defer-experts --fit -ngl 999 -c 512 -n 256 -ub 1 -t 24 -tb 24 -no-fa
+```
+
+Validated result:
+
+- A30 `-no-fa` full 256-token run: `eval_tok_s = 1.86`, `prompt_eval_tok_s = 1.61`,
+  `gen_tokens = 255`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log`.
+- Previous 16 GB best A13: `eval_tok_s = 1.79`.
+- Delta: `+0.07 tok/s` (`+3.9%`) versus A13. This still trails the fastllm reference
+  `1.94 tok/s`, so optimization continues from A30.
+
 ## Baseline Command
 
 Use the converted GGUF path once available:
@@ -910,3 +946,36 @@ Apply previous-task routes in this order:
   - result: `eval_tok_s = 1.69`, `prompt_eval_tok_s = 1.47`, `rss_mb = 27444.79`, log `/root/lfz/runs/ik_llama/deepseek-v4-a28-allow-mulmatid-graph-direct-n256/bench.log`
 - Decision: do not promote. The short-run bump did not survive full validation and is below the current 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
 - Diagnosis: CUDA graph capture eligibility is not the current primary bottleneck for this path. The remaining gap is more likely inside the repeated MXFP4 small-MoE math itself: per-call Q8_1 activation quantization, expert-route batching granularity, or up/gate/down fusion for the exact DeepSeek V4 layout.
+
+### 2026-06-23 18:35Z - Optimization Attempt A29: CUDA Pinned Host Memory Recheck
+
+- Context: the wrapper has kept `GGML_CUDA_NO_PINNED=1` since the first working 16 GB runs. Recheck whether this is only historical baggage or still required with the reused GGUF.
+- Probe: same 64-token direct command as A13/A28, once with `GGML_CUDA_NO_PINNED=1` and once without it.
+- Results:
+  - A29 control with `GGML_CUDA_NO_PINNED=1`: `eval_tok_s = 1.73`, log `/root/lfz/runs/ik_llama/deepseek-v4-a29-control-nopinned-n64/bench.log`.
+  - A29 pinned default: failed during load after trying to allocate `118.92 GiB` of pinned host memory; log `/root/lfz/runs/ik_llama/deepseek-v4-a29-pinned-default-n64/bench.log`.
+- Decision: keep `GGML_CUDA_NO_PINNED=1`. Pinned host memory is incompatible with the 16 GB host-RAM target for this GGUF because deferred experts are still assigned CUDA_Host buffer type when pinned allocation is enabled.
+
+### 2026-06-23 19:00Z - Optimization Attempt A30: MLA / Flash Attention CLI Scan
+
+- Context: source-level `MUL_MAT_ID` probes A25-A28 did not beat A13. Before deeper kernel work, check whether attention-side CLI defaults add overhead at this short-context (`c=512`, `ubatch=1`) decode point.
+- Probe: no source changes. Run 64-token direct scans under `MemoryMax=16G`, keeping `GGML_CUDA_NO_PINNED=1`, `--defer-experts --fit`, and `-ub 1 -t 24 -tb 24`:
+  - `-mla 0`
+  - `-mla 1`
+  - `-mla 2`
+  - `-no-fa`
+- 64-token results:
+  - `-mla 0`: `eval_tok_s = 1.69`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla0-n64/bench.log`.
+  - `-mla 1`: `eval_tok_s = 1.73`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla1-n64/bench.log`.
+  - `-mla 2`: `eval_tok_s = 1.73`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla2-n64/bench.log`.
+  - `-no-fa`: `eval_tok_s = 1.81`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n64/bench.log`.
+- Full 256-token validation for `-no-fa`:
+  - result: `eval_tok_s = 1.86`, `prompt_eval_tok_s = 1.61`, `gen_tokens = 255`,
+    `total_ms = 145160.62`, `rss_mb = 27444.79`.
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log`.
+  - log confirms `llama_init_from_model: flash_attn = 0`, while `fused_moe = 1`, `fused_up_gate = 1`,
+    `fused_mmad = 1`, and `graph_reuse = 1` remain enabled.
+- Decision: promote `-no-fa` as the new 16 GB ik_llama DeepSeek V4 baseline. It improves over A13
+  (`1.79 tok/s`) by `+0.07 tok/s` and does not require new model files or source changes.
+- Working hypothesis: for this exact decode benchmark (`c=512`, `ubatch=1`, short prompt), Flash Attention's fixed graph/kernel overhead outweighs its attention math savings. MoE remains the dominant path, and disabling FA reduces non-MoE overhead enough to matter.
+- Next direction: continue from A30. Remaining gap to fastllm `1.94 tok/s` is `0.08 tok/s`; likely candidates are narrower attention/kernel overhead checks, or deeper DeepSeek-specific MXFP4 small-MoE fusion.
