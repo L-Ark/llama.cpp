@@ -4630,3 +4630,65 @@ Decision:
   - Future work should move inside the MXFP4/Q8_2_x4 helper or reduce OpenMP/libgomp overhead in the existing `iqk_mul_mat_moe` execution path.
 - result_commit: `02e11001`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
+### 2026-06-23 13:38Z - Planned Diagnostic Attempt A74: Paired A73 Direct-Path Full Audit
+
+- Hypothesis:
+  - A73 quick direct mode beat same-session default by `0.08 tok/s`, but its full `-n 256` repeats missed promotion.
+  - A paired same-session full audit with default/direct/default/direct ordering can distinguish variance from real full-run scaling failure before lower-level MXFP4 helper work.
+- Source files:
+  - temporary reapply: `ggml/src/ggml.c` using `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/final_source_probe.diff`
+- Env gates:
+  - default: no A73 direct env
+  - direct: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT=1`
+- Benchmark command:
+  - 16 GB cgroup, `MemoryMax=16G`, `MemorySwapMax=0`, accepted A64 env/flags, paired `-n 256` order default/direct/default/direct.
+- Success metric:
+  - all paired repeats exit `0`, graph splits stay `76`, smoke output remains sane;
+  - direct mode only promotes if direct p50 beats same-session default p50 by `> 0.05 tok/s`, direct p50 is `> 9.89 tok/s`, and direct worst repeat is `>= 9.22 tok/s`.
+- Rollback:
+  - save diffs/logs under `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit`;
+  - revert temporary A73 source and rebuild default unless accepted by full validation.
+- Push status:
+  - `git push` forbidden by WiCi; any push remains blocked.
+
+### 2026-06-23 13:44Z - A74 Result: Paired A73 Direct Audit Confirms No Full-Run Win
+
+- attempt_start_utc: `2026-06-23T13:40:17Z`
+- attempt_end_utc: `2026-06-23T13:44:28Z`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit`
+- source diff paths:
+  - applied source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/source_probe.diff`
+  - final source diff before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/final_source_probe.diff`
+  - post-rollback source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/source_after_revert.diff` (empty)
+- logs:
+  - apply check: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/apply_check.log`
+  - diff check: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/diff_check.log`
+  - build: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/build.log`
+  - paired runs: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/bench_1_default.log`, `bench_2_direct.log`, `bench_3_default.log`, `bench_4_direct.log`
+  - mode summaries: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/mode_metrics.txt`
+  - rebuild after rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a74-a73-direct-paired-audit/rebuild_after_revert.log`
+- command summary:
+  - 16 GB cgroup with `MemoryMax=16G`, `MemorySwapMax=0`
+  - accepted A64 env/flags: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `-ub 1 -t 20 -tb 20 -no-fa`, `-n 256`
+  - paired order: default, direct, default, direct
+  - direct env: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT=1`
+- paired full results:
+  - default r1: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.53`, eval_tok_s `9.79`, total_ms `32486.57`
+  - direct r1: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.97`, eval_tok_s `9.72`, total_ms `32228.97`
+  - default r2: exit `0`, graph_splits `76`, prompt_eval_tok_s `5.00`, eval_tok_s `9.87`, total_ms `31876.38`
+  - direct r2: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.92`, eval_tok_s `9.70`, total_ms `32549.91`
+  - wrapper time maxrss was `6344 kB` for all paired runs; cgroup completed successfully and did not OOM-kill.
+- decision:
+  - A74 is diagnostically successful but unpromoted.
+  - Same-session default p50 is approximately `9.83 tok/s`; direct p50 is approximately `9.71 tok/s`, so direct mode is slower by about `0.12 tok/s` and fails the `> 0.05 tok/s` improvement rule.
+  - A73 direct single-row routing should not be kept; A73 quick win was variance or non-scaling overhead.
+  - Accepted local best remains A64-family with the gated CUDA F8 dense conversion path.
+- rollback status:
+  - temporary A73 source patch reverted with `git checkout -- ggml/src/ggml.c` after saving final diff.
+  - post-rollback source diff is empty.
+  - default `llama-cli` rebuilt successfully after rollback with rebuild exit `0`.
+  - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
+- next direction:
+  - Move below wrapper-level MoE routing into MXFP4/Q8_2_x4 helper internals or OpenMP/libgomp scheduling in the existing `iqk_mul_mat_moe` execution path.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
