@@ -58,6 +58,72 @@ Rules:
 - A token-rate improvement means `eval_tok_s > previous_best_eval_tok_s + 0.01`.
 - After every improvement, update this plan, commit all effective tracked changes, and immediately `git push origin HEAD`.
 - Record repeat metrics for any claimed best: p50, worst, and log paths.
+- Every new attempt after A31 must record timing metadata before and after execution. A promoted
+  result without `attempt_start_utc`, `attempt_end_utc`, and `wall_clock_elapsed` is invalid and
+  must be downgraded to `needs-timing-audit` until the timing is recovered from reliable logs.
+
+## Attempt Timing Protocol
+
+This section fixes the earlier process gap where many `elapsed_since_start` fields were left as
+`n/a`. Do not promote a future result unless this protocol is followed.
+
+For every optimization attempt:
+
+1. Before any benchmark, code edit, or source probe, create the run directory and write:
+
+```bash
+RUN_DIR=/root/lfz/runs/ik_llama/<attempt-id>
+mkdir -p "$RUN_DIR"
+date -u +%FT%TZ | tee "$RUN_DIR/attempt_start_utc.txt"
+git -C /root/lfz/ik_llama rev-parse HEAD > "$RUN_DIR/git_start_sha.txt"
+```
+
+2. Write a small metadata file before running:
+
+```bash
+cat > "$RUN_DIR/attempt_meta.env" <<META
+attempt_id=<attempt-id>
+attempt_goal=<one-line hypothesis>
+attempt_kind=<cli-scan|source-probe|benchmark-repeat|analysis>
+baseline_commit=$(git -C /root/lfz/ik_llama rev-parse HEAD)
+baseline_eval_tok_s=<previous-best>
+memory_limit=16G
+model=/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf
+META
+```
+
+3. At the end of the attempt, even on failure or rollback, write:
+
+```bash
+date -u +%FT%TZ | tee "$RUN_DIR/attempt_end_utc.txt"
+python3 - "$RUN_DIR" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = datetime.fromisoformat((p / "attempt_start_utc.txt").read_text().strip().replace("Z", "+00:00"))
+e = datetime.fromisoformat((p / "attempt_end_utc.txt").read_text().strip().replace("Z", "+00:00"))
+(p / "wall_clock_elapsed_seconds.txt").write_text(str(int((e - s).total_seconds())) + "\n")
+PY
+```
+
+4. Record these fields in this plan:
+
+- `attempt_start_utc`
+- `attempt_end_utc`
+- `wall_clock_elapsed`
+- `benchmark_runtime` (`eval_ms`, `total_ms`, and/or `/usr/bin/time` elapsed)
+- `result_status` (`promoted`, `unpromoted`, `reverted`, `failed`, `needs-timing-audit`)
+- `promoted_commit` or explicit `n/a`
+
+5. Commit/push discipline:
+
+- If the attempt is promoted, update this plan with timing and metrics before the promotion commit.
+- If the attempt is unpromoted but consumed meaningful time or source changes, update this plan
+  before moving to the next idea.
+- Historical entries with `elapsed_since_start = n/a` must not be retroactively fabricated. Only
+  recover elapsed values when `attempt_start_utc.txt`, log timestamps, `systemd` output, or commit
+  timestamps provide a defensible source. Otherwise mark them as `historical timing missing`.
 
 ## Current 16 GB Baseline
 
