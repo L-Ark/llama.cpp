@@ -4796,3 +4796,31 @@ Decision:
 - source rollback: temporary diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
 - result_commit: `b4d52f94a45d279717ab6fb92d5fd8f8f75eb691`
+
+### Planned Diagnostic Attempt A79 - F8 dense CUDA placement class bisect
+
+- goal: class-bisect the unsafe F8 dense CUDA placement families after A78 showed simple safe subsets remove almost all A64 benefit.
+- method: add temporary env-gated `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS` filtering in the F8 dense CUDA placement decision and test baseline, broad, attention-only, FFN-only, attention q/kv, attention output, FFN up/gate, and FFN down classes on the deterministic A75 prompts.
+- acceptance: build succeeds; baseline remains quality-clean; broad reproduces known corruption; class modes determine whether any quality-valid useful subset remains. Record `A79 class_bisect_result` as `useful_safe_class_candidate_found`, `safe_classes_remove_benefit`, `all_useful_classes_corrupt`, or `inconclusive_with_logs`.
+- note: diagnostic only; do not promote hard-coded tensor-name gating as a durable fix. A64/A66 remain `failed_invalid_for_quality` unless a future fix passes A75-style output audit.
+- pushed_commit: n/a, blocked by WiCi no-push constraint.
+
+### A79 result - F8 dense CUDA placement class bisect
+
+- attempt: A79 F8 dense CUDA placement class bisect
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a79-f8-placement-class-bisect`
+- validation_status: completed
+- build_status: success; temporary `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS` and `GGML_DEEPSEEK4_CUDA_F8_DENSE_CLASS_TRACE` diagnostics built successfully.
+- execution_status: all 24 deterministic A75-style runs exited 0 under `MemoryMax=16G`.
+- A79 class_bisect_result: `useful_safe_class_candidate_found`
+- baseline mode: graph_splits `1237/1237/1237`, eval `1.81/1.81/1.83 tok/s`, visible generated text empty for the three audit prompts.
+- broad A64 mode: graph_splits `76/76/76`, eval `8.67/9.42/9.69 tok/s`, but reproduced A75 corruption: repeated `[name` fragments for the France prompt, mixed nonsense for `2 + 2 =`, and repeated `[name`-style fragments for the hot/cold prompt.
+- `attn_all` class: graph_splits `291/291/291`, eval `5.16/5.01/5.17 tok/s`, visible generated text empty for all three prompts. Trace counts were 1548 allowed and 1989 denied placements per prompt. This is the strongest quality-valid useful class candidate from A79.
+- `ffn_all` class: graph_splits `1022/1022/1022`, eval `2.27/2.36/2.30 tok/s`, visible generated text empty; graph splitting remains near baseline, so it is not useful enough.
+- `attn_qkv` class: graph_splits `979/979/979`, eval `1.95/2.14/2.18 tok/s`, visible generated text empty; not useful enough.
+- `attn_out` class: graph_splits `549/549/549`, eval `3.04/2.99/2.99 tok/s`, visible generated text empty; quality-valid but weaker than `attn_all`.
+- `ffn_up_gate` class: graph_splits `1108/1108/1108`, eval `2.12/2.20/2.07 tok/s`, visible generated text empty; not useful enough.
+- `ffn_down` class: graph_splits `1151/1151/1151`, eval `1.95/2.00/1.93 tok/s`, visible generated text empty; not useful enough.
+- conclusion: broad A64-style placement remains `failed_invalid_for_quality`, but attention-family F8 dense CUDA placement is a quality-valid follow-up candidate on the A75 prompts and keeps graph splits substantially below baseline. Do not promote it yet: next work should run a focused A80 attention-only implementation/audit with stronger deterministic output checks and n64/n256 throughput validation before changing any accepted command.
+- source rollback: temporary class-filter diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
+- pushed_commit: n/a, blocked by WiCi no-push constraint.
