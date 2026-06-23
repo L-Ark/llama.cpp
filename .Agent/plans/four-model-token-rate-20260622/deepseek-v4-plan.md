@@ -17,7 +17,7 @@ git switch -c deepseek-v4-flash
 git push -u origin deepseek-v4-flash
 ```
 
-All DeepSeek V4 Flash integration commits, baseline records, token-rate improvements, and immediate improvement pushes must go to the `deepseek-v4-flash` branch.
+All DeepSeek V4 Flash integration commits, baseline records, token-rate improvements, and immediate improvement pushes must go to the `deepseek-v4-flash` branch. Do not push DeepSeek V4 Flash task commits to `main`.
 
 All commits and pushes for this model task must use the GitHub account and commit identity:
 
@@ -2974,3 +2974,48 @@ Decision:
 - rollback condition:
   - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
   - Do not promote diagnostic code.
+
+### 2026-06-23 09:24Z - A51 Result: Deferred `MUL_MAT_ID` Wrapper Probe Hit Only Fallback Accounting
+
+- attempt_id: `deepseek-v4-a51-mulmatid-wall-attribution`
+- status: `unpromoted diagnostic, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `21c97887bb2e6a1b3162d817014e21d284ac1c24`
+- attempt_start_utc: `2026-06-23T09:22:35Z`
+- attempt_end_utc: `2026-06-23T09:24:17Z`
+- wall_clock_elapsed: `102s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a51-mulmatid-wall-attribution`
+- logs:
+  - benchmark: `/root/lfz/runs/ik_llama/deepseek-v4-a51-mulmatid-wall-attribution/bench.log`
+  - source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a51-mulmatid-wall-attribution/source_probe.diff`
+  - final diff before revert: `/root/lfz/runs/ik_llama/deepseek-v4-a51-mulmatid-wall-attribution/source_probe.final.diff`
+  - rebuild after revert: `/root/lfz/runs/ik_llama/deepseek-v4-a51-mulmatid-wall-attribution/rebuild-after-revert.log`
+- command summary:
+  - `systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0`
+  - A31 env plus `GGML_DEEPSEEK4_MULMATID_WALL_ATTR=1`
+  - A31 flags with `-n 64`
+- benchmark result:
+  - load time: `7950.94 ms`
+  - prompt eval: `3047.55 ms / 5 tokens = 1.64 tok/s`
+  - eval: `33021.49 ms / 63 runs = 1.91 tok/s`
+  - total: `40999.06 ms / 68 tokens`
+  - service runtime: `42.148s`
+  - service CPU time: `12min 1.310s`
+  - `/usr/bin/time` maximum RSS for `systemd-run` wrapper: `6344 KB`; real model memory remains enforced by the `MemoryMax=16G` cgroup and printed model buffers.
+- attribution summary:
+  - `up`: `calls=2512`, `cuda_done=0`, `fallback_done=2512`, `total_ms=270.984`, `group_ms=0.841`, `prefetch_ms=8.923`, `compute_ms=0.000`, `minflt=2410`, `majflt=0`
+  - `gate`: `calls=2512`, `cuda_done=0`, `fallback_done=2512`, `total_ms=271.159`, `group_ms=2.235`, `prefetch_ms=9.133`, `compute_ms=0.000`, `minflt=2349`, `majflt=0`
+  - `down`: `calls=2512`, `cuda_done=0`, `fallback_done=2512`, `total_ms=272.422`, `group_ms=2.348`, `prefetch_ms=8.782`, `compute_ms=0.000`, `minflt=2403`, `majflt=0`
+- interpretation:
+  - The diagnostic hook did execute, so `ggml_compute_forward_mul_mat_id()` is on the visible call chain.
+  - The measured wrapper-side time is tiny: about `0.27s` per family, or about `0.81s` summed across up/gate/down in a `41.0s` benchmark. This is not the missing wall time.
+  - `cuda_done=0` and `fallback_done=2512` means this C-level probe did not observe the actual CUDA batch completion region for the DeepSeek V4 fused/deferred expert path. The next useful probe must move below this wrapper into the backend CUDA execution path, CUDA graph split execution, or the deferred expert tensor materialization path.
+  - Minor faults are present but small at this layer (`~2.3k-2.4k` per family, no major faults); this does not explain the token-rate gap.
+- rollback/rebuild:
+  - Temporary `ggml/src/ggml.c` instrumentation was reverted with `git apply -R` after saving the final diff.
+  - Default CUDA binary rebuilt successfully after revert.
+  - Post-revert status only contains unrelated untracked `.Agent/plans/m3-race-spec*` files.
+- decision:
+  - Do not promote A51 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A52 should instrument the actual backend execution point for the deferred DeepSeek V4 MoE path instead of adding more timing around `ggml_compute_forward_mul_mat_id()`.
