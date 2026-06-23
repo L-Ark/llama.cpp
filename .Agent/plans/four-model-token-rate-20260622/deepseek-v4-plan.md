@@ -4795,3 +4795,4 @@ Decision:
 - conclusion: the broad A64 placement corruption is not isolated to a small useful safe subset by the tested ordinal or `down` filters. Subsets that preserve the visible deterministic audit output remove nearly all graph-split and decode throughput benefit. A64/A66 remain `failed_invalid_for_quality`; no A64-derived 9.x tok/s result is accepted until a future fix passes an A75-style deterministic output audit.
 - source rollback: temporary diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
+- result_commit: `b4d52f94a45d279717ab6fb92d5fd8f8f75eb691`
