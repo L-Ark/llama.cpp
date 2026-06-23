@@ -2661,3 +2661,37 @@ Logs:
 - rollback condition:
   - If no expert-pack evidence appears, do not promote; record as diagnostic failure and inspect/fix
     `moe_stream_batch.cu` wiring before further RAM/VRAM fill attempts.
+
+### 2026-06-23 08:57Z - A48 Result: TTY Launch Failed Before Model Work
+
+- attempt_id: `deepseek-v4-a48-expert-pack-trace-n8`
+- attempt_start_utc: `2026-06-23T08:48:55Z`
+- attempt_end_utc: `2026-06-23T08:57:24Z`
+- wall_clock_elapsed: `509 seconds`
+- time_confidence: `strict`
+- result_status: `failed`
+- log_path: `/root/lfz/runs/ik_llama/deepseek-v4-a48-expert-pack-trace-n8/bench.log`
+- failure:
+  - `systemd-run --pty` was launched from a non-interactive redirected SSH command and stalled after:
+    `Running as unit: run-u17631.service`.
+  - The model process stayed at about `498 MiB` GPU memory and consumed only `1.151s` CPU over
+    `8min 9.819s`, so this did not execute a meaningful DeepSeek V4 benchmark or expert-pack probe.
+  - No `ttft_trace.tsv` was produced.
+- decision:
+  - Do not interpret A48 as evidence for or against expert-pack runtime usage.
+  - Retry the same diagnostic as A48b with `systemd-run --pipe --wait --collect`, not `--pty`.
+
+### 2026-06-23 - Planned Optimization Attempt A48b: Expert-Pack Runtime Proof With Pipe
+
+- attempt_id: `deepseek-v4-a48b-expert-pack-trace-pipe-n8`
+- baseline for rollback: A31 p50 `1.91 tok/s`.
+- attempt kind: `source-probe` plus short diagnostic benchmark.
+- change from A48:
+  - Replace `systemd-run --pty --wait --collect` with `systemd-run --pipe --wait --collect`.
+  - Keep the exact A48 model/env/flags, `-n 8`, strict `MemoryMax=16G`, and TTFT trace output.
+- success metric:
+  - A real model run completes or fails after model initialization, and the log/trace proves whether
+    expert-pack was initialized and used.
+- rollback condition:
+  - If `--pipe` also fails to start a real model run, stop using systemd-run for source probes and
+    use an explicit shell `ulimit`/cgroup wrapper or a preexisting runner that already captures logs.
