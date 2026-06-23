@@ -4628,4 +4628,5 @@ Decision:
 - next direction:
   - Wrapper-level row mapping and direct `iqk_mul_mat(Ny=1)` now appear insufficient for stable full-run improvement.
   - Future work should move inside the MXFP4/Q8_2_x4 helper or reduce OpenMP/libgomp overhead in the existing `iqk_mul_mat_moe` execution path.
+- result_commit: `02e11001`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
