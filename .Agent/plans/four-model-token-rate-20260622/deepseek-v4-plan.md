@@ -2417,3 +2417,102 @@ Cleanup to unblock expert-pack creation:
   - A31 base flags under `MemoryMax=16G`, plus expert-pack/iouring/RAM-tier envs;
   - first short `-n 64`, then full `-n 256` if token rate is promising;
   - promote only if full `-n 256` beats A31 p50 `1.91 tok/s`.
+
+### 2026-06-23 08:08Z - A46 Result and Tool Fix
+
+Timing:
+
+- attempt_id: `deepseek-v4-a46-create-expert-pack`
+- attempt_start_utc: `2026-06-23T08:07:40Z`
+- attempt_end_utc: `2026-06-23T08:08:29Z`
+- wall_clock_elapsed: `49 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `create.stderr.log`
+- time_confidence: `strict`
+- result_status: `failed, tool compatibility issue`
+- promoted_commit: `n/a`
+
+Failure:
+
+```text
+ValueError: 42 is not a valid GGMLQuantizationType
+```
+
+Root cause:
+
+- The DeepSeek V4 FP4/FP8 GGUF contains tensors with `GGML_TYPE_F8_E4M3_B128 = 42`.
+- Runtime C++ already defines and supports this type, but `gguf-py/gguf/constants.py` did not
+  expose it in `GGMLQuantizationType`, so `scripts/create-moe-expert-pack.py` could not read the
+  GGUF metadata.
+
+Fix:
+
+- Added `F8_E4M3_B128 = 42` to `GGMLQuantizationType`.
+- Added quant size `(128, 129)`, matching `block_f8_e4m3_b128` in `ggml/src/ggml-common.h`.
+- Validation command:
+
+```text
+python3 -m py_compile gguf-py/gguf/constants.py scripts/create-moe-expert-pack.py
+GGUFReader(...DeepSeek-V4...) -> tensors=1328; first F8 tensor recognized as F8_E4M3_B128
+```
+
+Commit:
+
+- `f50cf3a03bb316f21c0a60f5b0832955723493d7`
+  `gguf-py: support f8 e4m3 b128 tensors`
+- pushed to `origin/deepseek-v4-flash`.
+
+### 2026-06-23 08:19Z - A46b Result: DeepSeek V4 Expert Pack Created
+
+Timing:
+
+- attempt_id: `deepseek-v4-a46b-create-expert-pack-f8fix`
+- attempt_start_utc: recorded in
+  `/root/lfz/runs/ik_llama/deepseek-v4-a46b-create-expert-pack-f8fix/attempt_start_utc.txt`
+- create command wall time from `/usr/bin/time`: `4:03.13`
+- result_status: `artifact created, no token-rate promotion yet`
+- promoted_commit: `n/a`
+
+Command:
+
+```text
+python3 scripts/create-moe-expert-pack.py \
+  /root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf \
+  -o /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack \
+  --align 4096
+```
+
+Output:
+
+```text
+packing 33024 expert slices from 1 GGUF file(s), 137.06 GiB
+wrote /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack
+```
+
+Inspection:
+
+```text
+version=1 header_size=40 entries=33024 data_start=5021696
+payload_bytes=147169738752 payload_gib=137.06 unique_tensors=129
+entry[0] tensor=blk.0.ffn_up_exps.weight expert=0 offset=5021696 nbytes=4456448
+```
+
+Artifact:
+
+- `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`
+- size: `138G`
+
+Disk state:
+
+- `/root/lfz` free after pack creation: `96G`.
+
+Decision:
+
+- Proceed to A47: use the expert-pack to test cache-fill configurations under the required
+  `MemoryMax=16G`, starting with short `-n 64`.
+- First A47 configuration should isolate the sidecar path:
+  - A31 base flags;
+  - `GGML_MOE_EXPERT_PACK=<DeepSeek expert-pack>`;
+  - `GGML_MOE_IO_BACKEND=iouring`;
+  - `GGML_MOE_RAM_TIER_MIB=0`;
+  - then add RAM tier/profile only if the pack path is stable.
