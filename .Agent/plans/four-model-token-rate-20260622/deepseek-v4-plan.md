@@ -4720,3 +4720,27 @@ Decision:
 - promotion_decision: stop further A64/A66/A73/A74 performance promotion based on this path; next work should debug the F8 dense correctness issue or roll back to the last quality-valid baseline.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 - result_commit: `2f065869f7c17cc7a8edd7527a8c9002889a5efe`
+
+### Planned Correctness Debug Attempt A76 - A64 CUDA F8 corruption root cause
+- planned_at_utc: 2026-06-23T14:07:30Z
+- reason: A75 proved `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` corrupts deterministic decoded output, so A64/A66 remain invalid-for-quality.
+- scope: inspect A64 CUDA F8 dense support and temporarily compare CUDA `F8_E4M3_B128` to-fp16 conversion against a host reference decode under `GGML_DEEPSEEK4_F8_DEBUG_COMPARE=1`.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a76-a64-f8-correctness-debug`
+- decision_pending: classify root cause as `converter_math_or_layout`, `unsupported_shape_gating`, `placement_semantics`, or `inconclusive_with_evidence`.
+
+### Result A76 - A64 CUDA F8 correctness failure diagnosis
+- completed_at_utc: 2026-06-23T14:11:10Z
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a76-a64-f8-correctness-debug`
+- git_start_sha: `139b2b4fe42b81c00e5572213bcb9c3a4f7af4de`
+- source_probe: temporary env-gated diagnostic added to `ggml/src/ggml-cuda/convert.cu`, saved as `source_probe_applied.diff`, then reverted. `source_after_revert.diff` is empty.
+- build_validation: `git diff --check` passed, diagnostic `llama-cli` build passed, source was reverted, and default `llama-cli` rebuild passed.
+- diagnostic_run: baseline and A64 debug `-n 1` deterministic `The capital of France is` runs exited 0 under `MemoryMax=16G`.
+  - baseline: `graph_splits=1237`, prompt eval `1.57 tok/s`.
+  - A64 debug: `graph_splits=76`, prompt eval `4.99 tok/s`.
+- converter_compare_evidence: with `GGML_DEEPSEEK4_F8_DEBUG_COMPARE=1`, the first eight F8-to-fp16 conversion calls sampled 512 elements each and matched the host reference dequantizer exactly: every line reported `max_abs=0`, `mean_abs=0`, `bad=0`. Representative shapes included `nrows=1024 n_per_row=4096`, `nrows=32768 n_per_row=1024`, and `nrows=512 n_per_row=4096`.
+- root_cause_classification: `placement_semantics`.
+- interpretation: the A64 corruption is not explained by the CUDA F8 block converter math/layout for sampled dense tensors. The failure appears to come from broadly allowing `GGML_TYPE_F8_E4M3_B128` `GGML_OP_MUL_MAT` placement on the generic CUDA fp16 GEMM path, which dequantizes both operands to fp16, uses `CUBLAS_COMPUTE_16F`, and writes an fp16 intermediate before converting to fp32. That placement/precision semantics is not quality-equivalent for DeepSeek V4 dense F8 matmuls even though it reduces graph splits.
+- quality_status: A64/A66 remain `failed_invalid_for_quality`; do not promote A64/A73/A74-derived throughput until a future fix passes the A75 visible-output audit.
+- recommended_follow_up: test a narrow fix that either keeps F8 dense matmuls off CUDA by default or implements a quality-preserving CUDA path, likely fp32 accumulation/output or shape-specific gating plus another A75-style deterministic output audit before any speed claim.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
