@@ -4248,6 +4248,6 @@ Decision:
   - Keep accepted A64 command unchanged at `-t 20 -tb 20` for the current local best: A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
   - Next attempt should inspect or optimize the CPU MXFP4 expert/MoE matmul path and OpenMP scheduling rather than broad config sweeps.
 - commit/push:
-  - local commit: pending at time of result entry.
+  - local result commit: `8f9f26053682f2cddf3d4172f23a15bb0c3e1729`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
