@@ -2788,3 +2788,58 @@ Decision:
   - preload loads zero entries, cache hit stays zero, OOM, or short speed regresses badly. If that
     happens, stop no-code cache-fill attempts and move to a source change that connects expert-pack
     reads to the `only_active_experts` scheduler copy path.
+
+### 2026-06-23 09:05Z - A49 Result: Startup Pack Preload Also Loads Zero F8 Experts
+
+- attempt_id: `deepseek-v4-a49-startup-pack-profile-preload-n64`
+- attempt_start_utc: `2026-06-23T09:04:33Z`
+- attempt_end_utc: `2026-06-23T09:05:15Z`
+- wall_clock_elapsed: `42 seconds`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, no source changes`
+- promoted_commit: `n/a`
+- log_path: `/root/lfz/runs/ik_llama/deepseek-v4-a49-startup-pack-profile-preload-n64/bench.log`
+- trace_path: `/root/lfz/runs/ik_llama/deepseek-v4-a49-startup-pack-profile-preload-n64/ttft_trace.tsv`
+
+Benchmark:
+
+- startup preload: `[chat] startup profile preload: loaded 0/1569 entries from 111 tensors`
+- prompt eval: `3021.41 ms / 5 tokens = 1.65 tok/s`
+- eval: `32824.17 ms / 63 runs = 1.92 tok/s`
+- total: `40788.43 ms / 68 tokens`
+- systemd service runtime: `41.958s`
+- `/usr/bin/time` exit status: `0`
+
+Trace summary:
+
+```text
+rows=60288
+pack_hit=0
+cache_hit=0
+ram_hit=0
+copy_ms_sum=7017.0
+ops:
+  cpu_down_route=45216
+  cpu_down_minflt=7536
+  cpu_down_majflt=7536
+```
+
+Root cause:
+
+- The profile rows match the pack naming scheme (`blk.N.ffn_*_exps.weight`, `expert_idx` in range),
+  and the pack contains matching entries.
+- `ggml_cuda_moe_stream_preload_expert_from_pack_async()` returns before lookup because
+  `moe_stream_type_supported()` currently allows only `GGML_TYPE_IQ3_XXS` and `GGML_TYPE_IQ2_S`.
+- DeepSeek V4 Flash routed experts are `GGML_TYPE_F8_E4M3_B128`, so the existing ik_llama
+  VRAM/RAM/expert-pack cache layer is not active for this model.
+
+Decision:
+
+- Do not promote. The short `1.92 tok/s` is within noise and does not prove an improvement.
+- Stop no-code cache-fill attempts: A45, A48b, and A49 all prove cache/pack hit rate remains zero.
+- Next viable work item must be source-level:
+  - either connect `GGML_TYPE_F8_E4M3_B128` expert-pack reads to the `only_active_experts` scheduler
+    copy path, where the current A31 route copies active expert slices from CUDA_Host/mmap into the
+    CUDA split tensor;
+  - or implement a true F8 `moe_stream_batch`/VRAM-cache compute path. This is larger and riskier.
+- Until that source work exists, the stable 16GB SOTA remains A31 p50 `1.91 tok/s`.
