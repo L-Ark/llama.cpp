@@ -1991,3 +1991,105 @@ Decision:
   the surrounding `MUL_MAT_ID` graph constraints. Once identified, test whether isolating that
   `MUL_MAT` into a CUDA-graph-compatible split, changing its backend placement, or disabling the
   surrounding graph split improves token rate.
+
+### 2026-06-23 - Planned Optimization Attempt A41: Node 2 Identity Probe
+
+- attempt_id: `deepseek-v4-a41-node2-identity`
+- attempt_start_utc: `2026-06-23T06:11:50Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis: A40's expensive node `2` is not an expert `MUL_MAT_ID` node but a standard
+  `MUL_MAT` embedded in the same no-graph split. Identifying its tensor names, shapes, types, and
+  buffer placement will determine whether the next optimization should target attention/MLA,
+  routing, graph splitting, or backend placement.
+- planned changes: temporary default-off logging behind `GGML_DEEPSEEK4_NODE2_IDENTITY=1` inside
+  `evaluate_and_capture_cuda_graph()`:
+  - target only `use_cuda_graph = false`, `n_nodes = 19`, `mul_mat_id = 3` graph shapes;
+  - print at most two target graphs;
+  - for every node in the target graph, print node index, op, tensor name, shape, dtype, buffer
+    type/name, and source tensor names/shapes/types;
+  - highlight node `2` and its `src0/src1/src2` metadata.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_NODE2_IDENTITY=1`
+  - flags: A31 baseline flags with `-n 16` first, because identity logs do not require a full
+    64-token run.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric: produce enough metadata to map node `2` to a concrete model subpath and name the
+  next code/config change.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a41-node2-identity/journal.log`.
+
+### 2026-06-23 06:18Z - A41 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T06:11:50Z`
+- attempt_end_utc: `2026-06-23T06:17:42Z`
+- wall_clock_elapsed: `352 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `parsed_summary.json`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, source reverted`
+- promoted_commit: `n/a`
+
+Implementation:
+
+- Added temporary default-off logging behind `GGML_DEEPSEEK4_NODE2_IDENTITY=1`.
+- Targeted only `use_cuda_graph = false`, `n_nodes = 19`, `mul_mat_id = 3` graph shapes.
+- Printed the first two target graphs' node metadata.
+- Saved source diff at
+  `/root/lfz/runs/ik_llama/deepseek-v4-a41-node2-identity/source_probe.diff`.
+- Reverted the source probe and rebuilt default `llama-cli`.
+
+Command shape:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_NODE2_IDENTITY=1`
+- flags: A31 baseline flags with `-n 16`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a41-node2-identity/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a41-node2-identity/journal.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a41-node2-identity/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3390.22 ms / 5 tokens = 1.47 tok/s`
+- eval: `7995.01 ms / 15 runs = 1.88 tok/s`
+- total: `18079.51 ms / 20 tokens`
+- `/usr/bin/time` wall clock: `0:19.46`
+- max RSS from `/usr/bin/time`: `28102492 KB`
+
+Node 2 identity:
+
+```text
+[deepseek4_node2_identity_node] graph=1 node=2
+  dst name=ffn_moe_logits-0 op=MUL_MAT type=f32 ne=[256,1,1,1] nb=[4,1024,1024,1024] buffer=CUDA0
+  src0 name=blk.0.ffn_gate_inp.weight op=NONE type=f32 ne=[4096,256,1,1] nb=[4,16384,4194304,4194304] buffer=CUDA0
+  src1 name=ffn_norm-0 op=FUSED_RMS_NORM type=f32 ne=[4096,1,1,1] nb=[4,16384,16384,16384] buffer=CUDA0
+
+[deepseek4_node2_identity_node] graph=2 node=2
+  dst name=ffn_moe_logits-1 op=MUL_MAT type=f32 ne=[256,1,1,1] nb=[4,1024,1024,1024] buffer=CUDA0
+  src0 name=blk.1.ffn_gate_inp.weight op=NONE type=f32 ne=[4096,256,1,1] nb=[4,16384,4194304,4194304] buffer=CUDA0
+  src1 name=ffn_norm-1 op=FUSED_RMS_NORM type=f32 ne=[4096,1,1,1] nb=[4,16384,16384,16384] buffer=CUDA0
+```
+
+Interpretation:
+
+- A40's expensive node `2` is the MoE router/gating logits matmul:
+  `blk.N.ffn_gate_inp.weight` x `ffn_norm-N` -> `ffn_moe_logits-N`.
+- It is a standard F32 `MUL_MAT` of shape `[4096,256] x [4096,1] -> [256,1]`, fully resident on
+  CUDA0.
+- It is not attention/MLA and not an expert `MUL_MAT_ID`.
+- Because A40 sampled only the first three target graphs and A41 shows those are early layers
+  (`blk.0`, `blk.1`), the `39.745 ms` A40 value may include first-use cuBLAS/router warmup and
+  must not be linearly extrapolated across all 204 target calls without a late-sample check.
+
+Decision:
+
+- Do not promote. This is a diagnostic run and the probe source was reverted.
+- A42 should re-sample the same router node after warmup, e.g. skip the first 32-64 target graphs
+  and then measure node `2` GPU elapsed. If late router matmul remains high, test a specialized
+  small F32 GEMV/router kernel or keep router logits in a graph-compatible split. If late samples
+  are small, move to deferred-expert memory/cache instrumentation because the apparent A40 hotspot
+  was warmup-biased.
