@@ -5069,3 +5069,49 @@ Rollback_status: temporary A87 source probe saved in source_probe.diff and final
 
 A87 result_commit: c9f2b8a8
 A87 pushed_commit: n/a (WiCi no-push constraint)
+
+
+### Planned Consolidation Attempt A88 - accepted frontier and route boundary
+
+Goal: consolidate the current accepted DeepSeek V4 Flash optimization frontier after A80/A81 and after the A83-A87 lower-level OpenMP route failed to promote. This attempt introduces no new optimization source. It verifies clean source state, rebuilds the current binary, runs final baseline vs accepted attention-safe smoke checks, runs accepted attention-safe n256 repeats, and records the route boundary.
+
+Safety: no git push. Avoid shell execution of plan prose. Source must remain clean before and after validation.
+
+### Consolidation Result A88 - accepted frontier and route boundary
+
+Status: completed. No optimization source changes were introduced.
+
+Run directory: /root/lfz/runs/ik_llama/deepseek-v4-a88-accepted-frontier-consolidation
+Input commit: 2f55275f
+Accepted source/frontier commit before A88 plan-only commit: 2f55275f
+Accepted env: GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn
+Accepted command flags: --defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa with MemoryMax=16G and MemorySwapMax=0.
+
+Source and rollback status:
+- source_start.diff was empty before validation.
+- Current llama-cli rebuilt successfully from HEAD before smoke validation.
+- No tracked source changes were made by A88.
+- Pre-existing untracked .Agent/plans/m3-race-spec* files remain ignored.
+
+Final smoke validation, n64 deterministic prompts:
+- baseline france: exit=0, graph_splits=1237, eval=1.83 tok/s.
+- baseline math: exit=0, graph_splits=1237, eval=1.82 tok/s.
+- baseline hotcold: exit=0, graph_splits=1237, eval=1.87 tok/s.
+- accepted attention-safe france: exit=0, graph_splits=291, eval=5.13 tok/s.
+- accepted attention-safe math: exit=0, graph_splits=291, eval=5.00 tok/s.
+- accepted attention-safe hotcold: exit=0, graph_splits=291, eval=5.04 tok/s.
+All smoke runs exited 0. Summaries showed no CUDA/assert/shape/NaN failures and did not reproduce the known broad-A64 visible corruption pattern.
+
+Accepted attention-safe n256 repeats:
+- repeat 1: exit=0, graph_splits=291, eval=5.34 tok/s, max RSS about 6344 KiB as reported by time -v.
+- repeat 2: exit=0, graph_splits=291, eval=5.50 tok/s, max RSS about 6344 KiB as reported by time -v.
+These results remain in the established A80/A81 accepted performance band and are consistent with A81's n256 repeats around 5.27/5.38/5.32 tok/s.
+
+A88 accepted_frontier_summary:
+- Accepted quality-valid frontier: A80 attention-only CUDA F8 dense placement, hardened by A81 and re-smoked by A88.
+- Historical broad A64/A66 9.x tok/s remains invalid-for-quality because A75 showed deterministic output corruption, and later A76/A77/A78 localized/confirmed that broad F8 dense CUDA placement is not quality-equivalent.
+- A83 runtime-only OpenMP tuning, A84 source-level MoE OpenMP scheduling, A85 lower-level MXFP4 helper partitioning, A86 OpenMP region granularity diagnostic, and A87 persistent/coalesced helper-team probe are all unpromoted/diagnostic only. They do not replace the A80/A81 accepted command.
+- A86/A87 route boundary: lower-level OpenMP scheduling/partitioning probes are retired for this path unless new evidence or explicit user steering provides a non-speculative route with a stronger correctness oracle. Viable future directions should be different accepted-scope routes: quality-safe CUDA offload beyond the current attention-safe class, deeper SIMD/kernel optimization inside mul_mat_qX_q8_Helper without changing partitioning, or graph-level barrier/copy reduction with deterministic output and performance validation.
+- Safety note retained: iter-47 accidentally executed git push through b7639d5f due to unquoted markdown command substitution; A86 correction documented it. A88 ran no git push.
+
+A88 pushed_commit: n/a (WiCi no-push constraint)
