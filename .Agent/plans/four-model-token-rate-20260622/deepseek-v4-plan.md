@@ -3750,3 +3750,49 @@ Decision:
 - rollback condition:
   - Config-only attempt; no source rollback.
   - If quick run regresses or does not change split behavior, record and keep A31 as SOTA.
+
+### 2026-06-23 10:46Z - A61 Result: `--split-mode none` Was Not Repeat-Stable
+
+- attempt_id: `deepseek-v4-a61-split-mode-none`
+- status: `not promoted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `853bd8302913b05ebf1a47c1e492bd0f12373751`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- command summary:
+  - A31 env/flags plus `--split-mode none`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- run records:
+  - A61a `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a61a-split-mode-none-n64`
+    - attempt_start_utc: `2026-06-23T10:38:44Z`
+    - attempt_end_utc: `2026-06-23T10:39:26Z`
+    - wall_clock_elapsed: `42s`
+    - graph splits: `1237`
+    - eval: `32432.68 ms / 63 runs = 1.94 tok/s`
+    - result: passed quick filter.
+  - A61b `-n 256`, repeat1:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a61b-split-mode-none-n256-repeat1`
+    - attempt_start_utc: `2026-06-23T10:39:56Z`
+    - attempt_end_utc: `2026-06-23T10:42:17Z`
+    - wall_clock_elapsed: `141s`
+    - graph splits: `1237`
+    - eval: `132373.36 ms / 255 runs = 1.93 tok/s`
+    - result: above A31, requires repeat confirmation.
+  - A61c `-n 256`, repeat2:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a61c-split-mode-none-n256-repeat2`
+    - attempt_start_utc: `2026-06-23T10:42:45Z`
+    - attempt_end_utc: `2026-06-23T10:45:08Z`
+    - wall_clock_elapsed: `143s`
+    - graph splits: `1237`
+    - eval: `134164.84 ms / 255 runs = 1.90 tok/s`
+    - result: failed repeat confirmation.
+- interpretation:
+  - `--split-mode none` can produce one good run but does not change graph split count and is not
+    repeat-stable.
+  - Like A58 `-sas`, this looks like normal runtime variance around A31 rather than a robust
+    configuration improvement.
+- decision:
+  - Do not promote A61.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - Next useful target should be source-level placement/scheduler cleanup informed by A59, not another
+    broad split-mode flag.
