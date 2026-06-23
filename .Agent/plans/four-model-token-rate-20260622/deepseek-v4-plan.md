@@ -4691,4 +4691,5 @@ Decision:
   - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
 - next direction:
   - Move below wrapper-level MoE routing into MXFP4/Q8_2_x4 helper internals or OpenMP/libgomp scheduling in the existing `iqk_mul_mat_moe` execution path.
+- result_commit: `a15d85ecd0bf50cb8ce2cfdad6a0d88f116ceecf`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
