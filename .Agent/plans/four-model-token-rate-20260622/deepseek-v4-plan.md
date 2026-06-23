@@ -4719,4 +4719,4 @@ Decision:
 - quality_decision: A64/A66 throughput measurements around 9.x tok/s are real speed measurements for the modified graph, but are not accepted correct results. They are downgraded as invalid-for-quality and must not be used as the accepted quality-preserving optimization until the F8 dense path is corrected and re-audited.
 - promotion_decision: stop further A64/A66/A73/A74 performance promotion based on this path; next work should debug the F8 dense correctness issue or roll back to the last quality-valid baseline.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
-
+- result_commit: `2f065869f7c17cc7a8edd7527a8c9002889a5efe`
