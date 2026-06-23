@@ -4112,6 +4112,6 @@ Decision:
   - Do not run A65 fallback; A64 is accepted and stable.
   - Future A67 should be a targeted post-A64 CUDA/perf profile, not another broad scheduler flag.
 - commit/push:
-  - local commit: pending at time of result entry.
+  - local result commit: `4770c9977bb9cad10db915cc80dee80c80a0f20c`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
