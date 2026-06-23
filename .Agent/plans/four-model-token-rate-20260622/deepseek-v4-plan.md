@@ -4744,3 +4744,10 @@ Decision:
 - recommended_follow_up: test a narrow fix that either keeps F8 dense matmuls off CUDA by default or implements a quality-preserving CUDA path, likely fp32 accumulation/output or shape-specific gating plus another A75-style deterministic output audit before any speed claim.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 - result_commit: `1e9356022caef8d10c268aa8a5d6c78e1e82ccf6`
+
+### Planned Source Repair Probe A77 - quality-safe CUDA F8 dense matmul
+- planned_at_utc: 2026-06-23T14:16:14Z
+- reason: A76 classified A64 corruption as placement semantics from broad F8 dense CUDA placement on a generic fp16 GEMM path.
+- scope: add a temporary env-gated `GGML_DEEPSEEK4_CUDA_F8_DENSE_FP32_ACCUM=1` repair path for F8 dense `MUL_MAT` that keeps fp16 dequantized inputs but writes cublas output directly to fp32 using `CUBLAS_COMPUTE_32F`; compare baseline, known-bad A64, and repair modes with A75 prompts.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a77-f8-quality-repair-probe`
+- decision_pending: keep source only if repair mode passes visible-output correctness; otherwise revert and record failed/unpromoted.
