@@ -3624,6 +3624,87 @@ Decision:
   - Revert temporary source changes and rebuild default `llama-cli`.
   - Do not promote diagnostic code.
 
+### 2026-06-23 10:58Z - A62 Result: CPU Dense Splits Are Caused By Missing CUDA F8 Dense `MUL_MAT` Support
+
+- attempt_id: `deepseek-v4-a62-cpu-mulmat-placement-cause`
+- status: `diagnostic, not promoted, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `b1c47cc02b0be73f4e2c9b91b96489865bbea295`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a62-cpu-mulmat-placement-cause`
+- attempt_start_utc: `2026-06-23T10:52:57Z`
+- attempt_end_utc: `2026-06-23T10:53:39Z`
+- wall_clock_elapsed: `42s`
+- command summary:
+  - A31 env/flags plus `GGML_DEEPSEEK4_PLACEMENT_CAUSE=1`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- benchmark result:
+  - eval: `33137.84 ms / 63 runs = 1.90 tok/s`
+  - prompt eval: `3052.21 ms / 5 tokens = 1.64 tok/s`
+  - total: `41234.09 ms / 68 tokens`
+  - token rate is not used for promotion because this run used diagnostic instrumentation.
+- diagnostic findings:
+  - Representative `q_a-*`, `attn_group_out-*`, `attn_out_proj-*`, `ffn_gate-*`, `ffn_up-*`, and
+    `ffn_shexp-*` nodes all show:
+    - original weight input backend: `CUDA0`
+    - original weight buffer: `CUDA0`
+    - weight type: `f8_e4m3_b128`
+    - node backend: `CPU`
+    - node cause: `3.best`
+    - scheduler-created source copies: `CPU#...`
+  - Example:
+    - `q_a-0`: input `blk.0.attn_q_a.weight` is `CUDA0`, type `f8_e4m3_b128`, but the node is
+      scheduled on `CPU` and consumes `CPU#blk.0.attn_q_a.weight#0`.
+    - `attn_group_out-0`: input `blk.0.attn_output_a.weight (view)` is `CUDA0`, type
+      `f8_e4m3_b128`, but the node is scheduled on `CPU` and consumes a CPU copy.
+- root cause:
+  - `ggml_backend_cuda_supports_op()` does not include `GGML_TYPE_F8_E4M3_B128` in the CUDA
+    `MUL_MAT`/`MUL_MAT_ID` type whitelist.
+  - Therefore the scheduler cannot keep these F8 dense matmuls on CUDA even though their weights
+    already live in CUDA memory.
+  - Lowering `offload-batch-size` in A60 did not help because the CUDA backend still reports the op as
+    unsupported for this weight type.
+- rollback/rebuild:
+  - Temporary `ggml/src/ggml-backend.cpp` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully.
+- decision:
+  - Do not promote A62.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - Next attempt should test whether adding `GGML_TYPE_F8_E4M3_B128` to CUDA `supports_op` is enough
+    to route into an existing kernel path, or whether a real F8 dense CUDA matvec kernel is missing.
+
+### 2026-06-23 - Planned Source Probe A63: CUDA F8 Dense `MUL_MAT` Feasibility
+
+- attempt_id: `deepseek-v4-a63-cuda-f8-dense-support-probe`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A59 identifies CPU dense `MUL_MAT` split starts as the dominant graph fragmentation source.
+  - A62 proves those nodes have CUDA0-resident `f8_e4m3_b128` weights but are scheduled on CPU because
+    CUDA does not advertise support for `GGML_TYPE_F8_E4M3_B128` dense `MUL_MAT`.
+- hypothesis:
+  - If existing CUDA matvec code can already handle `f8_e4m3_b128` through a generic quantized path,
+    adding the type to `ggml_backend_cuda_supports_op()` may remove many CPU splits and improve token
+    rate.
+  - If no downstream CUDA kernel supports this type, the run will fail quickly or produce an explicit
+    unsupported-type error; then the correct next step is implementing a real F8_E4M3_B128 x Q8_1
+    CUDA matvec kernel.
+- planned source change:
+  - Temporary default-off probe gated by `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - In `ggml_backend_cuda_supports_op()`, allow `GGML_TYPE_F8_E4M3_B128` for `GGML_OP_MUL_MAT` only
+    when the env flag is set.
+  - Do not change default behavior.
+- benchmark command:
+  - A31 env plus `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - A31 flags with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Quick filter must complete without CUDA errors and reach at least `1.93 tok/s`.
+  - If quick filter passes, run two full `-n 256` repeats before promotion.
+- rollback condition:
+  - Revert temporary source changes and rebuild default `llama-cli` after the probe unless the change
+    is promoted with full validation.
+  - If the run crashes, produces NaN/invalid output, or regresses, record and move to implementing a
+    dedicated F8 dense CUDA kernel.
+
 ### 2026-06-23 10:39Z - A59 Result: Split Fragmentation Is Mostly CPU Dense `MUL_MAT`
 
 - attempt_id: `deepseek-v4-a59-backend-split-distribution-profile`
