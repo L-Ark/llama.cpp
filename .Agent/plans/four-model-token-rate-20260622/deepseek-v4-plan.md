@@ -2188,3 +2188,113 @@ Decision:
   - measure host-side expert lookup/load wait time;
   - measure GPU copy/dequant or placement wait if present;
   - correlate per-token latency spikes with cache miss/load events.
+
+### 2026-06-23 - Planned Optimization Attempt A43: Existing TTFT Expert Cache Trace
+
+- attempt_id: `deepseek-v4-a43-existing-ttft-cache-trace`
+- attempt_start_utc: `2026-06-23T06:31:57Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis: After A42 ruled out steady-state router matmul, the remaining measurable bottleneck
+  is likely expert cache/memory movement or deferred expert loading. `moe_stream_batch.cu` already
+  has `GGML_MOE_TTFT_TRACE_OUT`, which records expert events with `cache_hit`, `pack_hit`,
+  `ram_hit`, and `copy_ms`. Use this built-in trace before adding new instrumentation.
+- planned changes: no source changes. Run A31 config with:
+  - `GGML_MOE_TTFT_TRACE_OUT=/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/ttft_trace.csv`
+  - `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`
+- benchmark command shape:
+  - env: A31 baseline env plus TTFT trace env above
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric:
+  - quantify cache hit/miss counts, pack hits, RAM hits, total/avg copy_ms, and largest copy events;
+  - decide whether A44 should change cache policy/cap/profile or add deeper source instrumentation.
+- rollback condition: no source changes. If trace overhead is too high, record it and rerun with a
+  smaller trace cap.
+- expected logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/ttft_trace.csv`
+
+### 2026-06-23 06:37Z - A43 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T06:31:57Z`
+- attempt_end_utc: `2026-06-23T06:37:11Z`
+- wall_clock_elapsed: `314 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `ttft_trace.csv`, `parsed_summary.json`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, no source changes`
+- promoted_commit: `n/a`
+
+Command shape:
+
+- env: A31 baseline env plus:
+  - `GGML_MOE_TTFT_TRACE_OUT=/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/ttft_trace.csv`
+  - `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/ttft_trace.csv`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/trace_summary.json`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a43-existing-ttft-cache-trace/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3203.40 ms / 5 tokens = 1.56 tok/s`
+- eval: `34463.00 ms / 63 runs = 1.83 tok/s`
+- total: `43268.47 ms / 68 tokens`
+- `/usr/bin/time` wall clock: `0:44.61`
+- max RSS from `/usr/bin/time`: `28102980 KB`
+
+Trace summary:
+
+```text
+events=60288
+op_counts:
+  cpu_down_route=45216
+  cpu_down_minflt=7536
+  cpu_down_majflt=7536
+copy_events=112
+copy_ms_total=7055.0
+copy_ms_avg=62.991
+copy_ms_max=116.0
+trace_t_ms_last=37357.075
+```
+
+Top copy/fault examples:
+
+```text
+cpu_down_minflt blk.6.ffn_up_exps.weight expert=1 bytes=4456448 copy_ms=116.0
+cpu_down_minflt blk.8.ffn_gate_exps.weight expert=1 bytes=4456448 copy_ms=69.0
+cpu_down_minflt blk.8.ffn_down_exps.weight expert=1 bytes=4456448 copy_ms=69.0
+cpu_down_minflt blk.13.ffn_up_exps.weight expert=1 bytes=4456448 copy_ms=69.0
+cpu_down_minflt blk.13.ffn_down_exps.weight expert=1 bytes=4456448 copy_ms=69.0
+```
+
+Interpretation:
+
+- The existing TTFT trace is useful but incomplete for the A43 question.
+- It proves there is meaningful CPU/down expert page-fault or copy-adjacent cost in this run:
+  `112` copy/fault events totaling about `7.06 s`.
+- The trace does not expose VRAM cache lookup/insert totals for the active up/gate and down paths:
+  `cache_hit`, `pack_hit`, and `ram_hit` fields are all zero for this run, while the ops recorded
+  are `cpu_down_route`, `cpu_down_minflt`, and `cpu_down_majflt`.
+- Therefore A43 cannot answer the current hit-rate question by itself. It points to CPU/down path
+  page faults as a real cost, but not to whether VRAM cache misses, eviction policy, or expert
+  staging are the root cause.
+
+Decision:
+
+- Do not promote. This was an analysis run and no source changed.
+- A44 should add narrow source instrumentation around the expert cache functions in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`, especially:
+  - `batch_cache_lookup_slot`
+  - `batch_cache_insert_slot`
+  - `batch_cache_wait_slot_ready`
+  - RAM tier lookup/copy paths
+  - host/page-fault down path records
+- A44 must report cache lookup count, hit/miss count, insert count, evictions, wait time, copy time,
+  and separate up/gate vs down tensor families. This is needed before changing cache policy or
+  memory placement.
