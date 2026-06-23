@@ -89,10 +89,15 @@ GGML_MOE_VRAM_CACHE_POLICY=lfu_lru
 
 Validated result:
 
-- A30 `-no-fa` full 256-token run: `eval_tok_s = 1.86`, `prompt_eval_tok_s = 1.61`,
-  `gen_tokens = 255`, log `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log`.
+- A30 `-no-fa` full 256-token runs: `eval_tok_s = 1.86 / 1.80 / 1.88`.
+  - p50: `1.86 tok/s`
+  - worst: `1.80 tok/s`
+  - logs:
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log`
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat2/bench.log`
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat3/bench.log`
 - Previous 16 GB best A13: `eval_tok_s = 1.79`.
-- Delta: `+0.07 tok/s` (`+3.9%`) versus A13. This still trails the fastllm reference
+- Delta: p50 `+0.07 tok/s` (`+3.9%`) versus A13. This still trails the fastllm reference
   `1.94 tok/s`, so optimization continues from A30.
 
 ## Baseline Command
@@ -973,9 +978,14 @@ Apply previous-task routes in this order:
   - result: `eval_tok_s = 1.86`, `prompt_eval_tok_s = 1.61`, `gen_tokens = 255`,
     `total_ms = 145160.62`, `rss_mb = 27444.79`.
   - log: `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log`.
+  - repeat2: `eval_tok_s = 1.80`, `prompt_eval_tok_s = 1.57`, log
+    `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat2/bench.log`.
+  - repeat3: `eval_tok_s = 1.88`, `prompt_eval_tok_s = 1.64`, log
+    `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat3/bench.log`.
+  - repeat summary: p50 `1.86 tok/s`, worst `1.80 tok/s`.
   - log confirms `llama_init_from_model: flash_attn = 0`, while `fused_moe = 1`, `fused_up_gate = 1`,
     `fused_mmad = 1`, and `graph_reuse = 1` remain enabled.
 - Decision: promote `-no-fa` as the new 16 GB ik_llama DeepSeek V4 baseline. It improves over A13
-  (`1.79 tok/s`) by `+0.07 tok/s` and does not require new model files or source changes.
+  (`1.79 tok/s`) by p50 `+0.07 tok/s` and does not require new model files or source changes.
 - Working hypothesis: for this exact decode benchmark (`c=512`, `ubatch=1`, short prompt), Flash Attention's fixed graph/kernel overhead outweighs its attention math savings. MoE remains the dominant path, and disabling FA reduces non-MoE overhead enough to matter.
 - Next direction: continue from A30. Remaining gap to fastllm `1.94 tok/s` is `0.08 tok/s`; likely candidates are narrower attention/kernel overhead checks, or deeper DeepSeek-specific MXFP4 small-MoE fusion.
