@@ -609,3 +609,32 @@ Apply previous-task routes in this order:
 - Decision: do not promote. The prototype source and runner diagnostics were reverted before
   commit. The next useful optimization must target the actual CUDA fused MoE / CUDA `mul_mat_id`
   path, or move to the planned I/O/prefetch/MTP directions instead of CPU stream-one.
+
+### 2026-06-23 11:55Z - Optimization Attempt A17: Built-in MTP Smoke
+
+- Hypothesis: DeepSeek V4 Flash GGUF may include MTP-compatible tensors or ik_llama may support
+  a self-contained MTP path. If MTP accepts more than one token per expensive MoE pass, it can
+  reduce effective SSD/expert-read cost per emitted token without changing model weights.
+- Change to try: keep the promoted 16 GB baseline settings and add `-mtp` through `EXTRA_ARGS`.
+  Do not introduce a separate draft model or new download.
+- Benchmark command:
+  `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24 -mtp" N_PREDICT=64 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a17-mtp-n64 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: the run exits code `0`, logs show MTP/speculative mode is active, output is not
+  obviously corrupted, and short-run `eval_tok_s` is above the current short control range
+  (`~1.82 tok/s`). If it passes, run full `N_PREDICT=256` and promote only if it beats A13
+  (`1.79 tok/s` under 16 GB) by more than `0.01 tok/s`.
+- Rollback condition: unsupported MTP, load/generation failure, no active MTP logs, or short-run
+  speed <= control means record as unpromoted and move to CUDA fused MoE/offload or I/O/prefetch.
+
+#### A17 Result
+
+- Run: `/root/lfz/runs/ik_llama/deepseek-v4-a17-mtp-n64/bench.log`.
+- Command: `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24 -mtp" N_PREDICT=64`.
+- Result: exited code `0`, `eval_tok_s = 1.79`, `prompt_eval_tok_s = 1.57`, `gen_tokens = 63`,
+  `total_ms = 43307.53`.
+- Diagnostic: grep found no MTP/speculative/draft acceptance logs. The command line contains
+  `-mtp`, but the run behaves like normal single-token decode and is below the current short
+  control range (`~1.82 tok/s`).
+- Decision: do not promote. Built-in MTP is either inactive for this GGUF or not beneficial in the
+  current `llama-cli` path. Move to CUDA fused MoE / CUDA `mul_mat_id` thresholds or I/O/prefetch
+  rather than spending more time on MTP without active logs.
