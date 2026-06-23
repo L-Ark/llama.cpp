@@ -4693,3 +4693,12 @@ Decision:
   - Move below wrapper-level MoE routing into MXFP4/Q8_2_x4 helper internals or OpenMP/libgomp scheduling in the existing `iqk_mul_mat_moe` execution path.
 - result_commit: `a15d85ecd0bf50cb8ce2cfdad6a0d88f116ceecf`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
+### Planned Correctness Audit A75 - A64 deterministic output quality gate
+- planned_at_utc: 2026-06-23T13:52:50Z
+- reason: supervisor hot reload requires correctness validation before treating A64/A66 9.x tok/s throughput as accepted.
+- scope: compare baseline/default path with `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` on deterministic simple prompts using `--temp 0 --top-p 1.0 --top-k 1 --seed 1`, accepted A64 flags `-ub 1 -t 20 -tb 20 -no-fa`, and 16 GiB cgroup.
+- prompts: `The capital of France is`; `2 + 2 =`; `The opposite of hot is`.
+- logit_probe: see `/root/lfz/runs/ik_llama/deepseek-v4-a75-a64-correctness-audit/logit_option_probe.txt`.
+- decision_pending: record `A64 correctness_status: passed` or `failed_invalid_for_quality` after the comparison.
+
