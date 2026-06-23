@@ -3624,6 +3624,88 @@ Decision:
   - Revert temporary source changes and rebuild default `llama-cli`.
   - Do not promote diagnostic code.
 
+### 2026-06-23 10:57Z - A63 Result: Advertising CUDA F8 Dense Support Alone Crashes
+
+- attempt_id: `deepseek-v4-a63-cuda-f8-dense-support-probe`
+- status: `failed, not promoted, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `0b44aae61e11412ec8ccd5926839342e0625e06b`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a63-cuda-f8-dense-support-probe`
+- attempt_start_utc: `2026-06-23T10:56:58Z`
+- attempt_end_utc: `2026-06-23T10:57:05Z`
+- wall_clock_elapsed: `7s`
+- time_source: `strict_attempt_files`
+- time_confidence: `strict`
+- command summary:
+  - A31 env/flags plus `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+  - `-n 64` quick filter.
+- source probe:
+  - Temporarily allowed `GGML_TYPE_F8_E4M3_B128` for `GGML_OP_MUL_MAT` in
+    `ggml_backend_cuda_supports_op()` only when `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - Diff saved at
+    `/root/lfz/runs/ik_llama/deepseek-v4-a63-cuda-f8-dense-support-probe/source_probe.diff`.
+- result:
+  - The model initialized with graph splits reduced from the usual `1237` to `76`, confirming that
+    F8 dense `MUL_MAT` placement is the dominant split source.
+  - The run then aborted before producing tokens:
+    `ggml/src/ggml-cuda.cu:1719: GGML_ASSERT(to_fp16_cuda != nullptr) failed`.
+  - Stack top:
+    `ggml_cuda_op_mul_mat_cublas -> ggml_cuda_op_mul_mat -> ggml_cuda_mul_mat ->
+    ggml_backend_cuda_graph_compute`.
+  - `systemd-run` ended with `code=dumped/status=ABRT`, exit status `1`.
+- interpretation:
+  - A62's bottleneck diagnosis is confirmed: if F8 dense matmuls could run on CUDA, graph
+    fragmentation would drop sharply.
+  - However, the existing CUDA matmul path does not implement `ggml_get_to_fp16_cuda()` for
+    `GGML_TYPE_F8_E4M3_B128`; simply advertising backend support is invalid.
+  - The next source-level attempt must implement real `F8_E4M3_B128 -> FP16` CUDA conversion or a
+    dedicated F8 dense matvec kernel. CLI/cache tuning will not solve this placement blocker.
+- rollback/rebuild:
+  - Temporary `ggml/src/ggml-cuda.cu` probe was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully.
+- decision:
+  - Do not promote A63.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+
+### 2026-06-23 - Planned Source Attempt A64: CUDA `F8_E4M3_B128` Dense Convert Path
+
+- attempt_id: `deepseek-v4-a64-cuda-f8-b128-to-f16-convert`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A59 showed `1237` graph splits, dominated by CPU dense `MUL_MAT` split starts.
+  - A62 showed those dense matmuls use CUDA-resident `f8_e4m3_b128` weights but are forced to CPU
+    because CUDA does not support that type.
+  - A63 reduced graph splits to `76` by advertising support, proving this is the largest placement
+    blocker, but crashed because the CUDA path lacks `F8_E4M3_B128 -> FP16` conversion.
+- hypothesis:
+  - Adding an env-gated CUDA conversion function for `GGML_TYPE_F8_E4M3_B128` will allow the existing
+    cublas dense `MUL_MAT` path to execute these weights on GPU, cutting graph splits and CPU/OpenMP
+    scheduler overhead.
+  - This may be slower than a future dedicated F8 x Q8_1 matvec because it dequantizes to FP16 first,
+    but it is the narrowest feasibility step and directly tests the largest bottleneck.
+- planned source change:
+  - Implement a CUDA `to_fp16` converter for `block_f8_e4m3_b128`.
+  - Decode the per-block E8M0 scale using the same semantics as the CPU helper
+    `dequantize_row_f8_e4m3_b128`.
+  - Register the converter in `ggml_get_to_fp16_cuda(GGML_TYPE_F8_E4M3_B128)`.
+  - Keep CUDA `supports_op` for this type env-gated behind
+    `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` for the first validation.
+- benchmark command:
+  - A31 env plus `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - A31 flags with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Quick filter completes without CUDA errors and reaches at least `1.93 tok/s`.
+  - If it passes, run two full `-n 256` repeats under `MemoryMax=16G`.
+  - Promotion requires repeated full validation beating A31 p50 by `> 0.01 tok/s`, with plan
+    metrics and immediate push to `deepseek-v4-flash`.
+- rollback condition:
+  - If the quick filter crashes, produces invalid text, exceeds 16GB host RAM, or regresses below
+    A31 quick-run control band, revert source changes and rebuild default CUDA binary.
+  - If conversion works but is slower, record the result and move to a dedicated F8 dense matvec
+    kernel rather than promoting.
+
 ### 2026-06-23 10:58Z - A62 Result: CPU Dense Splits Are Caused By Missing CUDA F8 Dense `MUL_MAT` Support
 
 - attempt_id: `deepseek-v4-a62-cpu-mulmat-placement-cause`
