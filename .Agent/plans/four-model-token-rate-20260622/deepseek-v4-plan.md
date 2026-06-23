@@ -1777,3 +1777,108 @@ Decision:
 - A39 should sample/timestamp no-graph MoE shapes end-to-end, especially the `nodes=19/20`
   `ADD -> MUL_MULTI_ADD` shapes with `mul_mat_id=3`. If those are still small, move outward to
   outer scheduler split orchestration and deferred-expert memory movement.
+
+### 2026-06-23 - Planned Optimization Attempt A39: No-Graph MoE Full-Path Timing
+
+- attempt_id: `deepseek-v4-a39-no-graph-moe-full-timing`
+- attempt_start_utc: `2026-06-23T05:56:05Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis: A38 did not sample the two MoE graph shapes because they run with
+  `use_cuda_graph = false`. A35 timed only the inner MXFP4 `MUL_MAT_ID` kernel bodies and found
+  them too small. The missing cost may be the full no-graph MoE execution path around those kernels:
+  scheduler splits, surrounding ops, memory movement, synchronization, or deferred-expert waits.
+- planned changes: temporary default-off instrumentation behind
+  `GGML_DEEPSEEK4_NO_GRAPH_MOE_TIMING=1` in `ggml_backend_cuda_graph_compute()`. It will:
+  - detect graph shapes with `use_cuda_graph = false` and `mul_mat_id > 0`;
+  - group by op-class graph shape, matching A37/A38;
+  - measure bounded CPU wall time around the no-graph evaluation call;
+  - measure bounded CUDA event elapsed time around the same evaluation call when safe;
+  - print aggregate call count, sample count, CPU milliseconds, and GPU milliseconds for the
+    no-graph MoE shapes.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_NO_GRAPH_MOE_TIMING=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric:
+  - If no-graph MoE full-path sampled CPU/GPU time is material, A40 should target the measured
+    subpath.
+  - If no-graph MoE full-path time is also small, A40 should move outward to outer scheduler split
+    orchestration and deferred-expert load/memory placement instrumentation.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a39-no-graph-moe-full-timing/journal.log`.
+
+### 2026-06-23 06:02Z - A39 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T05:56:05Z`
+- attempt_end_utc: `2026-06-23T06:01:54Z`
+- wall_clock_elapsed: `349 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `parsed_summary.json`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, source reverted`
+- promoted_commit: `n/a`
+
+Implementation:
+
+- Added temporary default-off timing behind `GGML_DEEPSEEK4_NO_GRAPH_MOE_TIMING=1`.
+- Targeted only `use_cuda_graph = false` graph shapes with `mul_mat_id > 0`.
+- Recorded CPU enqueue time around `evaluate_and_capture_cuda_graph()` for every matching no-graph
+  MoE call.
+- Added bounded CUDA event samples for matching shapes: max `5` samples per shape, max `80` total.
+- Saved source diff at
+  `/root/lfz/runs/ik_llama/deepseek-v4-a39-no-graph-moe-full-timing/source_probe.diff`.
+- Reverted the source probe with `git apply -R` and rebuilt default `llama-cli`.
+
+Command shape:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_NO_GRAPH_MOE_TIMING=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a39-no-graph-moe-full-timing/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a39-no-graph-moe-full-timing/journal.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a39-no-graph-moe-full-timing/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3195.67 ms / 5 tokens = 1.56 tok/s`
+- eval: `34339.29 ms / 63 runs = 1.83 tok/s`
+- total: `42517.16 ms / 68 tokens`
+- `/usr/bin/time` wall clock: `0:43.63`
+- max RSS from `/usr/bin/time`: `28103956 KB`
+  - Note: the run was launched under systemd `MemoryMax=16G`, `MemorySwapMax=0`. The high
+    `/usr/bin/time` max RSS remains an accounting warning to investigate separately because prior
+    cgrouped runs show similar mmap-heavy reporting. It does not change the A39 diagnostic result.
+
+Timing output:
+
+```text
+[deepseek4_no_graph_moe_timing] unique_shapes=2 total_calls=408 total_samples=10 total_cpu_ms=152.542 total_gpu_ms=128.719
+[deepseek4_no_graph_moe_timing_top] rank=1 calls=204 samples=5 cpu_ms=141.040 avg_cpu_ms=0.691 gpu_ms=128.253 avg_gpu_ms=25.651 shape=nodes=19 first_op=ADD last_op=MUL_MULTI_ADD add=1 concat=0 norm=1 mul_mat_id=3 mul_multi_add=1 mul_mat=1 soft_max=1
+[deepseek4_no_graph_moe_timing_top] rank=2 calls=204 samples=5 cpu_ms=11.503 avg_cpu_ms=0.056 gpu_ms=0.466 avg_gpu_ms=0.093 shape=nodes=20 first_op=ADD last_op=MUL_MULTI_ADD add=2 concat=0 norm=1 mul_mat_id=3 mul_multi_add=1 mul_mat=1 soft_max=1
+```
+
+Interpretation:
+
+- A39 found exactly the two MoE no-graph shapes that A37/A38 left unsampled.
+- CPU enqueue overhead for these shapes is tiny: `152.542 ms` across `408` calls.
+- CUDA event samples show a large asymmetry:
+  - `nodes=19` samples average `25.651 ms` GPU elapsed;
+  - `nodes=20` samples average only `0.093 ms`.
+- If the `nodes=19` samples are representative, that shape alone could account for roughly
+  `204 * 25.651 ms = 5.23 s` of the 64-token eval. That is material but still far below the full
+  `34.34 s` eval time.
+- Because A39 samples only 5 calls per shape and synchronizes for the sample, it identifies a real
+  suspect but does not yet prove total runtime attribution.
+
+Decision:
+
+- Do not promote. This is a diagnostic run and the probe source was reverted.
+- A40 should split the `nodes=19` no-graph MoE shape internally: time `MUL_MAT_ID` up/gate,
+  softmax/attention-adjacent ops, down `MUL_MAT_ID`, `MUL_MULTI_ADD`, and any stream wait or memory
+  movement around expert access. If the `nodes=19` inner split still cannot explain the remaining
+  time, move to deferred-expert memory movement/cache miss instrumentation.
