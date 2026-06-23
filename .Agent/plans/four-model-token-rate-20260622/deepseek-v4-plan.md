@@ -4931,3 +4931,26 @@ Decision:
 - rollback_status: no source changes were made; `git diff -- ggml/src` is empty. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
 - result_commit: `20e3ca4a0db78ffae8ee9e609a805982840078bb`
+
+### Planned Source Probe A84 - MoE OpenMP scheduling probe
+
+- goal: test source-level OpenMP/MoE scheduling alternatives under the accepted A80 attention-safe F8 dense CUDA path after A83 found no promotable runtime-only OpenMP configuration.
+- method: keep default behavior unchanged; add temporary env-gated `GGML_DEEPSEEK4_MOE_OMP_*` probes around the post-A80 CPU MoE `iqk_mul_mat_moe` path for decode shape `Ny=1`. Test compare logging, capped active outer workers, atomic active-expert scheduling, and serial single-region scheduling.
+- acceptance: source builds; default and compare quick runs exit 0; compare logs targeted calls with `max_abs_diff <= 1e-3` and `bad=0`; quick variants exit 0, keep graph_splits near 291, and show no CUDA/assert/NaN/Inf failures. Promote only if paired full repeats clear the S25 thresholds.
+- note: default accepted A80 behavior must remain unchanged when gates are absent. Do not run `git push`.
+
+### Source Probe Result A84 - MoE OpenMP scheduling probe
+
+- status: completed_unpromoted; accepted A80 source behavior unchanged after rollback.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a84-moe-openmp-source-probe`
+- input_commit: `8f4ba9d3`
+- source_probe_diff: `source_probe.diff` and corrected `source_probe_v2.diff`; final full temporary diff saved as `final_source_probe.diff` before rollback.
+- build_status: temporary env-gated source built successfully. Default binary was rebuilt again after rollback.
+- first_quick_note: the first probe was placed in the parallel-experts branch and did not emit A84 markers on this workload, showing that the accepted A80 run uses the fallback CPU IQK MoE path instead. Those logs are preserved as `quick_*.log` and `quick_metrics.tsv`; no result was promoted from that misplaced probe.
+- corrected_compare: `quick2_compare` exited `0`, graph_splits `291`, eval `5.14 tok/s`, emitted `256` A84 fallback compare markers, and reported `max_abs=0`, `bad=0`.
+- corrected_quick_results: default `5.15 tok/s`; inner_cap=1 `1.53`; inner_cap=2 `2.56`; inner_cap=4 `3.83`; outer_active `4.56`; single_region `1.52`. All corrected quick2 runs exited `0`, kept graph_splits `291`, and showed no CUDA/assert/NaN/Inf failures in summaries.
+- promotion_decision: not promoted. No source variant beat same-session default by `> 0.10 tok/s`; therefore paired full repeats were skipped per the S25 selection rule. The actual fallback-path probe shows that reducing active workers or replacing the current all-threads-per-expert fallback with outer/serial expert scheduling is much slower for this decode shape.
+- interpretation: A82's libgomp overhead is not solved by simply capping inner workers or moving to one-expert-per-worker scheduling in the fallback CPU MoE path. The current fallback path's per-expert use of all graph threads remains faster, despite OpenMP wait overhead.
+- next_concrete_optimization_candidate: inspect and optimize inside the MXFP4/Q8_2 helper itself (`mul_mat_qX_q8_Helper` / `MXFP4_Unpacker`) or reduce graph-level OpenMP barriers outside `iqk_mul_mat_moe`; avoid outer-active or serial expert scheduling for this workload unless a new batching design changes the work distribution.
+- rollback_status: temporary source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
+- pushed_commit: n/a; WiCi run forbids `git push`.
