@@ -119,6 +119,9 @@ PY
 - `attempt_start_utc`
 - `attempt_end_utc`
 - `wall_clock_elapsed`
+- `time_source` (`strict_attempt_files`, `bench_log`, `run_file_mtime`, `journal_timestamp`,
+  `git_commit_time`, or `historical_reconstruction`)
+- `time_confidence` (`strict`, `reliable_benchmark`, `audited_approximation`, or `missing`)
 - `benchmark_runtime` (`eval_ms`, `total_ms`, and/or `/usr/bin/time` elapsed)
 - `result_status` (`promoted`, `unpromoted`, `reverted`, `failed`, `needs-timing-audit`)
 - `promoted_commit` or explicit `n/a`
@@ -131,6 +134,10 @@ PY
 - Historical entries with `elapsed_since_start = n/a` must not be retroactively fabricated. Only
   recover elapsed values when `attempt_start_utc.txt`, log timestamps, `systemd` output, or commit
   timestamps provide a defensible source. Otherwise mark them as `historical timing missing`.
+- A result can be called `promoted` only when `time_confidence = strict` for the attempt that
+  established the improvement. Older A11/A13/A30/A31 records may keep their historical SOTA status,
+  but their timing status must remain `historical_reconstruction` rather than being rewritten as a
+  strict timer.
 
 ## Current 16 GB Baseline
 
@@ -1583,16 +1590,36 @@ Important distinction:
 These reconstructed values must be treated as `historical timing audited`, not as strict attempt
 timing. They must not be used to pretend the original process had complete timing metadata.
 
+### Timing Source Ledger
+
+| timing field | A11/A13 source | A30/A31 source | confidence | can satisfy future promotion rule? |
+| --- | --- | --- | --- | --- |
+| attempt start | `start_utc.txt` exists for the full validation runs only | missing; reconstructed from `run.sh` mtime for each run | audited approximation | no |
+| attempt end | `bench.log`/run-directory mtime after process exit | `bench.log`/run-directory mtime after process exit | audited approximation | no |
+| benchmark wall clock | `/usr/bin/time` line inside `bench.log` | `/usr/bin/time` line inside `bench.log` | reliable benchmark runtime | no, it is benchmark-only |
+| eval runtime | `llama_perf_context_print` in `bench.log` | `llama_perf_context_print` in `bench.log` | reliable benchmark metric | no, it is not whole-attempt elapsed |
+| promotion time | git commit timestamp | git commit timestamp | reliable commit timestamp | no, it is post-validation documentation time |
+| human/analysis elapsed | not recorded | not recorded | missing | no |
+
+The practical consequence is:
+
+- A11/A13/A30/A31 token-rate values are valid benchmark records.
+- Their benchmark runtime and run windows are auditable and are recorded below.
+- Their "from idea to confirmed improvement" wall-clock time is not strictly recoverable because no
+  `attempt_start_utc.txt` was written before the work.
+- Future results must not repeat this pattern: no strict attempt files means no promotion, even if
+  the token rate improves.
+
 ### Promoted/Key Baseline Timing Summary
 
-| attempt | scope | audited_start_utc | audited_end_utc | audited_elapsed | benchmark_wall_clock | eval tok/s | promotion / record commit |
-| --- | --- | --- | --- | ---: | --- | ---: | --- |
-| A11 | first strong full run, not 16GB strict | 2026-06-22T15:49:38Z | 2026-06-22T15:52:08Z | 150s | 2:30.39 | 1.81 | `e5a1fb8a` at 2026-06-22T15:54:43Z |
-| A13 | 16GB reproduced baseline | 2026-06-22T16:04:49Z | 2026-06-22T16:07:22Z | 153s | 2:32.43 | 1.79 | recorded around `82b49fcf` at 2026-06-22T16:09:28Z |
-| A30 short scan | MLA/FA scan, 4 short runs | 2026-06-23T02:37:22Z | 2026-06-23T02:40:25Z | 183s | per-run below | best short 1.81 | promoted later by `2cd600f6` |
-| A30 full validation + repeats | `-no-fa`, 3 full runs | 2026-06-23T02:41:00Z | 2026-06-23T02:51:53Z | 652s | per-run below | p50 1.86 | promote `2cd600f6` at 2026-06-23T02:45:43Z; repeats `22eb1640` at 2026-06-23T02:53:13Z |
-| A31 short scan | `-no-fa` thread scan, 4 short runs | 2026-06-23T02:53:51Z | 2026-06-23T02:56:43Z | 171s | per-run below | best short 1.93 | promoted later by `5a28463d` |
-| A31 full validation + repeats | `-no-fa -t 20 -tb 20`, 3 full runs | 2026-06-23T02:57:06Z | 2026-06-23T03:06:01Z | 534s | per-run below | p50 1.91 | promote `5a28463d` at 2026-06-23T03:00:50Z; repeats `62f803c2` at 2026-06-23T03:07:46Z |
+| attempt | scope | audited_start_utc | audited_end_utc | audited_elapsed | benchmark_wall_clock | eval tok/s | time_source | timing_status | promotion / record commit |
+| --- | --- | --- | --- | ---: | --- | ---: | --- | --- | --- |
+| A11 | first strong full run, not 16GB strict | 2026-06-22T15:49:38Z | 2026-06-22T15:52:08Z | 150s | 2:30.39 | 1.81 | `start_utc.txt` + `bench.log` mtime | historical reconstruction | `e5a1fb8a` at 2026-06-22T15:54:43Z |
+| A13 | 16GB reproduced baseline | 2026-06-22T16:04:49Z | 2026-06-22T16:07:22Z | 153s | 2:32.43 | 1.79 | `start_utc.txt` + `bench.log` mtime | historical reconstruction | recorded around `82b49fcf` at 2026-06-22T16:09:28Z |
+| A30 short scan | MLA/FA scan, 4 short runs | 2026-06-23T02:37:22Z | 2026-06-23T02:40:25Z | 183s | per-run below | best short 1.81 | `run.sh` mtime + `bench.log` mtime | historical reconstruction | promoted later by `2cd600f6` |
+| A30 full validation + repeats | `-no-fa`, 3 full runs | 2026-06-23T02:41:00Z | 2026-06-23T02:51:53Z | 652s | per-run below | p50 1.86 | `run.sh` mtime + `bench.log` mtime | historical reconstruction | promote `2cd600f6` at 2026-06-23T02:45:43Z; repeats `22eb1640` at 2026-06-23T02:53:13Z |
+| A31 short scan | `-no-fa` thread scan, 4 short runs | 2026-06-23T02:53:51Z | 2026-06-23T02:56:43Z | 171s | per-run below | best short 1.93 | `run.sh` mtime + `bench.log` mtime | historical reconstruction | promoted later by `5a28463d` |
+| A31 full validation + repeats | `-no-fa -t 20 -tb 20`, 3 full runs | 2026-06-23T02:57:06Z | 2026-06-23T03:06:01Z | 534s | per-run below | p50 1.91 | `run.sh` mtime + `bench.log` mtime | historical reconstruction | promote `5a28463d` at 2026-06-23T03:00:50Z; repeats `62f803c2` at 2026-06-23T03:07:46Z |
 
 ### Per-Run Historical Timing Details
 
@@ -1617,6 +1644,18 @@ timing. They must not be used to pretend the original process had complete timin
 
 ### Promotion Timing Derived From Audit
 
+- A11:
+  - full validation started from `start_utc.txt` at `2026-06-22T15:49:38Z`;
+  - full validation ended at `2026-06-22T15:52:08Z`;
+  - promotion commit `e5a1fb8a` landed at `2026-06-22T15:54:43Z`, about `155s` after the
+    validation run ended;
+  - strict attempt elapsed is still missing because no pre-attempt metadata file was written before
+    the thread-count sweep began.
+- A13:
+  - 16 GB validation started from `start_utc.txt` at `2026-06-22T16:04:49Z`;
+  - validation ended at `2026-06-22T16:07:22Z`;
+  - record commit `82b49fcf` landed at `2026-06-22T16:09:28Z`, about `126s` after validation ended;
+  - strict attempt elapsed is missing for the same reason as A11.
 - A30:
   - first promising scan result (`-no-fa`, n64) finished at `2026-06-23T02:40:25Z`;
   - first full validation finished at `2026-06-23T02:43:26Z`;
@@ -1639,3 +1678,102 @@ Audit conclusion:
   not created at the start of the original attempts.
 - From A32 onward, strict timing exists. From the workflow update onward, missing timing blocks
   promotion.
+
+### 2026-06-23 - Planned Optimization Attempt A38: CUDA Graph Shape GPU-Time Sampling
+
+- attempt_id: `deepseek-v4-a38-cuda-graph-gpu-sampling`
+- hypothesis: A37 showed 40000 CUDA graph compute calls are dominated by tiny graph shapes
+  (`CONCAT`, norm, fused unary, attention fragments), while MoE graph shapes are only `402` calls.
+  Count alone is insufficient. A38 samples actual CUDA elapsed time for stable CUDA-graph launches
+  grouped by the same op-class graph shape. This should identify whether the hot-by-count tiny
+  graph splits also dominate GPU time.
+- planned changes: temporary default-off instrumentation behind
+  `GGML_DEEPSEEK4_GRAPH_SAMPLE=1` in `ggml_backend_cuda_graph_compute()`. It will:
+  - build the same op-class graph shape key as A37;
+  - sample only `use_cuda_graph && !cuda_graph_update_required` launches, avoiding graph capture
+    and update paths;
+  - take at most a small bounded number of CUDA event samples per graph shape;
+  - print aggregate sample counts and sampled GPU milliseconds before process exit.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_SAMPLE=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric: identify top graph shapes by sampled GPU time. If `CONCAT`/norm fragments have
+  material GPU time, A39 should reduce/fuse those graph splits. If attention shapes dominate, A39
+  should focus attention/MLA path instead.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a38-cuda-graph-gpu-sampling/journal.log`.
+
+### 2026-06-23 04:39Z - A38 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T04:35:23Z`
+- attempt_end_utc: `2026-06-23T04:39:17Z`
+- wall_clock_elapsed: `234 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `journal.log`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, source reverted`
+- promoted_commit: `n/a`
+
+Implementation:
+
+- Added temporary default-off CUDA graph sampling behind `GGML_DEEPSEEK4_GRAPH_SAMPLE=1`.
+- Sampled only stable graph launches where `use_cuda_graph = true` and
+  `cuda_graph_update_required = false`.
+- Grouped graph shapes by op-class key rather than tensor names to avoid unbounded key growth.
+- Reverted the probe source after the run and rebuilt the default `llama-cli`.
+- Source probe diff was preserved at
+  `/root/lfz/runs/ik_llama/deepseek-v4-a38-cuda-graph-gpu-sampling/source_probe.diff`.
+
+Command shape:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_SAMPLE=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a38-cuda-graph-gpu-sampling/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a38-cuda-graph-gpu-sampling/journal.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a38-cuda-graph-gpu-sampling/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3744.82 ms / 5 tokens = 1.34 tok/s`
+- eval: `40929.14 ms / 63 runs = 1.54 tok/s`
+- `/usr/bin/time` wall clock: `0:51.43`
+- max RSS from `/usr/bin/time`: `6344 KB`
+
+Sampling output:
+
+```text
+[deepseek4_graph_sample] unique_shapes=16 total_calls=40000 total_samples=66 total_sampled_ms=3.990
+[deepseek4_graph_sample_top] rank=1 calls=63 use_graph=63 no_graph=0 updates=1 samples=5 sampled_ms=3.354 avg_sample_ms=0.671 shape=nodes=4 first_op=ADD last_op=MUL_MAT concat=0 norm=1 mul_mat_id=0 mul_multi_add=0 mul_mat=1 flash_attn=0 soft_max=0
+[deepseek4_graph_sample_top] rank=2 calls=2881 use_graph=2881 no_graph=0 updates=129 samples=5 sampled_ms=0.139 avg_sample_ms=0.028 shape=nodes=24 first_op=FUSED_RMS_NORM last_op=CONT concat=1 norm=1 mul_mat_id=0 mul_multi_add=0 mul_mat=2 flash_attn=0 soft_max=1
+[deepseek4_graph_sample_top] rank=10 calls=17286 use_graph=17286 no_graph=0 updates=258 samples=5 sampled_ms=0.034 avg_sample_ms=0.007 shape=nodes=3 first_op=CONCAT last_op=CONCAT concat=1 norm=0 mul_mat_id=0 mul_multi_add=0 mul_mat=0 flash_attn=0 soft_max=0
+[deepseek4_graph_sample_top] rank=15 calls=201 use_graph=0 no_graph=201 updates=201 samples=0 sampled_ms=0.000 avg_sample_ms=0.000 shape=nodes=19 first_op=ADD last_op=MUL_MULTI_ADD concat=0 norm=1 mul_mat_id=3 mul_multi_add=1 mul_mat=1 flash_attn=0 soft_max=1
+[deepseek4_graph_sample_top] rank=16 calls=201 use_graph=0 no_graph=201 updates=201 samples=0 sampled_ms=0.000 avg_sample_ms=0.000 shape=nodes=20 first_op=ADD last_op=MUL_MULTI_ADD concat=0 norm=1 mul_mat_id=3 mul_multi_add=1 mul_mat=1 flash_attn=0 soft_max=1
+```
+
+Interpretation:
+
+- Stable CUDA graph GPU time is too small to explain the 35-40s eval runtime. The bounded samples
+  total only `3.990 ms`.
+- The graph shapes that dominate call count in A37, especially `CONCAT`, average only
+  `0.005-0.007 ms` in sampled stable CUDA graph launches.
+- The heaviest sampled stable graph shape averages `0.671 ms`, but it appears only `63` times.
+- The two MoE graph shapes with `mul_mat_id=3` are `no_graph` and were intentionally not sampled by
+  A38. They still appear as `201 + 201` calls and remain the next suspect.
+- Combined with A35/A36, the main bottleneck is unlikely to be isolated MXFP4 matvec kernel bodies,
+  CUDA graph host bookkeeping, or stable CUDA graph GPU launches. The next probe should time the
+  full `use_cuda_graph = false` MoE graph execution path, including scheduler overhead, surrounding
+  ops, memory movement, and waits.
+
+Decision:
+
+- Do not promote. This is a diagnostic run and the probe source was reverted.
+- A39 should sample/timestamp no-graph MoE shapes end-to-end, especially the `nodes=19/20`
+  `ADD -> MUL_MULTI_ADD` shapes with `mul_mat_id=3`. If those are still small, move outward to
+  outer scheduler split orchestration and deferred-expert memory movement.
