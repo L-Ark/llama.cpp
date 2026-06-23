@@ -2298,3 +2298,122 @@ Decision:
 - A44 must report cache lookup count, hit/miss count, insert count, evictions, wait time, copy time,
   and separate up/gate vs down tensor families. This is needed before changing cache policy or
   memory placement.
+
+### 2026-06-23 07:07Z - A44 Superseded Before Source Edits
+
+Timing:
+
+- attempt_id: `deepseek-v4-a44-cache-lookup-insert-timing`
+- attempt_start_utc: `2026-06-23T06:59:47Z`
+- attempt_end_utc: `2026-06-23T07:07:11Z`
+- wall_clock_elapsed: `444 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `aborted_by_priority_shift.txt`
+- time_confidence: `strict`
+- result_status: `superseded, no source edits, no benchmark`
+- promoted_commit: `n/a`
+
+Decision:
+
+- User priority changed to filling RAM/VRAM caches first:
+  "尽可能将 RAM（16GB） 和 VRAM 填满（如 preload 更多专家），通过把 cache hit 提高来提升速度".
+- Stop A44 before modifying source. Keep the run directory as an audit record only.
+- Move immediately to a cache-fill sweep. Source instrumentation remains useful only if cache-fill
+  experiments do not expose hit-rate or throughput changes clearly enough.
+
+### 2026-06-23 - Planned Optimization Attempt A45: VRAM/RAM Cache Fill Sweep
+
+- attempt_id: `deepseek-v4-a45-vram-ram-cache-fill-sweep`
+- attempt_start_utc: `2026-06-23T07:07:33Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- user objective: under the required 16GB host RAM limit, fill VRAM and host RAM caches as much as
+  practical by preloading more routed experts, then promote immediately if token rate improves.
+- hypothesis:
+  - A31 uses a large dynamic VRAM cache cap but no explicit hot expert profile preload.
+  - Reusing the existing fastllm hotset profiles after converting them to ik_llama's CSV profile
+    schema may reduce cold expert loads and raise hit rate.
+  - Host RAM tier should also be tested, but ik_llama's RAM tier appears to require
+    `GGML_MOE_EXPERT_PACK`; no DeepSeek V4 expert-pack file has been found yet. Therefore A45
+    starts with VRAM profile preload, then tests RAM only if an expert pack or equivalent path is
+    available.
+- generated inputs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a45-vram-ram-cache-fill-sweep/vram7g.ik_profile.csv`
+    - source: `/root/lfz/fastllm_runs/route-br5-vram-fill/vram-profile-wide-7g.tsv`
+    - rows: `1569`
+    - logical size: `6.512 GiB`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a45-vram-ram-cache-fill-sweep/ram6g.ik_profile.csv`
+    - source:
+      `/root/lfz/fastllm_runs/route-m-multitrace-ram-profile-current-build-20260616-171659/ram-profile-decode-hot-6g-multitrace.tsv`
+    - rows: `1443`
+    - logical size: `5.989 GiB`
+- first run command shape:
+  - env: A31 baseline env plus:
+    - `GGML_MOE_VRAM_PROFILE=<run_dir>/vram7g.ik_profile.csv`
+    - `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+    - `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=5`
+  - keep `GGML_MOE_RAM_TIER_MIB=0` for the first pass, to isolate VRAM profile preload.
+  - flags: A31 baseline flags, first with `-n 64`, then full `-n 256` if promising.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- promotion gate:
+  - Full `-n 256` p50 must exceed A31 p50 `1.91 tok/s` and should ideally exceed fastllm `1.94 tok/s`.
+  - Log must include strict attempt timing metadata.
+  - If improved, commit and push immediately.
+- fallback:
+  - If profile preload is too small or does not activate, adjust cache/profile envs before source
+    edits:
+    - increase `GGML_MOE_VRAM_CACHE_MIB`;
+    - reduce `GGML_MOE_VRAM_PROFILE_RESERVE_PCT`;
+    - test `GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT=1`;
+    - then investigate RAM tier expert-pack generation.
+
+### 2026-06-23 07:xxZ - A45 Cache Fill Findings and Space Cleanup
+
+Preliminary A45 results:
+
+- `GGML_MOE_VRAM_PROFILE` alone did not trigger startup preload in non-interactive `llama-cli`.
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a45-vram-ram-cache-fill-sweep/bench-vram7g-profile-n64.log`
+  - result: `1.71 tok/s`, no `[moe_stream_batch]` cache/preload report.
+- Enabling the non-chat startup preload path with
+  `LLAMA_PROMPT_STARTUP_PROFILE_PRELOAD=1` reached the preload function but loaded zero entries:
+  - log:
+    `/root/lfz/runs/ik_llama/deepseek-v4-a45-vram-ram-cache-fill-sweep/bench-vram7g-startup-preload-n64.log`
+  - key line: `[chat] startup profile preload: loaded 0/1569 entries from 111 tensors`
+  - result: `1.77 tok/s`, still below A31.
+- Interpretation: current DeepSeek V4 run uses deferred expert tensors whose ordinary tensor
+  `data` pointers are not available to the startup preload path. The path also cannot use
+  `ggml_cuda_moe_stream_preload_expert_from_pack_async` because no DeepSeek V4 `.expert-pack`
+  sidecar existed.
+
+Cleanup to unblock expert-pack creation:
+
+- User authorized deleting `/root/lfz/models/MiniMax-M3-UD-IQ3_XXS`.
+- Deleted size: `149G`.
+- Disk free after deletion: `233G` on `/root/lfz`.
+- This makes it possible to generate a DeepSeek V4 expert-pack sidecar for the existing GGUF:
+  `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`.
+
+### 2026-06-23 - Planned Artifact Attempt A46: Create DeepSeek V4 Expert Pack
+
+- attempt_id: `deepseek-v4-a46-create-expert-pack`
+- attempt_start_utc: recorded in
+  `/root/lfz/runs/ik_llama/deepseek-v4-a46-create-expert-pack/attempt_start_utc.txt`
+- baseline_commit: `c21b9618d1f79c7b20c17ad1b6311ec00128ad20`
+- objective: create a `GGMLMOEPACKv1` sidecar for DeepSeek V4 expert tensors so that follow-up
+  runs can use:
+  - `GGML_MOE_EXPERT_PACK`
+  - `GGML_MOE_IO_BACKEND=iouring` or `direct`
+  - `GGML_MOE_RAM_TIER_MIB` / `GGML_MOE_RAM_TIER_PROFILE`
+  - startup expert-row preload from profile
+- command shape:
+  - `python3 scripts/create-moe-expert-pack.py <DeepSeek GGUF> -o <DeepSeek expert-pack> --align 4096`
+- expected output:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`
+- success checks:
+  - pack creation exits `0`;
+  - inspect mode reports nonzero entries and expected payload size;
+  - free disk remains sufficient for follow-up benchmark logs;
+  - strict timing files are written.
+- next benchmark after pack creation:
+  - A31 base flags under `MemoryMax=16G`, plus expert-pack/iouring/RAM-tier envs;
+  - first short `-n 64`, then full `-n 256` if token rate is promising;
+  - promote only if full `-n 256` beats A31 p50 `1.91 tok/s`.
