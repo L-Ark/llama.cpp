@@ -4552,5 +4552,6 @@ Decision:
   - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
 - next direction:
   - Implementing a true improvement requires a new MXFP4/Q8_2_x4 inner helper or lower-overhead helper scheduling inside `iqk_mul_mat_moe`; wrapper-level routing and row-mapping shortcuts have now been ruled out.
+- result_commit: `65922bb9efe0a70ad5d1bb1ff56178c481970090`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
