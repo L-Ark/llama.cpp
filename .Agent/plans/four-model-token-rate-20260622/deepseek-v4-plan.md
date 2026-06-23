@@ -3034,6 +3034,71 @@ Decision:
   - No source changes are expected for A56.
   - Do not promote profiler output as a performance change.
 
+### 2026-06-23 09:54Z - A56 Result: CPU Samples Dominated By `libgomp` Runtime Wait/Barrier
+
+- attempt_id: `deepseek-v4-a56-perf-cpu-hotspot-profile`
+- status: `unpromoted diagnostic, no source changes`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `2022b71d1051dae7ca30eeb409f1235f0630f255`
+- attempt_start_utc: `2026-06-23T09:54:11Z`
+- attempt_end_utc: `2026-06-23T09:54:58Z`
+- wall_clock_elapsed: `47s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a56-perf-cpu-hotspot-profile`
+- profiler artifacts:
+  - `perf.data`: `6.1M`
+  - `perf.report.nochildren.txt`: `575K`
+  - `perf.report.children.txt`: `2.7M`
+- benchmark result:
+  - load time: `8281.72 ms`
+  - prompt eval: `3240.19 ms / 5 tokens = 1.54 tok/s`
+  - eval: `36117.86 ms / 63 runs = 1.74 tok/s`
+  - total: `44426.60 ms / 68 tokens`
+  - service runtime: `47.018s`
+  - service CPU time: `13min 8.474s`
+  - perf captured `78064` samples with no lost samples.
+- top CPU samples:
+  - no-children report: `88.83%` in `libgomp.so.1.0.0` internal symbol at offset `0x23f12`.
+  - children report: `89.18%` under the same `libgomp` internal location.
+  - `5.13%` under `cudaMemcpyAsync`, mostly `cuMemcpyDtoHAsync_v2` through
+    `ggml_backend_cuda_buffer_get_tensor`.
+  - only `1.91%` self in `libggml.so` MXFP4/Q8 helper:
+    `mul_mat_qX_q8_Helper<MXFP4_Unpacker,...>` / `mul_mat_qX_1_q8_2_T<MXFP4_Unpacker,6>`.
+- interpretation:
+  - The dominant CPU cost is OpenMP/libgomp runtime waiting/spinning/barrier behavior, not the
+    MXFP4 math helper itself.
+  - This explains why source-level CUDA and op construction probes did not find a large bucket: most
+    CPU cycles are being burned by thread scheduling/wait behavior around many small graph/split work
+    units.
+  - The next attempt should test OpenMP wait/spin policy and thread count, because reducing busy-wait
+    overhead may improve effective decode or at least expose the next real bottleneck.
+- decision:
+  - Do not promote A56 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A57 should be a no-source configuration sweep around OpenMP wait policy and thread count.
+
+### 2026-06-23 - Planned Config Attempt A57: Reduce `libgomp` Spin/Barrier Overhead
+
+- attempt_id: `deepseek-v4-a57-openmp-wait-policy-sweep`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - A56 shows nearly `89%` of CPU samples in `libgomp` runtime internals, likely wait/barrier/spin.
+- hypothesis:
+  - Current `-t 20 -tb 20` with default libgomp spin policy wastes CPU on many tiny graph/split tasks.
+  - `OMP_WAIT_POLICY=PASSIVE` and/or `GOMP_SPINCOUNT=0` may reduce busy wait and improve wall time.
+  - If passive waiting hurts latency, a smaller thread count (`-t 12` or `-t 16`) may reduce barrier
+    overhead while preserving enough CPU parallelism.
+- planned runs:
+  - A57a: A31 flags/env plus `OMP_WAIT_POLICY=PASSIVE`, `GOMP_SPINCOUNT=0`, keep `-t 20 -tb 20`.
+  - A57b: if A57a regresses, try `-t 16 -tb 16` with default OpenMP policy.
+  - A57c: if A57b is close, try `-t 12 -tb 12`.
+- success metric:
+  - Promote only if repeated `-n 256` run exceeds A31 p50 by `> 0.01 tok/s` and worst run is not below
+    A31 worst by more than noise.
+  - A quick `-n 64` run may be used as a filter before full repeat.
+- rollback condition:
+  - Config-only attempt; no source rollback needed.
+  - If no run beats A31, keep A31 as SOTA and record all failed variants.
+
 ### 2026-06-23 09:46Z - A54 Result: CUDA Graph Launch/Sync Is Not The Missing Runtime
 
 - attempt_id: `deepseek-v4-a54-cuda-graph-sync-attribution`
