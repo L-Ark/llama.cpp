@@ -4978,3 +4978,4 @@ Decision:
 - next_concrete_optimization_candidate: stop lower-level scheduling/partitioning probes for this path unless a new design changes work granularity; move to a different accepted-scope route such as reducing graph-level barriers/copies outside the helper, CUDA-offloading a quality-safe additional class, or deeper SIMD/kernel optimization inside `mul_mat_qX_q8_Helper` without changing thread partitioning.
 - rollback_status: temporary helper source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
+- result_commit: `a3a8d025877243af42f3c3a2b93b8a2d895c4d66`
