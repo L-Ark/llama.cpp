@@ -2633,3 +2633,31 @@ Logs:
 - `/root/lfz/runs/ik_llama/deepseek-v4-a47-expert-pack-iouring-n64/bench.log`
 - `/root/lfz/runs/ik_llama/deepseek-v4-a47b-expert-pack-iouring-n256/bench.log`
 - `/root/lfz/runs/ik_llama/deepseek-v4-a47c-expert-pack-iouring-n256-repeat2/bench.log`
+
+### 2026-06-23 - Planned Optimization Attempt A48: Expert-Pack Runtime Proof
+
+- attempt_id: `deepseek-v4-a48-expert-pack-trace-n8`
+- baseline for rollback: A31 p50 `1.91 tok/s`.
+- attempt kind: `source-probe` plus short diagnostic benchmark.
+- hypothesis:
+  - A47 passed `GGML_MOE_EXPERT_PACK`, but logs did not show expert-pack init/counters.
+  - A short run with `GGML_MOE_TTFT_TRACE_OUT` should reveal whether the fused MoE path calls
+    `expert_pack_lookup()` and whether cache copy events have `pack_entry` data.
+  - If no init/counter/trace evidence appears, the expert-pack env is ineffective for the current
+    DeepSeek V4 path and cache-fill tuning must pause until runtime wiring is fixed.
+- config:
+  - A31 env/flags plus A47 expert-pack/io_uring env.
+  - Add `GGML_MOE_TTFT_TRACE_OUT=/root/lfz/runs/ik_llama/deepseek-v4-a48-expert-pack-trace-n8/ttft_trace.tsv`.
+  - Add `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`.
+  - Use `-n 8` to keep this diagnostic cheap.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- expected logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a48-expert-pack-trace-n8/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a48-expert-pack-trace-n8/ttft_trace.tsv`
+  - strict attempt timing files.
+- success metric:
+  - stderr contains at least one `[moe_stream_batch] expert pack: loaded ...` line or atexit counter
+    line, and/or TTFT trace shows pack-backed copies.
+- rollback condition:
+  - If no expert-pack evidence appears, do not promote; record as diagnostic failure and inspect/fix
+    `moe_stream_batch.cu` wiring before further RAM/VRAM fill attempts.
