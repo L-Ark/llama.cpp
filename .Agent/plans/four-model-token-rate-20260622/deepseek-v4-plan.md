@@ -787,3 +787,31 @@ Apply previous-task routes in this order:
   capture/reuse in this build. `GGML_CUDA_EAGER_CUBLAS=1` was a clear regression.
 - Decision: do not promote. If graph-disable remains interesting, it needs an explicit source
   change to wire a supported runtime switch; otherwise proceed to fused MoE code-level work.
+
+### 2026-06-23 14:20Z - Optimization Attempt A23: Explicit Graph-Reuse Disable Scan
+
+- Finding: A22 used `GGML_CUDA_DISABLE_GRAPHS=1`, but logs still reported CUDA graph objects. Source
+  reading shows two more explicit controls: CLI `-no-gr` disables llama graph reuse, and
+  `-cuda use-cuda-graph=0` sets `ctx->use_cuda_graph = false` in the CUDA backend.
+- Hypothesis: true graph reuse / CUDA graph disablement may change decode latency for DeepSeek's
+  fused MoE path. Test the explicit switches before moving to kernel changes.
+- Change to try: no source changes, no new model files. Run 64-token probes:
+  - A23a: `EXTRA_ARGS="-ub 1 -t 24 -tb 24 -no-gr"`
+  - A23b: `EXTRA_ARGS="-ub 1 -t 24 -tb 24 -cuda use-cuda-graph=0"`
+  - A23c: both flags together.
+- Success metric: short-run `eval_tok_s > 1.82` before any full validation. Full validation must
+  beat A13 (`1.79 tok/s`) by more than `0.01 tok/s` under `MEMORY_MAX=16G` before promotion.
+- Rollback condition: speed <= control or instability means do not promote.
+
+#### A23 Result
+
+- A23a `-no-gr`: exited code `0`, `eval_tok_s = 0.56`, `graph_reuse = 0`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a23a-_no_gr-n64/bench.log`.
+- A23b `-cuda use-cuda-graph=0`: exited code `0`, `eval_tok_s = 1.69`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a23b-_cuda_use_cuda_graph_0-n64/bench.log`.
+- A23c both flags: exited code `0`, `eval_tok_s = 0.59`, `graph_reuse = 0`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a23c-_no_gr__cuda_use_cuda_graph_0-n64/bench.log`.
+- Diagnosis: graph reuse is critical for this DeepSeek V4 path. Disabling llama graph reuse causes
+  a severe decode regression, and disabling backend CUDA graph use alone is also slower.
+- Decision: do not promote. Keep graph reuse/CUDA graphs enabled and focus source-level work on
+  optimizing the fused MoE / CUDA `mul_mat_id` path with graph reuse intact.
