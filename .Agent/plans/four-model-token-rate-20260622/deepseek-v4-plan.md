@@ -1472,3 +1472,170 @@ Decision:
   should identify which graph launches consume the tens of seconds of eval time. The current best
   hypothesis is that non-MoE GPU work, full-graph execution, or many small graph launches dominate,
   not the isolated MoE MXFP4 kernels or graph host bookkeeping.
+
+### 2026-06-23 - Planned Optimization Attempt A37: CUDA Graph Shape Histogram
+
+- attempt_id: `deepseek-v4-a37-cuda-graph-shape-histogram`
+- hypothesis: A36 showed `40596` CUDA backend graph compute calls for one 64-token run. The next
+  bottleneck may be many repeated small graph launches or a small number of hot graph shapes whose
+  GPU execution dominates. We need a graph shape histogram before choosing an optimization.
+- planned changes: temporary default-off instrumentation behind
+  `GGML_DEEPSEEK4_GRAPH_HISTO=1` in `ggml_backend_cuda_graph_compute()`. It will aggregate graph
+  shapes by node count plus first/last node op/name. It may sample a bounded number of CUDA event
+  timings, but must avoid synchronizing every graph launch.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_HISTO=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric: print top graph shapes by count and sampled GPU time, enough to decide whether
+  A38 should reduce graph count, merge graph shapes, or optimize a specific op group.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a37-cuda-graph-shape-histogram/journal.log`.
+
+#### Result
+
+- attempt_start_utc: `2026-06-23T04:14:04Z`
+- attempt_end_utc: `2026-06-23T04:27:50Z`
+- wall_clock_elapsed: `826 seconds`
+- result_status: `diagnostic, unpromoted, reverted`
+- promoted_commit: `n/a`
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a37-cuda-graph-shape-histogram/attempt_meta.env`
+- Source probe diff:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a37-cuda-graph-shape-histogram/source_probe.diff`
+- Parsed summary:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a37-cuda-graph-shape-histogram/parsed_summary.json`
+- Build status:
+  - diagnostic build succeeded;
+  - diagnostic source was reverted with `git restore ggml/src/ggml-cuda.cu`;
+  - default `llama-cli` was rebuilt successfully after revert.
+
+Notes:
+
+- First histogram version used node names in the key and then attempted to report at process exit.
+  It failed after the benchmark completed with `std::bad_alloc`, so it was not used as the final
+  evidence.
+- Second histogram version printed at the 40000th graph compute call and grouped by op class rather
+  than node name. That is the usable diagnostic evidence.
+
+Diagnostic run:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_HISTO=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- final log: `/root/lfz/runs/ik_llama/deepseek-v4-a37-cuda-graph-shape-histogram/retry3-opclass/journal.log`
+- benchmark runtime:
+  - eval: `34752.23 ms / 63 runs = 1.81 tok/s`
+
+Graph histogram summary at the 40000th CUDA graph compute call:
+
+```text
+[deepseek4_graph_histo] unique_shapes=16 total_calls=40000
+rank=1 calls=17286 shape=nodes=3 first_op=CONCAT last_op=CONCAT
+rank=2 calls=2949  shape=nodes=1 first_op=FUSED_RMS_NORM last_op=FUSED_RMS_NORM
+rank=3 calls=2881  shape=nodes=1 first_op=CONCAT last_op=CONCAT
+rank=4 calls=2881  shape=nodes=24 first_op=FUSED_RMS_NORM last_op=CONT mul_mat=2 soft_max=1
+rank=5 calls=2881  shape=nodes=5 first_op=RMS_NORM last_op=CONCAT
+rank=6 calls=2877  shape=nodes=1 first_op=FUSED_MUL_UNARY last_op=FUSED_MUL_UNARY
+rank=7 calls=2814  shape=nodes=3 first_op=ADD last_op=FUSED_RMS_NORM
+rank=8 calls=2475  shape=nodes=1 first_op=MUL_MULTI_ADD last_op=MUL_MULTI_ADD
+rank=9 calls=2412  shape=nodes=15 first_op=ADD last_op=SCALE mul_mat=1 soft_max=1
+rank=10 calls=201  shape=nodes=19 first_op=ADD last_op=MUL_MULTI_ADD mul_mat_id=3 mul_multi_add=1 mul_mat=1 soft_max=1 no_graph=201
+rank=11 calls=201  shape=nodes=20 first_op=ADD last_op=MUL_MULTI_ADD mul_mat_id=3 mul_multi_add=1 mul_mat=1 soft_max=1 no_graph=201
+```
+
+Interpretation:
+
+- The decode path is split into many very small CUDA graph compute calls. By count, the hottest
+  graph shapes are not the MoE `MUL_MAT_ID` shapes; they are tiny `CONCAT`, norm, fused unary, and
+  small attention-related graph splits.
+- The MoE shape with `mul_mat_id=3` appears in two variants with `201 + 201 = 402` calls, matching
+  the A33/A35 MoE occurrence count. These calls are not CUDA-graph reused (`no_graph=201` for each
+  variant), but A36 showed their host-side direct eval loop is still only hundreds of milliseconds.
+- The stronger optimization target is now graph fragmentation / many tiny graph splits, especially
+  the thousands of single-op `CONCAT`, norm, fused unary, and `MUL_MULTI_ADD` graph calls.
+
+Decision:
+
+- Do not promote diagnostic source. It was reverted and the default binary was rebuilt.
+- Next direction: A38 should reduce graph split count or fuse/drop redundant tiny graph splits. The
+  first low-risk candidate is to investigate why `CONCAT` dominates (`17286 + 2881` calls by the
+  40000th compute call) and whether these are real kernels, views/copies, or scheduler artifacts
+  that can be fused with neighboring nodes.
+
+## Historical Timing Audit For Pre-Protocol Improvements
+
+This audit answers why older rows had `elapsed_since_start = n/a` and records the best recoverable
+times for the key promoted improvements before the strict attempt timing protocol was introduced.
+
+Important distinction:
+
+- `strict_attempt_timer`: missing for A30/A31 because no `attempt_start_utc.txt` and
+  `attempt_end_utc.txt` were created before the work.
+- `benchmark_wall_clock`: reliable, from `/usr/bin/time` in `bench.log`.
+- `run_window`: audit reconstruction from `run.sh` mtime or `start_utc.txt` to
+  `exit_code.txt`/`bench.log` mtime.
+- `promotion_commit_time`: reliable git commit timestamp, but it measures documentation/push time,
+  not the start of thinking or manual analysis.
+
+These reconstructed values must be treated as `historical timing audited`, not as strict attempt
+timing. They must not be used to pretend the original process had complete timing metadata.
+
+### Promoted/Key Baseline Timing Summary
+
+| attempt | scope | audited_start_utc | audited_end_utc | audited_elapsed | benchmark_wall_clock | eval tok/s | promotion / record commit |
+| --- | --- | --- | --- | ---: | --- | ---: | --- |
+| A11 | first strong full run, not 16GB strict | 2026-06-22T15:49:38Z | 2026-06-22T15:52:08Z | 150s | 2:30.39 | 1.81 | `e5a1fb8a` at 2026-06-22T15:54:43Z |
+| A13 | 16GB reproduced baseline | 2026-06-22T16:04:49Z | 2026-06-22T16:07:22Z | 153s | 2:32.43 | 1.79 | recorded around `82b49fcf` at 2026-06-22T16:09:28Z |
+| A30 short scan | MLA/FA scan, 4 short runs | 2026-06-23T02:37:22Z | 2026-06-23T02:40:25Z | 183s | per-run below | best short 1.81 | promoted later by `2cd600f6` |
+| A30 full validation + repeats | `-no-fa`, 3 full runs | 2026-06-23T02:41:00Z | 2026-06-23T02:51:53Z | 652s | per-run below | p50 1.86 | promote `2cd600f6` at 2026-06-23T02:45:43Z; repeats `22eb1640` at 2026-06-23T02:53:13Z |
+| A31 short scan | `-no-fa` thread scan, 4 short runs | 2026-06-23T02:53:51Z | 2026-06-23T02:56:43Z | 171s | per-run below | best short 1.93 | promoted later by `5a28463d` |
+| A31 full validation + repeats | `-no-fa -t 20 -tb 20`, 3 full runs | 2026-06-23T02:57:06Z | 2026-06-23T03:06:01Z | 534s | per-run below | p50 1.91 | promote `5a28463d` at 2026-06-23T03:00:50Z; repeats `62f803c2` at 2026-06-23T03:07:46Z |
+
+### Per-Run Historical Timing Details
+
+| run | start source | audited_start_utc | audited_end_utc | run_window | benchmark_wall_clock | eval_ms | eval tok/s | log |
+| --- | --- | --- | --- | ---: | --- | ---: | ---: | --- |
+| `deepseek-v4-a11-t24-full` | `start_utc.txt` | 2026-06-22T15:49:38Z | 2026-06-22T15:52:08Z | 150s | 2:30.39 | 140604.99 | 1.81 | `/root/lfz/runs/ik_llama/deepseek-v4-a11-t24-full/bench.log` |
+| `deepseek-v4-a13-t24-full-16g` | `start_utc.txt` | 2026-06-22T16:04:49Z | 2026-06-22T16:07:22Z | 153s | 2:32.43 | 142585.35 | 1.79 | `/root/lfz/runs/ik_llama/deepseek-v4-a13-t24-full-16g/bench.log` |
+| `deepseek-v4-a30-mla0-n64` | `run.sh` mtime | 2026-06-23T02:37:22Z | 2026-06-23T02:38:09Z | 46s | 0:46.87 | 37180.69 | 1.69 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla0-n64/bench.log` |
+| `deepseek-v4-a30-mla1-n64` | `run.sh` mtime | 2026-06-23T02:38:09Z | 2026-06-23T02:38:55Z | 45s | 0:45.89 | 36339.86 | 1.73 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla1-n64/bench.log` |
+| `deepseek-v4-a30-mla2-n64` | `run.sh` mtime | 2026-06-23T02:38:55Z | 2026-06-23T02:39:41Z | 45s | 0:45.91 | 36353.87 | 1.73 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-mla2-n64/bench.log` |
+| `deepseek-v4-a30-no-fa-n64` | `run.sh` mtime | 2026-06-23T02:39:41Z | 2026-06-23T02:40:25Z | 44s | 0:44.12 | 34749.26 | 1.81 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n64/bench.log` |
+| `deepseek-v4-a30-no-fa-n256` | `run.sh` mtime | 2026-06-23T02:41:00Z | 2026-06-23T02:43:26Z | 146s | 2:26.26 | 136938.24 | 1.86 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256/bench.log` |
+| `deepseek-v4-a30-no-fa-n256-repeat2` | `run.sh` mtime | 2026-06-23T02:46:10Z | 2026-06-23T02:48:41Z | 151s | 2:31.12 | 141823.59 | 1.80 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat2/bench.log` |
+| `deepseek-v4-a30-no-fa-n256-repeat3` | `run.sh` mtime | 2026-06-23T02:49:28Z | 2026-06-23T02:51:53Z | 144s | 2:24.67 | 135513.14 | 1.88 | `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat3/bench.log` |
+| `deepseek-v4-a31-no-fa-t20-n64` | `run.sh` mtime | 2026-06-23T02:53:51Z | 2026-06-23T02:54:33Z | 41s | 0:41.79 | 32692.53 | 1.93 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n64/bench.log` |
+| `deepseek-v4-a31-no-fa-t24-n64` | `run.sh` mtime | 2026-06-23T02:54:33Z | 2026-06-23T02:55:15Z | 42s | 0:42.27 | 33219.04 | 1.90 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t24-n64/bench.log` |
+| `deepseek-v4-a31-no-fa-t28-n64` | `run.sh` mtime | 2026-06-23T02:55:15Z | 2026-06-23T02:55:58Z | 42s | 0:42.66 | 33656.95 | 1.87 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t28-n64/bench.log` |
+| `deepseek-v4-a31-no-fa-t32-n64` | `run.sh` mtime | 2026-06-23T02:55:58Z | 2026-06-23T02:56:43Z | 44s | 0:44.65 | 35166.65 | 1.79 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t32-n64/bench.log` |
+| `deepseek-v4-a31-no-fa-t20-n256` | `run.sh` mtime | 2026-06-23T02:57:06Z | 2026-06-23T02:59:30Z | 143s | 2:23.51 | 134377.09 | 1.90 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log` |
+| `deepseek-v4-a31-no-fa-t20-n256-repeat2` | `run.sh` mtime | 2026-06-23T03:01:17Z | 2026-06-23T03:03:39Z | 142s | 2:22.56 | 133327.12 | 1.91 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat2/bench.log` |
+| `deepseek-v4-a31-no-fa-t20-n256-repeat3` | `run.sh` mtime | 2026-06-23T03:03:39Z | 2026-06-23T03:06:01Z | 141s | 2:21.70 | 132563.01 | 1.92 | `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat3/bench.log` |
+
+### Promotion Timing Derived From Audit
+
+- A30:
+  - first promising scan result (`-no-fa`, n64) finished at `2026-06-23T02:40:25Z`;
+  - first full validation finished at `2026-06-23T02:43:26Z`;
+  - promotion commit `2cd600f6` landed at `2026-06-23T02:45:43Z`, about `137s` after first full
+    validation finished;
+  - repeat3 finished at `2026-06-23T02:51:53Z`;
+  - repeat-metrics commit `22eb1640` landed at `2026-06-23T02:53:13Z`, about `80s` after repeat3.
+- A31:
+  - best short scan result (`T=20`, n64) finished at `2026-06-23T02:54:33Z`;
+  - first full validation finished at `2026-06-23T02:59:30Z`;
+  - promotion commit `5a28463d` landed at `2026-06-23T03:00:50Z`, about `80s` after first full
+    validation finished;
+  - repeat3 finished at `2026-06-23T03:06:01Z`;
+  - repeat-metrics commit `62f803c2` landed at `2026-06-23T03:07:46Z`, about `105s` after repeat3.
+
+Audit conclusion:
+
+- A30/A31 benchmark runtimes and run windows are now detailed above.
+- A30/A31 still do not have strict `attempt_start_utc` / `attempt_end_utc` because those files were
+  not created at the start of the original attempts.
+- From A32 onward, strict timing exists. From the workflow update onward, missing timing blocks
+  promotion.
