@@ -5066,3 +5066,6 @@ Interpretation: reducing the outer direct iqk_mul_mat_moe call count alone does 
 Next recommendation: stop lower-level OpenMP scheduling probes for this path. Move to a different accepted-scope optimization route: quality-safe CUDA offload beyond A80 attention-safe placement, deeper SIMD/kernel optimization inside mul_mat_qX_q8_Helper without changing partitioning, or graph-level barrier/copy reduction with a stronger correctness oracle.
 
 Rollback_status: temporary A87 source probe saved in source_probe.diff and final_source_probe.diff, then reverted. Default llama-cli was rebuilt after rollback; source_after_revert.diff is empty. pushed_commit remains n/a because WiCi forbids git push.
+
+A87 result_commit: c9f2b8a8
+A87 pushed_commit: n/a (WiCi no-push constraint)
