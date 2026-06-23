@@ -5117,3 +5117,37 @@ A88 accepted_frontier_summary:
 A88 pushed_commit: n/a (WiCi no-push constraint)
 
 A88 result_commit: ac191f23
+
+
+### Planned Residual Route Audit A89 - non-speculative route check
+
+Goal: audit the current remote plan and A8x run artifacts after A88 consolidation to decide whether a concrete, non-speculative next route remains inside the fixed user scope. This attempt introduces no source changes and performs no new benchmark beyond artifact/status inspection.
+
+### Residual Route Audit Result A89 - non-speculative route check
+
+Status: no_non_speculative_route_remaining.
+
+Run directory: /root/lfz/runs/ik_llama/deepseek-v4-a89-residual-route-audit
+Input commit: 402017ef
+Source status: source_start.diff is empty; no tracked source changes were present or introduced.
+Artifact scan: a8_run_dirs.txt records 12 A8x run directories, and a88_exit_statuses.txt contains zero nonzero A88 exit statuses.
+
+Accepted frontier preserved:
+- Accepted quality-valid command/env remains the A80 attention-only CUDA F8 dense placement, hardened by A81 and revalidated by A88.
+- Accepted env: GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn.
+- Accepted command family: llama-cli with --defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa under MemoryMax=16G and MemorySwapMax=0.
+- A88 final smoke and n256 evidence remains the latest frontier validation: baseline smoke graph_splits=1237 at about 1.82-1.87 tok/s, accepted attention-safe smoke graph_splits=291 at about 5.00-5.13 tok/s, accepted attention-safe n256 repeats graph_splits=291 at 5.34/5.50 tok/s.
+
+Invalidated and retired routes:
+- Broad A64/A66/A73/A74-style F8 dense CUDA placement remains invalid-for-quality because A75 showed deterministic output corruption and A76-A78 localized/confirmed the broad placement quality issue.
+- A83 runtime-only OpenMP tuning, A84 source-level MoE OpenMP scheduling, A85 MXFP4 helper partitioning, A86 OpenMP region granularity diagnostics, and A87 persistent/coalesced helper-team work are unpromoted or diagnostic only. They do not replace the A80/A81/A88 accepted frontier.
+- Lower-level OpenMP scheduling/partitioning for the current fallback CPU IQK MoE path is retired by the A86/A87 evidence unless new user steering or new execution evidence provides a concrete route with target files/functions, correctness oracle, promotion threshold, rollback plan, and a reason it is not another variant of the retired path.
+
+Residual route audit decision:
+- No explicit remaining route in the current remote plan satisfies the non-speculative route criteria. Mentions of quality-safe CUDA offload beyond the current attention-safe class, deeper SIMD/kernel optimization inside mul_mat_qX_q8_Helper, or graph-level barrier/copy reduction are possible future research directions, but the current plan/artifacts do not identify enough target-code evidence, correctness oracle, promotion threshold, and rollback strategy to execute them under the fixed user scope without new steering.
+- Therefore the current terminal frontier for this WiCi run is A80/A81/A88. Further progress requires explicit user steering, new profiling evidence, or a new planner step that converts one of the broad future directions into a concrete non-speculative validation plan.
+
+Safety and rollback:
+- A89 ran no git push and made no source changes.
+- The iter-47 accidental git push safety note remains preserved in the A86 correction record.
+- pushed_commit: n/a (WiCi no-push constraint).
