@@ -870,3 +870,19 @@ Apply previous-task routes in this order:
 - Decision: do not promote. The 256-token result is below the current 16 GB SOTA baseline (`1.79 tok/s`), so the source probe was reverted and `build-cuda` was rebuilt back to default.
 - Next direction: easy CLI/runtime switches are now mostly exhausted. Further gains likely require a deeper CUDA MXFP4 `MUL_MAT_ID` optimization, such as reducing per-call activation quantization or batching/fusing the up/gate and down expert sequence without breaking CUDA graph reuse.
 
+### 2026-06-23 16:20Z - Optimization Attempt A26: CUDA MMVQ `nwarps` Policy Probe
+
+- Context: A25 identified the hot path as CUDA MXFP4 `MUL_MAT_ID`. Source reading showed the MXFP4 path calls `mul_mat_vec_mxfp4_q8_1_cuda()` through `mmvq`, with the existing heuristic choosing:
+  - `nwarps=4` for `args.ncols_y <= 4` (DeepSeek up/gate calls with one active column)
+  - `nwarps=2` for `args.ncols_y = 6` (DeepSeek down calls with six active experts)
+- Probe: add default-off `GGML_CUDA_MMVQ_FORCE_NWARPS={1,2,4}` to force one launch policy for all MMVQ calls. Default behavior was unchanged.
+- 64-token direct scan under 16 GB host-RAM limit:
+  - default heuristic: `eval_tok_s = 1.71`, log `/root/lfz/runs/ik_llama/deepseek-v4-a26-nwarps-default-direct-n64/bench.log`
+  - force `nwarps=1`: `eval_tok_s = 1.68`, log `/root/lfz/runs/ik_llama/deepseek-v4-a26-nwarps1-direct-n64/bench.log`
+  - force `nwarps=2`: `eval_tok_s = 1.70`, log `/root/lfz/runs/ik_llama/deepseek-v4-a26-nwarps2-direct-n64/bench.log`
+  - force `nwarps=4`: `eval_tok_s = 1.73`, log `/root/lfz/runs/ik_llama/deepseek-v4-a26-nwarps4-direct-n64/bench.log`
+- Full 256-token validation for the best short probe:
+  - force `nwarps=4`: `eval_tok_s = 1.69`, log `/root/lfz/runs/ik_llama/deepseek-v4-a26-nwarps4-direct-n256/bench.log`
+- Decision: do not promote. The short-run `nwarps=4` bump did not survive full validation and remains below the current 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
+- Next direction: the current MMVQ launch policy is not the limiting knob. Any meaningful improvement likely needs an algorithmic change: reduce repeated Q8_1 activation quantization, fuse up/gate/down across active experts, or build a DeepSeek-specific MXFP4 small-MoE kernel while preserving CUDA graph reuse.
+
