@@ -5035,3 +5035,34 @@ Recommendation: stop more low-level OpenMP partitioning probes unless implementi
 Rollback_status: temporary A86 source diagnostics were saved in source_probe.diff, final temporary source diff was saved, the patch was reverse-applied, default llama-cli was rebuilt, and source_after_revert.diff is empty. Remote tracked source is clean after commit; only pre-existing untracked .Agent/plans/m3-race-spec* files remain.
 
 Safety_note: while recording the first A86 result, an unquoted here-document expanded inline command-substitution text and executed git push from the plan prose. The observed push updated the remote branch only through b7639d5f, before the A86 commits were created. This was accidental and violated the WiCi no-push constraint; no further push was run, and A86 commits remain local to the remote repository.
+
+### Planned Source Probe A87 - Persistent/coalesced MoE helper team
+
+Goal: after A86 classified the remaining accepted-A80 bottleneck as callsite_granularity / many_small_regions, test the minimal existing call-coalescing route before retiring lower-level OpenMP work. The temporary source probe uses an env-gated `GGML_DEEPSEEK4_MOE_COALESCE_HELPERS=1` path that calls `iqk_mul_mat_moe_many` once per graph thread for all active experts, preserving the same inner row partitioning (`inner_ith=ith`, `inner_nth=nth`) and leaving default behavior unchanged. This reduces direct `iqk_mul_mat_moe` call count from one call per active expert to one coalesced call when the gate is enabled.
+
+Safety: no `git push`. Avoid shell execution of plan prose. Save and revert all temporary source edits unless the probe passes full validation.
+
+### Source Probe Result A87 - Persistent/coalesced MoE helper team
+
+Status: completed_unpromoted. A temporary env-gated coalescing probe was added under GGML_DEEPSEEK4_MOE_COALESCE_HELPERS / GGML_DEEPSEEK4_MOE_PERSISTENT_TEAM / GGML_DEEPSEEK4_MOE_PERSISTENT_COMPARE. Default accepted A80 behavior was unchanged when gates were absent.
+
+Run directory: /root/lfz/runs/ik_llama/deepseek-v4-a87-persistent-moe-helper-team
+Input commit: 1bdeb16a
+Build status: patched llama-cli built successfully.
+
+Implementation tested: for the decode MUL_MAT_ID fallback path, the gate replaced the per-active-expert loop of iqk_mul_mat_moe calls with one iqk_mul_mat_moe_many call per graph thread across all active experts, preserving the same inner row partitioning with inner_ith=ith and inner_nth=nth. This reduced direct IQK MoE calls from active_experts to one coalesced call per graph thread for the tested path.
+
+Quick results, all n128 under accepted A80 env and MemoryMax=16G:
+- default: exit=0, graph_splits=291, eval=5.14 tok/s, A87 markers=0.
+- compare: exit=0, graph_splits=291, eval=5.01 tok/s, A87 markers=29281, coalesce_markers=14640, compare_markers=14640, direct_calls_before=6, direct_calls_after=1. Compare marker was diagnostic-only and did not compute max_abs because the coalesced path replaces the original in a single run; therefore it is not sufficient for promotion.
+- coalesce64: exit=0, graph_splits=291, eval=5.06 tok/s, coalesce_markers=14640, direct_calls_before=6, direct_calls_after=1.
+- coalesce256: exit=0, graph_splits=291, eval=5.13 tok/s, coalesce_markers=14640, direct_calls_before=6, direct_calls_after=1.
+- persistent: exit=0, graph_splits=291, eval=5.06 tok/s, coalesce_markers=14640, direct_calls_before=6, direct_calls_after=1.
+
+Promotion decision: not promoted. Although the probe did reduce direct call count from 6 active-expert calls to one coalesced call at the instrumented site, no variant beat same-session default by more than 0.10 tok/s; coalesce256 was essentially tied but still slightly below default, and coalesce64/persistent/compare regressed. Full n256 repeats were skipped by the S28 quick-selection rule. The compare marker did not provide max_abs equivalence, so this probe also fails the compare-first promotion requirement.
+
+Interpretation: reducing the outer direct iqk_mul_mat_moe call count alone does not solve the measured OpenMP overhead. The remaining cost is likely inside helper invocation volume, graph-level barriers/waits, or memory/cache behavior that is not removed by iqk_mul_mat_moe_many-style call coalescing. This completes and effectively retires the current lower-level OpenMP scheduling/partitioning line unless a new design can coalesce actual helper work or persist a team across graph operations with a real equivalence check.
+
+Next recommendation: stop lower-level OpenMP scheduling probes for this path. Move to a different accepted-scope optimization route: quality-safe CUDA offload beyond A80 attention-safe placement, deeper SIMD/kernel optimization inside mul_mat_qX_q8_Helper without changing partitioning, or graph-level barrier/copy reduction with a stronger correctness oracle.
+
+Rollback_status: temporary A87 source probe saved in source_probe.diff and final_source_probe.diff, then reverted. Default llama-cli was rebuilt after rollback; source_after_revert.diff is empty. pushed_commit remains n/a because WiCi forbids git push.
