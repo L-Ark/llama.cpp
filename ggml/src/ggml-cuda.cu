@@ -10,6 +10,7 @@
 #include "ggml-backend-impl.h"
 
 #include "ggml-cuda/common.cuh"
+#include <cstring>
 #include "ggml-cuda/acc.cuh"
 #include "ggml-cuda/arange.cuh"
 #include "ggml-cuda/argsort.cuh"
@@ -4703,8 +4704,29 @@ GGML_CALL static bool ggml_backend_cuda_supports_op(ggml_backend_t backend, cons
                     case GGML_TYPE_IQ1_S_R4:
                     case GGML_TYPE_IQ1_M_R4:
                         return true;
-                    case GGML_TYPE_F8_E4M3_B128:
-                        return op->op == GGML_OP_MUL_MAT && std::getenv("GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE") != nullptr;
+                    case GGML_TYPE_F8_E4M3_B128: {
+                        if (op->op != GGML_OP_MUL_MAT || std::getenv("GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE") == nullptr) {
+                            return false;
+                        }
+                        if (std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_UNSAFE_BROAD") != nullptr) {
+                            return true;
+                        }
+                        auto has = [](const char * haystack, const char * needle) {
+                            return haystack != nullptr && std::strstr(haystack, needle) != nullptr;
+                        };
+                        const char * op_name = op->name;
+                        const char * src0_name = op->src[0] != nullptr ? op->src[0]->name : "";
+                        const char * src1_name = op->src[1] != nullptr ? op->src[1]->name : "";
+                        const bool is_attn = has(op_name, "attn") || has(src0_name, "attn") || has(src1_name, "attn") || has(op_name, "q_a") || has(src0_name, "attn_q") || has(src0_name, "attn_kv");
+                        if (std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE") != nullptr || std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS") == nullptr) {
+                            return is_attn;
+                        }
+                        const char * allow_class = std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS");
+                        if (std::strcmp(allow_class, "attn") == 0) {
+                            return is_attn;
+                        }
+                        return false;
+                    }
                     default:
                         return false;
                 }

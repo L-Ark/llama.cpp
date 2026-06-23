@@ -4825,3 +4825,26 @@ Decision:
 - source rollback: temporary class-filter diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
 - result_commit: `b53069c10f5115be0a53b6b31a179e5c367f297d`
+
+### Planned Source Validation A80 - attention-only F8 dense CUDA placement
+
+- goal: turn the A79 `attn_all` diagnostic candidate into a minimal env-gated source repair and validate correctness plus repeat throughput before treating it as quality-valid performance.
+- method: narrow `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` to attention-family F8 dense `MUL_MAT` placement by default, keep `GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` as an explicit equivalent safe gate, and add `GGML_DEEPSEEK4_CUDA_F8_DENSE_UNSAFE_BROAD=1` only as a diagnostic escape hatch for reproducing known-bad broad A64 behavior.
+- acceptance: baseline and attention-safe modes must be coherent on deterministic A75 prompts; unsafe broad should reproduce known corruption; full attention-safe repeats must exit 0, keep graph_splits <= 400, p50 >= 4.5 tok/s, worst repeat >= 4.0 tok/s, and beat same-session baseline p50 by > 1.0 tok/s.
+- note: broad A64/A66 remain `failed_invalid_for_quality`; do not run `git push`.
+
+### A80 result - accepted attention-only F8 dense CUDA placement
+
+- attempt: A80 attention-only F8 dense CUDA placement validation
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a80-attn-f8-safe-validation`
+- validation_status: accepted_quality_valid_candidate
+- source_status: accepted env-gated repair in `ggml/src/ggml-cuda.cu`; default behavior remains unchanged when `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE` is unset.
+- gate semantics: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` now allows only attention-family F8 dense `MUL_MAT` placement; `GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` is an explicit equivalent safe marker; `GGML_DEEPSEEK4_CUDA_F8_DENSE_UNSAFE_BROAD=1` is retained only as a diagnostic escape hatch to reproduce known-bad broad A64 behavior.
+- deterministic correctness audit: baseline, unsafe broad, and attention-safe modes each ran the three A75 prompts under `MemoryMax=16G`; all nine runs exited 0.
+- baseline correctness: graph_splits `1237/1237/1237`, eval `1.94/1.92/1.94 tok/s`, visible generated text empty for all prompts.
+- unsafe broad control: graph_splits `76/76/76`, eval `5.80/8.90/8.67 tok/s`, reproduced known corruption (`[name` repetition and mixed nonsense), confirming broad A64/A66 remain `failed_invalid_for_quality`.
+- attention-safe correctness: graph_splits `291/291/291`, eval `5.17/5.18/4.99 tok/s`, visible generated text empty for all prompts; no CUDA/assert/read/shape/NaN/Inf failures were seen in summaries.
+- full n256 repeats: same-session baseline repeats exited 0 at graph_splits `1237/1237`, eval `1.90/1.92 tok/s` (p50 `1.91`). Attention-safe repeats exited 0 at graph_splits `291/291`, eval `5.23/5.27 tok/s` (p50 `5.25`, worst `5.23`, delta p50 `+3.34 tok/s`). This passes the A80 acceptance thresholds: graph_splits <= 400, p50 >= 4.5, worst >= 4.0, and >1.0 tok/s faster than same-session baseline p50.
+- A80 accepted_env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` with the existing benchmark command flags `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa` and MemoryMax=16G. The `ATTN_SAFE` marker is optional with the accepted source because broad mode requires the explicit `UNSAFE_BROAD=1` escape hatch.
+- decision: A80 is the first quality-valid F8 dense CUDA candidate in this run. Historical broad A64/A66 9.x tok/s measurements remain real throughput but invalid-for-quality. The accepted A80 candidate should replace broad A64 for any future F8 dense validation; future work may run larger prompt suites or n256 repeats before treating it as production-ready.
+- pushed_commit: n/a, blocked by WiCi no-push constraint.
