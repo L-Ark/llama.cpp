@@ -4480,5 +4480,6 @@ Decision:
 - next direction:
   - Avoid grouped active-expert scheduling wrappers for this decode shape.
   - Future source work should target the MXFP4 helper inner kernel or reduce per-call overhead without redistributing active experts across thread groups.
+- result_commit: `d5b4a064a1832872b8d6cb4e9c564a0fadc60a06`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
