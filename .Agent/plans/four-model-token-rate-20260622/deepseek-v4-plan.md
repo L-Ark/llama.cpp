@@ -1882,3 +1882,112 @@ Decision:
   softmax/attention-adjacent ops, down `MUL_MAT_ID`, `MUL_MULTI_ADD`, and any stream wait or memory
   movement around expert access. If the `nodes=19` inner split still cannot explain the remaining
   time, move to deferred-expert memory movement/cache miss instrumentation.
+
+### 2026-06-23 - Planned Optimization Attempt A40: No-Graph MoE Node-Level Timing
+
+- attempt_id: `deepseek-v4-a40-no-graph-moe-node-timing`
+- attempt_start_utc: `2026-06-23T06:04:43Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis: A39 showed the `nodes=19` no-graph MoE shape has material GPU elapsed time
+  (`25.651 ms` average across five samples), but A35 showed the fused MXFP4 `MUL_MAT_ID` kernel
+  bodies alone are too small. The cost may be concentrated in one surrounding node, hidden stream
+  wait, or the graph's node ordering rather than the inner matvec kernels themselves.
+- planned changes: temporary default-off instrumentation behind
+  `GGML_DEEPSEEK4_MOE_NODE_TIMING=1` inside `evaluate_and_capture_cuda_graph()`:
+  - target only `use_cuda_graph = false` graphs with `n_nodes = 19` and `mul_mat_id = 3`;
+  - for a bounded number of graph calls, record CUDA events around each node's
+    `ggml_cuda_compute_forward()` call;
+  - aggregate by node index and op name;
+  - print per-node total and average GPU milliseconds at process exit.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_MOE_NODE_TIMING=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric:
+  - Identify whether one node or op accounts for most of the `nodes=19` GPU time.
+  - If a single op dominates, A41 should test a focused optimization or bypass for that op.
+  - If no node dominates and per-node totals are small, A41 should instrument deferred-expert
+    load/cache/memory placement outside the node loop.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a40-no-graph-moe-node-timing/journal.log`.
+
+### 2026-06-23 06:10Z - A40 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T06:04:43Z`
+- attempt_end_utc: `2026-06-23T06:09:45Z`
+- wall_clock_elapsed: `302 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `parsed_summary.json`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, source reverted`
+- promoted_commit: `n/a`
+
+Implementation:
+
+- Added temporary default-off timing behind `GGML_DEEPSEEK4_MOE_NODE_TIMING=1`.
+- Targeted only `use_cuda_graph = false`, `n_nodes = 19`, `mul_mat_id = 3` graph shapes.
+- Sampled the first three matching graph calls.
+- Recorded CUDA event elapsed time around each non-noop `ggml_cuda_compute_forward()` call in the
+  target graph.
+- Saved source diff at
+  `/root/lfz/runs/ik_llama/deepseek-v4-a40-no-graph-moe-node-timing/source_probe.diff`.
+- Reverted the source probe and rebuilt default `llama-cli`.
+
+Command shape:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_MOE_NODE_TIMING=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a40-no-graph-moe-node-timing/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a40-no-graph-moe-node-timing/journal.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a40-no-graph-moe-node-timing/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3439.78 ms / 5 tokens = 1.45 tok/s`
+- eval: `36224.90 ms / 63 runs = 1.74 tok/s`
+- total: `44997.87 ms / 68 tokens`
+- `/usr/bin/time` wall clock: `0:46.19`
+- max RSS from `/usr/bin/time`: `28103464 KB`
+
+Node timing output:
+
+```text
+[deepseek4_moe_node_timing] target_calls=204 sampled_graphs=3 node_samples=27 total_gpu_ms=141.273
+[deepseek4_moe_node_timing_top] rank=1 node=2 op=MUL_MAT samples=3 gpu_ms=119.236 avg_gpu_ms=39.745
+[deepseek4_moe_node_timing_top] rank=2 node=15 op=MUL_MAT_ID samples=3 gpu_ms=12.900 avg_gpu_ms=4.300
+[deepseek4_moe_node_timing_top] rank=3 node=0 op=ADD samples=3 gpu_ms=3.769 avg_gpu_ms=1.256
+[deepseek4_moe_node_timing_top] rank=4 node=16 op=FUSED_MUL_UNARY samples=3 gpu_ms=2.066 avg_gpu_ms=0.689
+[deepseek4_moe_node_timing_top] rank=5 node=10 op=SOFT_MAX samples=3 gpu_ms=1.878 avg_gpu_ms=0.626
+[deepseek4_moe_node_timing_top] rank=6 node=18 op=MUL_MULTI_ADD samples=3 gpu_ms=0.747 avg_gpu_ms=0.249
+[deepseek4_moe_node_timing_top] rank=7 node=12 op=SCALE samples=3 gpu_ms=0.555 avg_gpu_ms=0.185
+[deepseek4_moe_node_timing_top] rank=8 node=17 op=MUL_MAT_ID samples=3 gpu_ms=0.093 avg_gpu_ms=0.031
+[deepseek4_moe_node_timing_top] rank=9 node=1 op=FUSED_RMS_NORM samples=3 gpu_ms=0.028 avg_gpu_ms=0.009
+```
+
+Interpretation:
+
+- A40 identifies the dominant subpath inside A39's expensive `nodes=19` no-graph MoE shape:
+  node `2`, op `MUL_MAT`, averages `39.745 ms` across three samples.
+- The largest MoE expert op in the same graph, node `15` `MUL_MAT_ID`, averages only `4.300 ms`.
+  Node `17` `MUL_MAT_ID` is effectively tiny at `0.031 ms`.
+- This contradicts the earlier assumption that the remaining cost is primarily the expert
+  `MUL_MAT_ID` path. The expensive node is a normal `MUL_MAT`, likely an attention/MLA or routing
+  side matrix multiply embedded in the same no-graph split.
+- If node `2` is representative across all `204` target calls, it can account for roughly
+  `204 * 39.745 ms = 8.11 s` of the 64-token eval. This is now the largest concrete measured
+  bottleneck.
+
+Decision:
+
+- Do not promote. This is a diagnostic run and the probe source was reverted.
+- A41 should identify node `2` precisely: tensor name, source tensor names, tensor dimensions,
+  dtype/quant type, backend buffer placement, and whether it falls out of CUDA graphs because of
+  the surrounding `MUL_MAT_ID` graph constraints. Once identified, test whether isolating that
+  `MUL_MAT` into a CUDA-graph-compatible split, changing its backend placement, or disabling the
+  surrounding graph split improves token rate.
