@@ -4702,3 +4702,21 @@ Decision:
 - logit_probe: see `/root/lfz/runs/ik_llama/deepseek-v4-a75-a64-correctness-audit/logit_option_probe.txt`.
 - decision_pending: record `A64 correctness_status: passed` or `failed_invalid_for_quality` after the comparison.
 
+### Result A75 - A64 deterministic output correctness audit
+- completed_at_utc: 2026-06-23T13:58:17Z
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a75-a64-correctness-audit`
+- git_start_sha: `379abc92139a0189c82ba46521394f4480ee43fd`
+- source_state: no intentional source changes; tracked source was clean before the audit. Final source remains unchanged.
+- logit_probe: `llama-cli --help` exposes `--all-logits` and logit-bias/KL flags, but no simple human-readable first-token/top-prob text output option was available for this CLI path, so this audit compares deterministic decoded output and first visible generated text.
+- deterministic_setup: `--temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -n 16 --ignore-eos -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, `MemorySwapMax=0`.
+- baseline_mode: `env -u GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE`; all three runs exited 0 with `graph_splits=1237`. In the raw output window after `generate:` and before timings, the visible continuation was blank/newline-only for the three short prompts under `--no-display-prompt`.
+- a64_mode: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`; all three runs exited 0 with `graph_splits=76`, but the deterministic decoded text was corrupted:
+  - `The capital of France is`: `[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name`
+  - `2 + 2 =`: `ancimingtonmingtonanciancianciancianci acronymanci好吧 Sequel对学生不加不加不加`
+  - `The opposite of hot is`: `anners[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name`
+- failure_scan: no CUDA/assert/read/shape/NaN/Inf crash was found in the summary greps; the failure is output quality/correctness, not process exit.
+- A64 correctness_status: failed_invalid_for_quality
+- quality_decision: A64/A66 throughput measurements around 9.x tok/s are real speed measurements for the modified graph, but are not accepted correct results. They are downgraded as invalid-for-quality and must not be used as the accepted quality-preserving optimization until the F8 dense path is corrected and re-audited.
+- promotion_decision: stop further A64/A66/A73/A74 performance promotion based on this path; next work should debug the F8 dense correctness issue or roll back to the last quality-valid baseline.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
