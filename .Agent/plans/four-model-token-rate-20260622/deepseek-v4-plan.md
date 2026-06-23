@@ -1163,3 +1163,70 @@ Apply previous-task routes in this order:
     top-k MoE op that avoids the generic post-SwiGLU Q8_1 quantization and generic `MUL_MAT_ID`
     setup. A smaller preliminary probe is to instrument per-layer kernel counts / quantize calls
     under A31 to quantify the down-side overhead before writing a custom kernel.
+
+### 2026-06-23 03:21Z - Optimization Attempt A33: CUDA MoE Quantization / `MUL_MAT_ID` Count Diagnostic
+
+- attempt_start_utc: `2026-06-23T03:21:39Z`
+- attempt_end_utc: `2026-06-23T03:27:18Z`
+- wall_clock_elapsed: `339 seconds`
+- result_status: `diagnostic, unpromoted, reverted`
+- promoted_commit: `n/a`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a33-moe-cuda-diag/attempt_meta.env`.
+
+#### Probe
+
+- Added a temporary default-off CUDA diagnostic behind `GGML_DEEPSEEK4_MOE_DIAG=1`.
+- Counters were inserted in:
+  - `ggml_cuda_mul_mat_id()`
+  - `ggml_cuda_moe_up_gate_unary()`
+- The diagnostic printed counts at process exit with prefix `[deepseek4_moe_diag]`.
+- Build: `cmake --build build-cuda -j 8` succeeded.
+- Benchmark command shape:
+  - env: `GGML_CUDA_NO_PINNED=1 GGML_DEEPSEEK4_MOE_DIAG=1`
+  - flags: `--defer-experts --fit -ngl 999 -c 512 -n 64 -ub 1 -t 20 -tb 20 -no-fa`
+  - Memory: `MemoryMax=16G`, `MemorySwapMax=0`
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a33-moe-cuda-diag-n64/bench.log`
+
+#### Result
+
+- Benchmark completed:
+  - `eval_tok_s = 1.83` (diagnostic overhead; not compared for promotion)
+  - `prompt_eval_tok_s = 1.58`
+  - `gen_tokens = 63`
+  - `rss_mb = 27444.79`
+- Diagnostic line:
+
+```text
+[deepseek4_moe_diag] mul_mat_id_calls=816 mul_mat_id_fast_calls=816 mul_mat_id_fast_quant_calls=816 mul_mat_id_fast_quant_rows=2856 mul_mat_id_fast_matvec_launches=1224 mul_mat_id_fast_fuse_next=408 moe_up_gate_calls=0 moe_up_gate_fast_calls=0 moe_up_gate_fast_ny_total=0 moe_up_gate_input_quant_calls=0 moe_up_gate_input_quant_rows=0 moe_up_gate_upgate_launches=0 moe_up_gate_down_fuse=0 moe_up_gate_down_quant_calls=0 moe_up_gate_down_quant_rows=0 moe_up_gate_down_launches=0 moe_up_gate_down_add_id=0
+```
+
+#### Interpretation
+
+- DeepSeek4 A31 does not enter `GGML_OP_MOE_FUSED_UP_GATE` at all:
+  - `moe_up_gate_calls = 0`
+- The whole routed expert path is generic CUDA `MUL_MAT_ID` fast path:
+  - `mul_mat_id_calls = mul_mat_id_fast_calls = 816`
+- Up/gate adjacency fusion is active:
+  - `mul_mat_id_fast_fuse_next = 408`
+  - This means one up/gate activation quantization is reused for the adjacent up/gate pair.
+- The inferred split is:
+  - 408 fused up/gate occurrences
+  - 408 down occurrences
+  - 1224 matvec launches = `408 * 2` for up/gate + `408 * 1` for down
+  - 2856 quantized rows = `408 * 1` input rows + `408 * 6` post-SwiGLU down rows
+- This confirms the fastllm-equivalent gap is not repeated up/gate quantization. The concrete
+  overhead to target is the down-side path: per occurrence, ik_llama quantizes six post-SwiGLU
+  rows to Q8_1 and runs a generic MXFP4 `MUL_MAT_ID` down projection instead of a DeepSeek4-specific
+  top-k down-reduce path.
+
+#### Decision
+
+- Do not promote diagnostic code. Source changes were reverted and `build-cuda` was rebuilt back
+  to the default implementation.
+- Next direction:
+  - A34 should test a minimal DeepSeek4-specific down-side optimization or add lower-overhead timing
+    around down quantization versus down matvec.
+  - The most promising full optimization remains a DeepSeek4-specific two-stage MoE op modeled after
+    fastllm's concept: top-k NVFP4 SwiGLU stage followed by top-k NVFP4 down-reduce stage.
