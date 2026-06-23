@@ -2554,3 +2554,69 @@ Decision:
   - crash, read failures, OOM, or clear short-run regression means do not promote; record the
     expert-pack counters and proceed to RAM tier / profile only if the sidecar path is at least
     stable.
+
+### 2026-06-23 08:35Z - A47/A47b Result: Expert-Pack Env Full Run Beats A31
+
+Timing:
+
+- A47 short attempt_id: `deepseek-v4-a47-expert-pack-iouring-n64`
+  - attempt_start_utc: `2026-06-23T08:27:01Z`
+  - attempt_end_utc: `2026-06-23T08:28:51Z`
+  - wall_clock_elapsed: `110 seconds`
+  - time_confidence: `strict`
+- A47b full attempt_id: `deepseek-v4-a47b-expert-pack-iouring-n256`
+  - attempt_start_utc: `2026-06-23T08:31:27Z`
+  - attempt_end_utc: `2026-06-23T08:34:48Z`
+  - wall_clock_elapsed: `201 seconds`
+  - time_confidence: `strict`
+
+Config:
+
+- Base: A31 `-ub 1 -t 20 -tb 20 -no-fa`
+- Additional env:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`
+  - `GGML_MOE_IO_BACKEND=iouring`
+  - `GGML_MOE_IO_BYTES=2097152`
+  - `GGML_MOE_IO_DEPTH=16`
+  - `GGML_MOE_IO_SORT_OFFSET=1`
+  - `GGML_MOE_IO_SQPOLL=1`
+  - `GGML_MOE_STAGE_PINNED=1`
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`
+  - `GGML_MOE_RAM_TIER_MIB=0`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+
+Metrics:
+
+| attempt | n_predict | eval_tok_s | eval_ms | prompt_eval_tok_s | total_ms | max_rss_kb | major_faults | fs_inputs | result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| A47 | 64 | 1.97 | 32054.93 | 1.67 | 40224.41 | 28103464 | 0 | 640 | promising short run |
+| A47b | 256 | 1.95 | 130909.58 | 1.68 | 138968.84 | 28103464 | 0 | 560 | beats A31 and fastllm ref |
+
+Comparison:
+
+- A31 p50 full baseline: `1.91 tok/s`; A31 worst: `1.90 tok/s`.
+- fastllm host-RAM-16GB reference target: `1.94 tok/s`.
+- A47b full result: `1.95 tok/s`, `+0.04 tok/s` vs A31 p50 and `+0.01 tok/s` vs fastllm reference.
+
+Important caveat:
+
+- The run log did not print expert-pack counters (`expert pack`, `iouring`, or `VRAM cache`
+  atexit lines). The env was present in `/usr/bin/time` command output, but counter absence means
+  A47b cannot yet prove whether the improvement came from the expert-pack runtime path, hot page
+  cache after pack creation, or reduced major faults from another placement effect.
+- Because the full-run token rate improved, record and push immediately, but treat the next step
+  as validation rather than moving on blindly.
+
+Decision:
+
+- Promote A47b as the current measured DeepSeek V4 ik_llama speed record under the required 16GB
+  systemd limit: `1.95 tok/s`.
+- Immediate follow-up:
+  - run at least one repeat with the same config;
+  - add `GGML_MOE_TTFT_TRACE_OUT` or source counters if needed to prove the expert-pack/cache path;
+  - then test RAM tier with the generated expert-pack and `ram6g.ik_profile.csv`.
+
+Logs:
+
+- `/root/lfz/runs/ik_llama/deepseek-v4-a47-expert-pack-iouring-n64/bench.log`
+- `/root/lfz/runs/ik_llama/deepseek-v4-a47b-expert-pack-iouring-n256/bench.log`
