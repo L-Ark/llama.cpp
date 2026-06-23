@@ -2975,6 +2975,85 @@ Decision:
   - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
   - Do not promote diagnostic code.
 
+### 2026-06-23 09:41Z - A53 Result: `MUL_MAT_ID` Fast-Path Construction Is Not The Runtime Bottleneck
+
+- attempt_id: `deepseek-v4-a53-cuda-mulmatid-fastpath-attribution`
+- status: `unpromoted diagnostic, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `4b6bcfe3842847f44db54315c656c545f93de825`
+- attempt_start_utc: `2026-06-23T09:38:40Z`
+- attempt_end_utc: `2026-06-23T09:41:07Z`
+- wall_clock_elapsed: `147s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a53-cuda-mulmatid-fastpath-attribution`
+- logs:
+  - benchmark: `/root/lfz/runs/ik_llama/deepseek-v4-a53-cuda-mulmatid-fastpath-attribution/bench.log`
+  - source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a53-cuda-mulmatid-fastpath-attribution/source_probe.diff`
+  - final diff before revert: `/root/lfz/runs/ik_llama/deepseek-v4-a53-cuda-mulmatid-fastpath-attribution/source_probe.final.diff`
+  - rebuild after revert: `/root/lfz/runs/ik_llama/deepseek-v4-a53-cuda-mulmatid-fastpath-attribution/rebuild-after-revert.log`
+- command summary:
+  - `systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0`
+  - A31 env plus `GGML_DEEPSEEK4_MMID_FAST_ATTR=1`
+  - A31 flags with `-n 64`
+- benchmark result:
+  - load time: `7940.56 ms`
+  - prompt eval: `3032.59 ms / 5 tokens = 1.65 tok/s`
+  - eval: `32729.13 ms / 63 runs = 1.92 tok/s`
+  - total: `40682.74 ms / 68 tokens`
+  - service runtime: `41.803s`
+  - service CPU time: `11min 55.326s`
+  - This is diagnostic-only; do not promote because source was temporary and the run was not repeated.
+- attribution summary:
+  - `[deepseek4_mmid_fast_attr] calls=816 fused_next=408 total_ms=51.281 memset_ms=5.893 quant_ms=6.501 first_mmvq_ms=28.966 next_mmvq_ms=8.517 unattributed_ms=1.404`
+- interpretation:
+  - The fast path is definitely used: `816` calls and `408` fused-next calls in a `64`-token run.
+  - The measured construction/launch-side fast-path work is tiny: `51.281 ms` total versus `32729 ms`
+    eval. Q8_1 activation quantization is only `6.501 ms`; the first and next MMVQ launch-side
+    measurements sum to only `37.483 ms`.
+  - Therefore, a simple activation-quantization reuse patch is unlikely to produce a material speedup.
+  - The large missing time is likely in CUDA graph execution/synchronization after the graph is
+    launched, not in the per-op host construction code that A53 measured.
+- rollback/rebuild:
+  - Temporary `ggml-cuda.cu` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully after revert.
+  - Post-revert status only contains unrelated untracked `.Agent/plans/m3-race-spec*` files.
+- decision:
+  - Do not promote A53 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A54 should instrument CUDA graph launch/synchronization and backend wait points, because that is
+    where asynchronous kernel execution time should be charged.
+
+### 2026-06-23 - Planned Diagnostic Attempt A54: CUDA Graph Launch And Synchronization Attribution
+
+- attempt_id: `deepseek-v4-a54-cuda-graph-sync-attribution`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - A51/A52/A53 progressively ruled out the C wrapper, scheduler active-expert copy block, CUDA op
+    construction, activation quantization, and per-op launch-side MMVQ code.
+  - The remaining plausible accounting gap is asynchronous CUDA graph/kernel execution charged to
+    graph launch, backend synchronize, event wait, or final stream synchronization points.
+- hypothesis:
+  - The decode wall time is dominated by CUDA graph execution/wait time, not by host-side graph building.
+  - A54 should identify whether time is spent in `cudaGraphLaunch`, `cudaStreamSynchronize`,
+    backend event synchronization, or `ggml_backend_graph_compute_async` caller waits.
+- planned source change:
+  - Temporary default-off instrumentation gated by `GGML_DEEPSEEK4_GRAPH_SYNC_ATTR=1`.
+  - In `ggml/src/ggml-cuda.cu`, measure CUDA graph launch/capture/replay and explicit stream sync
+    points near graph execution.
+  - In `ggml/src/ggml-backend.cpp`, measure `ggml_backend_synchronize`, backend event wait/synchronize,
+    and graph compute async calls at scheduler level.
+  - Print summary lines at exit; source must be reverted after the run.
+- benchmark command:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_GRAPH_SYNC_ATTR=1`.
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Attribute most of the `~32-35s` eval wall time to CUDA graph launch/sync/wait buckets.
+  - If launch/sync dominates, A55 should try a controlled config/code change that reduces graph split
+    count, disables the harmful graph path, or improves graph reuse for this decode shape.
+- rollback condition:
+  - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
+  - Do not promote diagnostic code.
+
 ### 2026-06-23 09:24Z - A51 Result: Deferred `MUL_MAT_ID` Wrapper Probe Hit Only Fallback Accounting
 
 - attempt_id: `deepseek-v4-a51-mulmatid-wall-attribution`
