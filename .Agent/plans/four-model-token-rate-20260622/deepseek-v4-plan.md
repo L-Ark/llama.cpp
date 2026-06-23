@@ -4483,3 +4483,74 @@ Decision:
 - result_commit: `d5b4a064a1832872b8d6cb4e9c564a0fadc60a06`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
+### 2026-06-23 12:44Z - Planned Source Probe A72: Single-Row `iqk_mul_mat_moe` Fast-Path Mapping
+
+- Hypothesis:
+  - A69/A70/A71 narrowed the hotspot to single-row active expert calls in `iqk_mul_mat_moe`.
+  - Before writing a direct MXFP4 helper, verify whether the sequential down path can derive exact B row and C destination from `mmid_row_mapping`, and whether any safe fast-path route exists beyond the current DataInfo-backed call.
+- Source files:
+  - temporary: `ggml/src/ggml.c`
+  - inspected: `ggml/src/iqk/iqk_common.h`, `ggml/src/iqk/iqk_mul_mat.cpp`, `ggml/src/iqk/iqk_gemm_legacy_quants.cpp`
+- Env gates:
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE=1`
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE_LIMIT=256`
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_FASTPATH=1`
+- Benchmark command:
+  - 16 GB cgroup, `MemoryMax=16G`, `MemorySwapMax=0`, accepted A64 env/flags, `-n 64` for default, compare, and fast modes.
+- Success metric:
+  - build succeeds;
+  - compare/default modes exit `0`, graph splits remain `76`;
+  - compare logs exact mapping proof and `max_abs_diff <= 1e-3` or a conservative decline reason;
+  - fast mode is promoted only if an independent fast route exists, wins by `> 0.05 tok/s`, and then passes full `-n 256` validation.
+- Rollback:
+  - save diffs/logs under `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe`;
+  - revert temporary source and rebuild default unless accepted by full validation.
+- Push status:
+  - `git push` forbidden by WiCi; any push remains blocked.
+
+### 2026-06-23 12:47Z - A72 Result: Single-Row Mapping Proven, Fast Path Declined
+
+- attempt_start_utc: `2026-06-23T12:44:24Z`
+- sweep_start_utc: `2026-06-23T12:46:49Z`
+- attempt_end_utc: `2026-06-23T12:47:32Z`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe`
+- source diff paths:
+  - planned-source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/source_probe.diff`
+  - final source diff before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/final_source_probe.diff`
+  - post-rollback source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/source_after_revert.diff` (empty)
+- logs:
+  - diff check: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/diff_check.log`
+  - build: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/build.log`
+  - default: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/bench_default.log`
+  - compare: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/bench_compare.log`
+  - fast: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/bench_fast.log`
+  - mode summaries: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/mode_metrics.txt`
+  - rebuild after rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/rebuild_after_revert.log`
+- command summary:
+  - 16 GB cgroup with `MemoryMax=16G`, `MemorySwapMax=0`
+  - accepted A64 env/flags: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `-ub 1 -t 20 -tb 20 -no-fa`, `-n 64`
+  - compare env: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE=1`, `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE_LIMIT=256`
+  - fast env: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_FASTPATH=1`
+- quick results:
+  - default: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.84`, eval_tok_s `9.71`, total_ms `12641.63`, service_runtime `14.343s`, CPU_time `2min 30.198s`, wall_clock_elapsed `14.37s`
+  - compare: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.85`, eval_tok_s `9.82`, total_ms `12593.60`, service_runtime `14.167s`, CPU_time `2min 28.576s`, wall_clock_elapsed `14.19s`, A72 compare records `256`
+  - fast: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.90`, eval_tok_s `9.73`, total_ms `12513.45`, service_runtime `14.096s`, CPU_time `2min 29.457s`, wall_clock_elapsed `14.11s`
+  - wrapper time maxrss was `6344 kB` for all three modes; cgroup completed successfully and did not OOM-kill.
+- compare findings:
+  - `mmid_row_mapping` gives exact `i1/i2` routing for the single-row decode path.
+  - B row is derivable from `i11 = i1 % ne11`, `i12 = i2`, and the same row-size formula used by `DataInfo::src1_row()`.
+  - C destination is derivable from `i1*nb1 + i2*nb2`, matching `DataInfo::dst_row()`.
+  - The compare probe logged `max_abs_diff=0` for 256 checked single-row calls because the only safe candidate was the existing `iqk_mul_mat_moe` DataInfo path; there was no separate independent MXFP4/Q8_2_x4 kernel to compare.
+- fast-mode decision:
+  - Fast mode intentionally declined with: `exact single-row mapping is derivable, but no independent faster MXFP4/Q8_2_x4 kernel is present; falling through to iqk_mul_mat_moe for safety`.
+  - A72 is diagnostically successful but unpromoted.
+  - Do not run `-n 256` full repeats and do not keep source, because no actual fast-path source route was executed or accepted.
+  - Accepted local best remains A64-family with the CUDA F8 dense conversion path.
+- rollback status:
+  - temporary source changes reverted with `git apply -R /root/lfz/runs/ik_llama/deepseek-v4-a72-moe-single-row-fastpath-probe/final_source_probe.diff`.
+  - default `llama-cli` rebuilt successfully after rollback.
+  - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
+- next direction:
+  - Implementing a true improvement requires a new MXFP4/Q8_2_x4 inner helper or lower-overhead helper scheduling inside `iqk_mul_mat_moe`; wrapper-level routing and row-mapping shortcuts have now been ruled out.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
