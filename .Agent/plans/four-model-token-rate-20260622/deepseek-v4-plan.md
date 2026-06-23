@@ -674,3 +674,33 @@ Apply previous-task routes in this order:
   so the current default threshold is preferable for this direct GGUF path.
 - Decision: do not promote. Move to I/O/prefetch instrumentation or targeted CUDA fused-MoE code
   work rather than further lowering offload thresholds.
+
+### 2026-06-23 12:35Z - Optimization Attempt A19: Existing Prefetch/Predict Switch Scan
+
+- Hypothesis: if decode is blocked on mmap/page-cache expert reads, ik_llama's existing prefetch
+  switches may reduce stall time without changing kernels or model files.
+- Change to try: no source changes. Keep promoted 16 GB baseline settings and test:
+  - A19a: `GGML_MOE_PREFETCH=1`
+  - A19b: `GGML_MOE_PREDICT=1`
+  - A19c: `GGML_MOE_PREFETCH=1 GGML_MOE_PREDICT=1`
+- Benchmark command template:
+  `MEMORY_MAX=16G <env> EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=64 RUN_DIR=<run> /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: short-run `eval_tok_s` must exceed the current short control range (`~1.82
+  tok/s`) and logs should show prefetch/predict startup or activity. If a candidate passes, run
+  full `N_PREDICT=256` and promote only if it beats A13 (`1.79 tok/s`) by more than `0.01 tok/s`.
+- Rollback condition: speed <= control, no activity logs, or instability means do not promote and
+  move to deeper route-trace/prefetch or expert-pack work.
+
+#### A19 Result
+
+- A19a `GGML_MOE_PREFETCH=1`: exited code `0`, `eval_tok_s = 1.75`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a19a-GGML_MOE_PREFETCH-1-n64/bench.log`.
+- A19b `GGML_MOE_PREDICT=1`: exited code `0`, `eval_tok_s = 1.40`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a19b-GGML_MOE_PREDICT-1-n64/bench.log`.
+- A19c `GGML_MOE_PREFETCH=1 GGML_MOE_PREDICT=1`: exited code `0`, `eval_tok_s = 1.32`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a19c-GGML_MOE_PREFETCH-1-GGML_MOE_PREDICT-1-n64/bench.log`.
+- Diagnostic: logs did not show useful prefetch/predict activity beyond env propagation, and all
+  variants regressed versus the short control range (`~1.82 tok/s`).
+- Decision: do not promote. The existing prefetch/predict switches do not improve the current
+  DeepSeek V4 direct GGUF path. Future I/O work needs deeper route-trace-aware expert-pack or
+  direct staging changes rather than these coarse switches.
