@@ -4979,3 +4979,28 @@ Decision:
 - rollback_status: temporary helper source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
 - result_commit: `a3a8d025877243af42f3c3a2b93b8a2d895c4d66`
+
+### Planned Diagnostic Attempt A86 - OpenMP region granularity
+
+Goal: measure actual OpenMP/MoE call granularity after A83-A85 failed to find a promotable scheduling or helper partitioning change. This is diagnostic only: keep accepted A80 attention-safe CUDA F8 behavior unchanged by default, add temporary env-gated markers under `GGML_DEEPSEEK4_MOE_OMP_REGION_TRACE=1`, measure fallback CPU IQK MoE direct calls plus the lower-level helper path, then revert the diagnostic source and record the mechanism.
+
+Acceptance: trace must build, run under the accepted A80 env with graph_splits near 291, hit the same fallback CPU IQK MoE/MXFP4 helper route proven by A84/A85, and record enough call counts/shapes/timing to classify the remaining OpenMP overhead as many_small_regions, callsite_granularity, helper_work_imbalance, instrumentation_overhead_only, or inconclusive_with_logs.
+
+### Diagnostic Result A86 - OpenMP region granularity
+
+Status: completed_unpromoted_diagnostic. The temporary env-gated trace built successfully and all A86 n128 runs exited 0 under the accepted A80 env () with graph_splits stable at 291 and no CUDA/assert/shape/NaN/Inf failures.
+
+Artifacts: , , , , , .
+
+Observed metrics:
+- default_n128: exit=0, graph_splits=291, eval=5.05 tok/s, A86 markers=0.
+- trace_n128: exit=0, graph_splits=291, eval=5.10 tok/s, markers=4001, moe_direct_markers=2000, helper_markers=2000. Helper elapsed_us avg=121.6, p50=123.0, max=348.0. MoE direct elapsed_us avg=328.7, p50=157.0, max=16103.0.
+- trace_limit_n128: exit=0, graph_splits=291, eval=5.08 tok/s, markers=257, moe_direct_markers=128, helper_markers=128. Helper elapsed_us avg=137.8, p50=132.0, max=277.0. MoE direct elapsed_us avg=317.0, p50=187.5, max=1424.0.
+
+Representative traced shape:  with , , , , , row chunks mostly  plus the tail ; each direct call invokes one  helper call with , , . The helper path is therefore the same actual MXFP4/Q8_2 fallback route proven by A84/A85.
+
+A86 omp_overhead_mechanism: callsite_granularity / many_small_regions. The trace rapidly hit the 2000 marker cap in a short n128 decode, and representative work units are tiny: one helper call per , usually about 103 rows, with helper p50 around 123-132 us. A few MoE-direct outliers are much larger than helper time, consistent with surrounding scheduling/barrier/wait effects rather than raw helper arithmetic. A83-A85 already showed that runtime knobs, wrapper-level scheduling, and lower-level cyclic/balanced partitioning do not improve this pattern.
+
+Recommendation: stop further low-level OpenMP partitioning probes unless implementing a true call-coalescing or persistent-team design that reduces the number of tiny per-expert call sites/regions. The next accepted-scope route should be a persistent-team/call-coalescing prototype across experts/layers, a quality-safe CUDA offload route, or deeper SIMD/kernel optimization inside the helper that preserves the current contiguous block partitioning.
+
+Rollback_status: temporary A86 source diagnostics were saved in , reverted after measurement, default  was rebuilt, and tracked source diff was confirmed empty before commit.  remains n/a because WiCi forbids .
