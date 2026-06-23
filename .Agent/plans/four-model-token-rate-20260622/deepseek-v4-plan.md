@@ -2093,3 +2093,98 @@ Decision:
   small F32 GEMV/router kernel or keep router logits in a graph-compatible split. If late samples
   are small, move to deferred-expert memory/cache instrumentation because the apparent A40 hotspot
   was warmup-biased.
+
+### 2026-06-23 - Planned Optimization Attempt A42: Router Node Late-Sample Timing
+
+- attempt_id: `deepseek-v4-a42-router-late-sample`
+- attempt_start_utc: `2026-06-23T06:20:27Z`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis: A40 sampled the first three target graphs, and A41 showed those target graphs were
+  early router layers. The measured `39.745 ms` router `MUL_MAT` may be first-use/warmup overhead
+  rather than steady-state decode cost.
+- planned changes: temporary default-off timing behind `GGML_DEEPSEEK4_ROUTER_LATE_TIMING=1`:
+  - target only `use_cuda_graph = false`, `n_nodes = 19`, `mul_mat_id = 3`;
+  - count target graphs;
+  - skip the first `64` target graphs;
+  - sample only node `2` (`ffn_moe_logits-N` router `MUL_MAT`) for up to `8` later target graphs;
+  - print target count, sampled count, total GPU ms, average GPU ms, and sampled node names.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_ROUTER_LATE_TIMING=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric:
+  - If late router avg remains multi-ms, A43 should test a router-specific small GEMV path or graph
+    placement change.
+  - If late router avg collapses to sub-ms, A43 should stop pursuing router optimization and move
+    to deferred-expert memory/cache instrumentation.
+- rollback condition: diagnostic source must be reverted and default `llama-cli` rebuilt after the
+  run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a42-router-late-sample/journal.log`.
+
+### 2026-06-23 06:26Z - A42 Result
+
+Timing:
+
+- attempt_start_utc: `2026-06-23T06:20:27Z`
+- attempt_end_utc: `2026-06-23T06:26:07Z`
+- wall_clock_elapsed: `340 seconds`
+- time_source: `attempt_start_utc.txt`, `attempt_end_utc.txt`,
+  `wall_clock_elapsed_seconds.txt`, `bench.log`, `parsed_summary.json`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, source reverted`
+- promoted_commit: `n/a`
+
+Implementation:
+
+- Added temporary default-off timing behind `GGML_DEEPSEEK4_ROUTER_LATE_TIMING=1`.
+- Targeted only `use_cuda_graph = false`, `n_nodes = 19`, `mul_mat_id = 3` graph shapes.
+- Skipped the first `64` target graphs and sampled node `2` for eight later target graphs.
+- Saved source diff at
+  `/root/lfz/runs/ik_llama/deepseek-v4-a42-router-late-sample/source_probe.diff`.
+- Reverted the source probe and rebuilt default `llama-cli`.
+
+Command shape:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_ROUTER_LATE_TIMING=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a42-router-late-sample/bench.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a42-router-late-sample/journal.log`
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a42-router-late-sample/parsed_summary.json`
+
+Benchmark metrics:
+
+- prompt eval: `3337.45 ms / 5 tokens = 1.50 tok/s`
+- eval: `35529.04 ms / 63 runs = 1.77 tok/s`
+- total: `51225.53 ms / 68 tokens`
+- `/usr/bin/time` wall clock: `0:52.73`
+- max RSS from `/usr/bin/time`: `28103468 KB`
+
+Late router timing:
+
+```text
+[deepseek4_router_late_timing] target_calls=204 sampled=8 gpu_ms=0.313 avg_gpu_ms=0.039 skip_first=64 max_samples=8
+[deepseek4_router_late_timing_sample] idx=1 ffn_moe_logits-1 op=MUL_MAT type=f32 ne=[256,1,1,1] src0=blk.1.ffn_gate_inp.weight:f32[4096,256,1,1] src1=ffn_norm-1:f32[4096,1,1,1]
+[deepseek4_router_late_timing_sample] idx=2 ffn_moe_logits-2 op=MUL_MAT type=f32 ne=[256,1,1,1] src0=blk.2.ffn_gate_inp.weight:f32[4096,256,1,1] src1=ffn_norm-2:f32[4096,1,1,1]
+[deepseek4_router_late_timing_sample] idx=3 ffn_moe_logits-0 op=MUL_MAT type=f32 ne=[256,1,1,1] src0=blk.0.ffn_gate_inp.weight:f32[4096,256,1,1] src1=ffn_norm-0:f32[4096,1,1,1]
+```
+
+Interpretation:
+
+- A42 disproves the A40 router-hotspot hypothesis for steady-state decode. After skipping the
+  first `64` target graphs, router node `2` averages only `0.039 ms`.
+- The A40 `39.745 ms` samples were first-use/warmup-biased and must not guide optimization.
+- Router-specific small GEMV work is not justified right now.
+- The measured steady-state router cost is far too small to explain the gap between A31
+  (`1.91 tok/s`) and fastllm (`1.94 tok/s`) or the broader `~35s` eval runtime.
+
+Decision:
+
+- Do not promote. This is a diagnostic run and the probe source was reverted.
+- A43 should move outward to deferred expert/cache/memory movement instrumentation:
+  - count expert cache hits/misses by tier for the A31 config;
+  - measure host-side expert lookup/load wait time;
+  - measure GPU copy/dequant or placement wait if present;
+  - correlate per-token latency spikes with cache miss/load events.
