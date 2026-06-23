@@ -4849,3 +4849,26 @@ Decision:
 - decision: A80 is the first quality-valid F8 dense CUDA candidate in this run. Historical broad A64/A66 9.x tok/s measurements remain real throughput but invalid-for-quality. The accepted A80 candidate should replace broad A64 for any future F8 dense validation; future work may run larger prompt suites or n256 repeats before treating it as production-ready.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
 - result_commit: `d537cae482d27d652315a84cea3f20a65bb85f19`
+
+### Planned Diagnostic Attempt A81 - post-A80 stability and bottleneck audit
+
+- goal: harden the accepted A80 attention-only F8 dense CUDA path with broader deterministic output coverage, full-repeat stability, and a post-A80 bottleneck profile before selecting the next optimization route.
+- method: keep accepted A80 source unchanged; run expanded baseline vs attention-safe visible-output checks, run three attention-safe n256 repeats, and capture one `perf stat -d` pass under the accepted A80 env and benchmark flags.
+- acceptance: expanded output checks and repeats exit 0 with no CUDA/assert/read/shape/NaN/Inf failures; attention-safe output remains coherent on all prompts; n256 repeats keep graph_splits near 291, p50 >= 5.0 tok/s, worst >= 4.8 tok/s; perf log is saved or unavailability recorded.
+- note: no source promotion in A81; record next-route recommendation only. Do not run `git push`.
+
+### A81 result - post-A80 stability and bottleneck audit
+
+- attempt: A81 post-A80 stability and bottleneck audit
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a81-a80-stability-bottleneck-audit`
+- validation_status: completed_pass
+- source_status: no source changes; accepted A80 source remained unchanged.
+- build_status: current `llama-cli` rebuilt successfully before audit.
+- expanded output audit: baseline and attention-safe each ran six deterministic prompts (`The capital of France is`, `2 + 2 =`, `The opposite of hot is`, `The color of the sky is`, `One plus one equals`, `Write the word hello`) under `MemoryMax=16G`; all 12 runs exited 0.
+- baseline expanded metrics: graph_splits `1237` for all six prompts; eval `1.97/1.88/1.90/1.85/1.95/1.92 tok/s`; visible generated text remained empty/coherent for this deterministic no-display-prompt audit.
+- A80 attention-safe expanded metrics: graph_splits `291` for all six prompts; eval `5.10/4.97/5.01/5.02/4.99/5.03 tok/s`; visible generated text remained empty/coherent for all prompts; no CUDA/assert/read/shape/NaN/Inf failures were seen in summaries.
+- A80 stability repeats: three attention-safe `-n 256` repeats exited 0 with graph_splits `291/291/291`, eval `5.27/5.38/5.32 tok/s`, p50 `5.32 tok/s`, worst `5.27 tok/s`. This passes the A81 stability thresholds p50 >= 5.0 and worst >= 4.8.
+- perf pass: `perf stat -d` n128 attention-safe run exited 0. Logs are `perf_stat_attn_safe_n128.log`, `perf_attn_safe_n128_stderr.log`, and `perf_attn_safe_n128_stdout.log` under the A81 run directory. The perf run kept graph_splits `291`; eval under perf was `3.92 tok/s` with wall time `42.875s`, task-clock `685340.54 ms`, `15.985 CPUs utilized`, `560688832192 instructions`, `1520047590669 cycles`, IPC `0.37`, frontend stalled cycles `8.45%`, branch miss rate `0.88%`, and L1D miss rate `1.80%`. LLC counters were not supported.
+- bottleneck interpretation: after A80 removes most CUDA F8 dense graph-split overhead, the remaining decode is still CPU-heavy and low-IPC. The log still shows expert tensors in `CUDA_Host`, active-expert scheduling, fused MoE/up-gate/mul-mat enabled, and `graph_splits=291`. The next route should focus on the CPU/MoE expert path and host-resident expert movement rather than broadening F8 dense CUDA placement. Candidate next diagnostics: perf/top-down or targeted timing around `iqk_mul_mat_moe` and expert scheduling under A80, thread-count sweep under A80, or improving host-resident MoE expert matmul/data movement.
+- accepted_env remains: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, and the existing MoE cache env. Broad A64/A66 remain `failed_invalid_for_quality`.
+- pushed_commit: n/a, blocked by WiCi no-push constraint.
