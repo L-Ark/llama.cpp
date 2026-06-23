@@ -4047,3 +4047,71 @@ Decision:
   - local accepted source commit: `0465e612a2173887f565b74a6cda4a30148e7e94`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
+### 2026-06-23 - Planned Diagnostic Attempt A66: Post-A64 Stability and Bottleneck Audit
+
+- attempt_id: `deepseek-v4-a66-post-a64-n256-r3`
+- baseline/current best:
+  - Accepted A64 full repeats: `9.22 tok/s` and `9.84 tok/s` at `-n 256` under `MemoryMax=16G`.
+  - A64 graph splits: `76`, down from A31/A59 `1237`.
+- purpose:
+  - Run one additional full `-n 256` repeat with the accepted A64 env/flags to verify post-promotion stability.
+  - Collect a lightweight bottleneck audit without source changes: graph splits, eval tok/s, prompt tok/s, total ms, service CPU time, host RSS/cgroup status, VRAM snapshots when available, and `perf stat` availability.
+- command summary:
+  - A31 command shape with accepted A64 env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - Flags: `-n 256 -ub 1 -t 20 -tb 20 -no-fa`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+  - Runner: local `.thinkless1/.opt/measure.sh`, writing `/root/lfz/runs/ik_llama/deepseek-v4-a66-post-a64-n256-r3`.
+- audit tools:
+  - `nvidia-smi` is available for pre/post VRAM snapshots.
+  - `perf` availability will be checked; if blocked by kernel permissions, use benchmark logs and `/usr/bin/time -v` output instead.
+- success metric:
+  - Repeat exits `0`, remains under the 16 GB host-memory cap, and has no CUDA OOM/assert/read/shape/smoke failure.
+  - Record strict timing metadata, log paths, and recomputed A64-family full-repeat p50/worst over A64 r1/r2 plus A66 r3.
+- rollback condition:
+  - No source rollback expected; this is diagnostic/validation only.
+  - If the benchmark fails, record the failed result and keep the previous local A64 best explicitly qualified.
+
+### 2026-06-23 11:20Z - A66 Result: Post-A64 Stability Audit Passed
+
+- attempt_id: `deepseek-v4-a66-post-a64-n256-r3`
+- status: `diagnostic validation passed, no source changes`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `6e3ec5f0ce7eae8d2ab27fd62226ef2ca2a62bb3`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a66-post-a64-n256-r3`
+- attempt_start_utc: `2026-06-23T11:19:50Z`
+- attempt_end_utc: `2026-06-23T11:20:24Z`
+- wall_clock_elapsed: `34s`
+- command summary: accepted A64 env/flags, `-n 256`, `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `MemoryMax=16G`, `MemorySwapMax=0`.
+- benchmark result:
+  - graph splits: `76`
+  - eval: `25704.02 ms / 255 runs = 9.92 tok/s`
+  - prompt eval: `988.00 ms / 5 tokens = 5.06 tok/s`
+  - total: `31739.82 ms / 260 tokens`
+  - exit_code: `0`
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a66-post-a64-n256-r3/bench.log`
+  - summary: `/root/lfz/runs/ik_llama/deepseek-v4-a66-post-a64-n256-r3/summary.json`
+- audit evidence:
+  - `systemd-run` service runtime: `33.482s`; `/usr/bin/time -v` elapsed wall clock: `0:33.51`.
+  - CPU time consumed: `8min 54.754s`.
+  - wrapper maximum resident set size: `6344 kbytes`; cgroup did not kill the service.
+  - pre-run VRAM snapshot: `304 MiB used / 32607 MiB total`, GPU util `0%`, power `27.63 W`.
+  - post-run VRAM snapshot: `304 MiB used / 32607 MiB total`, GPU util `0%`, power `28.29 W`.
+  - `nvidia-smi` snapshots: `nvidia_smi_pre.csv`, `nvidia_smi_post.csv` in the run dir.
+  - `perf stat` is available for simple probes; `perf stat -e cycles,instructions -- true` exited `0`; log `perf_stat_probe.log` in the run dir.
+- A64-family full-repeat stability:
+  - A64 r1: `9.22 tok/s`, graph splits `76`.
+  - A64 r2: `9.84 tok/s`, graph splits `76`.
+  - A66 r3: `9.92 tok/s`, graph splits `76`.
+  - recomputed p50: `9.84 tok/s`; worst full repeat: `9.22 tok/s`.
+- interpretation:
+  - A66 confirms the accepted A64 path is stable under the 16 GB benchmark discipline.
+  - The original graph-fragmentation bottleneck is no longer dominant: splits remain `76` instead of A31/A59 `1237`.
+  - The largest evidenced remaining cost is the decode eval path itself (`25.704s` for 255 generated tokens). Next work should profile inside the post-A64 CUDA execution path, with likely candidates including generic F8-to-FP16 dequantization plus cublas dense matmul, residual splits, or MoE/cache activity.
+- decision:
+  - Keep A64 as current local best: A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
+  - Do not run A65 fallback; A64 is accepted and stable.
+  - Future A67 should be a targeted post-A64 CUDA/perf profile, not another broad scheduler flag.
+- commit/push:
+  - local commit: pending at time of result entry.
+  - pushed_commit: `n/a, blocked by WiCi no-push constraint`
+
