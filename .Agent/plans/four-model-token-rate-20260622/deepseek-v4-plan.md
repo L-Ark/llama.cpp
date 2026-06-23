@@ -2555,7 +2555,7 @@ Decision:
     expert-pack counters and proceed to RAM tier / profile only if the sidecar path is at least
     stable.
 
-### 2026-06-23 08:35Z - A47/A47b Result: Expert-Pack Env Full Run Beats A31
+### 2026-06-23 08:35Z - A47/A47b/A47c Result: Expert-Pack Env Is Not Yet Stable
 
 Timing:
 
@@ -2568,6 +2568,11 @@ Timing:
   - attempt_start_utc: `2026-06-23T08:31:27Z`
   - attempt_end_utc: `2026-06-23T08:34:48Z`
   - wall_clock_elapsed: `201 seconds`
+  - time_confidence: `strict`
+- A47c full repeat attempt_id: `deepseek-v4-a47c-expert-pack-iouring-n256-repeat2`
+  - attempt_start_utc: `2026-06-23T08:40:25Z`
+  - attempt_end_utc: `2026-06-23T08:43:17Z`
+  - wall_clock_elapsed: `172 seconds`
   - time_confidence: `strict`
 
 Config:
@@ -2590,13 +2595,17 @@ Metrics:
 | attempt | n_predict | eval_tok_s | eval_ms | prompt_eval_tok_s | total_ms | max_rss_kb | major_faults | fs_inputs | result |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | A47 | 64 | 1.97 | 32054.93 | 1.67 | 40224.41 | 28103464 | 0 | 640 | promising short run |
-| A47b | 256 | 1.95 | 130909.58 | 1.68 | 138968.84 | 28103464 | 0 | 560 | beats A31 and fastllm ref |
+| A47b | 256 | 1.95 | 130909.58 | 1.68 | 138968.84 | 28103464 | 0 | 560 | single-run best |
+| A47c | 256 | 1.88 | 135332.71 | 1.62 | 143722.24 | 28103472 | 0 | 608 | repeat regressed below A31 p50 |
 
 Comparison:
 
 - A31 p50 full baseline: `1.91 tok/s`; A31 worst: `1.90 tok/s`.
 - fastllm host-RAM-16GB reference target: `1.94 tok/s`.
 - A47b full result: `1.95 tok/s`, `+0.04 tok/s` vs A31 p50 and `+0.01 tok/s` vs fastllm reference.
+- A47c repeat result: `1.88 tok/s`, `-0.03 tok/s` vs A31 p50 and below the fastllm reference.
+- A47b/A47c are too noisy to advance the stable SOTA. Until another validated repeat set proves
+  otherwise, the stable DeepSeek V4 ik_llama 16GB SOTA remains A31 p50 `1.91 tok/s`.
 
 Important caveat:
 
@@ -2604,19 +2613,23 @@ Important caveat:
   atexit lines). The env was present in `/usr/bin/time` command output, but counter absence means
   A47b cannot yet prove whether the improvement came from the expert-pack runtime path, hot page
   cache after pack creation, or reduced major faults from another placement effect.
-- Because the full-run token rate improved, record and push immediately, but treat the next step
-  as validation rather than moving on blindly.
+- Because A47c failed to confirm the A47b speedup, the earlier A47b promotion commit must be treated
+  as a provisional record rather than a stable SOTA. Do not build the next optimization on A47b as the
+  baseline until expert-pack/cache counters and repeat speed are both validated.
 
 Decision:
 
-- Promote A47b as the current measured DeepSeek V4 ik_llama speed record under the required 16GB
-  systemd limit: `1.95 tok/s`.
+- Downgrade A47b from stable promotion to `unconfirmed-single-run-best`.
+- Keep A31 as the rollback baseline for config comparisons.
 - Immediate follow-up:
-  - run at least one repeat with the same config;
-  - add `GGML_MOE_TTFT_TRACE_OUT` or source counters if needed to prove the expert-pack/cache path;
-  - then test RAM tier with the generated expert-pack and `ram6g.ik_profile.csv`.
+  - first prove whether `GGML_MOE_EXPERT_PACK` is actually used at runtime by adding trace/counters or
+    checking existing TTFT trace support;
+  - only after the sidecar path is proven, retest RAM/VRAM fill using strict timing and at least two
+    full `-n 256` repeats;
+  - if expert-pack is not used, fix the runtime integration before cache-fill tuning.
 
 Logs:
 
 - `/root/lfz/runs/ik_llama/deepseek-v4-a47-expert-pack-iouring-n64/bench.log`
 - `/root/lfz/runs/ik_llama/deepseek-v4-a47b-expert-pack-iouring-n256/bench.log`
+- `/root/lfz/runs/ik_llama/deepseek-v4-a47c-expert-pack-iouring-n256-repeat2/bench.log`
