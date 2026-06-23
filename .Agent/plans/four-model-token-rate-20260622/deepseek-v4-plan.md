@@ -89,9 +89,13 @@ GGML_MOE_VRAM_CACHE_POLICY=lfu_lru
 
 Validated result:
 
-- A31 `-no-fa -t 20 -tb 20` full 256-token run: `eval_tok_s = 1.90`,
-  `prompt_eval_tok_s = 1.66`, log
-  `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log`.
+- A31 `-no-fa -t 20 -tb 20` full 256-token runs: `eval_tok_s = 1.90 / 1.91 / 1.92`.
+  - p50: `1.91 tok/s`
+  - worst: `1.90 tok/s`
+  - logs:
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log`
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat2/bench.log`
+    - `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat3/bench.log`
 - A30 `-no-fa` full 256-token runs: `eval_tok_s = 1.86 / 1.80 / 1.88`.
   - p50: `1.86 tok/s`
   - worst: `1.80 tok/s`
@@ -100,7 +104,7 @@ Validated result:
     - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat2/bench.log`
     - `/root/lfz/runs/ik_llama/deepseek-v4-a30-no-fa-n256-repeat3/bench.log`
 - Previous 16 GB best A13: `eval_tok_s = 1.79`.
-- Delta: `+0.04 tok/s` versus A30 p50 and `+0.11 tok/s` (`+6.1%`) versus A13.
+- Delta: p50 `+0.05 tok/s` versus A30 p50 and `+0.12 tok/s` (`+6.7%`) versus A13.
   This still trails the fastllm reference
   `1.94 tok/s`, so optimization continues from A30.
 
@@ -1014,8 +1018,17 @@ Apply previous-task routes in this order:
   - result: `eval_tok_s = 1.90`, `prompt_eval_tok_s = 1.66`, `gen_tokens = 255`,
     `rss_mb = 27444.79`.
   - log: `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256/bench.log`.
+  - repeat2: `eval_tok_s = 1.91`, `prompt_eval_tok_s = 1.66`, log
+    `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat2/bench.log`.
+  - repeat3: `eval_tok_s = 1.92`, `prompt_eval_tok_s = 1.66`, log
+    `/root/lfz/runs/ik_llama/deepseek-v4-a31-no-fa-t20-n256-repeat3/bench.log`.
+  - repeat summary: p50 `1.91 tok/s`, worst `1.90 tok/s`.
 - Decision: promote `-t 20 -tb 20 -no-fa` as the new 16 GB ik_llama DeepSeek V4 baseline. It
-  improves over A30 p50 (`1.86 tok/s`) by `+0.04 tok/s` and over A13 (`1.79 tok/s`) by
-  `+0.11 tok/s`. It remains below the fastllm reference (`1.94 tok/s`) by `0.04 tok/s`.
-- Next direction: run A31 repeats to measure stability. If stable, continue from `T=20 -no-fa` and
-  scan narrower runtime knobs; otherwise keep A30's `T=24 -no-fa` as the conservative fallback.
+  improves over A30 p50 (`1.86 tok/s`) by p50 `+0.05 tok/s` and over A13 (`1.79 tok/s`) by
+  p50 `+0.12 tok/s`. It remains below the fastllm reference (`1.94 tok/s`) by `0.03 tok/s`.
+- Next direction: continue from stable `T=20 -no-fa`. Fastllm CUDA kernels should not be copied
+  directly because fastllm and ik_llama have different tensor, graph, and quantization runtimes.
+  Instead, compare the DeepSeek V4 expert execution chain and port equivalent ideas into ik_llama:
+  hot expert placement/profile policy, DeepSeek4-specific expert layout handling, GPU-side
+  dequant/decode, reduced per-token repeated work, and eventually a DeepSeek4-specific fused MoE
+  path.
