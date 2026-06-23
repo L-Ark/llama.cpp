@@ -585,3 +585,27 @@ Apply previous-task routes in this order:
 - Decision: do not promote. Even with a high hotexp hit rate, the parallel/hotexp CPU path is
   slower than the promoted T24 baseline. This rules out "missing RAM hot expert cache" as the
   remaining fastllm gap for DeepSeek F8.
+
+### 2026-06-23 11:35Z - Optimization Attempt A16: F8 Stream-One Probe
+
+- Hypothesis: existing MoE stream/cache code only supports `IQ2/IQ3`, while DeepSeek V4 Flash
+  routed experts are `GGML_TYPE_F8_E4M3_B128`. Adding an F8 stream-one CUDA path might reduce the
+  remaining gap to the fastllm `1.94 tok/s` SOTA.
+- Probe implementation was built locally and intentionally left uncommitted unless it improved
+  speed. It added an F8_E4M3_B128 x F32 CUDA kernel behind `ggml_cuda_moe_stream_one()` plus
+  diagnostics around the CPU `mul_mat_id` stream hook.
+- Result A16d:
+  `MEMORY_MAX=16G GGML_MOE_STREAM=1 GGML_MOE_STREAM_DEFER=1 GGML_MOE_STREAM_DIAG=1 GGML_MOE_STREAM_ONE_CACHE_MIB=4096 GGML_MOE_PARALLEL_EXPERTS=1 EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=4 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a16d-f8-stream-diag-n4 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+  exited code `0`, `eval_tok_s = 1.57`. Log printed only `[moe_stream] enabled`; no stream-one or
+  `mul_mat_id` diagnostics were reached.
+- Result A16e control with fused MoE disabled:
+  `MEMORY_MAX=16G GGML_MOE_STREAM=1 GGML_MOE_STREAM_DEFER=1 GGML_MOE_STREAM_DIAG=1 GGML_MOE_STREAM_ONE_CACHE_MIB=4096 GGML_MOE_PARALLEL_EXPERTS=1 EXTRA_ARGS="-ub 1 -t 24 -tb 24 -no-fmoe" N_PREDICT=16 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a16e-no-fmoe-stream-diag-n16 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+  exited code `0`, `eval_tok_s = 1.54`, with `fused_moe = 0` but still no CPU `mul_mat_id`
+  diagnostics.
+- Diagnosis: DeepSeek V4 Flash is executing the hot MoE path through the CUDA backend
+  `GGML_OP_MOE_FUSED_UP_GATE` / CUDA `GGML_OP_MUL_MAT_ID` path, not the CPU `mul_mat_id` hook that
+  calls `ggml_cuda_moe_stream_one()`. Therefore extending stream-one to F8 does not affect the
+  current direct GGUF execution path.
+- Decision: do not promote. The prototype source and runner diagnostics were reverted before
+  commit. The next useful optimization must target the actual CUDA fused MoE / CUDA `mul_mat_id`
+  path, or move to the planned I/O/prefetch/MTP directions instead of CPU stream-one.
