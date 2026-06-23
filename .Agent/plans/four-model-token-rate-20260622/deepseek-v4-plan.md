@@ -728,3 +728,31 @@ Apply previous-task routes in this order:
   `total_ms = 157435.72`.
 - Decision: do not promote. The earlier short-run T28 result did not hold over the full 256-token
   validation. Keep `T=24` as the reproducible 16 GB baseline.
+
+### 2026-06-23 13:25Z - Optimization Attempt A21: Fusion Flag Smoke Scan
+
+- Hypothesis: current DeepSeek V4 direct GGUF performance may be sensitive to ik_llama fusion
+  choices. A small smoke scan can rule out simple CLI-level fusion toggles before writing code.
+- Change to try: no source changes, no new model files. Run 32-token probes with promoted
+  `-ub 1 -t 24 -tb 24` plus:
+  - A21a: `-no-fug`
+  - A21b: `-no-mmad`
+  - A21c: `-no-fug -no-mmad`
+  - A21d: `-muge`
+- Success metric: a 32-token probe must beat the known short control range (`~1.82 tok/s`) before
+  any 64/256-token validation. Otherwise record as unpromoted.
+- Rollback condition: crash/OOM/load failure or slower speed means keep baseline unchanged.
+
+#### A21 Result
+
+- A21a `-no-fug`: exited code `0`, `eval_tok_s = 1.75`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a21a_no_fug-n32/bench.log`.
+- A21b `-no-mmad`: exited code `0`, `eval_tok_s = 1.75`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a21b_no_mmad-n32/bench.log`.
+- A21c `-no-fug -no-mmad`: exited code `0`, `eval_tok_s = 1.78`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a21c_no_fug__no_mmad-n32/bench.log`.
+- A21d `-muge`: failed during model load because merged up/gate experts attempted to allocate a
+  `127693488160` byte CUDA_Host buffer, which is incompatible with the 16 GB host-RAM target.
+  Log: `/root/lfz/runs/ik_llama/deepseek-v4-a21d_muge-n32/bench.log`.
+- Decision: do not promote. Current default fusion flags remain better than disabling fused
+  up-gate or fused multi-add, and `-muge` is not viable for this 16 GB deployment.
