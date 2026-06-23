@@ -4954,3 +4954,4 @@ Decision:
 - next_concrete_optimization_candidate: inspect and optimize inside the MXFP4/Q8_2 helper itself (`mul_mat_qX_q8_Helper` / `MXFP4_Unpacker`) or reduce graph-level OpenMP barriers outside `iqk_mul_mat_moe`; avoid outer-active or serial expert scheduling for this workload unless a new batching design changes the work distribution.
 - rollback_status: temporary source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
+- result_commit: `ef741d01a575bbfe17aa933cd2df821a7132189f`
