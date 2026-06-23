@@ -4873,3 +4873,36 @@ Decision:
 - accepted_env remains: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, and the existing MoE cache env. Broad A64/A66 remain `failed_invalid_for_quality`.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
 - result_commit: `799be01ade5df7898dfc9a408a23ddcf96317a04`
+
+### Planned Diagnostic Attempt A82 - post-A80 MoE movement profile
+
+- goal: profile the post-A80 CPU/MoE expert path and host-resident expert movement/cache behavior before selecting the next source optimization.
+- method: keep accepted A80 source unchanged; run symbol-level profiling under the accepted attention-safe env. Add temporary env-gated MoE movement diagnostics only if perf record/report cannot distinguish CPU MXFP4 matmul from expert movement/cache behavior.
+- acceptance: accepted A80 run exits 0, graph_splits remain near 291, and logs provide enough evidence to record `A82 bottleneck_classification` as `cpu_mxfp4_moe_matmul`, `host_expert_movement_cache`, `openmp_overhead`, `mixed_cpu_moe_and_movement`, or `inconclusive_with_logs`.
+- note: do not change accepted A80 behavior and do not run `git push`.
+
+### Diagnostic Result A82 - post-A80 MoE movement profile
+
+- status: completed; source behavior unchanged from accepted A80 attention-only F8 dense CUDA path.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a82-post-a80-moe-movement-profile`
+- input_commit: `8256fe3a`
+- accepted_env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn`
+- command_summary: `perf record -F 99 -g --call-graph dwarf` around `llama-cli --defer-experts --fit ... -n 128 -ub 1 -t 20 -tb 20 -no-fa` under `MemoryMax=16G`.
+- exit_status: perf-wrapped run exited `0`; `perf report` generated symbol and self-symbol reports.
+- quality/perf guard: graph_splits remained `291`; eval time `26769.30 ms / 127 runs`, `4.74 tok/s` under perf overhead; no CUDA/assert/NaN/Inf failure was logged.
+- perf_artifacts:
+  - `perf_attn_safe_n128_stdout.log`
+  - `perf_attn_safe_n128_stderr.log`
+  - `perf_attn_safe_n128.data`
+  - `perf_report_symbols.txt`
+  - `perf_report_self_symbols.txt`
+- top_evidence:
+  - Children report: `ggml_graph_compute -> ggml_compute_forward_mul_mat_id -> iqk_mul_mat_moe -> MXFP4_Unpacker` accounts for about `23.99-25.15%` of sampled cycles.
+  - Self-symbol report: `libgomp.so.1.0.0` runtime/wait symbols account for `61.04%` and `7.36%` self overhead, while useful MXFP4 `mul_mat_qX_q8_Helper` accounts for `24.65%` self.
+  - CUDA movement/cache evidence is much smaller in this run: `ggml_backend_cuda_buffer_get_tensor -> cudaMemcpyAsync -> cuMemcpyDtoHAsync_v2` appears at about `2.54%` children / `2.23%` self-side CUDA frame; HtoD/load-related `ggml_backend_cuda_buffer_set_tensor -> cudaMemcpyAsync` appears around `0.71-0.77%`.
+- temporary_instrumentation_used: no. Perf was sufficient to separate OpenMP runtime overhead, CPU MXFP4 MoE matmul work, and smaller host/device movement frames.
+- A82 bottleneck_classification: `openmp_overhead`.
+- interpretation: post-A80 decode is no longer blocked primarily by broad CUDA F8 placement. The accepted attention-safe path leaves CPU MoE work under `iqk_mul_mat_moe`, but the dominant sampled cost in this accepted n128 profile is OpenMP runtime/spin/wait overhead around the CPU graph execution. Host-resident expert movement/cache copies are visible but too small to be the primary bottleneck in this run.
+- next_concrete_optimization_candidate: run an A83 focused OpenMP/threading probe under the accepted A80 path: sweep `-t/-tb`, `OMP_WAIT_POLICY`, and `GOMP_SPINCOUNT`, then consider a source-level reduction of per-token OpenMP team overhead around the CPU MoE `MUL_MAT_ID`/`iqk_mul_mat_moe` path if runtime knobs confirm the profile. Keep A80 placement rules unchanged and preserve the A75-style correctness audit for any promoted source change.
+- rollback_status: no source instrumentation was added; `git diff -- ggml/src` stayed empty. Only this plan record is intended to be committed.
+- pushed_commit: n/a; WiCi run forbids `git push`.
