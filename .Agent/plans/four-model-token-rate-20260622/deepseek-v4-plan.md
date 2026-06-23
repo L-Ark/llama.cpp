@@ -3109,6 +3109,34 @@ Decision:
   - Config-only attempt; no source rollback needed.
   - If no run beats A31, keep A31 as SOTA and record all failed variants.
 
+### 2026-06-23 - Planned Config Attempt A58: Graph Scheduling / Async Scheduler Sweep
+
+- attempt_id: `deepseek-v4-a58-graph-scheduler-sweep`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A56 `perf` shows about `89%` of CPU samples in `libgomp` runtime internals.
+  - A54 shows about `84k` backend graph compute calls in a `64`-token run, matching roughly `1200+`
+    tiny graph/split evaluations per generated token.
+  - A57 showed OpenMP passive waiting is too slow and reduced thread counts do not beat A31 on
+    `-n 256`; therefore the next largest target is graph/scheduler structure rather than OpenMP
+    wait policy alone.
+- hypothesis:
+  - `-smgs` may force split-mode graph scheduling that reduces harmful tiny scheduling behavior or
+    changes backend split grouping.
+  - `-sas` may overlap split evaluation enough to reduce scheduler wait overhead.
+  - If either short run exceeds the A31 short-run band, validate with full `-n 256`.
+- planned runs:
+  - A58a: A31 env/flags plus `-smgs`, `-n 64`.
+  - A58b: A31 env/flags plus `-sas`, `-n 64`.
+  - A58c: if either looks promising, combine `-smgs -sas`, `-n 64`.
+- success metric:
+  - Quick filter must reach at least `1.93 tok/s` on `-n 64` without host RAM exceeding the 16GB
+    cgroup.
+  - Promotion requires repeated `-n 256` validation beating A31 p50 by `> 0.01 tok/s`.
+- rollback condition:
+  - Config-only attempt; no source rollback.
+  - If all variants fail quick filter, record and keep A31 as SOTA.
+
 ### 2026-06-23 10:04Z - A57 Result: OpenMP Wait/Thread Sweep Did Not Beat A31
 
 - attempt_id: `deepseek-v4-a57-openmp-wait-policy-sweep`
