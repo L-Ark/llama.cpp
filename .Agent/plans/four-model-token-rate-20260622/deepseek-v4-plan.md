@@ -2695,3 +2695,96 @@ Logs:
 - rollback condition:
   - If `--pipe` also fails to start a real model run, stop using systemd-run for source probes and
     use an explicit shell `ulimit`/cgroup wrapper or a preexisting runner that already captures logs.
+
+### 2026-06-23 08:59Z - A48b Result: Expert-Pack Env Still Not Used By Active Path
+
+- attempt_id: `deepseek-v4-a48b-expert-pack-trace-pipe-n8`
+- attempt_start_utc: `2026-06-23T08:59:06Z`
+- attempt_end_utc: `2026-06-23T08:59:19Z`
+- wall_clock_elapsed: `13 seconds`
+- time_confidence: `strict`
+- result_status: `unpromoted diagnostic, no source changes`
+- promoted_commit: `n/a`
+- log_path: `/root/lfz/runs/ik_llama/deepseek-v4-a48b-expert-pack-trace-pipe-n8/bench.log`
+- trace_path: `/root/lfz/runs/ik_llama/deepseek-v4-a48b-expert-pack-trace-pipe-n8/ttft_trace.tsv`
+
+Benchmark:
+
+- prompt eval: `3076.99 ms / 5 tokens = 1.62 tok/s`
+- eval: `3660.53 ms / 7 runs = 1.91 tok/s`
+- total: `11888.67 ms / 12 tokens`
+- `/usr/bin/time` wall: `0:13.03`
+- systemd service runtime: `13.006s`
+
+Trace summary:
+
+```text
+rows=10560
+pack_hit=0
+cache_hit=0
+ram_hit=0
+copy_ms_sum=7062.0
+ops:
+  cpu_down_route=7920
+  cpu_down_minflt=1320
+  cpu_down_majflt=1320
+```
+
+Interpretation:
+
+- `systemd-run --pipe` works and should be used for future non-interactive probes instead of `--pty`.
+- The expert-pack env was present, but there was still no
+  `[moe_stream_batch] expert pack: loaded ...` line and no expert-pack atexit counters.
+- The TTFT trace proves the current A31/A47-style DeepSeek V4 path is still the CPU/down
+  CUDA_Host/mmap route, not the `moe_stream_batch.cu` VRAM cache / RAM tier / expert-pack copy route.
+- Therefore simply increasing `GGML_MOE_VRAM_CACHE_MIB`, adding RAM tier, or changing iouring knobs
+  cannot improve hit rate until the runtime copy path is actually connected.
+
+Decision:
+
+- Do not promote.
+- Keep A31 p50 `1.91 tok/s` as the stable SOTA baseline.
+- Before source edits, run one final no-code probe using the now-existing expert pack plus startup
+  profile expert-row preload. This uses the existing
+  `ggml_cuda_moe_stream_preload_expert_from_pack_async()` hook and may populate the VRAM cache before
+  decode even though the normal active-expert copy path does not currently use the pack.
+
+### 2026-06-23 - Planned Optimization Attempt A49: Startup Expert-Row Preload From Pack
+
+- attempt_id: `deepseek-v4-a49-startup-pack-profile-preload-n64`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis:
+  - A45 startup profile preload loaded zero entries before the DeepSeek V4 expert-pack existed.
+  - `examples/main/main.cpp` can now call
+    `ggml_cuda_moe_stream_preload_expert_from_pack_async()` when:
+    `LLAMA_PROMPT_STARTUP_PROFILE_PRELOAD=1`,
+    `LLAMA_CHAT_STARTUP_PROFILE_EXPERT_ROWS=1`, and
+    `GGML_MOE_EXPERT_PACK=<pack>` are set.
+  - If it loads the hot profile into VRAM cache, a short run should show `startup profile preload:
+    loaded > 0`, VRAM cache allocation/counters, and some `cache_hit` or `pack_hit` trace entries.
+- config:
+  - A31 env/flags plus:
+    - `GGML_MOE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`
+    - `GGML_MOE_IO_BACKEND=iouring`
+    - `GGML_MOE_IO_BYTES=2097152`
+    - `GGML_MOE_IO_DEPTH=16`
+    - `GGML_MOE_STAGE_PINNED=1`
+    - `GGML_MOE_STAGE_PINNED_SLOTS=16`
+    - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/ik_llama/deepseek-v4-a45-vram-ram-cache-fill-sweep/vram7g.ik_profile.csv`
+    - `LLAMA_PROMPT_STARTUP_PROFILE_PRELOAD=1`
+    - `LLAMA_CHAT_STARTUP_PROFILE_EXPERT_ROWS=1`
+    - `LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_TENSORS=2000`
+    - `LLAMA_CHAT_STARTUP_PROFILE_PRELOAD_EXPERT_ROWS=1569`
+    - `GGML_MOE_TTFT_TRACE_OUT=<run>/ttft_trace.tsv`
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - The run completes without OOM;
+  - startup preload reports `loaded > 0`;
+  - trace or counters show nonzero VRAM cache hits and/or expert-pack hits;
+  - short eval speed is not materially below A31 short-run band.
+- rollback condition:
+  - preload loads zero entries, cache hit stays zero, OOM, or short speed regresses badly. If that
+    happens, stop no-code cache-fill attempts and move to a source change that connects expert-pack
+    reads to the `only_active_experts` scheduler copy path.
