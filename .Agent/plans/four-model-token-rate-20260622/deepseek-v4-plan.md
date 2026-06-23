@@ -2975,6 +2975,65 @@ Decision:
   - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
   - Do not promote diagnostic code.
 
+### 2026-06-23 09:51Z - A55 Result: Expected CPU Fallback Loops Did Not Emit Counters
+
+- attempt_id: `deepseek-v4-a55-all-thread-cpu-fallback-attribution`
+- status: `unpromoted diagnostic, source reverted, instrumentation miss`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `c45449d8e7fa4803b395a59cff0ad275d36fdbc2`
+- attempt_start_utc: `2026-06-23T09:50:12Z`
+- attempt_end_utc: `2026-06-23T09:51:38Z`
+- wall_clock_elapsed: `86s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a55-all-thread-cpu-fallback-attribution`
+- benchmark result:
+  - load time: `8356.00 ms`
+  - prompt eval: `3118.90 ms / 5 tokens = 1.60 tok/s`
+  - eval: `34860.38 ms / 63 runs = 1.81 tok/s`
+  - total: `43243.78 ms / 68 tokens`
+  - service runtime: `44.412s`
+  - service CPU time: `12min 40.178s`
+- attribution summary:
+  - No `[deepseek4_cpu_fallback_attr]` line was emitted.
+- interpretation:
+  - The specific down/up-gate CPU fallback loops instrumented by A55 did not execute in this run, or
+    at least did not execute the instrumented sections. This is an instrumentation miss.
+  - The high aggregate CPU time remains real (`12min 40s` CPU for `44.4s` service runtime), so the
+    next step should stop guessing source locations and use a system profiler to identify hot
+    functions directly.
+- rollback/rebuild:
+  - Temporary `ggml.c` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully after revert.
+  - Post-revert status only contains unrelated untracked `.Agent/plans/m3-race-spec*` files.
+- decision:
+  - Do not promote A55 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A56 should run a short `perf record/report` under the same 16GB cgroup to identify the actual CPU
+    hotspots.
+
+### 2026-06-23 - Planned Diagnostic Attempt A56: System `perf` CPU Hotspot Profile
+
+- attempt_id: `deepseek-v4-a56-perf-cpu-hotspot-profile`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - Source-level probes ruled out several guessed locations but the process still consumes about
+    `12min` aggregate CPU for a `44s` wall-clock run.
+- hypothesis:
+  - The true bottleneck is visible in sampled CPU stacks: likely GGML scheduler/threadpool overhead,
+    CPU tensor ops outside the two A55 loops, sampling/logits work, or another fallback path.
+- planned command:
+  - Run `perf record -F 99 -g -- systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0 ...`
+    with A31 env/flags and `-n 64`.
+  - Save `perf.data`, `perf.report.txt`, benchmark log, start/end timestamps, and wall-clock elapsed.
+  - If kernel settings block perf, record the exact error and fall back to `/usr/bin/time -v` plus
+    `pidstat -t`/`top -H` sampling.
+- success metric:
+  - Identify top CPU symbols/stacks accounting for a material share of samples.
+  - If a clear source hotspot appears, A57 should be a targeted optimization attempt rather than
+    another broad diagnostic.
+- rollback condition:
+  - No source changes are expected for A56.
+  - Do not promote profiler output as a performance change.
+
 ### 2026-06-23 09:46Z - A54 Result: CUDA Graph Launch/Sync Is Not The Missing Runtime
 
 - attempt_id: `deepseek-v4-a54-cuda-graph-sync-attribution`
