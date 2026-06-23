@@ -4751,3 +4751,4 @@ Decision:
 - scope: add a temporary env-gated `GGML_DEEPSEEK4_CUDA_F8_DENSE_FP32_ACCUM=1` repair path for F8 dense `MUL_MAT` that keeps fp16 dequantized inputs but writes cublas output directly to fp32 using `CUBLAS_COMPUTE_32F`; compare baseline, known-bad A64, and repair modes with A75 prompts.
 - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a77-f8-quality-repair-probe`
 - decision_pending: keep source only if repair mode passes visible-output correctness; otherwise revert and record failed/unpromoted.
+- result_commit: `e12674b7cbd92bd2102b4e9d533d7f2617508272`
