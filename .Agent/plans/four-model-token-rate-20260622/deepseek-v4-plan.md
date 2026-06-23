@@ -3522,3 +3522,69 @@ Decision:
 - rollback condition:
   - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
   - Do not promote diagnostic code.
+### 2026-06-23 10:22Z - A58 Result: Graph Scheduler / Async Scheduler Did Not Produce Stable Improvement
+
+- attempt_id: `deepseek-v4-a58-graph-scheduler-sweep`
+- status: `not promoted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `e106291a9a46a9ad088c08e3a3e636936035ab68`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hard constraints:
+  - Host RAM capped with `systemd-run -p MemoryMax=16G -p MemorySwapMax=0`.
+  - VRAM cache remained at the A31 fill-oriented setting: `GGML_MOE_VRAM_CACHE_MIB=24576`,
+    `GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1`, `GGML_MOE_VRAM_CACHE_SAFETY_MIB=512`.
+- run records:
+  - A58a `-smgs`, `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a58a-smgs-n64`
+    - attempt_start_utc: `2026-06-23T10:11:45Z`
+    - attempt_end_utc: `2026-06-23T10:12:28Z`
+    - wall_clock_elapsed: `43s`
+    - eval: `33301.59 ms / 63 runs = 1.89 tok/s`
+    - result: below quick-filter threshold; do not validate full.
+  - A58b `-sas`, `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a58b-scheduler-async-n64`
+    - attempt_start_utc: `2026-06-23T10:12:54Z`
+    - attempt_end_utc: `2026-06-23T10:13:36Z`
+    - wall_clock_elapsed: `42s`
+    - eval: `32478.33 ms / 63 runs = 1.94 tok/s`
+    - result: passed quick filter; validate full.
+  - A58b `-sas`, `-n 256`, repeat1:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a58b-scheduler-async-n256-repeat1`
+    - attempt_start_utc: `2026-06-23T10:14:06Z`
+    - attempt_end_utc: `2026-06-23T10:16:27Z`
+    - wall_clock_elapsed: `141s`
+    - eval: `131999.61 ms / 255 runs = 1.93 tok/s`
+    - result: above A31, but requires repeat confirmation.
+  - A58b `-sas`, `-n 256`, repeat2:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a58b-scheduler-async-n256-repeat2`
+    - attempt_start_utc: `2026-06-23T10:16:53Z`
+    - attempt_end_utc: `2026-06-23T10:19:18Z`
+    - wall_clock_elapsed: `145s`
+    - eval: `135026.18 ms / 255 runs = 1.89 tok/s`
+    - result: failed repeat confirmation.
+  - A58c `-smgs -sas`, `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a58c-smgs-sas-n64`
+    - attempt_start_utc: `2026-06-23T10:19:47Z`
+    - attempt_end_utc: `2026-06-23T10:20:29Z`
+    - wall_clock_elapsed: `42s`
+    - eval: `32979.22 ms / 63 runs = 1.91 tok/s`
+    - result: no full validation value.
+- interpretation:
+  - `-smgs` does not help; it was slower than A31 in the quick run.
+  - `-sas` can produce a good single run (`1.93-1.94 tok/s`) but is not repeat-stable under full
+    `-n 256` validation.
+  - The combination `-smgs -sas` does not beat A31 in quick screening.
+  - The A56 bottleneck remains valid: CPU-side graph/OpenMP scheduling overhead is large, but the
+    existing CLI scheduler toggles are not sufficient to make a stable SOTA improvement.
+- timing bookkeeping:
+  - last promoted record remains A31.
+  - delta_from_last_promoted_record: not applicable because A58 was not promoted.
+  - elapsed_since_integration_start: not recomputed for unpromoted A58; strict per-run wall-clock
+    fields are recorded above.
+- decision:
+  - Do not promote A58.
+  - Do not push A58 as a token-rate improvement; push only this experiment record.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - Next optimization should still attack graph/scheduler overhead, but likely needs source-level
+    changes that reduce split count, reduce tiny graph submissions, or batch/fuse per-token MoE work;
+    simple `-smgs` / `-sas` runtime flags are exhausted.
