@@ -4332,6 +4332,6 @@ Decision:
   - Keep accepted A64 command as current local best.
   - Future A70 should be a targeted source probe around `iqk_mul_mat_moe` work partitioning or batching for the DeepSeek4 `Nx=2048, Ny=1, ne00=4096, typeB=q8_2_x4` expert path.
 - commit/push:
-  - local commit: pending at time of result entry.
+  - local result commit: `98c85c987f992f9cab4a26cb57ef6486c19b6eb0`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
