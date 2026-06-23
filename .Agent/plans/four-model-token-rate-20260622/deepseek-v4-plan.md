@@ -2516,3 +2516,41 @@ Decision:
   - `GGML_MOE_IO_BACKEND=iouring`;
   - `GGML_MOE_RAM_TIER_MIB=0`;
   - then add RAM tier/profile only if the pack path is stable.
+
+### 2026-06-23 - Planned Optimization Attempt A47: Expert-Pack I/O Baseline
+
+- attempt_id: `deepseek-v4-a47-expert-pack-iouring-n64`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- prerequisite artifact:
+  `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`
+- hypothesis:
+  - The new expert-pack sidecar should let ik_llama bypass scattered GGUF mmap/page-fault expert
+    reads and instead use the existing expert-pack runtime path.
+  - The first run should isolate the expert-pack path without RAM tier, so that regressions can be
+    attributed to sidecar I/O/backend behavior before adding RAM residency.
+- env delta versus A31:
+  - `GGML_MOE_EXPERT_PACK=<DeepSeek expert-pack>`
+  - `GGML_MOE_IO_BACKEND=iouring`
+  - `GGML_MOE_IO_BYTES=2097152`
+  - `GGML_MOE_IO_DEPTH=16`
+  - `GGML_MOE_IO_SORT_OFFSET=1`
+  - `GGML_MOE_IO_SQPOLL=1`
+  - `GGML_MOE_STAGE_PINNED=1`
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`
+  - keep `GGML_MOE_RAM_TIER_MIB=0`
+  - keep A31 VRAM cache envs.
+- flags:
+  - A31 base flags with `-n 64` for the first pass:
+    `--defer-experts --fit -ngl 999 -c 512 -n 64 --ignore-eos --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -ub 1 -t 20 -tb 20 -no-fa`
+- cgroup:
+  - `MemoryMax=16G`, `MemorySwapMax=0`.
+- expected logs:
+  - `/root/lfz/runs/ik_llama/deepseek-v4-a47-expert-pack-iouring-n64/bench.log`
+  - `systemd.log`, `command.txt`, strict attempt timing files.
+- success metric:
+  - short `-n 64` should be stable and should not regress below the A31 short-run band.
+  - If it is promising, run full `-n 256`; promote only if full result beats A31 p50 `1.91 tok/s`.
+- rollback condition:
+  - crash, read failures, OOM, or clear short-run regression means do not promote; record the
+    expert-pack counters and proceed to RAM tier / profile only if the sidecar path is at least
+    stable.
