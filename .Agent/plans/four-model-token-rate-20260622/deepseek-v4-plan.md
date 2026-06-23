@@ -1237,3 +1237,66 @@ Apply previous-task routes in this order:
     around down quantization versus down matvec.
   - The most promising full optimization remains a DeepSeek4-specific two-stage MoE op modeled after
     fastllm's concept: top-k NVFP4 SwiGLU stage followed by top-k NVFP4 down-reduce stage.
+
+### 2026-06-23 - Planned Optimization Attempt A34: Down/Reduce And Graph CLI Guardrail Scan
+
+- attempt_id: `deepseek-v4-a34-down-reduce-cli-scan`
+- hypothesis: A33 showed the current remaining gap is down-side work after SwiGLU: six-row
+  post-SwiGLU quantization, generic down `MUL_MAT_ID`, and final weighted reduce. Before writing a
+  custom DeepSeek4 CUDA down-reduce kernel, test whether existing runtime switches around the final
+  reduce and graph reuse are hurting this exact `-ub 1`, top-6 DeepSeek V4 decode shape.
+- planned changes: no source changes. Run short 64-token scans from the A31 baseline while toggling:
+  - control: A31 flags unchanged
+  - `-no-mmad` / `--no-fused-mul-multiadd`
+  - `-no-gr` / `--no-graph-reuse`
+  - combined `-no-mmad -no-gr` only if either single toggle is competitive
+- benchmark command shape:
+  - `MemoryMax=16G`, `MemorySwapMax=0`
+  - env: `GGML_CUDA_NO_PINNED=1`, `GGML_MOE_RAM_TIER_MIB=0`,
+    `GGML_MOE_VRAM_CACHE_MIB=24576`, `GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1`,
+    `GGML_MOE_VRAM_CACHE_SAFETY_MIB=512`, `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`
+  - flags: `--defer-experts --fit -ngl 999 -c 512 -n 64 --ignore-eos --temp 0 --top-p 1.0
+    --top-k 1 --seed 1 --no-display-prompt -ub 1 -t 20 -tb 20 -no-fa`
+- success metric: a 64-token result must beat the A31 short-run control band (`1.93 tok/s`) by at
+  least `+0.01 tok/s` before spending a full 256-token validation. A promotable 256-token result
+  must beat A31 p50 `1.91 tok/s` by at least `+0.01 tok/s` and keep RSS under 16 GB cgroup limit.
+- rollback condition: any toggle below the control or any instability/read/CUDA failure is
+  unpromoted; no source rollback is needed because this is CLI-only.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan*/bench.log`.
+
+#### Result
+
+- attempt_start_utc: `2026-06-23T03:37:55Z`
+- attempt_end_utc: `2026-06-23T03:42:25Z`
+- wall_clock_elapsed: `270 seconds`
+- result_status: `unpromoted`
+- promoted_commit: `n/a`
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan/attempt_meta.env`
+- Parsed summary:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan/parsed_summary.json`
+- Runner note: this scan used `systemd-run --wait --collect` without `--pty`, so llama stdout/stderr
+  went to journald. The per-case `bench.log` files contain systemd and `/usr/bin/time` output only;
+  the complete llama logs were recovered and saved as per-case `journal.log` files.
+
+64-token results under `MemoryMax=16G`:
+
+| case | extra flags | eval tok/s | prompt eval tok/s | eval_ms | total_ms | service runtime | log |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| control | none | 1.96 | 1.69 | 32155.15 | 40053.62 | 41.145s | `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan/control/journal.log` |
+| no-mmad | `-no-mmad` | 1.91 | 1.64 | 32904.57 | 41172.51 | 42.225s | `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan/no-mmad/journal.log` |
+| no-gr | `-no-gr` | 0.61 | 1.65 | 104129.47 | 112310.87 | 1min 55.117s | `/root/lfz/runs/ik_llama/deepseek-v4-a34-down-reduce-cli-scan/no-gr/journal.log` |
+
+Decision:
+
+- Do not promote any new configuration.
+- Keep `fused_mmad=1`: disabling fused mul-multi-add made the short run slower than the control.
+- Keep `graph_reuse=1`: disabling graph reuse catastrophically regressed decode rate.
+- The control result (`1.96 tok/s`) is the existing A31 configuration and is treated as a
+  same-config short-run variance/recheck, not a new SOTA. It does not change the validated A31
+  256-token p50 baseline (`1.91 tok/s`).
+- Next direction: continue source-level work on the DeepSeek4 down path. Since existing down/reduce
+  CLI toggles do not help, the remaining meaningful route is lower-overhead down-side timing or a
+  true DeepSeek4-specific down-reduce CUDA path that avoids the generic post-SwiGLU Q8_1
+  quantization and generic `MUL_MAT_ID` setup.
