@@ -2843,3 +2843,94 @@ Decision:
     CUDA split tensor;
   - or implement a true F8 `moe_stream_batch`/VRAM-cache compute path. This is larger and riskier.
 - Until that source work exists, the stable 16GB SOTA remains A31 p50 `1.91 tok/s`.
+
+### 2026-06-23 - Planned Source Attempt A50: Expert-Pack Scheduler Copy Probe
+
+- attempt_id: `deepseek-v4-a50-sched-pack-copy-probe`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- hypothesis:
+  - A48b/A49 show the active path is `ggml_backend_sched` with `only_active_experts`, where the
+    scheduler copies active expert slices from CUDA_Host/mmap into the CUDA split tensor via
+    `ggml_backend_tensor_set_async()`.
+  - A minimal source hook at that copy point can bypass the original GGUF mmap pointer and read the
+    same expert slice from the contiguous `.expert-pack` sidecar.
+  - This does not require an F8 fused MoE kernel because the destination tensor layout/type stays
+    unchanged; it only changes the source of the H2D copy.
+- planned source change:
+  - Add a default-off env gate: `GGML_MOE_EXPERT_PACK_SCHED_COPY=1`.
+  - In `ggml/src/ggml-backend.cpp`, when `only_active_experts` copies ranges for tensors whose names
+    match expert-pack entries, read the requested expert range from `GGML_MOE_EXPERT_PACK` into a
+    temporary host buffer and call synchronous `ggml_backend_tensor_set()` for that destination range.
+  - Fall back to the original mmap copy on miss/read failure.
+  - Emit a small atexit counter report:
+    `sched_pack: hits, misses, read_failures, bytes`.
+- risk:
+  - A synchronous temporary buffer may be slower than mmap for hot page-cache runs. This is acceptable
+    for A50 because the first goal is proving correct wiring and counters, not promotion.
+  - If it regresses or destabilizes, revert the source patch before the next attempt.
+- build command:
+  - Rebuild the CUDA target after the patch using the existing repo build system.
+- benchmark command:
+  - A31 env/flags plus:
+    - `GGML_MOE_EXPERT_PACK=<DeepSeek expert-pack>`
+    - `GGML_MOE_EXPERT_PACK_SCHED_COPY=1`
+    - `GGML_MOE_TTFT_TRACE_OUT=<run>/ttft_trace.tsv`
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`
+  - first run `-n 16`; run `-n 64` only if it completes and logs nonzero sched-pack hits.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Build succeeds;
+  - short run exits code `0`;
+  - sched-pack counter `hits > 0` and `bytes > 0`;
+  - output is not obviously corrupted;
+  - short eval speed is not materially worse than A31 short-run band.
+- promotion gate:
+  - Only if a subsequent full `-n 256` repeat set beats A31 p50 `1.91 tok/s` with strict timing.
+- rollback condition:
+  - build failure, runtime crash, correctness failure, no sched-pack hits, or clear speed regression.
+    Revert source changes and keep only this plan record.
+
+### 2026-06-23 09:11Z - A50 Result: Scheduler Hook Did Not Hit Current Hot Path
+
+- attempt_id: `deepseek-v4-a50-sched-pack-copy-probe`
+- attempt_start_utc: `2026-06-23T09:10:31Z`
+- attempt_end_utc: `2026-06-23T09:11:23Z`
+- wall_clock_elapsed: `52 seconds`
+- time_confidence: `strict`
+- result_status: `reverted`
+- promoted_commit: `n/a`
+- build_log: `/root/lfz/runs/ik_llama/deepseek-v4-a50-sched-pack-copy-probe/build.log`
+- run_log: `/root/lfz/runs/ik_llama/deepseek-v4-a50-sched-pack-copy-probe/bench-n16.log`
+- trace_path: `/root/lfz/runs/ik_llama/deepseek-v4-a50-sched-pack-copy-probe/ttft_trace_n16.tsv`
+
+Source probe:
+
+- Added a default-off `GGML_MOE_EXPERT_PACK_SCHED_COPY=1` hook in
+  `ggml/src/ggml-backend.cpp` at the `only_active_experts` scheduler copy lambda.
+- The hook built successfully and the short run exited `0`.
+- The run did not print any `[sched_pack]` init/counter lines, so the hook was not reached by the
+  current DeepSeek V4 hot path.
+
+Benchmark:
+
+- prompt eval: `3019.04 ms / 5 tokens = 1.66 tok/s`
+- eval: `7771.03 ms / 15 runs = 1.93 tok/s`
+- total: `15812.80 ms / 20 tokens`
+- systemd service runtime: `16.949s`
+- exit status: `0`
+
+Decision:
+
+- Do not promote. The apparent `1.93 tok/s` short-run value is too short/noisy and has no sched-pack
+  evidence.
+- Revert the source patch immediately because the A50 success metric required nonzero sched-pack hits.
+- Rebuild after revert succeeded:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a50-sched-pack-copy-probe/rebuild-after-revert.log`.
+- Current evidence after A45/A48b/A49/A50:
+  - A31/A47-style execution uses the CPU/down CUDA_Host/mmap route visible as `cpu_down_*` TTFT events.
+  - ik_llama's existing VRAM/RAM/expert-pack cache layer is specialized for IQ2/IQ3 stream paths and
+    does not serve DeepSeek V4 `GGML_TYPE_F8_E4M3_B128` routed experts.
+  - The attempted scheduler hook did not intercept the hot path, so the next source attempt must
+    instrument or modify the actual CUDA fused MoE / CUDA `MUL_MAT_ID` path, not just generic
+    scheduler input copy.
+- Stable 16GB SOTA remains A31 p50 `1.91 tok/s`.
