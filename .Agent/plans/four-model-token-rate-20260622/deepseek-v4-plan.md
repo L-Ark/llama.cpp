@@ -3588,3 +3588,38 @@ Decision:
   - Next optimization should still attack graph/scheduler overhead, but likely needs source-level
     changes that reduce split count, reduce tiny graph submissions, or batch/fuse per-token MoE work;
     simple `-smgs` / `-sas` runtime flags are exhausted.
+
+### 2026-06-23 - Planned Diagnostic Attempt A59: Backend Split Distribution Profile
+
+- attempt_id: `deepseek-v4-a59-backend-split-distribution-profile`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A56 `perf` shows about `89%` of CPU samples in `libgomp` runtime internals.
+  - A54/A52 show tens of thousands of backend graph compute submissions during a short run, with
+    `graph splits = 1237` at model init.
+  - A58 proves the existing CLI scheduler switches (`-smgs`, `-sas`) are not enough for stable speedup.
+- hypothesis:
+  - The largest remaining speedup requires reducing graph fragmentation, but we first need to know
+    which split start nodes dominate: routed MoE `MUL_MAT_ID`, `CPY`, norm, attention, output, or
+    mixed backend placement nodes.
+  - If most splits start at `MUL_MAT_ID`, optimize MoE node grouping or DeepSeek4-specific fused
+    graph construction. If most splits start at copies/backend transfers, optimize placement/copy
+    policy instead.
+- planned source change:
+  - Add temporary default-off instrumentation in `ggml/src/ggml-backend.cpp`, gated by
+    `GGML_DEEPSEEK4_SPLIT_PROFILE=1`.
+  - During `ggml_backend_sched_split_graph()`, count split starts by backend, op, first node name,
+    node count, and input count.
+  - Print a compact summary once per process at exit or after graph split build.
+  - Save the source diff in the run directory and revert after the diagnostic.
+- benchmark command:
+  - A31 env plus `GGML_DEEPSEEK4_SPLIT_PROFILE=1`.
+  - A31 flags with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Produce a summary that accounts for the repeated split distribution and identifies the top split
+    categories by count.
+  - The run is diagnostic only; token rate is not comparable because instrumentation may add overhead.
+- rollback condition:
+  - Revert temporary source changes and rebuild default `llama-cli`.
+  - Do not promote diagnostic code.
