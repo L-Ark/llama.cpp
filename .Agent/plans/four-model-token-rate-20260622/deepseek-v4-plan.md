@@ -35,6 +35,15 @@ git config user.email "fliangae@connect.ust.hk"
 
 Optimization ideas may be chosen independently based on DeepSeek V4 Flash's actual architecture and bottlenecks, and may reference previous ik_llama optimization experience such as GLM/DeepSeek expert packing, VRAM cache/profile placement, startup preload, direct-read/io_uring, prompt scheduling, and decode prefetch. Before starting any optimization attempt, write a concrete optimization plan in this file, including the hypothesis, code/config changes to try, benchmark command, success metric, rollback condition, and expected logs. During the attempt, record the full process in this same plan: commands, metrics, failures, reverted ideas, elapsed time, log paths, and whether the result was pushed. If any key metric regresses versus the previous recorded best, including eval tok/s, TTFT, first_visible_s, total_ms, RSS, VRAM stability, read_failures, or smoke accuracy, immediately roll back to the previous best commit/config and record the rollback reason and verification run in this plan before trying another route.
 
+## Current Hard Requirements
+
+These requirements override older historical attempt notes in this file when they conflict.
+
+1. Host RAM must stay at or below `16 GB` for every accepted baseline, promoted result, and comparison run. Use `systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0` for benchmarks. GPU VRAM should be filled as much as safely possible using model placement, KV/cache/expert placement, or other ik_llama-supported mechanisms, but not at the cost of CUDA OOM or unstable generation.
+2. Timing starts when integration/framework work begins after required model files or converted GGUF files are already present. Model download and conversion time are excluded. The first successful token-rate measurement must be recorded. Every later token-rate improvement must record exact metrics, `delta_since_last_record`, and `elapsed_since_start` from the integration timer, with strict `attempt_start_utc`, `attempt_end_utc`, and `wall_clock_elapsed` evidence.
+3. Every confirmed token-rate improvement must be recorded in this plan, committed, and immediately pushed to the remote `deepseek-v4-flash` branch before further experimentation. Do not push DeepSeek V4 task commits to `main`.
+4. Work must start from the currently largest evidenced bottleneck, not from low-impact or convenient changes. Each new attempt must state the bottleneck evidence it targets and why that bottleneck is expected to have the largest speedup potential. If evidence disproves the bottleneck, record the result and move to the next largest evidenced bottleneck.
+
 Model source and target:
 
 - Download name: `deepseek-ai/DeepSeek-V4-Flash`
@@ -186,7 +195,7 @@ Validated result:
 - Previous 16 GB best A13: `eval_tok_s = 1.79`.
 - Delta: p50 `+0.05 tok/s` versus A30 p50 and `+0.12 tok/s` (`+6.7%`) versus A13.
   This still trails the fastllm reference
-  `1.94 tok/s`, so optimization continues from A30.
+  `1.94 tok/s`, so optimization continues from A31.
 
 ## Baseline Command
 
@@ -566,8 +575,9 @@ Apply previous-task routes in this order:
 
 ### 2026-06-22 17:05Z - Optimization Attempt A10: Uncapped Host RAM Hot Expert Cache
 
-- Current task no longer requires a 16 GB host-RAM cap, and the server has about `86 GiB` RAM
-  with no swap.
+- Historical note: this A10 attempt temporarily tested uncapped host RAM. It is not valid under the
+  current hard requirement, which requires accepted baselines, promoted results, and comparison runs
+  to stay within the 16 GB host-RAM cap.
 - DeepSeek-V4 routed experts use `GGML_TYPE_F8_E4M3_B128`, while ik_llama's MoE stream/cache
   fast path currently supports only `IQ3_XXS` and `IQ2_S`. Therefore F8 routed experts cannot
   immediately reuse the GLM IQ2/IQ3 GPU-stream SOTA path.
