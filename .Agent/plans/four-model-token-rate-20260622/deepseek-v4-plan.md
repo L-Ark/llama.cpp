@@ -4251,3 +4251,87 @@ Decision:
   - local result commit: `8f9f26053682f2cddf3d4172f23a15bb0c3e1729`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
+### 2026-06-23 - Planned Diagnostic Attempt A69: MXFP4 Expert Hotspot Attribution
+
+- attempt_id: `deepseek-v4-a69-mxfp4-hotspot-attr`
+- baseline/current best:
+  - Accepted A64 command remains current best: A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
+  - A67 identified the visible post-A64 CPU hotspot as `libggml.so` `mul_mat_qX_q8_Helper<MXFP4_Unpacker,...>` plus `libgomp` overhead.
+  - A68 showed broad `-t/-tb` retuning does not beat the A64-family baseline.
+- purpose:
+  - Attribute the MXFP4/Q8 helper calls to the public IQK entry paths and shapes without changing default behavior.
+  - Determine whether the hot path is plain `iqk_mul_mat`, routed `iqk_mul_mat_moe`, `iqk_mul_mat_moe_many`, hybrid expert scheduling, fused up/gate, or another CPU path.
+- planned source change:
+  - Add temporary instrumentation in `ggml/src/iqk/iqk_mul_mat.cpp`, gated by `GGML_DEEPSEEK4_MXFP4_HOTSPOT_ATTR=1`.
+  - Record MXFP4 call counts, aggregate wall time, representative shapes/types, thread indices, and row/expert scheduling parameters.
+  - Save source diff in `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr/source_probe.diff`.
+- benchmark command:
+  - Accepted A64 env plus `GGML_DEEPSEEK4_MXFP4_HOTSPOT_ATTR=1`.
+  - Flags: `-n 64 -ub 1 -t 20 -tb 20 -no-fa`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Diagnostic build succeeds and the run exits `0`, or the failure is recorded with logs.
+  - Plan records timing metadata, logs, whether instrumentation hit the A67 hotspot, top call families/shapes/timing, rollback status, and the next implementation direction.
+- rollback condition:
+  - Always revert temporary instrumentation and rebuild default `llama-cli` after the diagnostic.
+  - Do not promote instrumented throughput.
+
+### 2026-06-23 12:02Z - A69 Result: MXFP4 Hotspot Is Routed `iqk_mul_mat_moe` Down/Up Expert Work
+
+- attempt_id: `deepseek-v4-a69-mxfp4-hotspot-attr`
+- status: `diagnostic passed, source reverted, no performance promotion`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `2f8ea44ff82b86979ada4e535c1c2d398a9d855d`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr`
+- source files temporarily edited:
+  - `ggml/src/iqk/iqk_mul_mat.cpp`
+- source diffs:
+  - initial saved diff: `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr/source_probe.diff`
+  - final source-only diff before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr/source_probe.final.diff`
+- build validation:
+  - command: `git diff --check && cmake --build build-cuda --target llama-cli -j$(nproc)`
+  - result: passed before the diagnostic run.
+- benchmark command summary:
+  - accepted A64 env plus `GGML_DEEPSEEK4_MXFP4_HOTSPOT_ATTR=1`
+  - flags: `-n 64 -ub 1 -t 20 -tb 20 -no-fa`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- run timing:
+  - attempt_start_utc: `2026-06-23T12:02:01Z`
+  - attempt_end_utc: `2026-06-23T12:02:16Z`
+  - exit_code: `0`
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr/bench.log`
+- benchmark result:
+  - graph splits: `76`
+  - prompt eval: `1021.72 ms / 5 tokens = 4.89 tok/s`
+  - eval: `6489.02 ms / 63 runs = 9.71 tok/s`
+  - total: `12699.61 ms / 68 tokens`
+  - service runtime: `14.344s`
+  - CPU time consumed: `2min 29.881s`
+  - wrapper maximum resident set size: `6344 kbytes`; cgroup did not kill the service.
+- instrumentation result:
+  - The A67 MXFP4 helper hotspot was hit and all recorded MXFP4 calls went through `iqk_mul_mat_moe`.
+  - summary: `total_calls=904320`, `total_ms=76912.183`
+  - `iqk_mul_mat_moe`: `calls=904320`, `total_ms=76912.183`, `avg_us=85.050`
+  - No calls were attributed to plain `iqk_mul_mat`, `iqk_mul_mat_4d`, `iqk_mul_mat_moe_many`, `iqk_mul_mat_moe_many_hybrid`, or `iqk_moe_fused_up_gate` in this run.
+- representative sample shape:
+  - kind: `iqk_mul_mat_moe`
+  - `Nx=2048`, `Ny=1`, `ne00=4096`, `typeB=q8_2_x4`
+  - `ith` spans worker threads under `nth=20`
+  - `ne11=1`, `extra0=8192`, `extra1=49152`
+  - sample elapsed times were mostly tens to hundreds of microseconds per thread-level call.
+- rollback/rebuild:
+  - Temporary `ggml/src/iqk/iqk_mul_mat.cpp` instrumentation was reverted with `git apply -R` using the source-only final diff.
+  - Default `llama-cli` was rebuilt successfully after rollback; log `/root/lfz/runs/ik_llama/deepseek-v4-a69-mxfp4-hotspot-attr/rebuild-after-revert.log`.
+  - Post-rollback tracked status only contains the plan update; unrelated untracked `.Agent/plans/m3-race-spec*` remains.
+- interpretation:
+  - A69 resolves the A67 attribution ambiguity: the CPU MXFP4/Q8 hotspot is routed expert `iqk_mul_mat_moe`, not plain CPU matmul, hybrid many-expert scheduling, or fused up/gate.
+  - The shape `2048 x 4096` with `Ny=1` and `q8_2_x4` activation input is consistent with per-token routed expert work under `MUL_MAT_ID`/deferred expert execution.
+  - Since A68 showed thread-count retuning does not promote, the next source work should target `iqk_mul_mat_moe` scheduling/partitioning or reduce repeated `Ny=1` MXFP4 expert calls, not broad CLI flags.
+- decision:
+  - Do not promote A69 as a performance change.
+  - Keep accepted A64 command as current local best.
+  - Future A70 should be a targeted source probe around `iqk_mul_mat_moe` work partitioning or batching for the DeepSeek4 `Nx=2048, Ny=1, ne00=4096, typeB=q8_2_x4` expert path.
+- commit/push:
+  - local commit: pending at time of result entry.
+  - pushed_commit: `n/a, blocked by WiCi no-push constraint`
+
