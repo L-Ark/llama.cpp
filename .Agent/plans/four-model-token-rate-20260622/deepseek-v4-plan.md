@@ -4115,3 +4115,86 @@ Decision:
   - local result commit: `4770c9977bb9cad10db915cc80dee80c80a0f20c`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
+### 2026-06-23 - Planned Diagnostic Attempt A67: Post-A64 Decode Perf Profile
+
+- attempt_id: `deepseek-v4-a67-post-a64-perf-profile`
+- baseline/current best:
+  - A64-family full-repeat p50: `9.84 tok/s`; worst: `9.22 tok/s`.
+  - A66 confirmed graph splits stay at `76`, so the pre-A64 split-fragmentation bottleneck is no longer dominant.
+- purpose:
+  - Attribute the remaining post-A64 decode cost without source changes.
+  - Capture `perf stat` for the accepted A64 command path under `MemoryMax=16G` and, if permitted, collect `perf record -g` / `perf report` against the actual workload.
+  - Decide whether the next useful step is CUDA/F8 conversion profiling, cublas dense matmul profiling, residual CPU scheduler/sync work, MoE/cache behavior, or narrower source instrumentation.
+- command summary:
+  - Accepted A64 env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+  - Flags: `-n 128 -ub 1 -t 20 -tb 20 -no-fa` for a lower-cost diagnostic profile.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+  - Run dir: `/root/lfz/runs/ik_llama/deepseek-v4-a67-post-a64-perf-profile`.
+- tool plan:
+  - First run `perf stat -d -d -d` around `systemd-run` to capture wall-clock-scale hardware/software counters and benchmark logs.
+  - Then try a short `perf record -g` around the same service command if permissions allow useful samples.
+  - If `perf record` cannot profile the child service or produces no useful symbols, record that limitation and use `perf stat`, `/usr/bin/time -v`, graph split count, and log/source inspection instead.
+- success metric:
+  - Diagnostic run exits `0` or records a clear profiling-tool failure with logs.
+  - Plan records timing metadata, log paths, graph splits, throughput if available, perf availability/reliability, and a concrete next-bottleneck conclusion.
+- rollback condition:
+  - No source rollback expected because this is diagnostic only.
+  - If profiling fails, preserve run directory evidence and record failed/unpromoted diagnostic outcome.
+
+### 2026-06-23 11:32Z - A67 Result: Post-A64 Perf Profile Shows CPU Expert Matmul/OpenMP Bottleneck
+
+- attempt_id: `deepseek-v4-a67-post-a64-perf-profile`
+- status: `diagnostic passed, no source changes`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `7e7cbd4386fbd79274fa046f544190d0a3809e44`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a67-post-a64-perf-profile`
+- cgroup/env:
+  - `MemoryMax=16G`, `MemorySwapMax=0`
+  - `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`
+  - accepted A64 flags: `-ub 1 -t 20 -tb 20 -no-fa`
+- perf-stat wrapper run:
+  - attempt_start_utc: `2026-06-23T11:30:10Z`
+  - attempt_end_utc: `2026-06-23T11:30:31Z`
+  - exit_code: `0`
+  - command: `perf stat -d -d -d` around `systemd-run`, `-n 128`
+  - benchmark: graph splits `76`; eval `12997.95 ms / 127 runs = 9.77 tok/s`; prompt eval `1002.74 ms / 5 tokens = 4.99 tok/s`; total `19176.73 ms / 132 tokens`
+  - service runtime: `20.853s`; CPU time consumed: `4min 40.425s`
+  - limitation: this measured only the `systemd-run` launcher (`47.60 ms task-clock`, `0.002 CPUs utilized`), not the `llama-cli` workload.
+  - logs: `bench.log`, `perf_stat.log`
+- in-service perf-stat fallback:
+  - attempt_start_utc: `2026-06-23T11:31:07Z`
+  - attempt_end_utc: `2026-06-23T11:31:32Z`
+  - exit_code: `0`
+  - command: `systemd-run ... perf stat -d -d -d ... llama-cli`, `-n 128`
+  - benchmark: graph splits `76`; eval `15447.72 ms / 127 runs = 8.22 tok/s`; prompt eval `1240.01 ms / 5 tokens = 4.03 tok/s`; total `23124.22 ms / 132 tokens`
+  - service runtime: `25.250s`; CPU time consumed: `5min 34.507s`
+  - perf counters: `334446.99 ms task-clock`, `13.271 CPUs utilized`, `742138164481 cycles`, `463898476923 instructions`, `0.63 IPC`, `1730 context-switches`, `844064 page-faults`.
+  - logs: `bench_inside_perf.log`, `perf_stat_inside.log`
+- in-service perf-record run:
+  - attempt_start_utc: `2026-06-23T11:32:10Z`
+  - attempt_end_utc: `2026-06-23T11:32:26Z`
+  - exit_code: `0`
+  - command: `systemd-run ... perf record -F 99 -g ... llama-cli`, `-n 64`
+  - benchmark: graph splits `76`; eval `6579.87 ms / 63 runs = 9.57 tok/s`; prompt eval `1027.66 ms / 5 tokens = 4.87 tok/s`; total `12703.34 ms / 68 tokens`
+  - service runtime: `15.926s`; CPU time consumed: `2min 32.932s`
+  - perf record: captured `15205` samples, `0` lost samples, data file `perf.data` (`1.220 MB`).
+  - top exclusive samples from `perf_report_stdio.txt`:
+    - `46.85%` `libggml.so` `mul_mat_qX_q8_Helper<MXFP4_Unpacker,...ScaleHelperQ8_2, block_q8_2...>`
+    - `26.88%` `libgomp.so.1.0.0` offset `0x23f12`
+    - `16.06%` `libgomp.so.1.0.0` offset `0x240ca`
+    - `0.97%` `libcuda.so` path under `cudaMemcpyAsync` / `ggml_backend_cuda_buffer_set_tensor`
+    - `0.23%` `libggml.so` `ggml_compute_forward_mul_mat_id`
+  - logs: `bench_perf_record.log`, `perf_report_stdio.txt`, `perf_report_children_stdio.txt`
+- interpretation:
+  - Reliable attribution came from the in-service perf runs, not the launcher-wrapped perf stat.
+  - After A64 reduced dense F8 graph splits to `76`, the visible post-A64 CPU hotspot is routed expert work in the CPU MXFP4/Q8 helper path plus OpenMP runtime overhead, not CUDA F8 dense conversion or cublas host overhead.
+  - The CUDA driver/memcpy path appears in the short profile but is below `1%` exclusive samples, so it is not the next primary bottleneck from this evidence.
+  - The high task-clock (`334.4s` over `25.2s` elapsed, `13.27` CPUs utilized) and top `libgomp` samples indicate the remaining decode cost is still CPU/OpenMP-heavy, likely from deferred expert/MoE computation and scheduling.
+- decision:
+  - Do not change source in A67.
+  - Current local best remains A64-family p50 `9.84 tok/s`, worst `9.22 tok/s`.
+  - Next attempt should target the expert/MoE CPU path, such as a focused profile/instrumentation of `mul_mat_qX_q8_Helper` callers and expert cache/deferred expert scheduling, before attempting optimization.
+- commit/push:
+  - local commit: pending at time of result entry.
+  - pushed_commit: `n/a, blocked by WiCi no-push constraint`
+
