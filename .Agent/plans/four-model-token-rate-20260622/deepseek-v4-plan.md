@@ -1098,3 +1098,68 @@ Apply previous-task routes in this order:
   hot expert placement/profile policy, DeepSeek4-specific expert layout handling, GPU-side
   dequant/decode, reduced per-token repeated work, and eventually a DeepSeek4-specific fused MoE
   path.
+
+### 2026-06-23 03:12Z - Optimization Attempt A32: fastllm vs ik_llama Expert Chain Audit + Fused-UpGate Probe
+
+- attempt_start_utc: `2026-06-23T03:12:17Z`
+- attempt_end_utc: `2026-06-23T03:17:50Z`
+- wall_clock_elapsed: `333 seconds`
+- result_status: `unpromoted, reverted`
+- promoted_commit: `n/a`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a32-fastllm-expert-chain-audit/attempt_meta.env`.
+
+#### Chain Comparison
+
+- fastllm NVFP4 batch-1 path:
+  - `FastllmCudaTypedMergeMOENVFP4Batch1Indexed()` and
+    `FastllmCudaTypedMergeMOENVFP4Batch1()` use two specialized CUDA stages:
+    `LaunchFastllmGemmTypedNVFP4TopKSwiglu*` followed by
+    `LaunchFastllmGemmTypedNVFP4TopKDownReduce*`.
+  - It operates directly on the selected top-k NVFP4/F8 expert table or pointer list and reduces
+    the top-k down output with the route scores inside the specialized MoE path.
+  - This is a design to port conceptually, not a kernel to copy directly.
+- ik_llama current DeepSeek4 path:
+  - `llm_build_moe_ffn()` explicitly disables `can_use_fmoe` for `LLM_ARCH_DEEPSEEK4`, so DeepSeek4
+    uses generic `MUL_MAT_ID` graph nodes, not `GGML_OP_MOE_FUSED_UP_GATE`.
+  - The CUDA `MUL_MAT_ID` fast path already fuses the adjacent up/gate pair enough to reuse one
+    Q8_1 activation quantization for both projections.
+  - The remaining down projection still requires quantizing the SwiGLU output to Q8_1 before the
+    generic MXFP4 `MUL_MAT_ID` down op.
+- Practical conclusion:
+  - The earlier hypothesis "up/gate repeatedly quantizes activation" is mostly false for the
+    current hot path; ik_llama already reuses the input quantization across adjacent up/gate
+    `MUL_MAT_ID` nodes.
+  - The likely remaining gap versus fastllm is the down-side generic path: extra Q8_1 quantization,
+    generic `MUL_MAT_ID` setup, more intermediate tensors, and lack of a DeepSeek4-specific
+    top-k down-reduce kernel.
+
+#### Source Probe
+
+- Probe change: temporarily gate DeepSeek4 into the existing ik_llama fused MoE up/gate graph via:
+  - `GGML_DEEPSEEK4_ENABLE_FUSED_MOE_UP_GATE=1`
+  - set `swiglu_limits[il]` for DeepSeek4 when the fused op is used.
+- Default behavior was unchanged unless the env var was set.
+- Build: `cmake --build build-cuda -j 8` succeeded.
+- 64-token benchmark command shape:
+  - env: `GGML_CUDA_NO_PINNED=1 GGML_DEEPSEEK4_ENABLE_FUSED_MOE_UP_GATE=1`
+  - flags: `--defer-experts --fit -ngl 999 -c 512 -n 64 -ub 1 -t 20 -tb 20 -no-fa`
+  - Memory: `MemoryMax=16G`, `MemorySwapMax=0`
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a32-enable-fused-moe-upgate-n64/bench.log`
+- Result:
+  - `eval_tok_s = 1.90`
+  - `prompt_eval_tok_s = 1.64`
+  - `gen_tokens = 63`
+  - `rss_mb = 27444.79`
+- Decision:
+  - Do not promote. The probe is below A31 short-run best (`1.93 tok/s`) and does not justify a
+    256-token validation.
+  - Source changes were reverted and `build-cuda` was rebuilt back to the default implementation.
+- Next direction:
+  - Do not spend more time toggling the existing fused-upgate path for DeepSeek4; it is not the
+    fastllm-equivalent win.
+  - The next useful source-level target is a DeepSeek4-specific down/reduce fast path or a fused
+    top-k MoE op that avoids the generic post-SwiGLU Q8_1 quantization and generic `MUL_MAT_ID`
+    setup. A smaller preliminary probe is to instrument per-layer kernel counts / quantize calls
+    under A31 to quantify the down-side overhead before writing a custom kernel.
