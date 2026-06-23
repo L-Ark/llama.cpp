@@ -4770,3 +4770,28 @@ Decision:
 - recommended_follow_up: test stricter support gating that declines F8 dense CUDA placement for unsafe shapes/tensors, or implement a dedicated semantically equivalent F8 dense CUDA path and re-run the A75 audit before any performance validation.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 - result_commit: `42387b4dc7de5079db0b297048522daf46605bb4`
+
+### Planned Diagnostic Attempt A78 - F8 dense CUDA placement localization
+- planned_at_utc: 2026-06-23T14:27:18Z
+- reason: A75/A77 show broad F8 dense CUDA placement corrupts output; A76 ruled out sampled converter math/layout.
+- scope: add temporary `GGML_DEEPSEEK4_CUDA_F8_DENSE_TRACE`, `GGML_DEEPSEEK4_CUDA_F8_DENSE_MAX_ORDINAL`, and `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_PATTERN` gates around the F8 dense CUDA support decision, then compare baseline, broad A64, trace, ordinal, and name-pattern subsets on A75 prompts.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a78-f8-placement-localization`
+- decision_pending: record `A78 localization_result` after correctness comparison.
+
+### A78 result - F8 dense CUDA placement localization
+
+- attempt: A78 F8 dense CUDA placement localization
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a78-f8-placement-localization`
+- validation_status: completed
+- build_status: success; temporary `GGML_DEEPSEEK4_CUDA_F8_DENSE_TRACE`, `GGML_DEEPSEEK4_CUDA_F8_DENSE_MAX_ORDINAL`, and `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_PATTERN` diagnostics built successfully.
+- execution_status: all 18 deterministic A75-style runs exited 0 under `MemoryMax=16G`.
+- A78 localization_result: `benefit_removed_by_safe_subset`
+- baseline mode: graph_splits `1237/1237/1237`, eval `1.82/1.82/1.81 tok/s`, visible generated text empty for the three audit prompts.
+- broad A64 mode: graph_splits `76/76/76`, eval `9.75/9.72/9.56 tok/s`, but reproduced A75 corruption: repeated `[name` fragments for the France prompt, mixed nonsense for `2 + 2 =`, and repeated `[name`-style fragments for the hot/cold prompt.
+- trace mode: graph_splits `76/76/76`, eval `9.75/9.49/9.66 tok/s`, reproduced the same corrupt outputs and logged 1935 allowed F8 dense CUDA placements per prompt. First placements include `q_a-0` (`blk.0.attn_q_a.weight`, `ne=[1024,1,1,1]`), `blk.0.attn_q_b.weight` (`ne=[32768,1,1,1]`), `blk.0.attn_kv_latent.weight` (`ne=[512,1,1,1]`), `attn_out_proj-0`, `ffn_gate-0`, `ffn_up-0`, and `ffn_shexp-0`.
+- ordinal8 subset: allowed the first 8 F8 dense placements and denied 10197 later placements per prompt. It avoided visible corruption on these prompts, but graph_splits rose to `1222/1222/1222` and eval fell to `1.73/1.64/1.75 tok/s`, effectively removing the A64 speed benefit.
+- ordinal32 subset: allowed the first 32 F8 dense placements and denied 10053 later placements per prompt. It avoided visible corruption on these prompts, but graph_splits rose to `1177/1177/1177` and eval fell to `1.73/1.72/1.75 tok/s`.
+- `ALLOW_PATTERN=down` subset: allowed only 129 down-pattern placements and denied 9582 placements per prompt. It avoided visible corruption on these prompts, but graph_splits remained high at `1151/1151/1151` and eval only reached `2.00/1.94/2.05 tok/s`.
+- conclusion: the broad A64 placement corruption is not isolated to a small useful safe subset by the tested ordinal or `down` filters. Subsets that preserve the visible deterministic audit output remove nearly all graph-split and decode throughput benefit. A64/A66 remain `failed_invalid_for_quality`; no A64-derived 9.x tok/s result is accepted until a future fix passes an A75-style deterministic output audit.
+- source rollback: temporary diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
+- pushed_commit: n/a, blocked by WiCi no-push constraint.
