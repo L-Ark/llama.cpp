@@ -815,3 +815,35 @@ Apply previous-task routes in this order:
   a severe decode regression, and disabling backend CUDA graph use alone is also slower.
 - Decision: do not promote. Keep graph reuse/CUDA graphs enabled and focus source-level work on
   optimizing the fused MoE / CUDA `mul_mat_id` path with graph reuse intact.
+
+### 2026-06-23 14:50Z - Optimization Attempt A24: Disable CUDA MoE Fast-TG Branch Probe
+
+- Finding: `ggml_cuda_moe_up_gate_unary()` first takes a token-generation fast path when
+  `src1->ne[1] == 1`, `src1->ne[2] <= 8`, quantized expert tensors are on CUDA, and `src1` is F32.
+  That branch loops over `Ny` routes and launches fused up/gate/down work one route at a time.
+  The later MMQ-ID branch can batch active routes with `compute_row_ids()` and may be faster for
+  DeepSeek V4's F8 experts, but the first branch prevents it from being tested by CLI flags.
+- Change to try: add a gated env-only source probe, `GGML_CUDA_MOE_DISABLE_FAST_TG=1`, that skips
+  the first fast-TG branch in `ggml_cuda_moe_up_gate_unary()` and `ggml_cuda_mul_mat_id()` while
+  leaving default behavior unchanged.
+- Benchmark command:
+  `MEMORY_MAX=16G GGML_CUDA_MOE_DISABLE_FAST_TG=1 EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=64 RUN_DIR=/root/lfz/runs/ik_llama/deepseek-v4-a24-disable-fasttg-n64 /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: short-run `eval_tok_s > 1.82` and no CUDA instability. If it passes, run full
+  `N_PREDICT=256`; promote only if full run beats A13 (`1.79 tok/s`) by more than `0.01 tok/s`.
+- Rollback condition: build failure, crash, or speed <= control means revert source changes before
+  commit and record the result as unpromoted.
+
+#### A24 Result
+
+- Probe source change built successfully, then was reverted before commit because it did not
+  improve performance.
+- Run: `/root/lfz/runs/ik_llama/deepseek-v4-a24-disable-fasttg-n64/bench.log`.
+- Command: `MEMORY_MAX=16G GGML_CUDA_MOE_DISABLE_FAST_TG=1 EXTRA_ARGS="-ub 1 -t 24 -tb 24" N_PREDICT=64`.
+- Result: exited code `0`, `eval_tok_s = 1.71`, `prompt_eval_tok_s = 1.50`, `gen_tokens = 63`,
+  `total_ms = 45100.98`.
+- Diagnosis: forcing the later MMQ-ID branch by skipping the fast-TG path is slower than the
+  current short control range (`~1.82 tok/s`). The existing fast-TG branch is the better path for
+  this batch-1 DeepSeek F8 decode workload.
+- Decision: do not promote. Source changes were reverted and `build-cuda` was rebuilt back to the
+  default implementation. Future source-level work should optimize within the fast-TG/fused path
+  rather than bypassing it.
