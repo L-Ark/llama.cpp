@@ -756,3 +756,34 @@ Apply previous-task routes in this order:
   Log: `/root/lfz/runs/ik_llama/deepseek-v4-a21d_muge-n32/bench.log`.
 - Decision: do not promote. Current default fusion flags remain better than disabling fused
   up-gate or fused multi-add, and `-muge` is not viable for this 16 GB deployment.
+
+### 2026-06-23 13:55Z - Optimization Attempt A22: CUDA Graph/Eager cuBLAS Switch Scan
+
+- Hypothesis: DeepSeek V4 Flash's current hot path is CUDA fused MoE / CUDA `mul_mat_id`. CUDA
+  graph capture/replay and lazy cuBLAS initialization can affect small-batch decode latency, so
+  `GGML_CUDA_DISABLE_GRAPHS` and `GGML_CUDA_EAGER_CUBLAS` are worth testing before writing fused
+  MoE code.
+- Change to try: no source changes, no new model files. Keep promoted baseline
+  `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24"` and run 64-token probes:
+  - A22a: `GGML_CUDA_DISABLE_GRAPHS=1`
+  - A22b: `GGML_CUDA_EAGER_CUBLAS=1`
+  - A22c: `GGML_CUDA_DISABLE_GRAPHS=1 GGML_CUDA_EAGER_CUBLAS=1`
+- Success metric: short-run `eval_tok_s` must exceed the current short control range (`~1.82
+  tok/s`) before full validation. If a candidate passes, run full `N_PREDICT=256` under 16 GB and
+  promote only if it beats A13 (`1.79 tok/s`) by more than `0.01 tok/s`.
+- Rollback condition: speed <= control, CUDA instability, or no observable backend effect means do
+  not promote and proceed to source-level fused MoE diagnostics/optimization.
+
+#### A22 Result
+
+- A22a `GGML_CUDA_DISABLE_GRAPHS=1`: exited code `0`, `eval_tok_s = 1.79`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a22a-GGML_CUDA_DISABLE_GRAPHS-1-n64/bench.log`.
+- A22b `GGML_CUDA_EAGER_CUBLAS=1`: exited code `0`, `eval_tok_s = 1.72`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a22b-GGML_CUDA_EAGER_CUBLAS-1-n64/bench.log`.
+- A22c both switches: exited code `0`, `eval_tok_s = 1.74`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a22c-GGML_CUDA_DISABLE_GRAPHS-1-GGML_CUDA_EAGER_CUBLAS-1-n64/bench.log`.
+- Diagnostic: logs still reported `~ggml_backend_cuda_context: have 597 graphs` with
+  `GGML_CUDA_DISABLE_GRAPHS=1`, so this environment variable does not currently disable graph
+  capture/reuse in this build. `GGML_CUDA_EAGER_CUBLAS=1` was a clear regression.
+- Decision: do not promote. If graph-disable remains interesting, it needs an explicit source
+  change to wire a supported runtime switch; otherwise proceed to fused MoE code-level work.
