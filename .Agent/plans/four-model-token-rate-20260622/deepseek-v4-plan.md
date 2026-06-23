@@ -3698,3 +3698,55 @@ Decision:
 - rollback condition:
   - Config-only attempt; no source rollback.
   - If quick run regresses or full repeat is unstable, record and keep A31 as SOTA.
+
+### 2026-06-23 10:38Z - A60 Result: `offload-batch-size=1` Did Not Help
+
+- attempt_id: `deepseek-v4-a60-cuda-offload-batch-size-1`
+- status: `not promoted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `66dcbffbb4b4757205545c50e64441560662574e`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a60a-cuda-offload-batch-size1-n64`
+- attempt_start_utc: `2026-06-23T10:36:31Z`
+- attempt_end_utc: `2026-06-23T10:37:14Z`
+- wall_clock_elapsed: `43s`
+- command summary:
+  - A31 env/flags plus `--cuda-params offload-batch-size=1`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- benchmark result:
+  - CUDA log confirmed `setting offload_batch_size to 1`.
+  - graph splits: `1237`
+  - eval: `33632.99 ms / 63 runs = 1.87 tok/s`
+  - prompt eval: `3091.65 ms / 5 tokens = 1.62 tok/s`
+  - total: `41864.12 ms / 68 tokens`
+- interpretation:
+  - The knob was parsed, but it did not reduce graph split count and regressed token rate.
+  - Therefore A59's CPU split-start labels are not fixed by lowering CUDA's generic offload threshold
+    alone. The placement may already be fixed by tensor buffer assignment, split-mode behavior, or
+    special scheduling constraints.
+- decision:
+  - Do not promote A60.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - Next low-cost config check: single-GPU `--split-mode none`, because there is only one active GPU
+    and current graph still contains 1237 splits.
+
+### 2026-06-23 - Planned Config Attempt A61: Single-GPU Split Mode `none`
+
+- attempt_id: `deepseek-v4-a61-split-mode-none`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A59 shows `1237` graph splits, dominated by CPU/CUDA boundary split starts.
+  - A60 confirms generic CUDA offload threshold does not reduce the split count.
+  - The run uses a single RTX 5090; keeping default layer split mode may retain scheduling machinery
+    that is unnecessary for a one-GPU deployment.
+- hypothesis:
+  - `--split-mode none` may simplify backend placement for a single-GPU run and reduce CPU/CUDA graph
+    fragmentation without changing model math.
+- planned runs:
+  - A61a: A31 env/flags plus `--split-mode none`, `-n 64`.
+  - If A61a reaches at least `1.93 tok/s`, run two full `-n 256` repeats.
+- success metric:
+  - Promotion requires repeated `-n 256` validation beating A31 p50 by `> 0.01 tok/s`, with host RAM
+    still capped at `16GB`.
+- rollback condition:
+  - Config-only attempt; no source rollback.
+  - If quick run regresses or does not change split behavior, record and keep A31 as SOTA.
