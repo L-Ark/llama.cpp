@@ -22,6 +22,22 @@ or non-trivial repository change:
 - record final results, failed attempts, exact configs, log paths, and next
   steps in the plan file before giving the final answer.
 
+For any performance or token-rate attempt, the timing protocol in
+`/root/lfz/ik_llama/.Agent/performance-attempt-workflow.md` is mandatory:
+
+- create the run directory and write `attempt_start_utc.txt`,
+  `git_start_sha.txt`, and `attempt_meta.env` before code edits, source probes,
+  benchmark runs, or config scans;
+- finish every attempt, including failed and reverted attempts, by writing
+  `attempt_end_utc.txt` and `wall_clock_elapsed_seconds.txt`;
+- record start time, end time, wall-clock elapsed time, benchmark runtime,
+  status, metrics, log path, and promoted commit in the relevant plan markdown;
+- do not mark a result as `promoted` or SOTA unless these timing fields are
+  present, or unless a documented timing audit reconstructs them from reliable
+  logs;
+- do not invent missing historical elapsed times. Mark old rows as
+  `historical timing missing` when no reliable timing source exists.
+
 For every large task, create a new task folder under:
 
 `/root/lfz/ik_llama/.Agent/plans/`

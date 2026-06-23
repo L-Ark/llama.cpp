@@ -47,6 +47,13 @@ Model source and target:
 
 Start timing after model files or converted GGUF files are present. Download and conversion time are excluded; ik_llama architecture, tensor, graph, runtime, and benchmark work are included.
 
+The repository-wide performance attempt workflow is mandatory for this task:
+
+`/root/lfz/ik_llama/.Agent/performance-attempt-workflow.md`
+
+The local protocol below is the DeepSeek V4 instance of that workflow. If the
+two documents ever diverge, follow the stricter rule.
+
 Every successful baseline or improved run must append a row with:
 
 | record_id | utc | git_sha | phase | eval_tok_s | prompt_eval_tok_s | ttft_s | first_visible_s | time_to_type_s | total_ms | gen_tokens | delta_since_last_record | elapsed_since_start | host_rss_peak_mb | vram_peak_mb | vram_free_mb | ram_hit_pct | vram_hit_pct | direct_reads | read_bytes_gb | effective_read_gbps | read_failures | accuracy_smoke | command | env | log_path | pushed_commit |
