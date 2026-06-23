@@ -897,3 +897,16 @@ Apply previous-task routes in this order:
 - Decision: do not promote and do not run full validation. The short probe is below the current direct short-run control band and well below the 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
 - Diagnosis: simply routing DeepSeek4 into the existing fused MoE up/gate graph is not enough. The current CUDA fused-MoE implementation was built around other layouts/streaming assumptions; for DeepSeek4 MXFP4 the existing paired `MUL_MAT_ID` path remains faster.
 
+### 2026-06-23 17:55Z - Optimization Attempt A28: CUDA Graph Override for `MUL_MAT_ID`
+
+- Context: A25 identified CUDA MXFP4 `MUL_MAT_ID` as the hot routed-expert path. Source reading showed CUDA graph capture is disabled for `GGML_OP_MUL_MAT_ID` when the ID tensor contains more than one expert, which is exactly the DeepSeek V4 decode shape (`ids = 6 x 1`).
+- Hypothesis: allowing CUDA graph capture for the DeepSeek V4 `MUL_MAT_ID` decode shape might reduce launch overhead without changing tensor math.
+- Probe: add default-off `GGML_CUDA_ALLOW_MUL_MAT_ID_GRAPH=1` to bypass the graph-compatibility rejection for `MUL_MAT_ID` with multi-expert IDs. Default behavior was unchanged.
+- 64-token direct run under 16 GB host-RAM limit:
+  - command env: `GGML_CUDA_ALLOW_MUL_MAT_ID_GRAPH=1`, `-ub 1 -t 24 -tb 24`, `N_PREDICT=64`
+  - result: `eval_tok_s = 1.75`, log `/root/lfz/runs/ik_llama/deepseek-v4-a28-allow-mulmatid-graph-direct-n64/bench.log`
+- Full 256-token validation:
+  - command env: `GGML_CUDA_ALLOW_MUL_MAT_ID_GRAPH=1`, `-ub 1 -t 24 -tb 24`, `N_PREDICT=256`
+  - result: `eval_tok_s = 1.69`, `prompt_eval_tok_s = 1.47`, `rss_mb = 27444.79`, log `/root/lfz/runs/ik_llama/deepseek-v4-a28-allow-mulmatid-graph-direct-n256/bench.log`
+- Decision: do not promote. The short-run bump did not survive full validation and is below the current 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
+- Diagnosis: CUDA graph capture eligibility is not the current primary bottleneck for this path. The remaining gap is more likely inside the repeated MXFP4 small-MoE math itself: per-call Q8_1 activation quantization, expert-route batching granularity, or up/gate/down fusion for the exact DeepSeek V4 layout.
