@@ -4555,3 +4555,77 @@ Decision:
 - result_commit: `65922bb9efe0a70ad5d1bb1ff56178c481970090`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
+### 2026-06-23 12:55Z - Planned Source Probe A73: Direct Single-Row IQK/MulMat MoE Path
+
+- Hypothesis:
+  - A72 proved exact single-row B/C mapping for the target MoE decode path.
+  - A gated direct call to existing `iqk_mul_mat(Nx, Ny=1, ...)` can bypass `iqk_mul_mat_moe` row-mapping/DataInfo indirection for `nr1 == 1` while preserving the same MXFP4/Q8_2_x4 kernel.
+- Source files:
+  - temporary: `ggml/src/ggml.c`
+  - inspected: `ggml/src/iqk/iqk_mul_mat.h`, `ggml/src/iqk/iqk_mul_mat.cpp`, `ggml/src/iqk/iqk_common.h`
+- Env gates:
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT_COMPARE=1`
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE_LIMIT=512`
+  - `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT=1`
+- Benchmark command:
+  - 16 GB cgroup, `MemoryMax=16G`, `MemorySwapMax=0`, accepted A64 env/flags, `-n 64` for default, compare, and direct modes.
+- Success metric:
+  - compare mode exits `0`, graph splits stay `76`, checked calls have `max_abs_diff <= 1e-3`, and no NaN/Inf.
+  - direct mode is promoted only if it wins quick by `> 0.05 tok/s` and passes full `-n 256` validation.
+- Rollback:
+  - save diffs/logs under `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe`;
+  - revert temporary source and rebuild default unless accepted by full validation.
+- Push status:
+  - `git push` forbidden by WiCi; any push remains blocked.
+
+
+### 2026-06-23 13:09Z - A73 Result: Direct Single-Row Path Correct But Not Promoted
+
+- attempt_start_utc: `2026-06-23T13:05:37Z`
+- attempt_end_utc: `2026-06-23T13:06:57Z`
+- full_validation_end_utc: `2026-06-23T13:09:06Z`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe`
+- source diff paths:
+  - planned-source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/source_probe.diff`
+  - final source diff before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/final_source_probe.diff`
+  - post-rollback source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/source_after_revert.diff` (empty)
+- logs:
+  - diff check: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/diff_check.log`
+  - build: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/build.log`
+  - default quick: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/bench_default.log`
+  - compare quick: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/bench_compare.log`
+  - direct quick: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/bench_direct.log`
+  - direct full repeats: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/bench_direct_n256_r1.log`, `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/bench_direct_n256_r2.log`
+  - mode summaries: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/mode_metrics.txt`
+  - rebuild after rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a73-moe-single-row-direct-probe/rebuild_after_revert.log`
+- command summary:
+  - 16 GB cgroup with `MemoryMax=16G`, `MemorySwapMax=0`
+  - accepted A64 env/flags: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `-ub 1 -t 20 -tb 20 -no-fa`
+  - compare env: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT_COMPARE=1`, `GGML_DEEPSEEK4_MOE_SINGLE_ROW_COMPARE_LIMIT=512`
+  - direct env: `GGML_DEEPSEEK4_MOE_SINGLE_ROW_DIRECT=1`
+- quick results:
+  - default: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.86`, eval_tok_s `9.85`, total_ms `12384.51`
+  - compare: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.78`, eval_tok_s `9.85`, total_ms `12540.03`, compare records `27`, max_abs_diff `0`, bad records `0`
+  - direct: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.98`, eval_tok_s `9.93`, total_ms `12273.14`, logged direct path records `6`
+  - wrapper time maxrss was `6344 kB` for all quick runs; cgroup completed successfully and did not OOM-kill.
+- full direct validation:
+  - direct_n256_r1: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.93`, eval_tok_s `9.83`, total_ms `31948.96`
+  - direct_n256_r2: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.83`, eval_tok_s `9.73`, total_ms `32469.94`
+  - p50 over two repeats is approximately `9.78 tok/s`; worst repeat is `9.73 tok/s`.
+- probe behavior:
+  - temporary source derived the direct B row and destination C pointer from `mmid_row_mapping`, then called existing `iqk_mul_mat(..., Ny=1, ...)` for the single-row MoE path.
+  - compare mode confirmed numerical equivalence for sampled MXFP4/Q8_2_x4 up/gate/down expert calls with `max_abs_diff=0`.
+  - direct quick mode beat same-session default by `0.08 tok/s`, so full validation was run.
+- decision:
+  - A73 is correct and diagnostically useful but unpromoted.
+  - Full validation did not meet the promotion rule `p50 > 9.89 tok/s`; both direct n256 repeats were below the accepted A64-family high-water evidence.
+  - Do not keep the source path; accepted local best remains A64-family with the gated CUDA F8 dense conversion path.
+- rollback status:
+  - temporary source changes reverted with `git checkout -- ggml/src/ggml.c` after saving the final source diff.
+  - post-rollback source diff is empty.
+  - default `llama-cli` rebuilt successfully after rollback with rebuild exit `0`.
+  - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
+- next direction:
+  - Wrapper-level row mapping and direct `iqk_mul_mat(Ny=1)` now appear insufficient for stable full-run improvement.
+  - Future work should move inside the MXFP4/Q8_2_x4 helper or reduce OpenMP/libgomp overhead in the existing `iqk_mul_mat_moe` execution path.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
