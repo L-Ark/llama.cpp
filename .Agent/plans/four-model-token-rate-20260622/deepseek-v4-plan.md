@@ -638,3 +638,39 @@ Apply previous-task routes in this order:
 - Decision: do not promote. Built-in MTP is either inactive for this GGUF or not beneficial in the
   current `llama-cli` path. Move to CUDA fused MoE / CUDA `mul_mat_id` thresholds or I/O/prefetch
   rather than spending more time on MTP without active logs.
+
+### 2026-06-23 12:10Z - Optimization Attempt A18: CUDA MoE Offload Threshold Scan
+
+- Hypothesis: the remaining gap to fastllm may come from CUDA backend scheduling choices for
+  `GGML_OP_MOE_FUSED_UP_GATE` / CUDA `GGML_OP_MUL_MAT_ID`. `--cuda-params` exposes
+  `offload-batch-size`, `offload-batch-size-per-byte`, and `mmq-id-size`; lowering the offload
+  threshold may keep more decode-phase MoE work on the faster CUDA path for batch size 1.
+- Change to try: no source changes. Run short 64-token probes with promoted baseline settings plus
+  one CUDA param set at a time:
+  - A18a: `-cuda offload-batch-size=0`
+  - A18b: `-cuda offload-batch-size=1`
+  - A18c: `-cuda offload-batch-size=0,mmq-id-size=1`
+  - A18d: `-cuda offload-batch-size=0,mmq-id-size=64`
+- Benchmark command template:
+  `MEMORY_MAX=16G EXTRA_ARGS="-ub 1 -t 24 -tb 24 -cuda <params>" N_PREDICT=64 RUN_DIR=<run> /root/lfz/runs/ik_llama/run_deepseek_v4_baseline.sh`
+- Success metric: short-run `eval_tok_s` must exceed the current short control range (`~1.82
+  tok/s`) without CUDA OOM or output corruption. If a candidate passes, validate with full
+  `N_PREDICT=256` and promote only if it beats A13 (`1.79 tok/s`) by more than `0.01 tok/s`.
+- Rollback condition: any crash/OOM or speed <= control means record as unpromoted; do not commit
+  code because this is a config-only scan.
+
+#### A18 Result
+
+- A18a `-cuda offload-batch-size=0`: exited code `0`, `eval_tok_s = 1.33`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a18a-cuda-offload-batch-size-0-n64/bench.log`.
+- A18b `-cuda offload-batch-size=1`: exited code `0`, `eval_tok_s = 1.70`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a18b-cuda-offload-batch-size-1-n64/bench.log`.
+- A18c `-cuda offload-batch-size=0,mmq-id-size=1`: exited code `0`, `eval_tok_s = 1.34`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a18c-cuda-offload-batch-size-0-mmq-id-size-1-n64/bench.log`.
+- A18d `-cuda offload-batch-size=0,mmq-id-size=64`: exited code `0`, `eval_tok_s = 1.31`, log
+  `/root/lfz/runs/ik_llama/deepseek-v4-a18d-cuda-offload-batch-size-0-mmq-id-size-64-n64/bench.log`.
+- Diagnosis: forcing very small CUDA offload thresholds makes decode slower than the promoted
+  baseline/control. The overhead of offloading these decode-phase MoE ops dominates any benefit,
+  so the current default threshold is preferable for this direct GGUF path.
+- Decision: do not promote. Move to I/O/prefetch instrumentation or targeted CUDA fused-MoE code
+  work rather than further lowering offload thresholds.
