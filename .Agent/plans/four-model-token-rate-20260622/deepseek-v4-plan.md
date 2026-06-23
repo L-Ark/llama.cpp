@@ -3099,6 +3099,55 @@ Decision:
   - Config-only attempt; no source rollback needed.
   - If no run beats A31, keep A31 as SOTA and record all failed variants.
 
+### 2026-06-23 10:04Z - A57 Result: OpenMP Wait/Thread Sweep Did Not Beat A31
+
+- attempt_id: `deepseek-v4-a57-openmp-wait-policy-sweep`
+- status: `unpromoted config sweep`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `7d40bc30c1c8e31db8909abf93506a7d11e43987`
+- variants:
+  - A57a `OMP_WAIT_POLICY=PASSIVE GOMP_SPINCOUNT=0 -t 20 -tb 20`, `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a57a-openmp-passive-spincount0-n64`
+    - attempt_start_utc: `2026-06-23T09:57:13Z`
+    - attempt_end_utc: `2026-06-23T09:58:27Z`
+    - wall_clock_elapsed: `74s`
+    - eval: `62534.64 ms / 63 = 1.01 tok/s`
+    - CPU time: `2min 43.936s`
+    - result: severe latency regression; passive OpenMP waiting is not viable.
+  - A57b default OpenMP `-t 16 -tb 16`, `-n 64`:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a57b-t16-default-openmp-n64`
+    - attempt_start_utc: `2026-06-23T09:59:02Z`
+    - attempt_end_utc: `2026-06-23T09:59:45Z`
+    - wall_clock_elapsed: `43s`
+    - eval: `32957.68 ms / 63 = 1.91 tok/s`
+    - CPU time: `9min 37.435s`
+    - result: roughly matches A31 short-run rate and reduces CPU burn, but does not improve SOTA.
+  - A57c default OpenMP `-t 12 -tb 12`, `-n 64` quick filter:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a57c-t12-default-openmp-n64`
+    - attempt_start_utc: `2026-06-23T10:00:21Z`
+    - attempt_end_utc: `2026-06-23T10:01:03Z`
+    - wall_clock_elapsed: `42s`
+    - eval: `32600.35 ms / 63 = 1.93 tok/s`
+    - CPU time: `7min 10.060s`
+    - result: good short-run filter, required full `-n 256` validation.
+  - A57c default OpenMP `-t 12 -tb 12`, `-n 256` repeat1:
+    - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a57c-t12-default-openmp-n256-repeat1`
+    - attempt_start_utc: `2026-06-23T10:01:40Z`
+    - attempt_end_utc: `2026-06-23T10:04:05Z`
+    - wall_clock_elapsed: `145s`
+    - eval: `135013.15 ms / 255 = 1.89 tok/s`
+    - CPU time: `27min 40.202s`
+    - result: fails full validation; do not promote.
+- interpretation:
+  - Reducing libgomp spin with passive waiting trades CPU burn for much worse token latency.
+  - Lowering thread count reduces CPU burn substantially, but the only promising short-run setting
+    (`-t 12`) does not hold up on the required `-n 256` validation.
+- decision:
+  - No A57 variant beats A31. Keep A31 as stable 16GB SOTA: p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - Next attempt should target structural graph/thread scheduling rather than environment-only
+    OpenMP knobs: reduce tiny split count, reduce OpenMP team wakeups, or bypass libgomp for decode
+    micrographs.
+
 ### 2026-06-23 09:46Z - A54 Result: CUDA Graph Launch/Sync Is Not The Missing Runtime
 
 - attempt_id: `deepseek-v4-a54-cuda-graph-sync-attribution`
