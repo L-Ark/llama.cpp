@@ -1300,3 +1300,87 @@ Decision:
   CLI toggles do not help, the remaining meaningful route is lower-overhead down-side timing or a
   true DeepSeek4-specific down-reduce CUDA path that avoids the generic post-SwiGLU Q8_1
   quantization and generic `MUL_MAT_ID` setup.
+
+### 2026-06-23 - Planned Optimization Attempt A35: Down-Path CUDA Event Timing
+
+- attempt_id: `deepseek-v4-a35-down-path-event-timing`
+- hypothesis: A33 proved the DeepSeek4 routed path executes 408 up/gate occurrences and 408 down
+  occurrences for a 64-token run. A34 proved existing down/reduce CLI toggles do not improve it.
+  Before implementing a custom down-reduce kernel, measure how much CUDA time is spent in:
+  - input Q8_1 quantization for up/gate calls;
+  - post-SwiGLU Q8_1 quantization for down calls;
+  - MXFP4 `MUL_MAT_ID` matvec for up/gate;
+  - MXFP4 `MUL_MAT_ID` matvec for down.
+- planned changes: temporary default-off CUDA instrumentation in `ggml_cuda_mul_mat_id()` behind
+  `GGML_DEEPSEEK4_DOWN_TIMING=1`. It will use CUDA events and synchronize per measured segment,
+  so token rate from this probe is diagnostic only and must not be compared for promotion.
+- benchmark command shape:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_DOWN_TIMING=1`
+  - flags: A31 baseline flags with `-n 64`
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- success metric: produce a timing line that separates up/gate quant, down quant, up/gate matvec,
+  and down matvec totals/call counts. Use the ratios to decide whether A36 should optimize
+  quantization, matvec, or down-reduce fusion.
+- rollback condition: diagnostic source must be reverted and `build-cuda` rebuilt to default after
+  the run. Do not promote diagnostic source.
+- expected logs:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a35-down-path-event-timing/bench.log`.
+
+#### Result
+
+- attempt_start_utc: `2026-06-23T03:50:22Z`
+- attempt_end_utc: `2026-06-23T03:59:00Z`
+- wall_clock_elapsed: `518 seconds`
+- result_status: `diagnostic, unpromoted, reverted`
+- promoted_commit: `n/a`
+- Metadata path:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a35-down-path-event-timing/attempt_meta.env`
+- Source probe diff:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a35-down-path-event-timing/source_probe.diff`
+- Parsed summary:
+  `/root/lfz/runs/ik_llama/deepseek-v4-a35-down-path-event-timing/parsed_summary.json`
+- Build status:
+  - diagnostic build succeeded;
+  - diagnostic source was reverted with `git restore ggml/src/ggml-cuda.cu`;
+  - default `llama-cli` was rebuilt successfully after revert.
+
+Diagnostic run:
+
+- env: A31 baseline env plus `GGML_DEEPSEEK4_DOWN_TIMING=1`
+- flags: A31 baseline flags with `-n 64`
+- cgroup: `MemoryMax=16G`, `MemorySwapMax=0`
+- log: `/root/lfz/runs/ik_llama/deepseek-v4-a35-down-path-event-timing/journal.log`
+- benchmark runtime:
+  - prompt eval: `3189.17 ms / 5 tokens = 1.57 tok/s`
+  - eval: `35061.66 ms / 63 runs = 1.80 tok/s`
+  - total: `43365.40 ms`
+  - systemd service runtime: `44.475s`
+
+CUDA event timing line:
+
+```text
+[deepseek4_down_timing] up_quant_calls=408 up_quant_ms=3.010 down_quant_calls=408 down_quant_ms=1.411 up_matvec_calls=816 up_matvec_ms=26.028 down_matvec_calls=408 down_matvec_ms=7.797
+```
+
+Interpretation:
+
+- The measured GPU kernel body time for the current fast-path MoE math is tiny compared with
+  end-to-end decode time:
+  - all measured Q8_1 quantization: `4.421 ms` total;
+  - all measured MXFP4 matvecs: `33.825 ms` total;
+  - combined measured GPU math: `38.246 ms` over a run whose eval phase is `35061.66 ms`.
+- The event timing is diagnostic and includes synchronization overhead around measured segments, so
+  its token rate is not promotable. The ratios are still useful: replacing only the Q8_1
+  quantization kernels cannot recover the remaining `~0.03 tok/s` gap to fastllm, because those
+  kernels are not consuming meaningful GPU time.
+- The likely bottleneck is now outside the kernel arithmetic itself: per-node graph scheduling,
+  CPU-side CUDA graph replay/capture bookkeeping, launch/dispatch overhead, memory-pool allocation,
+  or other host-side work around the 408 MoE occurrences per 64-token run.
+
+Decision:
+
+- Do not promote diagnostic source. It was reverted and the default binary was rebuilt.
+- Do not prioritize a quantization-only optimization for A36.
+- Next direction: measure host-side per-op time or graph replay overhead around `GGML_OP_MUL_MAT_ID`,
+  `GGML_OP_MUL_MULTI_ADD`, and attention with low overhead. The goal is to explain why measured GPU
+  math is only tens of milliseconds while end-to-end eval remains tens of seconds.
