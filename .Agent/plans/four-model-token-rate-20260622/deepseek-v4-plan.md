@@ -4955,3 +4955,26 @@ Decision:
 - rollback_status: temporary source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
 - result_commit: `ef741d01a575bbfe17aa933cd2df821a7132189f`
+
+### Planned Source Probe A85 - MXFP4 helper partitioning
+
+- goal: probe lower-level MXFP4/Q8_2 helper row partitioning under accepted A80 after A84 wrapper-level MoE scheduling regressed.
+- method: keep default behavior unchanged; add temporary env-gated `GGML_DEEPSEEK4_MXFP4_HELPER_*` stats/compare and row partition variants in `iqk_mul_mat_moe` direct helper path.
+- acceptance: source builds; compare/stats show the actual helper path is hit with `max_abs_diff <= 1e-3` and `bad=0`; quick variants must exit 0, keep graph_splits near 291, and only proceed to full repeats if a quick variant beats default by >0.10 tok/s.
+- note: no default behavior change and no `git push`.
+
+### Source Probe Result A85 - MXFP4 helper partitioning
+
+- status: completed_unpromoted; accepted A80 source behavior unchanged after rollback.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a85-mxfp4-helper-partition-probe`
+- input_commit: `f68e9970`
+- source_probe_diff: `source_probe.diff`; final temporary source diff saved as `final_source_probe.diff` before rollback.
+- build_status: temporary env-gated helper probe built successfully. Default binary was rebuilt again after rollback.
+- compare_result: `quick_compare` exited `0`, graph_splits `291`, eval `5.09 tok/s`, emitted `512` `A85_MXFP4_HELPER` markers for the direct `iqk_mul_mat_moe` helper path, and reported `max_abs=0`, `bad=0`.
+- stats_result: `quick_stats` exited `0`, graph_splits `291`, eval `5.11 tok/s`, emitted `64` helper markers, `max_abs=0`, `bad=0`.
+- quick_results: default `5.01 tok/s`; block `5.11`; cyclic `4.41`; balanced `4.91`. All quick runs exited `0`, kept graph_splits `291`, and showed no CUDA/assert/NaN/Inf failures in summaries.
+- promotion_decision: not promoted. No source partitioning variant produced a clear quick win `> 0.10 tok/s` over same-session default; the behavior-equivalent `block` and `stats` logs were only a rounded `+0.10 tok/s`, while actual alternative partition modes regressed. Paired full repeats were skipped per the S26 selection rule.
+- interpretation: the direct MXFP4/Q8_2 helper path is confirmed as active, but changing row partitioning to cyclic or fewer active row groups worsens throughput. The current contiguous block partitioning inside `iqk_mul_mat_moe` remains the best tested helper partitioning strategy.
+- next_concrete_optimization_candidate: stop lower-level scheduling/partitioning probes for this path unless a new design changes work granularity; move to a different accepted-scope route such as reducing graph-level barriers/copies outside the helper, CUDA-offloading a quality-safe additional class, or deeper SIMD/kernel optimization inside `mul_mat_qX_q8_Helper` without changing thread partitioning.
+- rollback_status: temporary helper source probe reverted; `git diff -- ggml/src` is empty after rebuild. Only this plan record is committed.
+- pushed_commit: n/a; WiCi run forbids `git push`.
