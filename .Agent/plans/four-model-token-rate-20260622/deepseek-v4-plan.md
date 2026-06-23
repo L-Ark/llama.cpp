@@ -4417,3 +4417,68 @@ Decision:
 - result_commit: `1a3d3e940d3fc9d12e97bc8ea408fedd585e036f`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
+### 2026-06-23 12:31Z - Planned Source Probe A71: Grouped `iqk_mul_mat_moe` Partitioning
+
+- Hypothesis:
+  - A70 showed existing many/hybrid routing is eligible but slower, likely because the wrapper still adds overhead for the decode shape.
+  - A narrower grouped path in the sequential CPU down-expert branch may reduce repeated all-thread-per-expert work by processing active experts in small groups while preserving inner row partitioning inside `iqk_mul_mat_moe`.
+- Source files:
+  - temporary: `ggml/src/ggml.c`
+  - inspected: `ggml/src/iqk/iqk_mul_mat.cpp`
+- Env gate:
+  - `GGML_DEEPSEEK4_MOE_GROUPED_PROBE=1`
+  - `GGML_DEEPSEEK4_MOE_GROUP_SIZE={2,3,4,6}`
+  - default behavior unchanged when the gate is absent.
+- Benchmark command:
+  - 16 GB cgroup, `MemoryMax=16G`, `MemorySwapMax=0`, accepted A64 env/flags, `-n 64` quick sweep for default and group sizes 2/3/4/6.
+- Promotion condition:
+  - only promote if a grouped probe beats same-session default by `> 0.05 tok/s`, then passes at least two full `-n 256` repeats with p50 `> 9.89 tok/s` and worst `>= 9.22 tok/s`.
+- Rollback:
+  - save `source_probe.diff` and final diff under `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe`;
+  - revert all temporary source edits and rebuild default `llama-cli` unless full validation explicitly accepts source.
+- Push status:
+  - `git push` forbidden by WiCi; any push remains blocked.
+
+### 2026-06-23 12:35Z - A71 Result: Grouped Partitioning Slower Than Same-Session Default
+
+- attempt_start_utc: `2026-06-23T12:31:35Z`
+- sweep_start_utc: `2026-06-23T12:34:00Z`
+- attempt_end_utc: `2026-06-23T12:35:11Z`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe`
+- source diff paths:
+  - planned-source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/source_probe.diff`
+  - final source diff before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/final_source_probe.diff`
+  - post-rollback source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/source_after_revert.diff` (empty)
+- logs:
+  - diff check: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/diff_check.log`
+  - build: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/build.log`
+  - sweep summaries: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/sweep_metrics.txt`
+  - rebuild after rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/rebuild_after_revert.log`
+- command summary:
+  - 16 GB cgroup with `MemoryMax=16G`, `MemorySwapMax=0`
+  - accepted A64 env/flags: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, `-ub 1 -t 20 -tb 20 -no-fa`, `-n 64`
+  - gated source env: `GGML_DEEPSEEK4_MOE_GROUPED_PROBE=1`, `GGML_DEEPSEEK4_MOE_GROUP_SIZE={2,3,4,6}`
+- same-session quick results:
+  - default: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.90`, eval_tok_s `9.85`, total_ms `12377.70`, service_runtime `14.037s`, CPU_time `2min 27.717s`, wall_clock_elapsed `14.06s`
+  - group_size `2`: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.87`, eval_tok_s `9.65`, total_ms `12543.90`, service_runtime `14.143s`, CPU_time `2min 30.869s`, wall_clock_elapsed `14.16s`, grouped completions `7536`
+  - group_size `3`: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.83`, eval_tok_s `9.60`, total_ms `12770.73`, service_runtime `14.387s`, CPU_time `2min 31.665s`, wall_clock_elapsed `14.41s`, grouped completions `7536`
+  - group_size `4`: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.77`, eval_tok_s `9.54`, total_ms `12745.61`, service_runtime `14.334s`, CPU_time `2min 32.601s`, wall_clock_elapsed `14.36s`, grouped completions `7536`
+  - group_size `6`: exit `0`, graph_splits `76`, prompt_eval_tok_s `4.83`, eval_tok_s `9.71`, total_ms `12640.66`, service_runtime `14.257s`, CPU_time `2min 29.891s`, wall_clock_elapsed `14.28s`, grouped completions `7536`
+  - wrapper time maxrss was `6344 kB` for every sweep run; cgroup completed successfully and did not OOM-kill.
+- probe behavior:
+  - temporary source was gated behind `GGML_DEEPSEEK4_MOE_GROUPED_PROBE=1` and mapped threads across active experts in groups, preserving inner `iqk_mul_mat_moe` partitioning per expert.
+  - representative logged shape remained `typeA=mxfp4`, `vec_dot=q8_2_x4`, `active=6`, `total_rows=6`, `max_rows=1`, `n_as=256`, `nth=20`.
+- decision:
+  - A71 is diagnostically successful but unpromoted.
+  - No grouped variant beat the same-session default by `> 0.05 tok/s`; all grouped variants were slower.
+  - Do not run `-n 256` full repeats for A71 and do not keep source.
+  - Accepted local best remains A64-family with the CUDA F8 dense conversion path.
+- rollback status:
+  - temporary source changes reverted with `git apply -R /root/lfz/runs/ik_llama/deepseek-v4-a71-moe-grouped-partition-probe/final_source_probe.diff`.
+  - default `llama-cli` rebuilt successfully after rollback.
+  - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
+- next direction:
+  - Avoid grouped active-expert scheduling wrappers for this decode shape.
+  - Future source work should target the MXFP4 helper inner kernel or reduce per-call overhead without redistributing active experts across thread groups.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
