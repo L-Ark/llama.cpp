@@ -4335,3 +4335,84 @@ Decision:
   - local result commit: `98c85c987f992f9cab4a26cb57ef6486c19b6eb0`
   - pushed_commit: `n/a, blocked by WiCi no-push constraint`
 
+### 2026-06-23 12:13Z - Planned Source Probe A70: MoE Many/Hybrid Eligibility for A69 Hotspot
+
+- Hypothesis:
+  - A69 showed the visible MXFP4 hotspot is routed through `iqk_mul_mat_moe` with `Nx=2048`, `Ny=1`, `ne00=4096`, `typeB=q8_2_x4`, and `nth=20`.
+  - The existing down-expert many/hybrid paths may already support this shape but are only reached when prompt env flags are set. A gated probe should determine whether routing the accepted A64 decode down path through `iqk_mul_mat_moe_many_hybrid` is eligible, correct enough for smoke generation, and faster than per-expert `iqk_mul_mat_moe`.
+- Source files:
+  - temporary: `ggml/src/ggml.c`
+  - inspected: `ggml/src/iqk/iqk_mul_mat.cpp`, `ggml/src/iqk/iqk_mul_mat.h`
+- Env gate:
+  - `GGML_DEEPSEEK4_MOE_MANY_PROBE=1`
+  - keep accepted A64 env `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`.
+- Benchmark command:
+  - 16 GB cgroup, `MemoryMax=16G`, `MemorySwapMax=0`, accepted A64 flags `-ub 1 -t 20 -tb 20 -no-fa`, `-n 64`.
+- Success metric:
+  - diagnostic build succeeds;
+  - run exits `0` with sane smoke output and `graph_splits=76`;
+  - logs clearly state many/hybrid eligibility or decline reason;
+  - throughput compared against A69 n64 `9.71 tok/s` and A64-family full p50 `9.84 tok/s` only as directional evidence, not promotion.
+- Rollback:
+  - save `source_probe.diff` and final diff under `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe`;
+  - revert all temporary source edits and rebuild default `llama-cli`;
+  - commit plan record only unless a later full validation step explicitly accepts source.
+- Push status:
+  - `git push` forbidden by WiCi; any push remains blocked.
+
+### 2026-06-23 12:20Z - A70 Result: Many/Hybrid Eligible but Not Faster
+
+- attempt_start_utc: `2026-06-23T12:13:30Z`
+- attempt_end_utc: `2026-06-23T12:20:38Z`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe`
+- source diff paths:
+  - initial gated probe: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/source_probe.diff`
+  - final gated probe before rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/final_source_probe.diff`
+  - post-rollback source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/source_after_revert.diff` (empty)
+- build logs:
+  - first build: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/build.log`
+  - revised build: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/build_r2.log`
+  - rebuild after rollback: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/rebuild_after_revert.log`
+- command summary:
+  - `MemoryMax=16G`, `MemorySwapMax=0`
+  - `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`
+  - `GGML_DEEPSEEK4_MOE_MANY_PROBE=1`
+  - accepted A64 flags `-ub 1 -t 20 -tb 20 -no-fa`, `-n 64`
+- first probe log: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/bench.log`
+  - exit_code: `0`
+  - graph_splits: `76`
+  - prompt_eval_tok_s: `4.90`
+  - eval_tok_s: `9.92`
+  - total_ms: `12445.37`
+  - wall_clock_elapsed: `14.20s`
+  - observation: no `[A70]` diagnostics were emitted because the accepted decode path bypassed the earlier parallel-experts prompt branch. This made the first source hook insufficient for S12 eligibility.
+- revised probe log: `/root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/bench_r2.log`
+  - exit_code: `0`
+  - graph_splits: `76`
+  - prompt_eval_tok_s: `4.79`
+  - eval_tok_s: `9.64`
+  - total_ms: `12561.17`
+  - service_runtime: `14.175s`
+  - CPU_time_consumed: `2min 30.546s`
+  - wall_clock_elapsed: `14.20s`
+  - time_maxrss_kb: `6344` for the `systemd-run` wrapper; cgroup completed successfully and was not OOM-killed.
+- eligibility findings:
+  - revised temporary probe added a direct `GGML_DEEPSEEK4_MOE_MANY_PROBE=1` route in the sequential CPU down path that A69 had hit.
+  - `iqk_mul_mat_moe_many_hybrid` accepted that route `7536` times during the n64 decode probe.
+  - representative logged shape: `typeA=mxfp4`, `vec_dot=q8_2_x4`, `n_as=256`, `ne12=1`, `ids_ne1=1`, `active=6`, `single_row=6`, `total_rows=6`, `max_rows=1`.
+  - up/gate examples: `ne01=2048`, `ne00=4096`, `ne11=1`, `nb02=4456448`.
+  - down examples: `ne01=4096`, `ne00=2048`, `ne11=6`, `nb02=4456448`.
+  - no decline was observed once the actual sequential branch was instrumented.
+- performance decision:
+  - A70 is diagnostically successful but unpromoted.
+  - The many/hybrid route is eligible and smoke-correct for the A69 shape, but the quick run was slower than A69 n64 (`9.64 tok/s` vs `9.71 tok/s`) and not better than A64-family full p50 (`9.84 tok/s`).
+  - Do not keep the source probe or change the accepted A64 command.
+- rollback status:
+  - temporary source changes reverted with `git apply -R /root/lfz/runs/ik_llama/deepseek-v4-a70-moe-many-eligibility-probe/final_source_probe.diff`.
+  - default `llama-cli` rebuilt successfully after rollback.
+  - tracked source files clean after rollback; only this plan file remains intentionally modified before commit.
+- next direction:
+  - Do not pursue simple many/hybrid routing as a performance change.
+  - The next useful source direction is direct optimization of the MXFP4 helper / `iqk_mul_mat_moe` inner row partitioning for `active=6`, `Ny=1`, single-row expert calls, or reducing per-call overhead/logically batching without the existing many/hybrid wrapper overhead.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
