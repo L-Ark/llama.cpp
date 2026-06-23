@@ -2934,3 +2934,43 @@ Decision:
     instrument or modify the actual CUDA fused MoE / CUDA `MUL_MAT_ID` path, not just generic
     scheduler input copy.
 - Stable 16GB SOTA remains A31 p50 `1.91 tok/s`.
+
+### 2026-06-23 - Planned Diagnostic Attempt A51: Deferred `MUL_MAT_ID` Full Wall-Time Attribution
+
+- attempt_id: `deepseek-v4-a51-mulmatid-wall-attribution`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - A35 showed isolated MXFP4/Q8_1 GPU math is too small to explain eval time.
+  - A36/A38 showed CUDA graph host and stable-graph GPU time are too small.
+  - A39/A40/A42 ruled out the early router hotspot after warmup.
+  - A43/A48/A49/A50 show cache/pack/RAM hit rate remains zero for DeepSeek V4 F8 experts, while the
+    visible TTFT trace only accounts for roughly `7s` of copy/fault-adjacent time in a 64-token run.
+- hypothesis:
+  - The missing runtime is in the full `ggml_compute_forward_mul_mat_id()` wrapper or its surrounding
+    deferred-expert execution path, not in the isolated CUDA kernels measured earlier.
+  - We need one low-overhead attribution pass that buckets full wall time by tensor family:
+    `ffn_up_exps`, `ffn_gate_exps`, `ffn_down_exps`, router/non-expert, plus whether the CUDA batch
+    path completed (`cuda_batch_done`) or fell through to CPU/IQK fallback.
+- planned source change:
+  - Temporary default-off instrumentation in `ggml/src/ggml.c`, gated by
+    `GGML_DEEPSEEK4_MULMATID_WALL_ATTR=1`.
+  - For `ith == 0`, measure wall time around major regions in `ggml_compute_forward_mul_mat_id()`:
+    group rows, prefetch/register, CUDA batch attempt, CPU/IQK fallback compute, and total function
+    time.
+  - Record rusage deltas for minor/major faults around the function and around the prefetch/compute
+    regions.
+  - Aggregate by `src0->name` family and print one summary line at exit.
+  - Keep sampling/aggregation bounded; this is diagnostic only and must be reverted after the run.
+- benchmark command:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_MULMATID_WALL_ATTR=1`.
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Produce a summary showing where the full `MUL_MAT_ID` wrapper time goes and whether up/gate/down
+    differ materially.
+  - If one family/region dominates, A52 should target that specific region.
+  - If all wrapper regions are small, A52 should stop chasing expert movement and target outer graph
+    split/scheduler orchestration.
+- rollback condition:
+  - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
+  - Do not promote diagnostic code.
