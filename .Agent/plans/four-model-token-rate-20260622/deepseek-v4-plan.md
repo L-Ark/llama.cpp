@@ -886,3 +886,14 @@ Apply previous-task routes in this order:
 - Decision: do not promote. The short-run `nwarps=4` bump did not survive full validation and remains below the current 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
 - Next direction: the current MMVQ launch policy is not the limiting knob. Any meaningful improvement likely needs an algorithmic change: reduce repeated Q8_1 activation quantization, fuse up/gate/down across active experts, or build a DeepSeek-specific MXFP4 small-MoE kernel while preserving CUDA graph reuse.
 
+### 2026-06-23 17:05Z - Optimization Attempt A27: DeepSeek4 Fused MoE Up/Gate Enable Probe
+
+- Finding: `llm_build_moe_ffn()` explicitly disables `can_use_fmoe` for `LLM_ARCH_DEEPSEEK4`, even when a merged `ffn_up_gate_exps` tensor exists. That prevents graph construction from emitting `GGML_OP_MOE_FUSED_UP_GATE` and leaves the CUDA backend to execute the routed expert path as paired `MUL_MAT_ID` calls.
+- Hypothesis: enabling DeepSeek4 to use `GGML_OP_MOE_FUSED_UP_GATE` might reduce up/gate kernel launches and allow the existing CUDA fused MoE path to combine up/gate activation and down projection.
+- Probe: add default-off `GGML_DEEPSEEK4_ENABLE_FUSED_MOE_UP_GATE=1` that allows DeepSeek4 through the existing fused-MoE graph builder and applies `hparams.swiglu_limits[il]` to the fused op. Default behavior was unchanged.
+- 64-token direct run under 16 GB host-RAM limit:
+  - command env: `GGML_DEEPSEEK4_ENABLE_FUSED_MOE_UP_GATE=1`, `-ub 1 -t 24 -tb 24`, `N_PREDICT=64`
+  - result: `eval_tok_s = 1.68`, log `/root/lfz/runs/ik_llama/deepseek-v4-a27-fused-moe-upgate-direct-n64/bench.log`
+- Decision: do not promote and do not run full validation. The short probe is below the current direct short-run control band and well below the 16 GB SOTA (`1.79 tok/s`). Source changes were reverted and `build-cuda` was rebuilt back to default.
+- Diagnosis: simply routing DeepSeek4 into the existing fused MoE up/gate graph is not enough. The current CUDA fused-MoE implementation was built around other layouts/streaming assumptions; for DeepSeek4 MXFP4 the existing paired `MUL_MAT_ID` path remains faster.
+
