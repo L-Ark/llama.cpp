@@ -4414,5 +4414,6 @@ Decision:
 - next direction:
   - Do not pursue simple many/hybrid routing as a performance change.
   - The next useful source direction is direct optimization of the MXFP4 helper / `iqk_mul_mat_moe` inner row partitioning for `active=6`, `Ny=1`, single-row expert calls, or reducing per-call overhead/logically batching without the existing many/hybrid wrapper overhead.
+- result_commit: `1a3d3e940d3fc9d12e97bc8ea408fedd585e036f`
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
 
