@@ -4906,3 +4906,4 @@ Decision:
 - next_concrete_optimization_candidate: run an A83 focused OpenMP/threading probe under the accepted A80 path: sweep `-t/-tb`, `OMP_WAIT_POLICY`, and `GOMP_SPINCOUNT`, then consider a source-level reduction of per-token OpenMP team overhead around the CPU MoE `MUL_MAT_ID`/`iqk_mul_mat_moe` path if runtime knobs confirm the profile. Keep A80 placement rules unchanged and preserve the A75-style correctness audit for any promoted source change.
 - rollback_status: no source instrumentation was added; `git diff -- ggml/src` stayed empty. Only this plan record is intended to be committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
+- result_commit: `85ea616b3a9e7fc4a8421d6388576be288dbd4d1`
