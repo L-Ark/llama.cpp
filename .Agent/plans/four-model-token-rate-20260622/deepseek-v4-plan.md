@@ -5004,3 +5004,6 @@ A86 omp_overhead_mechanism: callsite_granularity / many_small_regions. The trace
 Recommendation: stop further low-level OpenMP partitioning probes unless implementing a true call-coalescing or persistent-team design that reduces the number of tiny per-expert call sites/regions. The next accepted-scope route should be a persistent-team/call-coalescing prototype across experts/layers, a quality-safe CUDA offload route, or deeper SIMD/kernel optimization inside the helper that preserves the current contiguous block partitioning.
 
 Rollback_status: temporary A86 source diagnostics were saved in , reverted after measurement, default  was rebuilt, and tracked source diff was confirmed empty before commit.  remains n/a because WiCi forbids .
+
+A86 result_commit: 2c291dd0
+A86 pushed_commit: n/a (WiCi no-push constraint)
