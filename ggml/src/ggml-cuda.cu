@@ -4703,6 +4703,8 @@ GGML_CALL static bool ggml_backend_cuda_supports_op(ggml_backend_t backend, cons
                     case GGML_TYPE_IQ1_S_R4:
                     case GGML_TYPE_IQ1_M_R4:
                         return true;
+                    case GGML_TYPE_F8_E4M3_B128:
+                        return op->op == GGML_OP_MUL_MAT && std::getenv("GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE") != nullptr;
                     default:
                         return false;
                 }

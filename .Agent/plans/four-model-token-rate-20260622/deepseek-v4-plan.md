@@ -3992,3 +3992,58 @@ Decision:
 - rollback condition:
   - Revert temporary source changes and rebuild default `llama-cli`.
   - Do not promote diagnostic code.
+
+### 2026-06-23 11:08Z - A64 Result: Gated CUDA `F8_E4M3_B128` Dense Convert Path Accepted Locally
+
+- attempt_id: `deepseek-v4-a64-cuda-f8-b128-to-f16-convert`
+- status: `accepted locally, source kept, push blocked by WiCi no-push constraint`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `1c390ed2e8bec36aa59d412fcc811d354f074a37`
+- source files:
+  - `ggml/src/ggml-cuda.cu`
+  - `ggml/src/ggml-cuda/convert.cu`
+- build validation:
+  - command: `git diff --check && cmake --build build-cuda --target llama-cli -j$(nproc)`
+  - result: passed
+  - build log: `/root/lfz/runs/ik_llama/deepseek-v4-a64-cuda-f8-b128-to-f16-convert/build.log`
+- quick filter:
+  - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a64-cuda-f8-b128-to-f16-convert`
+  - attempt_start_utc: `2026-06-23T11:04:13Z`
+  - attempt_end_utc: `2026-06-23T11:05:19Z`
+  - wall_clock_elapsed: `66s`
+  - command summary: A31 env/flags, `-n 64`, `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1`, cgroup `MemoryMax=16G`, `MemorySwapMax=0`
+  - graph splits: `76`
+  - eval: `8838.58 ms / 63 runs = 7.13 tok/s`
+  - prompt eval: `3500.54 ms / 5 tokens = 1.43 tok/s`
+  - total: `17253.78 ms / 68 tokens`
+  - log: `/root/lfz/runs/ik_llama/deepseek-v4-a64-cuda-f8-b128-to-f16-convert/bench.log`
+- full validation repeats:
+  - repeat1:
+    - attempt_id: `deepseek-v4-a64-f8-dense-convert-n256-r1`
+    - attempt_start_utc: `2026-06-23T11:06:57Z`
+    - attempt_end_utc: `2026-06-23T11:07:33Z`
+    - wall_clock_elapsed: `36s`
+    - graph splits: `76`
+    - eval: `27656.22 ms / 255 runs = 9.22 tok/s`
+    - prompt eval: `988.40 ms / 5 tokens = 5.06 tok/s`
+    - total: `33666.22 ms / 260 tokens`
+    - log: `/root/lfz/runs/ik_llama/deepseek-v4-a64-f8-dense-convert-n256-r1/bench.log`
+  - repeat2:
+    - attempt_id: `deepseek-v4-a64-f8-dense-convert-n256-r2`
+    - attempt_start_utc: `2026-06-23T11:07:43Z`
+    - attempt_end_utc: `2026-06-23T11:08:17Z`
+    - wall_clock_elapsed: `34s`
+    - graph splits: `76`
+    - eval: `25915.39 ms / 255 runs = 9.84 tok/s`
+    - prompt eval: `1002.93 ms / 5 tokens = 4.99 tok/s`
+    - total: `31934.46 ms / 260 tokens`
+    - log: `/root/lfz/runs/ik_llama/deepseek-v4-a64-f8-dense-convert-n256-r2/bench.log`
+- acceptance decision:
+  - Both full repeats exited `0` under the 16 GB cgroup with no CUDA assert, OOM, NaN, or read failure.
+  - p50 over full repeats is approximately `9.53 tok/s`; worst repeat is `9.22 tok/s`, both well above A31 p50 `1.91 tok/s` and worst `1.90 tok/s`.
+  - Graph splits dropped from A31/A59 `1237` to `76`, matching the A63 placement hypothesis without the missing-converter crash.
+  - Promote the env-gated source change locally. Default behavior remains unchanged unless `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1` is set.
+- commit/push:
+  - local commit: `1bcfe4a7f8a3fb9b244f637af6b6a14b654ec0a4`
+  - pushed_commit: `n/a, blocked by WiCi no-push constraint`
+
