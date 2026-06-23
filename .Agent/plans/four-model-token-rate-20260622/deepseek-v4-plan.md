@@ -3796,3 +3796,36 @@ Decision:
   - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
   - Next useful target should be source-level placement/scheduler cleanup informed by A59, not another
     broad split-mode flag.
+
+### 2026-06-23 - Planned Diagnostic Attempt A62: CPU `MUL_MAT` Placement Cause Probe
+
+- attempt_id: `deepseek-v4-a62-cpu-mulmat-placement-cause`
+- baseline: A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- current largest bottleneck evidence:
+  - A59 shows `1237` graph splits dominated by CPU `MUL_MAT` split starts, especially
+    `attn_group_out-*`, `attn_out_proj-*`, `q_a-*`, `ffn_gate-*`, `ffn_up-*`, and `ffn_shexp-*`.
+  - A60 confirms lowering CUDA's generic offload threshold does not change the split count.
+  - A61 confirms broad split-mode changes do not produce stable improvement.
+- hypothesis:
+  - The remaining high-impact path is a source-level scheduler/placement fix, but we need to know
+    whether the CPU `MUL_MAT` assignments come from CPU-resident source weights, unsupported CUDA op
+    checks, inherited CPU placement from neighboring nodes, or buffer compatibility constraints.
+- planned source change:
+  - Add temporary default-off instrumentation in `ggml/src/ggml-backend.cpp`, gated by
+    `GGML_DEEPSEEK4_PLACEMENT_CAUSE=1`.
+  - During the first large graph split only, print representative CPU `MUL_MAT` split starts with:
+    split index, node index, node name/op/backend/cause, node shape, input count, and each source's
+    name/op/backend/cause/buffer type/shape.
+  - Limit output to at most 80 records to avoid A59-style exit overhead.
+  - Save source diff in the run directory and revert after the diagnostic.
+- benchmark command:
+  - A31 env plus `GGML_DEEPSEEK4_PLACEMENT_CAUSE=1`.
+  - A31 flags with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Explain the scheduler reason for the top CPU `MUL_MAT` categories well enough to choose a
+    source-level fix or reject this path.
+  - This is diagnostic only; token rate is not comparable.
+- rollback condition:
+  - Revert temporary source changes and rebuild default `llama-cli`.
+  - Do not promote diagnostic code.
