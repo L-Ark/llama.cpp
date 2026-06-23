@@ -3077,3 +3077,86 @@ Decision:
   - Do not promote diagnostic code.
   - If the diagnostic crashes or changes generated-token count, record it as failed and revert before
     any further attempt.
+
+### 2026-06-23 09:36Z - A52 Result: Actual Path Is CUDA `MUL_MAT_ID` Fast Path, Not Scheduler Active-Expert Copy
+
+- attempt_id: `deepseek-v4-a52-backend-cuda-moe-attribution`
+- status: `unpromoted diagnostic, source reverted`
+- branch: `deepseek-v4-flash`
+- git_start_sha: `afacd245161a6a3d6a98b7e11e60d81c82765ecc`
+- attempt_start_utc: `2026-06-23T09:30:36Z`
+- attempt_end_utc: `2026-06-23T09:36:06Z`
+- wall_clock_elapsed: `330s`
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a52-backend-cuda-moe-attribution`
+- logs:
+  - benchmark: `/root/lfz/runs/ik_llama/deepseek-v4-a52-backend-cuda-moe-attribution/bench.log`
+  - source diff: `/root/lfz/runs/ik_llama/deepseek-v4-a52-backend-cuda-moe-attribution/source_probe.diff`
+  - final diff before revert: `/root/lfz/runs/ik_llama/deepseek-v4-a52-backend-cuda-moe-attribution/source_probe.final.diff`
+  - rebuild after revert: `/root/lfz/runs/ik_llama/deepseek-v4-a52-backend-cuda-moe-attribution/rebuild-after-revert.log`
+- command summary:
+  - `systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0`
+  - A31 env plus `GGML_DEEPSEEK4_BACKEND_ATTR=1`
+  - A31 flags with `-n 64`
+- benchmark result:
+  - load time: `8740.50 ms`
+  - prompt eval: `3383.65 ms / 5 tokens = 1.48 tok/s`
+  - eval: `35109.41 ms / 63 runs = 1.79 tok/s`
+  - total: `43891.36 ms / 68 tokens`
+  - service runtime: `44.997s`
+  - service CPU time: `12min 50.017s`
+  - token rate is not comparable to A31 because A52 inserted synchronization for diagnostics.
+- attribution summary:
+  - CUDA: `[deepseek4_cuda_moe_attr] fused_calls=0 mmid_calls=816 active_iters=0 active_rows=0 total_ms=0.000 rowmap_ms=0.000 quant_ms=0.000 up_gate_ms=0.000 swiglu_ms=0.000 down_ms=0.000 scatter_ms=0.000`
+  - backend scheduler: `[deepseek4_backend_attr] active_events=0 ids_fetch_ms=0.000 unique_build_ms=0.000 tensor_set_ms=0.000 expert_ranges=0 expert_bytes_gib=0.000 graph_compute_calls=84116 graph_compute_ms=2353.648`
+- interpretation:
+  - The scheduler active-expert host-staging branch did not run at all (`active_events=0`). The current DeepSeek V4 path is not using the `only_active_experts` scheduler copy block that A52 targeted.
+  - The CUDA fused up/gate op also did not run (`fused_calls=0`). The graph is executing `GGML_OP_MUL_MAT_ID` directly.
+  - `mmid_calls=816` confirms the hot path is `ggml_cuda_mul_mat_id()`.
+  - A52 did not time the fast path because the instrumentation was placed mainly around the general path and the fast TG path returns before those counters are updated. This is an instrumentation miss, not a performance result.
+  - Backend graph compute submit overhead is only `2353.648 ms` over `84116` split compute calls. This is nonzero but still too small to explain the `35.1s` eval time alone.
+- rollback/rebuild:
+  - Temporary `ggml-backend.cpp` and `ggml-cuda.cu` instrumentation was reverted with `git apply -R`.
+  - Default CUDA binary rebuilt successfully after revert.
+  - Post-revert status only contains unrelated untracked `.Agent/plans/m3-race-spec*` files.
+- decision:
+  - Do not promote A52 as a performance change.
+  - Stable 16GB DeepSeek V4 SOTA remains A31 p50 `1.91 tok/s`, worst `1.90 tok/s`.
+  - A53 should instrument the early-return fast path in `ggml_cuda_mul_mat_id()` directly: `cudaMemsetAsync`, Q8_1 activation quantization, first `ggml_cuda_op_mul_mat_vec_q_id`, optional fused next/down `ggml_cuda_op_mul_mat_vec_q_id`, and stream synchronization.
+
+### 2026-06-23 - Planned Diagnostic Attempt A53: CUDA `MUL_MAT_ID` Fast Path Attribution
+
+- attempt_id: `deepseek-v4-a53-cuda-mulmatid-fastpath-attribution`
+- baseline: A31 `-ub 1 -t 20 -tb 20 -no-fa`, p50 `1.91 tok/s`, worst `1.90 tok/s`.
+- context:
+  - A52 shows the actual execution path is direct CUDA `GGML_OP_MUL_MAT_ID`, with `816` calls in a
+    `64`-token run.
+  - The fast path in `ggml_cuda_mul_mat_id()` handles token-generation shape when `src1->ne[1] <=
+    MMVQ_MAX_BATCH_SIZE`, `src1->ne[2] == 1`, `src1->type == F32`, and the expert/input/output buffers
+    are CUDA-resident. It does:
+    - zero dst,
+    - allocate/quantize activation to Q8_1,
+    - run `ggml_cuda_op_mul_mat_vec_q_id`,
+    - optionally fuse the next `MUL_MAT_ID` with the same activation quantization.
+- hypothesis:
+  - The missing eval wall time is inside this fast path: either repeated activation quantization,
+    repeated `mul_mat_vec_q_id` small-kernel launches, or the optional next/down fusion path.
+- planned source change:
+  - Temporary default-off instrumentation in `ggml/src/ggml-cuda.cu`, gated by
+    `GGML_DEEPSEEK4_MMID_FAST_ATTR=1`.
+  - Only instrument the early fast path in `ggml_cuda_mul_mat_id()`.
+  - Measure calls, fused-next count, `cudaMemsetAsync`, activation quantization, first MMVQ, fused-next
+    MMVQ, and total fast-path wall time. Use stream sync only under the env flag.
+  - Revert after the run.
+- benchmark command:
+  - env: A31 baseline env plus `GGML_DEEPSEEK4_MMID_FAST_ATTR=1`.
+  - flags: A31 baseline with `-n 64`.
+  - cgroup: `MemoryMax=16G`, `MemorySwapMax=0`.
+- success metric:
+  - Attribute at least `80%` of fast-path measured total to quantization, first MMVQ, fused-next MMVQ,
+    memset, or unexplained host overhead.
+  - If MMVQ dominates, next attempt should inspect kernel launch count/fusion or shape-specific
+    batching. If quantization dominates, next attempt should try activation quant reuse. If fused-next
+    count is zero, revisit graph fusion/order.
+- rollback condition:
+  - Diagnostic source must be reverted and default `llama-cli` rebuilt after the run.
+  - Do not promote diagnostic code.
