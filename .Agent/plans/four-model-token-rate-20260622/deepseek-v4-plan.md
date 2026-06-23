@@ -4930,3 +4930,4 @@ Decision:
 - next_concrete_optimization_candidate: A84 should be a source-level OpenMP/MoE scheduling probe to reduce per-token OpenMP team/wait overhead around CPU `MUL_MAT_ID` / `iqk_mul_mat_moe`, or a narrower instrumentation pass that counts worker active/wait time per decode step. Keep accepted A80 placement rules unchanged and retain A75/A80-style deterministic output audits for any promoted source change.
 - rollback_status: no source changes were made; `git diff -- ggml/src` is empty. Only this plan record is committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
+- result_commit: `20e3ca4a0db78ffae8ee9e609a805982840078bb`
