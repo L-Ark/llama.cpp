@@ -4907,3 +4907,26 @@ Decision:
 - rollback_status: no source instrumentation was added; `git diff -- ggml/src` stayed empty. Only this plan record is intended to be committed.
 - pushed_commit: n/a; WiCi run forbids `git push`.
 - result_commit: `85ea616b3a9e7fc4a8421d6388576be288dbd4d1`
+
+### Planned Diagnostic Attempt A83 - OpenMP runtime/thread sweep
+
+- goal: test whether A82 `openmp_overhead` can be reduced by runtime/thread-count controls under the accepted A80 attention-safe F8 dense CUDA path before attempting source-level MoE scheduling changes.
+- method: keep accepted A80 source unchanged; run same-session quick `-n 128` sweeps over `-t/-tb`, `OMP_WAIT_POLICY`, `GOMP_SPINCOUNT`, and `OMP_PROC_BIND`/`OMP_PLACES`. Promote a runtime recipe only if paired `-n 256` repeats beat same-session default by the PLAN thresholds.
+- acceptance: quick runs must exit 0, keep graph_splits near 291, and show no CUDA/assert/NaN/Inf failures. A candidate needs quick eval > default by 0.10 tok/s and full-repeat p50 > default by 0.10 tok/s, candidate p50 >= 5.35 tok/s, and worst >= 5.20 tok/s.
+- note: no source changes are intended. Do not run `git push`.
+
+### Diagnostic Result A83 - OpenMP runtime/thread sweep
+
+- status: completed_unpromoted; accepted A80 source behavior unchanged.
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a83-openmp-runtime-sweep`
+- input_commit: `9b626e11`
+- quick_sweep: all 11 quick `-n 128` candidates exited `0`, kept graph_splits `291`, and logged no CUDA/assert/NaN/Inf failures.
+- quick_results_tps: default_t20 `5.07`, passive_t20 `2.79`, active_t20 `3.35`, close_t20 `5.24`, spread_t20 `5.23`, passive_close_t20 `2.84`, default_t16 `5.17`, passive_t16 `2.91`, close_t16 `5.08`, default_t24 `4.95`, passive_t24 `2.55`.
+- quick_candidate: `close_t20` with `5.24 tok/s`, `20` threads, env `OMP_PROC_BIND=close OMP_PLACES=cores`. It beat same-session default_t20 quick `5.07 tok/s` by `0.17 tok/s`, so it qualified for full repeats.
+- full_repeat_results: default_t20 repeats `5.32/5.26 tok/s`; candidate `close_t20` repeats `5.33/5.17 tok/s`; all exited `0` and kept graph_splits `291`.
+- full_p50: default_t20 `5.29 tok/s`; candidate `5.25 tok/s`; candidate worst `5.17 tok/s`.
+- promotion_decision: not promoted. Candidate full-repeat p50 did not beat same-session default p50 by `> 0.10 tok/s` and did not meet the `>= 5.35 tok/s` p50 threshold, despite the quick-run improvement. PASSIVE/GOMP_SPINCOUNT=0 variants were consistently harmful (`2.55-2.91 tok/s`), and t24 regressed.
+- recommended_runtime_recipe: keep the A80/A81 default runtime recipe for now (`-t 20 -tb 20`, no added OpenMP env). `OMP_PROC_BIND=close` may be useful as a noisy hint but is not accepted as a new recipe.
+- next_concrete_optimization_candidate: A84 should be a source-level OpenMP/MoE scheduling probe to reduce per-token OpenMP team/wait overhead around CPU `MUL_MAT_ID` / `iqk_mul_mat_moe`, or a narrower instrumentation pass that counts worker active/wait time per decode step. Keep accepted A80 placement rules unchanged and retain A75/A80-style deterministic output audits for any promoted source change.
+- rollback_status: no source changes were made; `git diff -- ggml/src` is empty. Only this plan record is committed.
+- pushed_commit: n/a; WiCi run forbids `git push`.
