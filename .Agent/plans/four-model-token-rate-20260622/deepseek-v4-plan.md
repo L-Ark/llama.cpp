@@ -5154,3 +5154,29 @@ Safety and rollback:
 
 A89 result_commit: 32a1d97a
 A89 pushed_commit: n/a (WiCi no-push constraint)
+
+
+### Terminal Frontier Receipt A90
+
+Status: terminal_frontier_receipt
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a90-terminal-frontier-receipt`
+Input commit: `1515f80e` (`plan: record a89 result commit`)
+
+A90 records an evidence-backed terminal frontier for the current GOAL.md scope, grounded in A89 rather than in plan exhaustion alone. The A89 residual route audit recorded `Status: no_non_speculative_route_remaining`; the A90 scan preserved the current plan under `deepseek-v4-plan.before.md`, confirmed `source_start.diff` is empty, and found zero nonzero A88 exit statuses.
+
+Accepted quality-valid frontier: A80 attention-only CUDA F8 dense placement, hardened by A81 and revalidated by A88. Accepted runtime environment and command constraints remain:
+
+- Environment: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn`
+- Runtime flags: `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`
+- Memory guard: `MemoryMax=16G`, `MemorySwapMax=0`
+- Model path: `/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf`
+
+A88 final validation evidence remains the accepted boundary check: baseline smoke prompts exited 0 at `graph_splits=1237` with eval `1.83/1.82/1.87 tok/s`; accepted attention-safe smoke prompts exited 0 at `graph_splits=291` with eval `5.13/5.00/5.04 tok/s`; accepted attention-safe n256 repeats exited 0 at `graph_splits=291` with eval `5.34/5.50 tok/s`, consistent with the A80/A81 band.
+
+Invalidated and retired routes remain unchanged: broad A64/A66/A73/A74-style F8 dense CUDA placement is real-throughput but invalid-for-quality after deterministic output audits and localization; A83-A87 OpenMP scheduling, helper partitioning, region granularity, and coalesced/persistent helper-team probes are diagnostic or completed_unpromoted only. Lower-level OpenMP scheduling/partitioning probes are retired unless new evidence changes the target.
+
+Source-clean and safety status: A90 introduced no optimization source changes and no benchmark run; `source_start.diff` is empty. No `git push` was run in A90. The prior A86 Safety_note documenting the accidental iter-47 push remains part of this plan history.
+
+Reopen criteria: further autonomous optimization should require explicit new user steering or new execution evidence that provides a concrete target file/function, a correctness oracle, a promotion threshold, a rollback strategy, and an explanation of why the route is not one of the retired OpenMP or invalid broad-F8 paths.
+
+A90 pushed_commit: n/a (WiCi no-push constraint)
