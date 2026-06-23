@@ -4824,3 +4824,4 @@ Decision:
 - conclusion: broad A64-style placement remains `failed_invalid_for_quality`, but attention-family F8 dense CUDA placement is a quality-valid follow-up candidate on the A75 prompts and keeps graph splits substantially below baseline. Do not promote it yet: next work should run a focused A80 attention-only implementation/audit with stronger deterministic output checks and n64/n256 throughput validation before changing any accepted command.
 - source rollback: temporary class-filter diagnostics were reverted; `source_after_revert.diff` is empty and default `llama-cli` rebuilt successfully.
 - pushed_commit: n/a, blocked by WiCi no-push constraint.
+- result_commit: `b53069c10f5115be0a53b6b31a179e5c367f297d`
