@@ -5180,3 +5180,6 @@ Source-clean and safety status: A90 introduced no optimization source changes an
 Reopen criteria: further autonomous optimization should require explicit new user steering or new execution evidence that provides a concrete target file/function, a correctness oracle, a promotion threshold, a rollback strategy, and an explanation of why the route is not one of the retired OpenMP or invalid broad-F8 paths.
 
 A90 pushed_commit: n/a (WiCi no-push constraint)
+
+A90 result_commit: eb809570
+A90 pushed_commit: n/a (WiCi no-push constraint)
