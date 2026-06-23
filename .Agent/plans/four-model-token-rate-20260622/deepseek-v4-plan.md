@@ -4769,4 +4769,4 @@ Decision:
 - quality_status: repair failed/unpromoted; A64/A66 remain `failed_invalid_for_quality`. No A64-derived throughput is quality-valid until a future repair passes an A75-style visible-output audit.
 - recommended_follow_up: test stricter support gating that declines F8 dense CUDA placement for unsafe shapes/tensors, or implement a dedicated semantically equivalent F8 dense CUDA path and re-run the A75 audit before any performance validation.
 - pushed_commit: `n/a`, blocked by WiCi no-push constraint.
-
+- result_commit: `42387b4dc7de5079db0b297048522daf46605bb4`
