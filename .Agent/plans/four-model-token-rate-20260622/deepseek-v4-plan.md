@@ -4752,3 +4752,21 @@ Decision:
 - run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a77-f8-quality-repair-probe`
 - decision_pending: keep source only if repair mode passes visible-output correctness; otherwise revert and record failed/unpromoted.
 - result_commit: `e12674b7cbd92bd2102b4e9d533d7f2617508272`
+
+### Result A77 - F8 dense quality repair probe
+- completed_at_utc: 2026-06-23T14:22:12Z
+- run_dir: `/root/lfz/runs/ik_llama/deepseek-v4-a77-f8-quality-repair-probe`
+- git_start_sha: `bc6761c2bb90058d89f97b7b9b9a64f3c74547cb`
+- source_probe: temporary `GGML_DEEPSEEK4_CUDA_F8_DENSE_FP32_ACCUM=1` repair added to `ggml/src/ggml-cuda.cu`, saved as `source_probe_applied.diff`, then reverted. `source_after_revert.diff` is empty.
+- build_validation: `git diff --check` passed, repair `llama-cli` build passed, source was reverted, and default `llama-cli` rebuild passed.
+- audit_modes: baseline (`graph_splits=1237`), known-bad A64 (`graph_splits=76`), and repair (`graph_splits=76`) all exited 0 for the three A75 prompts under `MemoryMax=16G`.
+- repair_attempt: used fp16-dequantized F8 inputs but wrote cublas output directly to fp32 with `CUBLAS_COMPUTE_32F`; the log confirmed `GGML_DEEPSEEK4_CUDA_F8_DENSE_FP32_ACCUM: using fp32 output/accumulation for F8 dense matmul`.
+- visible_output_result: failed. Repair mode reproduced the known-bad A64 corruption:
+  - `The capital of France is`: `[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name`
+  - `2 + 2 =`: `ancimingtonmingtonanciancianciancianci acronymanci好吧 Sequel对学生不加不加不加`
+  - `The opposite of hot is`: `anners[name[name[name[name[name[name[name[name[name[name[name[name[name[name[name`
+- conclusion: fp32 accumulation/output alone is insufficient; the corruption remains tied to enabling broad CUDA placement for `GGML_TYPE_F8_E4M3_B128` dense matmuls, not merely the fp16 GEMM accumulator/output precision.
+- quality_status: repair failed/unpromoted; A64/A66 remain `failed_invalid_for_quality`. No A64-derived throughput is quality-valid until a future repair passes an A75-style visible-output audit.
+- recommended_follow_up: test stricter support gating that declines F8 dense CUDA placement for unsafe shapes/tensors, or implement a dedicated semantically equivalent F8 dense CUDA path and re-run the A75 audit before any performance validation.
+- pushed_commit: `n/a`, blocked by WiCi no-push constraint.
+
