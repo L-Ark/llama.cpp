@@ -5712,3 +5712,27 @@ A101 decision: `inconclusive_with_missing_evidence`, with a practical `reference
 Next evidence needed to reopen R4: obtain or build a fuller independent reference CLI/server surface for commit `9d36408` (or another pinned known-good DeepSeek4 reference) with prompt/template/sampling controls and a viable 16 GB memory strategy, then rerun the France paragraph gate. If that independent reference emits a readable short paragraph, classify the current blocker as `ik_llama_runtime_generation_blocker` and rerun the A96 historical candidate coverage with the working harness. If a fuller independent reference also produces blank/corrupt/non-paragraph output under the same GGUF and memory discipline, then classify `model_or_gguf_generation_blocker`.
 
 Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+### Planned Diagnostic Attempt A102 - current-runtime token stop path trace
+
+Goal: trace the current `/root/lfz/ik_llama` runtime at the actual sampling site for the France paragraph prompt before any further optimization. The diagnostic adds a temporary default-off `IK_LLAMA_A102_TRACE_TOKENS=1` source hook around generated token sampling, display, EOG, and non-interactive break checks, runs no-F8 and A93/A94 rows under `MemoryMax=16G`/`MemorySwapMax=0`, saves token ID/piece/stop evidence, then reverts the hook and leaves source clean. Push remains blocked by the WiCi no-push constraint.
+
+### Diagnostic Result A102 - France paragraph path search
+
+Status: completed_unresolved_call_path.
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a102-france-paragraph-path-or-fix`.
+Remote start/head: `e85d13cf` on `deepseek-v4-flash`. Known unrelated untracked files remained `.Agent/plans/m3-race-spec.md` and `.Agent/plans/m3-race-spec/RACE_SPEC.md`; an additional untracked single-character file `│` was observed during A102 status checks and was not added to the commit.
+
+Evidence reviewed before new probes: A97 CLI harness matrix, A98 display-path-only token trace diff, A99 no-flash server/chat corrupted JSON outputs, A100 metadata-template rows, and A101 independent reference runtime logs. A98 was not repeated blindly: its hook only logged tokens inside the display path, so a temporary A102 trace was placed at the sampler/display/EOG checks, saved as `a102_temp_trace_source.diff`, then reverted. `source_after_trace_revert.diff` is empty and `build_after_trace_revert.log` records a successful default `llama-cli` rebuild after revert.
+
+Focused source-free call-path probe:
+
+| row | command delta | exit | visible excerpt | pass/fail | logs |
+| --- | --- | ---: | --- | --- | --- |
+| `baseline_ngl1_nospec` | no-F8, `-ngl 1 -no-fa --no-multi-token-prediction --spec-type none --ctx-size 1024 --batch-size 64 --ubatch-size 64 --temp 0 --seed 1 --no-display-prompt`, MemoryMax=16G/MemorySwapMax=0 | 124 | none | fail: timed out after model/context load with no visible generated text | `/root/lfz/runs/ik_llama/deepseek-v4-a102-france-paragraph-path-or-fix/baseline_ngl1_nospec.stdout`, `.stderr`, `.command` |
+
+The focused row loaded with one GPU layer and flash attention disabled; stderr shows `flash_attn = 0`, `offloaded 1/44 layers`, CPU buffer about 148909 MiB, KV self about 86 MiB, and graph splits 1245. It still produced no visible text before the 180s timeout. Because the no-F8 focused path did not produce any candidate paragraph and earlier A97/A99/A100/A101 evidence already covered plain, prompt-display, no-ignore-EOS, Jinja/manual-template, no-flash server, chat, and independent reference-simple paths, no A102 path can currently be validated as a readable short France paragraph.
+
+A102 classification: `runtime_crash_or_timeout` with `call_path_unresolved`. No token-rate result is promoted or historically ranked. The next concrete evidence needed is either a known-good DeepSeek V4 Flash invocation that emits a readable paragraph under the 16 GB cap, or a minimal runtime repair target identified from deeper sampler/logit tracing that can generate visible non-corrupted text before rerunning A96 ranking.
+
+Rollback/source status: temporary trace source was saved and reverted; final tracked source diff for `ggml src examples common` is empty. Only this plan file is intentionally changed. Push status: blocked by WiCi no-push constraint; no `git push` was run.
