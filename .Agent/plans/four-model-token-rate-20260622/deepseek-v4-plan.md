@@ -5292,3 +5292,78 @@ A92 pushed_commit: n/a (WiCi no-push constraint)
 
 A92 result_commit: a2cdbcc6
 A92 pushed_commit: n/a (WiCi no-push constraint)
+
+
+### Planned Source Probe A93 - narrow F8 placement beyond A91
+
+Goal: continue from the A91/A92 accepted quality-valid baseline and test narrow, env-gated F8 CUDA placement expansion beyond `attn,ffn_up`. A92 confirmed A91 stability with p50 `6.43 tok/s` and worst `6.43 tok/s`; these are the baseline thresholds for A93.
+
+Scope: class-by-class candidates only unless source inspection identifies a concrete tensor-level candidate. The first candidate matrix layers `attn_out`, `attn_qkv`, or `ffn_gate` on top of `attn,ffn_up`. Do not use broad unsafe dense F8 placement, and do not introduce any sub-4-bit effective quantization route.
+
+Correctness oracle: candidates must preserve deterministic visible output and, if available, first-token/top-logit behavior against the A91/A92 accepted baseline. If `llama-cli` does not expose a built-in logit/probability export, record that limitation and use deterministic visible-output equivalence plus graph-split/source-consistency as the oracle for this run unless a temporary top-logit diagnostic can be added safely and reverted.
+
+Baseline env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, deterministic sampling, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Promotion thresholds: quick n128 must beat same-session A91 baseline by > 0.10 tok/s. Full repeats must exit 0, preserve correctness, candidate p50 must beat same-session A91 p50 by > 0.20 tok/s, beat A92 recorded A91 p50 by > 0.15 tok/s, candidate worst must be >= A92 recorded A91 worst, candidate p50 must be >= 6.55 tok/s, and candidate worst must be >= 6.25 tok/s.
+
+Safety: no `git push`; save logs, source diffs, oracle artifacts, and rollback evidence under `/root/lfz/runs/ik_llama/deepseek-v4-a93-narrow-f8-placement-beyond-a91`.
+
+### Source Probe Result A93 - narrow F8 placement beyond A91
+
+Status: accepted_promoted
+
+Context: A93 ran after A92 confirmed A91 stability. The accepted A91/A92 baseline was `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up`, with A92 A91 p50 `6.43 tok/s` and worst `6.43 tok/s`. A93 kept the >=4-bit effective quantization floor and did not use broad unsafe dense F8 placement.
+
+Artifacts: `/root/lfz/runs/ik_llama/deepseek-v4-a93-narrow-f8-placement-beyond-a91`.
+
+Candidate matrix:
+- `a91_baseline`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up`
+- `a91_plus_attn_out`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,attn_out`
+- `a91_plus_attn_qkv`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,attn_qkv`
+- `a91_plus_ffn_gate`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate`
+
+Correctness oracle:
+- Deterministic output smoke ran four prompts (`france`, `math`, `hotcold`, `color`) for all four candidates under `MemoryMax=16G` and `MemorySwapMax=0`; all 16 exits were `0`, visible output remained blank/coherent like A91/A92, and no CUDA/assert/shape/NaN/Inf failures were detected.
+- `llama-cli --help` did not expose a direct logits-file export suitable for this audit. A temporary default-off diagnostic `GGML_DEEPSEEK4_A93_TOP_LOGIT=1` was added in `common/sampling.cpp`, saved as `logit_oracle_source.diff`, used only for A93, then reverted and rebuilt.
+- The temporary first-token top-logit oracle ran the same four prompts for all candidates under the 16 GB cgroup. All 16 exits were `0`; each candidate matched the A91 baseline first-token `top_id`, `sampled_id`, and top-logit delta (`0`) for every prompt. Logs: `logit_table.tsv`, `logit_*.log`.
+
+Quick n128 throughput:
+- `a91_baseline`: graph_splits=`248`, eval=`6.14 tok/s`.
+- `a91_plus_attn_out`: graph_splits=`248`, eval=`6.00 tok/s`; not selected.
+- `a91_plus_attn_qkv`: graph_splits=`248`, eval=`6.11 tok/s`; not selected.
+- `a91_plus_ffn_gate`: graph_splits=`162`, eval=`8.54 tok/s`; selected, delta `+2.40 tok/s` over same-session A91.
+
+Full n256 paired repeats:
+- Same-session A91 baseline exits: all `0`; eval values `6.25`, `6.45`, `6.45 tok/s`; p50=`6.45`, worst=`6.25`, graph_splits=`248`.
+- Candidate `a91_plus_ffn_gate` exits: all `0`; eval values `10.39`, `10.55`, `10.45 tok/s`; p50=`10.45`, worst=`10.39`, graph_splits=`162`.
+- Promotion thresholds passed: candidate p50 beats same-session A91 by `+4.00 tok/s`; candidate p50 beats A92 A91 p50 by `+4.02 tok/s`; candidate worst `10.39` is above A92 A91 worst `6.43`, candidate p50 is above `6.55`, and candidate worst is above `6.25`.
+
+Accepted A93 env:
+`GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate`
+
+Rollback/source status:
+- No promoted source change was needed; the existing A91 env-gated allowlist implementation already supports `ffn_gate`.
+- Temporary logit diagnostic diff was saved as `logit_oracle_source.diff`, reverted with `git apply -R`, and `llama-cli` was rebuilt.
+- `final_source_probe.diff` is `0` bytes after revert; tracked source is clean.
+- No `git push` was run; push remains blocked by WiCi no-push constraint.
+
+Next recommendation: use A93 (`attn,ffn_up,ffn_gate`) as the new quality-valid frontier. A94, if requested, should harden A93 with expanded output/logit stability and perf audit before exploring any additional narrow class/per-tensor F8 placement.
+
+### Progress Artifact Sync S35
+
+Status: completed
+
+Context: hot-reload requirement R3 requested copying local `PROGRESS.md` to `/root/lfz/ik_llama/.Agent/plans/four-model-token-rate-20260622/PROGRESS.md` at a safe point and committing it with related plan changes.
+
+Safe-point evidence:
+- A93 deterministic output, temporary logit oracle, quick n128, and full n256 repeat commands had completed.
+- Temporary logit diagnostic source was reverted and `llama-cli` was rebuilt.
+- `final_source_probe.diff` was `0` bytes before the progress sync.
+- No benchmark/build/perf process was intentionally left running; a process-state check was performed at sync time, ignoring the transient verification shell itself.
+
+Checksum:
+- Local `PROGRESS.md` SHA256: `82be9f5c3c254103c78461bad6ebe67761f94a5e2a176b06456e8baf46aab884`.
+- Remote copied `PROGRESS.md` SHA256: `82be9f5c3c254103c78461bad6ebe67761f94a5e2a176b06456e8baf46aab884`.
+- Checksum artifact: `/root/lfz/runs/ik_llama/deepseek-v4-progress-sync/progress_sha_compare.txt`.
+
+Commit scope: `.Agent/plans/four-model-token-rate-20260622/PROGRESS.md` and `.Agent/plans/four-model-token-rate-20260622/deepseek-v4-plan.md` only. `git push` is blocked by WiCi no-push constraint and was not run.
