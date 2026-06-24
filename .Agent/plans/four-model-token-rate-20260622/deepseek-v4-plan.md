@@ -5531,3 +5531,33 @@ Rollback/source-clean evidence: A96 used only detached worktree builds under `/r
 
 A96 result_commit: `1b45e572`
 A96 pushed_commit: n/a (blocked by WiCi no-push constraint).
+
+### Planned Diagnostic Attempt A97 - France paragraph harness diagnosis
+
+Goal: diagnose why A95/A96 produced blank visible output for `Please introduce France in a short paragraph.` This is a harness/quality diagnostic only, not a token-rate optimization. The run will keep tracked source unchanged, use the current main checkout, preserve A96 worktree artifacts, and test a small controlled matrix under `MemoryMax=16G`, `MemorySwapMax=0` for the no-F8 baseline and current A93/A94 env.
+
+Planned variants: original A96 flags, no `--no-display-prompt`, no `--ignore-eos`, neither suppression flag, and any repo-supported chat/template mode indicated by `llama-cli --help`. For each row record env, flags, exit code, visible excerpt, pass/fail reason, eval tok/s, graph_splits, and log path. If any row yields a readable short paragraph, rerun the A96 candidate set with that exact harness in a later step; if none does, record a quality/harness blocker before further token-rate optimization.
+
+
+### Diagnostic Result A97 - France paragraph harness diagnosis
+
+A97 tested whether the blank output seen in A95/A96 was caused by the specific CLI output harness. It used the current main checkout, no source changes, the established 16 GB cgroup (`MemoryMax=16G`, `MemorySwapMax=0`), `GGML_CUDA_NO_PINNED=1`, and the existing model path. The matrix covered no-F8 baseline and current A93/A94 env, varying prompt display, `--ignore-eos`, Jinja template mode, and manual DeepSeek chat markers. The literal prompt was stripped from visible-output extraction so prompt echo could not count as a paragraph.
+
+| name | env_name | role | extra_flags | exit_code | visible_excerpt | pass_fail | reason | eval_tok_s | graph_splits | log_path |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline_orig | no_f8 | baseline_control | --ignore-eos --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.83 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_orig.log |
+| baseline_show_prompt | no_f8 | baseline_control | --ignore-eos | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.77 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_show_prompt.log |
+| baseline_no_ignore | no_f8 | baseline_control | --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.86 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_no_ignore.log |
+| baseline_plain | no_f8 | baseline_control |  | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.84 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_plain.log |
+| baseline_jinja | no_f8 | baseline_control | --jinja --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.80 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_jinja.log |
+| baseline_manual_chat | no_f8 | baseline_control | --no-display-prompt | 124 | (blank) | fail | exit_124 | n/a | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_baseline_manual_chat.log |
+| a93_orig | a93 | current_best | --ignore-eos --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.82 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_orig.rerun.log |
+| a93_show_prompt | a93 | current_best | --ignore-eos | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.76 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_show_prompt.rerun.log |
+| a93_no_ignore | a93 | current_best | --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.78 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_no_ignore.rerun.log |
+| a93_plain | a93 | current_best |  | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.54 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_plain.rerun.log |
+| a93_jinja | a93 | current_best | --jinja --no-display-prompt | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.82 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_jinja.rerun.log |
+| a93_manual_chat | a93 | current_best | --no-display-prompt | 1 | (blank) | fail | runtime_timeout_no_visible_paragraph | n/a | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a97-france-paragraph-harness-diagnosis/harness_a93_manual_chat.rerun.log |
+
+A97 decision: no harness row produced a visible, readable short paragraph. The ordinary plain/Jinja/prompt-display/EOS variants for both no-F8 and A93/A94 exited `0` but generated blank visible output. Manual chat-marker variants also failed: no-F8 timed out under the wrapper in the first diagnostic run and A93/A94 hit the systemd runtime cap without a visible paragraph. This means A97 did not find a harness-only fix. Token-rate optimization remains blocked for the France paragraph requirement until a generation/prompt path that produces visible text is identified and then used to rerun A96 candidate coverage.
+
+Operational notes: the first no-F8 manual-chat timeout left a child `llama-cli` process holding VRAM; it was explicitly terminated by PID after confirming it belonged to this A97 diagnostic, then the A93 rows were rerun with clean GPU memory. Final GPU/process sanity after the rerun showed no active `llama-cli`, `systemd-run`, `cmake --build`, or `perf` benchmark process. Push status: blocked by WiCi no-push constraint; no `git push` was run.
