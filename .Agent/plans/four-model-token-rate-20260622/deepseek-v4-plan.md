@@ -5677,3 +5677,6 @@ A99 pushed_commit: n/a (blocked by WiCi no-push constraint).
 - Rationale: a DeepSeek chat template is present in the GGUF and the exact metadata-derived prompt was tested, so the strongest current evidence does not support missing prompt-template as the primary blocker. The failure persists across CLI, metadata-exact prompt, and repo-native server/chat surfaces as blank output, corrupted output, CUDA runtime abort, or 16 GB capped kill. No A96 row can be paragraph-qualified and no highest token-rate row can be named under R4.
 - Evidence needed to reopen: a known-good DeepSeek V4 Flash prompt/runtime invocation that emits a readable short France paragraph under the same 16 GB cgroup, or a runtime fix for the server flash-attention abort/corrupted no-flash generation. If found, rerun A96 candidate coverage exactly with that harness before naming a best qualified token-rate result.
 - Rollback/source status: no source changes were introduced for A100. Source start diff is /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/source_start.diff. A100 scripts/artifacts are outside tracked source. Push remains blocked by WiCi no-push constraint.
+
+A100 result_commit: 7f7db49a
+A100 pushed_commit: n/a (blocked by WiCi no-push constraint).
