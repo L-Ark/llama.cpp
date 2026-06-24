@@ -5420,3 +5420,66 @@ Source and safety: tracked source is clean after reverting the temporary logit d
 
 A94 result_commit: 514d247d
 A94 pushed_commit: n/a (WiCi no-push constraint)
+
+### Planned Source Probe A95 - narrow F8 placement beyond A93
+
+Goal: continue from the A93/A94 durable quality-valid frontier and test whether class-by-class additions beyond `attn,ffn_up,ffn_gate` can improve token rate while preserving correctness. This attempt does not use broad unsafe dense F8 placement and does not introduce any sub-4-bit effective quantization route.
+
+Accepted baseline under audit: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Source inspection note: the current `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES` gate treats `attn` as a broad attention-family class because it checks tensor/op names for `attn`, `q_a`, `attn_q`, and `attn_kv`. Therefore adding `attn_out` or `attn_qkv` on top of a baseline that already includes `attn` is expected to be behavior-equivalent. A95 will still validate those planned candidate strings to confirm no unexpected graph or timing change.
+
+Candidate matrix:
+- `a93_baseline`: `attn,ffn_up,ffn_gate`
+- `a93_plus_attn_out`: `attn,ffn_up,ffn_gate,attn_out`
+- `a93_plus_attn_qkv`: `attn,ffn_up,ffn_gate,attn_qkv`
+
+Correctness oracle: deterministic output and first-token/top-logit behavior against `a93_baseline` on six prompts (`france`, `math`, `hotcold`, `color`, `sequence`, `opposite`). Reuse the saved temporary top-logit diagnostic, save it as A95 `logit_oracle_source.diff`, and revert/rebuild before commit.
+
+Promotion thresholds: quick n128 must beat same-session A93 by `> 0.10 tok/s`. Full repeats are only required for a selected quick winner and must pass the A95 thresholds from the local plan.
+
+Safety: do not run `git push`; save logs, source diffs, candidate metrics, and rollback evidence under `/root/lfz/runs/ik_llama/deepseek-v4-a95-narrow-f8-placement-beyond-a93`.
+
+### Source Probe Result A95 - narrow F8 placement beyond A93
+
+Status: completed_unpromoted
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a95-narrow-f8-placement-beyond-a93`
+Start commit: `0969573c`
+
+A95 continued from the durable A93/A94 frontier and tested only narrow/default-off F8 CUDA placement strings beyond `attn,ffn_up,ffn_gate`. It did not use broad unsafe dense F8 placement and did not introduce sub-4-bit effective quantization.
+
+Source inspection: the current `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES` gate treats `attn` as a broad attention-family class because it checks tensor/op names for `attn`, `q_a`, `attn_q`, and `attn_kv`. Therefore `attn_out` and `attn_qkv` on top of a baseline already containing `attn` are expected to be behavior-equivalent. A95 confirmed this: all candidates kept graph_splits at `162`.
+
+Candidate matrix:
+- `a93_baseline`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate`
+- `a93_plus_attn_out`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate,attn_out`
+- `a93_plus_attn_qkv`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate,attn_qkv`
+
+Correctness/top-logit oracle:
+- A temporary top-logit diagnostic was reused from A93/A94, saved as `logit_oracle_source.diff`, applied only for smoke correctness, then reverted and rebuilt.
+- Deterministic output/top-logit smoke ran six prompts for all three candidates: `france`, `math`, `hotcold`, `color`, `sequence`, and `opposite`.
+- All 18 smoke runs exited `0`; no CUDA/assert/shape/NaN/Inf failures were detected.
+- Every candidate matched the A93 baseline first-token `top_id`, `sampled_id`, and top-logit delta `0` on every prompt.
+- Graph_splits remained `162` for all candidates and prompts.
+
+Smoke eval rates:
+- `a93_baseline`: `7.72/7.63/7.89/7.73/7.76/7.63 tok/s`.
+- `a93_plus_attn_out`: `7.68/7.71/7.84/7.73/7.79/7.77 tok/s`.
+- `a93_plus_attn_qkv`: `7.81/7.87/7.92/7.79/7.81/7.80 tok/s`.
+
+Quick n128 throughput:
+- `a93_baseline`: exit `0`, graph_splits `162`, eval `8.71 tok/s`.
+- `a93_plus_attn_out`: exit `0`, graph_splits `162`, eval `8.81 tok/s`, delta `+0.10 tok/s` from parsed floats but not strictly greater than the `> 0.10 tok/s` quick-selection threshold.
+- `a93_plus_attn_qkv`: exit `0`, graph_splits `162`, eval `8.80 tok/s`, delta `+0.09 tok/s`.
+
+A95 decision: no candidate cleared the strict quick-selection threshold, so no full n256 repeats were run and no candidate was promoted. A93/A94 `attn,ffn_up,ffn_gate` remains the durable quality-valid frontier.
+
+Rollback/source status:
+- No promoted source change was needed.
+- `source_start.diff`, `source_after_logit_revert.diff`, and `final_source_probe.diff` are all `0` bytes.
+- `logit_oracle_source.diff` is saved for audit and was reverted before final rebuild.
+- Tracked source is clean.
+
+Next recommendation: do not spend more attempts adding `attn_out` or `attn_qkv` to the existing `attn` class, because they are redundant under current class matching. If further F8 placement work is requested, use source inspection or tracing to identify a truly new narrow class or per-tensor family beyond the current `attn,ffn_up,ffn_gate` frontier, and keep the same output/top-logit correctness gate and A93/A94 promotion thresholds.
+
+No `git push` was run; push remains blocked by WiCi no-push constraint.
