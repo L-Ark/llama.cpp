@@ -5240,3 +5240,6 @@ A91 accepted_env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_
 Source status: the new combined allowlist is env-gated and promoted. `source_probe.diff` records the source change. No broad unsafe dense F8 placement was run as a candidate. No `git push` was run.
 
 A91 pushed_commit: n/a (WiCi no-push constraint)
+
+A91 result_commit: $NEW_SHA
+A91 pushed_commit: n/a (WiCi no-push constraint)
