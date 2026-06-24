@@ -5290,5 +5290,5 @@ Source and safety: no source files were modified by A92; tracked source remained
 
 A92 pushed_commit: n/a (WiCi no-push constraint)
 
-A92 result_commit: $NEW_SHA
+A92 result_commit: a2cdbcc6
 A92 pushed_commit: n/a (WiCi no-push constraint)
