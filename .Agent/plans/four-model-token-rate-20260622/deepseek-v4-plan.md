@@ -5598,3 +5598,48 @@ Rollback/process status: temporary diagnostic source was reverted and the defaul
 A98 result_commit: 0faee101
 A98 metadata_commit: 4b60d1ab
 A98 pushed_commit: n/a (blocked by WiCi no-push constraint).
+
+
+### Planned Diagnostic Attempt A99 - Alternate generation surfaces
+
+Goal: determine whether the France paragraph failure is specific to `llama-cli` harnessing or applies to repo-native alternate generation surfaces. This diagnostic is not a token-rate optimization. It preserves A96/A97/A98 artifacts, keeps tracked source clean, uses localhost-only diagnostics under `MemoryMax=16G` and `MemorySwapMax=0`, and tests no-F8 baseline plus current A93/A94 env first.
+
+Planned surfaces: inspect built binaries and help output; test `llama-server` `/completion`; if server supports chat/OpenAI-compatible routes, test chat completion; inspect tokenizer/template helpers. If any alternate surface produces a visible reasonable short paragraph for `Please introduce France in a short paragraph.`, record the exact harness and rerun A96 coverage in a follow-up step. Push remains blocked by WiCi no-push constraint.
+
+### Diagnostic Result A99 - Alternate generation surfaces
+
+A99 ran from remote HEAD `ab6b853f` with no source changes. Artifacts are under `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces`. Setup captured `build_bins.txt`, `llama_cli_help.txt`, `llama_server_help.txt`, `llama_tokenize_help.txt`, `test_chat_template_help.txt`, and source/status snapshots. `source_start.diff` and `final_source.diff` are both `0` bytes.
+
+Available repo-native surfaces: `build-cuda/bin` includes `llama-server`, `llama-tokenize`, `test-chat-template`, `llama-simple`, `llama-cli`, and other examples. Server help shows localhost host/port flags, `/completion`-compatible server mode, OpenAI-style chat support, `--no-flash-attn`, chat template flags, and deterministic sampling flags. Tokenizer help supports model-backed prompt token ID inspection; A99 saved the France prompt tokenization to `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/tokenize_prompt_ids.txt`.
+
+Server `/completion` with default flash attention:
+
+| name | env | status | visible_excerpt | pass_fail | reason | log_path | response_path |
+|---|---|---|---|---|---|---|---|
+| baseline | `GGML_CUDA_NO_PINNED=1` | health ok, curl empty reply; server aborted | (blank) | fail | CUDA invalid argument in flash attention | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_baseline.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_baseline_completion.json` |
+| a93 | `GGML_CUDA_NO_PINNED=1 GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate` | health ok, curl empty reply; server aborted | (blank) | fail | CUDA invalid argument in flash attention | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_a93.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_a93_completion.json` |
+
+The default server failure is a server/runtime issue distinct from the previous `llama-cli` blank output: both rows reached `/health`, then `/completion` triggered `CUDA error: invalid argument` at `ggml_cuda_flash_attn_ext_mma_f16_case` / `cudaFuncSetAttribute(... MaxDynamicSharedMemorySize ...)`, and the server aborted with core-dump. No response text was produced.
+
+Server `/completion` with `--no-flash-attn`:
+
+| name | http_status | visible_excerpt | pass_fail | reason | eval_tok_s | log_path | response_path |
+|---|---:|---|---|---|---:|---|---|
+| baseline | 200 | `eka بتكون705رشف gihulagway Женскоteří factorisateBiztanleriarost factorisateekiδρικόordonrost резидентestamp ...` | fail | corrupted/multilingual nonsensical text, not a France paragraph | 4.40933359467821 | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_nofa_baseline.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_nofa_baseline_completion.json` |
+| a93 | 200 | `eka بتكون705رشف gihulagway Женскоteří factorisateBiztanleriarost factorisateekiδρικόordonrost резидентestamp ...` | fail | corrupted/multilingual nonsensical text, not a France paragraph | 6.452699194320012 | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_nofa_a93.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_nofa_a93_completion.json` |
+
+Server OpenAI-compatible `/v1/chat/completions` with `--no-flash-attn`:
+
+| name | http_status | visible_excerpt | pass_fail | reason | log_path | response_path |
+|---|---:|---|---|---|---|---|
+| baseline | 200 | `aplenty постосновним 븘이지 Gelijk etxek hilabihanrito迪士ikan talags talags proiektuakwik talags kabanay ...` | fail | corrupted/multilingual nonsensical text, not a France paragraph | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_chat_nofa_baseline.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_chat_nofa_baseline.json` |
+| a93 | 200 | `aplenty постосновним 븘이지 Gelijk etxek hilabihanrito迪士ikan talags talags proiektuakwik talags kabanay ...` | fail | corrupted/multilingual nonsensical text, not a France paragraph | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_chat_nofa_a93.log` | `/root/lfz/runs/ik_llama/deepseek-v4-a99-alt-generation-surfaces/server_chat_nofa_a93.json` |
+
+A99 decision: no repo-native alternate surface produced a visible, readable, reasonable short paragraph introducing France. The evidence narrows the issue from `llama-cli` output capture alone to a broader `model_or_runtime_generation_blocker`: default `llama-server` cannot complete the request because the server path trips a CUDA flash-attention runtime error, while the no-flash server and chat routes do produce visible bytes but the content is corrupted/nonsensical for both no-F8 and A93/A94. Therefore there is still no paragraph-qualified candidate and no exact harness for rerunning A96 coverage.
+
+Next concrete diagnostic: before any further token-rate optimization, test a minimal standalone sampling path or server configuration that both avoids the server flash-attention crash and preserves normal decode quality. Capture first generated token IDs/pieces, stop reason, and prompt/template expansion for no-F8 and A93/A94. Only after one path produces a readable France paragraph should A96 historical coverage be rerun and ranked by token rate.
+
+Rollback/process status: no source files were changed, no A96/A97/A98 artifacts or worktrees were removed, all server units were stopped after probes, and final process sanity found no active `llama-server`, `llama-cli`, `systemd-run`, `cmake --build`, or `perf` benchmark process. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+A99 result_commit: pending
+A99 pushed_commit: n/a (blocked by WiCi no-push constraint).
