@@ -4718,6 +4718,20 @@ GGML_CALL static bool ggml_backend_cuda_supports_op(ggml_backend_t backend, cons
                         const char * src0_name = op->src[0] != nullptr ? op->src[0]->name : "";
                         const char * src1_name = op->src[1] != nullptr ? op->src[1]->name : "";
                         const bool is_attn = has(op_name, "attn") || has(src0_name, "attn") || has(src1_name, "attn") || has(op_name, "q_a") || has(src0_name, "attn_q") || has(src0_name, "attn_kv");
+                        const bool is_attn_out = has(op_name, "attn_out") || has(src0_name, "attn_out") || has(src1_name, "attn_out");
+                        const bool is_attn_qkv = has(op_name, "q_a") || has(src0_name, "attn_q") || has(src0_name, "attn_kv") || has(src1_name, "attn_q") || has(src1_name, "attn_kv");
+                        const bool is_ffn_gate = has(op_name, "ffn_gate") || has(src0_name, "ffn_gate") || has(src1_name, "ffn_gate");
+                        const bool is_ffn_up = has(op_name, "ffn_up") || has(src0_name, "ffn_up") || has(src1_name, "ffn_up");
+                        const char * allow_classes = std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES");
+                        if (allow_classes != nullptr) {
+                            bool allowed = false;
+                            allowed = allowed || (has(allow_classes, "attn") && is_attn);
+                            allowed = allowed || (has(allow_classes, "attn_out") && is_attn_out);
+                            allowed = allowed || (has(allow_classes, "attn_qkv") && is_attn_qkv);
+                            allowed = allowed || (has(allow_classes, "ffn_gate") && is_ffn_gate);
+                            allowed = allowed || (has(allow_classes, "ffn_up") && is_ffn_up);
+                            return allowed;
+                        }
                         if (std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE") != nullptr || std::getenv("GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS") == nullptr) {
                             return is_attn;
                         }

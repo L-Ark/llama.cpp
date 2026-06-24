@@ -5183,3 +5183,60 @@ A90 pushed_commit: n/a (WiCi no-push constraint)
 
 A90 result_commit: eb809570
 A90 pushed_commit: n/a (WiCi no-push constraint)
+
+
+### Planned Source Probe A91 - quality-safe F8 placement expansion
+
+Goal: continue R2 optimization from the quality-valid A80/A88 accepted baseline, not from invalid broad A64/A66 throughput. A91 will test a narrow F8 dense CUDA placement expansion using deterministic correctness first and 16 GiB cgroup discipline.
+
+Scope: inspect the existing A80 attention-safe placement gate and, if needed, add a temporary default-off combined allowlist gate `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,<extra>`. Do not run or promote broad unsafe dense F8 placement. Candidate extras are limited to source-discovered placement classes such as `attn_out`, `attn_qkv`, `ffn_gate`, and `ffn_up` layered on top of accepted `attn`.
+
+Accepted baseline/oracle: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, deterministic sampling, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Promotion rule: candidates must pass deterministic smoke correctness and show no CUDA/assert/shape/NaN/Inf failures before throughput testing. Promote only if paired n256 repeats beat same-session accepted attention-safe p50 by more than 0.15 tok/s, candidate p50 is at least 5.45 tok/s, worst repeat is at least 5.25 tok/s, and visible smoke output remains sane. Otherwise revert temporary source, rebuild default `llama-cli`, and record A91 as unpromoted.
+
+Safety: no `git push`; save source diffs and logs under `/root/lfz/runs/ik_llama/deepseek-v4-a91-quality-safe-f8-placement-expansion`.
+
+
+### Result A91 - accepted quality-safe F8 placement expansion
+
+Status: accepted_promoted
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a91-quality-safe-f8-placement-expansion`
+Start commit: `ca1ecf55`
+
+A91 continued from the A80/A88 quality-valid baseline after R2 reopened optimization. It did not use the broad unsafe dense F8 placement path. A temporary source probe added a default-off combined allowlist gate `GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES` in `ggml/src/ggml-cuda.cu`; default behavior and the existing accepted A80 `ALLOW_CLASS=attn` path remain unchanged unless the new env var is explicitly set.
+
+Candidate matrix:
+
+- `accepted_attn`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn`
+- `attn_plus_attn_out`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,attn_out`
+- `attn_plus_attn_qkv`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,attn_qkv`
+- `attn_plus_ffn_gate`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_gate`
+- `attn_plus_ffn_up`: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up`
+
+Deterministic correctness smoke: all 15 candidate/prompt runs exited 0 under `MemoryMax=16G`, `MemorySwapMax=0`, deterministic sampling, and the accepted A80 flags. Visible output windows were blank/coherent for the tested prompts, matching accepted_attn behavior, and summaries showed no CUDA/assert/shape/NaN/Inf failures. Graph splits: accepted/attn_out/attn_qkv stayed at `291`; `attn_plus_ffn_gate` and `attn_plus_ffn_up` reduced graph_splits to `248`.
+
+Smoke n64 eval tok/s by candidate:
+
+- accepted_attn: france/math/hotcold `5.11/4.95/4.94`
+- attn_plus_attn_out: `5.19/5.10/5.30`
+- attn_plus_attn_qkv: `5.11/5.22/5.07`
+- attn_plus_ffn_gate: `6.27/5.83/6.02`
+- attn_plus_ffn_up: `5.97/6.04/6.12`
+
+Quick n128 throughput on `The capital of France is`: accepted_attn exited 0 with graph_splits `291` and eval `5.11 tok/s`; attn_plus_attn_out exited 0 with graph_splits `291` and eval `5.17 tok/s`; attn_plus_attn_qkv exited 0 with graph_splits `291` and eval `5.00 tok/s`; attn_plus_ffn_gate exited 0 with graph_splits `248` and eval `6.10 tok/s`; attn_plus_ffn_up exited 0 with graph_splits `248` and eval `6.12 tok/s`. A91 selected `attn_plus_ffn_up` for paired full repeats.
+
+Paired full n256 repeats, same session:
+
+- accepted_attn repeat 1: exit 0, graph_splits `291`, eval `5.02 tok/s`
+- attn_plus_ffn_up repeat 1: exit 0, graph_splits `248`, eval `6.42 tok/s`
+- accepted_attn repeat 2: exit 0, graph_splits `291`, eval `5.36 tok/s`
+- attn_plus_ffn_up repeat 2: exit 0, graph_splits `248`, eval `6.34 tok/s`
+
+Full-repeat decision: accepted_attn p50 `5.19 tok/s`; attn_plus_ffn_up p50 `6.38 tok/s`; delta `+1.19 tok/s`; candidate worst `6.34 tok/s`. This passes the A91 thresholds: delta > 0.15 tok/s, p50 >= 5.45 tok/s, worst >= 5.25 tok/s, all exits 0, and visible smoke output stayed sane.
+
+A91 accepted_env: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, deterministic sampling for audits, and `MemoryMax=16G` / `MemorySwapMax=0`.
+
+Source status: the new combined allowlist is env-gated and promoted. `source_probe.diff` records the source change. No broad unsafe dense F8 placement was run as a candidate. No `git push` was run.
+
+A91 pushed_commit: n/a (WiCi no-push constraint)
