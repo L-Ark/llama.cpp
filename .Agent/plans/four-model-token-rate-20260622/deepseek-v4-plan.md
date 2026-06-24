@@ -5736,3 +5736,48 @@ The focused row loaded with one GPU layer and flash attention disabled; stderr s
 A102 classification: `runtime_crash_or_timeout` with `call_path_unresolved`. No token-rate result is promoted or historically ranked. The next concrete evidence needed is either a known-good DeepSeek V4 Flash invocation that emits a readable paragraph under the 16 GB cap, or a minimal runtime repair target identified from deeper sampler/logit tracing that can generate visible non-corrupted text before rerunning A96 ranking.
 
 Rollback/source status: temporary trace source was saved and reverted; final tracked source diff for `ggml src examples common` is empty. Only this plan file is intentionally changed. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+### Planned Diagnostic Attempt A103 - accepted-env France paragraph repair
+
+Goal: diagnose the current accepted A93/A94 environment first, because it is the memory-safe quality baseline candidate, and find either a source-free invocation or a minimal targeted runtime repair that makes `Please introduce France in a short paragraph.` produce visible, readable, non-corrupted short paragraph text under MemoryMax=16G/MemorySwapMax=0. Token-rate optimization and historical ranking remain paused. Push remains blocked by the WiCi no-push constraint.
+
+## Diagnostic Result A103 - DeepSeek integration and answerability gate
+
+Status: completed_no_verified_answerable_version.
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair`.
+Remote start/head: `a7e957af` on `deepseek-v4-flash`; final tracked source diff for `ggml src examples common` is empty after reverting the temporary trace and rebuilding `llama-cli`.
+
+Actual loaded GGUF metadata:
+- Raw llama-cli metadata log: `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/model_info_accepted_n0.combined.log` (the metadata was emitted before llama-cli returned exit 255 for `-n 0`; fields below were also extracted directly from the GGUF).
+- Selected GGUF metadata JSON: `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/gguf_selected_metadata_accepted.json`.
+- Model path: `/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf`.
+- `general.architecture`: `deepseek4`; `general.name`: `DeepSeek V4 Flash`.
+- Tokenizer: `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `BOS=0`, `EOS=1`, `add_bos_token=false`, `add_eos_token=false`.
+- Full `tokenizer.chat_template`: `{{ '<｜begin▁of▁sentence｜>' }}{% for message in messages %}{% if message['role'] == 'system' %}{{ message['content'] }}{% elif message['role'] == 'user' %}{{ '<｜User｜>' + message['content'] }}{% elif message['role'] == 'assistant' %}{{ message['content'] + '<｜end▁of▁sentence｜>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<｜Assistant｜></think>' }}{% endif %}`.
+
+Accepted A93/A94 environment answerability matrix:
+- Env: `GGML_CUDA_NO_PINNED=1 GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate`.
+- Common flags: `--defer-experts --fit -ngl 999 -c 512 --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -ub 1 -t 20 -tb 20 -no-fa`, under `MemoryMax=16G` and `MemorySwapMax=0`.
+- Temporary trace source: `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/a103_trace_source.diff`; trace was default-off and enabled with `IK_LLAMA_A102_TRACE_TOKENS=1`, then reverted.
+
+| row | prompt | exit | stdout bytes | first generated token | token class | stdout write-path evidence | stop reason | eval tok/s | pass/fail |
+| --- | --- | ---: | ---: | --- | --- | --- | --- | ---: | --- |
+| `accepted_math_trace` | `1+1=` | 0 | 0 | id `0`, eog `0`, piece_hex ``, piece_text `` | `empty_special_or_blank` | `A102_DISPLAY id=0 bytes=0 piece_hex= piece_text=` | `n_remain_exhausted/no_EOG_break` | 7.28 | fail: no visible reasonable answer |
+| `accepted_capital_trace` | `The capital of France is` | 0 | 0 | id `0`, eog `0`, piece_hex ``, piece_text `` | `empty_special_or_blank` | `A102_DISPLAY id=0 bytes=0 piece_hex= piece_text=` | `n_remain_exhausted/no_EOG_break` | 6.95 | fail: no visible reasonable answer |
+| `accepted_france_trace` | `Please introduce France in a short paragraph.` | 0 | 0 | id `0`, eog `0`, piece_hex ``, piece_text `` | `empty_special_or_blank` | `A102_DISPLAY id=0 bytes=0 piece_hex= piece_text=` | `n_remain_exhausted/no_EOG_break` | 7.19 | fail: no visible reasonable answer |
+
+Raw byte/write-path evidence:
+- `1+1=`: stdout `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_math_trace.trace.stdout`, xxd `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_math_trace.stdout.xxd`, trace `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_math_trace.trace.lines`; stdout file is 0 bytes.
+- `The capital of France is`: stdout `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_capital_trace.trace.stdout`, xxd `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_capital_trace.stdout.xxd`, trace `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_capital_trace.trace.lines`; stdout file is 0 bytes.
+- `Please introduce France in a short paragraph.`: stdout `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_france_trace.trace.stdout`, xxd `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_france_trace.stdout.xxd`, trace `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_france_trace.trace.lines`; stdout file is 0 bytes.
+
+A103 classification for accepted A93/A94 env: `generated_blank_or_special_tokens`. The model entered the normal generation/output path and the display hook ran, but the first generated token for all three prompts was token id `0`, decoded to zero bytes (`piece_hex=` and `piece_text=` empty), was not EOG, and the run continued sampling the same empty token until `n_remain=0`. The stdout write path therefore wrote no bytes because the decoded pieces were empty; this is not `generated_visible_tokens_not_written` and not `did_not_enter_normal_generation_output_path`.
+
+No-F8 baseline / historical / repair candidates:
+- No-F8 was not rerun at full offload because earlier capped rows were not memory-safe: A100 metadata-exact no-F8 exited `137`, and A101 full-offload reference hit CUDA OOM. The bounded A102 no-F8 `-ngl 1 -no-fa --no-multi-token-prediction --spec-type none` row timed out with no visible generated text, so it is not answerable evidence.
+- A103 source-free repair probes with logit bias were not answerable: biasing token `0` made the first generated token id `1` (EOG, empty piece) for France/capital; biasing `0` and `1` made France repeatedly generate token id `2` with an empty piece. Logs: `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_env_bias_trace.tsv` and `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/accepted_france_bias_bos_eog.summary.tsv`.
+- Previously tested feasible historical/surface candidates remain non-answerable under the current evidence: A96 historical CLI rows produced blank output; A99 no-flash server/chat produced visible but corrupted nonsensical bytes; A101 independent `llama-simple` emitted prompt echo/incomplete non-answer fragments under low offload and timed out.
+
+A103 final answerability decision: `no_verified_answerable_version`. No tested version/config/call path is verified to answer `1+1=`, `The capital of France is`, or `Please introduce France in a short paragraph.` with visible, reasonable text under the required evidence standard. Token-rate optimization and historical ranking remain blocked until a call path generates visible, non-corrupted answers.
+
+Rollback/source/process status: temporary trace source was saved, reverted with `git apply -R`, default `llama-cli` was rebuilt (`/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/build_after_hotreload_trace_revert.log`), and `/root/lfz/runs/ik_llama/deepseek-v4-a103-accepted-env-paragraph-repair/final_source.diff` is 0 bytes. Known unrelated untracked files remain untouched. Push status: blocked by WiCi no-push constraint; no `git push` was run.
