@@ -5241,5 +5241,5 @@ Source status: the new combined allowlist is env-gated and promoted. `source_pro
 
 A91 pushed_commit: n/a (WiCi no-push constraint)
 
-A91 result_commit: $NEW_SHA
+A91 result_commit: 9e2d2c0a
 A91 pushed_commit: n/a (WiCi no-push constraint)
