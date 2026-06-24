@@ -5641,5 +5641,5 @@ Next concrete diagnostic: before any further token-rate optimization, test a min
 
 Rollback/process status: no source files were changed, no A96/A97/A98 artifacts or worktrees were removed, all server units were stopped after probes, and final process sanity found no active `llama-server`, `llama-cli`, `systemd-run`, `cmake --build`, or `perf` benchmark process. Push status: blocked by WiCi no-push constraint; no `git push` was run.
 
-A99 result_commit: pending
+A99 result_commit: 0d02a72d
 A99 pushed_commit: n/a (blocked by WiCi no-push constraint).
