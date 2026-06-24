@@ -5680,3 +5680,35 @@ A99 pushed_commit: n/a (blocked by WiCi no-push constraint).
 
 A100 result_commit: 7f7db49a
 A100 pushed_commit: n/a (blocked by WiCi no-push constraint).
+
+### Planned Diagnostic Attempt A101 - isolated reference runtime France cross-check
+
+Goal: determine whether the same DeepSeek V4 Flash GGUF can produce a visible, readable short France paragraph outside the current `/root/lfz/ik_llama` runtime before resuming token-rate optimization. This diagnostic preserves the main checkout, uses an independent reference tree when available, runs under `MemoryMax=16G` and `MemorySwapMax=0`, and records prompt output evidence for `Please introduce France in a short paragraph.` Push remains blocked by WiCi no-push constraint.
+
+### Diagnostic Result A101 - isolated reference runtime France cross-check
+
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a101-reference-runtime-crosscheck`.
+
+Remote start state: main repo HEAD `ef666353` (`plan: record a100 result metadata`), branch `deepseek-v4-flash`; tracked source diff at start was empty (`source_start.diff` is 0 bytes). Final source diff remained empty. Known unrelated untracked files remain `.Agent/plans/m3-race-spec.md` and `.Agent/plans/m3-race-spec/RACE_SPEC.md`.
+
+Reference discovery/build:
+- Independent reference checkout found at `/root/lfz/vendor/llama.cpp-deepseek-v4`, branch `wip/deepseek-v4-support`, commit `9d36408` (`deepseek4: opt-in lightning_indexer kernel for indexer score`), remote `https://github.com/nisparks/llama.cpp`.
+- Existing binary search first listed current-family binaries under `/root/lfz/ik_llama/build-cuda/bin` and `/root/lfz/ik_llama_glm52/build-cuda/bin`; these were not used as the independent reference result.
+- Initial configure without `CMAKE_CUDA_COMPILER` failed to find CUDA compiler (`reference_build.log`). Configure with `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` succeeded (`reference_build_nvcc.log`). The old `llama-cli` target is not present in this reference tree; target help recorded `llama`, `llama-simple`, `llama-simple-chat`, `llama-completion`, and related examples.
+- Built `llama` shared-library target successfully, then built executable target `llama-simple` successfully at `/root/lfz/vendor/llama.cpp-deepseek-v4/build-a101-nvcc/bin/llama-simple`; build logs: `reference_build_llama.log`, `reference_build_llama_simple.log`, target list: `reference_build_targets.txt`, `reference_exec_targets.txt`, executable list: `reference_built_executables.txt`.
+- `llama-simple --help` supports only `-m model.gguf [-n n_predict] [-ngl n_gpu_layers] [prompt]`; it has no deterministic seed/temp/chat-template controls. Help/version capture: `llama-simple_help.txt`, `llama-simple_version.txt`.
+
+Reference prompt rows under the 16 GB cgroup:
+
+| row | command summary | exit | visible output excerpt | pass/fail reason | logs |
+| --- | --- | ---: | --- | --- | --- |
+| `llama-simple-full-offload` | `systemd-run --user --scope -p MemoryMax=16G -p MemorySwapMax=0 timeout 300s .../llama-simple -m DeepSeek-V4-Flash-00001-of-00001.gguf -n 96 -ngl 999 "Please introduce France in a short paragraph."` | 1 | none | failed before generation: attempted to allocate `147899.45 MiB` CUDA buffer on RTX 5090 and hit CUDA OOM | `reference_llama_simple_france.command`, `.stdout`, `.stderr`, `.meta` |
+| `llama-simple-ngl0` | same prompt, `-n 96 -ngl 0`, timeout 180s | 124 | none | loaded CPU-mapped 148909.44 MiB model buffer and constructed context under the 16 GB scope, but timed out before emitting text | `reference_llama_simple_france_ngl0.command`, `.stdout`, `.stderr`, `.meta` |
+| `llama-simple-ngl1-n16` | same prompt, `-n 16 -ngl 1`, timeout 300s | 124 | `Please introduce France in a short paragraph.2. **Identify Key Cultural Elements:**` | visible bytes appeared, but output is prompt echo plus non-answer fragment; not a readable France paragraph and timed out before completion | `reference_llama_simple_france_ngl1_n16.command`, `.stdout`, `.stderr`, `.meta` |
+| `llama-simple-template-ngl1-n8` | exact GGUF metadata template prompt `<｜begin▁of▁sentence｜><｜User｜>Please introduce France in a short paragraph.<｜Assistant｜></think>`, `-n 8 -ngl 1`, timeout 300s | 124 | `<｜begin▁of▁sentence｜><｜User｜>Please introduce France in a short paragraph.<｜Assistant｜></think>2. **France` | visible bytes appeared, but output is prompt echo plus incomplete fragment; not a readable short paragraph and timed out | `reference_llama_simple_france_template_ngl1_n8.command`, `.stdout`, `.stderr`, `.meta` |
+
+A101 decision: `inconclusive_with_missing_evidence`, with a practical `reference_runtime_unavailable_for_paragraph_ranking` blocker. An independent DeepSeek4-capable reference checkout was found and built, proving the A101 reference build path, but its only quickly built prompt-capable executable (`llama-simple`) is too minimal and too slow/limited under the required 16 GB discipline to produce a qualifying paragraph. It also lacks deterministic/chat-template controls needed to serve as the final oracle. Therefore A101 does not prove that the GGUF itself is incapable of producing the France paragraph, and it does not prove the current `ik_llama` runtime alone is at fault. It does confirm that no paragraph-qualified token-rate candidate can be named from this reference run.
+
+Next evidence needed to reopen R4: obtain or build a fuller independent reference CLI/server surface for commit `9d36408` (or another pinned known-good DeepSeek4 reference) with prompt/template/sampling controls and a viable 16 GB memory strategy, then rerun the France paragraph gate. If that independent reference emits a readable short paragraph, classify the current blocker as `ik_llama_runtime_generation_blocker` and rerun the A96 historical candidate coverage with the working harness. If a fuller independent reference also produces blank/corrupt/non-paragraph output under the same GGUF and memory discipline, then classify `model_or_gguf_generation_blocker`.
+
+Push status: blocked by WiCi no-push constraint; no `git push` was run.
