@@ -5372,3 +5372,48 @@ A93 result_commit: b75857af
 A93 pushed_commit: n/a (WiCi no-push constraint)
 S35 result_commit: b75857af
 S35 pushed_commit: n/a (WiCi no-push constraint)
+
+### Planned Diagnostic Attempt A94 - post-A93 stability and bottleneck audit
+
+Goal: harden the accepted A93 `attn,ffn_up,ffn_gate` F8 dense placement frontier before any wider placement exploration. This attempt should not keep source changes. It compares A91/A92 `attn,ffn_up` and A93 `attn,ffn_up,ffn_gate` on expanded deterministic output/top-logit smoke prompts, runs paired A91-vs-A93 n256 stability repeats, and captures one perf stat pass under the 16 GiB cgroup.
+
+Accepted frontier under audit: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Baseline for comparison: A91/A92 `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up`.
+
+Correctness oracle: deterministic output and first-token/top-logit behavior against the accepted A91/A92 baseline on six prompts (`france`, `math`, `hotcold`, `color`, `sequence`, `opposite`). If built-in logit export is unavailable, reuse the saved A93 temporary top-logit diagnostic pattern, save the A94 oracle diff, and revert it before commit.
+
+Acceptance: all correctness/logit runs must exit 0, show no CUDA/assert/shape/NaN/Inf failures, and keep A93 output/logit behavior coherent with the accepted baseline oracle. A93 repeats must exit 0, keep graph_splits near 162 or explain source-consistent variance, p50 >= 10.20 tok/s, worst >= 10.00 tok/s, and beat same-session A91 p50 by >= 3.50 tok/s. Perf counters should be recorded if available.
+
+Safety: do not run `git push`; save logs and summaries under `/root/lfz/runs/ik_llama/deepseek-v4-a94-post-a93-stability-bottleneck-audit`; keep rollback available and commit only the plan record unless an intentional source change is accepted.
+
+### Diagnostic Result A94 - post-A93 stability and bottleneck audit
+
+Status: completed_stable_promoted_frontier
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a94-post-a93-stability-bottleneck-audit`
+Start commit: `b2520530`
+
+A94 introduced no promoted source changes. It rebuilt the current source, applied the saved temporary top-logit diagnostic only for the correctness oracle, then reverted it and rebuilt before stability/perf measurements. `source_start.diff` and `source_after_logit_revert.diff` are both `0` bytes.
+
+Expanded deterministic correctness/top-logit smoke compared A91/A92 `attn,ffn_up` and A93 `attn,ffn_up,ffn_gate` on six prompts: `france`, `math`, `hotcold`, `color`, `sequence`, and `opposite`. All 12 runs exited `0`. No CUDA/assert/shape/NaN/Inf failures were detected. A93 graph_splits stayed `162` on every prompt; A91 stayed `248`. The temporary first-token top-logit oracle matched the A91 baseline `top_id`, `sampled_id`, and top-logit delta `0` for every A93 prompt. The top-logit hook reports BOS/zero as in A93, so it is useful as a regression sentinel for this deterministic path but should not be treated as a full distribution equivalence proof.
+
+Correctness smoke eval rates:
+- A91 baseline `attn,ffn_up`: graph_splits `248`, eval `6.11/5.98/5.91/5.99/6.11/6.00 tok/s` for france/math/hotcold/color/sequence/opposite.
+- A93 accepted `attn,ffn_up,ffn_gate`: graph_splits `162`, eval `7.81/7.69/7.82/7.85/7.81/7.60 tok/s` for france/math/hotcold/color/sequence/opposite.
+
+Paired n256 stability repeats, same session:
+- A91 baseline: exits `0/0/0`, graph_splits `248/248/248`, eval `6.34/6.29/6.39 tok/s`, p50 `6.34`, worst `6.29`.
+- A93 accepted: exits `0/0/0`, graph_splits `162/162/162`, eval `10.54/10.56/10.51 tok/s`, p50 `10.54`, worst `10.51`.
+- A93-vs-A91 p50 delta: `+4.20 tok/s`.
+
+A94 decision: A93 remains the promoted quality-valid frontier. It passes the A94 stability thresholds: all correctness/logit and repeat runs exited `0`, graph_splits stayed source-consistent at `162`, A93 p50 is >= `10.20 tok/s`, worst is >= `10.00 tok/s`, and same-session p50 beats A91 by >= `3.50 tok/s`.
+
+Perf pass: `perf_stat_a93_accepted_n128.log` exited `0` and produced usable counters. Under perf overhead the A93 n128 run used graph_splits `162` and eval `6.84 tok/s`; perf recorded `28.538389119s` elapsed, `14.013 CPUs utilized`, IPC `0.50`, frontend stalls `7.60%`, branch misses `1.10%`, L1D miss rate `1.14%`, and LLC counters unsupported. This is materially better than the A92 A91 perf-overhead eval `4.65 tok/s`, consistent with the lower graph_splits from ffn_gate placement.
+
+Accepted A93/A94 baseline env for future work: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, deterministic sampling for audits, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+PROGRESS.md retained status: `/root/lfz/ik_llama/.Agent/plans/four-model-token-rate-20260622/PROGRESS.md` remains present from S35. It was not modified by A94.
+
+Next recommendation: use A93/A94 as the durable baseline. Further work may probe one additional narrow F8 placement class or per-tensor family only with the same output/top-logit correctness gate and promotion threshold versus A93/A94 p50/worst. Broad unsafe dense F8 placement remains invalid-for-quality.
+
+Source and safety: tracked source is clean after reverting the temporary logit diagnostic and rebuilding. No `git push` was run; push remains blocked by WiCi no-push constraint.
