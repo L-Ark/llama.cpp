@@ -5849,3 +5849,46 @@ Repair result:
 A104 decision: `repair_candidate_failed` with narrow blocker `logits_degenerate_to_token0`. No tested source-free or temporary source-gated repair produced visible, reasonable answers for the three required prompts. `no_verified_answerable_version` remains in force, and no token-rate optimization or historical ranking was run.
 
 Next evidence needed: locate why the accepted A93/A94 forward pass writes an all-zero logits buffer for DeepSeek4 (for example output tensor/copy path, final projection, deferred expert/output routing, or CUDA/F8 placement interaction), then validate nonzero top-k logits before repeating answerability tests. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+### Planned Diagnostic Attempt A105 - trace all-zero logits pipeline
+- UTC recorded: 2026-06-24T09:25:53Z
+- Priority: visible DeepSeek answerability, not token rate. This continues R5 after A103/A104 showed accepted A93/A94 generation repeatedly selected token id 0 because the first-step logits buffer was flat/all-zero.
+- Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a105-all-zero-logits-pipeline-repair`
+- Starting commit: `cdefecac` (`plan: diagnose token zero blank generation`); branch `deepseek-v4-flash`; tracked source was clean at start apart from known pre-existing untracked plan/spec files and the single-character untracked file.
+- Temporary source instrumentation:
+  - `a105_trace_source.diff` traced `A105_COPY_PLAN`, `A105_GET_LOGITS`, `A105_LOGITS stage=get_logits_ith`, and `A105_LOGITS stage=logits_base`.
+  - `a105_trace_source_direct.diff` additionally performed a synchronous `ggml_backend_tensor_get()` from the `result_output` tensor immediately after graph compute/copy scheduling, logging `A105_DIRECT_GET` and `A105_LOGITS stage=result_tensor_direct`.
+  - Both patches were temporary. They were reverted after evidence capture; `final_source.diff` is empty and default `llama-cli` was rebuilt in `build_after_trace_revert.log`.
+
+#### A105 accepted A93/A94 env boundary trace
+Accepted env:
+`GGML_CUDA_NO_PINNED=1 GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate`
+Common flags: `--defer-experts --fit -ngl 999 -c 512 --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -ub 1 -t 20 -tb 20 -no-fa`, under `MemoryMax=16G MemorySwapMax=0`.
+
+Artifacts:
+- `a105_logits_pipeline_matrix.tsv`
+- `a105_direct_result_tensor_matrix.tsv`
+- Per-prompt stdout/stderr and `*.a105.lines` / `*.direct.a105.lines` files under the A105 run directory.
+
+Results for required prompts:
+- `1+1=`: exit `0`, stdout bytes `0`; `A105_COPY_PLAN` showed `n_outputs_new=1`, `res_ne0=129280`, `res_ne1=1`, `mtp_op_type=0`; `A105_GET_LOGITS` resolved `j=0` with matching `logits_ptr`/`result_ptr`; direct `result_output` read was `finite=129280 nonzero=0 nan=0 finite_min=0 finite_max=0 sum_abs=0`; `get_logits_ith` and `logits_base` were also all-zero. Eval rate from the direct run: about `4.15 tok/s`.
+- `The capital of France is`: exit `0`, stdout bytes `0`; valid output indexing/copy plan as above; direct `result_output`, `get_logits_ith`, and `logits_base` were all `finite=129280 nonzero=0 sum_abs=0`. Eval rate from the direct run: about `4.48 tok/s`.
+- `Please introduce France in a short paragraph.`: exit `0`, stdout bytes `0`; valid output indexing/copy plan as above; direct `result_output`, `get_logits_ith`, and `logits_base` were all `finite=129280 nonzero=0 sum_abs=0`. Eval rate from the direct run: about `5.28 tok/s`.
+
+#### A105 control localization
+A91/A92-style control env removed A93/A94 `ffn_gate` from the F8 placement set while keeping `attn,ffn_up`:
+`GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up`.
+Artifact: `a105_control_a91_result_tensor_matrix.tsv`.
+
+Control results:
+- `1+1=`: exit `0`, stdout bytes `0`; direct `result_output` all-zero (`finite=129280 nonzero=0 sum_abs=0`); `get_logits_ith` all-zero.
+- `The capital of France is`: exit `0`, stdout bytes `0`; direct `result_output` all-zero; `get_logits_ith` all-zero.
+- `Please introduce France in a short paragraph.`: exit `0`, stdout bytes `0`; direct `result_output` all-zero; `get_logits_ith` all-zero.
+
+#### A105 classification and decision
+- Classification: `logits_zero_at_graph_output` with `control_env_also_zero`.
+- Why: the logits are already all-zero in a direct synchronous read of the graph `result_output` tensor (`res`) before the ordinary async copy into `lctx.logits`, before output-id indexing, and before the sampler. Therefore the A103/A104 blank stdout is not caused by stdout/display, sampler stop handling, token-piece conversion, output-index selection, or async logits copy loss.
+- Repair attempt status: no source repair was kept. A104 already showed token-0/BOS/empty/special masking is not a valid repair: token-0 blocking selected EOS with zero stdout, and stricter EOG blocking produced repeated `!` rather than reasonable answers. A105 rules out copy/index/sampler repair as the immediate fix. The remaining narrow blocker is graph/result-output construction or upstream DeepSeek4 compute producing an all-zero `result_output` tensor under accepted and A91/A92-style F8 envs.
+- Verified answerable version/config/call path: `none`. `no_verified_answerable_version` remains active.
+- Promotion/ranking: blocked. Do not run historical ranking or token-rate optimization until a configuration produces visible, readable, reasonable answers for `1+1=`, `The capital of France is`, and `Please introduce France in a short paragraph.`.
+- Push: blocked by WiCi no-push constraint; no `git push` was run.
