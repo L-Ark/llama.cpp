@@ -5243,3 +5243,49 @@ A91 pushed_commit: n/a (WiCi no-push constraint)
 
 A91 result_commit: 9e2d2c0a
 A91 pushed_commit: n/a (WiCi no-push constraint)
+
+
+### Planned Diagnostic Attempt A92 - post-A91 stability and bottleneck audit
+
+Goal: harden the accepted A91 `attn,ffn_up` F8 dense placement frontier before any wider placement exploration. This attempt introduces no source changes. It compares default baseline, A80/A88 attention-only F8, and A91 `attn,ffn_up` on expanded deterministic smoke prompts, runs paired A80-vs-A91 n256 stability repeats, and captures one perf stat pass under the 16 GiB cgroup.
+
+Accepted frontier under audit: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Acceptance: all correctness runs must exit 0, visible output must stay coherent relative to default/A80 with no broad-F8 corruption patterns, A91 repeats must keep graph_splits near 248, p50 >= 6.20 tok/s, worst >= 6.00 tok/s, and beat same-session A80 p50 by >= 0.75 tok/s. Perf counters should be recorded if available.
+
+Safety: no `git push`; save logs and summaries under `/root/lfz/runs/ik_llama/deepseek-v4-a92-post-a91-stability-bottleneck-audit`.
+
+
+### Diagnostic Result A92 - post-A91 stability and bottleneck audit
+
+Status: completed_stable_promoted_frontier
+Run directory: `/root/lfz/runs/ik_llama/deepseek-v4-a92-post-a91-stability-bottleneck-audit`
+Start commit: `87ec431e`
+
+A92 introduced no source changes. It rebuilt the current A91 source, verified `source_start.diff` was empty, and audited the accepted A91 `attn,ffn_up` F8 dense CUDA placement under the 16 GiB cgroup discipline.
+
+Expanded deterministic correctness smoke compared default baseline, A80/A88 attention-only F8, and A91 `attn,ffn_up` on six prompts: `france`, `math`, `hotcold`, `color`, `sequence`, and `opposite`. All 18 runs exited 0. Visible output windows remained blank/coherent across baseline, A80, and A91 and did not reproduce the known broad-F8 corruption patterns. No CUDA/assert/shape/NaN/Inf failures were seen in summaries.
+
+Correctness smoke metrics:
+
+- baseline: graph_splits `1237` for all prompts, eval `1.80/1.83/1.81/1.74/1.80/1.88 tok/s` for france/math/hotcold/color/sequence/opposite.
+- A80 attention-only: graph_splits `291` for all prompts, eval `5.10/5.14/5.11/5.10/5.14/5.15 tok/s`.
+- A91 `attn,ffn_up`: graph_splits `248` for all prompts, eval `6.09/6.13/6.11/5.97/6.17/6.00 tok/s`.
+
+Paired n256 stability repeats, same session:
+
+- A80 attention-only: exits `0/0/0`, graph_splits `291/291/291`, eval `5.32/5.33/5.22 tok/s`, p50 `5.32`, worst `5.22`.
+- A91 `attn,ffn_up`: exits `0/0/0`, graph_splits `248/248/248`, eval `6.43/6.43/6.44 tok/s`, p50 `6.43`, worst `6.43`.
+- A91-vs-A80 p50 delta: `+1.11 tok/s`.
+
+A92 decision: A91 remains the promoted quality-valid frontier. It passes the A92 stability thresholds: all repeats exited 0, graph_splits stayed source-consistent at 248, A91 p50 is >= 6.20 tok/s, worst is >= 6.00 tok/s, and same-session p50 beats A80 by >= 0.75 tok/s.
+
+Perf pass: `perf_stat_a91_attn_ffn_up_n128.log` exited 0 and produced usable counters. Under perf overhead the A91 n128 run used graph_splits `248` and eval `4.65 tok/s`; perf recorded `37.584576243s` elapsed, `15.444 CPUs utilized`, IPC `0.41`, frontend stalls `8.02%`, branch misses `0.94%`, L1D miss rate `1.45%`, and LLC counters unsupported. This pass confirms the accepted A91 path is still CPU-heavy under profiling overhead, but A92 does not identify a new MXFP4 CPU function target beyond the previously characterized MoE/helper/OpenMP path.
+
+Accepted A91/A92 baseline env for future work: `GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up` with `--defer-experts --fit -ngl 999 -c 512 -ub 1 -t 20 -tb 20 -no-fa`, deterministic sampling for audits, `MemoryMax=16G`, and `MemorySwapMax=0`.
+
+Next recommendation after hot reload R3: continue with a narrow, env-gated A93 F8 CUDA placement probe beyond `attn,ffn_up`, using A91/A92 p50 `6.43` and worst `6.43` as the baseline. Prefer class-by-class or per-tensor F8 placement expansion and require deterministic output/logit correctness against A91/A92 before throughput selection. Defer MXFP4 MoE CPU-path work unless a later perf/profile pass identifies a concrete function target. Maintain the quality floor at least 4-bit effective quantization and do not use broad unsafe dense F8 placement.
+
+Source and safety: no source files were modified by A92; tracked source remained clean. No `git push` was run.
+
+A92 pushed_commit: n/a (WiCi no-push constraint)
