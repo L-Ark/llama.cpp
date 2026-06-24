@@ -5643,3 +5643,37 @@ Rollback/process status: no source files were changed, no A96/A97/A98 artifacts 
 
 A99 result_commit: 0d02a72d
 A99 pushed_commit: n/a (blocked by WiCi no-push constraint).
+
+## Planned Diagnostic Attempt A100 - DeepSeek prompt-template/runtime compatibility audit
+
+- Status: planned_then_completed in S42 / iter-62.
+- Goal: determine whether the France paragraph gate failure is due to a missing DeepSeek prompt template, chat mode mismatch, tokenizer/special-token mismatch, or runtime incompatibility before any further token-rate optimization.
+- Scope: diagnostic only; no source optimization; no broad unsafe F8 placement; preserve A96-A99 artifacts; run any generation under MemoryMax=16G and MemorySwapMax=0.
+- Baselines/surfaces: no-F8 baseline and current A93/A94 env: GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate.
+- Target prompt: Please introduce France in a short paragraph.
+
+## Diagnostic Result A100 - Prompt-template/runtime compatibility audit
+
+- Status: completed_blocked_runtime_generation.
+- Remote HEAD at start: 5a8821d9.
+- Artifact directory: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit
+- Metadata evidence:
+  - Selected GGUF metadata: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/gguf_selected_metadata.json
+  - llama-cli n=0 metadata log: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/model_info_llama_cli_n0.log
+  - local repo matches: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/local_repo_template_matches.txt
+  - tokenization evidence: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/tokenize_plain_ids.txt and /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/tokenize_manual_chat_ids.txt
+  - Extracted tokenizer.chat_template from the GGUF itself: begin-of-sentence marker, user marker, assistant marker, and an add_generation_prompt suffix of <｜Assistant｜></think>.
+  - Tokenizer metadata: general.architecture=deepseek4, general.name=DeepSeek V4 Flash, tokenizer.ggml.model=gpt2, tokenizer.ggml.pre=joyai-llm, BOS=0, EOS/PAD/EOT=1, add_bos_token=false, add_eos_token=false.
+- A100 harness matrix:
+  - Matrix TSV: /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/metadata_exact_matrix_v3.tsv
+  - metadata_exact/no-F8: exact GGUF tokenizer.chat_template rendered prompt, MemoryMax=16G, exit=137, no eval tok/s, no paragraph-qualified visible output; log /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/metadata_exact_nof8.v3.log
+  - metadata_exact/A93-A94: same exact metadata-derived prompt under accepted A93/A94 env, MemoryMax=16G, exit=137, no eval tok/s, no paragraph-qualified visible output; log /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/metadata_exact_a93.v3.log
+  - Earlier wrapper files metadata_exact_matrix.tsv and metadata_exact_matrix_v2.tsv are explicitly discarded as non-evidence because local shell quoting failed before a valid llama-cli invocation.
+- Inherited evidence used by S42:
+  - A97 llama-cli plain/Jinja/prompt-display/EOS/manual-marker rows all exited 0 but produced blank visible output for the France paragraph prompt.
+  - A98 found no hidden paragraph bytes in A97 raw logs; token-stream diagnostic was attempted, saved, reverted, and did not capture usable token IDs.
+  - A99 llama-server default /completion reached /health but aborted on request with CUDA invalid argument in flash attention. A99 llama-server --no-flash-attn /completion and /v1/chat returned HTTP 200 but produced corrupted nonsensical visible text for baseline and A93/A94, not a reasonable France paragraph.
+- Decision: runtime_generation_blocker.
+- Rationale: a DeepSeek chat template is present in the GGUF and the exact metadata-derived prompt was tested, so the strongest current evidence does not support missing prompt-template as the primary blocker. The failure persists across CLI, metadata-exact prompt, and repo-native server/chat surfaces as blank output, corrupted output, CUDA runtime abort, or 16 GB capped kill. No A96 row can be paragraph-qualified and no highest token-rate row can be named under R4.
+- Evidence needed to reopen: a known-good DeepSeek V4 Flash prompt/runtime invocation that emits a readable short France paragraph under the same 16 GB cgroup, or a runtime fix for the server flash-attention abort/corrupted no-flash generation. If found, rerun A96 candidate coverage exactly with that harness before naming a best qualified token-rate result.
+- Rollback/source status: no source changes were introduced for A100. Source start diff is /root/lfz/runs/ik_llama/deepseek-v4-a100-prompt-template-runtime-audit/source_start.diff. A100 scripts/artifacts are outside tracked source. Push remains blocked by WiCi no-push constraint.
