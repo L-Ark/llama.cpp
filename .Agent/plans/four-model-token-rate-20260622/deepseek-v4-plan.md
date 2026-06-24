@@ -5483,3 +5483,48 @@ Rollback/source status:
 Next recommendation: do not spend more attempts adding `attn_out` or `attn_qkv` to the existing `attn` class, because they are redundant under current class matching. If further F8 placement work is requested, use source inspection or tracing to identify a truly new narrow class or per-tensor family beyond the current `attn,ffn_up,ffn_gate` frontier, and keep the same output/top-logit correctness gate and A93/A94 promotion thresholds.
 
 No `git push` was run; push remains blocked by WiCi no-push constraint.
+
+
+### Hot-reload Paragraph Gate Supplement A95 - France short paragraph
+
+Prompt: `Please introduce France in a short paragraph.`
+
+This supplement was run after the A95 throughput/logit probe because the goal was hot-reloaded to require visible, readable short-paragraph output for the current accepted best and every A95 candidate. Runs used the established 16 GB cgroup discipline (`MemoryMax=16G`, `MemorySwapMax=0`) and the accepted model/flags. An initial launch without `GGML_CUDA_NO_PINNED=1` failed model load under the 16 GB cap and was discarded as setup failure; the recorded table below is the corrected run using the accepted 16 GB environment.
+
+| name | env_allow_classes | log_path | exit_code | visible_excerpt | pass_fail | reason |
+| --- | --- | --- | --- | --- | --- | --- |
+| a93_baseline | attn,ffn_up,ffn_gate | /root/lfz/runs/ik_llama/deepseek-v4-a95-narrow-f8-placement-beyond-a93/quality_france_paragraph_a93_baseline.log | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False |
+| a93_plus_attn_out | attn,ffn_up,ffn_gate,attn_out | /root/lfz/runs/ik_llama/deepseek-v4-a95-narrow-f8-placement-beyond-a93/quality_france_paragraph_a93_plus_attn_out.log | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False |
+| a93_plus_attn_qkv | attn,ffn_up,ffn_gate,attn_qkv | /root/lfz/runs/ik_llama/deepseek-v4-a95-narrow-f8-placement-beyond-a93/quality_france_paragraph_a93_plus_attn_qkv.log | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False |
+
+A95 paragraph decision: all corrected A95 paragraph runs exited `0`, but visible generated output was blank for the current accepted A93 best and both A95 candidate strings. Therefore none of these configurations is quality-qualified for the new France paragraph prompt, and A95 remains unpromoted. The previous A93/A94 throughput frontier is no longer sufficient by itself for the new prompt-specific quality requirement; paragraph-capable history or repair must be established before naming a best result for this prompt.
+
+### Planned History Sweep A96 - France paragraph quality frontier
+
+Goal: enumerate protected historical candidates on `deepseek-v4-flash` to find the highest token rate that produces a visible, readable, reasonable short paragraph for `Please introduce France in a short paragraph.` The sweep protects current S37/A95 state by using a detached temporary worktree instead of checking out historical commits in the main repository.
+
+Worktree: `/root/lfz/worktrees/ik_llama-a96-history-20260624T034625Z`
+Main checkout start HEAD: `fb85adc1b565288c77e418bd67165ff2d4c8872c`
+Start UTC: `2026-06-24T03:46:25Z`
+Prompt: `Please introduce France in a short paragraph.`
+Runner: `systemd-run --pipe --wait --collect -p MemoryMax=16G -p MemorySwapMax=0 ... --defer-experts --fit -ngl 999 -c 512 -n 128 --ignore-eos --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -ub 1 -t 20 -tb 20 -no-fa` with `GGML_CUDA_NO_PINNED=1` and the established VRAM-cache env.
+
+### History Sweep Result A96 - France paragraph quality frontier
+
+| name | commit | env | role | exit_code | visible_excerpt | pass_fail | reason | eval_tok_s | graph_splits | log_path |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a93_a94_best | 0969573c | GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up,ffn_gate | quality_candidate | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 8.56 | 162 | /root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/a93_a94_best/quality_france_paragraph.corrected.log |
+| a91_a92_best | 57bf3af7 | GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASSES=attn,ffn_up | quality_candidate | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 6.05 | 248 | /root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/a91_a92_best/quality_france_paragraph.corrected.log |
+| a80_a88_attn | 402017ef | GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ATTN_SAFE=1 GGML_DEEPSEEK4_CUDA_F8_DENSE_ALLOW_CLASS=attn | quality_candidate | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 5.12 | 291 | /root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/a80_a88_attn/quality_france_paragraph.corrected.log |
+| a88_no_f8_baseline | 402017ef |  | baseline_control | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 1.95 | 1237 | /root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/a88_no_f8_baseline/quality_france_paragraph.corrected.log |
+| a88_broad_f8_control | 402017ef | GGML_DEEPSEEK4_ENABLE_CUDA_F8_DENSE=1 | invalid_control | 0 | (blank) | fail | readable=False words=0 short_para=True not_gibberish=False | 5.09 | 291 | /root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/a88_broad_f8_control/quality_france_paragraph.corrected.log |
+
+A96 decision: A96 found no paragraph-qualified candidate; every required candidate/control exited 0 but produced blank visible output, so no highest-token-rate answer exists under the new France paragraph quality gate.
+
+Controls and interpretation:
+- `a93_a94_best` was fastest at `8.56 tok/s` with graph_splits `162`, but failed because generated visible output was blank.
+- `a91_a92_best`, `a80_a88_attn`, the no-F8 baseline control, and the known invalid broad-F8 control also failed for blank visible output.
+- The broad-F8 row remains an invalid control and is not a candidate for quality promotion regardless of throughput.
+- Since no candidate passed the paragraph gate, no configuration can currently be called the highest token-rate result while accurately answering this prompt. Next work should focus on prompt/template/generation repair or a validated decoding invocation that produces visible text before further token-rate optimization.
+
+Rollback/source-clean evidence: A96 used only detached worktree builds under `/root/lfz/worktrees/ik_llama-a96-history-20260624T034625Z` and did not checkout historical commits in `/root/lfz/ik_llama`. The main checkout remained on the A95 plan commit during the sweep. Push status: blocked by WiCi no-push constraint; no `git push` was run.
