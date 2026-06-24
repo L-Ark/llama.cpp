@@ -5561,3 +5561,6 @@ A97 tested whether the blank output seen in A95/A96 was caused by the specific C
 A97 decision: no harness row produced a visible, readable short paragraph. The ordinary plain/Jinja/prompt-display/EOS variants for both no-F8 and A93/A94 exited `0` but generated blank visible output. Manual chat-marker variants also failed: no-F8 timed out under the wrapper in the first diagnostic run and A93/A94 hit the systemd runtime cap without a visible paragraph. This means A97 did not find a harness-only fix. Token-rate optimization remains blocked for the France paragraph requirement until a generation/prompt path that produces visible text is identified and then used to rerun A96 candidate coverage.
 
 Operational notes: the first no-F8 manual-chat timeout left a child `llama-cli` process holding VRAM; it was explicitly terminated by PID after confirming it belonged to this A97 diagnostic, then the A93 rows were rerun with clean GPU memory. Final GPU/process sanity after the rerun showed no active `llama-cli`, `systemd-run`, `cmake --build`, or `perf` benchmark process. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+A97 result_commit: `b1d14cff`
+A97 pushed_commit: n/a (blocked by WiCi no-push constraint).
