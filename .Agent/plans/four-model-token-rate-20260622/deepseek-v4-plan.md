@@ -5595,5 +5595,6 @@ Decision: no corrected paragraph harness exists yet, and no A96 candidate can be
 
 Rollback/process status: temporary diagnostic source was reverted and the default `llama-cli` rebuilt. Final source diff is empty. No A96 worktree/artifact was removed. Push status: blocked by WiCi no-push constraint; no `git push` was run.
 
-A98 result_commit: 
+A98 result_commit: 0faee101
+A98 metadata_commit: 4b60d1ab
 A98 pushed_commit: n/a (blocked by WiCi no-push constraint).
