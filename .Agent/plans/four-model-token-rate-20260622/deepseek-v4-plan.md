@@ -5417,3 +5417,6 @@ PROGRESS.md retained status: `/root/lfz/ik_llama/.Agent/plans/four-model-token-r
 Next recommendation: use A93/A94 as the durable baseline. Further work may probe one additional narrow F8 placement class or per-tensor family only with the same output/top-logit correctness gate and promotion threshold versus A93/A94 p50/worst. Broad unsafe dense F8 placement remains invalid-for-quality.
 
 Source and safety: tracked source is clean after reverting the temporary logit diagnostic and rebuilding. No `git push` was run; push remains blocked by WiCi no-push constraint.
+
+A94 result_commit: 514d247d
+A94 pushed_commit: n/a (WiCi no-push constraint)
