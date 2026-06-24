@@ -5528,3 +5528,6 @@ Controls and interpretation:
 - Since no candidate passed the paragraph gate, no configuration can currently be called the highest token-rate result while accurately answering this prompt. Next work should focus on prompt/template/generation repair or a validated decoding invocation that produces visible text before further token-rate optimization.
 
 Rollback/source-clean evidence: A96 used only detached worktree builds under `/root/lfz/worktrees/ik_llama-a96-history-20260624T034625Z` and did not checkout historical commits in `/root/lfz/ik_llama`. The main checkout remained on the A95 plan commit during the sweep. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+A96 result_commit: `1b45e572`
+A96 pushed_commit: n/a (blocked by WiCi no-push constraint).
