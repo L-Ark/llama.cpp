@@ -5289,3 +5289,6 @@ Next recommendation after hot reload R3: continue with a narrow, env-gated A93 F
 Source and safety: no source files were modified by A92; tracked source remained clean. No `git push` was run.
 
 A92 pushed_commit: n/a (WiCi no-push constraint)
+
+A92 result_commit: $NEW_SHA
+A92 pushed_commit: n/a (WiCi no-push constraint)
