@@ -5564,3 +5564,36 @@ Operational notes: the first no-F8 manual-chat timeout left a child `llama-cli` 
 
 A97 result_commit: `b1d14cff`
 A97 pushed_commit: n/a (blocked by WiCi no-push constraint).
+
+
+### Planned Diagnostic Attempt A98 - France paragraph token/output classification
+
+Goal: classify why A95/A96/A97 produced blank visible output for `Please introduce France in a short paragraph.` This is a diagnostic-only step, not a token-rate optimization. It preserves the A96 protected worktree/artifacts, keeps tracked source clean, uses the 16 GB cgroup discipline, and tests no-F8 baseline plus current A93/A94 env first. Candidate classifications are `output_capture_bug`, `prompt_template_or_cli_harness_missing`, `model_generates_eos_or_whitespace`, or `inconclusive`.
+
+Planned evidence: inspect A97 raw logs with byte-level tails, inspect CLI/model template metadata, run the smallest additional token/output diagnostics needed, and if a corrected harness produces a visible reasonable France paragraph, rerun the required A96 historical candidate coverage using exactly that harness. Push remains blocked by WiCi no-push constraint.
+
+### Diagnostic Result A98 - France paragraph token/output classification
+
+A98 inspected existing A97 artifacts and ran limited additional diagnostics from current remote HEAD `e437883f` under the S40 safety constraints. It introduced no accepted source changes. The temporary token-stream hook in `examples/main/main.cpp` was saved as `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_stream_diag_source.diff`, then reverted; `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/source_after_token_diag_revert.diff` and `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/final_source.diff` are both `0` bytes after rebuilding default `llama-cli`.
+
+Raw-output evidence from A97: byte-level inspection of `harness_baseline_plain.log`, `harness_baseline_show_prompt.log`, `harness_a93_plain.rerun.log`, `harness_a93_show_prompt.rerun.log`, `harness_baseline_manual_chat.log`, and `harness_a93_manual_chat.rerun.log` is saved in `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/a97_raw_log_inspection.txt`. These logs contain normal model metadata, the model chat template metadata (`tokenizer.chat_template`), EOS metadata (`tokenizer.ggml.eos_token_id = 1`, `add_eos_token = false`), generation/timing summaries, and no hidden paragraph bytes in the generated-output window. A97 rows with `--ignore-eos` still reported eval token rates while visible output remained blank, which argues against a simple output-extraction bug.
+
+CLI/template evidence: `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/llama_cli_help.txt` and `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/help_prompt_matches.txt` show relevant flags including `--verbose-prompt`, `--no-display-prompt`, `--special`, `--conversation`, `--jinja`, `--chat-template`, `--reasoning`, and `--skip-chat-parsing`. A97 had already covered plain, prompt-display, no-`--ignore-eos`, `--jinja`, and manual DeepSeek chat-marker variants for no-F8 and A93/A94. No row yielded a visible readable short paragraph.
+
+Additional A98 diagnostics:
+
+| diagnostic | result | artifact |
+|---|---|---|
+| discarded matrix attempt | Initial background matrix runner had a local quoting bug that passed an empty `-p` argument; it was stopped and marked discarded, so it is not used as evidence. | `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/diagnostic_results.bad_prompt_quoting.tsv`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/progress.bad_prompt_quoting.log` |
+| fixed matrix attempt | Corrected quoting showed the France prompt in the process command line, but the first `--verbose-prompt` row exceeded its intended bound and was stopped before producing useful output; the continuing row was also stopped. | `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/run_a98_matrix.sh`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/verbose_row_stopped.txt` |
+| contained `--special` probe | A synchronous no-F8 `--special --ignore-eos -n 16` row with timeout inside the 16 GB cgroup timed out with exit `124` and `0` log bytes, so it provided no token evidence. | `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/sync_baseline_special_n16.log`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/exit_sync_baseline_special_n16.txt` |
+| temporary token-stream hook | Env-gated hook `GGML_DEEPSEEK4_A98_DUMP_TOKENS=1` was built and run for no-F8 and A93/A94 original harness with `-n 16`; both wrapper rows returned exit `255` with `0` log bytes and no `A98_TOKEN` lines. | `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_diag_baseline.log`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_diag_a93.log`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_diag_baseline.tokens.txt`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_diag_a93.tokens.txt`, `/root/lfz/runs/ik_llama/deepseek-v4-a98-france-paragraph-token-output-diagnosis/token_diag_progress.log` |
+
+A98 classification: `inconclusive`, leaning away from `output_capture_bug` and toward `model_generates_eos_or_whitespace`. The reason it is not recorded as definitive `model_generates_eos_or_whitespace` is that the temporary token-ID/piece diagnostic failed under the systemd wrapper and did not capture first generated token IDs. The strongest completed evidence remains A97: raw logs show no hidden paragraph bytes, multiple CLI harness variants failed, and `--ignore-eos` rows produced eval timing but blank visible text. However, without token IDs or a successful conversation-mode stdin row, A98 cannot fully distinguish whitespace/special-token generation from a still-missing DeepSeek-specific prompt/conversation harness.
+
+Decision: no corrected paragraph harness exists yet, and no A96 candidate can be paragraph-qualified. Do not resume token-rate optimization or name a highest-token-rate France-paragraph result until a visible generation path is found. Concrete next diagnostic: avoid `llama-cli`/`systemd-run --wait` wrapper interaction by using a small standalone local sampling probe or `llama-server` request path under an explicit 16 GB cgroup, capture first generated token IDs/pieces and stop reason for no-F8 and A93/A94, then rerun the A96 historical coverage only if that path produces a visible reasonable France paragraph.
+
+Rollback/process status: temporary diagnostic source was reverted and the default `llama-cli` rebuilt. Final source diff is empty. No A96 worktree/artifact was removed. Push status: blocked by WiCi no-push constraint; no `git push` was run.
+
+A98 result_commit: pending
+A98 pushed_commit: n/a (blocked by WiCi no-push constraint).
