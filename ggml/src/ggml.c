@@ -3327,7 +3327,9 @@ struct ggml_tensor * ggml_hc_weighted_sum(
 
     GGML_ASSERT(a->ne[1] == b->ne[0]);
     GGML_ASSERT(a->ne[3] == 1);
-    GGML_ASSERT(b->ne[1] == a->ne[2] && b->ne[2] == 1 && b->ne[3] == 1);
+    const bool shared_weights  = b->ne[1] == a->ne[2] && b->ne[2] == 1;
+    const bool per_dim_weights = b->ne[1] == a->ne[0] && b->ne[2] == a->ne[2];
+    GGML_ASSERT((shared_weights || per_dim_weights) && b->ne[3] == 1);
 
     struct ggml_tensor * result = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, a->ne[0], a->ne[2]);
 

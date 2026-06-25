@@ -723,15 +723,11 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         ggml_tensor * act = ggml_swiglu_split(ctx0, gate, up);
         cb(act, "ffn_moe_swiglu", il);
 
-        ggml_tensor * experts = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
-        experts = ggml_mul(ctx0, experts, weights);
-        cb(experts, "ffn_moe_down", il);
+        ggml_tensor * down = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
+        cb(down, "ffn_moe_down_raw", il);
 
-        ggml_tensor * experts_by_id = ggml_cont(ctx0, ggml_permute(ctx0, experts, 1, 0, 2, 3));
-        ggml_tensor * out = sum_rows_checked(experts_by_id, "build_expert_mix.sum");
-        out = reshape_3d_checked(out, 1, n_embd, mix_tokens, "build_expert_mix.sum_out", il);
-        out = reshape_2d_checked(out, n_embd, mix_tokens, "build_expert_mix.out", il);
-
+        ggml_tensor * weights_2d = reshape_2d_checked(weights, n_expert_used, mix_tokens, "build_expert_mix.weights_2d", il);
+        ggml_tensor * out = ggml_hc_weighted_sum(ctx0, down, weights_2d);
         cb(out, "ffn_moe_out", il);
         return out;
     };
@@ -921,14 +917,11 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                     ggml_tensor * batched_score_slots = ggml_concat(ctx0, prev_score_b, cur_score_b, 1);
 
                     // permute (1, 0, 2, 3): [head_dim, 2r, n] -> [2r, head_dim, n]
-                    ggml_tensor * batched_kv_seq    = ggml_cont(ctx0, ggml_permute(ctx0, batched_kv_slots, 1, 0, 2, 3));
                     ggml_tensor * batched_score_seq = ggml_cont(ctx0, ggml_permute(ctx0, batched_score_slots, 1, 0, 2, 3));
 
                     ggml_tensor * batched_weights  = ggml_soft_max(ctx0, batched_score_seq);
-                    ggml_tensor * batched_weighted = ggml_mul(ctx0, batched_kv_seq, batched_weights);
-                    ggml_tensor * batched_flat     = sum_rows_checked(batched_weighted, "build_attn_v4.comp_sum_b");
-                    // [1, head_dim, n] -> [head_dim, n]
-                    batched_flat = cont_if_needed(reshape_2d_checked(batched_flat, head_dim, n, "build_attn_v4.comp_flat_b", il));
+                    ggml_tensor * batched_flat     = ggml_hc_weighted_sum(ctx0, batched_kv_slots, batched_weights);
+                    cb(batched_flat, "attn_comp_weighted_sum_b", il);
                     batched_flat = build_norm(batched_flat, layer.attn_compress_norm, nullptr, LLM_NORM_RMS, il);
 
                     // split nope/pe along dim 0
@@ -981,13 +974,10 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                         comp_kv_slots = updated_attn_comp_kv_state;
                         comp_score_slots = updated_attn_comp_score_state;
                     }
-
-                    ggml_tensor * comp_kv_seq = ggml_cont(ctx0, ggml_transpose(ctx0, comp_kv_slots));
                     ggml_tensor * comp_score_seq = ggml_cont(ctx0, ggml_transpose(ctx0, comp_score_slots));
                     ggml_tensor * comp_weights = ggml_soft_max(ctx0, comp_score_seq);
-                    ggml_tensor * comp_weighted = ggml_mul(ctx0, comp_kv_seq, comp_weights);
-                    ggml_tensor * comp_flat = sum_rows_checked(comp_weighted, "build_attn_v4.comp_sum");
-                    comp_flat = ggml_cont(ctx0, ggml_transpose(ctx0, comp_flat));
+                    ggml_tensor * comp_flat = ggml_hc_weighted_sum(ctx0, comp_kv_slots, comp_weights);
+                    cb(comp_flat, "attn_comp_weighted_sum", il);
                     comp_flat = build_norm(comp_flat, layer.attn_compress_norm, nullptr, LLM_NORM_RMS, il);
                     if (ggml_nelements(comp_flat) != head_dim) {
                         GGML_ABORT(
@@ -1097,14 +1087,11 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
 
                     ggml_tensor * batched_kv_slots    = ggml_concat(ctx0, prev_kv_b,    cur_kv_b,    1);
                     ggml_tensor * batched_score_slots = ggml_concat(ctx0, prev_score_b, cur_score_b, 1);
-
-                    ggml_tensor * batched_kv_seq    = ggml_cont(ctx0, ggml_permute(ctx0, batched_kv_slots, 1, 0, 2, 3));
                     ggml_tensor * batched_score_seq = ggml_cont(ctx0, ggml_permute(ctx0, batched_score_slots, 1, 0, 2, 3));
 
                     ggml_tensor * batched_weights  = ggml_soft_max(ctx0, batched_score_seq);
-                    ggml_tensor * batched_weighted = ggml_mul(ctx0, batched_kv_seq, batched_weights);
-                    ggml_tensor * batched_flat     = sum_rows_checked(batched_weighted, "build_attn_v4.indexer_comp_sum_b");
-                    batched_flat = cont_if_needed(reshape_2d_checked(batched_flat, indexer_head_dim, n, "build_attn_v4.indexer_comp_flat_b", il));
+                    ggml_tensor * batched_flat     = ggml_hc_weighted_sum(ctx0, batched_kv_slots, batched_weights);
+                    cb(batched_flat, "indexer_comp_weighted_sum_b", il);
                     batched_flat = build_norm(batched_flat, layer.indexer_compress_norm, nullptr, LLM_NORM_RMS, il);
 
                     ggml_tensor * batched_states = reshape_3d_checked(batched_flat, indexer_head_dim, 1, n, "build_attn_v4.indexer_comp_states_b", il);
@@ -1154,13 +1141,10 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                         indexer_comp_kv_slots = updated_indexer_comp_kv_state;
                         indexer_comp_score_slots = updated_indexer_comp_score_state;
                     }
-
-                    ggml_tensor * indexer_comp_kv_seq = ggml_cont(ctx0, ggml_transpose(ctx0, indexer_comp_kv_slots));
                     ggml_tensor * indexer_comp_score_seq = ggml_cont(ctx0, ggml_transpose(ctx0, indexer_comp_score_slots));
                     ggml_tensor * indexer_comp_weights = ggml_soft_max(ctx0, indexer_comp_score_seq);
-                    ggml_tensor * indexer_comp_weighted = ggml_mul(ctx0, indexer_comp_kv_seq, indexer_comp_weights);
-                    ggml_tensor * indexer_comp_flat = sum_rows_checked(indexer_comp_weighted, "build_attn_v4.indexer_comp_sum");
-                    indexer_comp_flat = ggml_cont(ctx0, ggml_transpose(ctx0, indexer_comp_flat));
+                    ggml_tensor * indexer_comp_flat = ggml_hc_weighted_sum(ctx0, indexer_comp_kv_slots, indexer_comp_weights);
+                    cb(indexer_comp_flat, "indexer_comp_weighted_sum", il);
                     indexer_comp_flat = build_norm(indexer_comp_flat, layer.indexer_compress_norm, nullptr, LLM_NORM_RMS, il);
 
                     ggml_tensor * indexer_comp_states = reshape_3d_checked(indexer_comp_flat, indexer_head_dim, 1, 1, "build_attn_v4.indexer_comp_states", il);
@@ -1324,15 +1308,15 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                         // with the collapsed scores.
                         index_weights = ggml_cont(ctx0, ggml_transpose(ctx0, index_weights));
                         index_weights = sum_rows_checked(index_weights, "build_attn_v4.index_weights_sum_b");
-                        index_weights = reshape_2d_checked(index_weights, 1, hparams.indexer_n_head, "build_attn_v4.index_weights_collapsed", il);
+                        index_weights = reshape_2d_checked(index_weights, hparams.indexer_n_head, 1, "build_attn_v4.index_weights_collapsed", il);
                     } else if (work_tokens > 1) {
                         // Per-query: keep weights aligned with scores [.., n_head, work_tokens]
                         index_weights = reshape_3d_checked(index_weights, 1, hparams.indexer_n_head, work_tokens, "build_attn_v4.index_weights_b", il);
                     } else {
-                        index_weights = reshape_2d_checked(index_weights, 1, hparams.indexer_n_head, "build_attn_v4.index_weights", il);
+                        index_weights = reshape_2d_checked(index_weights, hparams.indexer_n_head, 1, "build_attn_v4.index_weights", il);
                     }
-                    index_scores = ggml_mul(ctx0, index_scores, index_weights);
                     if (work_tokens > 1 && deepseek4_indexer_per_query()) {
+                        index_scores = ggml_mul(ctx0, index_scores, index_weights);
                         // Aggregate per-query scores into a single ubatch-wide
                         // top-k. Sum across both indexer_n_head and the
                         // work_tokens axis so every query in the ubatch
@@ -1346,9 +1330,8 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                         index_scores = sum_rows_checked(index_scores, "build_attn_v4.index_scores_sum");
                         index_scores = reshape_2d_checked(index_scores, n_comp, 1, "build_attn_v4.index_scores_perq", il);
                     } else {
-                        index_scores = ggml_cont(ctx0, ggml_transpose(ctx0, index_scores));
-                        index_scores = sum_rows_checked(index_scores, "build_attn_v4.index_scores");
-                        index_scores = reshape_2d_checked(index_scores, n_comp, 1, "build_attn_v4.index_scores", il);
+                        ggml_tensor * index_scores_hc = reshape_3d_checked(index_scores, n_comp, hparams.indexer_n_head, 1, "build_attn_v4.index_scores_hc", il);
+                        index_scores = ggml_hc_weighted_sum(ctx0, index_scores_hc, index_weights);
                     }
                     cb(index_scores, "index_scores", il);
                     }

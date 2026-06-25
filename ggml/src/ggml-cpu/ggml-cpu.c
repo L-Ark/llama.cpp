@@ -188,6 +188,9 @@ static int sched_yield (void) {
 typedef void * thread_ret_t;
 
 #include <sys/types.h>
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/mman.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -1628,6 +1631,24 @@ static void ggml_compute_forward_mul_mat_id(
         atomic_int * current_chunk_ctr = (atomic_int *)(atomic_current_chunk + cur_a);
         *current_chunk_ctr = nth;
     }
+
+#if defined(__linux__) || defined(__APPLE__)
+    static bool madvise_active = false;
+    static bool madvise_active_init = false;
+    if (!madvise_active_init) {
+        const char * env = getenv("GGML_MOE_MADVISE_ACTIVE");
+        madvise_active = env != NULL && env[0] != '\0' && env[0] != '0';
+        madvise_active_init = true;
+    }
+    if (madvise_active && src0->type == GGML_TYPE_MXFP4) {
+        for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
+            if (matrix_row_counts[cur_a] == 0) {
+                continue;
+            }
+            (void) madvise((void *) ((char *) src0->data + cur_a * nb02), nb02, MADV_WILLNEED);
+        }
+    }
+#endif
 
     ggml_barrier(params->threadpool);
 

@@ -624,10 +624,16 @@ static __global__ void mul_mat_vec_q(
                 if (use_bias) {
                     result += x_biases[j];
                 }
+                if (fusion.clamp_x) {
+                    result = fminf(fmaxf(result, fusion.clamp_x_min), fusion.clamp_x_max);
+                }
                 if (use_gate) {
                     float gate_value = tmp_gate[j][threadIdx.x];
                     if (use_gate_bias) {
                         gate_value += gate_biases[j];
+                    }
+                    if (fusion.clamp_gate) {
+                        gate_value = fminf(fmaxf(gate_value, fusion.clamp_gate_min), fusion.clamp_gate_max);
                     }
                     switch (active_glu) {
                         case GGML_GLU_OP_SWIGLU:
@@ -1131,6 +1137,7 @@ static void mul_mat_vec_q_switch_type(
     }
 }
 
+
 void ggml_cuda_mul_mat_vec_q(
         ggml_backend_cuda_context & ctx, const ggml_tensor * src0, const ggml_tensor * src1, const ggml_tensor * ids, ggml_tensor * dst,
         const ggml_cuda_mm_fusion_args_host * fusion) {
@@ -1180,6 +1187,12 @@ void ggml_cuda_mul_mat_vec_q(
             fusion_local.gate_bias = fusion->gate_bias->data;
         }
         fusion_local.glu_op = fusion->glu_op;
+        fusion_local.clamp_x = fusion->clamp_x;
+        fusion_local.clamp_gate = fusion->clamp_gate;
+        fusion_local.clamp_x_min = fusion->clamp_x_min;
+        fusion_local.clamp_x_max = fusion->clamp_x_max;
+        fusion_local.clamp_gate_min = fusion->clamp_gate_min;
+        fusion_local.clamp_gate_max = fusion->clamp_gate_max;
     }
 
     // If src0 is a temporary compute buffer, clear any potential padding.

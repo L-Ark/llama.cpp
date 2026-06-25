@@ -1519,12 +1519,14 @@ void ggml_compute_forward_hc_weighted_sum(
     GGML_ASSERT(src0->type == GGML_TYPE_F32);
     GGML_ASSERT(src1->type == GGML_TYPE_F32);
     GGML_ASSERT( dst->type == GGML_TYPE_F32);
-    // src0: [n_embd, hc_mult, n_batch], src1: [hc_mult, n_batch],
-    // dst:  [n_embd, n_batch]; src0->ne[3] / src1->ne[2..3] all == 1.
+    // src0: [n_embd, hc_mult, n_batch]. src1 can be [hc_mult, n_batch]
+    // with weights shared across n_embd, or [hc_mult, n_embd, n_batch]
+    // with per-dimension weights. dst: [n_embd, n_batch].
     GGML_ASSERT(src0->ne[1] == src1->ne[0]);
-    GGML_ASSERT(src0->ne[2] == src1->ne[1]);
     GGML_ASSERT(src0->ne[3] == 1);
-    GGML_ASSERT(src1->ne[2] == 1 && src1->ne[3] == 1);
+    const bool shared_weights  = src1->ne[1] == src0->ne[2] && src1->ne[2] == 1;
+    const bool per_dim_weights = src1->ne[1] == src0->ne[0] && src1->ne[2] == src0->ne[2];
+    GGML_ASSERT((shared_weights || per_dim_weights) && src1->ne[3] == 1);
     GGML_ASSERT(dst->ne[0] == src0->ne[0]);
     GGML_ASSERT(dst->ne[1] == src0->ne[2]);
     GGML_ASSERT(dst->ne[2] == 1 && dst->ne[3] == 1);
@@ -1552,7 +1554,9 @@ void ggml_compute_forward_hc_weighted_sum(
         float sum = 0.0f;
         for (int64_t h = 0; h < hc_mult; ++h) {
             const float xv = *(const float *) (x + e*src0->nb[0] + h*src0->nb[1] + b*src0->nb[2]);
-            const float wv = *(const float *) (w + h*src1->nb[0] + b*src1->nb[1]);
+            const float wv = shared_weights
+                ? *(const float *) (w + h*src1->nb[0] + b*src1->nb[1])
+                : *(const float *) (w + h*src1->nb[0] + e*src1->nb[1] + b*src1->nb[2]);
             sum += xv * wv;
         }
         *(float *) ((char *) out + e*dst->nb[0] + b*dst->nb[1]) = sum;

@@ -43,7 +43,22 @@ size_t hot_manager::total_gpu_bytes() const {
 }
 
 bool hot_manager::load_profile(std::string path) {
-    if (active) return true;
+    LLAMA_LOG_INFO("ds4-hot: load_profile entry active=%d path_arg=%s env=%s\n",
+            active ? 1 : 0, path.c_str(), std::getenv("DS4_HOT_PROFILE_JSON") ? std::getenv("DS4_HOT_PROFILE_JSON") : "(null)");
+    if (active) {
+        bool has_layer = false;
+        for (const auto & lp : layers) {
+            if (lp) { has_layer = true; break; }
+        }
+        if (has_layer) return true;
+        LLAMA_LOG_WARN("ds4-hot: active profile state had no usable layers; forcing profile reload\n");
+        active = false;
+        layers.clear();
+        n_layer = 0;
+        n_expert = 0;
+        k = 0;
+        category.clear();
+    }
 
     if (path.empty()) {
         const char * env = std::getenv("DS4_HOT_PROFILE_JSON");
@@ -84,25 +99,40 @@ bool hot_manager::load_profile(std::string path) {
     layers.resize(n_layer);
 
     const auto & hot_obj = j["hot"];
+    LLAMA_LOG_INFO("ds4-hot: profile hot_is_object=%d hot_is_array=%d hot_size=%zu\n",
+            hot_obj.is_object() ? 1 : 0, hot_obj.is_array() ? 1 : 0, hot_obj.size());
     int loaded = 0;
+    int ignored_non_array = 0;
+    int ignored_empty = 0;
+    int seen_values = 0;
+    int accepted_values = 0;
     for (auto it = hot_obj.begin(); it != hot_obj.end(); ++it) {
         int il = std::atoi(it.key().c_str());
         if (il < 0 || (size_t) il >= n_layer) continue;
-        if (!it.value().is_array()) continue;
+        if (!it.value().is_array()) { ++ignored_non_array; continue; }
 
         auto state = std::make_unique<layer_hot_state>();
         state->il = il;
         state->hot_ids.reserve(k);
         state->hot_set.reserve(k);
         for (const auto & v : it.value()) {
-            int e = v.is_number_integer() ? v.get<int>() : -1;
+            ++seen_values;
+            int e = -1;
+            if (v.is_number_integer() || v.is_number_unsigned()) {
+                e = v.get<int>();
+            } else if (v.is_number()) {
+                e = (int) v.get<double>();
+            } else if (v.is_string()) {
+                e = std::atoi(v.get<std::string>().c_str());
+            }
             if (e < 0 || e >= n_expert) continue;
+            ++accepted_values;
             state->hot_ids.push_back(e);
             state->hot_set.insert(e);
             if ((int) state->hot_ids.size() >= k) break;
         }
         state->k = (int) state->hot_ids.size();
-        if (state->k <= 0) continue;
+        if (state->k <= 0) { ++ignored_empty; continue; }
 
         // Build cold set and remap tables.
         state->remap_hot.assign(n_expert, -1);
@@ -257,6 +287,13 @@ bool hot_manager::allocate(const llama_model & model) {
 
     int n_alloc_layers = 0;
     size_t total_bytes = 0;
+    int n_probe_logged = 0;
+    int n_profile_layers = 0;
+    int n_skip_no_gate_up = 0;
+    int n_skip_no_down = 0;
+    int n_skip_no_probe_buffer = 0;
+    int n_skip_non_host_gpu = 0;
+    int n_skip_no_gpu_budget = 0;
 
     // Compute the total bytes one layer's hot tensors + lookup tables need so
     // we can reserve all of them on the SAME device. This is essential — if
@@ -352,13 +389,16 @@ bool hot_manager::allocate(const llama_model & model) {
         if (!layers[il]) {
             continue;
         }
+        ++n_profile_layers;
         auto & state = *layers[il];
         const auto & lm = m_layers[il];
 
         if (!lm.ffn_gate_up_exps && !(lm.ffn_gate_exps && lm.ffn_up_exps)) {
+            ++n_skip_no_gate_up;
             continue;
         }
         if (!lm.ffn_down_exps) {
+            ++n_skip_no_down;
             continue;
         }
 
@@ -367,13 +407,38 @@ bool hot_manager::allocate(const llama_model & model) {
                                                  : (lm.ffn_gate_exps ? lm.ffn_gate_exps : lm.ffn_up_exps);
 
         if (!probe || !probe->buffer) {
+            ++n_skip_no_probe_buffer;
+            if (n_probe_logged < 8) {
+                LLAMA_LOG_INFO("ds4-hot: layer %zu probe missing buffer tensor=%s has_combined=%d gate_up=%p gate=%p up=%p down=%p\n",
+                        il, probe ? probe->name : "(null)", has_combined ? 1 : 0,
+                        (void *) lm.ffn_gate_up_exps, (void *) lm.ffn_gate_exps,
+                        (void *) lm.ffn_up_exps, (void *) lm.ffn_down_exps);
+                ++n_probe_logged;
+            }
             continue;
         }
 
-        bool buf_is_host = ggml_backend_buft_is_host(ggml_backend_buffer_get_type(probe->buffer));
+        ggml_backend_buffer_type_t probe_buft = ggml_backend_buffer_get_type(probe->buffer);
+        const char * probe_buft_name = ggml_backend_buft_name(probe_buft);
+        bool buf_is_host = ggml_backend_buft_is_host(probe_buft);
+        if (!buf_is_host && probe_buft_name && std::strstr(probe_buft_name, "Host") != nullptr) {
+            buf_is_host = true;
+        }
+        if (n_probe_logged < 8) {
+            ggml_backend_dev_t probe_dev = ggml_backend_buft_get_device(probe_buft);
+            LLAMA_LOG_INFO("ds4-hot: layer %zu probe buffer type=%s host=%d device=%s device_type=%d tensor=%s\n",
+                    il,
+                    probe_buft_name ? probe_buft_name : "(null)",
+                    buf_is_host ? 1 : 0,
+                    probe_dev ? ggml_backend_dev_name(probe_dev) : "(null)",
+                    probe_dev ? (int) ggml_backend_dev_type(probe_dev) : -1,
+                    probe->name);
+            ++n_probe_logged;
+        }
         if (!buf_is_host) {
-            ggml_backend_dev_t dev = ggml_backend_buft_get_device(ggml_backend_buffer_get_type(probe->buffer));
+            ggml_backend_dev_t dev = ggml_backend_buft_get_device(probe_buft);
             if (dev && ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+                ++n_skip_non_host_gpu;
                 layers[il].reset();
                 continue;
             }
@@ -385,6 +450,7 @@ bool hot_manager::allocate(const llama_model & model) {
         if (!buft) {
             LLAMA_LOG_WARN("ds4-hot: no GPU has %.1f MiB free for layer %zu hot pack; skipping\n",
                     needed / (1024.0 * 1024.0), il);
+            ++n_skip_no_gpu_budget;
             layers[il].reset();
             continue;
         }
@@ -524,6 +590,8 @@ bool hot_manager::allocate(const llama_model & model) {
         }
     }
 
+    LLAMA_LOG_INFO("ds4-hot: allocate stats profile_layers=%d skip_no_gate_up=%d skip_no_down=%d skip_no_probe_buffer=%d skip_non_host_gpu=%d skip_no_gpu_budget=%d\n",
+            n_profile_layers, n_skip_no_gate_up, n_skip_no_down, n_skip_no_probe_buffer, n_skip_non_host_gpu, n_skip_no_gpu_budget);
     LLAMA_LOG_INFO("ds4-hot: pinned hot experts for %d/%d CPU-MoE layers, ~%.1f MiB on GPU across %zu buffers (k=%d, category=%s)\n",
             n_usable, n_alloc_layers, total_bytes / (1024.0 * 1024.0), bufs->bufs.size(), k, category.c_str());
 

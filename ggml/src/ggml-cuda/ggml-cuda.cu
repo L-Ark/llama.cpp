@@ -2311,6 +2311,55 @@ static bool ggml_cuda_should_fuse_mul_mat(const ggml_tensor * ffn_up,
     return true;
 }
 
+static bool ggml_cuda_should_fuse_mul_mat_clamped(const ggml_tensor * ffn_up,
+                                                  const ggml_tensor * ffn_gate,
+                                                  const ggml_tensor * up_clamp,
+                                                  const ggml_tensor * gate_clamp,
+                                                  const ggml_tensor * glu) {
+    if (up_clamp->op != GGML_OP_CLAMP || gate_clamp->op != GGML_OP_CLAMP) {
+        return false;
+    }
+    if (up_clamp->src[0] != ffn_up || gate_clamp->src[0] != ffn_gate) {
+        return false;
+    }
+    if (glu->op != GGML_OP_GLU || glu->src[0] != gate_clamp || glu->src[1] != up_clamp) {
+        return false;
+    }
+
+    const bool is_mul_mat    = ffn_up->op == GGML_OP_MUL_MAT    && ffn_gate->op == GGML_OP_MUL_MAT;
+    const bool is_mul_mat_id = ffn_up->op == GGML_OP_MUL_MAT_ID && ffn_gate->op == GGML_OP_MUL_MAT_ID;
+    if (!is_mul_mat && !is_mul_mat_id) {
+        return false;
+    }
+
+    if (ffn_up->src[0]->type != ffn_gate->src[0]->type || !ggml_are_same_shape(ffn_up->src[0], ffn_gate->src[0]) ||
+        !ggml_are_same_stride(ffn_up->src[0], ffn_gate->src[0])) {
+        return false;
+    }
+    if (ffn_up->src[1] != ffn_gate->src[1]) {
+        return false;
+    }
+    if (ffn_up->src[2] && (ffn_up->src[2] != ffn_gate->src[2])) {
+        return false;
+    }
+
+    static constexpr std::array<ggml_glu_op, 3> valid_glu_ops = { GGML_GLU_OP_SWIGLU, GGML_GLU_OP_GEGLU, GGML_GLU_OP_SWIGLU_OAI };
+    if (std::find(valid_glu_ops.begin(), valid_glu_ops.end(), ggml_get_glu_op(glu)) == valid_glu_ops.end()) {
+        return false;
+    }
+    if (const bool swapped = ggml_get_op_params_i32(glu, 1); swapped) {
+        return false;
+    }
+
+    const bool split = ggml_backend_buft_is_cuda_split(ffn_up->src[0]->buffer->buft) ||
+                       ggml_backend_buft_is_cuda_split(ffn_gate->src[0]->buffer->buft);
+    if (split) {
+        return false;
+    }
+
+    return true;
+}
+
 static bool ggml_cuda_should_fuse_mul_mat_vec_f(const ggml_tensor * tensor) {
     ggml_tensor *       src0 = tensor->src[0];
     ggml_tensor *       src1 = tensor->src[1];
@@ -2474,6 +2523,40 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
     const ggml_tensor * src1 = dst->src[1];
     const ggml_tensor * ids  = dst->src[2];
 
+    static const bool mmid_log_enabled = []() {
+        const char * env = getenv("GGML_CUDA_MUL_MAT_ID_LOG");
+        return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+    }();
+    static std::atomic<int> mmid_log_count{0};
+    auto mmid_log = [&](const char * path) {
+        if (!mmid_log_enabled) {
+            return;
+        }
+        const int idx = mmid_log_count.fetch_add(1, std::memory_order_relaxed);
+        if (idx >= 240) {
+            return;
+        }
+        ggml_backend_buffer_type_t src0_buft = src0->buffer ? ggml_backend_buffer_get_type(src0->buffer) : nullptr;
+        ggml_backend_buffer_type_t src1_buft = src1->buffer ? ggml_backend_buffer_get_type(src1->buffer) : nullptr;
+        ggml_backend_buffer_type_t ids_buft  = ids->buffer  ? ggml_backend_buffer_get_type(ids->buffer)  : nullptr;
+        GGML_LOG_INFO("ggml_cuda_mul_mat_id: #%d path=%s name=%s src0_type=%s src0_buft=%s src1_buft=%s ids_buft=%s ne0=%lld ne1=%lld n_expert=%lld n_tokens=%lld n_used=%lld src0_nb2=%zu ids_ne0=%lld ids_ne1=%lld\n",
+                idx,
+                path,
+                dst->name[0] ? dst->name : "(unnamed)",
+                ggml_type_name(src0->type),
+                src0_buft ? ggml_backend_buft_name(src0_buft) : "(null)",
+                src1_buft ? ggml_backend_buft_name(src1_buft) : "(null)",
+                ids_buft  ? ggml_backend_buft_name(ids_buft)  : "(null)",
+                (long long) src0->ne[0],
+                (long long) src0->ne[1],
+                (long long) src0->ne[2],
+                (long long) src1->ne[2],
+                (long long) ids->ne[0],
+                (size_t) src0->nb[2],
+                (long long) ids->ne[0],
+                (long long) ids->ne[1]);
+    };
+
     GGML_ASSERT(src1->type == GGML_TYPE_F32);
     GGML_ASSERT(dst->type  == GGML_TYPE_F32);
     GGML_ASSERT(!ggml_backend_buft_is_cuda_split(src0->buffer->buft) && "mul_mat_id does not support split buffers");
@@ -2489,11 +2572,13 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
             if (ggml_is_quantized(src0->type)) {
                 const int mmvq_mmid_max = get_mmvq_mmid_max_batch(src0->type, cc);
                 if (ne2 <= mmvq_mmid_max) {
+                    mmid_log("mmvq");
                     ggml_cuda_mul_mat_vec_q(ctx, src0, src1, ids, dst);
                     return;
                 }
             } else {
                 if (GGML_CUDA_CC_IS_AMD(cc)) {
+                    mmid_log("mmvf");
                     ggml_cuda_mul_mat_vec_f(ctx, src0, src1, ids, dst);
                     return;
                 }
@@ -2501,15 +2586,19 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
         }
 
         if (ggml_cuda_should_use_mmq(src0->type, cc, ne12, /*n_experts=*/ne02)) {
+            mmid_log("mmq");
             ggml_cuda_mul_mat_q(ctx, src0, src1, ids, dst);
             return;
         }
 
         if (ggml_cuda_should_use_mmf(src0->type, cc, WARP_SIZE, src0->ne, src0->nb, src1->ne[2], /*mul_mat_id=*/true)) {
+            mmid_log("mmf");
             ggml_cuda_mul_mat_f(ctx, src0, src1, ids, dst);
             return;
         }
     }
+
+    mmid_log("fallback_sort");
 
     // note: this path should not be reached when recording CUDA graphs, because it requires stream synchronization
     // TODO: add asserts to verify this. should work with CUDA, HIP, etc.
@@ -3508,6 +3597,54 @@ static bool ggml_cuda_can_fuse(const struct ggml_cgraph *                cgraph,
 
     std::initializer_list<enum ggml_op> mul_mat_id_glu_ops = { GGML_OP_MUL_MAT_ID, GGML_OP_MUL_MAT_ID, GGML_OP_GLU };
     std::initializer_list<enum ggml_op> mul_mat_glu_ops    = { GGML_OP_MUL_MAT,    GGML_OP_MUL_MAT,    GGML_OP_GLU };
+    std::initializer_list<enum ggml_op> mul_mat_id_clamp_glu_ops = { GGML_OP_MUL_MAT_ID, GGML_OP_MUL_MAT_ID, GGML_OP_CLAMP, GGML_OP_CLAMP, GGML_OP_GLU };
+    std::initializer_list<enum ggml_op> mul_mat_clamp_glu_ops    = { GGML_OP_MUL_MAT,    GGML_OP_MUL_MAT,    GGML_OP_CLAMP, GGML_OP_CLAMP, GGML_OP_GLU };
+    std::initializer_list<enum ggml_op> mul_mat_id_interleaved_clamp_glu_ops = { GGML_OP_MUL_MAT_ID, GGML_OP_CLAMP, GGML_OP_MUL_MAT_ID, GGML_OP_CLAMP, GGML_OP_GLU };
+    std::initializer_list<enum ggml_op> mul_mat_interleaved_clamp_glu_ops    = { GGML_OP_MUL_MAT,    GGML_OP_CLAMP, GGML_OP_MUL_MAT,    GGML_OP_CLAMP, GGML_OP_GLU };
+    static const bool enable_clamp_glu_fusion = []() {
+        const char * env = getenv("GGML_CUDA_ENABLE_CLAMP_GLU_FUSION");
+        return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+    }();
+
+    if (enable_clamp_glu_fusion && (is_equal(mul_mat_id_interleaved_clamp_glu_ops, ops) || is_equal(mul_mat_interleaved_clamp_glu_ops, ops)) &&
+        ggml_can_fuse_subgraph(cgraph, node_idx, ops, { node_idx + 4 })) {
+        const ggml_tensor * mm_a = cgraph->nodes[node_idx];
+        const ggml_tensor * clamp_a = cgraph->nodes[node_idx + 1];
+        const ggml_tensor * mm_b = cgraph->nodes[node_idx + 2];
+        const ggml_tensor * clamp_b = cgraph->nodes[node_idx + 3];
+        const ggml_tensor * glu = cgraph->nodes[node_idx + 4];
+        const ggml_tensor * gate_clamp = glu->src[0];
+        const ggml_tensor * up_clamp   = glu->src[1];
+        if ((gate_clamp == clamp_a || gate_clamp == clamp_b) && (up_clamp == clamp_a || up_clamp == clamp_b) && gate_clamp != up_clamp) {
+            const ggml_tensor * ffn_gate = gate_clamp->src[0];
+            const ggml_tensor * ffn_up   = up_clamp->src[0];
+            if ((ffn_gate == mm_a || ffn_gate == mm_b) && (ffn_up == mm_a || ffn_up == mm_b) && ffn_gate != ffn_up &&
+                    ggml_cuda_should_fuse_mul_mat_clamped(ffn_up, ffn_gate, up_clamp, gate_clamp, glu)) {
+                int out_nodes[] = { node_idx + 4 };
+                return ggml_cuda_check_fusion_memory_ranges(cgraph, node_idx, (int)ops.size(), out_nodes, 1);
+            }
+        }
+    }
+
+    if (enable_clamp_glu_fusion && (is_equal(mul_mat_id_clamp_glu_ops, ops) || is_equal(mul_mat_clamp_glu_ops, ops)) &&
+        ggml_can_fuse_subgraph(cgraph, node_idx, ops, { node_idx + 4 })) {
+        const ggml_tensor * glu = cgraph->nodes[node_idx + 4];
+        const ggml_tensor * gate_clamp = glu->src[0];
+        const ggml_tensor * up_clamp   = glu->src[1];
+        const ggml_tensor * clamp_a = cgraph->nodes[node_idx + 2];
+        const ggml_tensor * clamp_b = cgraph->nodes[node_idx + 3];
+        if ((gate_clamp == clamp_a || gate_clamp == clamp_b) && (up_clamp == clamp_a || up_clamp == clamp_b) && gate_clamp != up_clamp) {
+            const ggml_tensor * ffn_gate = gate_clamp->src[0];
+            const ggml_tensor * ffn_up   = up_clamp->src[0];
+            const ggml_tensor * mm_a = cgraph->nodes[node_idx];
+            const ggml_tensor * mm_b = cgraph->nodes[node_idx + 1];
+            if ((ffn_gate == mm_a || ffn_gate == mm_b) && (ffn_up == mm_a || ffn_up == mm_b) && ffn_gate != ffn_up &&
+                    ggml_cuda_should_fuse_mul_mat_clamped(ffn_up, ffn_gate, up_clamp, gate_clamp, glu)) {
+                int out_nodes[] = { node_idx + 4 };
+                return ggml_cuda_check_fusion_memory_ranges(cgraph, node_idx, (int)ops.size(), out_nodes, 1);
+            }
+        }
+    }
 
     if ((is_equal(mul_mat_bias_glu_ops, ops) || is_equal(mul_mat_id_bias_glu_ops, ops)) &&
         ggml_can_fuse_subgraph(cgraph, node_idx, ops, { node_idx + 4 })) {
@@ -3827,6 +3964,26 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                     continue;
                 }
 
+                static const bool graph_op_log_enabled = []() {
+                    const char * env = getenv("GGML_CUDA_GRAPH_OP_LOG");
+                    return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+                }();
+                static std::atomic<int> graph_op_log_count{0};
+                if (graph_op_log_enabled) {
+                    const bool interesting = node->op == GGML_OP_MUL_MAT_ID || node->op == GGML_OP_CLAMP || node->op == GGML_OP_GLU ||
+                        strstr(node->name, "ffn_moe") != nullptr;
+                    if (interesting) {
+                        const int idx = graph_op_log_count.fetch_add(1, std::memory_order_relaxed);
+                        if (idx < 400) {
+                            GGML_LOG_INFO("ggml_cuda_graph_op: #%d i=%d op=%s name=%s src0=%s src1=%s src2=%s\n",
+                                    idx, i, ggml_op_name(node->op), node->name,
+                                    node->src[0] ? node->src[0]->name : "(null)",
+                                    node->src[1] ? node->src[1]->name : "(null)",
+                                    node->src[2] ? node->src[2]->name : "(null)");
+                        }
+                    }
+                }
+
                 // start of fusion operations
                 static bool disable_fusion = (getenv("GGML_CUDA_DISABLE_FUSION") != nullptr);
                 if (!disable_fusion) {
@@ -4027,6 +4184,161 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
                                 fusion_data.gate_bias = gate_bias_tensor;
                                 fusion_data.glu_op    = ggml_get_glu_op(glu);
 
+                                ggml_cuda_mul_mat_vec_q(*cuda_ctx, src0, src1, ids, glu, &fusion_data);
+                                fused_mul_mat_vec = true;
+                                fused_node_count = 5;
+                                break;
+                            }
+                        } else if (ggml_cuda_can_fuse(cgraph, i, { op, GGML_OP_CLAMP, op, GGML_OP_CLAMP, GGML_OP_GLU }, {})) {
+                            ggml_tensor * mm_a = cgraph->nodes[i];
+                            ggml_tensor * clamp_a = cgraph->nodes[i + 1];
+                            ggml_tensor * mm_b = cgraph->nodes[i + 2];
+                            ggml_tensor * clamp_b = cgraph->nodes[i + 3];
+                            ggml_tensor * glu = cgraph->nodes[i + 4];
+                            ggml_tensor * gate_clamp = glu->src[0];
+                            ggml_tensor * up_clamp   = glu->src[1];
+
+                            if (!((gate_clamp == clamp_a || gate_clamp == clamp_b) && (up_clamp == clamp_a || up_clamp == clamp_b) && gate_clamp != up_clamp)) {
+                                continue;
+                            }
+
+                            ggml_tensor * gate = gate_clamp->src[0];
+                            ggml_tensor * up   = up_clamp->src[0];
+
+                            bool ok = (gate == mm_a || gate == mm_b) && (up == mm_a || up == mm_b) && gate != up;
+
+                            if (!ok) continue;
+
+                            const ggml_tensor * src0 = up->src[0];
+                            const ggml_tensor * src1 = up->src[1];
+                            const ggml_tensor * ids  = up->src[2];
+
+                            ggml_cuda_mm_fusion_args_host fusion_data{};
+                            fusion_data.gate = gate->src[0];
+                            fusion_data.glu_op = ggml_get_glu_op(glu);
+                            fusion_data.clamp_x = true;
+                            fusion_data.clamp_gate = true;
+                            fusion_data.clamp_x_min = ggml_get_op_params_f32(up_clamp, 0);
+                            fusion_data.clamp_x_max = ggml_get_op_params_f32(up_clamp, 1);
+                            fusion_data.clamp_gate_min = ggml_get_op_params_f32(gate_clamp, 0);
+                            fusion_data.clamp_gate_max = ggml_get_op_params_f32(gate_clamp, 1);
+
+                            static const bool fused_clamp_log_enabled = []() {
+                                const char * env = getenv("GGML_CUDA_FUSED_CLAMP_LOG");
+                                return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+                            }();
+                            static std::atomic<int> fused_clamp_log_count{0};
+                            auto log_fused_clamp = [&](const char * path) {
+                                if (!fused_clamp_log_enabled) {
+                                    return;
+                                }
+                                const int idx = fused_clamp_log_count.fetch_add(1, std::memory_order_relaxed);
+                                if (idx >= 240) {
+                                    return;
+                                }
+                                ggml_backend_buffer_type_t up_buft = up->src[0]->buffer ? ggml_backend_buffer_get_type(up->src[0]->buffer) : nullptr;
+                                GGML_LOG_INFO("ggml_cuda_fused_clamp_glu: #%d path=%s order=interleaved up=%s gate=%s glu=%s src0_type=%s src0_buft=%s n_tokens=%lld clamp_x=[%.4g,%.4g] clamp_gate=[%.4g,%.4g]\n",
+                                        idx,
+                                        path,
+                                        up->name[0] ? up->name : "(unnamed)",
+                                        gate->name[0] ? gate->name : "(unnamed)",
+                                        glu->name[0] ? glu->name : "(unnamed)",
+                                        ggml_type_name(up->src[0]->type),
+                                        up_buft ? ggml_backend_buft_name(up_buft) : "(null)",
+                                        (long long) up->src[1]->ne[2],
+                                        fusion_data.clamp_x_min,
+                                        fusion_data.clamp_x_max,
+                                        fusion_data.clamp_gate_min,
+                                        fusion_data.clamp_gate_max);
+                            };
+
+                            if (ggml_cuda_should_fuse_mul_mat_vec_f(up)) {
+                                log_fused_clamp("mmvf");
+                                ggml_cuda_mul_mat_vec_f(*cuda_ctx, src0, src1, ids, glu, &fusion_data);
+                                fused_mul_mat_vec = true;
+                                fused_node_count = 5;
+                                break;
+                            }
+
+                            if (ggml_cuda_should_fuse_mul_mat_vec_q(up)) {
+                                log_fused_clamp("mmvq");
+                                ggml_cuda_mul_mat_vec_q(*cuda_ctx, src0, src1, ids, glu, &fusion_data);
+                                fused_mul_mat_vec = true;
+                                fused_node_count = 5;
+                                break;
+                            }
+                        } else if (ggml_cuda_can_fuse(cgraph, i, { op, op, GGML_OP_CLAMP, GGML_OP_CLAMP, GGML_OP_GLU }, {})) {
+                            ggml_tensor * glu = cgraph->nodes[i + 4];
+                            ggml_tensor * gate_clamp = glu->src[0];
+                            ggml_tensor * up_clamp   = glu->src[1];
+                            ggml_tensor * clamp_a = cgraph->nodes[i + 2];
+                            ggml_tensor * clamp_b = cgraph->nodes[i + 3];
+
+                            if (!((gate_clamp == clamp_a || gate_clamp == clamp_b) && (up_clamp == clamp_a || up_clamp == clamp_b) && gate_clamp != up_clamp)) {
+                                continue;
+                            }
+
+                            ggml_tensor * gate = gate_clamp->src[0];
+                            ggml_tensor * up   = up_clamp->src[0];
+
+                            bool ok = (gate == cgraph->nodes[i] && up == cgraph->nodes[i + 1])
+                                || (gate == cgraph->nodes[i + 1] && up == cgraph->nodes[i]);
+
+                            if (!ok) continue;
+
+                            const ggml_tensor * src0 = up->src[0];
+                            const ggml_tensor * src1 = up->src[1];
+                            const ggml_tensor * ids  = up->src[2];
+
+                            ggml_cuda_mm_fusion_args_host fusion_data{};
+                            fusion_data.gate = gate->src[0];
+                            fusion_data.glu_op = ggml_get_glu_op(glu);
+                            fusion_data.clamp_x = true;
+                            fusion_data.clamp_gate = true;
+                            fusion_data.clamp_x_min = ggml_get_op_params_f32(up_clamp, 0);
+                            fusion_data.clamp_x_max = ggml_get_op_params_f32(up_clamp, 1);
+                            fusion_data.clamp_gate_min = ggml_get_op_params_f32(gate_clamp, 0);
+                            fusion_data.clamp_gate_max = ggml_get_op_params_f32(gate_clamp, 1);
+
+                            static const bool fused_clamp_log_enabled = []() {
+                                const char * env = getenv("GGML_CUDA_FUSED_CLAMP_LOG");
+                                return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+                            }();
+                            static std::atomic<int> fused_clamp_log_count{0};
+                            auto log_fused_clamp = [&](const char * path) {
+                                if (!fused_clamp_log_enabled) {
+                                    return;
+                                }
+                                const int idx = fused_clamp_log_count.fetch_add(1, std::memory_order_relaxed);
+                                if (idx >= 240) {
+                                    return;
+                                }
+                                ggml_backend_buffer_type_t up_buft = up->src[0]->buffer ? ggml_backend_buffer_get_type(up->src[0]->buffer) : nullptr;
+                                GGML_LOG_INFO("ggml_cuda_fused_clamp_glu: #%d path=%s up=%s gate=%s glu=%s src0_type=%s src0_buft=%s n_tokens=%lld clamp_x=[%.4g,%.4g] clamp_gate=[%.4g,%.4g]\n",
+                                        idx,
+                                        path,
+                                        up->name[0] ? up->name : "(unnamed)",
+                                        gate->name[0] ? gate->name : "(unnamed)",
+                                        glu->name[0] ? glu->name : "(unnamed)",
+                                        ggml_type_name(up->src[0]->type),
+                                        up_buft ? ggml_backend_buft_name(up_buft) : "(null)",
+                                        (long long) up->src[1]->ne[2],
+                                        fusion_data.clamp_x_min,
+                                        fusion_data.clamp_x_max,
+                                        fusion_data.clamp_gate_min,
+                                        fusion_data.clamp_gate_max);
+                            };
+
+                            if (ggml_cuda_should_fuse_mul_mat_vec_f(up)) {
+                                log_fused_clamp("mmvf");
+                                ggml_cuda_mul_mat_vec_f(*cuda_ctx, src0, src1, ids, glu, &fusion_data);
+                                fused_mul_mat_vec = true;
+                                fused_node_count = 5;
+                                break;
+                            }
+
+                            if (ggml_cuda_should_fuse_mul_mat_vec_q(up)) {
+                                log_fused_clamp("mmvq");
                                 ggml_cuda_mul_mat_vec_q(*cuda_ctx, src0, src1, ids, glu, &fusion_data);
                                 fused_mul_mat_vec = true;
                                 fused_node_count = 5;
@@ -5284,10 +5596,48 @@ static int64_t get_op_batch_size(const ggml_tensor * op) {
     }
 }
 
+static bool ggml_cuda_moe_layer_filter_allows(const ggml_tensor * op) {
+    const char * env = getenv("GGML_CUDA_MOE_OFFLOAD_LAYERS");
+    if (env == nullptr || env[0] == '\0') {
+        return true;
+    }
+    if (op->op != GGML_OP_MUL_MAT_ID || strstr(op->name, "ffn_moe_") == nullptr) {
+        return true;
+    }
+
+    const char * dash = strrchr(op->name, '-');
+    if (dash == nullptr || dash[1] == '\0') {
+        return false;
+    }
+    char * end_layer = nullptr;
+    const long layer = strtol(dash + 1, &end_layer, 10);
+    if (end_layer == dash + 1 || *end_layer != '\0') {
+        return false;
+    }
+
+    const char * sep = strchr(env, '-');
+    char * end_start = nullptr;
+    const long start = strtol(env, &end_start, 10);
+    if (end_start == env) {
+        return false;
+    }
+    long end = start;
+    if (sep != nullptr) {
+        char * end_end = nullptr;
+        end = strtol(sep + 1, &end_end, 10);
+        if (end_end == sep + 1) {
+            return false;
+        }
+    } else if (*end_start != '\0') {
+        return false;
+    }
+    return layer >= start && layer <= end;
+}
+
 static bool ggml_backend_cuda_device_offload_op(ggml_backend_dev_t dev, const ggml_tensor * op) {
     ggml_backend_cuda_device_context * dev_ctx = (ggml_backend_cuda_device_context *) dev->context;
 
-    return get_op_batch_size(op) >= dev_ctx->op_offload_min_batch_size;
+    return ggml_cuda_moe_layer_filter_allows(op) && get_op_batch_size(op) >= dev_ctx->op_offload_min_batch_size;
 }
 
 static ggml_backend_event_t ggml_backend_cuda_device_event_new(ggml_backend_dev_t dev) {
