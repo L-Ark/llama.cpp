@@ -133,13 +133,14 @@ def find_cgroup(unit):
 
 def parse_timings(stderr):
     timings = {}
+    line_prefix = r"^common_perf_print:\s+"
     patterns = {
-        "prompt_eval": r"prompt eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*([0-9]+)\s*tokens.*?([0-9.]+)\s*tokens per second",
-        "eval": r"eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*([0-9]+)\s*(?:runs|tokens).*?([0-9.]+)\s*tokens per second",
-        "total": r"total time\s*=\s*([0-9.]+)\s*ms",
+        "prompt_eval": line_prefix + r"prompt eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*([0-9]+)\s*tokens.*?([0-9.]+)\s*tokens per second",
+        "eval": line_prefix + r"eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*([0-9]+)\s*(?:runs|tokens).*?([0-9.]+)\s*tokens per second",
+        "total": line_prefix + r"total time\s*=\s*([0-9.]+)\s*ms",
     }
     for name, pat in patterns.items():
-        m = re.search(pat, stderr, re.S)
+        m = re.search(pat, stderr, re.M)
         if m:
             if name == "total":
                 timings[name] = {"ms": float(m.group(1))}

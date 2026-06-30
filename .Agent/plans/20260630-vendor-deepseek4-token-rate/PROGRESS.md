@@ -117,3 +117,40 @@ Decision packet:
 - Chosen approach: accept the completed no-warmup strict baseline because it uses the validated cgroup/GPU harness, preserves memory and output evidence, and imposes a stricter TTFT comparison for later candidates.
 - Risks: decode rate is lower than older references, likely because strict low-RAM/page-cache behavior dominates; future tuning must compare against this exact strict method and cannot use `n64` as final evidence.
 - Validation: `python3 .Agent/run-tools/check-ds4-summary.py .Agent/runs/20260630-ds4-token-rate/baseline-n96/summary.json --max-memory-bytes 16000000000 --require-n-predict 96 --require-output-quality pass` returned PASS.
+
+
+## 2026-06-30 12:20 CST - S4 Profiling And Metric Parser Receipt
+
+Runs:
+
+- Control: `.Agent/runs/20260630-ds4-token-rate/profile-control-n64`
+- Logging profile: `.Agent/runs/20260630-ds4-token-rate/profile-logs-n64`
+
+Measurement correction:
+
+- Found a harness parser defect: the `eval time` regex could match the substring inside `prompt eval time`, so `decode_tokens_per_second` was sometimes populated with prompt-eval speed.
+- Fixed `parse_timings()` to anchor to `common_perf_print:` lines and distinguish `prompt eval time` from `eval time`.
+- Reparsed existing `summary.json`/`summary.md` files from raw stderr for `baseline-n96`, `baseline-nowarm-n64`, `profile-control-n64`, and `profile-logs-n64`.
+
+Corrected S3 baseline metrics:
+
+- `baseline-n96`: prompt eval `0.24 tok/s`, decode eval `0.51 tok/s`, TTFT `753.0239360332489 s`, memory peak `15032385536` bytes, VRAM peak `25854 MiB`, output pass.
+
+S4 evidence:
+
+- `profile-control-n64`: prompt eval `0.17 tok/s`, decode eval `0.50 tok/s`, TTFT `743.0110232830048 s`, memory peak `15032385536` bytes, VRAM peak `25860 MiB`, output pass.
+- `profile-logs-n64`: prompt eval `0.15 tok/s`, decode eval `0.62 tok/s`, TTFT `901.9034945964813 s`, memory peak `15032385536` bytes, VRAM peak `25850 MiB`, output pass.
+- Logging profile overhead is material for TTFT and wall-clock behavior; use it for relative scheduler/backend structure, not speed acceptance.
+- Scheduler log summary from `profile-logs-n64`: repeated logged split records counted `2995` CPU split records and `5839` CUDA split records, with CPU examples dominated by `attn_out_proj-*`/reshapes and CUDA examples covering `q_proj-*`, attention, and final output chunks.
+- Raw stderr shows each graph reserve has `n_splits=110`, `n_nodes=7926`, and compute buffer sizes around CUDA0 `33 MiB`, CUDA_Host `1.24 MiB`.
+- Memory samples show the strict cgroup reaches the same `15032385536` byte plateau before first stdout; `memory.stat` is dominated by mapped file pages, confirming host page-cache pressure is part of TTFT under the 14G cap.
+
+Decision packet:
+
+- Problem: S4 needed bottleneck evidence, but the first profiling comparison exposed a metric parser bug that would invalidate candidate acceptance.
+- Inferred invariants: acceptance must use raw llama `eval time` for decode rate, same harness TTFT, cgroup memory including file pages, and exact output quality evidence; profiling logs can diagnose scheduler structure but cannot define accepted speed when overhead is large.
+- Options considered: ignore the parser mismatch and continue, manually compare stderr only, or repair the harness and reparse raw artifacts before tuning.
+- Chosen approach: repair the harness parser, reparse existing evidence, and treat corrected summaries as the source of truth.
+- Risks: previous S3 progress text recorded `0.24 tok/s` as decode before the parser fix; this section supersedes that value with corrected decode `0.51 tok/s` from raw stderr.
+- Next experiment: run a bounded no-code matrix focused first on using more VRAM without increasing host RAM: higher `GGML_MOE_VRAM_CACHE_MIB` and then possibly `-ngl`/scheduler cache knobs. Do not accept any tuning without corrected `n96` comparison against `baseline-n96`.
+- Validation: `python3 -m py_compile .Agent/run-tools/strict_ds4_runner.py`; `check-ds4-summary.py` passes for `baseline-n96`, `profile-control-n64`, and `profile-logs-n64` after reparse.
