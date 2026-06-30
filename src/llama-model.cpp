@@ -8069,6 +8069,24 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         }
     }
 
+    bool defer_expert_mmap = ml.should_defer_expert_mmaps();
+    LLAMA_LOG_INFO("%s: defer expert mmap probe: defer_experts=%d use_mmap=%d expert_ranges=%zu dense=%.2f GiB deferred=%.2f GiB active=%d\n",
+            __func__,
+            ml.defer_experts ? 1 : 0,
+            ml.use_mmap ? 1 : 0,
+            ml.expert_tensor_index.file_ranges.size(),
+            ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
+            ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0,
+            defer_expert_mmap ? 1 : 0);
+    if (defer_expert_mmap && use_mlock) {
+        LLAMA_LOG_WARN("%s: deferred expert loading disabled because mlock keeps mmap ranges resident\n", __func__);
+        defer_expert_mmap = false;
+    }
+    if (defer_expert_mmap && ml.check_tensors) {
+        LLAMA_LOG_WARN("%s: deferred expert loading disabled because tensor validation would fault expert pages eagerly\n", __func__);
+        defer_expert_mmap = false;
+    }
+
     ml.done_getting_tensors();
 
     // populate tensors_by_name
@@ -8078,7 +8096,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         }
     }
 
-    ml.init_mappings(true, use_mlock ? &pimpl->mlock_mmaps : nullptr);
+    ml.init_mappings(!defer_expert_mmap, use_mlock ? &pimpl->mlock_mmaps : nullptr);
     pimpl->mappings.reserve(ml.mappings.size());
 
     // create the backend buffers
@@ -8205,6 +8223,14 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         if (!ml.load_all_data(ctx, buf_map, use_mlock ? &pimpl->mlock_mmaps : NULL, params.progress_callback, params.progress_callback_user_data)) {
             return false;
         }
+    }
+
+    if (defer_expert_mmap) {
+        ml.drop_mmap_expert_pages();
+        LLAMA_LOG_INFO("%s: dense parameters loaded, expert mmap pages deferred/dropped (dense %.2f GiB, deferred %.2f GiB)\n",
+                __func__,
+                ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
+                ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0);
     }
 
     if (use_mmap_buffer) {
@@ -9275,6 +9301,7 @@ llama_model_params llama_model_default_params() {
         /*.check_tensors               =*/ false,
         /*.use_extra_bufts             =*/ true,
         /*.no_host                     =*/ false,
+        /*.defer_experts               =*/ false,
         /*.no_alloc                    =*/ false,
     };
 

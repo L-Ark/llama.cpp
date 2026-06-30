@@ -319,6 +319,7 @@ extern "C" {
         bool check_tensors;   // validate model tensor data
         bool use_extra_bufts; // use extra buffer types (used for weight repacking)
         bool no_host;         // bypass host buffer allowing extra buffers to be used
+        bool defer_experts;   // defer expert mmap residency to avoid eager host RSS growth
         bool no_alloc;        // only load metadata and simulate memory allocations
     };
 

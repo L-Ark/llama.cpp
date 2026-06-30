@@ -2249,6 +2249,14 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_DIO"));
     add_opt(common_arg(
+        {"--defer-experts"},
+        "defer expert mmap residency on Linux to reduce load-time host RSS",
+        [](common_params & params) {
+            params.defer_experts = true;
+            params.warmup = false;
+        }
+    ).set_env("LLAMA_ARG_DEFER_EXPERTS"));
+    add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"
         "- distribute: spread execution evenly over all nodes\n"

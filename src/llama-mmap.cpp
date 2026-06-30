@@ -479,6 +479,26 @@ struct llama_mmap::impl {
         }
     }
 
+    void dontneed_fragment(size_t first, size_t last) {
+        int page_size = sysconf(_SC_PAGESIZE);
+        align_range(&first, &last, page_size);
+        size_t len = last - first;
+
+        if (len == 0) {
+            return;
+        }
+
+        GGML_ASSERT(first % page_size == 0);
+        GGML_ASSERT(last % page_size == 0);
+        GGML_ASSERT(last >= first);
+
+#ifdef __linux__
+        if (madvise((uint8_t *) addr + first, len, MADV_DONTNEED)) {
+            LLAMA_LOG_WARN("warning: madvise(..., MADV_DONTNEED) failed: %s\n", strerror(errno));
+        }
+#endif
+    }
+
     void unmap_fragment(size_t first, size_t last) {
         int page_size = sysconf(_SC_PAGESIZE);
         align_range(&first, &last, page_size);
@@ -569,6 +589,11 @@ struct llama_mmap::impl {
         }
     }
 
+    void dontneed_fragment(size_t first, size_t last) {
+        GGML_UNUSED(first);
+        GGML_UNUSED(last);
+    }
+
     void unmap_fragment(size_t first, size_t last) {
         GGML_UNUSED(first);
         GGML_UNUSED(last);
@@ -597,6 +622,13 @@ struct llama_mmap::impl {
         throw std::runtime_error("mmap not supported");
     }
 
+    void dontneed_fragment(size_t first, size_t last) {
+        GGML_UNUSED(first);
+        GGML_UNUSED(last);
+
+        throw std::runtime_error("mmap not supported");
+    }
+
     void unmap_fragment(size_t first, size_t last) {
         GGML_UNUSED(first);
         GGML_UNUSED(last);
@@ -615,6 +647,7 @@ llama_mmap::~llama_mmap() = default;
 size_t llama_mmap::size() const { return pimpl->size; }
 void * llama_mmap::addr() const { return pimpl->addr; }
 
+void llama_mmap::dontneed_fragment(size_t first, size_t last) { pimpl->dontneed_fragment(first, last); }
 void llama_mmap::unmap_fragment(size_t first, size_t last) { pimpl->unmap_fragment(first, last); }
 
 #if defined(_POSIX_MEMLOCK_RANGE) || defined(_WIN32)
