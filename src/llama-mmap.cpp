@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <cerrno>
 #include <algorithm>
+#include <cstdlib>
 
 #ifdef __has_include
     #if __has_include(<unistd.h>)
@@ -438,22 +439,33 @@ struct llama_mmap::impl {
         size = file->size();
         int fd = file->file_id();
         int flags = MAP_SHARED;
-        if (numa) { prefetch = 0; }
+        const char * low_ram_env = std::getenv("LLAMA_MMAP_LOW_RAM");
+        const bool low_ram = low_ram_env && strcmp(low_ram_env, "0") != 0;
+        if (numa || low_ram) { prefetch = 0; }
 #ifdef __linux__
-        if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
-            LLAMA_LOG_WARN("warning: posix_fadvise(.., POSIX_FADV_SEQUENTIAL) failed: %s\n",
+        const int fadv = low_ram ? POSIX_FADV_RANDOM : POSIX_FADV_SEQUENTIAL;
+        if (posix_fadvise(fd, 0, 0, fadv)) {
+            LLAMA_LOG_WARN("warning: posix_fadvise(.., %s) failed: %s\n",
+                    low_ram ? "POSIX_FADV_RANDOM" : "POSIX_FADV_SEQUENTIAL",
                     strerror(errno));
         }
-        if (prefetch) { flags |= MAP_POPULATE; }
+        if (prefetch && !low_ram) { flags |= MAP_POPULATE; }
 #endif
         addr = mmap(NULL, file->size(), PROT_READ, flags, fd, 0);
         if (addr == MAP_FAILED) {
             throw std::runtime_error(format("mmap failed: %s", strerror(errno)));
         }
 
-        if (prefetch > 0) {
+        if (prefetch > 0 && !low_ram) {
             if (posix_madvise(addr, std::min(file->size(), prefetch), POSIX_MADV_WILLNEED)) {
                 LLAMA_LOG_WARN("warning: posix_madvise(.., POSIX_MADV_WILLNEED) failed: %s\n",
+                        strerror(errno));
+            }
+        }
+        if (low_ram) {
+            LLAMA_LOG_INFO("llama_mmap: low RAM mode enabled, using random mmap access without prefetch\n");
+            if (posix_madvise(addr, file->size(), POSIX_MADV_RANDOM)) {
+                LLAMA_LOG_WARN("warning: posix_madvise(.., POSIX_MADV_RANDOM) failed: %s\n",
                         strerror(errno));
             }
         }
