@@ -37,6 +37,11 @@ void ggml_cuda_moe_stream_sync(void) {}
 #include <thread>
 #include <vector>
 
+#ifdef __linux__
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
 #include <cuda_runtime.h>
 
 extern "C" {
@@ -138,6 +143,40 @@ static void vram_cache_report_atexit() {
     if (h + m == 0) return;
     std::fprintf(stderr, "[moe_stream] VRAM cache: hits=%lu misses=%lu hit_rate=%.1f%%\n",
                  h, m, 100.0 * h / (h + m));
+}
+
+static bool moe_stream_dontneed_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_DONTNEED");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled != 0;
+}
+
+static void moe_stream_dontneed_source_pages(const void * ptr, size_t size) {
+#if defined(__linux__)
+    if (!moe_stream_dontneed_enabled() || ptr == nullptr || size == 0) {
+        return;
+    }
+
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        return;
+    }
+
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t end = begin + size;
+    const uintptr_t aligned_begin = begin & ~static_cast<uintptr_t>(page_size - 1);
+    const uintptr_t aligned_end = (end + static_cast<uintptr_t>(page_size - 1)) & ~static_cast<uintptr_t>(page_size - 1);
+    if (aligned_end <= aligned_begin) {
+        return;
+    }
+
+    (void) madvise(reinterpret_cast<void *>(aligned_begin), aligned_end - aligned_begin, MADV_DONTNEED);
+#else
+    (void) ptr;
+    (void) size;
+#endif
 }
 
 static void vram_cache_init(size_t expert_sz) {
@@ -468,6 +507,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
             const float *src_row = src_buf + k * ne01;
             std::memcpy(dst_row, src_row, (size_t)ne01 * sizeof(float));
         }
+        moe_stream_dontneed_source_pages(src0_data, src0_bytes);
         release_slot(s);
         return true;
     }
