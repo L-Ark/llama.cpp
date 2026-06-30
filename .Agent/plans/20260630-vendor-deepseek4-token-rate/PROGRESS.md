@@ -192,3 +192,10 @@ Decision packet:
 Push status:
 
 - A local commit will record this accepted receipt. Current WiCi safety forbids `git push`; withheld push command remains `git push lark wip/deepseek-v4-support`.
+
+## 2026-06-30T13:24:45+00:00 - S11 Strict n96 evidence audit
+
+- Audit path: .Agent/runs/20260630-ds4-token-rate/evidence-audit-20260630-132445/audit.md
+- Result: AUDIT_PASS; exact generated output and TTFT details are present in strict baseline/candidate n96 artifacts.
+- Baseline summary: .Agent/runs/20260630-ds4-token-rate/baseline-n96/summary.json
+- Candidate summary: .Agent/runs/20260630-ds4-token-rate/candidate-ngl9-n96/summary.json
