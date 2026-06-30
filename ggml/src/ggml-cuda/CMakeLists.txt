@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.18)  # for CMAKE_CUDA_ARCHITECTURES
 
 find_package(CUDAToolkit)
 
+option(GGML_CUDA_MOE_STREAM "Compile the opt-in CUDA MoE streaming path" ON)
+
 if (CUDAToolkit_FOUND)
     message(STATUS "CUDA Toolkit found")
 
@@ -132,6 +134,10 @@ if (CUDAToolkit_FOUND)
 
     if (GGML_CUDA_GRAPHS)
         add_compile_definitions(GGML_CUDA_USE_GRAPHS)
+    endif()
+
+    if (GGML_CUDA_MOE_STREAM)
+        target_compile_definitions(ggml-cuda PRIVATE GGML_CUDA_MOE_STREAM)
     endif()
 
     if (GGML_CUDA_FORCE_MMQ)
