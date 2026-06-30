@@ -59,6 +59,7 @@ def build_command(n_predict, ngl):
         "--top-p", "1.0",
         "--top-k", "1",
         "--seed", "1",
+        "--no-warmup",
         "--no-display-prompt",
         "-no-cnv",
         "-ub", "1",

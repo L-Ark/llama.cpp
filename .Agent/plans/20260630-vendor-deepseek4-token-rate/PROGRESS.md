@@ -64,3 +64,28 @@ Decision packet:
 - Chosen approach: external systemd harness first, because it records the acceptance evidence without touching model execution code.
 - Risks: first-byte TTFT is measured from redirected stdout visibility, so it is an operational TTFT proxy rather than internal token timing; it remains valid for baseline/candidate comparison because the same harness is used.
 - Validation: dry-run and syntax/py_compile checks passed; next step is strict `n64` path check followed by strict `n96` baseline.
+
+## 2026-06-30 11:03 CST - S3 First Baseline Attempt Rejected
+
+Run: `.Agent/runs/20260630-ds4-token-rate/baseline-n64`
+
+Result: rejected as a baseline record.
+
+Evidence:
+
+- Command used strict `MemoryMax=14G`, `MemorySwapMax=0`, `LLAMA_MMAP_LOW_RAM=1`, `GGML_MOE_VRAM_CACHE_MIB=16384`, `-ngl 8`, and default warmup.
+- Live cgroup sampling worked; peak was `15032385536` bytes, below the final `<16000000000` byte gate.
+- VRAM peak was about `25850` MiB.
+- The process reached model load, scheduler reserve, warmup, and started generation. Output text was coherent France text.
+- The run was stopped after about 19 minutes because it remained dominated by strict low-RAM load/warmup/page reclaim and had not produced a final llama perf block. Therefore `decode_tokens_per_second` was missing and the record cannot be used as S3 baseline.
+- Source inspection found `LLAMA_MMAP_LOW_RAM` implemented in `src/llama-mmap.cpp`; no implementation of `IK_LLAMA_DROP_DEFERRED_EXPERT_PAGES` exists in this checkout, so that old progress variable is not a valid knob here.
+- `llama-completion --help` confirms `--warmup, --no-warmup` is available and warmup defaults to enabled.
+
+Decision packet:
+
+- Problem: the planned strict baseline command spends excessive time in default warmup/load under the 14G cgroup cap and does not yield timely perf evidence.
+- Inferred invariants: final acceptance compares baseline and candidate with the same harness and command policy; the user requires TTFT not to regress versus the strict baseline, not default warmup specifically.
+- Options considered: repeat the same default-warmup run, raise MemoryMax, add unsupported page-drop env, or disable warmup for strict baseline/candidate measurements.
+- Chosen approach: add `--no-warmup` to the harness command for all strict measurements. This avoids measuring an empty-run warmup page-reclaim path, keeps the cgroup cap unchanged, and applies equally to baseline and candidate.
+- Risks: TTFT baseline will be lower than default-warmup TTFT, making the later 120% TTFT gate stricter. This is acceptable because it does not mask a regression.
+- Validation: rerun `baseline-n64` using a fresh label, then promote to `baseline-n96` only if the no-warmup run produces memory, TTFT, output, and decode timing.
