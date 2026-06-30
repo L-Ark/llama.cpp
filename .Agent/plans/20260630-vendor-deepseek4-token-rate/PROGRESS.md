@@ -89,3 +89,31 @@ Decision packet:
 - Chosen approach: add `--no-warmup` to the harness command for all strict measurements. This avoids measuring an empty-run warmup page-reclaim path, keeps the cgroup cap unchanged, and applies equally to baseline and candidate.
 - Risks: TTFT baseline will be lower than default-warmup TTFT, making the later 120% TTFT gate stricter. This is acceptable because it does not mask a regression.
 - Validation: rerun `baseline-n64` using a fresh label, then promote to `baseline-n96` only if the no-warmup run produces memory, TTFT, output, and decode timing.
+
+
+## 2026-06-30 11:22 CST - S3 Strict Baseline Accepted
+
+Run directory: `.Agent/runs/20260630-ds4-token-rate/baseline-n96`
+
+Strict `n96` baseline passed the current acceptance checks using the same harness and command policy that candidates must use.
+
+Evidence:
+
+- Git SHA: `5d360bc3dfefb3f6f727ceb6c412bf7a1bf73aee`.
+- Command policy: `MemoryMax=14G`, `MemorySwapMax=0`, `LLAMA_MMAP_LOW_RAM=1`, `GGML_CUDA_NO_PINNED=1`, `GGML_MOE_VRAM_CACHE_MIB=16384`, `-ngl 8`, `--no-warmup`, deterministic greedy sampling, `n_predict=96`.
+- Decode token rate: `0.24 tok/s`.
+- TTFT: `753.0239360332489 s` by the strict harness first-stdout-byte method.
+- Host memory peak: `15032385536` bytes, below the required `<16000000000` byte gate, with `1761` memory samples.
+- GPU memory peak: `25854 MiB`.
+- Wall time: `941.1688921451569 s`.
+- Output quality: pass; coherent France paragraph and no malformed tail.
+- Exact output tail: `...attracting millions of visitors each year to its cities, countryside, and coastline. The official language is French, and the currency is the`.
+
+Decision packet:
+
+- Problem: establish a strict current baseline before accepting any optimization.
+- Inferred invariants: strict acceptance is tied to the vendor checkout, branch `wip/deepseek-v4-support`, live cgroup memory including file/page-cache accounting, deterministic France prompt output, and same-method TTFT for baseline/candidate comparison.
+- Options considered: rerun the default-warmup baseline, accept old reference runs, or accept the completed no-warmup strict baseline.
+- Chosen approach: accept the completed no-warmup strict baseline because it uses the validated cgroup/GPU harness, preserves memory and output evidence, and imposes a stricter TTFT comparison for later candidates.
+- Risks: decode rate is lower than older references, likely because strict low-RAM/page-cache behavior dominates; future tuning must compare against this exact strict method and cannot use `n64` as final evidence.
+- Validation: `python3 .Agent/run-tools/check-ds4-summary.py .Agent/runs/20260630-ds4-token-rate/baseline-n96/summary.json --max-memory-bytes 16000000000 --require-n-predict 96 --require-output-quality pass` returned PASS.
