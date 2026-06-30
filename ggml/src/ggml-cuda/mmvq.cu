@@ -1261,3 +1261,67 @@ void ggml_cuda_op_mul_mat_vec_q(
 
     GGML_UNUSED_VARS(src1, dst, src1_ddf_i, src1_ncols, src1_padded_row_size);
 }
+
+#ifdef GGML_CUDA_MOE_STREAM
+extern "C" bool ggml_cuda_moe_stream_mmvq_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    cudaStream_t stream) {
+    const ggml_type t0 = (ggml_type) src0_type_int;
+    if (!d_src0 || !d_src1_f32 || !d_src1_q8 || !d_dst || ne01 <= 0 || ne00 <= 0) {
+        return false;
+    }
+
+    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+    quantize_row_q8_1_cuda(d_src1_f32, nullptr, d_src1_q8, t0,
+            ne00, ne00, ne00, ne00, src1_padded, 1, 1, 1, stream);
+    if (cudaGetLastError() != cudaSuccess) {
+        return false;
+    }
+
+    ggml_cuda_mm_fusion_args_device fusion_local{};
+    const int stride_row_x = ne00 / ggml_blck_size(t0);
+    const int stride_col_y = src1_padded / QK8_1;
+
+    mul_mat_vec_q_switch_type(
+        d_src0, t0, (const char *) d_src1_q8, nullptr, fusion_local, d_dst,
+        ne00, ne01, 1, stride_row_x, stride_col_y, ne01,
+        1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 0, stream);
+
+    return cudaGetLastError() == cudaSuccess;
+}
+
+extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    float *d_dst,
+    const int32_t *,
+    int64_t n_active,
+    int64_t,
+    cudaStream_t stream) {
+    if (n_active <= 0) {
+        return false;
+    }
+    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+    const int64_t src1_q8_row_bytes = src1_padded * (int64_t) sizeof(block_q8_1) / QK8_1;
+    for (int64_t k = 0; k < n_active; ++k) {
+        const float *d_src1_row = d_src1_f32 + k * ne00;
+        void *d_src1_q8_row = (char *) d_src1_q8 + (size_t) k * src1_q8_row_bytes;
+        float *d_dst_row = d_dst + k * ne01;
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif // GGML_CUDA_MOE_STREAM

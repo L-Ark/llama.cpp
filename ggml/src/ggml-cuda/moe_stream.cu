@@ -25,8 +25,7 @@ void ggml_cuda_moe_stream_sync(void) {}
 // Author: Zili Meng <zilim@ieee.org>
 
 #include "common.cuh"
-#include "mmvq-args.h"
-#include "mmvq-templates.cuh"
+#include "mmvq.cuh"
 #include "quantize.cuh"
 
 #include <atomic>
@@ -315,115 +314,6 @@ extern "C" bool ggml_cuda_moe_stream_available(void) {
     return g_avail.load(std::memory_order_acquire);
 }
 
-extern "C" bool ggml_cuda_moe_stream_mmvq_dev(
-    int src0_type_int,
-    const void *d_src0,
-    int64_t ne01,
-    int64_t ne00,
-    const float *d_src1_f32,
-    void *d_src1_q8,
-    float *d_dst,
-    cudaStream_t stream) {
-    const ggml_type t0 = (ggml_type)src0_type_int;
-    if (!d_src0 || !d_src1_f32 || !d_src1_q8 || !d_dst) return false;
-
-    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
-    quantize_row_q8_1_cuda(d_src1_f32, d_src1_q8, ne00, 1, 1, src1_padded, t0, stream);
-    if (cudaGetLastError() != cudaSuccess) return false;
-
-    const mmvq_args args{
-        /* vx_u     */ d_src0,
-        /* vx_g     */ nullptr,
-        /* bias_u   */ nullptr,
-        /* bias_g   */ nullptr,
-        /* vy       */ d_src1_q8,
-        /* dst      */ d_dst,
-        /* ids_data */ nullptr,
-        /* ncols_x  */ (int)ne00,
-        /* nrows_x  */ (int)ne01,
-        /* nrows_y  */ (int)src1_padded,
-        /* ncols_y  */ 1,
-        /* nrows_dst*/ (int)ne01,
-        /* ne2      */ 1,
-        /* nb02     */ 0,
-        /* nb12     */ 0,
-        /* nb2      */ 0,
-        /* ids_nb0  */ 0,
-        /* bias_nb1 */ 0,
-        /* unary_op */ GGML_UNARY_OP_COUNT,
-        /* limit    */ INFINITY,
-    };
-
-    switch (t0) {
-        case GGML_TYPE_IQ2_S:
-            mul_mat_vec_iq2_s_q8_1_cuda(args, stream);
-            break;
-        case GGML_TYPE_IQ3_XXS:
-            mul_mat_vec_iq3_xxs_q8_1_cuda(args, stream);
-            break;
-        default:
-            return false;
-    }
-    return cudaGetLastError() == cudaSuccess;
-}
-
-extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
-    int src0_type_int,
-    const void *d_src0,
-    int64_t ne01,
-    int64_t ne00,
-    const float *d_src1_f32,
-    void *d_src1_q8,
-    float *d_dst,
-    const int32_t *d_x_ids,
-    int64_t n_active,
-    int64_t src0_stride,
-    cudaStream_t stream) {
-    const ggml_type t0 = (ggml_type)src0_type_int;
-    if (!d_src0 || !d_src1_f32 || !d_src1_q8 || !d_dst || !d_x_ids || n_active <= 0 || src0_stride <= 0) return false;
-
-    const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
-    const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
-
-    quantize_row_q8_1_cuda(d_src1_f32, d_src1_q8, ne00, n_active, 1, src1_padded, t0, stream);
-    if (cudaGetLastError() != cudaSuccess) return false;
-
-    const mmvq_args args{
-        /* vx_u     */ d_src0,
-        /* vx_g     */ nullptr,
-        /* bias_u   */ nullptr,
-        /* bias_g   */ nullptr,
-        /* vy       */ d_src1_q8,
-        /* dst      */ d_dst,
-        /* ids_data */ (const char *)d_x_ids,
-        /* ncols_x  */ (int)ne00,
-        /* nrows_x  */ (int)ne01,
-        /* nrows_y  */ (int)src1_padded,
-        /* ncols_y  */ 1,
-        /* nrows_dst*/ (int)ne01,
-        /* ne2      */ (int)n_active,
-        /* nb02     */ (uint64_t)src0_stride,
-        /* nb12     */ (uint64_t)src1_q8_row_bytes,
-        /* nb2      */ (uint64_t)(ne01 * (int64_t)sizeof(float)),
-        /* ids_nb0  */ (uint64_t)sizeof(int32_t),
-        /* bias_nb1 */ 0,
-        /* unary_op */ GGML_UNARY_OP_COUNT,
-        /* limit    */ INFINITY,
-    };
-
-    switch (t0) {
-        case GGML_TYPE_IQ2_S:
-            mul_mat_vec_iq2_s_q8_1_cuda(args, stream);
-            break;
-        case GGML_TYPE_IQ3_XXS:
-            mul_mat_vec_iq3_xxs_q8_1_cuda(args, stream);
-            break;
-        default:
-            return false;
-    }
-    return cudaGetLastError() == cudaSuccess;
-}
-
 extern "C" int ggml_cuda_host_register(void *p, size_t n) {
     if (!p || n == 0) return 0;
     cudaError_t err = cudaHostRegister(p, n, cudaHostRegisterDefault);
@@ -555,33 +445,16 @@ extern "C" bool ggml_cuda_moe_stream_one(
         release_slot(s);
         return false;
     }
-    quantize_row_q8_1_cuda((const float *)ctx.d_src1_f32, ctx.d_src1, ne00, cne1, 1, src1_padded, t0, st);
-
-    mmvq_args args{
-        /* vx_u     */ kernel_src0,
-        /* vx_g     */ nullptr,
-        /* bias_u   */ nullptr,
-        /* bias_g   */ nullptr,
-        /* vy       */ ctx.d_src1,
-        /* dst      */ (float *)ctx.d_dst,
-        /* ids_data */ nullptr,
-        /* ncols_x  */ (int)ne00,
-        /* nrows_x  */ (int)ne01,
-        /* nrows_y  */ (int)src1_padded,
-        /* ncols_y  */ (int)cne1,
-        /* nrows_dst*/ (int)ne01,
-        /* ne2      */ 1,
-        /* nb02     */ (uint64_t)0,
-        /* nb12     */ (uint64_t)0,
-        /* nb2      */ (uint64_t)0,
-        /* ids_nb0  */ (uint64_t)0,
-        /* bias_nb1 */ (uint64_t)0,
-        /* unary_op */ GGML_UNARY_OP_COUNT,
-        /* limit    */ INFINITY,
-    };
-
-    extern void mul_mat_vec_iq3_xxs_q8_1_cuda(const mmvq_args & args, cudaStream_t stream);
-    mul_mat_vec_iq3_xxs_q8_1_cuda(args, st);
+    const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
+    for (int64_t k = 0; k < cne1; ++k) {
+        const float *d_src1_row = (const float *)((const char *)ctx.d_src1_f32 + (size_t)k * ne00 * sizeof(float));
+        void *d_src1_q8_row = (char *)ctx.d_src1 + (size_t)k * src1_q8_row_bytes;
+        float *d_dst_row = (float *)ctx.d_dst + k * ne01;
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, kernel_src0, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
+            release_slot(s);
+            return false;
+        }
+    }
 
     if (cudaMemcpyAsync(ctx.h_scratch, ctx.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) { release_slot(s); return false; }
 

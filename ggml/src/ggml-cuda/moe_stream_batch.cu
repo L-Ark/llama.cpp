@@ -1,5 +1,5 @@
 
-#ifndef GGML_CUDA_MOE_STREAM
+#ifndef GGML_CUDA_MOE_STREAM_BATCH
 #include <cstdint>
 #include <cstddef>
 extern "C" {
@@ -5678,4 +5678,4 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     return true;
 }
 
-#endif // GGML_CUDA_MOE_STREAM
+#endif // GGML_CUDA_MOE_STREAM_BATCH
