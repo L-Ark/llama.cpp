@@ -154,3 +154,41 @@ Decision packet:
 - Risks: previous S3 progress text recorded `0.24 tok/s` as decode before the parser fix; this section supersedes that value with corrected decode `0.51 tok/s` from raw stderr.
 - Next experiment: run a bounded no-code matrix focused first on using more VRAM without increasing host RAM: higher `GGML_MOE_VRAM_CACHE_MIB` and then possibly `-ngl`/scheduler cache knobs. Do not accept any tuning without corrected `n96` comparison against `baseline-n96`.
 - Validation: `python3 -m py_compile .Agent/run-tools/strict_ds4_runner.py`; `check-ds4-summary.py` passes for `baseline-n96`, `profile-control-n64`, and `profile-logs-n64` after reparse.
+
+
+## 2026-06-30 13:17 CST - S5/S8 ngl9 Candidate Accepted
+
+Candidate command delta: use `-ngl 9` instead of strict baseline `-ngl 8`; keep `MemoryMax=14G`, `MemorySwapMax=0`, `LLAMA_MMAP_LOW_RAM=1`, `GGML_CUDA_NO_PINNED=1`, `GGML_MOE_VRAM_CACHE_MIB=16384`, `--no-warmup`, deterministic greedy sampling, and the same France prompt.
+
+Screening results:
+
+- `matrix-vram20-n64` (`GGML_MOE_VRAM_CACHE_MIB=20480`) rejected: decode `0.49 tok/s` vs control `0.50 tok/s`, TTFT `770.5723698139191 s` vs control `743.0110232830048 s`, VRAM peak `25854 MiB`; it did not increase observed VRAM allocation or speed.
+- `matrix-ngl9-n64` promoted: decode `0.57 tok/s` vs control `0.50 tok/s`, TTFT `905.4901099205017 s`, memory peak `15032385536` bytes, VRAM peak `29232 MiB`, output pass. TTFT was borderline on `n64`, so promotion required strict `n96` evidence.
+
+Strict acceptance run:
+
+- Run directory: `.Agent/runs/20260630-ds4-token-rate/candidate-ngl9-n96`.
+- Baseline: `.Agent/runs/20260630-ds4-token-rate/baseline-n96`.
+- Baseline decode: `0.51 tok/s`.
+- Candidate decode: `0.57 tok/s` (`+0.06 tok/s`, about `+11.8%`).
+- Baseline TTFT: `753.0239360332489 s`.
+- Candidate TTFT: `898.3368136882782 s`.
+- TTFT ratio: `1.1929724550596665`, below the `1.20` gate.
+- Candidate host memory peak: `15032385536` bytes, below `<16000000000`.
+- Candidate VRAM peak: `29226 MiB`, up from baseline `25854 MiB` and using substantially more of the RTX 5090 without OOM.
+- Candidate prompt eval: `0.19 tok/s`; decode eval: `0.57 tok/s`.
+- Candidate output quality: pass; coherent France paragraph, no malformed or garbled tail. The output ends mid-phrase because `n_predict=96`, but the tail is plain coherent English, not corruption.
+- Exact candidate output: `France is a country located in Western Europe. It is known for its rich history, diverse culture, and iconic landmarks such as the Eiffel Tower and the Louvre Museum. The country is famous for its cuisine, wine, and fashion. France is also known for its contributions to art, literature, and philosophy. It is a popular tourist destination, attracting millions of visitors each year to its cities, countryside, and coastline. The official language is French, and the currency is the`
+
+Decision packet:
+
+- Problem: improve strict DeepSeek V4 decode token rate while staying under host RAM, using more VRAM, preserving output, and keeping TTFT within 120% of corrected strict baseline.
+- Inferred invariants: final acceptance requires `n96`; `n64` can only screen; host memory is cgroup memory including file/page-cache; decode rate must come from raw llama `eval time`; output text must be preserved exactly; runtime flags are acceptable only if recorded and reproducible.
+- Options considered: increase MoE VRAM cache, increase layer offload from `-ngl 8` to `-ngl 9`, or proceed to source-level scheduler changes.
+- Chosen approach: accept the existing runtime offload change `-ngl 9` because it directly moves one more layer to GPU, increases VRAM use from about `25.9 GiB` to `29.2 GiB`, reduces graph splits from `110` to `107`, and improves strict `n96` decode while staying within the TTFT and memory gates.
+- Risks: TTFT margin is narrow (`1.193x` vs `1.20x` cap), so future source optimizations should avoid increasing load/page-fault pressure unless they improve TTFT elsewhere. This is a runtime configuration optimization rather than a product-code algorithm change.
+- Validation: `check-ds4-summary.py` passed for candidate; `compare-ds4-runs.py --baseline baseline-n96 --candidate candidate-ngl9-n96 --max-memory-bytes 16000000000 --max-ttft-ratio 1.20 --require-decode-improvement --require-output-quality pass` returned PASS.
+
+Push status:
+
+- A local commit will record this accepted receipt. Current WiCi safety forbids `git push`; withheld push command remains `git push lark wip/deepseek-v4-support`.
