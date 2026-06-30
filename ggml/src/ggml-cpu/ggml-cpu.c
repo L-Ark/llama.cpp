@@ -72,6 +72,40 @@
 #define UNUSED GGML_UNUSED
 #define SWAP(x, y, T) do { T SWAP = x; (x) = y; (y) = SWAP; } while (0)
 
+typedef struct { int32_t i1; int32_t i2; } ggml_moe_stream_row_mapping;
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_available(void);
+__attribute__((weak)) extern void ggml_cuda_moe_stream_sync(void);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
+    int src0_type_int,
+    const void * src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const float * src1_f32,
+    size_t src1_nb1,
+    size_t src1_nb2,
+    int64_t cne1,
+    const void * src1_q8_1,
+    size_t src1_padded_num_cols,
+    float * dst,
+    size_t dst_nb1,
+    size_t dst_nb2,
+    const ggml_moe_stream_row_mapping * rows);
+#else
+static bool (*ggml_cuda_moe_stream_available)(void) = NULL;
+static void (*ggml_cuda_moe_stream_sync)(void) = NULL;
+static bool (*ggml_cuda_moe_stream_one)(
+    int, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t,
+    int64_t, const void *, size_t, float *, size_t, size_t,
+    const ggml_moe_stream_row_mapping *) = NULL;
+#endif
+
+static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
+    return type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
+}
+
 // precomputed f32 table for f16 (256 KB) (simd-mappings.h)
 float ggml_table_f32_f16[1 << 16];
 
@@ -1630,6 +1664,50 @@ static void ggml_compute_forward_mul_mat_id(
     }
 
     ggml_barrier(params->threadpool);
+
+    const bool use_gpu_stream =
+        ggml_cuda_moe_stream_one &&
+        ggml_cuda_moe_stream_available &&
+        ggml_cuda_moe_stream_available() &&
+        ggml_cuda_moe_stream_supports_type(src0->type) &&
+        src1->type == GGML_TYPE_F32 &&
+        ne13 == 1 &&
+        dst->type == GGML_TYPE_F32;
+
+    if (use_gpu_stream) {
+        if (ith == 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+
+                if (cne1 == 0) {
+                    continue;
+                }
+
+                const char * src0_cur = (const char *) src0->data + cur_a * nb02;
+                const bool done = ggml_cuda_moe_stream_one(
+                    src0->type,
+                    src0_cur,
+                    ne01, ne00, nb01,
+                    (const float *) src1->data,
+                    nb11, nb12,
+                    cne1,
+                    NULL, 0,
+                    (float *) dst->data,
+                    nb1, nb2,
+                    (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
+
+                if (done) {
+                    matrix_row_counts[cur_a] = 0;
+                }
+            }
+
+            if (ggml_cuda_moe_stream_sync) {
+                ggml_cuda_moe_stream_sync();
+            }
+        }
+
+        ggml_barrier(params->threadpool);
+    }
 
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
