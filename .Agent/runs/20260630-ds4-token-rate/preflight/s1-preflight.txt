@@ -1,0 +1,8 @@
+2026-06-30T10:39:17+00:00
+## wip/deepseek-v4-support...origin/wip/deepseek-v4-support [ahead 4]
+?? .Agent/runs/
+lark	git@github.com:L-Ark/llama.cpp.git (fetch)
+lark	git@github.com:L-Ark/llama.cpp.git (push)
+origin	https://github.com/nisparks/llama.cpp (fetch)
+origin	https://github.com/nisparks/llama.cpp (push)
+0, NVIDIA GeForce RTX 5090, 32607, 31807
