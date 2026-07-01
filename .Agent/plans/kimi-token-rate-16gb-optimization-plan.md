@@ -2236,3 +2236,30 @@ Rollback:
 - Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
+
+Result timestamp: 2026-07-01 16:28 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-162848Z-n4-phase2n-split-cache`
+
+Measured result:
+
+- Config: Phase 2M split cache with `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- TTFT: 99467.20 ms, inside the 106331.72 ms gate.
+- Decode: 14323.00 ms / 3 runs, 4.77433 s/token, 0.20945 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1310 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 979 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue directly to cold `-n 96` because Phase 2N is a full-length budget
+  tuning step.
