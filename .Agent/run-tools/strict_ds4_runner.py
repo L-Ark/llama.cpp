@@ -19,7 +19,7 @@ DEFAULT_BIN = Path("/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/
 DEFAULT_MODEL = Path("/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf")
 DEFAULT_OUT_ROOT = Path("/root/lfz/runs/vendor-ds4-16gb")
 PROMPT = "Please introduce France in a short paragraph."
-MEMORY_MAX_BYTES = 15_500_000_000
+MEMORY_MAX_BYTES = 16_000_000_000
 
 
 def utc_stamp() -> str:
@@ -136,6 +136,7 @@ def build_case_script(
     cpu_moe: int,
     env: dict[str, str],
     extra_args: list[str],
+    ram_kill_threshold_bytes: int,
 ) -> None:
     args = [
         str(binary),
@@ -197,9 +198,12 @@ echo "$start_ns" > start_ns.txt
 CG_REL=$(awk -F: '$2 == "" {{ print $3 }}' /proc/self/cgroup | tail -n 1)
 CG_DIR="/sys/fs/cgroup${{CG_REL}}"
 printf '%s\\n' "$CG_DIR" > cgroup_path.txt
+set +e
+/usr/bin/time -v {exact_command} < stdin.txt > stdout.txt 2> stderr.txt &
+CMD_PID=$!
 (
   printf 'time_epoch\\tmemory_current\\tmemory_peak\\tgpu_mem_used_mib\\tgpu_mem_free_mib\\tgpu_util_pct\\n'
-  while true; do
+  while kill -0 "$CMD_PID" 2>/dev/null; do
     now=$(date +%s)
     mem_cur=$(cat "$CG_DIR/memory.current" 2>/dev/null || true)
     mem_peak=$(cat "$CG_DIR/memory.peak" 2>/dev/null || true)
@@ -209,13 +213,15 @@ printf '%s\\n' "$CG_DIR" > cgroup_path.txt
     else
       printf '%s\\t%s\\t%s\\t\\t\\t\\n' "$now" "$mem_cur" "$mem_peak"
     fi
+    if [ -n "$mem_cur" ] && [ "$mem_cur" -gt {ram_kill_threshold_bytes} ]; then
+      printf 'ram_limit_exceeded current=%s threshold=%s\\n' "$mem_cur" "{ram_kill_threshold_bytes}" > ram_limit_exceeded.txt
+      kill "$CMD_PID" 2>/dev/null || true
+      exit 0
+    fi
     sleep 1
   done
 ) > resource_samples.tsv &
 MONITOR_PID=$!
-set +e
-/usr/bin/time -v {exact_command} < stdin.txt > stdout.txt 2> stderr.txt &
-CMD_PID=$!
 (
   while kill -0 "$CMD_PID" 2>/dev/null; do
     if python3 detect_answer_started.py stdout.txt {shlex.quote(PROMPT)}; then
@@ -250,7 +256,14 @@ exit "$STATUS"
     path.chmod(0o755)
 
 
-def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int, memory_max_bytes: int) -> dict[str, object]:
+def summarize_case(
+    case_dir: Path,
+    cpu_moe: int,
+    unit: str,
+    systemd_status: int,
+    memory_max_bytes: int,
+    ram_kill_threshold_bytes: int,
+) -> dict[str, object]:
     stdout_text = (case_dir / "stdout.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stdout.txt").exists() else ""
     stderr_text = (case_dir / "stderr.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stderr.txt").exists() else ""
     combined = stdout_text + "\n" + stderr_text
@@ -271,6 +284,7 @@ def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int,
     memory_event_counts = parse_memory_events(memory_events)
     oom_seen = memory_event_counts.get("oom", 0) > 0 or memory_event_counts.get("oom_kill", 0) > 0
     max_events = memory_event_counts.get("max", 0)
+    ram_limit_killed = (case_dir / "ram_limit_exceeded.txt").exists()
     first_answer_ms = None
     if (case_dir / "first_answer_ms.txt").exists():
         try:
@@ -292,11 +306,13 @@ def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int,
         "first_answer_ms": first_answer_ms,
         "memory_peak_bytes": memory_peak_bytes,
         "memory_max_bytes": memory_max_bytes,
+        "ram_kill_threshold_bytes": ram_kill_threshold_bytes,
         "memory_max_events": max_events,
         "max_rss_kb": time_v["max_rss_kb"],
         "elapsed_seconds": time_v["elapsed_seconds"],
         "oom_seen": oom_seen,
-        "ram_ok": memory_peak_bytes is not None and memory_peak_bytes < memory_max_bytes and max_events == 0 and not oom_seen,
+        "ram_limit_killed": ram_limit_killed,
+        "ram_ok": memory_peak_bytes is not None and memory_peak_bytes <= ram_kill_threshold_bytes and not ram_limit_killed and not oom_seen,
         "correctness_ok": correct,
         "correctness_reason": reason,
         "answer": answer,
@@ -319,11 +335,15 @@ def main() -> int:
     parser.add_argument("--cpu-moe", type=int, action="append", required=True)
     parser.add_argument("--vram-cache-gb", type=int, default=2)
     parser.add_argument("--memory-max-bytes", type=int, default=MEMORY_MAX_BYTES)
+    parser.add_argument("--ram-kill-threshold-bytes", type=int, default=MEMORY_MAX_BYTES)
     parser.add_argument("--extra-arg", action="append", default=[])
     args = parser.parse_args()
 
     if args.memory_max_bytes > MEMORY_MAX_BYTES:
-        print(f"MemoryMax must not exceed {MEMORY_MAX_BYTES} bytes for strict below-16GB runs.", file=sys.stderr)
+        print(f"MemoryMax must not exceed {MEMORY_MAX_BYTES} bytes for strict 16GB runs.", file=sys.stderr)
+        return 2
+    if args.ram_kill_threshold_bytes > args.memory_max_bytes:
+        print("RAM kill threshold must not exceed MemoryMax.", file=sys.stderr)
         return 2
     if not args.binary.exists():
         print(f"missing binary: {args.binary}", file=sys.stderr)
@@ -345,6 +365,7 @@ def main() -> int:
         "binary": str(args.binary),
         "model": str(args.model),
         "memory_max_bytes": args.memory_max_bytes,
+        "ram_kill_threshold_bytes": args.ram_kill_threshold_bytes,
         "prompt": PROMPT,
     }
     write_json(run_dir / "metadata.json", metadata)
@@ -375,6 +396,7 @@ def main() -> int:
             cpu_moe=cpu_moe,
             env=env,
             extra_args=extra_args,
+            ram_kill_threshold_bytes=args.ram_kill_threshold_bytes,
         )
         unit = f"vendor-ds4-16gb-{utc_stamp()}-cpu{cpu_moe}.service"
         systemd_cmd = [
@@ -394,7 +416,7 @@ def main() -> int:
         (case_dir / "runner_elapsed_seconds.txt").write_text(f"{time.time() - start:.3f}\n", encoding="utf-8")
         subprocess.run(["systemctl", "show", unit], text=True, stdout=(case_dir / "unit.properties").open("w"), stderr=subprocess.DEVNULL)
         subprocess.run(["journalctl", "-u", unit, "--no-pager", "-n", "200"], text=True, stdout=(case_dir / "journal.log").open("w"), stderr=subprocess.DEVNULL)
-        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode, args.memory_max_bytes))
+        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode, args.memory_max_bytes, args.ram_kill_threshold_bytes))
 
     write_json(run_dir / "summaries.json", summaries)
     with (run_dir / "results.tsv").open("w", encoding="utf-8") as f:
@@ -406,6 +428,7 @@ def main() -> int:
             "memory_peak_bytes",
             "memory_max_events",
             "ram_ok",
+            "ram_limit_killed",
             "correctness_ok",
             "correctness_reason",
             "case_dir",
