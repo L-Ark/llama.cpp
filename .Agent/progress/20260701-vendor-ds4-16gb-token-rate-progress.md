@@ -138,3 +138,15 @@ Rejected higher-rate candidates:
   - Matching examples: `blk.0.ffn_gate_exps.weight` expert `222` had `max_abs=9.53674316e-07`; `blk.1.ffn_gate_exps.weight` expert `8` had `max_abs=9.53674316e-07`.
   - Failing examples: expert `35` had CPU `1.64784455` versus GPU `0`; expert `53` had CPU `5.24980307` versus GPU `0`; expert `245` had CPU `9.97797775` versus GPU `-0.41251725`; maximum observed `max_abs=10.390495`.
 - Interpretation: the MXFP4 stream bug is not a uniform scatter/indexing failure, because some experts match exactly while others fail badly. The next isolation should correlate mismatches with VRAM cache hits, cache slots, source pointers, and DONTNEED behavior; run with `GGML_MOE_STREAM_DONTNEED=0` and with `GGML_MOE_VRAM_CACHE_GB=0` before changing kernels again.
+
+### 2026-07-01T08:24:21Z - Rejected DS4 gate stream cache/DONTNEED isolation
+
+- Purpose: determine whether the CPU-vs-GPU mismatches came from `GGML_MOE_STREAM_DONTNEED=1` discarding source pages before CPU comparison, or from the VRAM cache copy/slot path.
+- Invalid setup run: `/root/lfz/runs/vendor-ds4-16gb/20260701T082240Z-cold-ds4-gate-stream-cpu-compare-dontneed0/france-cpu40-vram2gb` failed to load because a concurrent non-vendor process consumed VRAM. It is not counted as a model metric.
+- Valid `DONTNEED=0` run: `/root/lfz/runs/vendor-ds4-16gb/20260701T082421Z-cold-ds4-gate-stream-cpu-compare-dontneed0-freegpu/france-cpu40-vram2gb`.
+  - Result: rejected. `eval_tok_s=2.5`, `prompt_tok_s=0.6`, `ttft_estimate_ms=50723.998661`, `memory_peak_bytes=16000000000`, `memory_max_events=39815`, `pgmajfault=363729`, `workingset_refault_file=6540359`, `correctness_ok=false`.
+  - `compare.csv` first eight rows were identical to the prior default `DONTNEED=1` run, including expert `35` CPU `1.64784455` versus GPU `0`, expert `222` matching at `9.53674316e-07`, and expert `245` CPU `9.97797775` versus GPU `-0.41251725`.
+- Valid `VRAM_CACHE_GB=0` run: `/root/lfz/runs/vendor-ds4-16gb/20260701T082759Z-cold-ds4-gate-stream-cpu-compare-vram0/france-cpu40-vram0gb`.
+  - Result: rejected. `eval_tok_s=1.8`, `prompt_tok_s=0.6`, `ttft_estimate_ms=54440.563489`, `memory_peak_bytes=16000000000`, `memory_max_events=36650`, `pgmajfault=365648`, `workingset_refault_file=8509598`, `correctness_ok=false`.
+  - `compare.csv` first eight rows again matched the prior runs exactly.
+- Interpretation: the DS4 MXFP4 gate stream numeric mismatch is not caused by source page discard or by the VRAM cache hit/miss/slot path. The next useful diagnostic is a lower-level MXFP4 block/input trace for one matching expert (`222` or `blk.1` expert `8`) and one failing expert (`35`, `53`, or `245`) to compare CPU `vec_dot` inputs against what the CUDA MMVQ kernel reads.

@@ -1,0 +1,106 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T08:35:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "ba21f48be",
+  "purpose": "Isolate whether DS4 MXFP4 gate stream CPU-vs-GPU mismatches are caused by source-page DONTNEED behavior or by the VRAM cache copy/slot path.",
+  "invalid_setup_runs": [
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T082240Z-cold-ds4-gate-stream-cpu-compare-dontneed0/france-cpu40-vram2gb",
+      "reason": "Model load failed because a concurrent non-vendor process consumed VRAM.",
+      "exit_status": 1,
+      "stderr_key_line": "cudaMalloc failed: out of memory"
+    }
+  ],
+  "runs": [
+    {
+      "name": "dontneed0_freegpu",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T082421Z-cold-ds4-gate-stream-cpu-compare-dontneed0-freegpu/france-cpu40-vram2gb",
+      "config": {
+        "cpu_moe": 40,
+        "vram_cache_gb": 2,
+        "drop_caches_before_case": true,
+        "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+        "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+        "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8",
+        "GGML_MOE_STREAM_DONTNEED": "0"
+      },
+      "eval_tok_s": 2.5,
+      "prompt_tok_s": 0.6,
+      "ttft_estimate_ms": 50723.998661,
+      "elapsed_seconds": 57.06,
+      "memory_peak_bytes": 16000000000,
+      "memory_max_events": 39815,
+      "memory_file_bytes": 15029903360,
+      "pgmajfault": 363729,
+      "workingset_refault_file": 6540359,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "answer_quality": "Degenerated into repeated punctuation/list pattern.",
+      "compare_result": "First eight compare rows were identical to the default DONTNEED=1 run."
+    },
+    {
+      "name": "vram_cache_0",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T082759Z-cold-ds4-gate-stream-cpu-compare-vram0/france-cpu40-vram0gb",
+      "config": {
+        "cpu_moe": 40,
+        "vram_cache_gb": 0,
+        "drop_caches_before_case": true,
+        "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+        "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+        "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8"
+      },
+      "eval_tok_s": 1.8,
+      "prompt_tok_s": 0.6,
+      "ttft_estimate_ms": 54440.563489,
+      "elapsed_seconds": 33.24,
+      "memory_peak_bytes": 16000000000,
+      "memory_max_events": 36650,
+      "memory_file_bytes": 15028502528,
+      "pgmajfault": 365648,
+      "workingset_refault_file": 8509598,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "answer_quality": "Degenerated into repeated punctuation/list pattern.",
+      "compare_result": "First eight compare rows were identical to the default DONTNEED=1 and DONTNEED=0 runs."
+    }
+  ],
+  "stable_compare_rows": [
+    {
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 35,
+      "max_abs": 1.64784455,
+      "cpu_value": 1.64784455,
+      "gpu_value": 0.0
+    },
+    {
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 222,
+      "max_abs": 9.53674316e-07,
+      "cpu_value": 10.0311499,
+      "gpu_value": 10.0311489
+    },
+    {
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 245,
+      "max_abs": 10.390495,
+      "cpu_value": 9.97797775,
+      "gpu_value": -0.41251725
+    }
+  ],
+  "conclusion": "The DS4 MXFP4 gate stream mismatch is not explained by source-page discard or VRAM cache hit/miss/slot behavior. The next diagnostic should instrument the MXFP4 block/input interpretation for one matching expert and one failing expert, then compare the CUDA kernel's read path with CPU vec_dot.",
+  "next_steps": [
+    "Add a lower-level diagnostic that dumps MXFP4 block metadata and selected activation quantization inputs for a matching expert and a failing expert.",
+    "Compare CPU vec_dot_mxfp4_q8_0 inputs with the values consumed by the CUDA MMVQ path.",
+    "Only after the block-level mismatch is understood, modify the CUDA stream path and rerun the France correctness gate."
+  ]
+}
