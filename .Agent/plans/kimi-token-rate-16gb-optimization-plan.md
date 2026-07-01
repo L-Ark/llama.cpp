@@ -505,6 +505,7 @@ Every implementation step must append one row before and after execution.
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-07-01 12:47:29 | Phase 0 cgroup smoke v2 | Verify the actual inference process can run inside a strict 16GB host-memory cgroup after fixing the runner to move `$BASHPID`, not the outer shell. | N/A | `/root/lfz/runs/vendor-kimi-token-rate/20260701-124729Z-n2-cgroup-smoke-v2`: `rc=0`, output `France is`, cgroup peak 14.901 GiB. | 16GB/cold/smoke quality pass; not a baseline because `-n 2`. | Proceed to full `-n 96` baseline. |
 | 2026-07-01 12:50:35 | Phase 0 full baseline | The current accepted Kimi correctness config should produce stable `-n 96` output under a 16GB host-memory guard, but token rate may drop because page cache is constrained. | Previous unconstrained reference was about 0.51-0.52 tok/s; under strict 16GB, lower bound unknown before measurement. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline`: `rc=0`, prompt eval/TTFT 88.61s, eval 401.59s / 80 decode runs, 0.20 tok/s, total 490.26s. | 16GB pass by cgroup peak 14.901 GiB; cold pass; quality pass; `read_failures` not reported; TTFT becomes baseline; reproducibility recorded. VRAM/GPU-first not optimized: 15.9 GiB VRAM unused. | Baseline established. Next required step is profiling with `memory.stat` anon/file sampling and MoE per-stage timing, then prioritize VRAM expert cache/profile preload. |
+| 2026-07-01 13:03:05 | Phase 2A n32 expert pack + VRAM cache profile | Move repeated routed expert tensors into VRAM cache to reduce 16GB page-cache/reclaim stalls without changing model math. | Removing strict-cgroup reclaim stalls could recover the old unconstrained 0.51-0.52 tok/s ceiling; route replay with 15GB cache estimated up to 70.46% trace hit rate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`: VRAM peak 31278 MiB, minimum free 832 MiB, cache hit 60.0%, route replay hit estimate 70.46%, but TTFT 110.33s (+24.5%), decode 0.16 tok/s, output started `The user asks: ...`. | Host RAM/cold/read failures pass; VRAM/GPU-first pass; TTFT gate fail; token-rate fail; quality fail. | Rejected. Do not promote and do not stack optimizations on this env. The gap is that enabling `GGML_MOE_STREAM`/batched up-gate changes output semantics and is slower under the 16GB cap. |
 
 ## Current bottleneck after Phase 0
 
@@ -601,8 +602,86 @@ Rollback:
   host RAM exceeds the cap, reject the candidate and return to the Phase 0
   baseline config.
 
+Result:
+
+- Rejected by the `-n 32` profiling run at
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`.
+- It did use VRAM as intended: peak 31278 MiB, minimum free 832 MiB.
+- It enabled the stream/batched path:
+  `[moe_stream] batched up/gate decode path active`.
+- It produced route/profile artifacts:
+  `route-profile.csv`, `route-trace.csv`, `ttft-trace.csv`, and `cache-sim.txt`.
+- Runtime counters:
+  - expert pack hits=3406, misses=2158, read_failures=0
+  - VRAM cache hits=8340, misses=5564, hit_rate=60.0%
+  - pinned staging copies=3406, host_stage=4623.159 ms, H2D=645.748 ms
+  - up/gate profile total=31.246 ms/call
+- Route simulator:
+  - 15GB single cache estimated hit 85.8% from profile counts.
+  - Trace replay with protected preload recommended upgate_pct=75, estimated
+    hit 70.46%, miss 19.44 GiB.
+- Failure:
+  - TTFT was 110325.85 ms, exceeding the 106331.72 ms gate.
+  - Decode was 0.16 tok/s, slower than the 0.20 tok/s baseline.
+  - Output quality failed: `The user asks: "Please introduce France ...`.
+
+Conclusion:
+
+The limiting issue is not just cache capacity. The available VRAM can be filled,
+but the current `GGML_MOE_STREAM` / batched up-gate path is not semantically
+equivalent to the accepted non-stream path for Kimi. No code or env promotion is
+allowed from Phase 2A.
+
+## Next candidate: Phase 2B stream switch isolation
+
+Design timestamp: 2026-07-01 13:12 UTC.
+
+Current bottleneck:
+
+- The correctness baseline is slow because it leaves about 15.9 GiB VRAM unused
+  and runs at the cgroup memory limit.
+- The first VRAM/cache attempt filled VRAM but failed quality and TTFT after
+  activating the stream/batched up-gate path.
+
+Hypothesis:
+
+The quality regression is caused by one of the stream math switches, not by the
+VRAM cache allocation itself. Before any cache optimization can be accepted, the
+minimum stream switch that changes Kimi output must be isolated.
+
+Isolation order:
+
+1. `GGML_MOE_STREAM=1` only, no expert pack, no VRAM cache, no fused up/gate.
+2. `GGML_MOE_STREAM=1` + expert pack, no VRAM cache, no fused up/gate.
+3. `GGML_MOE_STREAM=1` + expert pack + VRAM cache, no fused up/gate.
+4. Only if the above pass, add `GGML_MOE_STREAM_FUSED_UP_GATE=1`.
+
+Use cold `-n 16` or `-n 32` smoke runs under the same 16GB cgroup. Stop the
+isolation sweep as soon as the output starts with meta text, malformed grammar,
+or any semantic drift. These are diagnostic runs only; promotion still requires
+full `-n 96`.
+
+Theoretical upper bound:
+
+- If `GGML_MOE_STREAM=1` alone already fails quality, cache work cannot be
+  accepted until the stream path is fixed.
+- If stream-only passes and cache-only fails, the bug is in cache copy/staging.
+- If cache-only passes and fused up/gate fails, the bug is in the batched/fused
+  up-gate math path.
+
+Acceptance for isolation:
+
+- Host RAM below 16GB, cold start, `read_failures=0`.
+- France output must start as a direct answer, not prompt analysis.
+- TTFT should be recorded but does not promote the candidate.
+
+Rollback:
+
+- No code changes are made during isolation. Failed env combinations are recorded
+  and not reused for promotion.
+
 ## Immediate next action
 
-Run the Phase 2A `-n 32` profiling candidate on the remote GPU host with the same
-strict 16GB host-memory guard. Capture cgroup `memory.stat`, route profile,
-route trace, TTFT trace, expert-pack counters, VRAM samples, and quality output.
+Run Phase 2B stream switch isolation under the same strict 16GB host-memory
+guard. Begin with `GGML_MOE_STREAM=1` only and stop at the first semantic
+regression.
