@@ -2886,6 +2886,38 @@ Rollback:
   appear, or full `-n 96` does not improve over Phase 2H.
 - No code rollback should be needed because this is env-only.
 
+Result timestamp: 2026-07-02 17:57 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-175735Z-n4-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103118.25 ms, inside the 106331.72 ms gate.
+- Decode: 14280.11 ms / 3 runs, 4.76004 s/token, 0.21008 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Activation: log contains `down parallel CPU staging active`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1382, host_stage=1416.480 ms, h2d=297.596 ms.
+- Up/gate profile: calls=85, total=29.033 ms/call.
+- Down profile: calls=160, stage=12.211 ms/call, total=12.388 ms/call.
+
+Decision:
+
+- The smoke passes correctness, RAM, VRAM, TTFT, activation, and launch/read
+  gates.
+- It does not show the intended local down-stage improvement on the tiny run:
+  down stage is 12.211 ms/call, which is not better than the accepted full
+  Phase 2H down stage of 11.616 ms/call.
+- Continue to `-n 32` only to rule out tiny-sample noise. If `-n 32` does not
+  beat Phase 2H or materially reduce down stage, reject without full `-n 96`.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
