@@ -2760,6 +2760,54 @@ Decision:
   full promotion requires the actual `-n 96` decode to beat Phase 2H with
   semantic quality and TTFT gates intact.
 
+Full result timestamp: 2026-07-02 17:48 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-174833Z-n96-phase2t-lfu-cache-policy`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104074.28 ms, inside the 106331.72 ms gate.
+- Decode: 310487.68 ms / 85 runs, 3.65280 s/token, 0.27376 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=26154, misses=47878,
+  preloads=0, hit_rate=35.3%.
+- Pinned staging: copies=42984, host_stage=59313.938 ms, h2d=9334.894 ms.
+- Up/gate profile: calls=2381, total=24.455 ms/call.
+- Down profile: calls=4506, stage=12.445 ms/call, total=12.610 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2T `-n 96`: 310487.68 ms / 85 runs,
+  3.65280 s/token, 0.27376 tok/s.
+
+Analysis:
+
+- LFU/LRU does not generalize from the small `-n 32` win to full length.
+- It actively worsens the full cache behavior:
+  - misses increase from 40316 to 47878.
+  - hit_rate falls from 45.5% to 35.3%.
+  - host_stage rises from 50153.894 ms to 59313.938 ms.
+  - up/gate and down profiles both regress.
+- The likely cause is that per-slot lifetime hit count over-protects experts
+  that were hot early, then evicts experts needed later in the long decode.
+  For this prompt, recency remains more important than raw hit count.
+
+Decision:
+
+- Reject Phase 2T for full `-n 96`.
+- Do not use `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru` for the accepted config.
+- No code rollback is needed because this was env-only.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
