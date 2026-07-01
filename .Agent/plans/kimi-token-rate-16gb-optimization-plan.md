@@ -2692,6 +2692,116 @@ Decision:
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
 
+## Next candidate: Phase 3G retest down prefetch depth 2 after Phase 3E
+
+Design timestamp: 2026-07-02 20:25 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` remains current best, but down staging remains large:
+  - pinned staging host_stage=47796.399 ms.
+  - down batch stage=12.205 ms/call.
+  - down cache hit_rate=45.7%.
+- Phase 3F showed adding cache capacity does not reduce token time enough.
+- Earlier down prefetch tests were run before Phase 3E removed the expensive
+  single-expert stream path, so the interaction must be remeasured.
+
+Hypothesis:
+
+- `GGML_MOE_PREFETCH_DOWN=1` with `GGML_MOE_PREFETCH_DOWN_DEPTH=2` may overlap
+  down expert staging with adjacent CPU/GPU work now that the single path is
+  disabled.
+- If prefetch is effective, host_stage or down stage should fall without
+  increasing TTFT or hurting output quality.
+
+Theoretical upper bound:
+
+- The hard upper bound is the full 47.8s host_stage on Phase 3E full `-n 96`.
+- The realistic bound is much lower because staging may be serialized by route
+  availability and cache misses. A useful `-n 32` signal is at least several
+  seconds less eval time or a clear reduction in down stage.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best code/config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- If smoke passes all gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E `-n 32`
+  (2.24573 s/token) or shows a large stage reduction with no TTFT/quality risk.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, quality changes, RAM/VRAM gates fail,
+  prefetch is inactive/useless, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 20:30 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192442Z-n4-phase3g-prefetch-depth2`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76922.49 ms, inside the 106331.72 ms gate.
+- Decode: 11325.24 ms / 3 runs, 3.77508 s/token, 0.26490 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=137, hits=137, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=871, misses=1673, preloads=137, hit_rate=34.2%.
+  - pinned staging: copies=1780, host_stage=2644.232 ms,
+    h2d=386.512 ms.
+  - down batch: stage=12.722 ms/call, total=12.900 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192653Z-n32-phase3g-prefetch-depth2`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77520.17 ms, inside the 106331.72 ms gate.
+- Decode: 69924.90 ms / 31 runs, 2.25564 s/token, 0.44333 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=1446, hits=1446, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=14363, misses=12597, preloads=1446,
+    hit_rate=53.3%.
+  - pinned staging: copies=13136, host_stage=18245.027 ms,
+    h2d=2846.778 ms.
+  - up/gate: total=19.503 ms/call.
+  - down batch: stage=6.465 ms/call, total=6.620 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3G `-n 32`: 2.25564 s/token, 0.44333 tok/s.
+- Prefetch materially improves down stage and cache hit rate, but total eval
+  time still regresses slightly. The up/gate total also increases from
+  17.757 ms/call to 19.503 ms/call.
+
+Decision:
+
+- Reject down prefetch depth 2 for promotion because the `-n 32` token rate
+  regresses.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
