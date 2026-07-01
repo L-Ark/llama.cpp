@@ -1708,7 +1708,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top4-updown`
 - `attempt_kind`: `config-probe/approximate-pruning`
-- `status`: planned
+- `status`: accepted candidate pending pushed-commit clean rebuild rerun
 - `hypothesis`: Top5 up/down pruning is the current source-backed SOTA and shows that dropping one routed up/down expert can preserve the France answer. Remaining up/down fallback work is still large, so lowering `GGML_MOE_KEEP_TOPK_UPDOWN` from `5` to `4` may remove another routed expert from every up/down expert op and increase generation rate.
 - `theoretical_upper_bound`: Original op-wall trace estimated up/down fallback at about `77.3s`. Top5 roughly removes one of six routed experts, with an ideal reduction near `12.9s`. Top4 removes two of six, so the coarse upper bound versus no pruning is about `25.8s`, or about `12.9s` additional wall reduction versus top5 before overhead/page effects. Real gain is lower because gate streaming and non-expert work remain, but a measurable improvement over the current `2.0 tok/s` SOTA is plausible.
 - `risk`: This is a stronger approximation than top5. It may remove semantically important routed expert contribution and produce fluent but wrong, repetitive, or under-specified output. The France answer must be manually reviewed; heuristic correctness alone is insufficient.
@@ -1716,6 +1716,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.0`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed the top5 pushed rerun TTFT by more than `20%` (`43188.681316ms * 1.2 = 51826.417579ms`).
 - `rollback`: No source change. If token rate does not exceed `2.0`, output correctness fails, RAM exceeds limit, or TTFT exceeds the gate, mark rejected/unpromoted and keep current top5 SOTA. If accepted, immediately write full reproduction evidence, commit/push any changed records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, and run a pushed-commit clean rebuild/rerun before promotion.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T223523Z-20260702_expert_keep_top4_updown/france-cpu40-vram0gb`
+- `result`: accepted candidate pending pushed-commit rerun. `eval_tok_s=2.3`, `prompt_tok_s=0.8`, `TTFT=40828.237606ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14985457664`, `pgmajfault=398448`, `workingset_refault_file=6541363`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. The answer is semantically correct and coherent: it identifies France/French Republic as a Western European country, covers history/culture/global art/fashion/cuisine, borders and seas, Eiffel Tower/Louvre/Versailles, wines/cheeses/philosophy/literature/cinema, Paris, and France's economic/political/diplomatic role. No incoherence or factual degradation observed from top4 pruning.
+- `sota_gate`: candidate passes initial gates. Token rate exceeds current pushed top5 SOTA `2.0 -> 2.3`; TTFT `40828.237606ms` is below the `51826.417579ms` limit; RAM including page cache is capped at `16000000000`; France correctness passes manual review.
+- `reproduction_record`: candidate run directory now contains source head/status/diff, binary sha256/stat/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, plan snapshot, push remote/branch target, manual correctness review, and candidate status.
+- `publish_status`: next required step is immediate commit/push of updated records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit. Until that rerun passes, `2.3 tok/s` remains an accepted candidate, not final promoted SOTA.
 
 ## 记录与验收
 
