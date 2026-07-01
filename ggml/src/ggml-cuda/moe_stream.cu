@@ -412,6 +412,14 @@ static bool moe_stream_one_experimental_ds4_enabled() {
     return enabled != 0;
 }
 
+static bool moe_stream_one_ds4_nonids_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_ONE_DS4_NONIDS");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled != 0;
+}
+
 static bool moe_stream_one_name_filter_allows(const char * name) {
     static const char * filter = std::getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
     if (!filter || !filter[0]) {
@@ -619,7 +627,9 @@ extern "C" bool ggml_cuda_moe_stream_one(
         return false;
     }
     const auto t_src1 = std::chrono::steady_clock::now();
-    if ((t0 == GGML_TYPE_MXFP4 || t0 == GGML_TYPE_F8_E4M3_B128) && moe_stream_one_experimental_ds4_enabled()) {
+    if ((t0 == GGML_TYPE_MXFP4 || t0 == GGML_TYPE_F8_E4M3_B128) &&
+            moe_stream_one_experimental_ds4_enabled() &&
+            !moe_stream_one_ds4_nonids_enabled()) {
         if (cudaMemsetAsync(ctx.d_ids, 0, (size_t)cne1 * sizeof(int32_t), st) != cudaSuccess) {
             release_slot(s);
             return false;

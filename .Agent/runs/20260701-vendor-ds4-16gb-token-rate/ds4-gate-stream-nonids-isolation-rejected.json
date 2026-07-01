@@ -1,0 +1,73 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T08:45:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "077babfeb",
+  "purpose": "Isolate whether the compact-rows MoE ids kernel causes the DS4 MXFP4 gate stream CPU-vs-GPU mismatch.",
+  "code_changes": [
+    "Added default-off GGML_MOE_STREAM_ONE_DS4_NONIDS=1.",
+    "When enabled with experimental DS4 stream, MXFP4/F8 rows use the existing per-row single-column MMVQ helper instead of ggml_cuda_moe_stream_mmvq_rows_dev."
+  ],
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T083736Z-cold-ds4-gate-stream-cpu-compare-nonids/france-cpu40-vram2gb",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 2,
+      "drop_caches_before_case": true,
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_DS4_NONIDS": "1",
+      "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+      "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8"
+    },
+    "eval_tok_s": 2.3,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 53691.425728,
+    "elapsed_seconds": 9.19,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 33434,
+    "memory_file_bytes": 14992293888,
+    "pgmajfault": 344445,
+    "workingset_refault_file": 7776321,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "answer_quality": "Degenerated into repeated punctuation/list pattern."
+  },
+  "compare_result": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260701T083736Z-cold-ds4-gate-stream-cpu-compare-nonids/france-cpu40-vram2gb/compare.csv",
+    "summary": "First eight compare rows were identical to the rows-kernel, DONTNEED=0, and VRAM_CACHE_GB=0 runs.",
+    "representative_rows": [
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 35,
+        "max_abs": 1.64784455,
+        "cpu_value": 1.64784455,
+        "gpu_value": 0.0
+      },
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 222,
+        "max_abs": 9.53674316e-07,
+        "cpu_value": 10.0311499,
+        "gpu_value": 10.0311489
+      },
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 245,
+        "max_abs": 10.390495,
+        "cpu_value": 9.97797775,
+        "gpu_value": -0.41251725
+      }
+    ]
+  },
+  "conclusion": "The dedicated MoE ids kernel is not the source of the DS4 MXFP4 stream mismatch. The remaining likely source is the MXFP4/q8_1 CUDA vec-dot or activation quantization layout; instrument per-block partial sums for one matching and one failing expert next.",
+  "next_steps": [
+    "Add a lower-level diagnostic for MXFP4/q8_1 per-block partial sums.",
+    "Compare one matching expert and one failing expert using the same q8_1 activation representation consumed by CUDA.",
+    "Avoid another full-model type-gate trial until the block-level mismatch is explained."
+  ]
+}

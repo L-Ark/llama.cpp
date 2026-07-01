@@ -150,3 +150,13 @@ Rejected higher-rate candidates:
   - Result: rejected. `eval_tok_s=1.8`, `prompt_tok_s=0.6`, `ttft_estimate_ms=54440.563489`, `memory_peak_bytes=16000000000`, `memory_max_events=36650`, `pgmajfault=365648`, `workingset_refault_file=8509598`, `correctness_ok=false`.
   - `compare.csv` first eight rows again matched the prior runs exactly.
 - Interpretation: the DS4 MXFP4 gate stream numeric mismatch is not caused by source page discard or by the VRAM cache hit/miss/slot path. The next useful diagnostic is a lower-level MXFP4 block/input trace for one matching expert (`222` or `blk.1` expert `8`) and one failing expert (`35`, `53`, or `245`) to compare CPU `vec_dot` inputs against what the CUDA MMVQ kernel reads.
+
+### 2026-07-01T08:37:36Z - Rejected DS4 gate stream non-ids kernel isolation
+
+- Purpose: determine whether the compact-rows dedicated MoE ids kernel was responsible for the DS4 MXFP4 stream mismatch.
+- Code change: added default-off `GGML_MOE_STREAM_ONE_DS4_NONIDS=1`, which keeps experimental DS4 streaming enabled but routes DS4 rows through the existing per-row single-column MMVQ helper instead of `ggml_cuda_moe_stream_mmvq_rows_dev`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T083736Z-cold-ds4-gate-stream-cpu-compare-nonids/france-cpu40-vram2gb`.
+- Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_DS4_NONIDS=1`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=8`.
+- Result: rejected. `eval_tok_s=2.3`, `prompt_tok_s=0.6`, `ttft_estimate_ms=53691.425728`, `memory_peak_bytes=16000000000`, `memory_max_events=33434`, `pgmajfault=344445`, `workingset_refault_file=7776321`, `correctness_ok=false`.
+- `compare.csv` first eight rows were again identical to the ids-kernel, `DONTNEED=0`, and `VRAM_CACHE_GB=0` runs.
+- Interpretation: the dedicated MoE ids kernel is not the source of the numeric mismatch. The remaining likely layer is the MXFP4/q8_1 CUDA vec-dot or quantized activation layout itself. Next diagnostic should compare per-block partial sums for one matching and one failing expert.
