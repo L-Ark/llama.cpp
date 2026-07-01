@@ -3008,6 +3008,79 @@ Decision:
   insert/copy, and stream synchronization because repeated env-only attempts
   improve local CUDA-event buckets without improving end-to-end decode.
 
+## Next candidate: Phase 3A wall-time MoE profile instrumentation
+
+Design timestamp: 2026-07-02 18:11 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` eval time is 295113.58 ms, but the visible
+  MoE CUDA-event buckets account for far less:
+  - up/gate: 2381 calls * 22.785 ms/call = about 54.2s.
+  - down: 4506 calls * 11.781 ms/call = about 53.1s.
+  - pinned host staging: 50153.894 ms, partly included in stage buckets.
+- Env-only optimizations repeatedly improved one local bucket but worsened full
+  eval:
+  - down prefetch improved down stage but slowed n96.
+  - down parallel staging reduced staging counters but slowed n96.
+  - LFU/LRU improved n32 slightly but worsened n96 cache behavior.
+- Therefore the next bottleneck is not sufficiently visible in current logs.
+
+Hypothesis:
+
+Add default-off instrumentation under the existing `GGML_MOE_BATCH_PROFILE=1`
+path:
+
+- `wall_ms` for each up/gate call from function entry after buffer setup to
+  return.
+- `wall_ms` for each down batch call over the same scope.
+- Report per-call `wall` and `wall_gap`, where:
+  - up/gate `wall_gap = wall - stage - quant - kernel - d2h - scatter`.
+  - down `wall_gap = wall - stage - quant - kernel - d2h - scatter`.
+
+This does not change math, cache policy, allocation, or scheduling. It only
+adds `std::chrono::steady_clock` timing when profiling is already enabled.
+
+Theoretical value:
+
+- If wall time closely matches CUDA buckets, then the unexplained decode time
+  is outside these MoE stream functions and the next target should move upward
+  in the graph/runtime.
+- If wall_gap is large in up/gate or down, then hidden CPU work, lock waits,
+  cache insertion, stream synchronization, or staging thread joins are the real
+  bottleneck. That gives a concrete next optimization target instead of
+  continuing env sweeps.
+
+Execution:
+
+- Implement the instrumentation locally.
+- Build on the remote CUDA build directory.
+- Run a cold `-n 4` Phase 3A baseline with accepted Phase 2H runtime env and
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM, VRAM, TTFT, and quality gates still apply even though this is an
+  instrumentation run.
+- If `-n 4` passes and output is unchanged, run `-n 32` to get stable wall-gap
+  attribution. Full `-n 96` is optional for attribution and should be run only
+  if n32 still leaves ambiguity.
+
+Acceptance:
+
+- Instrumentation code is acceptable only if it is default-off outside
+  `GGML_MOE_BATCH_PROFILE`.
+- France output must remain semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- TTFT must remain <=106331.72 ms for any cold run used as evidence.
+- The run must report `wall` and `wall_gap` for both up/gate and down profile
+  lines.
+
+Rollback:
+
+- If instrumentation changes output quality, causes launch/read failures,
+  breaks build, or adds overhead outside profiling mode, revert the code.
+- This phase is diagnostic; do not promote token-rate changes from it unless a
+  separate optimized run without extra instrumentation passes all Phase 2H
+  acceptance gates and improves full `-n 96`.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
