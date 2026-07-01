@@ -1844,6 +1844,18 @@
 - `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
 - `rollback_status`: layer-selective top3 branch closed. Early20 improved speed but failed truncation/repetition; early10 failed both speed and correctness. Source patch reverted and clean rebuild completed. Current effective SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：expert-keep-top4-n128
+
+- `attempt_id`: `20260702-expert-keep-top4-n128`
+- `attempt_kind`: `config-diagnostic/generation-budget`
+- `status`: planned
+- `hypothesis`: Current top4 SOTA is correct but uses the runner default `-n 192`, while the prompt asks for a short paragraph. A smaller generation budget (`-n 128`) may still produce a complete, coherent short paragraph and can show whether measured eval token rate is sensitive to overly long generation tails. This is a parameter diagnostic, not a structural model optimization.
+- `theoretical_upper_bound`: Per-token compute should be unchanged from top4. Any rate difference comes from shorter decode length, less late-generation degeneration/repetition, and measurement variance. It should not be treated as a structural speedup unless the output is complete and a pushed rerun reproduces a stable improvement over `2.3 tok/s`.
+- `test_config`: clean source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-n 128 -c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: consider promotion only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and complete/coherent as a short paragraph, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`). Because this changes generation budget, require an additional pushed-commit rerun and be conservative about declaring SOTA.
+- `rollback`: No source change. If output is incomplete, too terse, semantically wrong, or `eval_tok_s <= 2.3`, record rejected/diagnostic and keep top4 `2.3 tok/s` SOTA.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, full France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
