@@ -1929,3 +1929,79 @@ Decision:
   remaining visible Phase 2H costs are still up/gate compute and expert staging;
   a useful next step should either reduce actual up/gate graph replay time or
   reduce the number/size of expert loads rather than just lookup overhead.
+
+## Next candidate: Phase 2M split VRAM cache by expert size
+
+Design timestamp: 2026-07-01 16:17 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H `-n 32` still spends a large visible bucket in expert
+  staging:
+  - Pinned staging: 13135 copies, host_stage=18199.846 ms,
+    h2d=2844.363 ms.
+  - VRAM cache hit_rate=47.8%.
+- Phase 2L showed lookup overhead is not the main limiter: a key index slightly
+  reduced host_stage but did not improve end-to-end token rate.
+- Current cache initialization logs show one final 7.44 MiB slot size:
+  2016 slots. All smaller experts can fit in that pool, but 4.48/5.36/6.02 MiB
+  experts waste space when stored in 7.44 MiB slots.
+- Phase 2H `-n 32` route profile by tensor kind:
+  - up: 4.48/5.36 MiB experts, 6952 uses, 2356 unique, 32.57 GiB traffic.
+  - gate: 4.48/5.36 MiB experts, 6952 uses, 2356 unique, 32.57 GiB traffic.
+  - down: 6.02/7.44 MiB experts, 13152 uses, 4294 unique, 81.40 GiB traffic.
+- Existing split-cache code only sends `expert_sz <= 4 MiB` to the second cache,
+  which is ineffective for Kimi. Kimi's up/gate experts are larger than 4 MiB.
+
+Hypothesis:
+
+Add a default-off environment threshold,
+`GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB`, used only when
+`GGML_MOE_VRAM_CACHE_SPLIT=1`. Test with:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+
+This should create a small-expert pool for 4.48/5.36 MiB up/gate experts and a
+large-expert pool for 6.02/7.44 MiB down experts. It reduces slot waste and
+prevents up/gate and down experts from evicting each other.
+
+Theoretical upper bound:
+
+- With a 15000 MiB cache and `UPGATE_PCT=45`, the small pool gets about
+  6750 MiB and can store about 1259 5.36 MiB slots. The large pool gets about
+  8250 MiB and can store about 1108 7.44 MiB slots.
+- Total resident expert entries can rise from 2016 unified slots to about 2367
+  split slots, a roughly 17% increase in resident entries.
+- If staging misses fall proportionally, host_stage could drop by up to about
+  3.1s on Phase 2H `-n 32`, improving from 95.6s to about 92.5s
+  (2.98 s/token, 0.34 tok/s). If partitioning hurts locality, it may be slower.
+
+Correctness risk:
+
+- Low math risk: selected experts and kernels do not change.
+- Cache-policy risk: wrong cache ID or budget could OOM or reduce hit rate.
+- The code change must be default-off unless `GGML_MOE_VRAM_CACHE_SPLIT=1`, so
+  accepted Phase 2H behavior remains unchanged without the new env.
+
+Acceptance:
+
+- First run cold `-n 4` with split cache under `memory.max=16000000000`,
+  `memory.swap.max=0`, and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`.
+- Accept and push the code/config only if `-n 32` is faster than accepted Phase
+  2H `-n 32` (0.32 tok/s / 3.08431 s/token) with all gates passing; otherwise
+  revert the code and record rejection.
+
+Rollback:
+
+- Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
+  gates fail, cache allocation fails, launch/read failures appear, or `-n 32`
+  does not improve over Phase 2H.
