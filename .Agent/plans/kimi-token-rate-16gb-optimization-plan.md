@@ -1330,3 +1330,25 @@ Correctness result:
 - Decision: accept Phase 2H as a correctness fix only. Next practice is a cold
   `-n 32` performance smoke with `GGML_MOE_STREAM_DOWN_BATCH=1` but still
   without `GGML_MOE_GPU_HANDOFF`; handoff remains a separate correctness risk.
+
+Performance smoke result:
+
+- Result timestamp: 2026-07-01 15:15 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-151003Z-n32-phase2h-down-batch-nohandoff`
+- Commit: `a1702641b`.
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Enabled `GGML_MOE_STREAM_DOWN_BATCH=1`; did not enable
+  `GGML_MOE_GPU_HANDOFF`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: 102309.52 ms, within the 106331.72 ms gate.
+- Decode: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Read/correctness status: read_failures=0, launch_failures=0, down_profile=true.
+- Down profile: calls=1644, avg_active=8.00, total=9.228 ms/call.
+- Up/gate profile: calls=869, total=18.938 ms/call.
+- Decision: pass smoke gate. Next practice is full cold `-n 96` with the exact
+  same config before performance promotion.
