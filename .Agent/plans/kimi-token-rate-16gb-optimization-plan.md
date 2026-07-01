@@ -1661,3 +1661,65 @@ Decision:
   reducing cache lookup/eviction overhead in the 2016-slot linear scans, or
   reducing up/gate compute cost, since up/gate remains about 54s of the Phase 2H
   full `-n 96` decode.
+
+## Next candidate: Phase 2K vendor MMQ up/gate path
+
+Design timestamp: 2026-07-01 15:46 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96`:
+  - Up/gate profile: 2381 calls, 22.785 ms/call, about 54.2s total.
+  - Down profile: 4506 calls, 11.781 ms/call, about 53.1s total, but the down
+    kernel itself is only 0.115 ms/call and most of this bucket is staging.
+- Phase 2J showed that broad profile preloading increased per-call overhead and
+  was slower at `-n 32`, so the next attempt should not add more preload work.
+- Existing code already has an up/gate vendor MMQ path guarded by
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1` for `IQ2_S` / `IQ3_XXS`. Phase 2H logs
+  show the current up/gate path is `IQ2_S batched MMVQ up/gate path active`,
+  so this is applicable to Kimi's up/gate tensors.
+
+Hypothesis:
+
+Enable `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1` on top of the accepted Phase 2H
+config. This changes only the up/gate compute path while keeping the accepted
+down batch, 16GB host-RAM cap, expert pack, and VRAM cache settings.
+
+Theoretical upper bound:
+
+- If vendor MMQ halves the up/gate compute bucket, the full `-n 96` decode could
+  save about 27s from the 295.1s Phase 2H decode, reaching roughly
+  268.1s / 85 runs = 3.15 s/token, or 0.32 tok/s.
+- If vendor MMQ is 3x faster for up/gate, the up/gate bucket drops from about
+  54.2s to 18.1s, saving 36.1s and reaching about 259.0s / 85 runs =
+  3.05 s/token, or 0.33 tok/s.
+- This still cannot reach 5 tok/s alone; it is one of the visible high-cost
+  buckets that must be reduced before larger architecture changes.
+
+Correctness risk:
+
+- This path changes quantized matmul implementation for up/gate. If it selects
+  the wrong row, stride, slot, or quantized source layout, it can silently
+  corrupt generation like the rejected handoff path.
+- Therefore start with a cold `-n 4` smoke and require actual semantic output,
+  not just a prefix match.
+
+Acceptance:
+
+- First run cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual answer for `Please introduce France in a short paragraph.` must be
+  semantically correct and coherent.
+- Logs must show `vendor MMQ up/gate path active`.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`; promote to `-n 96` only if token rate is
+  better than accepted Phase 2H at the same token count while all gates pass.
+
+Rollback:
+
+- Reject immediately if output corruption appears, vendor MMQ does not activate,
+  TTFT exceeds the gate, RAM/VRAM gates fail, launch/read failures appear, or
+  the `-n 32` rate is not better than accepted Phase 2H.
