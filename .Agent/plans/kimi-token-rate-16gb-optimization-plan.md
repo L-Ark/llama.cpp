@@ -2005,3 +2005,37 @@ Rollback:
 - Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
   gates fail, cache allocation fails, launch/read failures appear, or `-n 32`
   does not improve over Phase 2H.
+
+Result timestamp: 2026-07-01 16:08 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-160808Z-n4-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `1a635914-dirty-split-cache`, accepted Phase 2H config plus
+  local default-off split threshold code and:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+- Build: remote `build-cuda-batch` compiled successfully.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 103089.41 ms, inside the 106331.72 ms gate.
+- Decode: 13886.92 ms / 3 runs, 4.62897 s/token, 0.21603 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1109 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+- Pinned staging: copies=1759, host_stage=2668.331 ms, h2d=381.974 ms.
+- Up/gate profile: calls=85, total=26.065 ms/call.
+- Down profile: calls=160, stage=13.649 ms/call, total=13.818 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue to cold `-n 32` before deciding whether to keep or revert the code.
