@@ -3196,6 +3196,48 @@ Decision:
 - Continue to full cold `-n 96` promotion. Accept only if full `-n 96` beats
   Phase 3E 2.72551 s/token / 0.36690 tok/s with all hard gates passing.
 
+Full promotion run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-202300Z-n96-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Commit/config: `9cae62f42`, current best code plus depth 1 down prefetch and
+  `-t 28 -tb 32`.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78027.47 ms, inside the 106331.72 ms gate.
+- Decode: 231844.76 ms / 85 runs, 2.72759 s/token, 0.36662 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=2032, hits=2032, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=35885, misses=38163, preloads=2032,
+    hit_rate=48.5%.
+  - pinned staging: copies=35725, host_stage=49231.409 ms,
+    h2d=7735.211 ms.
+  - up/gate: calls=2381, total=24.634 ms/call, wall=27.651 ms/call,
+    wall_gap=3.017 ms/call.
+  - down batch: calls=4506, stage=10.177 ms/call,
+    total=10.331 ms/call.
+
+Comparison:
+
+- Phase 3E current best full `-n 96`: 2.72551 s/token, 0.36690 tok/s.
+- Phase 3M full `-n 96`: 2.72759 s/token, 0.36662 tok/s.
+
+Analysis:
+
+- The `-n 32` improvement does not generalize to full `-n 96`.
+- Depth 1 prefetch improves down stage and cache hit rate, but full-run
+  host_stage and up/gate wall gap increase enough to offset the benefit.
+
+Decision:
+
+- Reject Phase 3M for full promotion.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 Result timestamp: 2026-07-02 21:00 CST.
 
 Smoke run:
