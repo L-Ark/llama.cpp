@@ -3269,6 +3269,53 @@ Decision:
 - The `-n 4` graph profile passes all gates and prints the required data.
 - Continue to cold `-n 32` for stable attribution.
 
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-183122Z-n32-phase3b-graph-profile`
+
+Measured result:
+
+- Commit/config: `a2b7f6161`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 106040.00 ms, inside the 106331.72 ms gate.
+- Decode: 95575.69 ms / 31 runs, 3.08309 s/token, 0.32435 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Graph profile:
+  - submit: calls=32, total=201569.300 ms, avg=6299.041 ms/call.
+  - sync: calls=192, total=23.870 ms, avg=0.124 ms/call.
+  - decode sync: calls=31, total=23.710 ms.
+- MoE wall profile:
+  - up/gate: calls=869, total=18.568 ms/call, wall=18.595 ms/call,
+    wall_gap=0.027 ms/call.
+  - down: calls=1644, total=9.116 ms/call, wall=9.202 ms/call,
+    wall_gap=0.086 ms/call.
+
+Analysis:
+
+- `graph_compute_async` submit time accounts for almost all prompt+decode time:
+  201.57s submit vs about 201.62s common prompt+eval.
+- `synchronize()` is not the bottleneck: total sync time is only 23.870 ms.
+- MoE wall time accounts for about:
+  - up/gate: 869 * 18.595 ms = 16.16s.
+  - down: 1644 * 9.202 ms = 15.13s.
+  - combined: about 31.29s.
+- Therefore, for `-n 32`, roughly 64s of decode time is in graph submit but
+  outside the currently instrumented MoE stream functions. The next optimization
+  must identify which scheduled non-MoE ops or graph splits consume that time.
+
+Decision:
+
+- Phase 3B graph submit/sync instrumentation is accepted as diagnostic code:
+  default-off, builds, and preserves quality under the cold-start gates.
+- Do not claim token-rate improvement from Phase 3B.
+- Next candidate should split graph submit time by prompt/decode and then by
+  backend graph split or op family, because context-level submit vs sync is now
+  resolved.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
