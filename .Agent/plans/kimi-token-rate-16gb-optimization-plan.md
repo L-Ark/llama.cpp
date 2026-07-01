@@ -3161,6 +3161,70 @@ Decision:
 - Next candidate should add or use graph-level per-op/per-split timing to find
   the non-MoE decode bucket before making another optimization attempt.
 
+## Next candidate: Phase 3B graph submit/synchronize wall-time profile
+
+Design timestamp: 2026-07-02 18:29 CST.
+
+Current bottleneck:
+
+- Phase 3A shows MoE function wall gaps are tiny:
+  - up/gate wall_gap=0.028 ms/call on `-n 32`.
+  - down wall_gap=0.084 ms/call on `-n 32`.
+- MoE wall time accounts for about 31.6s of the 97.5s `-n 32` eval time.
+- `llama_context::graph_compute()` submits the graph asynchronously via
+  `ggml_backend_sched_graph_compute_async`, while `llama_context::synchronize()`
+  waits for completion and updates the perf counters. Current logs do not split
+  graph submit time from synchronize/wait time.
+
+Hypothesis:
+
+Add default-off graph wall profiling controlled by:
+
+- `LLAMA_KIMI_GRAPH_PROFILE=1`
+
+Record aggregate wall time for:
+
+- `graph_compute_async` submit calls.
+- `ggml_backend_sched_synchronize` wait calls.
+- queued-token class at synchronization time: prompt (`n_queued_tokens > 1`) vs
+  decode (`n_queued_tokens == 1`).
+
+This will determine whether the remaining time is mostly backend graph
+execution/synchronization, CPU submission overhead, or outside the graph path.
+
+Theoretical value:
+
+- If synchronize decode wall time roughly matches eval time, the next
+  optimization target is the scheduled graph/non-MoE CUDA kernels.
+- If graph submit time is large, the target is graph scheduling/reuse or graph
+  construction.
+- If neither is large, the target is outside context graph execution, such as
+  sampling/output transfer or application loop overhead.
+
+Execution:
+
+- Implement the instrumentation in `src/llama-context.cpp` with no effect
+  unless `LLAMA_KIMI_GRAPH_PROFILE=1`.
+- Build remotely.
+- Run cold `-n 4` with accepted Phase 2H runtime env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+
+Acceptance:
+
+- Code must build.
+- Default path must not change when `LLAMA_KIMI_GRAPH_PROFILE` is unset.
+- Runs must keep host RAM under 16GB, TTFT <=106331.72 ms, and semantically
+  correct France output.
+- Logs must print graph profile totals for submit and synchronize.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+
+Rollback:
+
+- Revert if build fails, default execution path changes, output quality fails,
+  or graph profile adds unacceptable overhead to the attribution runs.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
