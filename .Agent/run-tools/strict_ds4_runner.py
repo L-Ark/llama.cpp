@@ -86,6 +86,33 @@ def parse_memory_events(text: str) -> dict[str, int]:
     return events
 
 
+def parse_memory_stat(text: str) -> dict[str, int]:
+    keys = {
+        "anon",
+        "file",
+        "kernel",
+        "slab",
+        "inactive_file",
+        "active_file",
+        "file_mapped",
+        "pgfault",
+        "pgmajfault",
+        "workingset_refault_file",
+        "workingset_activate_file",
+        "workingset_restore_file",
+    }
+    stats: dict[str, int] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 2 or parts[0] not in keys:
+            continue
+        try:
+            stats[parts[0]] = int(parts[1])
+        except ValueError:
+            pass
+    return stats
+
+
 def extract_answer(stdout_text: str) -> str:
     text = stdout_text.replace("\b", "").replace("\r", "\n").strip()
     if PROMPT in text:
@@ -282,6 +309,8 @@ def summarize_case(
             pass
     memory_events = (case_dir / "memory.events").read_text(encoding="utf-8", errors="replace") if (case_dir / "memory.events").exists() else ""
     memory_event_counts = parse_memory_events(memory_events)
+    memory_stat = (case_dir / "memory.stat").read_text(encoding="utf-8", errors="replace") if (case_dir / "memory.stat").exists() else ""
+    memory_stat_relevant = parse_memory_stat(memory_stat)
     oom_seen = memory_event_counts.get("oom", 0) > 0 or memory_event_counts.get("oom_kill", 0) > 0
     max_events = memory_event_counts.get("max", 0)
     ram_limit_killed = (case_dir / "ram_limit_exceeded.txt").exists()
@@ -308,6 +337,10 @@ def summarize_case(
         "memory_max_bytes": memory_max_bytes,
         "ram_kill_threshold_bytes": ram_kill_threshold_bytes,
         "memory_max_events": max_events,
+        "memory_stat_relevant": memory_stat_relevant,
+        "memory_file_bytes": memory_stat_relevant.get("file"),
+        "pgmajfault": memory_stat_relevant.get("pgmajfault"),
+        "workingset_refault_file": memory_stat_relevant.get("workingset_refault_file"),
         "max_rss_kb": time_v["max_rss_kb"],
         "elapsed_seconds": time_v["elapsed_seconds"],
         "oom_seen": oom_seen,
@@ -336,6 +369,7 @@ def main() -> int:
     parser.add_argument("--vram-cache-gb", type=int, default=2)
     parser.add_argument("--memory-max-bytes", type=int, default=MEMORY_MAX_BYTES)
     parser.add_argument("--ram-kill-threshold-bytes", type=int, default=MEMORY_MAX_BYTES)
+    parser.add_argument("--drop-caches-before-case", action="store_true")
     parser.add_argument("--extra-arg", action="append", default=[])
     args = parser.parse_args()
 
@@ -366,6 +400,7 @@ def main() -> int:
         "model": str(args.model),
         "memory_max_bytes": args.memory_max_bytes,
         "ram_kill_threshold_bytes": args.ram_kill_threshold_bytes,
+        "drop_caches_before_case": args.drop_caches_before_case,
         "prompt": PROMPT,
     }
     write_json(run_dir / "metadata.json", metadata)
@@ -399,6 +434,10 @@ def main() -> int:
             ram_kill_threshold_bytes=args.ram_kill_threshold_bytes,
         )
         unit = f"vendor-ds4-16gb-{utc_stamp()}-cpu{cpu_moe}.service"
+        if args.drop_caches_before_case:
+            (case_dir / "cold_start_procedure.txt").write_text("sync; echo 3 > /proc/sys/vm/drop_caches\n", encoding="utf-8")
+            subprocess.run(["sync"], check=True)
+            Path("/proc/sys/vm/drop_caches").write_text("3\n", encoding="utf-8")
         systemd_cmd = [
             "systemd-run",
             f"--unit={unit}",
@@ -427,6 +466,9 @@ def main() -> int:
             "ttft_estimate_ms",
             "memory_peak_bytes",
             "memory_max_events",
+            "memory_file_bytes",
+            "pgmajfault",
+            "workingset_refault_file",
             "ram_ok",
             "ram_limit_killed",
             "correctness_ok",
