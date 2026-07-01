@@ -1750,6 +1750,19 @@
 - `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
 - `rollback_status`: no source change; no commit/push as SOTA. Current effective SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：expert-keep-top3-updown-n256
+
+- `attempt_id`: `20260702-expert-keep-top3-updown-n256`
+- `attempt_kind`: `config-probe/truncation-check`
+- `status`: planned
+- `hypothesis`: The rejected top3 run had strong speed (`2.7 tok/s`) and mostly correct content, but failed because the output ended with an incomplete trailing sentence at the `-n 192` generation limit. Increasing the generation budget to `-n 256` and context to `-c 384` may allow the same top3 approximation to finish a coherent France answer while preserving most of the token-rate gain.
+- `theoretical_upper_bound`: TTFT should remain close to top3 (`~36.6s`) because model load and first-token path are unchanged. Generation rate should remain near top3 if the per-token compute path is unchanged; total wall time will increase only because more tokens are allowed. Promote only if the measured `eval_tok_s` remains above current top4 SOTA `2.3 tok/s` and the answer is complete/coherent.
+- `risk`: Longer generation may reveal more semantic degradation from top3 pruning, produce a rambling answer, or still fail to stop cleanly. Larger `-c 384` may use more KV/VRAM; reject on CUDA OOM, RAM violation, TTFT gate failure, incomplete output, or `eval_tok_s <= 2.3`.
+- `test_config`: pushed branch HEAD `19449b48b` to be clean-rebuilt before run, no source change, `GGML_MOE_KEEP_TOPK_UPDOWN=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-n 256 -c 384 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and complete/coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: No source change. If any gate fails, record rejected/unpromoted and keep top4 `2.3 tok/s` SOTA. If accepted, immediately write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, full France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
