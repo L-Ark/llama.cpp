@@ -7957,3 +7957,92 @@ Decision:
   - Phase 3ZD strict n96: 2.69143 s/token, 0.37155 tok/s.
 - Next optimization must beat 2.69143 s/token under the same strict cold-start
   harness and quality gates.
+
+## Next candidate: Phase 3ZE strict down prefetch refresh
+
+Design timestamp: 2026-07-02 23:18 UTC / 2026-07-03 07:18 CST.
+
+Current bottleneck from Phase 3ZD:
+
+- Strict n96 decode is 228.77195 s / 85 tokens =
+  2.69143 s/token, 0.37155 tok/s.
+- The GPU down kernel is not the bottleneck:
+  - down CUDA kernel: 0.111 ms/call,
+  - down CUDA wall: 12.220 ms/call,
+  - down stage: 12.023 ms/call.
+- The dominant compressible bucket is expert staging/cache misses:
+  - pinned staging: 35734 copies,
+  - host_stage=47257.080 ms,
+  - h2d=7731.993 ms,
+  - VRAM cache hits=33844, misses=40188, hit_rate=45.7%.
+- Up/gate is already fully batched with no fallback:
+  - calls=2381,
+  - batch_accept=2381,
+  - batch_decline=0.
+- The remaining 52 `multirow_not_supported` declines are prompt-layout related;
+  Phase 3ZC proved simple flattening is unsafe.
+
+Hypothesis:
+
+- Re-enable the existing default-off down prefetch hook:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- This hook is called from the up/gate path and preloads the corresponding
+  down experts into the same VRAM cache before the down layer uses them.
+- It does not change routing or math, only timing of cache insertion/copy.
+- Old Phase 2P data showed down prefetch reduced n32 down stage
+  9.065 -> 3.609 ms/call with 100% useful hits, but that run predates the
+  strict 15.9GB baseline refresh and later Phase 3 changes. Retest under the
+  current strict harness before making any claim.
+
+Theoretical upper bound:
+
+- Phase 3ZD has 47.257 s host staging and 7.732 s H2D staging recorded.
+- If down prefetch hides half of the down staging component without increasing
+  up/gate misses, upper-bound full decode could improve by about 20-25 s:
+  `(228.77 - 20) / 85 = 2.456 s/token`.
+- A realistic target is smaller because prefetch competes for H2D bandwidth and
+  cache capacity. Even a 5-10 s decode reduction would beat the strict baseline
+  if TTFT and quality remain stable.
+
+Risks:
+
+- Prefetch can evict useful up/gate or down cache entries and increase misses.
+- TTFT can rise because prefetch starts during early generation.
+- Extra VRAM pressure can reduce reserve; current reserve is 824 MiB, so the
+  experiment must keep auto clamp and the 512 MiB safety margin.
+
+Execution:
+
+1. Run cold strict `-n 4` with Phase 3ZD env plus down prefetch.
+2. If hard gates pass and logs show useful prefetch activity, run cold strict
+   `-n 32`.
+3. Promote to cold strict `-n 96` only if `-n 32` is not slower than the best
+   current n32 reference and all hard gates pass.
+
+Hard gates for every run:
+
+- cgroup `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM `< 16000000000` including page cache.
+- TTFT `<= 106331.72 ms`.
+- France output semantically correct and coherent.
+- Strict launch failures=0.
+- Read failures=0.
+- VRAM reserve must remain visible with no OOM.
+- Logs must include down prefetch activity:
+  `down prefetch: loads=..., hits=..., evicted_unused=..., useful_rate=...`.
+
+Promotion target:
+
+- Full `-n 96` must beat Phase 3ZD strict baseline:
+  - faster than 2.69143 s/token,
+  - above 0.37155 tok/s,
+  - full France paragraph must remain correct and coherent.
+
+Rollback/rejection:
+
+- Since this is a config-only experiment, no source rollback is expected.
+- Reject the config if any hard gate fails, if prefetch does not activate, if
+  useful-rate is poor with significant evictions, or if the promoted n96 run
+  does not beat Phase 3ZD.
