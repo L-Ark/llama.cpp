@@ -19,7 +19,7 @@ DEFAULT_BIN = Path("/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/
 DEFAULT_MODEL = Path("/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf")
 DEFAULT_OUT_ROOT = Path("/root/lfz/runs/vendor-ds4-16gb")
 PROMPT = "Please introduce France in a short paragraph."
-MEMORY_MAX_BYTES = 16_000_000_000
+MEMORY_MAX_BYTES = 15_500_000_000
 
 
 def utc_stamp() -> str:
@@ -71,6 +71,19 @@ def parse_time_v(text: str) -> dict[str, float | int | None]:
         except ValueError:
             pass
     return out
+
+
+def parse_memory_events(text: str) -> dict[str, int]:
+    events: dict[str, int] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            events[parts[0]] = int(parts[1])
+        except ValueError:
+            pass
+    return events
 
 
 def extract_answer(stdout_text: str) -> str:
@@ -155,10 +168,32 @@ cat > prompt.txt <<'EOF_PROMPT'
 {PROMPT}
 EOF_PROMPT
 printf "/exit\\n" > stdin.txt
+cat > detect_answer_started.py <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+prompt = sys.argv[2]
+if not path.exists():
+    raise SystemExit(1)
+
+text = path.read_text(encoding="utf-8", errors="ignore")
+text = text.replace("\\b", "").replace("\\r", "\\n")
+if prompt not in text:
+    raise SystemExit(1)
+
+tail = text.rsplit(prompt, 1)[-1]
+tail = re.split(r"\\[\\s*Prompt\\s*:", tail, maxsplit=1)[0]
+tail = re.sub(r"^[>\\s|/\\\\-]+", "", tail).strip()
+raise SystemExit(0 if re.search(r"[A-Za-z]{{2,}}", tail) else 1)
+PY
 {shell_quote_env(env)}
 printf '%s\\n' {shlex.quote(exact_command)} > exact_command.txt
 env | sort > environment.txt
 date -Is > start_time.txt
+start_ns=$(date +%s%N)
+echo "$start_ns" > start_ns.txt
 CG_REL=$(awk -F: '$2 == "" {{ print $3 }}' /proc/self/cgroup | tail -n 1)
 CG_DIR="/sys/fs/cgroup${{CG_REL}}"
 printf '%s\\n' "$CG_DIR" > cgroup_path.txt
@@ -179,9 +214,27 @@ printf '%s\\n' "$CG_DIR" > cgroup_path.txt
 ) > resource_samples.tsv &
 MONITOR_PID=$!
 set +e
-/usr/bin/time -v {exact_command} < stdin.txt > stdout.txt 2> stderr.txt
+/usr/bin/time -v {exact_command} < stdin.txt > stdout.txt 2> stderr.txt &
+CMD_PID=$!
+(
+  while kill -0 "$CMD_PID" 2>/dev/null; do
+    if python3 detect_answer_started.py stdout.txt {shlex.quote(PROMPT)}; then
+      first_ns=$(date +%s%N)
+      python3 - "$start_ns" "$first_ns" > first_answer_ms.txt <<'PY'
+import sys
+print((int(sys.argv[2]) - int(sys.argv[1])) / 1000000.0)
+PY
+      exit 0
+    fi
+    sleep 0.05
+  done
+) &
+WATCHER_PID=$!
+wait "$CMD_PID"
 STATUS=$?
 set -e
+kill "$WATCHER_PID" 2>/dev/null || true
+wait "$WATCHER_PID" 2>/dev/null || true
 kill "$MONITOR_PID" 2>/dev/null || true
 wait "$MONITOR_PID" 2>/dev/null || true
 date -Is > end_time.txt
@@ -197,7 +250,7 @@ exit "$STATUS"
     path.chmod(0o755)
 
 
-def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int) -> dict[str, object]:
+def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int, memory_max_bytes: int) -> dict[str, object]:
     stdout_text = (case_dir / "stdout.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stdout.txt").exists() else ""
     stderr_text = (case_dir / "stderr.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stderr.txt").exists() else ""
     combined = stdout_text + "\n" + stderr_text
@@ -215,7 +268,15 @@ def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int)
         except ValueError:
             pass
     memory_events = (case_dir / "memory.events").read_text(encoding="utf-8", errors="replace") if (case_dir / "memory.events").exists() else ""
-    oom_seen = bool(re.search(r"oom(?:_kill)?\s+[1-9]", memory_events))
+    memory_event_counts = parse_memory_events(memory_events)
+    oom_seen = memory_event_counts.get("oom", 0) > 0 or memory_event_counts.get("oom_kill", 0) > 0
+    max_events = memory_event_counts.get("max", 0)
+    first_answer_ms = None
+    if (case_dir / "first_answer_ms.txt").exists():
+        try:
+            first_answer_ms = float((case_dir / "first_answer_ms.txt").read_text().strip())
+        except ValueError:
+            pass
     summary: dict[str, object] = {
         "case_dir": str(case_dir),
         "unit": unit,
@@ -227,12 +288,15 @@ def summarize_case(case_dir: Path, cpu_moe: int, unit: str, systemd_status: int)
         "load_ms": load_ms,
         "prompt_eval_ms": prompt_ms,
         "eval_ms": eval_ms,
-        "ttft_estimate_ms": ttft_estimate_ms,
+        "ttft_estimate_ms": first_answer_ms if first_answer_ms is not None else ttft_estimate_ms,
+        "first_answer_ms": first_answer_ms,
         "memory_peak_bytes": memory_peak_bytes,
+        "memory_max_bytes": memory_max_bytes,
+        "memory_max_events": max_events,
         "max_rss_kb": time_v["max_rss_kb"],
         "elapsed_seconds": time_v["elapsed_seconds"],
         "oom_seen": oom_seen,
-        "ram_ok": memory_peak_bytes is not None and memory_peak_bytes <= MEMORY_MAX_BYTES and not oom_seen,
+        "ram_ok": memory_peak_bytes is not None and memory_peak_bytes < memory_max_bytes and max_events == 0 and not oom_seen,
         "correctness_ok": correct,
         "correctness_reason": reason,
         "answer": answer,
@@ -258,8 +322,8 @@ def main() -> int:
     parser.add_argument("--extra-arg", action="append", default=[])
     args = parser.parse_args()
 
-    if args.memory_max_bytes != MEMORY_MAX_BYTES:
-        print("This runner is intended for exactly 16000000000 bytes MemoryMax.", file=sys.stderr)
+    if args.memory_max_bytes > MEMORY_MAX_BYTES:
+        print(f"MemoryMax must not exceed {MEMORY_MAX_BYTES} bytes for strict below-16GB runs.", file=sys.stderr)
         return 2
     if not args.binary.exists():
         print(f"missing binary: {args.binary}", file=sys.stderr)
@@ -330,7 +394,7 @@ def main() -> int:
         (case_dir / "runner_elapsed_seconds.txt").write_text(f"{time.time() - start:.3f}\n", encoding="utf-8")
         subprocess.run(["systemctl", "show", unit], text=True, stdout=(case_dir / "unit.properties").open("w"), stderr=subprocess.DEVNULL)
         subprocess.run(["journalctl", "-u", unit, "--no-pager", "-n", "200"], text=True, stdout=(case_dir / "journal.log").open("w"), stderr=subprocess.DEVNULL)
-        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode))
+        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode, args.memory_max_bytes))
 
     write_json(run_dir / "summaries.json", summaries)
     with (run_dir / "results.tsv").open("w", encoding="utf-8") as f:
@@ -340,6 +404,7 @@ def main() -> int:
             "prompt_tok_s",
             "ttft_estimate_ms",
             "memory_peak_bytes",
+            "memory_max_events",
             "ram_ok",
             "correctness_ok",
             "correctness_reason",
