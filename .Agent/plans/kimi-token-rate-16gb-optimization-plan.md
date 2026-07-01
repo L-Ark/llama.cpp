@@ -2414,6 +2414,50 @@ Decision:
   a passing smoke, but promotion to `-n 96` will require `-n 32` to beat Phase
   2H `-n 32` or show a clear bottleneck reason worth retuning.
 
+Result timestamp: 2026-07-02 17:14 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171437Z-n32-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus depth 2 down
+  prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101161.66 ms, inside the 106331.72 ms gate.
+- Decode: 93449.43 ms / 31 runs, 3.01450 s/token, 0.33173 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=1442, hits=1442, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=14345, misses=12615,
+  preloads=1442, hit_rate=53.2%.
+- Pinned staging: copies=13122, host_stage=18176.985 ms, h2d=2844.610 ms.
+- Up/gate profile: calls=869, total=17.730 ms/call.
+- Down profile: calls=1644, stage=6.558 ms/call, total=6.717 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2P depth 8 `-n 32`: 94356.18 ms / 31 runs, 3.04375 s/token,
+  0.32854 tok/s.
+- Phase 2Q depth 2 `-n 32`: 93449.43 ms / 31 runs, 3.01450 s/token,
+  0.33173 tok/s.
+
+Decision:
+
+- The `-n 32` run passes all gates and beats both Phase 2H and Phase 2P on the
+  matching token count.
+- The mechanism now has a better balance: down stage improves over Phase 2H,
+  while up/gate total is also lower than the Phase 2H `-n 32` profile.
+- Continue to cold full `-n 96`.
+- Full promotion still requires beating accepted Phase 2H full `-n 96`
+  (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with strict RAM,
+  VRAM, TTFT, launch/read, and semantic quality gates passing.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
