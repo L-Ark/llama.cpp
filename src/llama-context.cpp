@@ -12,8 +12,10 @@
 #include "llama-ext.h"
 #include "llama.h"
 
+#include <atomic>
 #include <cinttypes>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -21,6 +23,72 @@
 //
 // llama_context
 //
+
+namespace {
+
+struct kimi_graph_profile_state {
+    std::atomic<uint64_t> submit_calls{0};
+    std::atomic<uint64_t> submit_us{0};
+    std::atomic<uint64_t> sync_calls{0};
+    std::atomic<uint64_t> sync_us{0};
+    std::atomic<uint64_t> sync_decode_calls{0};
+    std::atomic<uint64_t> sync_decode_us{0};
+    std::atomic<uint64_t> sync_prompt_calls{0};
+    std::atomic<uint64_t> sync_prompt_us{0};
+    std::atomic<uint64_t> sync_idle_calls{0};
+    std::atomic<uint64_t> sync_idle_us{0};
+    std::atomic<uint64_t> sync_decode_tokens{0};
+    std::atomic<uint64_t> sync_prompt_tokens{0};
+};
+
+static kimi_graph_profile_state g_kimi_graph_profile;
+
+static void kimi_graph_profile_report() {
+    const uint64_t submit_calls = g_kimi_graph_profile.submit_calls.load();
+    const uint64_t sync_calls   = g_kimi_graph_profile.sync_calls.load();
+    if (submit_calls == 0 && sync_calls == 0) {
+        return;
+    }
+    const auto avg_ms = [](uint64_t us, uint64_t calls) {
+        return calls == 0 ? 0.0 : (double) us / 1000.0 / (double) calls;
+    };
+    const uint64_t submit_us       = g_kimi_graph_profile.submit_us.load();
+    const uint64_t sync_us         = g_kimi_graph_profile.sync_us.load();
+    const uint64_t sync_dec_calls  = g_kimi_graph_profile.sync_decode_calls.load();
+    const uint64_t sync_dec_us     = g_kimi_graph_profile.sync_decode_us.load();
+    const uint64_t sync_pr_calls   = g_kimi_graph_profile.sync_prompt_calls.load();
+    const uint64_t sync_pr_us      = g_kimi_graph_profile.sync_prompt_us.load();
+    const uint64_t sync_idle_calls = g_kimi_graph_profile.sync_idle_calls.load();
+    const uint64_t sync_idle_us    = g_kimi_graph_profile.sync_idle_us.load();
+    LLAMA_LOG_INFO(
+        "[kimi_graph_profile] submit: calls=%" PRIu64 " total=%.3f ms avg=%.3f ms/call\n",
+        submit_calls, (double) submit_us / 1000.0, avg_ms(submit_us, submit_calls));
+    LLAMA_LOG_INFO(
+        "[kimi_graph_profile] sync: calls=%" PRIu64 " total=%.3f ms avg=%.3f ms/call "
+        "decode_calls=%" PRIu64 " decode_tokens=%" PRIu64 " decode_total=%.3f ms decode_avg=%.3f ms/call "
+        "prompt_calls=%" PRIu64 " prompt_tokens=%" PRIu64 " prompt_total=%.3f ms prompt_avg=%.3f ms/call "
+        "idle_calls=%" PRIu64 " idle_total=%.3f ms idle_avg=%.3f ms/call\n",
+        sync_calls, (double) sync_us / 1000.0, avg_ms(sync_us, sync_calls),
+        sync_dec_calls, g_kimi_graph_profile.sync_decode_tokens.load(),
+        (double) sync_dec_us / 1000.0, avg_ms(sync_dec_us, sync_dec_calls),
+        sync_pr_calls, g_kimi_graph_profile.sync_prompt_tokens.load(),
+        (double) sync_pr_us / 1000.0, avg_ms(sync_pr_us, sync_pr_calls),
+        sync_idle_calls, (double) sync_idle_us / 1000.0, avg_ms(sync_idle_us, sync_idle_calls));
+}
+
+static bool kimi_graph_profile_enabled() {
+    static bool enabled = []() {
+        const char * env = std::getenv("LLAMA_KIMI_GRAPH_PROFILE");
+        const bool on = env && env[0] && env[0] != '0';
+        if (on) {
+            std::atexit(kimi_graph_profile_report);
+        }
+        return on;
+    }();
+    return enabled;
+}
+
+}
 
 llama_context::llama_context(
         const llama_model & model,
@@ -653,7 +721,27 @@ void llama_context::synchronize() {
         return;
     }
 
+    const bool graph_profile = kimi_graph_profile_enabled();
+    const int  queued_tokens = n_queued_tokens;
+    const int64_t t_sync_start_us = graph_profile ? ggml_time_us() : 0;
     ggml_backend_sched_synchronize(sched.get());
+    if (graph_profile) {
+        const uint64_t sync_us = (uint64_t) (ggml_time_us() - t_sync_start_us);
+        g_kimi_graph_profile.sync_calls.fetch_add(1, std::memory_order_relaxed);
+        g_kimi_graph_profile.sync_us.fetch_add(sync_us, std::memory_order_relaxed);
+        if (queued_tokens == 1) {
+            g_kimi_graph_profile.sync_decode_calls.fetch_add(1, std::memory_order_relaxed);
+            g_kimi_graph_profile.sync_decode_us.fetch_add(sync_us, std::memory_order_relaxed);
+            g_kimi_graph_profile.sync_decode_tokens.fetch_add(1, std::memory_order_relaxed);
+        } else if (queued_tokens > 1) {
+            g_kimi_graph_profile.sync_prompt_calls.fetch_add(1, std::memory_order_relaxed);
+            g_kimi_graph_profile.sync_prompt_us.fetch_add(sync_us, std::memory_order_relaxed);
+            g_kimi_graph_profile.sync_prompt_tokens.fetch_add((uint64_t) queued_tokens, std::memory_order_relaxed);
+        } else {
+            g_kimi_graph_profile.sync_idle_calls.fetch_add(1, std::memory_order_relaxed);
+            g_kimi_graph_profile.sync_idle_us.fetch_add(sync_us, std::memory_order_relaxed);
+        }
+    }
 
     // FIXME: if multiple single tokens are evaluated without a synchronization,
     // the stats will be added to the prompt evaluation stats
@@ -2210,7 +2298,14 @@ ggml_status llama_context::graph_compute(
         set_n_threads_fn.second(set_n_threads_fn.first, n_threads);
     }
 
+    const bool graph_profile = kimi_graph_profile_enabled();
+    const int64_t t_submit_start_us = graph_profile ? ggml_time_us() : 0;
     auto status = ggml_backend_sched_graph_compute_async(sched.get(), gf);
+    if (graph_profile) {
+        const uint64_t submit_us = (uint64_t) (ggml_time_us() - t_submit_start_us);
+        g_kimi_graph_profile.submit_calls.fetch_add(1, std::memory_order_relaxed);
+        g_kimi_graph_profile.submit_us.fetch_add(submit_us, std::memory_order_relaxed);
+    }
     if (status != GGML_STATUS_SUCCESS) {
         LLAMA_LOG_ERROR("%s: ggml_backend_sched_graph_compute_async failed with error %d\n", __func__, status);
     }
