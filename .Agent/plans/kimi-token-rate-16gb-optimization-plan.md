@@ -2173,3 +2173,66 @@ Decision:
   helps shorter runs but loses at longer output. The next experiment should
   tune split budget for `-n 96` specifically, or target graph replay/upgate
   cost rather than fixed cache partitioning.
+
+## Next candidate: Phase 2N n96 split-cache budget sweep
+
+Design timestamp: 2026-07-01 16:31 UTC.
+
+Current bottleneck:
+
+- Phase 2M split cache improved `-n 32` but missed the full `-n 96` target.
+- Phase 2M `-n 96` still passed correctness, TTFT, RAM, and VRAM gates, so the
+  split-cache mechanism is safe enough for config tuning.
+- Phase 2H/2M `-n 96` route profile by tensor kind:
+  - down: 223.10 GiB logical traffic, 7543 unique experts.
+  - up+gate: 178.46 GiB logical traffic, 8296 unique experts.
+- Phase 2M used `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`, producing:
+  - down pool: 1109 slots, hit_rate=50.6%.
+  - upgate pool: 1259 slots, hit_rate=47.2%.
+- Since down traffic is larger and down misses feed the visible staging bucket,
+  45% may over-allocate the upgate pool for full-length n96.
+
+Hypothesis:
+
+Keep the accepted default-off split threshold code and test a more down-heavy
+budget:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`
+
+This should reduce the small upgate pool from about 1259 slots to about 979
+slots and increase the large down pool from about 1109 slots to about 1310
+slots. If the full-length regression is caused by down pool pressure, the
+larger down pool should reduce down misses and staging enough to beat Phase 2H
+`-n 96`.
+
+Theoretical upper bound:
+
+- Phase 2M n96 down misses were 17786 and down stage was 11.130 ms/call.
+- A 18% larger down pool could plausibly save 5-10% of down misses if locality
+  is pool-capacity limited. That would save roughly 2-5s from full decode.
+- The maximum practical target for this budget-only step is therefore modest:
+  improve from Phase 2M's 3.52464 s/token to below Phase 2H's 3.47192 s/token,
+  likely around 3.43-3.47 s/token if successful.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 96` directly because this is a full-length
+  budget tuning step.
+- Promote only if `-n 96` is faster than accepted Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token) with all gates passing.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, cache allocation fails, launch/read failures appear, or `-n 96` does
+  not improve over Phase 2H.
