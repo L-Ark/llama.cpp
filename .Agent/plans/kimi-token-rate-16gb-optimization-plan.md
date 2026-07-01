@@ -2308,6 +2308,76 @@ Decision:
   mechanism: reducing graph replay/upgate cost, reducing the number of expert
   loads, or making cache partitioning adaptive rather than fixed.
 
+## Next candidate: Phase 2P down prefetch overlap
+
+Design timestamp: 2026-07-02 17:02 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` visible buckets:
+  - Up/gate profile: 2381 calls, 22.785 ms/call, about 54.2s total.
+  - Down profile: 4506 calls, stage=11.616 ms/call, about 52.3s visible down
+    staging time.
+  - Pinned staging: host_stage=50153.894 ms, h2d=7758.831 ms.
+- Split-cache budget tuning improved some cache hit-rate buckets, but all
+  tested fixed budgets missed Phase 2H at full `-n 96`.
+- The code already has a default-off down prefetch hook:
+  `GGML_MOE_PREFETCH_DOWN=1`, called from the up/gate path via
+  `preload_registered_down_for_active`. It can enqueue down expert loads on the
+  prefetch stream before the down layer uses them.
+
+Hypothesis:
+
+Enable down prefetch on top of the accepted Phase 2H full configuration:
+
+- `GGML_MOE_PREFETCH_DOWN=1`
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+
+Do not combine with split cache initially. This isolates whether overlapping
+down expert staging with up/gate compute reduces full-length decode. The
+mechanism should not change math or routing; it only changes when down experts
+enter the VRAM cache.
+
+Theoretical upper bound:
+
+- If down prefetch can hide half of the Phase 2H down staging bucket, it could
+  save about 26s on the 295.1s decode, improving to about 269s / 85 runs =
+  3.16 s/token.
+- A more realistic bound is lower because prefetch can evict useful cache lines
+  and still contends for H2D bandwidth. If it hides 10-20% of down staging, the
+  expected gain is about 5-10s, enough to beat Phase 2H if quality and TTFT hold.
+
+Correctness and performance risks:
+
+- Correctness risk is low if cache keys remain correct, but stale or wrongly
+  prefetched down weights could corrupt output.
+- Performance risk is moderate: prefetch may evict useful up/gate or down
+  entries, increasing misses. The logs must show `down prefetch` useful rate,
+  evicted-unused count, and cache hit rates.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show down prefetch activity.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32` to check miss/eviction behavior.
+- Promote to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  and all gates pass.
+- Full `-n 96` promotion requires beating Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token).
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, prefetch does not activate, down prefetch useful rate is poor with high
+  evicted-unused count, launch/read failures appear, or token rate does not
+  improve over the matching Phase 2H token count.
+
 Result timestamp: 2026-07-01 16:28 UTC.
 
 Run:
