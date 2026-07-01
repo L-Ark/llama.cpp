@@ -2721,6 +2721,45 @@ Decision:
 - If `-n 32` is slower than Phase 2H or has similarly tight TTFT without clear
   cache/staging improvement, reject without running `-n 96`.
 
+Result timestamp: 2026-07-02 17:35 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-173544Z-n32-phase2s-vram-cache15200`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15200`, no split cache, no down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31540 MiB used, 570 MiB free.
+- TTFT: 100855.49 ms, inside the 106331.72 ms gate.
+- Decode: 98327.66 ms / 31 runs, 3.17186 s/token, 0.31527 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2043, slot=7.44 MiB, hits=12961, misses=13983,
+  preloads=0, hit_rate=48.1%.
+- Pinned staging: copies=13077, host_stage=18034.264 ms, h2d=2835.196 ms.
+- Up/gate profile: calls=869, total=18.110 ms/call.
+- Down profile: calls=1644, stage=8.915 ms/call, total=9.082 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2S `-n 32`: 98327.66 ms / 31 runs, 3.17186 s/token,
+  0.31527 tok/s.
+
+Decision:
+
+- Reject Phase 2S without running full `-n 96`.
+- Although this config uses more VRAM and passes RAM/TTFT/quality at `-n 32`,
+  it is slower than Phase 2H on the matching medium-length run.
+- The 15200 MiB and 15400 MiB results together show that simply enlarging the
+  single down-cache budget does not improve the current full-run bottleneck:
+  15400 MiB violates TTFT at smoke, and 15200 MiB slows `-n 32`.
+- No code rollback is needed because this was env-only.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
