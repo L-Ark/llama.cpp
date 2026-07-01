@@ -892,6 +892,22 @@ Rollback:
 - Reject any sweep point that fails quality, TTFT, or token-rate gate. Do not
   commit performance config until full `-n 96` passes.
 
+Result for `-t 32 -tb 32` smoke:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-140437Z-n32-phase2e-src1fix-vram-cache-t32`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous`
+- TTFT: 104061.14 ms, within the 106331.72 ms gate.
+- Decode: 31 runs, 4.53227 s/token, 0.22 tok/s.
+- MoE cache/read status: read_failures=0, VRAM cache hit_rate=62.3%.
+- Decision: pass smoke gate. Next practice is a full cold `-n 96` with the exact
+  same configuration before any performance promotion.
+
 ## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
 
 Design timestamp: 2026-07-01 13:24 UTC.
@@ -951,5 +967,5 @@ Result:
 
 ## Immediate next action
 
-Run Phase 2E cold `-n 32` with src1 fix + expert pack + 15GB VRAM cache +
-`-t 32 -tb 32`.
+Run Phase 2E full cold `-n 96` with src1 fix + expert pack + 15GB VRAM cache +
+`-t 32 -tb 32`, using the same cold-start and 16GB cgroup harness as the smoke.
