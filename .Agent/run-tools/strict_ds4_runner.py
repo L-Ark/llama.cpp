@@ -58,7 +58,7 @@ def parse_time_v(text: str) -> dict[str, float | int | None]:
     match = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
     if match:
         out["max_rss_kb"] = int(match.group(1))
-    match = re.search(r"Elapsed \(wall clock\) time .*:\s*([0-9:.]+)", text)
+    match = re.search(r"Elapsed \(wall clock\) time[^\n]*\):\s*([0-9:.]+)", text)
     if match:
         parts = match.group(1).split(":")
         try:

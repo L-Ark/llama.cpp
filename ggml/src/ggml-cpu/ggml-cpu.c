@@ -335,6 +335,22 @@ static bool ggml_moe_cpu_willneed_enabled(void) {
     return enabled != 0;
 }
 
+static int ggml_moe_keep_topk_updown(void) {
+    static int keep_topk = -1;
+    if (keep_topk < 0) {
+        const char * env = getenv("GGML_MOE_KEEP_TOPK_UPDOWN");
+        keep_topk = env && env[0] ? atoi(env) : 0;
+        if (keep_topk < 0) {
+            keep_topk = 0;
+        }
+    }
+    return keep_topk;
+}
+
+static bool ggml_moe_keep_topk_applies(const char * name) {
+    return name && (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps"));
+}
+
 static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
 #if defined(__linux__)
     if (!ptr || size == 0) {
@@ -2109,6 +2125,8 @@ static void ggml_compute_forward_mul_mat_id(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+        const int keep_topk_updown = ggml_moe_keep_topk_updown();
+        const bool prune_updown = keep_topk_updown > 0 && ggml_moe_keep_topk_applies(src0->name);
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -2116,6 +2134,11 @@ static void ggml_compute_forward_mul_mat_id(
                 const int32_t i02 = *(const int32_t *) ((const char *) ids->data + iid1*ids->nb[1] + id*ids->nb[0]);
 
                 assert(i02 >= 0 && i02 < n_as);
+
+                if (prune_updown && id >= keep_topk_updown) {
+                    memset((char *) dst->data + id * nb1 + iid1 * nb2, 0, (size_t) ne01 * sizeof(float));
+                    continue;
+                }
 
                 MMID_MATRIX_ROW(i02, matrix_row_counts[i02]) = (struct mmid_row_mapping) {id, iid1};
                 matrix_row_counts[i02] += 1;
