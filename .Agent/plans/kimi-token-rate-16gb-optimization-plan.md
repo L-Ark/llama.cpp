@@ -1029,8 +1029,8 @@ Result:
 
 ## Immediate next action
 
-Run Phase 2F cold `-n 32` smoke with the accepted Phase 2E config plus
-up/gate parallel streams and parallel staging.
+Run Phase 2G cold `-n 32` smoke with the accepted Phase 2E config plus GPU down
+batch and GPU handoff.
 
 ## Next candidate: Phase 2F parallel up/gate streams
 
@@ -1126,3 +1126,65 @@ Result:
     bucket remained flat.
 - Decision: reject Phase 2F; do not run full `-n 96` and do not promote these
   env variables.
+
+## Next candidate: Phase 2G GPU down batch + GPU handoff
+
+Design timestamp: 2026-07-01 14:36 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2E full `-n 96` decode is 362575.94 ms / 77 runs:
+  4.70878 s/token, 0.21 tok/s.
+- TTFT trace accounts for only about 57.0s of the run:
+  - `runtime_load`: 12734 events, 27839.388 ms.
+  - `call_upgate`: 2157 events, 29143.436 ms.
+- The remaining about 305.6s over 77 decoded tokens is about 3.97 s/token and
+  is not explained by up/gate or expert-pack staging.
+- Code inspection shows the CPU bridge only calls `ggml_cuda_moe_stream_batch`
+  for down tensors when `GGML_MOE_STREAM_DOWN_BATCH` is set. Phase 2E did not
+  set it, so down expert matmul remained on the CPU fallback path.
+
+Hypothesis:
+
+Enable:
+
+```sh
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_GPU_HANDOFF=1
+```
+
+`GGML_MOE_STREAM_DOWN_BATCH=1` sends `ffn_down_exps` MoE matmuls through the CUDA
+batch path. `GGML_MOE_GPU_HANDOFF=1` allows the up/gate fused activation already
+on GPU to be consumed by the down batch path without an unnecessary host round
+trip when the graph adjacency matches.
+
+Theoretical upper bound:
+
+- If down batch only removes half of the unexplained 3.97 s/token CPU bucket,
+  token time could drop from 4.70878 s/token to about 2.72 s/token, or
+  0.37 tok/s.
+- If it removes most of that bucket and the remaining cost is the traced
+  up/gate+load bucket of about `57.0s / 77 = 0.74 s/token` plus graph overhead,
+  the optimistic bound is around 1 tok/s.
+- It cannot be assumed correct or fast without measurement because down batch
+  changes the largest numerical path and relies on route indexing, handoff
+  shape matching, cache slot lifetime, and output scatter semantics.
+
+Acceptance:
+
+- Cold `-n 32` smoke under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches`.
+- Host RAM must remain below the 16GB cgroup cap, including page cache.
+- VRAM should remain near full without OOM.
+- France answer must be semantically correct and coherent.
+- TTFT <= 106331.72 ms.
+- `read_failures=0`.
+- Logs must show the down CUDA path was actually active, either via
+  `GPU handoff consumed`, `profile: calls=...`, or down batch route/cache events.
+- If smoke passes and improves decode materially, run full cold `-n 96` before
+  promotion.
+
+Rollback:
+
+- Reject if quality changes, TTFT exceeds the gate, down batch silently declines,
+  cgroup OOM occurs, or decode does not improve over accepted Phase 2E.
