@@ -7850,6 +7850,53 @@ Second implementation smoke attempt:
 - Decision:
   - Reject Phase 3ZC.
   - Revert all Phase 3ZC source changes locally and remotely.
-  - Do not retry down multirow without first deriving the prompt down tensor
-    layout and adding an isolated correctness test; the simple flattening
-    approach is unsafe.
+- Do not retry down multirow without first deriving the prompt down tensor
+  layout and adding an isolated correctness test; the simple flattening
+  approach is unsafe.
+
+## Next measurement: Phase 3ZD strict n96 baseline refresh
+
+Design timestamp: 2026-07-02 23:04 UTC / 2026-07-03 07:04 CST.
+
+Reason:
+
+- The accepted Phase 3E full `-n 96` result is still the best known stable
+  output, but it was collected under the older 16 GB cgroup setup.
+- The current hard requirement is strictly below 16 GB including page cache,
+  and the corrected cgroup wrapper must write `BASHPID` to `cgroup.procs`.
+- Before attempting another optimization, refresh the full-length baseline
+  under `memory.max=15900000000`, `memory.swap.max=0`, and cold start.
+
+Run configuration:
+
+- Use the current reverted source at commit `c4f956e5b` plus a clean remote
+  rebuild.
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- `-n 96`, `-t 32`, `-tb 32`.
+- Production-like Phase 3E env:
+  - expert pack enabled,
+  - stream enabled,
+  - fused up/gate enabled,
+  - batch-only down path enabled,
+  - down prefetch disabled,
+  - VRAM cache 15000 MiB with auto clamp and 512 MiB safety,
+  - no experimental Q4 hot or multirow code.
+- Keep profiling outputs enabled only to record required metrics and bottleneck
+  attribution for the next design step.
+
+Acceptance:
+
+- This is a measurement, not a new optimization.
+- It must produce a full coherent France paragraph.
+- It must pass:
+  - host RAM `< 16000000000`,
+  - TTFT `<= 106331.72 ms`,
+  - read failures=0,
+  - strict launch failures=0.
+- Record exact answer, TTFT, decode seconds/token, token rate, host RAM, page
+  cache, VRAM peak/reserve, profiles, decline reasons, and reproducibility
+  files.
+- If the strict n96 baseline fails, do not optimize further; first investigate
+  why the accepted Phase 3E result no longer reproduces under the corrected
+  strict harness.
