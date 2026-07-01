@@ -7708,3 +7708,93 @@ Decision:
   path and would not be a valid performance trial.
 - Revert all Phase 3ZB source changes locally and remotely, keep this plan
   record as the reproducible rejection.
+
+## Next candidate: Phase 3ZC down multirow flattening
+
+Design timestamp: 2026-07-02 23:10 UTC / 2026-07-03 07:10 CST.
+
+Current bottleneck:
+
+- Under the strict 15.9 GB cold-start baseline, down batch still declines a
+  large number of calls because one expert can receive more than one route in
+  the same call:
+  - Phase 3Z `-n 4`: `multirow_not_supported=52`.
+  - Phase 3ZB `-n 4`: `multirow_not_supported=59`.
+- These declines fall back to CPU down compute:
+  - Phase 3ZB down profile: 550 down calls, 160 batch accepts, 80 batch
+    declines, fallback_t0=143.108 ms, cuda_batch=3.986 ms.
+- Q4 hot-set failed because call-level full coverage was zero. Multirow
+  flattening attacks an independent and higher-confidence decline reason that
+  is visible in the current accepted fallback path.
+
+Implementation hypothesis:
+
+- `ggml_cuda_moe_stream_batch` currently rejects when
+  `matrix_row_counts[e] > 1`.
+- The existing down GPU path already operates on a flattened route list:
+  - `active_experts[j]` selects the expert/cache slot,
+  - `src1` is copied per route,
+  - `launch_moe_mmvq_compact_batch` loops over `j` independently,
+  - final scatter writes each route to `(dst_id, token_id)`.
+- Therefore a multirow expert can be represented by repeated `active_experts`
+  entries with different `dst_ids` and `token_ids`.
+- No math kernel change is required for this first attempt.
+
+Theoretical upper bound:
+
+- In Phase 3ZB n4, 59 multirow declines are potentially convertible to GPU
+  batch calls.
+- The upper bound is bounded by replacing their CPU fallback work with the
+  existing GPU down batch path plus additional route staging.
+- Since the accepted down GPU path reports about 3.986 ms in cuda_batch for
+  the smoke run while fallback_t0 dominates the down profile, a successful
+  conversion should reduce decode time measurably if most multirow routes stay
+  under `MOE_STREAM_MAX_ACTIVE`.
+- The implementation may increase per-call `n_active`, src1 staging, D2H, and
+  scatter bytes; the `-n 4` smoke must verify that the converted calls do not
+  regress TTFT, RAM, or correctness before any longer run.
+
+Implementation sketch:
+
+1. In `ggml_cuda_moe_stream_batch`, replace the single-row-only route gather
+   with a flattening loop:
+   - skip experts with `matrix_row_counts[e] <= 0`,
+   - for each `ir < matrix_row_counts[e]`, append one active route,
+   - repeat the same expert id for multiple rows,
+   - store `dst_ids[j]=matrix_rows[e*rows_stride + ir].i1`,
+   - store `token_ids[j]=matrix_rows[e*rows_stride + ir].i2`.
+2. Keep the existing `n_active >= 128` guard as the first safety bound.
+3. Keep all existing type support and cache policy unchanged.
+4. Add no default-on Q4_0 behavior in this phase.
+
+Acceptance:
+
+- Build must pass.
+- First run cold strict `-n 4` under `memory.max=15900000000`,
+  `memory.swap.max=0`.
+- Hard gates:
+  - host RAM `< 16000000000` bytes including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France quality PASS,
+  - strict launch failures=0,
+  - read failures=0,
+  - `multirow_not_supported` should fall to zero or near zero.
+- If smoke passes and decode does not regress badly, run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s.
+- If `-n 32` fails performance, quality, TTFT, RAM, launch, or read gates,
+  reject and revert before the next implementation.
+- If `-n 32` beats Phase 3E, run cold strict `-n 96` and require a full
+  France paragraph with correct, coherent semantics before commit/push of the
+  source change.
+
+Repro notes:
+
+- Use the same strict cold-start harness as Phase 3Z/3ZB:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  cgroup `memory.max=15900000000`, `memory.swap.max=0`,
+  prompt `Please introduce France in a short paragraph.`
+- Record exact answer text, TTFT, decode seconds/token, token rate, host RAM,
+  page cache, VRAM peak/reserve, decline reasons, down/up profiles, expert-pack
+  read failures, and strict launch failures for every run.
