@@ -1848,13 +1848,19 @@
 
 - `attempt_id`: `20260702-expert-keep-top4-n128`
 - `attempt_kind`: `config-diagnostic/generation-budget`
-- `status`: planned
+- `status`: completed / rejected_incomplete_output_and_speed
 - `hypothesis`: Current top4 SOTA is correct but uses the runner default `-n 192`, while the prompt asks for a short paragraph. A smaller generation budget (`-n 128`) may still produce a complete, coherent short paragraph and can show whether measured eval token rate is sensitive to overly long generation tails. This is a parameter diagnostic, not a structural model optimization.
 - `theoretical_upper_bound`: Per-token compute should be unchanged from top4. Any rate difference comes from shorter decode length, less late-generation degeneration/repetition, and measurement variance. It should not be treated as a structural speedup unless the output is complete and a pushed rerun reproduces a stable improvement over `2.3 tok/s`.
 - `test_config`: clean source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-n 128 -c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: consider promotion only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and complete/coherent as a short paragraph, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`). Because this changes generation budget, require an additional pushed-commit rerun and be conservative about declaring SOTA.
 - `rollback`: No source change. If output is incomplete, too terse, semantically wrong, or `eval_tok_s <= 2.3`, record rejected/diagnostic and keep top4 `2.3 tok/s` SOTA.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, full France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T233312Z-20260702_expert_keep_top4_n128/france-cpu40-vram0gb`
+- `result`: rejected. `eval_tok_s=2.2`, `prompt_tok_s=0.8`, `TTFT=40022.448209ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15009312768`, `pgmajfault=345481`, `workingset_refault_file=4308680`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic but manual review failed.
+- `correctness_manual_review`: fail. The answer is semantically correct at the start but the smaller `-n 128` budget truncates the final sentence at `The country`. It also does not beat current top4 SOTA `2.3 tok/s`.
+- `trace_summary`: `rows=32520`, `src0_ms_sum=25268.92`, `kernel_ms_sum=363.79`, `dontneed_ms_sum=1165.406`, `total_ms_sum=27449.704`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: no source change. Current effective SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
