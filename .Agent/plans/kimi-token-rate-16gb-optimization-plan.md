@@ -3193,6 +3193,117 @@ Decision:
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
 
+## Next candidate: Phase 3K thread-count retest after Phase 3E
+
+Design timestamp: 2026-07-02 21:12 CST.
+
+Current bottleneck:
+
+- Phase 3E remains the current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- Phase 3H showed the remaining CPU `MUL_MAT_ID` fallback is still meaningful
+  after removing the single-stream path.
+- Earlier thread-count tests were run before Phase 3E; those results no longer
+  prove the best thread count for the current bottleneck mix.
+
+Hypothesis:
+
+- Increasing CPU compute threads from `-t 32 -tb 32` to `-t 40 -tb 40` may
+  reduce remaining CPU fallback and prompt work now that the single CUDA stream
+  path is gone.
+- The risk is that more CPU threads can increase scheduling contention and slow
+  decode or MoE staging.
+
+Theoretical upper bound:
+
+- If remaining CPU fallback is the dominant scalable component, the maximum
+  thread scaling from 32 to 40 is 1.25x on that component.
+- Phase 3H `-n 32` measured `MUL_MAT_ID` fallback_t0 at about
+  25.573 ms/call; thread-0 timing is not full thread-sum, so the practical
+  upper bound is uncertain.
+- A useful `-n 32` signal is either lower eval time than Phase 3E
+  2.24573 s/token, or materially lower fallback/profile buckets without TTFT
+  risk.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best env with `-t 40 -tb 40`.
+- If smoke passes RAM, VRAM, TTFT, and quality gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E `-n 32`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 21:09 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-200417Z-n4-phase3k-threads40`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 59131.24 ms, inside the 106331.72 ms gate.
+- Decode: 11111.12 ms / 3 runs, 3.70371 s/token, 0.27000 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2849.639 ms,
+    h2d=388.597 ms.
+  - up/gate: total=30.924 ms/call.
+  - down batch: stage=13.852 ms/call, total=14.010 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-200643Z-n32-phase3k-threads40`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 70803.34 ms, inside the 106331.72 ms gate.
+- Decode: 77704.60 ms / 31 runs, 2.50660 s/token, 0.39895 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=12906, misses=14038, hit_rate=47.9%.
+  - pinned staging: copies=13149, host_stage=18477.189 ms,
+    h2d=2849.390 ms.
+  - up/gate: total=18.488 ms/call.
+  - down batch: stage=9.020 ms/call, total=9.178 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32` with `-t 32 -tb 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3K `-n 32` with `-t 40 -tb 40`: 2.50660 s/token,
+  0.39895 tok/s.
+
+Analysis:
+
+- More CPU threads significantly improve TTFT but regress decode token rate.
+- The host-stage and down-batch timings also regress, so this is not a useful
+  token-rate optimization under the current goal.
+
+Decision:
+
+- Reject `-t 40 -tb 40` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
