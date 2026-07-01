@@ -529,9 +529,80 @@ Priority order before code changes:
 3. Only after the IO/cache bound is quantified, consider math/kernel changes
    such as up/gate id-MMQ.
 
+## Next candidate: Phase 2A expert pack plus VRAM cache
+
+Design timestamp: 2026-07-01 13:02 UTC.
+
+Current bottleneck:
+
+- The accepted strict 16GB baseline decodes at 0.20 tok/s.
+- cgroup memory is continuously capped at 16,000,000,000 bytes and reports
+  `memory.events max=245278`.
+- VRAM has about 15.9 GiB unused.
+- The process entered `D` state during decode, consistent with IO wait or memory
+  reclaim stalls.
+
+Hypothesis:
+
+Using the existing Kimi IQ3_S expert pack with MoE streaming and allocating a
+large VRAM expert cache should reduce page-cache pressure, reduce mmap-backed
+expert faults, and move repeated routed expert tensors into GPU memory. This
+matches the GPU/VRAM-first gate and should improve token rate without changing
+model math.
+
+Candidate configuration:
+
+```sh
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_STREAM=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_BATCH_PROFILE_OUT=<run>/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=<run>/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=<run>/ttft-trace.csv
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000
+```
+
+The first execution is a cold `-n 32` profiling run, not an accepted performance
+promotion. It must still pass the France semantic smoke. If it improves speed
+and quality holds, rerun the same config as full `-n 96` under the strict 16GB
+gate before committing any code changes.
+
+Theoretical upper bound:
+
+- Strict 16GB baseline decode time is 5.01989 s/token.
+- Previous same-correctness unconstrained reference was about 1.92-1.96 s/token.
+  Removing cgroup page-cache/reclaim stalls alone therefore gives an expected
+  ceiling around 0.51-0.52 tok/s.
+- Additional VRAM cache hits can only improve beyond that if repeated expert
+  tensors avoid SSD read and H2D transfer. The profiling run must report route
+  frequency and cache counters before claiming a higher bound.
+
+Acceptance for this candidate:
+
+- `-n 32` profiling run: host RAM including page cache below 16GB, cold start,
+  quality pass, and no read failures.
+- Promotion run: full `-n 96`, same gates, TTFT <= Phase 0 TTFT * 1.20
+  (<= 106331.72 ms), reproducible output, and token rate > 0.20 tok/s.
+- If promoted, record exact reproduction and commit/push immediately.
+
+Rollback:
+
+- If output quality regresses, read failures appear, TTFT exceeds the limit, or
+  host RAM exceeds the cap, reject the candidate and return to the Phase 0
+  baseline config.
+
 ## Immediate next action
 
-Run the profiling baseline on the remote GPU host with the same strict 16GB
-host-memory guard. The profiling run must add cgroup `memory.stat` samples and
-MoE per-stage counters/timing. Do not start a code speed patch until this
-per-token breakdown identifies the largest compressible bucket.
+Run the Phase 2A `-n 32` profiling candidate on the remote GPU host with the same
+strict 16GB host-memory guard. Capture cgroup `memory.stat`, route profile,
+route trace, TTFT trace, expert-pack counters, VRAM samples, and quality output.
