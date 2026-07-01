@@ -2378,6 +2378,37 @@ Rollback:
   evicted-unused count, launch/read failures appear, or token rate does not
   improve over the matching Phase 2H token count.
 
+Result timestamp: 2026-07-02 17:03 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-165331Z-n4-phase2p-down-prefetch`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105222.66 ms, inside the 106331.72 ms gate but with only about
+  1.1s headroom.
+- Decode: 14183.67 ms / 3 runs, 4.72789 s/token, 0.21151 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=404, hits=404, evicted_unused=0, useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=1145, misses=1399, preloads=404,
+  hit_rate=45.0%.
+- Pinned staging: copies=1773, host_stage=2759.033 ms, h2d=386.877 ms.
+- Up/gate profile: calls=85, total=27.275 ms/call.
+- Down profile: calls=160, stage=5.341 ms/call, total=5.518 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, prefetch activation,
+  useful-rate, and launch/read gates.
+- Continue to cold `-n 32`.
+- Watch TTFT closely because this path has less headroom than Phase 2H.
+
 Result timestamp: 2026-07-01 16:28 UTC.
 
 Run:
