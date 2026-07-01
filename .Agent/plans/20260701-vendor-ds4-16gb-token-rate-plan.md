@@ -9,12 +9,31 @@ Target model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash
 
 Optimize DeepSeek V4 token rate in the vendor llama.cpp framework. ik_llama may be used only as a reference implementation or source of ideas; accepted results must run from the vendor repo and vendor binary.
 
+## Current Priority: Cold Start
+
+From this point forward, optimization must focus on **cold-start behavior** under the 16 GB host RAM gate. Single-prompt warm/steady-state results may be recorded as diagnostics, but they are not the primary SOTA target unless they are explicitly labeled as warm-only.
+
+Definitions:
+
+- **Cold start** means the run begins without relying on previously warmed OS page cache for model/expert pages. The default validation method is `sync; echo 3 > /proc/sys/vm/drop_caches` before the experiment, followed by the strict 16 GB cgroup run.
+- **Steady state** means model/expert pages, VRAM cache, CUDA context, or storage cache may already be warm from a previous run. Steady-state results must be labeled separately and cannot replace cold-start SOTA.
+- **Constrained warmup** is allowed only if the warmup itself runs inside the same 16 GB cgroup workflow and is recorded as part of the benchmark. It must not depend on page cache created outside the 16 GB constraint.
+
+Latest evidence:
+
+- Accepted single-prompt warm result: `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=4`, `eval_tok_s=8.2`, `memory_peak_bytes=15793479680`, `memory_max_events=0`.
+- Cold `vram5` rerun after `drop_caches` regressed to `eval_tok_s=1.2`, `ttft_estimate_ms=43188.133285`, and `memory.events max=83388`.
+- Prompt-set same-process test after one France warmup failed to generalize: generation rates were `1.6`, `1.8`, `1.3`, `1.0`, `1.2`, `0.9` tok/s, with `memory.events max=422741`, `pgmajfault=4774376`, and `workingset_refault_file=147025029`.
+
+Therefore the current bottleneck is not raw decode compute. It is cold-start and prompt-dependent expert page churn under a 16 GB cgroup. The next accepted improvements must reduce page faults, cgroup reclaim pressure, and TTFT for cold runs while preserving correctness.
+
 ## Hard Gates
 
 1. Host RAM must stay below 16 GB, including page cache and all non-process memory. Every accepted run must execute inside a cgroup with `MemoryMax=16000000000` and `MemorySwapMax=0`, and must archive cgroup `memory.current`, `memory.peak`, `memory.events`, and `memory.stat`.
 2. VRAM should be used as fully as practical without OOM or correctness loss. Each experiment must record GPU memory and utilization samples.
 3. Correctness is mandatory. For the prompt `Please introduce France in a short paragraph.`, the answer must be semantically correct, coherent, and free of obvious degeneration. Large token-rate gains require manual answer review in addition to script checks.
 4. TTFT must not increase by more than 20% versus the accepted baseline. The runner records a consistent TTFT estimate from load time plus prompt eval time; any candidate near the limit needs a live first-token probe before acceptance.
+5. Cold-start claims must be backed by a cold-state procedure, normally `sync; echo 3 > /proc/sys/vm/drop_caches`, or a documented equivalent. Warm-cache results must be committed only with an explicit `warm_only`, `rejected`, or `needs_cold_validation` classification.
 
 ## Baseline Reset
 
@@ -59,15 +78,18 @@ Before each optimization, identify the current bottleneck with an experiment tha
 - prompt eval and TTFT estimate
 - GPU memory use and GPU utilization
 - cgroup memory peak and page-cache pressure
+- major page faults, `workingset_refault_file`, `inactive_file`/`active_file`, and `memory.events max`
 - expert streaming / CPU expert behavior from logs where available
 
 Rank candidates by expected token-rate gain and implementation risk. Prioritize the largest compressible time first, especially:
 
-- up/down expert compute speed
 - streamed expert transfer and residency behavior
-- CPU/GPU expert split
 - VRAM cache sizing and eviction
 - page cache pressure under the 16 GB cgroup
+- cold-start page-fault count and reclaim behavior
+- prompt-dependent expert page churn
+- CPU/GPU expert split only if it lowers cold page churn without breaking VRAM fit
+- up/down expert compute speed after I/O and page-cache pressure are no longer dominant
 - batch and microbatch settings only after the memory bottleneck is understood
 
 ### Execution Step
@@ -80,32 +102,38 @@ For each method:
 4. Compare measured result with the bound.
 5. If the result misses expectation, debug the gap from first principles instead of guessing. Examples: verify whether two operations are actually parallel, whether page cache eviction is working, whether host memory is throttling, whether expert transfer overlaps compute, and whether kernels are using the intended path.
 6. Record all metrics and the exact answer.
-7. If the candidate passes RAM, VRAM, correctness, and TTFT gates and improves token rate, commit and push immediately.
-8. If it regresses token rate, correctness, TTFT, or memory gates, revert the candidate change and keep only the experiment record.
+7. If the candidate passes RAM, VRAM, correctness, TTFT, and cold-start gates and improves token rate, commit and push immediately.
+8. If token rate improves but TTFT or cold-start gates fail, commit the experiment only as `rejected` or `needs_ttft_recovery` when it teaches a useful next step.
+9. If it regresses token rate, correctness, or memory gates without useful diagnostic value, revert the candidate change and keep only the experiment record.
 
-## First Optimization Candidates
+## Next Cold-Start Optimization Candidates
 
-These are ordered after the baseline reset unless the baseline profile points elsewhere.
+These supersede the earlier warm single-prompt sweep order.
 
-1. **VRAM cache sweep**
-   - Hypothesis: the clean 16 GB baseline uses too little VRAM cache and pays repeated streamed expert load cost.
-   - Bound: best possible gain is limited by the fraction of generation time spent waiting on expert load/transfer.
-   - Sweep `GGML_MOE_VRAM_CACHE_GB` values that fit RTX 5090 VRAM, starting from 2 GB and increasing conservatively.
+1. **Cold-start profile with page-fault accounting**
+   - Hypothesis: cold runs are dominated by major faults and cgroup reclaim, not GPU compute.
+   - Bound: maximum possible speedup is the portion of wall time attributable to major page faults, file reads, and reclaim stalls.
+   - Run `drop_caches` cold baselines for current accepted config (`cpu_moe=40`, `vram_cache=4`) and a small neighbor set. Record `pgmajfault`, `workingset_refault_file`, `memory.events max`, file input bytes, VRAM samples, and answer correctness.
 
-2. **CPU-MoE split sweep**
-   - Hypothesis: current split is not optimal under strict RAM. More resident CPU experts may reduce streaming cost but can exceed cgroup/page-cache limits.
-   - Bound: improvement is limited by the per-token time currently spent on streamed experts that become resident.
-   - Sweep near the best valid baseline value first.
+2. **Constrained multi-prompt warmup design**
+   - Hypothesis: France-only warmup does not cover enough expert pages. A short, diverse warmup set may populate a higher-value subset of expert pages while staying inside 16 GB.
+   - Bound: useful gain is capped by the reduction in subsequent major faults and `workingset_refault_file`.
+   - Warmup must run inside the same 16 GB cgroup and be recorded as part of the run. It is accepted only if the formal post-warmup prompt set improves and the warmup cost is documented.
 
-3. **Up/down compute path profiling**
-   - Hypothesis: expert up/down compute is a significant part of decode time and may have a vendor-kernel or scheduling gap compared with ik_llama.
-   - Bound: use measured up/down kernel time per token as the maximum removable time.
-   - Compare vendor kernels with corresponding ik_llama reference behavior only to identify vendor changes to port.
+3. **Selective expert residency / hot expert pinning**
+   - Hypothesis: the 16 GB cgroup cannot keep all expert pages hot, so we should reserve RAM/VRAM for high-frequency experts and avoid low-value page cache churn.
+   - Bound: estimate from active expert count, bytes per expert, and measured miss/refault rate.
+   - Use traces to identify repeated expert IDs across the prompt set, then test pinning/caching only those experts or changing eviction policy.
 
-4. **Streaming overlap and prefetch**
-   - Hypothesis: token generation may serialize expert load with compute.
-   - Bound: maximum gain is the portion of transfer time that can be hidden behind compute.
-   - Validate with traces before and after; a reported speedup is not accepted unless the timeline shows actual overlap.
+4. **Streaming overlap and cold prefetch**
+   - Hypothesis: cold expert page faults are serialized with decode. Predictive prefetch or async expert reads can hide part of the transfer/reclaim time behind GPU compute.
+   - Bound: maximum gain is the measured transfer/fault time that overlaps with compute.
+   - Validate with timeline/resource evidence before accepting; do not infer overlap from tok/s alone.
+
+5. **VRAM cache and CPU-MoE tuning under cold validation**
+   - Hypothesis: `vram_cache=4` is best for warm single prompt, but cold prompt sets may need a different balance.
+   - Bound: constrained by RTX 5090 VRAM fit and 16 GB cgroup page-cache pressure.
+   - Continue sweeps only after each candidate is cold-validated. Warm-only improvements such as `vram5` must be labeled `needs_cold_validation` or `rejected`.
 
 ## Required Record For Every Run
 
@@ -121,4 +149,3 @@ Each run directory must contain:
 - correctness check result and full answer text
 - pass/fail against every hard gate
 - timestamped notes in `.Agent/progress/20260701-vendor-ds4-16gb-token-rate-progress.md`
-
