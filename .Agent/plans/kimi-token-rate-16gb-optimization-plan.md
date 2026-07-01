@@ -7655,3 +7655,56 @@ Rollback:
 - Reject and revert if hot preload causes TTFT regression beyond the gate, OOM,
   RAM cap failure, output quality failure, launch/read failures, or `-n 32`
   performance below Phase 3E.
+
+Result timestamp: 2026-07-02 22:49 UTC / 2026-07-03 06:49 CST.
+
+Implementation smoke run:
+
+- Commit under test: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3zb`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-224849Z-n4-phase3zb-q4-hot64`
+- Repro command shape:
+  - cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  - cgroup `memory.max=15900000000`, `memory.swap.max=0`,
+  - `-n 4`,
+  - Phase 2H/3E env,
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`,
+  - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2/route-profile.csv`,
+  - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_SLOTS=64`.
+
+Metrics:
+
+- Host RAM strict peak: 15899996160 bytes, 14.808025 GiB.
+- Page cache final: 13.936584 GiB.
+- VRAM peak: 31794 MiB, minimum reserve 316 MiB.
+- TTFT: 75567.24 ms, gate PASS.
+- Decode: 10.27285 s / 3 tokens = 3.42428 s/token, 0.29203 tok/s.
+- France quality: PASS.
+- Exact answer: `France is a country`
+- Strict launch failures: 0.
+- Read failures: 0.
+- Declines: 85 total:
+  - `multirow_not_supported`: 59,
+  - `q4_hot_miss`: 21.
+- Q4 hot init: PASS.
+- Q4 hot path active: FAIL.
+- Q4 hot counters:
+  - calls=21,
+  - accepted=0,
+  - declined_miss=21,
+  - loaded=0,
+  - slots=64.
+
+Decision:
+
+- Reject Phase 3ZB before `-n 32`.
+- The hard gates passed for smoke, but the optimization path never executed:
+  every Q4_0 down candidate missed the static hot set because requiring all
+  active experts in a call to be hot is too strict.
+- The route-count coverage estimate was misleading for this launch shape:
+  per-entry coverage of 42.9% does not imply full-call coverage when a down
+  batch call requires multiple active experts to be present simultaneously.
+- Since `accepted=0`, a longer `-n 32` run would only benchmark the fallback
+  path and would not be a valid performance trial.
+- Revert all Phase 3ZB source changes locally and remotely, keep this plan
+  record as the reproducible rejection.
