@@ -8521,3 +8521,59 @@ Decision:
   drop inside a cgroup with `memory.max=15900000000` and `memory.swap.max=0`.
 - Future optimization target:
   beat 2.57811 s/token under the same strict cold-start n96 gates.
+
+## Next candidate: Phase 3ZH down prefetch depth=1 check
+
+Design timestamp: 2026-07-02 23:45 UTC / 2026-07-03 07:45 CST.
+
+Current accepted best:
+
+- Phase 3ZG depth=2 strict n96:
+  2.57811 s/token, 0.38788 tok/s.
+- It improves over no-prefetch by throttling depth enough to avoid most of the
+  depth=8 up/gate contention while still improving down cache behavior.
+
+Remaining question:
+
+- Depth=2 still regresses up/gate versus no-prefetch:
+  - no-prefetch n32 up/gate: 18.898 ms/call,
+  - depth=2 n32 up/gate: 23.313 ms/call.
+- Depth=2 improves down stage:
+  - no-prefetch n32 down stage: 9.035 ms/call,
+  - depth=2 n32 down stage: 6.504 ms/call.
+- Depth=1 may reduce up/gate contention further, but may lose too much down
+  prefetch benefit.
+
+Hypothesis:
+
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=1` is a lower-bandwidth point on the same
+  tradeoff curve.
+- It could beat depth=2 if the up/gate penalty falls faster than the down
+  staging benefit disappears.
+- It should be tested at strict n32 first before spending a full n96 run.
+
+Execution:
+
+1. Run strict cold `-n 32` with:
+   - `GGML_MOE_PREFETCH_DOWN=1`,
+   - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+2. Compare against:
+   - Phase 3ZF no-prefetch n32: 2.31041 s/token,
+   - Phase 3ZG depth=2 n32: 2.23835 s/token.
+3. Promote depth=1 to strict n96 only if it beats depth=2 n32 or provides a
+   clearly better projected full-length balance.
+
+Hard gates:
+
+- Same strict cgroup and cold-start gates as Phase 3ZG.
+- France quality PASS.
+- TTFT `<= 106331.72 ms`.
+- strict launch failures=0.
+- read failures=0.
+- prefetch must activate and report useful-rate.
+
+Decision rule:
+
+- If depth=1 is slower than depth=2 at n32, reject depth=1 and keep depth=2 as
+  current accepted runtime.
+- If depth=1 wins at n32, run strict n96 and require beating 2.57811 s/token.
