@@ -1604,6 +1604,118 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
     }
 }
 
+static int ggml_moe_stream_compare_cpu_limit(void) {
+    static int limit = -1;
+    if (limit >= 0) {
+        return limit;
+    }
+    const char * env = getenv("GGML_MOE_STREAM_COMPARE_CPU");
+    if (!env || !env[0] || env[0] == '0') {
+        limit = 0;
+    } else {
+        const int parsed = atoi(env);
+        limit = parsed > 0 ? parsed : 4;
+    }
+    return limit;
+}
+
+static void ggml_moe_stream_compare_cpu(
+    const struct ggml_tensor * dst,
+    const struct ggml_tensor * src0,
+    const struct ggml_tensor * src1,
+    const int64_t cur_a,
+    const char * src0_cur,
+    const struct mmid_row_mapping * matrix_rows,
+    const size_t row_size,
+    const bool src1_cont,
+    const void * wdata,
+    const int64_t cne1) {
+
+    static atomic_int compare_count = 0;
+    const int limit = ggml_moe_stream_compare_cpu_limit();
+    if (limit <= 0) {
+        return;
+    }
+    const int sample_idx = atomic_fetch_add_explicit(&compare_count, 1, memory_order_relaxed);
+    if (sample_idx >= limit) {
+        return;
+    }
+
+    const enum ggml_type type = src0->type;
+    ggml_vec_dot_t const vec_dot = type_traits_cpu[type].vec_dot;
+    enum ggml_type const vec_dot_type = type_traits_cpu[type].vec_dot_type;
+
+    GGML_TENSOR_BINARY_OP_LOCALS
+
+    const int64_t rows_to_check = MIN(cne1, (int64_t) 2);
+    const int64_t cols_to_check = MIN(ne01, (int64_t) 64);
+
+    double sum_abs = 0.0;
+    float max_abs = 0.0f;
+    float max_ref = 0.0f;
+    float max_got = 0.0f;
+    int64_t max_row = -1;
+    int64_t max_col = -1;
+    int max_id = -1;
+    int64_t n_cmp = 0;
+
+    for (int64_t ir1 = 0; ir1 < rows_to_check; ++ir1) {
+        struct mmid_row_mapping row_mapping = matrix_rows[ir1];
+        const int id = row_mapping.i1;
+        const int64_t i11 = id % ne11;
+        const int64_t i12 = row_mapping.i2;
+
+        const char * src1_col = (const char *) wdata +
+            (src1_cont || src1->type != vec_dot_type
+            ? (i11      + i12*ne11)*row_size
+            : (i11*nb11 + i12*nb12));
+
+        const float * dst_col = (const float *) ((const char *) dst->data + (id*nb1 + i12*nb2));
+
+        for (int64_t ir0 = 0; ir0 < cols_to_check; ++ir0) {
+            float ref = 0.0f;
+            vec_dot(ne00, &ref, 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+            const float got = dst_col[ir0];
+            const float diff = fabsf(ref - got);
+            sum_abs += (double) diff;
+            ++n_cmp;
+            if (diff > max_abs || max_row < 0) {
+                max_abs = diff;
+                max_ref = ref;
+                max_got = got;
+                max_row = ir1;
+                max_col = ir0;
+                max_id = id;
+            }
+        }
+    }
+
+    const double mean_abs = n_cmp > 0 ? sum_abs / (double) n_cmp : 0.0;
+    fprintf(stderr,
+            "[moe_stream_compare] sample=%d tensor=%s type=%s cur_a=%ld rows=%ld cols=%ld max_abs=%g mean_abs=%g max_ref=%g max_got=%g max_route=%ld max_col=%ld max_id=%d cne1=%ld ne01=%ld ne00=%ld nb01=%zu nb11=%zu nb12=%zu dst_nb1=%zu dst_nb2=%zu\n",
+            sample_idx,
+            src0->name,
+            ggml_type_name(type),
+            (long) cur_a,
+            (long) rows_to_check,
+            (long) cols_to_check,
+            (double) max_abs,
+            mean_abs,
+            (double) max_ref,
+            (double) max_got,
+            (long) max_row,
+            (long) max_col,
+            max_id,
+            (long) cne1,
+            (long) ne01,
+            (long) ne00,
+            nb01,
+            nb11,
+            nb12,
+            nb1,
+            nb2);
+}
+
 static void * incr_ptr_aligned(void ** p, size_t size, size_t align) {
 
     void * ptr = *p;
@@ -1771,6 +1883,9 @@ static void ggml_compute_forward_mul_mat_id(
 
     if (use_gpu_stream) {
         if (ith == 0) {
+            const void * wdata_stream = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+            const size_t row_size_stream = ggml_row_size(vec_dot_type, ne10);
+
             for (int cur_a = 0; cur_a < n_as; ++cur_a) {
                 const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -1792,6 +1907,10 @@ static void ggml_compute_forward_mul_mat_id(
                     (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
 
                 if (done) {
+                    ggml_moe_stream_compare_cpu(
+                        dst, src0, src1, cur_a, src0_cur,
+                        matrix_rows + cur_a * ids->ne[0] * ids->ne[1],
+                        row_size_stream, src1_cont, wdata_stream, cne1);
                     matrix_row_counts[cur_a] = 0;
                 }
             }

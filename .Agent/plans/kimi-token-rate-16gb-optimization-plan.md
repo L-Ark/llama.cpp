@@ -509,6 +509,9 @@ Every implementation step must append one row before and after execution.
 | 2026-07-01 13:11:49 | Phase 2B-1 stream-only isolation | If `GGML_MOE_STREAM=1` alone preserves quality, the Phase 2A regression is likely in expert pack/cache/fused up-gate. If it fails, stream path itself is the minimum bad switch. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`: cgroup peak 14.901 GiB, TTFT 109.13s, decode 0.26 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. Log shows `[moe_stream] enabled` and `VRAM cache: cudaMalloc 16.0 GiB FAILED`. | Host RAM/cold pass; TTFT fail; quality fail. | Rejected. Minimum semantic regression switch is `GGML_MOE_STREAM=1`; stop env sweep and debug stream one-path correctness before any VRAM cache promotion. |
 | 2026-07-01 13:17:22 | Phase 2C stream cache disabled isolation | Check whether stream-only corruption was caused by the default one-cache 16GiB cudaMalloc failure. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131722Z-n16-phase2c-stream-cache0`: `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, cgroup peak 14.901 GiB, TTFT 99.18s, decode 0.25 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. | Host RAM/cold pass; quality fail. | Rejected. one-cache allocation failure is not the root cause; stream compute/copy/scatter remains unsafe. |
 | 2026-07-01 13:23:17 | Phase 1A n32 `-t 40 -tb 40` | Increasing CPU threads on the accepted non-stream path may improve token rate without changing math. | Perfect CPU scaling from 24 to 40 would be 1.67x on the CPU portion, but IO/reclaim can dominate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-132317Z-n32-phase1a-threads40`: cgroup peak 14.901 GiB, quality pass, TTFT 65.28s, decode 155.51s / 31 runs, 0.20 tok/s. | Host RAM/cold/quality/TTFT pass; token-rate improvement absent. | Rejected for token-rate promotion. Useful observation: `-tb 40` may reduce prompt/TTFT, but decode remains page-cache/IO bound. |
+| 2026-07-01 13:34:48 | Phase 2C src1 row fix compare | Stream one-path likely reads the wrong `src1` row. Compare stream output against CPU reference and then fix row selection. | Correctness-only. A fixed stream path should reduce compare max_abs from O(1e-1) to quantization-level O(1e-3), then restore `France is` prefix. | Before fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133121Z-n2-phase2c-stream-compare` showed `max_abs` up to 0.527928 and no output yet. After fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133448Z-n2-phase2c-stream-src1fix-compare` showed `max_abs <= 0.00151799` and output `France is`. | Host RAM/cold pass; compare pass; n2 prefix pass. | Keep the src1 row-selection fix. It is required before any VRAM/cache stream work. |
+| 2026-07-01 13:37:39 | Phase 2C src1 fix stream-only n16 | Verify stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`: output `France is a country in Western Europe known for its rich history, culture, and`, TTFT 101.88s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT pass; token-rate fail. | Accept as stream correctness progress only. Do not promote as performance. |
+| 2026-07-01 13:42:33 | Phase 2C src1 fix stream-only n32 | Verify longer stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`: output remained coherent about France, TTFT 111.49s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT fail; token-rate fail. | Commit the opt-in stream correctness fix because it restores semantic output and is default-off. Next work must address TTFT/decode speed before any stream/cache promotion. |
 
 ## Current bottleneck after Phase 0
 
@@ -759,6 +762,38 @@ Rollback:
 - Revert any debug/fix patch that does not restore stream-only semantic quality
   or that worsens the accepted non-stream baseline.
 
+Result:
+
+- Root cause found: stream one-path used `rows[k].i1` directly as the `src1`
+  row index. For the Kimi decode shape, `src1_nb2 == src1_nb1`, so the effective
+  `src1.ne[1]` is 1 and the CPU reference uses `i11 = id % ne11 = 0`. Directly
+  using route slot values read the wrong activation rows.
+- Added default-off CPU compare instrumentation under
+  `GGML_MOE_STREAM_COMPARE_CPU`.
+- Before fix:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133121Z-n2-phase2c-stream-compare`
+  showed stream-vs-CPU `max_abs` up to 0.527928 on
+  `blk.2.ffn_gate_exps.weight`.
+- Fix: stream one-path now derives `src1_ne1` from `src1_nb2 / src1_nb1` and
+  uses `rows[k].i1 % src1_ne1`, matching the CPU `mul_mat_id` row selection.
+- After fix:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133448Z-n2-phase2c-stream-src1fix-compare`
+  showed `max_abs <= 0.00151799` and output `France is`.
+- `n16` stream-only semantic smoke passed:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`.
+- `n32` stream-only semantic smoke passed:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`.
+- Not a performance promotion:
+  n32 stream-only TTFT was 111.49s and decode was 0.14 tok/s, both worse than
+  the Phase 0 performance baseline. The fix is accepted only as default-off
+  correctness progress needed before future VRAM/cache work.
+
+Next:
+
+Re-test Phase 2A-style expert pack + VRAM cache with the src1 fix, starting with
+cold `-n 32`. Promotion still requires full `-n 96`, host RAM <16GB, quality
+pass, TTFT <=106331.72 ms, and token rate >0.20 tok/s.
+
 ## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
 
 Design timestamp: 2026-07-01 13:24 UTC.
@@ -818,7 +853,6 @@ Result:
 
 ## Immediate next action
 
-Implement Phase 2C debug instrumentation to compare the first stream one-path
-expert output against the accepted non-stream/CPU reference. The next code patch
-must be diagnostic or correctness-only; it is not a performance promotion until
-stream-only output passes semantic smoke.
+Commit and push the default-off Phase 2C stream correctness fix. Then rerun the
+Phase 2A expert pack + VRAM cache candidate with the src1 fix, starting with
+cold `-n 32`.
