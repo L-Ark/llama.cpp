@@ -2237,6 +2237,366 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+## Next candidate: Phase 3O route-trace host prefetch
+
+Design timestamp: 2026-07-02 21:50 CST.
+
+Current bottleneck:
+
+- Current accepted full `-n 96` best is Phase 3E:
+  - Run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM peak: 14.901 GiB under strict 16GB cgroup.
+  - VRAM peak: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E remaining measured decode components:
+  - down cache misses: 40188, hit_rate=45.7%.
+  - pinned staging: copies=35734, slot_wait=84.220 ms,
+    host_stage=47796.399 ms, H2D=7736.929 ms.
+  - up/gate: 2381 calls, 24.079 ms/call.
+  - down batch: 4506 calls, stage=12.205 ms/call,
+    total=12.363 ms/call.
+- The largest directly compressible wall component is `host_stage`: it is the
+  synchronous path that reads missed experts from the expert pack into staging
+  host memory before H2D.
+
+Hypothesis:
+
+- Enable existing route-trace host prefetch:
+  - `GGML_MOE_HOST_PREFETCH=<Phase 3E route-trace.csv>`
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`
+  - `GGML_MOE_HOST_PREFETCH_LEAD_EVENTS=2048`
+- The prefetch worker should read upcoming expert-pack entries into pinned host
+  buffers before the main staging path needs them.
+- On a host-prefetch hit, the critical path should skip the expert-pack read and
+  only enqueue H2D from the prefetched pinned host buffer.
+- This should not change math or cache keys; it only changes where the same
+  expert bytes are staged from.
+
+Theoretical upper bound:
+
+- Phase 3E host_stage is 47796.399 ms over the full `-n 96` run.
+- H2D is 7736.929 ms and cannot be removed by host prefetch.
+- If host prefetch hit rate were 100% and worker I/O were perfectly overlapped,
+  the hard upper bound would remove nearly the host read/stage portion:
+  about 47.8s from 231.7s decode, giving roughly 183.9s / 85 =
+  2.16 s/token, 0.46 tok/s.
+- A realistic first-pass target is smaller because the worker is single-threaded
+  and trace alignment may miss; 25-50% useful hit rate would save about
+  12-24s, enough to beat Phase 3E if other overhead does not rise.
+- Host RAM risk: default 512MiB pinned host budget plus the Phase 3E
+  14.901GiB cgroup peak should remain below 16GB, but this must be measured
+  cold because cgroup memory includes page cache and pinned allocations.
+
+Execution:
+
+- No code change.
+- Reuse Phase 3E best runtime env and enable host prefetch from:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off/route-trace.csv`
+- Keep diagnostic batch/profile output enabled for this experiment so host
+  prefetch counters, host_stage, H2D, and cache rates are recorded.
+- Run cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If smoke passes resource/TTFT/failure gates and logs show host prefetch
+  enabled without read/allocation failures, run cold `-n 32`.
+- If `-n 32` is not slower than Phase 3E `-n 32` and all gates pass, run full
+  cold `-n 96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned host prefetch
+  buffers.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent; full `-n 96` answer
+  must be a coherent paragraph for:
+  `Please introduce France in a short paragraph.`
+- `launch_failures=0`, expert-pack `read_failures=0`, host-prefetch
+  `read_failures=0`, and host-prefetch `alloc_failures=0`.
+- Logs must show host prefetch loaded the trace and report useful hits.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+- If accepted, commit and push immediately with the exact env and run paths
+  recorded for reproducibility.
+
+Rollback:
+
+- Reject if quality fails, TTFT exceeds the gate, host RAM exceeds 16GB, VRAM
+  gates fail, host prefetch cannot load the trace, read/allocation failures
+  appear, or `-n 32`/full `-n 96` does not improve over the matching Phase 3E
+  reference.
+
+Result timestamp: 2026-07-02 21:56 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204049Z-n4-phase3o-host-prefetch`
+
+Measured result:
+
+- Commit/config: `32b0d67c8`, Phase 3E best env plus route-trace host prefetch
+  from the Phase 3E full trace.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache and pinned host prefetch buffers.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78651.55 ms, inside the 106331.72 ms gate.
+- Decode: 11371.71 ms / 3 runs, 3.79057 s/token, 0.26381 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch loaded the trace:
+  - events=74144, lead_events=2048, slots=64, max=512MiB.
+  - calls=2640, matched=2640, submitted=6146, hits=0, evicted=6082.
+  - read_failures=11151428, alloc_failures=0, scan_passes=11157574.
+- Expert-pack direct read path itself had `read_failures=0`.
+- Pinned staging: copies=1790, host_stage=3109.692 ms,
+  H2D=422.394 ms.
+- Up/gate: 85 calls, total=36.206 ms/call.
+- Down batch: 160 calls, stage=15.859 ms/call, total=16.028 ms/call.
+
+Analysis:
+
+- Reject the env-only host prefetch attempt before `-n 32`.
+- The prefetch worker does not produce useful hits in this configuration.
+- The key failure is implementation-level: worker scan passes and read failures
+  explode while `produce_cursor` remains at 2641, so the worker repeatedly
+  revisits entries around the current route cursor instead of advancing across
+  the trace after a missing/unusable candidate.
+- This also explains the slowdown: the prefetch thread burns CPU/I/O lookup
+  work and competes with the real decode path, while `hits=0` means no critical
+  path staging is removed.
+
+Decision:
+
+- Reject Phase 3O.
+- Do not run `-n 32`.
+- Next candidate should first fix host-prefetch trace advancement with a
+  minimal cursor change, then rerun the same cold smoke gate.
+
+## Next candidate: Phase 3P fix host-prefetch worker advancement
+
+Design timestamp: 2026-07-02 21:58 CST.
+
+Current bottleneck:
+
+- Phase 3O identified a concrete prefetch-worker bug before any useful
+  performance conclusion:
+  - `scan_passes=11157574`
+  - `read_failures=11151428`
+  - `hits=0`
+  - `produce_cursor=2641/74144`
+- In `host_prefetch_worker`, the trace scan starts from:
+  `max(cursor, skip_events)`.
+- `produce_cursor` is updated after selecting an event, but it is not used as
+  the next scan start. If a selected event is not usable or the current route
+  cursor does not advance far enough, the worker can repeatedly examine the
+  same trace region and retry missing entries.
+
+Hypothesis:
+
+- Change the worker scan start to include `produce_cursor`:
+  `max(max(cursor, produce_cursor), skip_events)`.
+- This makes the prefetch producer move forward through the trace even when the
+  consumer cursor is still near the current route.
+- The change is metadata/control-flow only; it does not alter expert bytes,
+  quantization, routing, CUDA kernels, or output math.
+
+Theoretical upper bound:
+
+- The fix itself only removes wasted prefetch-loop work and enables the actual
+  Phase 3O mechanism to be measured.
+- If it produces no host-prefetch hits, the best expected result is close to
+  Phase 3E with a small overhead.
+- If it produces useful hits, the same upper bound as Phase 3O applies:
+  removing up to the 47.8s Phase 3E host_stage component, with realistic first
+  target 12-24s saved at 25-50% useful hit rate.
+
+Execution:
+
+- Apply the minimal cursor-start fix in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Build CUDA batch binary on the remote.
+- Run cold `-n 4` with the exact Phase 3O host-prefetch env and strict 16GB
+  cgroup.
+- Continue to `-n 32` only if:
+  - host-prefetch read failures no longer explode,
+  - host-prefetch has useful hits or negligible overhead,
+  - quality/RAM/VRAM/TTFT/failure gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned buffers.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack `read_failures=0`.
+- Host-prefetch `alloc_failures=0`; host-prefetch `read_failures` must be
+  bounded and explainable, not millions of repeated misses.
+- `scan_passes` should be proportional to trace/prefetch work, not millions for
+  an `-n 4` run.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if the cursor fix changes output quality, exceeds RAM/TTFT
+  gates, introduces read/allocation failures, or fails to improve the matching
+  Phase 3E token-count gate.
+
+Result timestamp: 2026-07-02 22:04 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204523Z-n4-phase3p-host-prefetch-cursor`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty`, Phase 3O env plus the first
+  host-prefetch cursor-start fix.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76666.17 ms, inside the 106331.72 ms gate.
+- Decode: 11220.96 ms / 3 runs, 3.74032 s/token, 0.26736 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=7230, hits=0, evicted=7166.
+  - read_failures=458, alloc_failures=0, scan_passes=7688.
+  - cursor=2640, produce_cursor=7815/74144, used=365.97MiB.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1790, host_stage=2833.511 ms,
+  H2D=411.515 ms.
+- Up/gate: 85 calls, total=34.312 ms/call.
+- Down batch: 160 calls, stage=14.577 ms/call, total=14.734 ms/call.
+
+Analysis:
+
+- The first cursor fix eliminated the catastrophic repeated scan:
+  read_failures fell from 11151428 to 458 and scan_passes fell from 11157574
+  to 7688.
+- It still fails the performance/usefulness gate: `hits=0`, decode is slower
+  than the Phase 3E smoke, and host prefetch evicts nearly every submitted
+  entry before use.
+- Root cause: the updated start uses `produce_cursor`, but the end of the scan
+  window is still computed from the new start. That lets `produce_cursor` run
+  thousands of events ahead of the actual route cursor, defeating
+  `lead_events`.
+
+Decision:
+
+- Do not promote Phase 3P and do not run `-n 32`.
+- Keep the first cursor insight, but add a second fix that bounds producer
+  advancement to `cursor + lead_events`.
+
+## Next candidate: Phase 3Q bounded host-prefetch lead window
+
+Design timestamp: 2026-07-02 22:07 CST.
+
+Current bottleneck:
+
+- Phase 3P fixed repeated retries but prefetch still has zero useful hits:
+  - cursor=2640
+  - produce_cursor=7815
+  - lead_events=2048
+  - submitted=7230, evicted=7166, hits=0
+- The worker is allowed to scan from `produce_cursor` and also set
+  `end=start+lead_events`, so it keeps walking forward indefinitely instead of
+  staying within a bounded window ahead of the consumer cursor.
+
+Hypothesis:
+
+- Compute a stable window from the route consumer cursor:
+  - `window_start=max(cursor, skip_events)`
+  - `start=max(window_start, produce_cursor)`
+  - `end=min(trace.size(), window_start + lead_events)`
+- If `start >= end`, the worker should wait briefly instead of prefetching
+  farther ahead.
+- This keeps prefetched entries near future route use, reduces eviction before
+  use, and should allow host-prefetch hits to appear.
+
+Theoretical upper bound:
+
+- The bounded-window fix still does not change math; it only changes background
+  prefetch scheduling.
+- If hits remain zero, expected performance is no better than Phase 3E and the
+  fix should be rejected.
+- If bounded prefetch converts even 25% of Phase 3E critical host_stage to
+  overlapped work, the full `-n 96` ceiling improves by about 12s, enough to
+  move from 2.72551 s/token to roughly 2.58 s/token.
+
+Execution:
+
+- Update `host_prefetch_worker` to bound scan `end` by
+  `window_start + lead_events`.
+- Rebuild remote CUDA batch binary.
+- Run cold `-n 4` with the same Phase 3O/3P host-prefetch env.
+- Continue to `-n 32` only if host-prefetch hits become nonzero or overhead is
+  clearly negligible, with quality/RAM/VRAM/TTFT/failure gates passing.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned buffers.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack `read_failures=0`.
+- Host-prefetch `alloc_failures=0`.
+- Host-prefetch read failures and scan passes remain bounded.
+- Host-prefetch must report useful hits or at least avoid the Phase 3P
+  submitted/evicted/hits=0 pattern.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if bounded prefetch changes output quality, exceeds RAM/TTFT
+  gates, introduces failures, keeps zero useful hits with decode slowdown, or
+  fails the matching Phase 3E token-count gate.
+
+Result timestamp: 2026-07-02 22:13 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204922Z-n4-phase3q-host-prefetch-bounded`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty`, Phase 3Q bounded host-prefetch window.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80421.80 ms, inside the 106331.72 ms gate.
+- Decode: 9593.22 ms / 3 runs, 3.19774 s/token, 0.31272 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=4287, hits=0, evicted=4223.
+  - read_failures=305, alloc_failures=0, scan_passes=7730.
+  - cursor=2640, produce_cursor=4688/74144, used=365.31MiB.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1790, host_stage=2889.523 ms,
+  H2D=402.364 ms.
+- Up/gate: 85 calls, total=30.694 ms/call.
+- Down batch: 160 calls, stage=14.197 ms/call, total=14.367 ms/call.
+
+Analysis:
+
+- The bounded-window fix reduced overrun versus Phase 3P:
+  - submitted fell from 7230 to 4287.
+  - evicted fell from 7166 to 4223.
+  - produce_cursor stayed closer to cursor+lead.
+- It still fails the mechanism gate: `hits=0`.
+- Without host-prefetch hits, the run does not remove critical-path staging.
+  The remaining speed movement is noise/secondary scheduling and is not enough
+  to justify `-n 32` or a code commit.
+- This indicates the existing trace-driven host-prefetch hook is still not
+  aligned with the actual miss-consumption point. A future attempt needs to
+  submit planned host prefetch close to `stage_copy_job` creation for the
+  tensors that will miss, or wire host prefetch into the down batch path
+  explicitly.
+
+Decision:
+
+- Reject Phase 3Q.
+- Do not run `-n 32`.
+- Revert the host-prefetch worker code changes.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 ## Next candidate: Phase 3D CPU MoE op path wall profile
 
 Design timestamp: 2026-07-02 19:14 CST.
