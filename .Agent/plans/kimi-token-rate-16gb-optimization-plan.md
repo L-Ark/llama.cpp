@@ -506,6 +506,7 @@ Every implementation step must append one row before and after execution.
 | 2026-07-01 12:47:29 | Phase 0 cgroup smoke v2 | Verify the actual inference process can run inside a strict 16GB host-memory cgroup after fixing the runner to move `$BASHPID`, not the outer shell. | N/A | `/root/lfz/runs/vendor-kimi-token-rate/20260701-124729Z-n2-cgroup-smoke-v2`: `rc=0`, output `France is`, cgroup peak 14.901 GiB. | 16GB/cold/smoke quality pass; not a baseline because `-n 2`. | Proceed to full `-n 96` baseline. |
 | 2026-07-01 12:50:35 | Phase 0 full baseline | The current accepted Kimi correctness config should produce stable `-n 96` output under a 16GB host-memory guard, but token rate may drop because page cache is constrained. | Previous unconstrained reference was about 0.51-0.52 tok/s; under strict 16GB, lower bound unknown before measurement. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline`: `rc=0`, prompt eval/TTFT 88.61s, eval 401.59s / 80 decode runs, 0.20 tok/s, total 490.26s. | 16GB pass by cgroup peak 14.901 GiB; cold pass; quality pass; `read_failures` not reported; TTFT becomes baseline; reproducibility recorded. VRAM/GPU-first not optimized: 15.9 GiB VRAM unused. | Baseline established. Next required step is profiling with `memory.stat` anon/file sampling and MoE per-stage timing, then prioritize VRAM expert cache/profile preload. |
 | 2026-07-01 13:03:05 | Phase 2A n32 expert pack + VRAM cache profile | Move repeated routed expert tensors into VRAM cache to reduce 16GB page-cache/reclaim stalls without changing model math. | Removing strict-cgroup reclaim stalls could recover the old unconstrained 0.51-0.52 tok/s ceiling; route replay with 15GB cache estimated up to 70.46% trace hit rate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`: VRAM peak 31278 MiB, minimum free 832 MiB, cache hit 60.0%, route replay hit estimate 70.46%, but TTFT 110.33s (+24.5%), decode 0.16 tok/s, output started `The user asks: ...`. | Host RAM/cold/read failures pass; VRAM/GPU-first pass; TTFT gate fail; token-rate fail; quality fail. | Rejected. Do not promote and do not stack optimizations on this env. The gap is that enabling `GGML_MOE_STREAM`/batched up-gate changes output semantics and is slower under the 16GB cap. |
+| 2026-07-01 13:11:49 | Phase 2B-1 stream-only isolation | If `GGML_MOE_STREAM=1` alone preserves quality, the Phase 2A regression is likely in expert pack/cache/fused up-gate. If it fails, stream path itself is the minimum bad switch. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`: cgroup peak 14.901 GiB, TTFT 109.13s, decode 0.26 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. Log shows `[moe_stream] enabled` and `VRAM cache: cudaMalloc 16.0 GiB FAILED`. | Host RAM/cold pass; TTFT fail; quality fail. | Rejected. Minimum semantic regression switch is `GGML_MOE_STREAM=1`; stop env sweep and debug stream one-path correctness before any VRAM cache promotion. |
 
 ## Current bottleneck after Phase 0
 
@@ -680,8 +681,81 @@ Rollback:
 - No code changes are made during isolation. Failed env combinations are recorded
   and not reused for promotion.
 
+Result:
+
+- `GGML_MOE_STREAM=1` alone failed the cold `-n 16` smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`.
+- Output was corrupted:
+  `The:ayt老爷 grave!!!!!!!!!!!`.
+- Because the first isolation switch failed, later combinations with expert
+  pack, VRAM cache, or fused up/gate are invalid until the base stream path is
+  corrected.
+
+Conclusion:
+
+The next real implementation work is correctness debugging in the stream path,
+not cache tuning. The stream path must become numerically equivalent enough to
+the accepted non-stream path before any VRAM/cache optimization can be accepted.
+
+## Next candidate: Phase 2C stream correctness debug
+
+Design timestamp: 2026-07-01 13:16 UTC.
+
+Current bottleneck:
+
+- Non-stream path is semantically correct but slow under 16GB because it leaves
+  VRAM unused and relies on mmap/page-cache behavior.
+- Stream path is required to use existing GPU expert cache machinery, but
+  `GGML_MOE_STREAM=1` alone corrupts output.
+
+Hypothesis:
+
+The stream one-path has a tensor layout, row mapping, quant type, or
+copy/scatter mismatch for Kimi's observed expert types. Fixing the stream path
+should unlock the VRAM-cache candidate. The upper bound is not accepted token
+rate yet; the first target is matching the non-stream prefix and then recovering
+at least the baseline 0.20 tok/s under 16GB.
+
+Debug order:
+
+1. Identify the first expert tensor type and route where stream output diverges.
+2. Compare stream one-path output against the normal non-stream reference for a
+   single routed expert and a single token.
+3. Verify:
+   - source weight pointer and byte count,
+   - quant type dispatch,
+   - `src1` row stride and token selection,
+   - destination scatter offset,
+   - synchronization before graph consumers read the output,
+   - whether the unexpected default 16GiB stream VRAM cache allocation changes
+     behavior or just logs a failed allocation.
+4. Add the smallest debug instrumentation needed to prove the mismatch.
+5. Only after the mismatch is fixed, rerun Phase 2B-1 stream-only smoke.
+
+Theoretical upper bound:
+
+- Correct stream-only decode measured 0.26 tok/s in the failed run, but this
+  number is not acceptable because quality failed and TTFT exceeded the gate.
+- If correctness is fixed without adding overhead, stream-only could at least
+  exceed the 0.20 tok/s baseline. The useful upper bound still comes from
+  Phase 2A cache replay: a corrected stream+cache path could approach the
+  0.51-0.52 tok/s reclaim-free reference, with further gains only if cache hits
+  reduce SSD/H2D waits.
+
+Acceptance:
+
+- `GGML_MOE_STREAM=1` only, cold `-n 16`, starts with a coherent France answer.
+- Then cold `-n 32` passes the same quality check.
+- Host RAM remains below 16GB, `read_failures=0`, and TTFT is recorded.
+- Commit/push only if a code fix is made and these diagnostics pass.
+
+Rollback:
+
+- Revert any debug/fix patch that does not restore stream-only semantic quality
+  or that worsens the accepted non-stream baseline.
+
 ## Immediate next action
 
-Run Phase 2B stream switch isolation under the same strict 16GB host-memory
-guard. Begin with `GGML_MOE_STREAM=1` only and stop at the first semantic
-regression.
+Start Phase 2C by instrumenting or using existing debug hooks to compare the
+first `GGML_MOE_STREAM=1` expert output with the non-stream reference. Do not
+try more cache settings until stream-only output is semantically correct.
