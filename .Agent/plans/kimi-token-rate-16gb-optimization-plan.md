@@ -3081,6 +3081,41 @@ Rollback:
   separate optimized run without extra instrumentation passes all Phase 2H
   acceptance gates and improves full `-n 96`.
 
+Implementation result timestamp: 2026-07-02 18:17 CST.
+
+Code:
+
+- Commit: `6536b772f cuda: add Kimi MoE wall-time profiling`.
+- Remote build: `/root/lfz/llama.cpp-vendor-kimi/build-cuda-batch`.
+- Build result: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-181709Z-n4-phase3a-wall-profile`
+
+Measured result:
+
+- Commit/config: `6536b772f`, accepted Phase 2H runtime env, with
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104723.63 ms, inside the 106331.72 ms gate.
+- Decode: 14167.59 ms / 3 runs, 4.72253 s/token, 0.21175 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Wall profile printed correctly:
+  - up/gate: total=27.290 ms/call, wall=27.420 ms/call,
+    wall_gap=0.130 ms/call.
+  - down: total=13.593 ms/call, wall=14.300 ms/call,
+    wall_gap=0.707 ms/call.
+
+Decision:
+
+- Instrumentation builds and the `-n 4` smoke passes quality, RAM, VRAM, TTFT,
+  launch/read, and profile-output gates.
+- Continue to cold `-n 32` to get stable wall-gap attribution. The `-n 4`
+  sample suggests that the hidden gap is small inside the MoE functions, but
+  `-n 32` is needed before moving the bottleneck search up the graph.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
