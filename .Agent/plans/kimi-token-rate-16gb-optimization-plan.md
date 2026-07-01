@@ -7547,3 +7547,111 @@ Decision:
 - Do not run full `-n 96`.
 - Revert all Phase 3ZA source changes locally and remotely.
 - Keep Phase 3E as current accepted best.
+
+## Next candidate: Phase 3ZB profile-guided Q4_0 down hot set
+
+Design timestamp: 2026-07-02 19:23 CST.
+
+Current bottleneck and lesson from Phase 3ZA:
+
+- Q4_0 down GPU compute can be made correct:
+  - Phase 3ZA v2 Q4_0 decode launch declines: 0.
+  - Q4_0 tensors changed from `batch_eligible=0` to `batch_accept=3`.
+- But unconditional scratch reload is slower:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3ZA `-n 32`: 2.59350 s/token.
+- The gap is copy policy, not math or launch support:
+  - no-cache scratch reloads active Q4_0 experts every decode call,
+  - copies rise to 15226 and host_stage rises to 21743.566 ms,
+  - H2D rises to 3450.111 ms.
+
+New profile finding:
+
+Using Phase 3ZA `-n 32` route profile:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2/route-profile.csv`
+
+Q4_0 down profile:
+
+- Q4_0 down expert size: 8257536 bytes, 7.875 MiB.
+- Q4_0 down rows: 613 tensor/expert pairs.
+- Q4_0 down total route count: 1736.
+- Static hot-set coverage by top route-profile entries:
+  - 16 slots, 126 MiB: 307 / 1736, 17.7%.
+  - 32 slots, 252 MiB: 500 / 1736, 28.8%.
+  - 48 slots, 378 MiB: 642 / 1736, 37.0%.
+  - 64 slots, 504 MiB: 744 / 1736, 42.9%.
+  - 80 slots, 630 MiB: 828 / 1736, 47.7%.
+  - 96 slots, 756 MiB: 902 / 1736, 52.0%.
+  - 128 slots, 1008 MiB: 1030 / 1736, 59.3%.
+
+Hypothesis:
+
+- Replace unconditional Q4_0 scratch reload with a profile-guided static hot
+  Q4_0 down set:
+  - env-gated and default-off,
+  - preload only the top Q4_0 down tensor/expert pairs from a route profile,
+  - for Q4_0 down calls, use GPU batch only when all active experts for that
+    call are present in the static Q4 hot set,
+  - otherwise decline immediately to the existing CPU fallback without scratch
+    copy.
+- This keeps Q4_0 out of the main LRU cache and avoids Phase 3ZA's repeated
+  miss-copy overhead.
+- Start with 64 slots because it fits within current free VRAM better than 96+
+  slots:
+  - Phase 3E free VRAM was about 824 MiB,
+  - 64 Q4_0 slots consume about 504 MiB,
+  - projected remaining free VRAM is about 320 MiB.
+
+Theoretical upper bound:
+
+- 64 slots cover 42.9% of Q4_0 down route count in the `-n 32` route profile.
+- Q4_0 scratch proved the GPU call path can execute with about 11-14 ms down
+  batch total, but unconditional scratch made staging too expensive.
+- Static hot hits should avoid per-hit H2D expert copy and pay only src1/id/dst
+  overhead plus kernel.
+- Misses should fall back to CPU without extra copy.
+- If the 64-slot hot set converts 40% of Q4_0 decode fallback and does not
+  perturb the existing 7.44 MiB down cache, the expected `-n 32` gain could be
+  several seconds. Promotion still requires beating Phase 3E by at least one
+  cold `-n 32` run before any full `-n 96` run.
+
+Implementation sketch:
+
+1. Add default-off env:
+   - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_PROFILE=<route-profile.csv>`
+   - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_SLOTS=64`
+2. At CUDA batch init, parse the profile and select top Q4_0 down entries by
+   count. Key by tensor name plus expert index.
+3. Allocate a dedicated Q4_0 hot device pool sized
+   `hot_slots * 8257536` bytes.
+4. Preload selected Q4_0 experts from the expert pack into that pool once.
+5. For Q4_0 down decode calls:
+   - if every active expert is in the hot pool, set `h_x_ids` to hot-pool slots
+     and launch compact MMVQ from the hot pool,
+   - if any active expert is missing, decline before any copy and use CPU
+     fallback.
+6. Do not admit Q4_0 into the existing main LRU cache.
+
+Acceptance:
+
+- Build must pass.
+- First run cold strict `-n 4` under `memory.max=15900000000`.
+- Then run cold strict `-n 32`.
+- Hard gates:
+  - host RAM `< 16000000000` bytes including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France quality PASS,
+  - strict launch failures=0,
+  - read failures=0,
+  - VRAM remains stable with a visible reserve.
+- `-n 32` must beat Phase 3E:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s.
+- If `-n 32` does not beat Phase 3E, reject and revert before another
+  implementation attempt.
+
+Rollback:
+
+- Reject and revert if hot preload causes TTFT regression beyond the gate, OOM,
+  RAM cap failure, output quality failure, launch/read failures, or `-n 32`
+  performance below Phase 3E.
