@@ -2912,6 +2912,173 @@ Decision:
 - This does not change the accepted best runtime; Phase 3E full `-n96` remains
   the current promoted best until a new strict-accounted optimization beats it.
 
+## Next candidate: Phase 3Y strict re-test Q4_0 separate down cache
+
+Design timestamp: 2026-07-03 01:13 CST.
+
+Current bottleneck:
+
+- Phase 3X proved the old metrics regex falsely counted `decline` text as
+  `launch_failures`.
+- Phase 3W-3 had been rejected only because the old metrics field showed
+  `launch_failures=44`, while strict stderr grep found no true CUDA/launch
+  failure lines.
+- Phase 3W-3 also showed the intended mechanism finally worked:
+  - main down cache stayed at 2016 slots / 7.44MiB.
+  - secondary Q4 cache had 65 slots / 7.88MiB.
+  - Q4_0 down names became batch eligible.
+  - n4 smoke decode was 3.24832 s/token, slightly better than the strict clean
+    Phase 3X n4 at 3.31559 s/token.
+- This is not enough to promote because n4 is too short and the code was
+  reverted.
+
+Hypothesis:
+
+- Re-apply the default-off Q4_0 separate-cache implementation, with the corrected
+  7.5MiB threshold, and run under strict launch-failure accounting.
+- If the prior rejection was purely measurement error, the n4 run should pass
+  all hard gates and show:
+  - strict `launch_failures=0`,
+  - Q4 cache allocation,
+  - Q4_0 down names with `batch_eligible>0`,
+  - main down cache unchanged.
+- The real decision point is n32. Q4 cache may still lose because it increases
+  staging copies/H2D and has low hit rate.
+
+Theoretical upper bound:
+
+- Removing Q4_0 down CPU fallback could save tens to hundreds of milliseconds
+  per token, but only if the secondary cache hit rate is high enough.
+- Phase 3W-3 n4 Q4 cache hit rate was only 22.6% and staging copies rose from
+  1790 to 1915, so the realistic upside may be small or negative on n32.
+- Promotion requires beating Phase 3E n32:
+  2.24573 s/token, 0.44529 tok/s.
+
+Execution:
+
+- Re-apply default-off source changes:
+  - CPU down-batch Q4_0 eligibility only when
+    `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB` is set.
+  - CUDA Q4_0 compact MMVQ batch support only under the same env.
+  - Q4_0 down expert sizes >=7.5MiB use cache bucket 1 with explicit budget.
+  - up/gate batch rejects Q4_0 to keep the experiment down-only.
+- Build remotely.
+- Run strict cold `-n4` with:
+  - `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512`
+  - strict metrics accounting from Phase 3X.
+  - CPU MoE name profile enabled.
+- If n4 passes, run strict cold `-n32`.
+- Only if n32 beats Phase 3E n32, run full `-n96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Strict `launch_failures=0`, `read_failures=0`.
+- Main down cache remains 2016 slots / 7.44MiB.
+- Logs show Q4 separate cache and Q4_0 down `batch_eligible>0`.
+- n32 must beat Phase 3E n32 before any full run.
+
+Rollback:
+
+- Revert the code if build fails, strict failures appear, quality/TTFT/RAM/VRAM
+  gates fail, Q4 cache isolation fails, or n32 does not beat Phase 3E n32.
+
+Implementation/result timestamp: 2026-07-03 01:23 CST.
+
+Code attempted:
+
+- Re-applied the Phase 3W default-off Q4_0 separate-cache code with strict
+  accounting:
+  - CPU down-batch Q4_0 eligibility only when
+    `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB` is set.
+  - CUDA compact MMVQ Q4_0 support only under the same env.
+  - Q4_0 down experts with size >=7.5MiB route to cache bucket 1.
+  - up/gate batch explicitly rejects Q4_0, keeping this down-only.
+- Remote build: PASS.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-215859Z-n4-phase3y-q4-separate-cache-strict`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 76116.51 ms.
+- Decode: 10206.57 ms / 3 runs, 3.40219 s/token, 0.29393 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- Strict `launch_failures=0`, `decline_count=44`, `read_failures=0`.
+- Main down cache remained isolated:
+  2016 slots, 7.44MiB, hits=728, misses=1800.
+- Q4 cache was active:
+  65 slots, 7.88MiB, hits=38, misses=130, hit_rate=22.6%.
+- Q4_0 down names became batch eligible, for example `blk.6`, `blk.7`,
+  `blk.9`, `blk.18`, `blk.10`, and `blk.15`.
+
+Decision after smoke:
+
+- n4 passed correctness, strict failure accounting, RAM, VRAM, TTFT, read, and
+  cache-isolation gates.
+- Continue to strict cold n32.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-220143Z-n32-phase3y-q4-separate-cache-strict`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 74685.95 ms.
+- Decode: 77463.13 ms / 31 runs, 2.49881 s/token, 0.40019 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Strict `launch_failures=0`, `decline_count=44`, `read_failures=0`.
+- Main down cache:
+  2016 slots, 7.44MiB, hits=12054, misses=14890, hit_rate=44.7%.
+- Q4 cache:
+  65 slots, 7.88MiB, hits=516, misses=1220, hit_rate=29.7%.
+- Pinned staging: copies=14714, host_stage=20873.250 ms,
+  H2D=3292.123 ms.
+- Up/gate profile: 869 calls, total=23.299 ms/call.
+- Down profile: 1861 calls, stage=10.942 ms/call, total=11.090 ms/call.
+- CPU profile:
+  - up_gate total=23.512 ms/call.
+  - down total=30.795 ms/call, `cuda_batch=5.172 ms/call`,
+    `fallback_t0=25.556 ms/call`, `batch_accept=1861`,
+    `batch_decline=59`.
+
+Comparison:
+
+- Phase 3E n32: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3Y n32: 2.49881 s/token, 0.40019 tok/s.
+- Phase 3Y is slower by 7.84635 s total over 31 decode runs.
+
+Analysis:
+
+- Strict accounting confirms Phase 3Y has no real launch/read failure and
+  preserves semantic output.
+- The implementation does move Q4_0 down tensors into the batch path, but the
+  Q4 cache hit rate is only 29.7%.
+- The extra Q4 path increases staging pressure:
+  - copies rise to 14714 versus Phase 3E n32's 13149.
+  - host_stage rises to 20873.250 ms versus Phase 3E n32's 17455.237 ms-class
+    staging bucket.
+  - H2D rises to 3292.123 ms versus Phase 3E n32's about 2844 ms.
+- The added staging and larger slot cost outweigh the Q4_0 fallback reduction.
+
+Decision:
+
+- Reject Phase 3Y.
+- Do not run full n96.
+- Revert all Phase 3Y source changes locally and remotely.
+- Rebuild the remote binary from clean source after rollback.
+- Keep Phase 3E as current accepted best.
+- If Q4_0 is revisited, it needs profile-guided Q4 admission/pinning or a
+  no-cache/scratch path that does not add broad staging pressure; pure LRU
+  separate-cache is not enough.
+
 Result timestamp: 2026-07-02 23:47 CST.
 
 Smoke run:
