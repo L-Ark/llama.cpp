@@ -74,12 +74,15 @@ def parse_time_v(text: str) -> dict[str, float | int | None]:
 
 
 def extract_answer(stdout_text: str) -> str:
-    text = stdout_text.strip()
+    text = stdout_text.replace("\b", "").replace("\r", "\n").strip()
+    if PROMPT in text:
+        text = text.rsplit(PROMPT, 1)[-1]
     split = re.split(r"\[\s*Prompt\s*:", text, maxsplit=1)
     if split:
         text = split[0].strip()
     text = re.sub(r"^Question:.*?Answer:\s*", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
     text = re.sub(r"^Answer:\s*", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^[>\s|/\\-]+", "", text).strip()
     return text
 
 
@@ -124,6 +127,7 @@ def build_case_script(
     args = [
         str(binary),
         "-m", str(model),
+        "-p", PROMPT,
         "-n", "192",
         "-c", "512",
         "-b", "64",
