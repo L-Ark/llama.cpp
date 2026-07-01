@@ -2589,6 +2589,38 @@ Rollback:
   appear, or full `-n 96` does not beat Phase 2H.
 - No code rollback should be needed because this is env-only.
 
+Result timestamp: 2026-07-02 17:28 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-172837Z-n4-phase2r-vram-cache15400`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15400`, down prefetch disabled.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 106568.74 ms, which exceeds the 106331.72 ms gate.
+- Decode: 14927.76 ms / 3 runs, 4.97592 s/token, 0.20097 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2060, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2838.856 ms, h2d=387.078 ms.
+- Up/gate profile: calls=85, total=28.555 ms/call.
+- Down profile: calls=160, stage=14.235 ms/call, total=14.407 ms/call.
+
+Decision:
+
+- Reject Phase 2R immediately at `-n 4`.
+- It uses VRAM more fully, but violates the TTFT rule by 237.02 ms.
+- Do not run `-n 32` or `-n 96`.
+- No code rollback is needed because the experiment is env-only.
+- Larger cache budgets near 15400 MiB are too close to the TTFT/VRAM margin for
+  the current cold-start acceptance rule. If cache budget is revisited, test a
+  smaller step such as 15200 MiB and require TTFT headroom on smoke before
+  continuing.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
