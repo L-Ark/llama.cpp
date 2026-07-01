@@ -1616,3 +1616,48 @@ Decision:
 - Continue to cold `-n 32` with the same config before any promotion.
 - Watch TTFT carefully because profile preload has only about 2.36s headroom
   under the gate.
+
+Result timestamp: 2026-07-01 15:35 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-153506Z-n32-phase2j-profile-cache`
+
+Measured result:
+
+- Commit/config: `a96d7d0b0`, same profile-guided cache config as the passing
+  `-n 4` smoke.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102740.62 ms, inside the 106331.72 ms gate.
+- Decode: 131577.12 ms / 31 runs, 4.24442 s/token, 0.23560 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is the largest nation in the EU by area and power, with`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=13487, misses=13457, preloads=1430, pinned=1430,
+  hit_rate=50.1%.
+- Pinned staging: copies=11887, host_stage=17641.260 ms, h2d=2583.955 ms.
+- Cache policy diag:
+  profile_count_lookups=13542, hits=10716, inserted_nonzero=12370,
+  inserted_avg=6.35, evictions=12871, victim_nonzero=10045,
+  victim_avg=3.46.
+- Up/gate profile: calls=869, total=26.286 ms/call.
+- Down profile: calls=1644, stage=14.475 ms/call, total=14.645 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2J `-n 32`: 131577.12 ms / 31 runs, 4.24442 s/token, 0.23560 tok/s.
+- Profile-guided cache is slower despite a modest hit-rate increase.
+- The extra preload/protection overhead and slower per-call stage/upgate timings
+  outweigh the reduced miss rate.
+
+Decision:
+
+- Reject Phase 2J.
+- Do not run `-n 96` for this config.
+- Keep accepted Phase 2H as the current best valid configuration.
+- Next design should target a direct per-call overhead reduction instead of
+  broad profile preload. The top visible candidates after this rejection are:
+  reducing cache lookup/eviction overhead in the 2016-slot linear scans, or
+  reducing up/gate compute cost, since up/gate remains about 54s of the Phase 2H
+  full `-n 96` decode.
