@@ -1,0 +1,96 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T08:18:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "e9cbfcf25",
+  "purpose": "Compare experimental DS4 MXFP4 gate stream GPU results against CPU vec_dot for the same streamed experts and activation rows.",
+  "code_changes": [
+    "Added default-off GGML_MOE_STREAM_COMPARE_CPU_OUT trace support in ggml-cpu.c.",
+    "Added GGML_MOE_STREAM_COMPARE_CPU_LIMIT to cap the number of streamed experts recomputed on CPU.",
+    "The compare hook runs only when ggml_cuda_moe_stream_one returns done=true, then writes per-expert max/mean absolute and relative error."
+  ],
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T081402Z-cold-ds4-gate-stream-cpu-compare/france-cpu40-vram2gb",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 2,
+      "drop_caches_before_case": true,
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+      "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8"
+    },
+    "eval_tok_s": 2.6,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 51954.067808,
+    "elapsed_seconds": 58.22,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 33849,
+    "memory_file_bytes": 15013490688,
+    "pgmajfault": 348107,
+    "workingset_refault_file": 7746423,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "answer": "preferably also as a list of  .    .   .   .   .   .   .   .   .   . ..."
+  },
+  "compare_csv_summary": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260701T081402Z-cold-ds4-gate-stream-cpu-compare/france-cpu40-vram2gb/compare.csv",
+    "rows": 8,
+    "matches_to_float_epsilon": [
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 222,
+        "max_abs": 9.53674316e-07,
+        "cpu_value": 10.0311499,
+        "gpu_value": 10.0311489
+      },
+      {
+        "tensor": "blk.1.ffn_gate_exps.weight",
+        "expert": 8,
+        "max_abs": 9.53674316e-07,
+        "cpu_value": 8.72225285,
+        "gpu_value": 8.72225189
+      }
+    ],
+    "large_mismatches": [
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 35,
+        "max_abs": 1.64784455,
+        "cpu_value": 1.64784455,
+        "gpu_value": 0.0
+      },
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 53,
+        "max_abs": 5.24980307,
+        "cpu_value": 5.24980307,
+        "gpu_value": 0.0
+      },
+      {
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "expert": 245,
+        "max_abs": 10.390495,
+        "cpu_value": 9.97797775,
+        "gpu_value": -0.41251725
+      },
+      {
+        "tensor": "blk.1.ffn_gate_exps.weight",
+        "expert": 97,
+        "max_abs": 2.29193002,
+        "cpu_value": 0.415755332,
+        "gpu_value": -1.87617469
+      }
+    ]
+  },
+  "conclusion": "The DS4 MXFP4 gate stream mismatch is expert/cache/layout specific. Some experts match CPU exactly while others return zero or wrong-sign values, so the next step is to correlate numeric errors with VRAM cache hit/miss, cache slot/source pointer, and DONTNEED behavior before modifying kernels again.",
+  "next_steps": [
+    "Run the same compare with GGML_MOE_STREAM_DONTNEED=0 to rule out source-page discard affecting the CPU reference or later stream state.",
+    "Run the same compare with GGML_MOE_VRAM_CACHE_GB=0 to distinguish VRAM cache copy/slot bugs from kernel/input layout bugs.",
+    "If cache-disabled still mismatches, instrument source pointer, row stride, and packed block offsets for one failing and one matching expert."
+  ]
+}

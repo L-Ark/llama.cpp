@@ -125,3 +125,16 @@ Rejected higher-rate candidates:
 - Result: rejected. `eval_tok_s=2.1`, `prompt_tok_s=0.6`, `ttft_estimate_ms=51806.596358`, `memory_peak_bytes=16000000000`, `memory_max_events=32813`, `pgmajfault=347048`, `workingset_refault_file=7647805`, but `correctness_ok=false`.
 - Output again degenerated into the same punctuation/list pattern and did not mention France or Europe.
 - Interpretation: the failure is not explained by using the non-ids MMVQ path. The next useful step is a small numeric CPU-vs-GPU diff for one MXFP4 expert/input to identify whether the mismatch is in weight layout, input quantization, output layout, or the CUDA vec-dot itself.
+
+### 2026-07-01T08:14:02Z - Rejected DS4 gate stream CPU-vs-GPU numeric compare
+
+- Purpose: add a default-off numeric compare hook that recomputes CPU `vec_dot` for streamed DS4 gate experts and compares it against the GPU result written by the experimental stream path.
+- Code change: `GGML_MOE_STREAM_COMPARE_CPU_OUT=<path>` writes `compare.csv`; `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=<n>` limits the number of streamed experts compared. The hook only runs after `ggml_cuda_moe_stream_one` reports `done=true`, so normal runs are unaffected.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T081402Z-cold-ds4-gate-stream-cpu-compare/france-cpu40-vram2gb`.
+- Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=8`.
+- Result: rejected. `eval_tok_s=2.6`, `prompt_tok_s=0.6`, `ttft_estimate_ms=51954.067808`, `memory_peak_bytes=16000000000`, `memory_max_events=33849`, `pgmajfault=348107`, `workingset_refault_file=7746423`, but `correctness_ok=false`.
+- Answer: `preferably also as a list of  . ...`; it does not mention France or Europe and is semantically invalid.
+- Numeric evidence from `compare.csv`:
+  - Matching examples: `blk.0.ffn_gate_exps.weight` expert `222` had `max_abs=9.53674316e-07`; `blk.1.ffn_gate_exps.weight` expert `8` had `max_abs=9.53674316e-07`.
+  - Failing examples: expert `35` had CPU `1.64784455` versus GPU `0`; expert `53` had CPU `5.24980307` versus GPU `0`; expert `245` had CPU `9.97797775` versus GPU `-0.41251725`; maximum observed `max_abs=10.390495`.
+- Interpretation: the MXFP4 stream bug is not a uniform scatter/indexing failure, because some experts match exactly while others fail badly. The next isolation should correlate mismatches with VRAM cache hits, cache slots, source pointers, and DONTNEED behavior; run with `GGML_MOE_STREAM_DONTNEED=0` and with `GGML_MOE_VRAM_CACHE_GB=0` before changing kernels again.

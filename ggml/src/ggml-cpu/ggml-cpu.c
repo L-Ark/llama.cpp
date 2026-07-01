@@ -358,6 +358,99 @@ static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
 #endif
 }
 
+static bool ggml_moe_stream_compare_cpu_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_STREAM_COMPARE_CPU_OUT");
+        enabled = env && env[0] ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static FILE * ggml_moe_stream_compare_cpu_fp(void) {
+    static FILE * fp = NULL;
+    static int initialized = 0;
+    static pthread_mutex_t init_mu = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&init_mu);
+    if (!initialized) {
+        initialized = 1;
+        const char * path = getenv("GGML_MOE_STREAM_COMPARE_CPU_OUT");
+        if (path && path[0]) {
+            fp = fopen(path, "w");
+            if (fp) {
+                setvbuf(fp, NULL, _IOLBF, 0);
+                fprintf(fp,
+                    "seq,tensor,type,expert,cne1,count,max_abs,mean_abs,max_rel,max_k,max_row,max_col,cpu_value,gpu_value\n");
+            } else {
+                fprintf(stderr, "[moe_stream_compare] failed to open compare trace: %s\n", path);
+            }
+        }
+    }
+    pthread_mutex_unlock(&init_mu);
+
+    return fp;
+}
+
+static bool ggml_moe_stream_compare_cpu_take_record(int * out_seq) {
+    static atomic_int seq = 0;
+    static int limit = -1;
+    if (limit < 0) {
+        const char * env = getenv("GGML_MOE_STREAM_COMPARE_CPU_LIMIT");
+        limit = env && env[0] ? atoi(env) : 32;
+        if (limit <= 0) {
+            limit = 32;
+        }
+    }
+
+    const int cur_seq = atomic_fetch_add_explicit(&seq, 1, memory_order_relaxed);
+    if (cur_seq >= limit) {
+        return false;
+    }
+    *out_seq = cur_seq;
+    return true;
+}
+
+static void ggml_moe_stream_compare_cpu_write(
+    int seq,
+    const char * tensor,
+    enum ggml_type type,
+    int expert,
+    int64_t cne1,
+    int64_t count,
+    double max_abs,
+    double mean_abs,
+    double max_rel,
+    int64_t max_k,
+    int32_t max_row,
+    int32_t max_col,
+    float cpu_value,
+    float gpu_value) {
+    FILE * fp = ggml_moe_stream_compare_cpu_fp();
+    if (!fp) {
+        return;
+    }
+
+    flockfile(fp);
+    fprintf(fp,
+        "%d,%s,%d,%d,%" PRId64 ",%" PRId64 ",%.9g,%.9g,%.9g,%" PRId64 ",%d,%d,%.9g,%.9g\n",
+        seq,
+        tensor ? tensor : "",
+        (int) type,
+        expert,
+        cne1,
+        count,
+        max_abs,
+        mean_abs,
+        max_rel,
+        max_k,
+        max_row,
+        max_col,
+        (double) cpu_value,
+        (double) gpu_value);
+    funlockfile(fp);
+}
+
 #define GGML_THREADPOOL_N_THREADS_MASK (0xffffU)
 #define GGML_THREADPOOL_N_THREADS_BITS (16)
 
@@ -1673,6 +1766,85 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
     }
 }
 
+static void ggml_moe_stream_compare_cpu_result(
+    struct ggml_tensor * dst,
+    const struct ggml_tensor * src0,
+    const struct ggml_tensor * src1,
+    const int64_t cur_a,
+    const int64_t cne1,
+    const char * src0_cur,
+    const struct mmid_row_mapping * matrix_rows,
+    const size_t row_size,
+    const bool src1_cont,
+    const void * wdata) {
+    int seq = 0;
+    if (!ggml_moe_stream_compare_cpu_take_record(&seq)) {
+        return;
+    }
+
+    GGML_TENSOR_BINARY_OP_LOCALS
+
+    const enum ggml_type type = src0->type;
+    ggml_vec_dot_t const vec_dot = type_traits_cpu[type].vec_dot;
+    enum ggml_type const vec_dot_type = type_traits_cpu[type].vec_dot_type;
+
+    double sum_abs = 0.0;
+    double max_abs = -1.0;
+    double max_rel = 0.0;
+    int64_t count = 0;
+    int64_t max_k = -1;
+    int32_t max_row = -1;
+    int32_t max_col = -1;
+    float max_cpu = 0.0f;
+    float max_gpu = 0.0f;
+
+    for (int64_t k = 0; k < cne1; ++k) {
+        struct mmid_row_mapping row_mapping = matrix_rows[k];
+        const int id = row_mapping.i1;
+        const int64_t i11 = id % ne11;
+        const int64_t i12 = row_mapping.i2;
+
+        const char * src1_col = (const char *) wdata +
+            (src1_cont || src1->type != vec_dot_type
+            ? (i11 + i12*ne11)*row_size
+            : (i11*nb11 + i12*nb12));
+
+        const float * dst_col = (const float *) ((const char *) dst->data + (id*nb1 + i12*nb2));
+
+        for (int64_t ir0 = 0; ir0 < ne01; ++ir0) {
+            float cpu = 0.0f;
+            vec_dot(ne00, &cpu, 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+            const float gpu = dst_col[ir0];
+            const double abs_diff = fabs((double) cpu - (double) gpu);
+            const double denom = fmax(fabs((double) cpu), 1.0e-12);
+            const double rel_diff = abs_diff / denom;
+
+            sum_abs += abs_diff;
+            count += 1;
+            if (abs_diff > max_abs) {
+                max_abs = abs_diff;
+                max_rel = rel_diff;
+                max_k = k;
+                max_row = id;
+                max_col = (int32_t) ir0;
+                max_cpu = cpu;
+                max_gpu = gpu;
+            }
+        }
+    }
+
+    ggml_moe_stream_compare_cpu_write(
+        seq, src0->name, src0->type, (int) cur_a, cne1, count,
+        max_abs < 0.0 ? 0.0 : max_abs,
+        count > 0 ? sum_abs / (double) count : 0.0,
+        max_rel,
+        max_k,
+        max_row,
+        max_col,
+        max_cpu,
+        max_gpu);
+}
+
 static void * incr_ptr_aligned(void ** p, size_t size, size_t align) {
 
     void * ptr = *p;
@@ -1828,6 +2000,15 @@ static void ggml_compute_forward_mul_mat_id(
                     (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
 
                 if (done) {
+                    if (ggml_moe_stream_compare_cpu_enabled()) {
+                        ggml_moe_stream_compare_cpu_result(
+                            dst, src0, src1, cur_a, cne1,
+                            src0_cur,
+                            matrix_rows + cur_a * ids->ne[0] * ids->ne[1],
+                            ggml_row_size(type_traits_cpu[src0->type].vec_dot_type, ne10),
+                            src1_cont,
+                            src1->type == type_traits_cpu[src0->type].vec_dot_type ? src1->data : params->wdata);
+                    }
                     matrix_row_counts[cur_a] = 0;
                 }
             }
