@@ -6933,3 +6933,617 @@ Rollback:
 - Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
+
+## Current execution pointer: Phase 3Z up/gate fallback attribution
+
+Design timestamp: 2026-07-02 17:31 CST.
+
+The older `Phase 2O` candidate above is superseded by later Phase 3 results.
+The current accepted runtime remains Phase 3E:
+
+- Commit: `9b64e4c8`.
+- Branch: `vendor/kimi-moe-stream-on-vendor`.
+- Full cold `-n 96` run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`.
+- Host RAM peak: 14.901 GiB under `memory.max=16000000000` and
+  `memory.swap.max=0`.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79721.89 ms. The hard 20% TTFT ceiling remains 106331.72 ms.
+- Decode: 231668.17 ms / 85 decode tokens, 2.72551 s/token,
+  0.36690 tok/s.
+- Quality: PASS on `Please introduce France in a short paragraph.`
+- Strict failure accounting: future runs must use strict launch failure regex
+  and record `decline_count` separately. `decline` log lines are not launch
+  failures.
+
+Latest rejected optimization:
+
+- Phase 3Y Q4_0 separate down cache passed strict launch/read/quality/RAM/TTFT
+  gates but was slower at `-n 32`.
+- Phase 3Y `-n 32`: 2.49881 s/token, 0.40019 tok/s.
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- The extra Q4 cache increased pinned staging and H2D pressure, so pure LRU Q4
+  separate caching is not a valid next step.
+
+Current bottleneck to locate before the next implementation:
+
+- Phase 3Y strict `-n 32` per-name profile still shows many
+  `ffn_gate_exps.weight` and `ffn_up_exps.weight` entries in the generic
+  `MUL_MAT_ID` fallback path, for example:
+  - `blk.28.ffn_gate_exps.weight`: 35.255 ms/call.
+  - `blk.7.ffn_gate_exps.weight`: 32.771 ms/call.
+  - `blk.7.ffn_up_exps.weight`: 32.352 ms/call.
+  - `blk.52.ffn_gate_exps.weight`: 31.467 ms/call.
+  - `blk.9.ffn_gate_exps.weight`: 31.244 ms/call.
+- The graph only builds the vendor fused up/gate op when
+  `GGML_MOE_STREAM_FUSED_UP_GATE` is set, `n_tokens == 1`, the up/gate tensors
+  are separate and shape-compatible, no bias/scale tensors are present, and the
+  FFN activation is SILU.
+- The CUDA up/gate batch path declines multi-row expert routes unless prompt
+  mode is enabled. Therefore the first question is whether the profiled
+  `ffn_gate_exps` / `ffn_up_exps` fallback time is decode-critical, prompt-only,
+  or caused by unsupported tensor type/shape conditions.
+
+Strict constraints for every Phase 3Z run:
+
+- Host RAM must remain below 16 GB including page cache, process RSS, pinned
+  memory, mmap-resident pages, helper processes, and cgroup-accounted kernel
+  memory. Run under `memory.max=16000000000` and `memory.swap.max=0`.
+- Every run must be cold start: restart the process and run
+  `sync; echo 3 > /proc/sys/vm/drop_caches` before launch. Record the proof in
+  `cold-start.txt`.
+- Use VRAM deliberately and prefer GPU compute/cache. Keep the Phase 3E
+  15000 MiB cache budget unless the experiment explicitly changes graph/cache
+  placement, and record unused VRAM minimum.
+- The France prompt must pass quality. Any answer that is not coherent,
+  semantically correct, and about France rejects the experiment immediately.
+- TTFT must be `<= 106331.72 ms`.
+- `read_failures` must be 0.
+- Strict `launch_failures` must be 0. `decline_count` must be recorded
+  separately and explained.
+- No implementation optimization may be stacked on top of a rejected change.
+- If a change improves token rate and satisfies all gates, commit and push it
+  immediately with reproduction details. If it fails any gate or is slower,
+  revert code before continuing and record the rejected result.
+
+Phase 3Z diagnostic method:
+
+1. Update this plan before each run with the exact hypothesis and rollback
+   condition.
+2. Run a cold strict `-n 4` diagnostic on the clean Phase 3E runtime with:
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+   - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+   - Phase 3E accepted runtime env otherwise unchanged.
+3. Parse the run into:
+   - total per-token time,
+   - up/gate fused accepts,
+   - up/gate CUDA batch declines by reason,
+   - generic `MUL_MAT_ID` fallback calls by tensor name,
+   - prompt vs decode call attribution if available from `rows_stride`,
+   - cache hit/miss, pinned staging, H2D, and down batch time.
+4. If the diagnostic proves top `ffn_gate_exps` / `ffn_up_exps` fallback entries
+   are decode-critical, rank implementation candidates by expected gain:
+   - first: make the graph take `ggml_moe_up_gate` for all eligible decode tokens
+     and eliminate accidental separate `build_lora_mm_id` up/gate construction,
+   - second: add missing CUDA support for the tensor type that is causing
+     `unsupported_type`, if the type is one of Kimi IQ3_S expert formats,
+   - third: enable a safe prompt-mode up/gate stream only if TTFT headroom and
+     exactness are proven.
+5. If the diagnostic shows the fallback is prompt-only, do not optimize it for
+   decode token rate unless TTFT is near the gate. Return to the largest measured
+   decode bucket instead.
+
+Theoretical upper bound for a decode-critical up/gate fallback fix:
+
+- Phase 3E full `-n 96` decode time is 231.668s over 85 tokens.
+- A top fallback entry costs roughly 30-35 ms/call. If 10-20 such up/gate
+  fallback calls are on every decode token and can be moved to the existing
+  fused GPU path, the hard visible upper bound is about 300-700 ms/token.
+- That would move the full-run ceiling from 2.72551 s/token toward roughly
+  2.0-2.4 s/token before accounting for cache misses and synchronization.
+- Realistic first-patch expectation is lower: 3-8% token-rate gain if only a
+  subset of fallback calls are decode-critical, or 0% if the fallback is
+  prompt-only.
+
+Acceptance for a later Phase 3Z implementation patch:
+
+- First run cold strict `-n 4`; then run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E `-n 32`:
+  - target faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all gates passing.
+- Only then run cold strict `-n 96`.
+- Full promotion requires beating Phase 3E full `-n 96`:
+  - faster than 2.72551 s/token,
+  - token rate above 0.36690 tok/s,
+  - RAM below 16 GB including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France answer quality PASS,
+  - `read_failures=0`,
+  - strict `launch_failures=0`,
+  - reproduction files complete.
+
+Required reproduction record for Phase 3Z:
+
+- Run directory under
+  `/root/lfz/runs/vendor-kimi-token-rate/YYYYMMDD-HHMMSSZ-<short-name>`.
+- Include `README.md`, `command.txt`, `env.txt`, `stdout.txt`, `stderr.txt`,
+  `answer.txt`, `metrics.json`, `memory.txt`, `vram.txt`, `system.txt`,
+  `cold-start.txt`, `moe.txt`, and `quality.txt`.
+- `metrics.json` must contain the exact commit, branch, cold-start proof,
+  cgroup memory peak, page cache peak, process RSS peak, VRAM peak and minimum
+  unused VRAM, TTFT, decode seconds, decode tokens, seconds/token, token rate,
+  token-rate delta vs Phase 3E, exact answer, strict launch failure count,
+  decline count, read failure count, and accept/reject decision.
+
+Rollback:
+
+- Reject and revert any source change if output quality fails, TTFT exceeds
+  106331.72 ms, host RAM exceeds the 16 GB cgroup cap, VRAM allocation becomes
+  unstable, strict launch/read failures appear, the result is not cold-start
+  reproducible, or matching-token-count token rate does not improve over
+  Phase 3E.
+
+### Phase 3Z run 1: strict cold `-n 4` fallback attribution
+
+Design timestamp: 2026-07-02 17:39 CST.
+
+Hypothesis:
+
+- The current top `ffn_gate_exps` / `ffn_up_exps` `MUL_MAT_ID` fallback names
+  may be either:
+  - decode-critical, meaning the graph is still constructing separate up/gate
+    matmuls for some decode path despite the fused up/gate env, or
+  - prompt-only / multi-row, meaning they should not be prioritized for decode
+    token-rate improvement.
+- A strict cold `-n 4` run with name profiling and decline debug is enough to
+  classify this before touching implementation code.
+
+Run configuration:
+
+- Base runtime: accepted Phase 3E env.
+- Token count: `-n 4`.
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- Required extra env:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+- Strict launch failure accounting:
+  - count only launch/CUDA failure patterns,
+  - record `decline_count` separately.
+- Cold start:
+  - restart process,
+  - run `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  - run inside `memory.max=16000000000`, `memory.swap.max=0`.
+
+Acceptance for this diagnostic:
+
+- This is not a performance promotion run.
+- It passes only if RAM, TTFT, cold-start, quality, strict launch failure, and
+  read failure gates pass.
+- It must produce enough evidence to decide whether the next implementation
+  target should be up/gate graph/fused support or a different decode bucket.
+
+Rollback:
+
+- No source code change is planned for this run.
+- If runtime flags cause quality, TTFT, RAM, or launch/read failures, reject the
+  diagnostic and rerun with narrower attribution flags.
+
+Result timestamp: 2026-07-02 18:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-221241Z-n4-phase3z-upgate-fallback-attribution`
+
+Measured result:
+
+- Commit/config: remote clean `32b0d67c804abaa1acfd74a087e201c6bbaed171`,
+  Phase 3E runtime env plus name profile and decline debug.
+- Cgroup: `memory.max=16000000000`, `memory.swap.max=0`.
+- Cold-start method: process restart plus `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host memory: `memory.peak=16000000000` bytes, final page cache
+  15078416384 bytes.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78485.42 ms, inside the 106331.72 ms gate.
+- Decode: 10881.99 ms / 3 runs, 3.62733 s/token, 0.27568 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Decline debug:
+  - down batch declines: 52, all `multirow_not_supported` on prompt
+    `rows_stride=136`.
+  - up/gate prompt disabled lines: 85.
+- Up/gate profile:
+  - calls=85, batch_accept=85, batch_decline=0.
+  - total=30.195 ms/call in CPU wrapper, CUDA batch total=29.829 ms/call.
+- Down profile:
+  - calls=550, batch_accept=160, batch_decline=52.
+  - fallback_t0=147.668 ms/call in CPU wrapper.
+  - CUDA down batch total=14.054 ms/call.
+- Name profile top entries are dominated by down fallback. The first up/gate
+  entry appears only at top28:
+  - `blk.52.ffn_up_exps.weight`, calls=4, batch_eligible=0,
+    fallback_t0=155.958 ms/call.
+
+Decision:
+
+- Reject this diagnostic as an accepted gate result because `memory.peak`
+  reached the exact `16000000000` byte cap. The user's constraint is strictly
+  below 16 GB including page cache, so a run that hits the cap is not acceptable
+  proof even though it completed.
+- The diagnostic evidence is still useful but must be reproduced under a lower
+  cgroup limit before it can guide implementation.
+- Next run uses `memory.max=15900000000` and the same Phase 3E runtime/env.
+
+### Phase 3Z run 2: strict cold `-n 4` fallback attribution under 15.9GB cap
+
+Design timestamp: 2026-07-02 18:18 CST.
+
+Hypothesis:
+
+- The Phase 3Z run 1 profile can be reproduced under a lower cgroup cap.
+- If it passes, the current bottleneck classification becomes:
+  - decode up/gate already uses fused CUDA batch for the measured calls,
+  - remaining large fallback is mostly down/prompt or down unsupported-type
+    fallback,
+  - next implementation should focus on down fallback eligibility/support
+    rather than graph-level up/gate decode fusion.
+
+Run configuration:
+
+- Same as Phase 3Z run 1, except:
+  - `memory.max=15900000000`.
+- Keep cold-start, strict launch failure accounting, quality, TTFT, and
+  read-failure gates unchanged.
+
+Acceptance:
+
+- `memory.peak < 16000000000` bytes.
+- TTFT `<= 106331.72 ms`.
+- France prompt quality PASS.
+- `strict_launch_failures=0`.
+- `read_failures=0`.
+- The run must reproduce enough profile evidence to classify up/gate vs down
+  bottleneck.
+
+Rollback:
+
+- No source code change is planned.
+- If lower cgroup cap causes failure/OOM or unreadable output, keep run 1 as
+  rejected diagnostic evidence and reduce VRAM/page-cache pressure only after a
+  new plan update.
+
+Result timestamp: 2026-07-02 18:24 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-221654Z-n4-phase3z-upgate-fallback-attribution-15900mb`
+
+Measured result:
+
+- Commit/config: remote clean `32b0d67c804abaa1acfd74a087e201c6bbaed171`,
+  Phase 3E runtime env plus name profile and decline debug.
+- Cgroup: `memory.max=15900000000`, `memory.swap.max=0`.
+- Cold-start method: process restart plus `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host memory: `memory.peak=15899996160` bytes, 14.808 GiB. This is below
+  16,000,000,000 bytes and satisfies the strict 16 GB gate.
+- Final page cache: 13.944 GiB.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80958.75 ms, inside the 106331.72 ms gate.
+- Decode: 10994.93 ms / 3 runs, 3.66498 s/token, 0.27285 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Decline debug:
+  - down batch declines: 52, all `multirow_not_supported` on prompt
+    `rows_stride=136`.
+  - up/gate prompt disabled lines: 85.
+- Up/gate:
+  - CUDA profile calls=85, total=33.279 ms/call.
+  - CPU wrapper calls=85, batch_accept=85, batch_decline=0,
+    fallback_t0=0.001 ms/call.
+  - Conclusion: decode up/gate is already on the fused CUDA batch path in this
+    run. The profiled up/gate fallback entries are not the current decode
+    priority.
+- Down:
+  - CPU wrapper calls=550, batch_accept=160, batch_decline=52,
+    fallback_t0=146.174 ms/call.
+  - CUDA down batch calls=160, total=13.939 ms/call.
+  - Name profile top entries are dominated by down fallback. Examples:
+    - `blk.4.ffn_down_exps.weight`: calls=4, batch_accept=3,
+      batch_decline=1, fallback_t0=369.286 ms/call.
+    - `blk.7.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=228.155 ms/call.
+    - `blk.6.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=203.400 ms/call.
+    - `blk.9.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=196.205 ms/call.
+  - The `batch_accept=3, batch_decline=1` pattern means these eligible down
+    tensors run CUDA batch for the three decode tokens and decline only the
+    prompt multi-row call.
+  - The `batch_eligible=0` down tensors remain on CPU fallback for both prompt
+    and decode and are now the largest actionable decode bucket.
+
+Decision:
+
+- Accept Phase 3Z run 2 as a valid diagnostic under the strict RAM, cold-start,
+  TTFT, VRAM, quality, read, and strict launch-failure gates.
+- Do not implement graph-level up/gate fusion next; the diagnostic disproves it
+  as the current decode bottleneck.
+- Next design step: identify why high-cost down tensors have `batch_eligible=0`
+  and whether a GPU down batch path can safely support their quant type without
+  repeating Phase 3Y's Q4 cache-pressure regression.
+
+## Next candidate: Phase 3ZA Q4_0 down scratch GPU batch
+
+Design timestamp: 2026-07-02 18:43 CST.
+
+Current bottleneck:
+
+- Phase 3Z run 2 proves decode up/gate is not the current priority:
+  - up/gate CPU wrapper calls=85,
+  - batch_accept=85,
+  - batch_decline=0,
+  - fallback_t0=0.001 ms/call.
+- The remaining large decode bucket is down fallback:
+  - down CPU wrapper calls=550,
+  - batch_accept=160,
+  - batch_decline=52,
+  - fallback_t0=146.174 ms/call.
+- GGUF metadata sampled from split 00002 identifies:
+  - `blk.4.ffn_down_exps.weight`: `iq4_xs`, eligible and decode batch accepted.
+  - `blk.6.ffn_down_exps.weight`: `q4_0`, `batch_eligible=0`.
+  - `blk.7.ffn_down_exps.weight`: `q4_0`, `batch_eligible=0`.
+- Therefore the next actionable target is Q4_0 down decode fallback.
+
+Rejected prior approach:
+
+- Phase 3Y Q4_0 separate down cache was functionally correct but slower at
+  `-n 32`:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3Y `-n 32`: 2.49881 s/token.
+- The gap was extra cache/staging/H2D pressure, not correctness:
+  - strict launch failures=0,
+  - read failures=0,
+  - quality PASS.
+- Therefore do not reintroduce Q4_0 into an LRU VRAM cache as the first retry.
+
+Hypothesis:
+
+- Add a default-off Q4_0 down scratch path:
+  - env: `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`,
+  - allow Q4_0 down tensors into `ggml_cuda_moe_stream_batch`,
+  - copy only the active Q4_0 experts for the current call into the existing
+    scratch device buffer,
+  - use slot ids `0..n_active-1` and `slot_stride=src0_bytes`,
+  - launch the compact MMVQ batch kernel from scratch memory,
+  - do not insert Q4_0 experts into the VRAM LRU cache.
+- This should reduce CPU fallback compute without stealing cache capacity from
+  IQ3/IQ4/Q3 down tensors that already benefit from the current Phase 3E cache.
+
+Theoretical upper bound:
+
+- Q4_0 down expert size is approximately:
+  - `ne00=2048`, `ne01=7168`,
+  - Q4_0 row size = 64 blocks * 18 bytes = 1152 bytes,
+  - expert size = 7168 * 1152 = 8.25 MiB.
+- A decode down call with 8 active experts copies about 66 MiB.
+- Even at a conservative 20-24 GB/s effective H2D bandwidth, the scratch copy
+  lower bound is about 2.8-3.3 ms before pack/read overhead and kernel time.
+- Current Q4_0 CPU fallback examples cost roughly 166-228 ms/call in the
+  strict diagnostic. If three decode calls per layer are converted, the visible
+  per-layer decode bound is tens to hundreds of milliseconds saved across the
+  short run.
+- The realistic first bound is lower because scratch copies are not cached and
+  may add H2D pressure. A useful `-n 32` result should still beat Phase 3E if it
+  converts enough Q4_0 down calls without disrupting existing cached down paths.
+
+Implementation plan:
+
+1. Add default-off env gate `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH`.
+2. CPU side: let `ggml_cuda_moe_stream_supports_down_batch` return true for
+   Q4_0 down tensors only when the env is enabled.
+3. CUDA side:
+   - allow Q4_0 through the down batch type gate only when scratch env is on,
+   - skip `batch_cache_get`, profile preload, lookup, and insert for Q4_0
+     scratch calls,
+   - copy each active expert to `bc.d_src0 + j * src0_bytes`,
+   - set `bc.h_x_ids[j] = j`,
+   - call `launch_moe_mmvq_compact_batch` with scratch base and
+     `slot_stride=src0_bytes`,
+   - add `GGML_TYPE_Q4_0` to the compact MMVQ launch switch.
+4. Keep the feature default-off so accepted Phase 3E behavior is unchanged when
+   env is absent.
+
+Acceptance:
+
+- Build must pass on the CUDA remote.
+- First run cold strict `-n 4` under `memory.max=15900000000`,
+  `memory.swap.max=0`.
+- Required env delta:
+  - `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Hard gates:
+  - host memory peak `< 16000000000` bytes,
+  - TTFT `<= 106331.72 ms`,
+  - VRAM remains stable and deliberately near full,
+  - France prompt quality PASS,
+  - strict launch failures=0,
+  - read failures=0.
+- Diagnostic success:
+  - Q4_0 down entries become batch eligible,
+  - no `unsupported_type` or launch failure for Q4_0,
+  - Q4_0 down fallback decreases materially.
+- If `-n 4` passes, run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E `-n 32`:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all hard gates passing.
+- Only if `-n 32` passes, run full cold strict `-n 96`.
+
+Rollback:
+
+- If build fails, quality fails, strict launch/read failures appear, TTFT exceeds
+  the gate, RAM exceeds the strict cap, or matching-token-count performance does
+  not improve, revert this source change before trying another optimization.
+
+Result timestamp: 2026-07-02 18:59 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-222715Z-n4-phase3za-q4-down-scratch`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za`,
+  Q4_0 scratch code enabled with `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Build: PASS.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 74333.82 ms, TTFT gate PASS.
+- Decode: 11902.85 ms / 3 runs, 3.96762 s/token, 0.25204 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- Declines:
+  - `multirow_not_supported`: 59 prompt declines.
+  - `launch_moe_mmvq_compact_batch`: 21 decode declines, all Q4_0 down tensors.
+- Name profile:
+  - Q4_0 down tensors became `batch_eligible=4`, proving CPU-side eligibility
+    worked.
+  - But Q4_0 down tensors had `batch_accept=0`, `batch_decline=4`, so decode
+    still fell back to CPU.
+
+Gap analysis:
+
+- The implementation added Q4_0 to `launch_moe_mmq_slot_batch`, but the active
+  down path calls `launch_moe_mmvq_compact_batch`.
+- `launch_moe_mmvq_compact_batch` still rejects Q4_0 in its type allowlist
+  before it reaches `ggml_cuda_moe_stream_mmvq_dev`.
+- This explains the 21 decode declines and the slower decode: the run paid
+  scratch copy overhead and then still executed CPU fallback.
+
+Decision:
+
+- Do not run `-n 32`.
+- Keep this run as a failed implementation smoke.
+- Patch the correct `launch_moe_mmvq_compact_batch` allowlist and rerun cold
+  strict `-n 4` before making any promotion decision.
+
+Result timestamp: 2026-07-02 19:08 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223212Z-n4-phase3za-q4-down-scratch-v2`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za-v2`,
+  Q4_0 scratch code with corrected compact MMVQ allowlist.
+- Build: PASS.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 76572.46 ms, TTFT gate PASS.
+- Decode: 9762.09 ms / 3 runs, 3.25403 s/token, 0.30731 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- Unsupported-type declines: 0.
+- `launch_moe_mmvq_compact_batch` declines: 0.
+- Down CPU wrapper:
+  - calls=550,
+  - batch_accept=181,
+  - batch_decline=59,
+  - fallback_t0=142.226 ms/call.
+- Down CUDA profile:
+  - calls=181,
+  - stage=13.551 ms/call,
+  - kernel=0.112 ms/call,
+  - total=13.711 ms/call.
+- Q4_0 tensors now accept decode batch:
+  - `blk.6.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.7.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.8.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.9.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.15.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.18.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+
+Comparison:
+
+- Phase 3Z diagnostic run 2 with same 15.9GB cap and debug env:
+  - 3.66498 s/token, 0.27285 tok/s.
+- Phase 3ZA v2 diagnostic:
+  - 3.25403 s/token, 0.30731 tok/s.
+- This proves the Q4_0 scratch path can execute and reduces the short-run
+  fallback burden, but it is still a diagnostic run with name/decline debug.
+
+Decision:
+
+- Continue to cold strict `-n 32`.
+- Use production-like Phase 3E env plus `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`,
+  but remove `GGML_KIMI_CPU_MOE_NAME_PROFILE` and
+  `GGML_MOE_STREAM_DECLINE_DEBUG` to avoid diagnostic overhead.
+- Promotion still requires beating Phase 3E `-n 32`:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all hard gates passing.
+
+Result timestamp: 2026-07-02 19:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za-v2`,
+  production-like Phase 3E env plus `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 76460.99 ms, TTFT gate PASS.
+- Decode: 80398.54 ms / 31 runs, 2.59350 s/token, 0.38558 tok/s.
+- Quality: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- `launch_moe_mmvq_compact_batch` declines: 0.
+- Unsupported-type declines: 0.
+- Down CPU wrapper:
+  - calls=4022,
+  - batch_accept=1861,
+  - batch_decline=59,
+  - fallback_t0=25.473 ms/call.
+- Down CUDA profile:
+  - calls=1861,
+  - stage=11.615 ms/call,
+  - kernel=0.108 ms/call,
+  - total=11.766 ms/call.
+- Pinned staging:
+  - copies=15226,
+  - host_stage=21743.566 ms,
+  - h2d=3450.111 ms.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3ZA `-n 32`: 2.59350 s/token, 0.38558 tok/s.
+- Phase 3ZA is slower by 10.78008s over 31 decode tokens.
+
+Gap analysis:
+
+- The Q4_0 scratch implementation works functionally and removes the Q4_0
+  launch declines, but no-cache scratch adds too much staging/H2D pressure.
+- The expected compute saving does not translate into end-to-end speed because
+  every Q4_0 decode call reloads all active Q4_0 experts instead of reusing a
+  cache slot.
+- This reproduces the general Phase 3Y lesson: Q4_0 down can be made correct,
+  but naive admission/copy policy is slower than Phase 3E. A future Q4_0 retry
+  needs profile-guided admission or a small pinned hot set, not unconditional
+  scratch reloads.
+
+Decision:
+
+- Reject Phase 3ZA.
+- Do not run full `-n 96`.
+- Revert all Phase 3ZA source changes locally and remotely.
+- Keep Phase 3E as current accepted best.
