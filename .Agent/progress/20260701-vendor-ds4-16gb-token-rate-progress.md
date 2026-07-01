@@ -42,3 +42,14 @@ Rejected higher-rate candidates:
 - TTFT gate: `ttft_estimate_ms=12146.360264`, lower than the previous accepted `12823.978055`.
 - Correctness gate: passed. The France answer is semantically correct and coherent; it contains the same spelling typo (`Rennowned`) but no semantic issue.
 - Exact command and environment are committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/accepted-hard16g-cpu40-vram4.json`.
+
+### 2026-07-01T05:52:37Z - Prompt-set steady-state stability test failed
+
+- Test purpose: check whether one France warmup in the same 16 GB cgroup and same long-lived `llama-cli` process makes different prompts run near the 8-10 tok/s single-prompt steady-state range.
+- Tested config: `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=4`, `MemoryMax=16000000000`, `MemorySwapMax=0`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb-promptset/20260701T055237Z-vram4-cpu40`.
+- Result: failed steady-state stability. Rates were `1.6`, `1.8`, `1.3`, `1.0`, `1.2`, `0.9` tok/s for warmup France, France again, quantum, Fibonacci, Japan, and climate respectively.
+- Memory evidence: `memory_peak=16000000000`, `memory.events max=422741`, `oom=0`, `oom_kill=0`; page cache was included in cgroup accounting with `file=14729252864`.
+- Interpretation: France-only warmup does not heat enough prompt-dependent MoE expert pages under the 16 GB cgroup. The run remains dominated by file/page-cache churn and major faults (`pgmajfault=4774376`, `workingset_refault_file=147025029`).
+- Follow-up bottleneck: to make prompt-independent steady state stable, we need either a broader multi-prompt warmup that stays within 16 GB, more selective/high-frequency expert residency, or a streaming/prefetch change that reduces page-cache churn across changing experts.
+- Full reproducibility record is committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/promptset-vram4-cpu40-failed.json`.
