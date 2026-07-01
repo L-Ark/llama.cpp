@@ -1752,3 +1752,41 @@ Decision:
 - The single sampled up/gate call is much slower than Phase 2H, but `-n 4` has
   only one up/gate profile call, so run the planned cold `-n 32` before final
   rejection.
+
+Result timestamp: 2026-07-01 15:45 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-154553Z-n32-phase2k-vendor-mmq-upgate`
+
+Measured result:
+
+- Commit/config: `a03085b02`, accepted Phase 2H config plus
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101097.26 ms, inside the 106331.72 ms gate.
+- Decode: 157639.97 ms / 31 runs, 5.08516 s/token, 0.19665 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Vendor MMQ activated: true.
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=12126, misses=14818, hit_rate=45.0%.
+- Pinned staging: copies=13458, host_stage=17950.601 ms, h2d=2973.772 ms.
+- Up/gate profile: calls=1, total=128.587 ms/call.
+- Down profile: calls=1644, stage=10.642 ms/call, total=10.808 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2K `-n 32`: 157639.97 ms / 31 runs, 5.08516 s/token, 0.19665 tok/s.
+- Vendor MMQ is substantially slower at the same token count, even though
+  correctness, RAM, VRAM, and TTFT gates pass.
+
+Decision:
+
+- Reject Phase 2K.
+- Do not run `-n 96` for this config.
+- Keep accepted Phase 2H as the current best valid configuration.
+- The next design should inspect why up/gate profile only reports one call under
+  vendor MMQ and where the missing decode time is spent before trying another
+  up/gate kernel change.
