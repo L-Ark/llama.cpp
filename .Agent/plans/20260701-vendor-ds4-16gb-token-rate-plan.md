@@ -1881,6 +1881,18 @@
 - `gap_analysis`: Removing per-expert trace did not improve token rate beyond current SOTA and TTFT was slightly worse than top4 pushed rerun. Trace write overhead is not hiding a higher top4 cold-start SOTA.
 - `rollback_status`: no source change. Current effective SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：old-config-cpu-chunk-trace-forensic
+
+- `attempt_id`: `20260702-old-config-cpu-chunk-trace-forensic`
+- `attempt_kind`: `forensic-diagnostic/cpu-fallback-wall`
+- `status`: planned
+- `hypothesis`: The old `2.6 tok/s` run and slow clean reruns have the same gate stream rows/hits/misses (`34753/29624/5129`), while trace span differs sharply (`~71s` old versus `~113s` slow) and only about `3.2s` of that gap is explained by gate `src0_ms`. The missing time is likely in unstreamed CPU fallback (`ffn_up_exps` / `ffn_down_exps`), cgroup reclaim stalls around those CPU reads, or a lost binary/source behavior in that path.
+- `theoretical_upper_bound`: If CPU fallback/reclaim accounts for most of the extra `~42s` trace-span gap, fixing that path could recover a large fraction of the historical `2.6 tok/s` observation without changing model quality. If CPU fallback trace shows only a small gap, the remaining delta is likely external IO/page-cache state or lost binary/shared-object state.
+- `test_config`: current pushed source HEAD, clean rebuilt binary, old 2.6 command shape (`-n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=12`, no `GGML_MOE_KEEP_TOPK_UPDOWN`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`), cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace plus `GGML_MOE_CPU_CHUNK_TRACE_OUT`.
+- `acceptance_gate`: diagnostic only. It cannot promote a SOTA because CPU chunk trace adds file-write/timing overhead. The run must still keep RAM within 16GB and produce a semantically correct/coherent France answer to be comparable.
+- `rollback`: No source change. If CPU chunk trace overhead makes the run unusably slow, terminate and record as failed diagnostic; current accepted SOTA remains top4 `2.3 tok/s`.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, cgroup memory files, gate `one_trace.csv`, CPU chunk trace, top tensor/layer wall-time aggregation, correctness output, and explicit conclusion about where the `2.6` gap moved.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
