@@ -3388,6 +3388,65 @@ Rollback:
 - Revert if build fails, output quality fails, default execution changes, or
   split profile overhead is too high for attribution runs.
 
+Implementation result timestamp: 2026-07-02 18:40 CST.
+
+Code:
+
+- Commits:
+  - `a45dac508 ggml: add Kimi split wall profiling`
+  - `8040754e0 ggml: fix Kimi split profile build`
+- Remote build: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-184011Z-n4-phase3c-split-profile`
+
+Measured result:
+
+- Commit/config: `8040754e0`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102691.53 ms, inside the 106331.72 ms gate.
+- Decode: 12777.07 ms / 3 runs, 4.25902 s/token, 0.23480 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Split profile:
+  - total: signatures=242, calls=488, wall=115448.850 ms.
+  - top split signatures are all `backend=CPU`, range of four nodes,
+    `first=ffn_moe_gate-*`, `last=ffn_moe_down-*`.
+  - top examples:
+    - layer 5: 3139.762 ms.
+    - layer 4: 2886.276 ms.
+    - layer 56: 2791.976 ms.
+    - layer 30: 2590.569 ms.
+- Graph profile:
+  - submit: calls=4, total=115453.523 ms.
+  - sync: calls=24, total=2.032 ms.
+
+Analysis:
+
+- Phase 3C identifies the dominant graph submit splits: Kimi MoE layer groups
+  are scheduled as CPU backend splits (`ffn_moe_gate-*` through
+  `ffn_moe_down-*`), even though those CPU ops launch the custom CUDA MoE stream
+  implementation internally.
+- This explains why context-level graph submit time is large and sync is tiny:
+  the CPU backend split is executing synchronously and doing the CUDA stream
+  work inside the CPU op path.
+- The next real optimization target is no longer blind cache tuning; it is
+  reducing CPU-backend split overhead around the MoE fused gate/down group, or
+  changing placement/scheduling so these MoE ops are treated as CUDA backend
+  work directly.
+
+Decision:
+
+- The split profiler builds, passes the `-n 4` cold-start gates, and provides
+  actionable attribution.
+- Continue to cold `-n 32` to confirm the same CPU MoE split dominance in the
+  decode phase, not just prompt/smoke.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
