@@ -3247,6 +3247,63 @@ Rollback:
 - Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
   or `-n 32` token rate regresses.
 
+Result timestamp: 2026-07-02 21:16 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201055Z-n4-phase3l-t28-tb32`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77980.00 ms, inside the 106331.72 ms gate.
+- Decode: 10487.76 ms / 3 runs, 3.49592 s/token, 0.28605 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2686.912 ms,
+    h2d=388.994 ms.
+  - up/gate: total=27.854 ms/call.
+  - down batch: stage=13.581 ms/call, total=13.733 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201303Z-n32-phase3l-t28-tb32`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76861.17 ms, inside the 106331.72 ms gate.
+- Decode: 70824.04 ms / 31 runs, 2.28465 s/token, 0.43770 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=12906, misses=14038, hit_rate=47.9%.
+  - pinned staging: copies=13149, host_stage=17682.462 ms,
+    h2d=2846.123 ms.
+  - up/gate: total=18.889 ms/call.
+  - down batch: stage=9.028 ms/call, total=9.184 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32` with `-t 32 -tb 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3L `-n 32` with `-t 28 -tb 32`: 2.28465 s/token,
+  0.43770 tok/s.
+
+Analysis:
+
+- Lowering decode threads to 28 preserves quality and TTFT but regresses decode.
+- Thread count remains best at the Phase 3E accepted `-t 32 -tb 32` among
+  tested points.
+
+Decision:
+
+- Reject `-t 28 -tb 32` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 Result timestamp: 2026-07-02 21:09 CST.
 
 Smoke run:
@@ -3303,6 +3360,55 @@ Decision:
 - Reject `-t 40 -tb 40` for promotion.
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3L lower decode threads with prompt threads unchanged
+
+Design timestamp: 2026-07-02 21:15 CST.
+
+Current bottleneck:
+
+- Phase 3K showed increasing both decode and prompt threads to 40 improves TTFT
+  but regresses decode from 2.24573 s/token to 2.50660 s/token.
+- This suggests decode is sensitive to CPU contention/scheduling, not simply
+  CPU-thread starved.
+
+Hypothesis:
+
+- Lowering decode threads while keeping prompt threads at 32 may reduce decode
+  contention in CPU fallback/staging without giving up the accepted TTFT path.
+- Test:
+  - `-t 28 -tb 32`
+
+Theoretical upper bound:
+
+- The upper bound is modest: if thread contention accounts for a few percent of
+  decode wall time, reducing decode threads could recover 1-3 seconds on
+  `-n 32`.
+- If CPU fallback is actually thread-starved, this will regress and should be
+  rejected after `-n 32`.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best env and `-t 28 -tb 32`.
+- If smoke passes all gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  or `-n 32` token rate regresses.
 
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
