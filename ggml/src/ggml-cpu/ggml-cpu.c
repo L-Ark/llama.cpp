@@ -166,6 +166,82 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
            type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
+struct ggml_kimi_cpu_moe_profile_op {
+    uint64_t calls;
+    uint64_t convert_us;
+    uint64_t route_us;
+    uint64_t route_barrier_us;
+    uint64_t cuda_batch_us;
+    uint64_t cuda_single_us;
+    uint64_t post_cuda_barrier_us;
+    uint64_t fallback_us;
+    uint64_t total_us;
+    uint64_t cuda_batch_accepted;
+    uint64_t cuda_batch_declined;
+    uint64_t cuda_single_accepted;
+    uint64_t cuda_single_declined;
+};
+
+struct ggml_kimi_cpu_moe_profile_state {
+    bool registered;
+    bool enabled;
+    struct ggml_kimi_cpu_moe_profile_op up_gate;
+    struct ggml_kimi_cpu_moe_profile_op down;
+};
+
+static struct ggml_kimi_cpu_moe_profile_state ggml_kimi_cpu_moe_profile;
+
+static void ggml_kimi_cpu_moe_profile_report_op(const char * name, const struct ggml_kimi_cpu_moe_profile_op * op) {
+    if (op->calls == 0) {
+        return;
+    }
+
+    fprintf(stderr,
+            "[kimi_cpu_moe_profile] %s calls=%" PRIu64
+            " total=%.3f ms/call convert_t0=%.3f route=%.3f route_barrier=%.3f"
+            " cuda_batch=%.3f cuda_single=%.3f post_cuda_barrier=%.3f fallback_t0=%.3f"
+            " batch_accept=%" PRIu64 " batch_decline=%" PRIu64
+            " single_accept=%" PRIu64 " single_decline=%" PRIu64 "\n",
+            name,
+            op->calls,
+            (double) op->total_us / 1000.0 / (double) op->calls,
+            (double) op->convert_us / 1000.0 / (double) op->calls,
+            (double) op->route_us / 1000.0 / (double) op->calls,
+            (double) op->route_barrier_us / 1000.0 / (double) op->calls,
+            (double) op->cuda_batch_us / 1000.0 / (double) op->calls,
+            (double) op->cuda_single_us / 1000.0 / (double) op->calls,
+            (double) op->post_cuda_barrier_us / 1000.0 / (double) op->calls,
+            (double) op->fallback_us / 1000.0 / (double) op->calls,
+            op->cuda_batch_accepted,
+            op->cuda_batch_declined,
+            op->cuda_single_accepted,
+            op->cuda_single_declined);
+}
+
+static void ggml_kimi_cpu_moe_profile_report(void) {
+    if (!ggml_kimi_cpu_moe_profile.enabled) {
+        return;
+    }
+
+    ggml_kimi_cpu_moe_profile_report_op("up_gate", &ggml_kimi_cpu_moe_profile.up_gate);
+    ggml_kimi_cpu_moe_profile_report_op("down",    &ggml_kimi_cpu_moe_profile.down);
+}
+
+static bool ggml_kimi_cpu_moe_profile_enabled(void) {
+    static int initialized = 0;
+
+    if (!initialized) {
+        initialized = 1;
+        ggml_kimi_cpu_moe_profile.enabled = getenv("GGML_KIMI_CPU_MOE_PROFILE") != NULL;
+        if (ggml_kimi_cpu_moe_profile.enabled && !ggml_kimi_cpu_moe_profile.registered) {
+            ggml_kimi_cpu_moe_profile.registered = true;
+            atexit(ggml_kimi_cpu_moe_profile_report);
+        }
+    }
+
+    return ggml_kimi_cpu_moe_profile.enabled;
+}
+
 // precomputed f32 table for f16 (256 KB) (simd-mappings.h)
 float ggml_table_f32_f16[1 << 16];
 
@@ -1736,6 +1812,8 @@ static void ggml_compute_forward_mul_mat_id(
 
     const int ith = params->ith;
     const int nth = params->nth;
+    const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
+    const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
 
     const enum ggml_type type = src0->type;
 
@@ -1775,6 +1853,7 @@ static void ggml_compute_forward_mul_mat_id(
 
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
+    const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     if (src1->type != vec_dot_type) {
         char * wdata = params->wdata;
 
@@ -1811,8 +1890,12 @@ static void ggml_compute_forward_mul_mat_id(
         }
 #endif
     }
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.down.convert_us += ggml_time_us() - kimi_cpu_moe_convert_start;
+    }
 
     if (ith == 0) {
+        const uint64_t kimi_cpu_moe_route_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
 
@@ -1827,6 +1910,9 @@ static void ggml_compute_forward_mul_mat_id(
                 matrix_row_counts[i02] += 1;
             }
         }
+        if (kimi_cpu_moe_profile) {
+            ggml_kimi_cpu_moe_profile.down.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
+        }
     }
 
     // reset current_chunk
@@ -1835,7 +1921,11 @@ static void ggml_compute_forward_mul_mat_id(
         *current_chunk_ctr = nth;
     }
 
+    const uint64_t kimi_cpu_moe_route_barrier_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     ggml_barrier(params->threadpool);
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.down.route_barrier_us += ggml_time_us() - kimi_cpu_moe_route_barrier_start;
+    }
 
     const bool use_gpu_stream_batch =
         getenv("GGML_MOE_STREAM_DOWN_BATCH") != NULL &&
@@ -1849,6 +1939,7 @@ static void ggml_compute_forward_mul_mat_id(
 
     if (use_gpu_stream_batch) {
         if (ith == 0) {
+            const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
             const bool done = ggml_cuda_moe_stream_batch(
                 src0->type,
                 src0->name,
@@ -1862,13 +1953,25 @@ static void ggml_compute_forward_mul_mat_id(
                 matrix_row_counts,
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
+            if (kimi_cpu_moe_profile) {
+                ggml_kimi_cpu_moe_profile.down.cuda_batch_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                if (done) {
+                    ggml_kimi_cpu_moe_profile.down.cuda_batch_accepted++;
+                } else {
+                    ggml_kimi_cpu_moe_profile.down.cuda_batch_declined++;
+                }
+            }
 
             if (done) {
                 memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
             }
         }
 
+        const uint64_t kimi_cpu_moe_post_cuda_barrier_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
         ggml_barrier(params->threadpool);
+        if (kimi_cpu_moe_profile && ith == 0) {
+            ggml_kimi_cpu_moe_profile.down.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
     }
 
     const bool use_gpu_stream =
@@ -1894,6 +1997,7 @@ static void ggml_compute_forward_mul_mat_id(
                 }
 
                 const char * src0_cur = (const char *) src0->data + cur_a * nb02;
+                const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
                 const bool done = ggml_cuda_moe_stream_one(
                     src0->type,
                     src0_cur,
@@ -1905,6 +2009,14 @@ static void ggml_compute_forward_mul_mat_id(
                     (float *) dst->data,
                     nb1, nb2,
                     (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
+                if (kimi_cpu_moe_profile) {
+                    ggml_kimi_cpu_moe_profile.down.cuda_single_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                    if (done) {
+                        ggml_kimi_cpu_moe_profile.down.cuda_single_accepted++;
+                    } else {
+                        ggml_kimi_cpu_moe_profile.down.cuda_single_declined++;
+                    }
+                }
 
                 if (done) {
                     ggml_moe_stream_compare_cpu(
@@ -1920,9 +2032,14 @@ static void ggml_compute_forward_mul_mat_id(
             }
         }
 
+        const uint64_t kimi_cpu_moe_post_cuda_barrier_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
         ggml_barrier(params->threadpool);
+        if (kimi_cpu_moe_profile && ith == 0) {
+            ggml_kimi_cpu_moe_profile.down.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
     }
 
+    const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -1982,6 +2099,11 @@ static void ggml_compute_forward_mul_mat_id(
 
             current_chunk = atomic_fetch_add_explicit(current_chunk_ctr, 1, memory_order_relaxed);
         }
+    }
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.down.fallback_us += ggml_time_us() - kimi_cpu_moe_fallback_start;
+        ggml_kimi_cpu_moe_profile.down.total_us += ggml_time_us() - kimi_cpu_moe_total_start;
+        ggml_kimi_cpu_moe_profile.down.calls++;
     }
 }
 
@@ -2073,6 +2195,8 @@ static void ggml_compute_forward_moe_up_gate(
 
     const int ith = params->ith;
     const int nth = params->nth;
+    const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
+    const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
 
     const enum ggml_type type = src0_up->type;
     enum ggml_type    const vec_dot_type = type_traits_cpu[type].vec_dot_type;
@@ -2126,6 +2250,7 @@ static void ggml_compute_forward_moe_up_gate(
 
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
+    const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     if (src1->type != vec_dot_type) {
         char * wdata = params->wdata;
 
@@ -2150,8 +2275,12 @@ static void ggml_compute_forward_moe_up_gate(
             }
         }
     }
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.up_gate.convert_us += ggml_time_us() - kimi_cpu_moe_convert_start;
+    }
 
     if (ith == 0) {
+        const uint64_t kimi_cpu_moe_route_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
 
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
@@ -2164,6 +2293,9 @@ static void ggml_compute_forward_moe_up_gate(
                 matrix_row_counts[i02] += 1;
             }
         }
+        if (kimi_cpu_moe_profile) {
+            ggml_kimi_cpu_moe_profile.up_gate.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
+        }
     }
 
     for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
@@ -2171,7 +2303,11 @@ static void ggml_compute_forward_moe_up_gate(
         *current_chunk_ctr = nth;
     }
 
+    const uint64_t kimi_cpu_moe_route_barrier_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     ggml_barrier(params->threadpool);
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.up_gate.route_barrier_us += ggml_time_us() - kimi_cpu_moe_route_barrier_start;
+    }
 
     const bool use_gpu_stream =
         ggml_cuda_moe_stream_up_gate_batch &&
@@ -2183,6 +2319,7 @@ static void ggml_compute_forward_moe_up_gate(
 
     if (use_gpu_stream) {
         if (ith == 0) {
+            const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
             const bool done = ggml_cuda_moe_stream_up_gate_batch(
                 src0_up->type,
                 src0_up->name, src0_up->data,
@@ -2198,17 +2335,30 @@ static void ggml_compute_forward_moe_up_gate(
                 matrix_row_counts,
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
+            if (kimi_cpu_moe_profile) {
+                ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                if (done) {
+                    ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_accepted++;
+                } else {
+                    ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_declined++;
+                }
+            }
             if (done) {
                 memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
             }
         }
 
+        const uint64_t kimi_cpu_moe_post_cuda_barrier_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
         ggml_barrier(params->threadpool);
+        if (kimi_cpu_moe_profile && ith == 0) {
+            ggml_kimi_cpu_moe_profile.up_gate.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
     }
 
     const size_t row_size = ggml_row_size(vec_dot_type, ne10);
     const enum ggml_unary_op op = (enum ggml_unary_op) ggml_get_op_params_i32(dst, 0);
 
+    const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -2265,6 +2415,11 @@ static void ggml_compute_forward_moe_up_gate(
 
             current_chunk = atomic_fetch_add_explicit(current_chunk_ctr, 1, memory_order_relaxed);
         }
+    }
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_profile.up_gate.fallback_us += ggml_time_us() - kimi_cpu_moe_fallback_start;
+        ggml_kimi_cpu_moe_profile.up_gate.total_us += ggml_time_us() - kimi_cpu_moe_total_start;
+        ggml_kimi_cpu_moe_profile.up_gate.calls++;
     }
 }
 

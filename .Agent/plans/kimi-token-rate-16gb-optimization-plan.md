@@ -2237,6 +2237,107 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+## Next candidate: Phase 3D CPU MoE op path wall profile
+
+Design timestamp: 2026-07-02 19:14 CST.
+
+Hard gates for all remaining optimization work:
+
+- Cold start only: every evidence run must clear page cache before execution.
+- Host RAM must stay below 16GB including process RSS, pinned memory, mmap
+  residency, and page cache. Evidence runs must use the 16GB cgroup guard:
+  `memory.max=16000000000`, `memory.swap.max=0`.
+- VRAM should remain as full as practical without OOM or allocation retries.
+- TTFT must stay <=106331.72 ms, the Phase 0 cold baseline plus 20%.
+- The prompt must remain exactly:
+  `Please introduce France in a short paragraph.`
+- The generated answer must be semantically correct and coherent.
+- Every experiment must record token rate, seconds/token, TTFT, exact output,
+  host RAM, VRAM, launch/read failures, cold-start proof, command/env, and log
+  path.
+- Before each practice step, update this plan with the bottleneck hypothesis,
+  theoretical speed bound, acceptance gates, and rollback rule.
+- If a code/config change improves full-gate performance, commit and push
+  immediately with a reproducible run method.
+- If performance drops, output quality fails, TTFT exceeds the gate, or RAM/VRAM
+  gates fail, reject that candidate and revert any promoted code/config.
+
+Current bottleneck:
+
+- Phase 3A shows the CUDA MoE stream functions account for only part of decode:
+  about 31.3s of the `-n 32` decode path.
+- Phase 3B shows almost all time is inside `graph_compute_async` submit, not
+  final synchronization.
+- Phase 3C shows the submit time is dominated by CPU backend split execution for
+  MoE node groups such as `ffn_moe_gate-*`/`ffn_moe_swiglu-*` through
+  `ffn_moe_down-*`.
+- Therefore the next unknown is the CPU MoE op wrapper time around route setup,
+  barriers, CUDA stream calls, and fallback CPU work in:
+  - `ggml_compute_forward_moe_up_gate`
+  - `ggml_compute_forward_mul_mat_id`
+
+Hypothesis:
+
+Add default-off CPU MoE op wall profiling controlled by:
+
+- `GGML_KIMI_CPU_MOE_PROFILE=1`
+
+For up/gate and down ops, measure:
+
+- total op wall time on thread 0.
+- `src1` conversion time.
+- row routing/setup time.
+- first barrier time after routing.
+- CUDA batch call time.
+- post-CUDA barrier time.
+- fallback CPU loop time from thread 0's wall-clock view.
+- call counts and CUDA accepted/declined counts.
+
+The instrumentation must not change behavior when the env var is unset.
+
+Theoretical value and upper bound:
+
+- Phase 3C `-n 32` split wall was 201827.779 ms, while MoE stream function wall
+  was much smaller. The top CPU MoE split signatures averaged about 90-161
+  ms/call.
+- If the CPU wrapper profile shows large barrier or fallback time, the upper
+  bound is the measured non-CUDA wrapper time in those ops.
+- If the wrapper profile accounts for most of the CPU split wall, the next
+  optimization should remove or reduce that component directly.
+- If wrapper time still does not explain split wall, the bottleneck is likely
+  scheduler split overhead or adjacent CPU nodes, and the next plan must move to
+  split fusion/backend placement rather than cache tuning.
+
+Execution:
+
+- Implement default-off profiling in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Commit and push the diagnostic code if it builds and remains default-off.
+- Build remotely.
+- Run cold `-n 4` with the accepted Phase 2H env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+- Do not run a performance-promotion `-n 96` until Phase 3D identifies a
+  concrete optimization target.
+
+Acceptance:
+
+- Code builds.
+- Default behavior is unchanged when `GGML_KIMI_CPU_MOE_PROFILE` is unset.
+- `-n 4` and `-n 32` attribution runs keep host RAM under 16GB, TTFT within the
+  gate, VRAM near full, `launch_failures=0`, `read_failures=0`, and semantic
+  France output correct.
+- Logs include `[kimi_cpu_moe_profile]` summaries for up/gate and down.
+
+Rollback:
+
+- Revert diagnostic code if it changes default behavior, fails to build, causes
+  quality regression, materially increases profiling-run TTFT beyond the gate,
+  or produces incomplete/ambiguous timing records.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
