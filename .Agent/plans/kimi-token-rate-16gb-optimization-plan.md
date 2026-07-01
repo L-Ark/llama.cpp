@@ -7798,3 +7798,58 @@ Repro notes:
 - Record exact answer text, TTFT, decode seconds/token, token rate, host RAM,
   page cache, VRAM peak/reserve, decline reasons, down/up profiles, expert-pack
   read failures, and strict launch failures for every run.
+
+Implementation note timestamp: 2026-07-02 22:57 UTC / 2026-07-03 06:57 CST.
+
+First implementation smoke attempt:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-225735Z-n4-phase3zc-down-multirow-flatten`
+- This run is not an accepted strict result because the cgroup wrapper wrote
+  `$$` instead of `BASHPID`, so `memory.peak` did not capture the model
+  process.
+- It is still useful as implementation diagnosis:
+  - process exit code: 0,
+  - output: `France is a country`,
+  - read failures: 0,
+  - strict launch failures: 0,
+  - `multirow_not_supported` disappeared,
+  - new decline reason: `too_many_active_routes=52`.
+- Root cause:
+  - the down path still used local arrays sized 128 and a hard `128` guard,
+    while the shared batch context already defines `MOE_STREAM_MAX_ACTIVE=512`.
+- Next adjustment before repeating strict smoke:
+  - change down route arrays and the guard to `MOE_STREAM_MAX_ACTIVE`,
+  - rerun cold strict n4 with the corrected cgroup wrapper using `BASHPID`.
+
+Rejection timestamp: 2026-07-02 23:01 UTC / 2026-07-03 07:01 CST.
+
+Second implementation smoke attempt:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-230115Z-n4-phase3zc-down-multirow-flatten-v2`
+- Cgroup wrapper was corrected with `BASHPID`, so this is a valid strict
+  failure:
+  - process exit code: 139,
+  - host RAM peak: 13613936640 bytes, 12.678967 GiB,
+  - page cache final: 12.205647 GiB,
+  - VRAM peak: 31598 MiB, minimum reserve 512 MiB,
+  - no answer produced,
+  - no timing metrics because the process segfaulted before completion.
+- Crash context:
+  - stderr reached
+    `[moe_stream] batched decode path active: experts=136 ne01=7168 ne00=2048`,
+  - then segfaulted in `libc.so.6` during CPU memory copy.
+- Root cause:
+  - the rejected multirow calls are prompt-layout calls, not simple decode
+    calls,
+  - the down path copied `src1` with the decode interpretation of
+    `(dst_id, token_id)`,
+  - after flattening prompt multirow mappings, that address calculation can
+    point outside the valid `src1` layout.
+- Decision:
+  - Reject Phase 3ZC.
+  - Revert all Phase 3ZC source changes locally and remotely.
+  - Do not retry down multirow without first deriving the prompt down tensor
+    layout and adding an isolated correctness test; the simple flattening
+    approach is unsafe.
