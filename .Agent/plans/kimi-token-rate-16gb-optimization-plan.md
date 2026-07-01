@@ -8644,3 +8644,65 @@ Decision:
 - Promote depth=1 to strict n96.
 - It must beat the current accepted Phase 3ZG depth=2 n96:
   2.57811 s/token, 0.38788 tok/s.
+
+Full promotion result timestamp: 2026-07-02 23:54 UTC / 2026-07-03 07:54 CST.
+
+Strict n96 depth=1 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-234846Z-n96-phase3zh-down-prefetch-depth1`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.710186 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  75642.16 ms, gate PASS.
+- Decode:
+  227.63000 s / 85 tokens = 2.67800 s/token, 0.37341 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=2032, hits=2032, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35725, host_stage=47254.519 ms, h2d=7737.595 ms.
+- Up/gate CPU profile:
+  calls=2381, total=26.621 ms/call, cuda_batch=26.445,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=19.999 ms/call, cuda_batch=4.189,
+  fallback_t0=15.755, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=9.769 ms/call, kernel=0.111 ms/call,
+  wall=9.952 ms/call.
+- VRAM cache:
+  hits=35885, misses=38163, preloads=2032, hit_rate=48.5%.
+
+Comparison:
+
+- Phase 3ZD no-prefetch strict n96:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZG depth=2 strict n96:
+  2.57811 s/token, 0.38788 tok/s.
+- Phase 3ZH depth=1 strict n96:
+  2.67800 s/token, 0.37341 tok/s.
+- Depth=1 beats no-prefetch slightly but is much slower than depth=2.
+- The n32 result over-predicted depth=1; at full length it under-prefetches:
+  up/gate contention is lower than depth=2, but down stage rises
+  8.779 -> 9.769 ms/call and cache hit-rate falls 51.1% -> 48.5%.
+
+Decision:
+
+- Reject depth=1 promotion.
+- Keep Phase 3ZG depth=2 as the current accepted strict n96 runtime:
+  `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
