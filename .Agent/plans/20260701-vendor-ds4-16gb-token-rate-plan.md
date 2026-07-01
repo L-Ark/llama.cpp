@@ -24,6 +24,7 @@ Latest evidence:
 - Accepted single-prompt warm result: `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=4`, `eval_tok_s=8.2`, `memory_peak_bytes=15793479680`, `memory_max_events=0`.
 - Cold `vram5` rerun after `drop_caches` regressed to `eval_tok_s=1.2`, `ttft_estimate_ms=43188.133285`, and `memory.events max=83388`.
 - Prompt-set same-process test after one France warmup failed to generalize: generation rates were `1.6`, `1.8`, `1.3`, `1.0`, `1.2`, `0.9` tok/s, with `memory.events max=422741`, `pgmajfault=4774376`, and `workingset_refault_file=147025029`.
+- Path tracing shows the vendor DS4 model currently falls back to CPU expert compute for MXFP4/F8 experts. The CUDA `moe_stream_one` path is present but only correct for `IQ3_XXS`; simply allowing MXFP4/F8 entered the path but produced garbled output and was rejected.
 
 Therefore the current bottleneck is not raw decode compute. It is cold-start and prompt-dependent expert page churn under a 16 GB cgroup. The next accepted improvements must reduce page faults, cgroup reclaim pressure, and TTFT for cold runs while preserving correctness.
 
@@ -125,12 +126,18 @@ These supersede the earlier warm single-prompt sweep order.
    - Bound: estimate from active expert count, bytes per expert, and measured miss/refault rate.
    - Use traces to identify repeated expert IDs across the prompt set, then test pinning/caching only those experts or changing eviction policy.
 
-4. **Streaming overlap and cold prefetch**
+4. **Correct DS4 MXFP4/F8 CUDA expert stream**
+   - Hypothesis: the CPU fallback dominates cold expert time because DS4 MXFP4/F8 experts do not use the single-expert CUDA stream path. A correct stream implementation can shift expert matvec compute to GPU and make VRAM residency useful for DS4.
+   - Bound: each observed expert tensor is about `4.25 MiB` (`src0_bytes=4456448`). The cold lower bound is unique expert bytes divided by storage/page-fault plus H2D bandwidth; the warm lower bound is the measured CUDA kernel plus D2H/scatter time when cached in VRAM.
+   - Required first step: compare the existing `moe_stream_one` call layout against the working CUDA `mmvq` implementation for `GGML_TYPE_MXFP4` and `GGML_TYPE_F8_E4M3_B128`. Do not accept a type-gate-only change; that already failed correctness with degenerate output.
+   - Acceptance requires France output to remain semantic/coherent and TTFT to stay within the configured gate, or be committed only as rejected/needs_ttft_recovery.
+
+5. **Streaming overlap and cold prefetch**
    - Hypothesis: cold expert page faults are serialized with decode. Predictive prefetch or async expert reads can hide part of the transfer/reclaim time behind GPU compute.
    - Bound: maximum gain is the measured transfer/fault time that overlaps with compute.
    - Validate with timeline/resource evidence before accepting; do not infer overlap from tok/s alone.
 
-5. **VRAM cache and CPU-MoE tuning under cold validation**
+6. **VRAM cache and CPU-MoE tuning under cold validation**
    - Hypothesis: `vram_cache=4` is best for warm single prompt, but cold prompt sets may need a different balance.
    - Bound: constrained by RTX 5090 VRAM fit and 16 GB cgroup page-cache pressure.
    - Continue sweeps only after each candidate is cold-validated. Warm-only improvements such as `vram5` must be labeled `needs_cold_validation` or `rejected`.

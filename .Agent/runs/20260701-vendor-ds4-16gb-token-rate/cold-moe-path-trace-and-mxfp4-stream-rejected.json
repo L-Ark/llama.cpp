@@ -1,0 +1,83 @@
+{
+  "accepted": false,
+  "classification": "cold_start_path_profile_and_rejected_stream_gate",
+  "created_at_utc": "2026-07-01T06:58:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "aef59539ee6b41a384f7016160e5a5b95ef55df7",
+  "purpose": "Identify the real vendor DS4 MoE execution path under a strict 16GB cgroup and test whether MXFP4/F8 can use the existing single-expert CUDA stream path.",
+  "common_config": {
+    "cpu_moe": 40,
+    "vram_cache_gb": 2,
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "drop_caches_before_case": true,
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "diagnostic_changes": [
+    "GGML_MOE_STREAM_ONE_TRACE_OUT records single-expert CUDA stream activity when that path is actually used.",
+    "GGML_MOE_CPU_CHUNK_TRACE_OUT records CPU fallback chunk timing per tensor/expert/thread."
+  ],
+  "cuda_one_trace_case": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T064349Z-cold-one-trace-cpu40-vram2/france-cpu40-vram2gb",
+    "eval_tok_s": 1.3,
+    "prompt_tok_s": 0.8,
+    "ttft_estimate_ms": 45086.194029,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 56138,
+    "memory_file_bytes": 14920232960,
+    "pgmajfault": 687084,
+    "workingset_refault_file": 13009221,
+    "correctness_ok": true,
+    "trace_file_created": false,
+    "interpretation": "The DS4 model did not enter the effective ggml_cuda_moe_stream_one path; it falls back to CPU expert compute for MXFP4/F8 tensors."
+  },
+  "cpu_chunk_trace_case": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T064950Z-cold-cpu-chunk-trace-cpu40-vram2/france-cpu40-vram2gb",
+    "eval_tok_s": 3.6,
+    "prompt_tok_s": 1.4,
+    "ttft_estimate_ms": 31509.004709,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 19096,
+    "memory_file_bytes": 14974668800,
+    "pgmajfault": 312677,
+    "workingset_refault_file": 2387301,
+    "correctness_ok": true,
+    "trace_file": "/root/lfz/runs/vendor-ds4-16gb/20260701T064950Z-cold-cpu-chunk-trace-cpu40-vram2/france-cpu40-vram2gb/cpu_chunk_trace.csv",
+    "trace_rows": 199982,
+    "trace_limit_hit": true,
+    "diagnostic_only": true,
+    "top_observation": "The slowest chunks were in blk.0.ffn_up_exps.weight, especially experts 47 and 75, with single chunks up to about 1053 ms."
+  },
+  "rejected_mxfp4_f8_stream_gate_case": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T065246Z-cold-mxfp4-stream-cpu40-vram2/france-cpu40-vram2gb",
+    "attempted_change": "Allow ggml_cuda_moe_stream_one to accept GGML_TYPE_MXFP4 and GGML_TYPE_F8_E4M3_B128 in addition to GGML_TYPE_IQ3_XXS.",
+    "path_entered": true,
+    "stderr_evidence": "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=2",
+    "ttft_estimate_ms": 73760.104238,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "observed_answer_quality": "Degenerated multilingual/garbled output.",
+    "action": "Stopped the run and reverted the type-gate change.",
+    "conclusion": "A type-gate-only MXFP4/F8 stream change is incorrect; the DS4 stream path needs a proper layout/kernel calling convention fix before it can be considered again."
+  },
+  "post_revert_verification": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T065951Z-cold-post-revert-verify-cpu40-vram2/france-cpu40-vram2gb",
+    "eval_tok_s": 1.1,
+    "prompt_tok_s": 0.7,
+    "ttft_estimate_ms": 45936.46463,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 82645,
+    "memory_file_bytes": 14886449152,
+    "pgmajfault": 980573,
+    "workingset_refault_file": 24824542,
+    "correctness_ok": true,
+    "classification": "post_revert_correctness_check_not_sota"
+  },
+  "next_steps": [
+    "Compare moe_stream_one against the working CUDA mmvq path for MXFP4/F8 and implement a correctness-first DS4 stream path.",
+    "Use CPU chunk trace to guide cold-page prefetch or selective residency if the CUDA stream path remains blocked."
+  ]
+}

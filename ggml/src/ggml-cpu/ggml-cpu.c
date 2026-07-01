@@ -79,6 +79,8 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_available(void);
 __attribute__((weak)) extern void ggml_cuda_moe_stream_sync(void);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
     int src0_type_int,
+    const char * src0_name,
+    int64_t expert_index,
     const void * src0_data,
     int64_t ne01,
     int64_t ne00,
@@ -97,7 +99,7 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
 static bool (*ggml_cuda_moe_stream_available)(void) = NULL;
 static void (*ggml_cuda_moe_stream_sync)(void) = NULL;
 static bool (*ggml_cuda_moe_stream_one)(
-    int, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t,
+    int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t,
     int64_t, const void *, size_t, float *, size_t, size_t,
     const ggml_moe_stream_row_mapping *) = NULL;
 #endif
@@ -228,6 +230,99 @@ typedef void * thread_ret_t;
 #endif
 
 typedef pthread_t ggml_thread_t;
+
+static bool ggml_moe_cpu_chunk_trace_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_CPU_CHUNK_TRACE_OUT");
+        enabled = env && env[0] ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static double ggml_moe_cpu_trace_now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double) ts.tv_sec * 1000.0 + (double) ts.tv_nsec / 1000000.0;
+}
+
+static FILE * ggml_moe_cpu_chunk_trace_fp(void) {
+    static FILE * fp = NULL;
+    static int initialized = 0;
+    static pthread_mutex_t init_mu = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&init_mu);
+    if (!initialized) {
+        initialized = 1;
+        const char * path = getenv("GGML_MOE_CPU_CHUNK_TRACE_OUT");
+        if (path && path[0]) {
+            fp = fopen(path, "w");
+            if (fp) {
+                setvbuf(fp, NULL, _IOLBF, 0);
+                fprintf(fp,
+                    "seq,tensor,type,expert,ith,nth,cne1,ir0_start,ir0_end,ir1_start,ir1_end,src0_bytes,ms\n");
+            } else {
+                fprintf(stderr, "[moe_cpu_trace] failed to open trace: %s\n", path);
+            }
+        }
+    }
+    pthread_mutex_unlock(&init_mu);
+
+    return fp;
+}
+
+static void ggml_moe_cpu_chunk_trace_write(
+    const char * tensor,
+    enum ggml_type type,
+    int expert,
+    int ith,
+    int nth,
+    int64_t cne1,
+    int64_t ir0_start,
+    int64_t ir0_end,
+    int64_t ir1_start,
+    int64_t ir1_end,
+    size_t src0_bytes,
+    double ms) {
+    static atomic_int seq = 0;
+    static int limit = -1;
+
+    if (limit < 0) {
+        const char * env = getenv("GGML_MOE_CPU_CHUNK_TRACE_LIMIT");
+        limit = env && env[0] ? atoi(env) : 200000;
+        if (limit <= 0) {
+            limit = 200000;
+        }
+    }
+
+    const int cur_seq = atomic_fetch_add_explicit(&seq, 1, memory_order_relaxed);
+    if (cur_seq >= limit) {
+        return;
+    }
+
+    FILE * fp = ggml_moe_cpu_chunk_trace_fp();
+    if (!fp) {
+        return;
+    }
+
+    flockfile(fp);
+    fprintf(fp,
+        "%d,%s,%d,%d,%d,%d,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%zu,%.3f\n",
+        cur_seq,
+        tensor ? tensor : "",
+        (int) type,
+        expert,
+        ith,
+        nth,
+        cne1,
+        ir0_start,
+        ir0_end,
+        ir1_start,
+        ir1_end,
+        src0_bytes,
+        ms);
+    funlockfile(fp);
+}
 
 #define GGML_THREADPOOL_N_THREADS_MASK (0xffffU)
 #define GGML_THREADPOOL_N_THREADS_BITS (16)
@@ -1686,6 +1781,8 @@ static void ggml_compute_forward_mul_mat_id(
                 const char * src0_cur = (const char *) src0->data + cur_a * nb02;
                 const bool done = ggml_cuda_moe_stream_one(
                     src0->type,
+                    src0->name,
+                    cur_a,
                     src0_cur,
                     ne01, ne00, nb01,
                     (const float *) src1->data,
@@ -1756,11 +1853,31 @@ static void ggml_compute_forward_mul_mat_id(
             const int64_t ir1_start = dr1 * ith1;
             const int64_t ir1_end = MIN(ir1_start + dr1, nr1);
 
+            const bool trace_cpu_chunk = ggml_moe_cpu_chunk_trace_enabled();
+            const double trace_t0_ms = trace_cpu_chunk ? ggml_moe_cpu_trace_now_ms() : 0.0;
+
             ggml_compute_forward_mul_mat_id_one_chunk(
                 dst, src0, src1, ids, cur_a,
                 ir0_start, ir0_end, ir1_start, ir1_end,
                 src0_cur, matrix_rows, row_size, src1_cont, wdata
             );
+
+            if (trace_cpu_chunk) {
+                const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();
+                ggml_moe_cpu_chunk_trace_write(
+                    src0->name,
+                    src0->type,
+                    cur_a,
+                    ith,
+                    nth,
+                    cne1,
+                    ir0_start,
+                    ir0_end,
+                    ir1_start,
+                    ir1_end,
+                    (size_t) ne01 * nb01,
+                    trace_t1_ms - trace_t0_ms);
+            }
 
             if (nth >= nchunk0 * nchunk1) {
                 break;

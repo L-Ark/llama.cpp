@@ -71,3 +71,28 @@ Rejected higher-rate candidates:
 - Interpretation: cold-start performance is not improved by the warm-optimal `vram_cache=4`; all variants remain around `1.2-1.3 tok/s`. `vram5` reduced major faults/refaults but did not improve decode rate, indicating remaining serial I/O/reclaim or stream scheduling stalls.
 - Next step: stop broad VRAM cache sweeping for now. Focus on reducing cold expert page churn with trace-guided expert residency/pinning or asynchronous prefetch/overlap. Any candidate must cold-validate with this runner.
 - Full reproducibility record is committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/cold-profile-vram-sweep.json`.
+
+### 2026-07-01T06:43:49Z - Cold-start MoE path tracing
+
+- Purpose: identify the real MoE execution path before attempting another cold-start optimization.
+- Added diagnostic-only trace hooks:
+  - `GGML_MOE_STREAM_ONE_TRACE_OUT` in `ggml/src/ggml-cuda/moe_stream.cu`, intended to log single-expert CUDA stream calls with tensor name, expert id, cache hit/miss, and stage timings.
+  - `GGML_MOE_CPU_CHUNK_TRACE_OUT` in `ggml/src/ggml-cpu/ggml-cpu.c`, logging CPU fallback chunk timings per tensor/expert/thread.
+- Cold CUDA one-trace run: `/root/lfz/runs/vendor-ds4-16gb/20260701T064349Z-cold-one-trace-cpu40-vram2/france-cpu40-vram2gb`.
+  - Result: `eval_tok_s=1.3`, `prompt_tok_s=0.8`, `ttft_estimate_ms=45086.194029`, `memory_peak_bytes=16000000000`, `memory_max_events=56138`, `pgmajfault=687084`, correctness passed.
+  - No `one_trace.csv` was produced. Stderr had `[moe_stream] enabled` but no `first call` or VRAM cache report.
+  - Interpretation: DS4 does not enter the effective `ggml_cuda_moe_stream_one` path. CPU-side gating allows MXFP4/F8, but `moe_stream_one` only accepts `GGML_TYPE_IQ3_XXS`, so the vendor DS4 model falls back to CPU expert compute.
+- Cold CPU chunk trace run: `/root/lfz/runs/vendor-ds4-16gb/20260701T064950Z-cold-cpu-chunk-trace-cpu40-vram2/france-cpu40-vram2gb`.
+  - Result: `eval_tok_s=3.6`, `prompt_tok_s=1.4`, `ttft_estimate_ms=31509.004709`, `memory_peak_bytes=16000000000`, `memory_max_events=19096`, `pgmajfault=312677`, correctness passed.
+  - The run is diagnostic only because the trace file hit the configured `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=200000` and may perturb timings. It still confirms the real path and hotspot shape.
+  - Trace file: `cpu_chunk_trace.csv`, about 15 MiB and 199982 data rows.
+  - First covered rows sum to about `100568 ms` of chunk time across threads. The slowest individual chunks are concentrated in `blk.0.ffn_up_exps.weight` for experts `47` and `75`, with single chunks up to about `1053 ms`; this is consistent with cold page faults/reclaim on first expert touches.
+- Failed optimization attempt: briefly allowed `moe_stream_one` to accept `GGML_TYPE_MXFP4` and `GGML_TYPE_F8_E4M3_B128` because the lower `mmvq` layer has kernels for these types.
+  - Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T065246Z-cold-mxfp4-stream-cpu40-vram2/france-cpu40-vram2gb`.
+  - Stderr confirmed the path was entered: `[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=2`.
+  - Rejected immediately: output degenerated into multilingual/garbled text, `correctness_ok=false`, `ttft_estimate_ms=73760.104238`, and the unit was manually stopped.
+  - The code change was reverted. Conclusion: DS4 MXFP4/F8 cannot be enabled by a simple type gate; the single-expert stream path has a layout or kernel calling convention mismatch for these formats.
+- Post-revert verification: `/root/lfz/runs/vendor-ds4-16gb/20260701T065951Z-cold-post-revert-verify-cpu40-vram2/france-cpu40-vram2gb`.
+  - Result: `eval_tok_s=1.1`, `prompt_tok_s=0.7`, `ttft_estimate_ms=45936.46463`, `memory_peak_bytes=16000000000`, `memory_max_events=82645`, `pgmajfault=980573`, correctness passed.
+  - This restores the correct CPU fallback behavior and is not a new SOTA.
+- Next bottleneck to attack: build a correct MXFP4/F8 stream path by comparing `moe_stream_one` against the existing CUDA `mmvq` call conventions, or avoid this path and instead reduce CPU fallback cold page faults with trace-guided prefetch/residency.

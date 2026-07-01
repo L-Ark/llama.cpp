@@ -1,14 +1,14 @@
 
 #ifndef GGML_CUDA_MOE_STREAM
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <cuda_runtime.h>
 extern "C" {
 typedef struct { int32_t i1; int32_t i2; } ggml_moe_row_mapping;
 void ggml_cuda_moe_stream_link_anchor(void) {}
 bool ggml_cuda_moe_stream_available(void) { return false; }
 int ggml_cuda_host_register(void *, size_t) { return 0; }
-bool ggml_cuda_moe_stream_one(int, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
+bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
 void ggml_cuda_moe_stream_sync(void) {}
@@ -29,6 +29,7 @@ void ggml_cuda_moe_stream_sync(void) {}
 #include "quantize.cuh"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -58,6 +59,8 @@ void ggml_cuda_moe_stream_link_anchor(void) {}
 //           If src1_f32 is NULL, falls back to caller-provided src1_q8_1.
 bool ggml_cuda_moe_stream_one(
     int  src0_type_int,
+    const char *src0_name,
+    int64_t expert_index,
     const void *src0_data,
     int64_t ne01,
     int64_t ne00,
@@ -307,6 +310,84 @@ static std::mutex        g_init_mu;
 // rather than per-slot.  Compute path doesn't need it.
 static std::mutex        g_resize_mu;
 
+struct one_trace_state {
+    std::mutex mu;
+    FILE * fp = nullptr;
+    bool initialized = false;
+    std::chrono::steady_clock::time_point start;
+    std::atomic<uint64_t> seq{0};
+};
+
+static one_trace_state g_one_trace;
+
+static double trace_elapsed_ms(std::chrono::steady_clock::time_point t) {
+    return std::chrono::duration<double, std::milli>(t - g_one_trace.start).count();
+}
+
+static FILE * one_trace_fp_locked(std::chrono::steady_clock::time_point start_time) {
+    if (!g_one_trace.initialized) {
+        g_one_trace.initialized = true;
+        g_one_trace.start = start_time;
+        const char * path = std::getenv("GGML_MOE_STREAM_ONE_TRACE_OUT");
+        if (path && path[0]) {
+            g_one_trace.fp = std::fopen(path, "w");
+            if (g_one_trace.fp) {
+                std::setvbuf(g_one_trace.fp, nullptr, _IOLBF, 0);
+                std::fprintf(g_one_trace.fp,
+                    "seq,t_ms,tensor,expert,src0_ptr,src0_bytes,cne1,cache_hit,cache_inserted,slot,src0_ms,src1_ms,kernel_ms,d2h_ms,sync_ms,scatter_ms,dontneed_ms,total_ms\n");
+            } else {
+                std::fprintf(stderr, "[moe_stream] failed to open one trace: %s\n", path);
+            }
+        }
+    }
+    return g_one_trace.fp;
+}
+
+static void one_trace_write(
+    const char * src0_name,
+    int64_t expert_index,
+    const void * src0_data,
+    size_t src0_bytes,
+    int64_t cne1,
+    bool cache_hit,
+    bool cache_inserted,
+    int slot,
+    std::chrono::steady_clock::time_point t0,
+    std::chrono::steady_clock::time_point t_src0,
+    std::chrono::steady_clock::time_point t_src1,
+    std::chrono::steady_clock::time_point t_kernel,
+    std::chrono::steady_clock::time_point t_d2h,
+    std::chrono::steady_clock::time_point t_sync,
+    std::chrono::steady_clock::time_point t_scatter,
+    std::chrono::steady_clock::time_point t_dontneed) {
+    std::lock_guard<std::mutex> lk(g_one_trace.mu);
+    FILE * fp = one_trace_fp_locked(t0);
+    if (!fp) {
+        return;
+    }
+    const uint64_t seq = g_one_trace.seq.fetch_add(1, std::memory_order_relaxed);
+    std::fprintf(fp,
+        "%lu,%.3f,%s,%ld,%p,%zu,%ld,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+        (unsigned long) seq,
+        trace_elapsed_ms(t0),
+        src0_name ? src0_name : "",
+        (long) expert_index,
+        src0_data,
+        src0_bytes,
+        (long) cne1,
+        cache_hit ? 1 : 0,
+        cache_inserted ? 1 : 0,
+        slot,
+        std::chrono::duration<double, std::milli>(t_src0 - t0).count(),
+        std::chrono::duration<double, std::milli>(t_src1 - t_src0).count(),
+        std::chrono::duration<double, std::milli>(t_kernel - t_src1).count(),
+        std::chrono::duration<double, std::milli>(t_d2h - t_kernel).count(),
+        std::chrono::duration<double, std::milli>(t_sync - t_d2h).count(),
+        std::chrono::duration<double, std::milli>(t_scatter - t_sync).count(),
+        std::chrono::duration<double, std::milli>(t_dontneed - t_scatter).count(),
+        std::chrono::duration<double, std::milli>(t_dontneed - t0).count());
+}
+
 static bool ensure_dev(void *&p, size_t &cur, size_t need) {
     if (cur >= need) return true;
     if (p) cudaFree(p);
@@ -387,6 +468,8 @@ static void release_slot(int s) {
 
 extern "C" bool ggml_cuda_moe_stream_one(
     int  src0_type_int,
+    const char *src0_name,
+    int64_t expert_index,
     const void *src0_data,
     int64_t ne01,
     int64_t ne00,
@@ -420,6 +503,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
     const int64_t src1_padded    = GGML_PAD(ne00, MATRIX_ROW_PADDING);
     const size_t src1_q8_1_bytes = (size_t)cne1 * (src1_padded / QK8_1) * sizeof(block_q8_1);
     const size_t dst_bytes       = (size_t)ne01 * cne1 * sizeof(float);
+    const auto ts0 = std::chrono::steady_clock::now();
 
     int s = acquire_slot();
     slot_ctx &ctx = g_slots[s];
@@ -446,6 +530,8 @@ extern "C" bool ggml_cuda_moe_stream_one(
     // VRAM cache lookup: if this expert is already in VRAM, skip H2D entirely.
     uintptr_t cache_key = (uintptr_t)src0_data;
     void *cached_vram = vram_cache_lookup(cache_key);
+    const bool cache_hit = cached_vram != nullptr;
+    bool cache_inserted = false;
     const void *kernel_src0 = nullptr;
 
     if (cached_vram) {
@@ -453,12 +539,14 @@ extern "C" bool ggml_cuda_moe_stream_one(
     } else {
         void *inserted = vram_cache_insert(cache_key, src0_data, src0_bytes, st);
         if (inserted) {
+            cache_inserted = true;
             kernel_src0 = inserted;
         } else {
             if (cudaMemcpyAsync(ctx.d_src0, src0_data, src0_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) { release_slot(s); return false; }
             kernel_src0 = ctx.d_src0;
         }
     }
+    const auto t_src0 = std::chrono::steady_clock::now();
 
     // src1 (F32) → persistent VRAM staging → quantize to Q8_1 on GPU
     {
@@ -484,6 +572,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
         release_slot(s);
         return false;
     }
+    const auto t_src1 = std::chrono::steady_clock::now();
     const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
     for (int64_t k = 0; k < cne1; ++k) {
         const float *d_src1_row = (const float *)((const char *)ctx.d_src1_f32 + (size_t)k * ne00 * sizeof(float));
@@ -494,11 +583,14 @@ extern "C" bool ggml_cuda_moe_stream_one(
             return false;
         }
     }
+    const auto t_kernel = std::chrono::steady_clock::now();
 
     if (cudaMemcpyAsync(ctx.h_scratch, ctx.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) { release_slot(s); return false; }
+    const auto t_d2h = std::chrono::steady_clock::now();
 
     if (!g_defer_sync) {
         if (cudaStreamSynchronize(st) != cudaSuccess) { release_slot(s); return false; }
+        const auto t_sync = std::chrono::steady_clock::now();
         const float *src_buf = (const float *)ctx.h_scratch;
         for (int64_t k = 0; k < cne1; ++k) {
             const int32_t i1 = rows[k].i1;
@@ -507,7 +599,11 @@ extern "C" bool ggml_cuda_moe_stream_one(
             const float *src_row = src_buf + k * ne01;
             std::memcpy(dst_row, src_row, (size_t)ne01 * sizeof(float));
         }
+        const auto t_scatter = std::chrono::steady_clock::now();
         moe_stream_dontneed_source_pages(src0_data, src0_bytes);
+        const auto t_dontneed = std::chrono::steady_clock::now();
+        one_trace_write(src0_name, expert_index, src0_data, src0_bytes, cne1, cache_hit, cache_inserted, s,
+                        ts0, t_src0, t_src1, t_kernel, t_d2h, t_sync, t_scatter, t_dontneed);
         release_slot(s);
         return true;
     }
@@ -526,6 +622,8 @@ extern "C" bool ggml_cuda_moe_stream_one(
         ds.i2[k] = rows[k].i2;
     }
     tls_pending.push_back(ds);
+    one_trace_write(src0_name, expert_index, src0_data, src0_bytes, cne1, cache_hit, cache_inserted, s,
+                    ts0, t_src0, t_src1, t_kernel, t_d2h, t_d2h, t_d2h, t_d2h);
     return true;
 }
 
