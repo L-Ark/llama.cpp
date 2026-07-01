@@ -2263,3 +2263,44 @@ Decision:
   launch/read gates.
 - Continue directly to cold `-n 96` because Phase 2N is a full-length budget
   tuning step.
+
+Full-length result timestamp: 2026-07-01 16:31 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-163150Z-n96-phase2n-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, Phase 2M split-cache code with
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- TTFT: 103692.99 ms, inside the 106331.72 ms gate.
+- Decode: 297362.72 ms / 85 runs, 3.49838 s/token, 0.28585 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1310 slots, 7.44 MiB slot, hits=19429, misses=16587,
+    hit_rate=53.9%.
+  - upgate: 979 slots, 5.36 MiB slot, hits=15631, misses=22465,
+    hit_rate=41.0%.
+- Pinned staging: copies=34488, host_stage=47046.256 ms, h2d=7380.708 ms.
+- Up/gate profile: calls=2381, total=23.552 ms/call.
+- Down profile: calls=4506, stage=10.415 ms/call, total=10.582 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 96`: 3.47192 s/token, 0.29 tok/s.
+- Phase 2M pct45 `-n 96`: 3.52464 s/token, 0.28372 tok/s.
+- Phase 2N pct35 `-n 96`: 3.49838 s/token, 0.28585 tok/s.
+- Moving from pct45 to pct35 improves down hit rate and total speed, but it
+  over-constrains the upgate pool: upgate hit_rate drops from 47.2% to 41.0%,
+  and up/gate total regresses from 22.493 ms/call to 23.552 ms/call.
+
+Decision:
+
+- Reject pct35 for full-length promotion.
+- Keep Phase 2H as the current best full `-n 96` configuration.
+- Next split-cache budget attempt, if pursued, should test an intermediate
+  upgate pct around 40 rather than moving further toward down.
