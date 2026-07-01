@@ -1735,14 +1735,20 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-updown`
 - `attempt_kind`: `config-probe/approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_manual_correctness_truncated_output
 - `hypothesis`: Top4 pruning is now the promoted SOTA and still produces a correct France answer. Reducing `GGML_MOE_KEEP_TOPK_UPDOWN` from `4` to `3` removes one more routed up/down expert per op and may further reduce the dominant CPU fallback work.
 - `theoretical_upper_bound`: Using the same coarse op-wall estimate (`up+down≈77.3s`, six routed experts), top3 removes three of six routed up/down experts. The rough upper bound versus no pruning is about `38.7s`, or about `12.9s` additional wall reduction versus top4 before overhead/page effects. Real gain is bounded by gate streaming, non-expert work, and possible changed output length. Promote only if measured generation rate exceeds current `2.3 tok/s`.
 - `risk`: Correctness risk is high. Top3 may remove too much expert contribution and yield plausible but lower-quality or semantically wrong output. France answer must be manually reviewed for semantic correctness, coherence, and absence of degeneration; heuristic pass alone is insufficient.
-- `test_config`: pushed branch HEAD `41bf96a92` rebuilt to binary version `9090 (41bf96a92)`, no source change, `GGML_MOE_KEEP_TOPK_UPDOWN=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `test_config`: pushed branch HEAD `baa457ca9` rebuilt to binary version `9091 (baa457ca9)`, no source change, `GGML_MOE_KEEP_TOPK_UPDOWN=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed the top4 pushed rerun TTFT by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: No source change. If token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds the gate, mark rejected/unpromoted and keep current top4 SOTA. If accepted, immediately write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T224718Z-20260702_expert_keep_top3_updown/france-cpu40-vram0gb`
+- `result`: rejected despite high speed. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=36616.831779ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15026126848`, `pgmajfault=324282`, `workingset_refault_file=5846413`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic but manual review failed.
+- `correctness_manual_review`: fail. The answer is mostly factually correct but ends with an incomplete trailing sentence: `The country is also known`. This is a truncation/coherence failure for the required France prompt, so the result cannot be promoted.
+- `trace_summary`: `rows=47883`, `src0_ms_sum=29164.065`, `kernel_ms_sum=509.168`, `dontneed_ms_sum=1465.194`, `total_ms_sum=32068.595`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: no source change; no commit/push as SOTA. Current effective SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
