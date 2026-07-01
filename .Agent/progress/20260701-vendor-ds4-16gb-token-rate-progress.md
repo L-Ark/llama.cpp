@@ -96,3 +96,23 @@ Rejected higher-rate candidates:
   - Result: `eval_tok_s=1.1`, `prompt_tok_s=0.7`, `ttft_estimate_ms=45936.46463`, `memory_peak_bytes=16000000000`, `memory_max_events=82645`, `pgmajfault=980573`, correctness passed.
   - This restores the correct CPU fallback behavior and is not a new SOTA.
 - Next bottleneck to attack: build a correct MXFP4/F8 stream path by comparing `moe_stream_one` against the existing CUDA `mmvq` call conventions, or avoid this path and instead reduce CPU fallback cold page faults with trace-guided prefetch/residency.
+
+### 2026-07-01T07:48:00Z - Rejected DS4 gate stream isolation and CPU WILLNEED prefetch
+
+- Purpose: continue the cold-start plan after the previous type-gate-only stream attempt failed. Two diagnostic paths were tested:
+  - Add default-off DS4 stream isolation controls: `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1` plus `GGML_MOE_STREAM_ONE_NAME_FILTER=<substring>`.
+  - Pass the real `nb01` row stride into `ggml_cuda_moe_stream_mmvq_dev` instead of recomputing stride from `ne00`, to remove a possible padding/layout mismatch.
+  - Add default-off CPU fallback prefetch: `GGML_MOE_CPU_WILLNEED=1`, which calls `madvise(MADV_WILLNEED)` for active expert pages before CPU chunk compute.
+- Invalid setup runs: `/root/lfz/runs/vendor-ds4-16gb/20260701T074105Z-cold-ds4-stream-filter-gate-cpu40-vram2`, `/root/lfz/runs/vendor-ds4-16gb/20260701T074551Z-cold-ds4-stream-filter-gate-stride-cpu40-vram2`, and `/root/lfz/runs/vendor-ds4-16gb/20260701T075241Z-cold-cpu-willneed-cpu40-vram2` failed at model load because concurrent GLM runs consumed VRAM. These are not counted as model metrics.
+- Valid DS4 gate-only stream isolation run after freeing GPU:
+  - Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T074800Z-cold-ds4-stream-filter-gate-stride-freegpu-cpu40-vram2/france-cpu40-vram2gb`.
+  - Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+  - Result: rejected. `eval_tok_s=2.5`, `prompt_tok_s=0.6`, `ttft_estimate_ms=52405.937441`, `memory_peak_bytes=16000000000`, `memory_max_events=34004`, `pgmajfault=358937`, but `correctness_ok=false`.
+  - Answer degenerated into repeated punctuation and did not mention France or Europe: `preferably also as a list of  . ...`.
+  - Interpretation: MXFP4 stream is already wrong for `ffn_gate_exps.weight`; the failure is not only an up/down fusion issue. Passing true `nb01` did not fix it.
+- Valid CPU `MADV_WILLNEED` prefetch run after freeing GPU:
+  - Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T075329Z-cold-cpu-willneed-freegpu-cpu40-vram2/france-cpu40-vram2gb`.
+  - Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_CPU_WILLNEED=1`.
+  - Result: rejected as performance regression. Correctness passed, but `eval_tok_s=1.0`, `prompt_tok_s=0.8`, `ttft_estimate_ms=43646.226705`, `memory_peak_bytes=16000000000`, `memory_max_events=61442`, `pgmajfault=605870`, `workingset_refault_file=19860280`.
+  - Compared with cold vram2 profile (`eval_tok_s=1.3`, `ttft_estimate_ms=44034.028848`, `pgmajfault=826309`), `WILLNEED` reduced major faults and slightly improved TTFT, but worsened generation throughput. The likely gap is that prefetch increases reclaim/read-ahead contention and does not overlap enough useful compute under the 16GB cgroup.
+- Next step: do not pursue broad `MADV_WILLNEED` as-is. For MXFP4/F8 stream correctness, compare `moe_stream_one` output against CPU for a tiny captured expert/input or add a targeted numeric diff harness before attempting another full model run.

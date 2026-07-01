@@ -176,6 +176,7 @@ bool ggml_cuda_moe_stream_mmvq_dev(
     const void *d_src0,
     int64_t ne01,
     int64_t ne00,
+    size_t nb01,
     const float *d_src1_f32,
     void *d_src1_q8,
     float *d_dst,
@@ -4677,7 +4678,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 float *d_row = (float *)d_out + (size_t)j * ne01;
                 const float *d_src1_row = (const float *)bc.d_src1_f32 + (size_t)j * ne00;
                 if (!ggml_cuda_moe_stream_mmvq_dev(
-                        src0_type, d_expert, ne01, ne00, d_src1_row, bc.d_src1_q8_one, d_row, run_stream)) {
+                        src0_type, d_expert, ne01, ne00, nb01, d_src1_row, bc.d_src1_q8_one, d_row, run_stream)) {
                     return false;
                 }
             }

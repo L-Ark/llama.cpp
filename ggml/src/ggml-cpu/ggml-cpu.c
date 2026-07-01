@@ -36,6 +36,7 @@
 #include <signal.h>
 #if defined(__gnu_linux__)
 #include <syscall.h>
+#include <sys/mman.h>
 #endif
 
 #ifdef GGML_USE_OPENMP
@@ -322,6 +323,39 @@ static void ggml_moe_cpu_chunk_trace_write(
         src0_bytes,
         ms);
     funlockfile(fp);
+}
+
+static bool ggml_moe_cpu_willneed_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_CPU_WILLNEED");
+        enabled = env && env[0] && env[0] != '0' ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
+#if defined(__linux__)
+    if (!ptr || size == 0) {
+        return;
+    }
+
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        return;
+    }
+
+    const uintptr_t begin = (uintptr_t) ptr;
+    const uintptr_t end = begin + size;
+    const uintptr_t aligned_begin = begin & ~(uintptr_t) (page_size - 1);
+    const uintptr_t aligned_end = (end + (uintptr_t) page_size - 1) & ~(uintptr_t) (page_size - 1);
+    if (aligned_end > aligned_begin) {
+        (void) madvise((void *) aligned_begin, aligned_end - aligned_begin, MADV_WILLNEED);
+    }
+#else
+    (void) ptr;
+    (void) size;
+#endif
 }
 
 #define GGML_THREADPOOL_N_THREADS_MASK (0xffffU)
@@ -1803,6 +1837,18 @@ static void ggml_compute_forward_mul_mat_id(
             }
         }
 
+        ggml_barrier(params->threadpool);
+    }
+
+    if (ggml_moe_cpu_willneed_enabled()) {
+        if (ith == 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                if (matrix_row_counts[cur_a] == 0) {
+                    continue;
+                }
+                ggml_moe_cpu_willneed_pages((const char *) src0->data + cur_a * nb02, (size_t) ne01 * nb01);
+            }
+        }
         ggml_barrier(params->threadpool);
     }
 

@@ -9,7 +9,7 @@ void ggml_cuda_moe_stream_link_anchor(void) {}
 bool ggml_cuda_moe_stream_available(void) { return false; }
 int ggml_cuda_host_register(void *, size_t) { return 0; }
 bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
-bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, cudaStream_t) { return false; }
+bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
 void ggml_cuda_moe_stream_sync(void) {}
 }
@@ -81,6 +81,7 @@ bool ggml_cuda_moe_stream_mmvq_dev(
     const void *d_src0,
     int64_t ne01,
     int64_t ne00,
+    size_t nb01,
     const float *d_src1_f32,
     void *d_src1_q8,
     float *d_dst,
@@ -388,6 +389,35 @@ static void one_trace_write(
         std::chrono::duration<double, std::milli>(t_dontneed - t0).count());
 }
 
+static bool moe_stream_one_experimental_ds4_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled != 0;
+}
+
+static bool moe_stream_one_name_filter_allows(const char * name) {
+    static const char * filter = std::getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
+    if (!filter || !filter[0]) {
+        return true;
+    }
+    return name && std::strstr(name, filter) != nullptr;
+}
+
+static bool moe_stream_one_type_allowed(ggml_type type, const char * name) {
+    if (type == GGML_TYPE_IQ3_XXS) {
+        return moe_stream_one_name_filter_allows(name);
+    }
+    if (!moe_stream_one_experimental_ds4_enabled()) {
+        return false;
+    }
+    if (type != GGML_TYPE_MXFP4 && type != GGML_TYPE_F8_E4M3_B128) {
+        return false;
+    }
+    return moe_stream_one_name_filter_allows(name);
+}
+
 static bool ensure_dev(void *&p, size_t &cur, size_t need) {
     if (cur >= need) return true;
     if (p) cudaFree(p);
@@ -487,7 +517,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (!g_avail.load(std::memory_order_acquire)) return false;
 
     const ggml_type t0 = (ggml_type)src0_type_int;
-    if (t0 != GGML_TYPE_IQ3_XXS) return false;
+    if (!moe_stream_one_type_allowed(t0, src0_name)) return false;
     if (cne1 < 1 || cne1 > MMVQ_MAX_BATCH_SIZE) return false;
     if (!src1_f32) return false;   // require F32 src1 for on-GPU quantization
 
@@ -578,7 +608,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
         const float *d_src1_row = (const float *)((const char *)ctx.d_src1_f32 + (size_t)k * ne00 * sizeof(float));
         void *d_src1_q8_row = (char *)ctx.d_src1 + (size_t)k * src1_q8_row_bytes;
         float *d_dst_row = (float *)ctx.d_dst + k * ne01;
-        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, kernel_src0, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, kernel_src0, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
             release_slot(s);
             return false;
         }

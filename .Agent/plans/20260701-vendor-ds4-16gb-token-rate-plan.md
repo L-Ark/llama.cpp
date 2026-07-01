@@ -130,11 +130,13 @@ These supersede the earlier warm single-prompt sweep order.
    - Hypothesis: the CPU fallback dominates cold expert time because DS4 MXFP4/F8 experts do not use the single-expert CUDA stream path. A correct stream implementation can shift expert matvec compute to GPU and make VRAM residency useful for DS4.
    - Bound: each observed expert tensor is about `4.25 MiB` (`src0_bytes=4456448`). The cold lower bound is unique expert bytes divided by storage/page-fault plus H2D bandwidth; the warm lower bound is the measured CUDA kernel plus D2H/scatter time when cached in VRAM.
    - Required first step: compare the existing `moe_stream_one` call layout against the working CUDA `mmvq` implementation for `GGML_TYPE_MXFP4` and `GGML_TYPE_F8_E4M3_B128`. Do not accept a type-gate-only change; that already failed correctness with degenerate output.
+   - Updated evidence: isolating only `ffn_gate_exps.weight` into the experimental MXFP4 stream still failed correctness, even after passing the true `nb01` stride into the CUDA MMVQ helper. The next CUDA step must be a small numeric CPU-vs-GPU harness for one captured expert/input, not another full-model type-gate trial.
    - Acceptance requires France output to remain semantic/coherent and TTFT to stay within the configured gate, or be committed only as rejected/needs_ttft_recovery.
 
 5. **Streaming overlap and cold prefetch**
    - Hypothesis: cold expert page faults are serialized with decode. Predictive prefetch or async expert reads can hide part of the transfer/reclaim time behind GPU compute.
    - Bound: maximum gain is the measured transfer/fault time that overlaps with compute.
+   - Updated evidence: broad CPU `MADV_WILLNEED` over active experts reduced major faults in one cold vram2 run but lowered generation rate from the cold baseline range to `1.0 tok/s`. Do not continue broad prefetch as-is; any future prefetch must be narrower or asynchronous enough to avoid reclaim contention.
    - Validate with timeline/resource evidence before accepting; do not infer overlap from tok/s alone.
 
 6. **VRAM cache and CPU-MoE tuning under cold validation**

@@ -1268,6 +1268,7 @@ extern "C" bool ggml_cuda_moe_stream_mmvq_dev(
     const void *d_src0,
     int64_t ne01,
     int64_t ne00,
+    size_t nb01,
     const float *d_src1_f32,
     void *d_src1_q8,
     float *d_dst,
@@ -1285,7 +1286,7 @@ extern "C" bool ggml_cuda_moe_stream_mmvq_dev(
     }
 
     ggml_cuda_mm_fusion_args_device fusion_local{};
-    const int stride_row_x = ne00 / ggml_blck_size(t0);
+    const int stride_row_x = nb01 / ggml_type_size(t0);
     const int stride_col_y = src1_padded / QK8_1;
 
     mul_mat_vec_q_switch_type(
@@ -1318,7 +1319,8 @@ extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
         const float *d_src1_row = d_src1_f32 + k * ne00;
         void *d_src1_q8_row = (char *) d_src1_q8 + (size_t) k * src1_q8_row_bytes;
         float *d_dst_row = d_dst + k * ne01;
-        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
+        const size_t nb01 = (size_t) ne00 * ggml_type_size((ggml_type) src0_type_int) / ggml_blck_size((ggml_type) src0_type_int);
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
             return false;
         }
     }
