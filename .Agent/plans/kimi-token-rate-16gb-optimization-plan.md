@@ -2808,6 +2808,84 @@ Decision:
 - No code rollback is needed because this was env-only.
 - Keep accepted Phase 2H as the current best full `-n 96` configuration.
 
+## Next candidate: Phase 2U down-only parallel CPU staging
+
+Design timestamp: 2026-07-02 18:00 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` down profile:
+  - calls=4506.
+  - stage=11.616 ms/call.
+  - total=11.781 ms/call.
+  - visible down staging bucket is about 52.3s.
+- Down prefetch reduced down stage but hurt full decode through cache/H2D
+  contention.
+- Up/gate parallel staging was already rejected in Phase 2F because stream waits
+  consumed the expected overlap.
+- The code has a separate down-only staging path:
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`. It splits down miss copy jobs across two
+  CPU threads and two CUDA streams, then joins before launching the down batch
+  kernel. This targets only the down staging bucket and does not prefetch ahead
+  or change cache policy.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_DOWN_PARALLEL_STAGE=1`
+- no up/gate parallel mode.
+- no down prefetch.
+- no split cache.
+- no cache policy override.
+- cache budget remains 15000 MiB.
+
+The path should preserve semantics because it only changes how missing down
+experts are copied into the same cache slots before the same down batch kernel
+uses them.
+
+Theoretical upper bound:
+
+- If copy jobs split evenly and H2D/host reads can overlap, down stage could
+  approach roughly half of 11.616 ms/call, similar to the best local effect
+  seen from prefetch but without loading future experts early.
+- Full-run upper bound: saving up to about 26s from Phase 2H, giving
+  269s / 85 runs = 3.16 s/token.
+- More realistic: if only host-side staging overlaps and H2D bandwidth remains
+  serialized, saving may be 3-8s full run, still enough to beat Phase 2H if it
+  does not add synchronization overhead.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Continue to full `-n 96` only if:
+  - `-n 32` is not slower than Phase 2H `-n 32`, or
+  - down stage is materially lower without TTFT/quality/RAM/VRAM risk.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should remain close to Phase 2H utilization without OOM.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- Logs must show `down parallel CPU staging active`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, RAM/VRAM gates fail, output quality fails,
+  `down parallel CPU staging active` does not appear, launch/read failures
+  appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
