@@ -2,7 +2,7 @@
 
 ## 目标
 
-- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，当前 source-backed 可回退 SOTA 为 `2.0 tok/s`；旧 `2.6 tok/s` 作为历史观测值继续排查，只有找回 exact source/binary 并通过 pushed-commit rerun 后才能重新作为 SOTA。
+- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，当前 source-backed 可回退 SOTA 为 `2.3 tok/s`；旧 `2.6 tok/s` 作为历史观测值继续排查，只有找回 exact source/binary 并通过 pushed-commit rerun 后才能重新作为 SOTA。
 - 严格保持：
   - Host RAM（含 page cache）`<= 16 GB`；
   - TTFT 不得高于当前 baseline 的 `20%` 阈值；
@@ -14,23 +14,24 @@
 - 当前可从 pushed source 干净重建并复跑的 cold-start 合规 SOTA：
   - `vendor` 框架
   - `cpu_moe=40`
-  - `GGML_MOE_KEEP_TOPK_UPDOWN=5`
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
   - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
   - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
   - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
   - cold drop_caches
   - 16GB cgroup
 - 当前记录：
-  - `eval_tok_s=2.0`（pushed-commit clean rebuild rerun）
-  - `prompt_tok_s=0.7`
-  - `TTFT=43188.681316ms`
+  - `eval_tok_s=2.3`（pushed-commit clean rebuild rerun）
+  - `prompt_tok_s=0.9`
+  - `TTFT=39140.888549ms`
   - `memory_peak_bytes=16000000000`
-  - `memory_file_bytes=14968823808`
+  - `memory_file_bytes=14986100736`
   - `ram_ok=true`
   - `correctness_ok=true`
-  - source-bearing pushed commit: `07f1dc6bb8d8f80e00e30ad09529a939170c25d8`
+  - pushed rerun commit: `99b7fd67cdd21942efbb015afed6388ebb86eaa3`
+  - source-bearing code commit: `07f1dc6bb8d8f80e00e30ad09529a939170c25d8`
   - pushed remote/branch: `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`
-  - pushed rerun dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T222605Z-20260702_expert_keep_top5_updown_pushed_rerun/france-cpu40-vram0gb`
+  - pushed rerun dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T224018Z-20260702_expert_keep_top4_updown_pushed_rerun/france-cpu40-vram0gb`
 - 旧 `2.6 tok/s` run 仍作为 forensic 排查对象，不作为当前可回退 SOTA：
   - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T095526Z-cold-ds4-gate-stream-src1-rowmod-vram12-trace/france-cpu40-vram12gb`
   - 原记录 `eval_tok_s=2.6`, `TTFT=40836ms`, `memory_peak_bytes=16000000000`, `correctness_ok=true`
@@ -1708,7 +1709,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top4-updown`
 - `attempt_kind`: `config-probe/approximate-pruning`
-- `status`: accepted candidate pending pushed-commit clean rebuild rerun
+- `status`: promoted after pushed-source clean rebuild rerun
 - `hypothesis`: Top5 up/down pruning is the current source-backed SOTA and shows that dropping one routed up/down expert can preserve the France answer. Remaining up/down fallback work is still large, so lowering `GGML_MOE_KEEP_TOPK_UPDOWN` from `5` to `4` may remove another routed expert from every up/down expert op and increase generation rate.
 - `theoretical_upper_bound`: Original op-wall trace estimated up/down fallback at about `77.3s`. Top5 roughly removes one of six routed experts, with an ideal reduction near `12.9s`. Top4 removes two of six, so the coarse upper bound versus no pruning is about `25.8s`, or about `12.9s` additional wall reduction versus top5 before overhead/page effects. Real gain is lower because gate streaming and non-expert work remain, but a measurable improvement over the current `2.0 tok/s` SOTA is plausible.
 - `risk`: This is a stronger approximation than top5. It may remove semantically important routed expert contribution and produce fluent but wrong, repetitive, or under-specified output. The France answer must be manually reviewed; heuristic correctness alone is insufficient.
@@ -1721,7 +1722,14 @@
 - `correctness_manual_review`: pass. The answer is semantically correct and coherent: it identifies France/French Republic as a Western European country, covers history/culture/global art/fashion/cuisine, borders and seas, Eiffel Tower/Louvre/Versailles, wines/cheeses/philosophy/literature/cinema, Paris, and France's economic/political/diplomatic role. No incoherence or factual degradation observed from top4 pruning.
 - `sota_gate`: candidate passes initial gates. Token rate exceeds current pushed top5 SOTA `2.0 -> 2.3`; TTFT `40828.237606ms` is below the `51826.417579ms` limit; RAM including page cache is capped at `16000000000`; France correctness passes manual review.
 - `reproduction_record`: candidate run directory now contains source head/status/diff, binary sha256/stat/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, plan snapshot, push remote/branch target, manual correctness review, and candidate status.
-- `publish_status`: next required step is immediate commit/push of updated records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit. Until that rerun passes, `2.3 tok/s` remains an accepted candidate, not final promoted SOTA.
+- `publish_status`: candidate records were committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then binary was clean-rebuilt from pushed commit and rerun passed all gates.
+- `pushed_commit`: `99b7fd67cdd21942efbb015afed6388ebb86eaa3` (`vendor-ds4: record top4 pruning candidate`).
+- `pushed_branch`: `vendor/deepseek-token-rate-16gb` on remote `ssd=https://github.com/wici-ai/ssd-llama.git`.
+- `pushed_rerun_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T224018Z-20260702_expert_keep_top4_updown_pushed_rerun/france-cpu40-vram0gb`.
+- `pushed_rerun_result`: `eval_tok_s=2.3`, `prompt_tok_s=0.9`, `TTFT=39140.888549ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14986100736`, `pgmajfault=405106`, `workingset_refault_file=6669541`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `pushed_rerun_binary`: `llama-cli --version` reports `version: 9089 (99b7fd67c)` after clean rebuild.
+- `pushed_rerun_correctness_manual_review`: pass. The France answer is semantically correct and coherent, with no observed degradation from top4 pruning.
+- `current_effective_sota`: `2.3 tok/s` under strict 16GB cgroup from pushed source. This replaces top5 `2.0 tok/s` as the current source-backed line; old `2.6 tok/s` remains a forensic target until exact source/binary state is recovered.
 
 ## 记录与验收
 
