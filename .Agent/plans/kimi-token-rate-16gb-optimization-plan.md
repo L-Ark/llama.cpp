@@ -495,7 +495,7 @@ Fill this before the next code optimization.
 
 | Time UTC | Commit | Run dir | Host RAM peak incl. page cache | VRAM peak / unused | TTFT | Token rate | Quality | Cold proof | Repro method | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Cold 16GB baseline required |
+| 2026-07-01 12:50:35 | `2c69cf836` | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline` | 14.901 GiB cgroup peak, includes page cache by cgroup accounting; `memory.events max=245278`, OOM=0 | 16224 MiB peak / 15886 MiB minimum free | 88609.77 ms | 0.20 tok/s, 5.01989 s/token | PASS: coherent France paragraph ending with `<|im_end|>` | `sync; echo 3 > /proc/sys/vm/drop_caches`; child shell moved into dedicated cgroup before `exec`; `cgroup.procs` sampled with timeout and model PID | `README.md` and `command.txt` in run dir | Accepted as the first cold 16GB correctness/token-rate baseline. Missing explicit anon/file page-cache split and MoE per-stage timing; collect in the next profiling run before any code optimization. |
 
 ## Experiment log
 
@@ -503,10 +503,35 @@ Every implementation step must append one row before and after execution.
 
 | Time UTC | Step | Hypothesis | Theoretical upper bound | Result | Gates | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| TBD | Phase 0 baseline | Establish true cold 16GB baseline | N/A | Pending | 16GB/cold/quality/TTFT/repro pending | Required before optimization |
+| 2026-07-01 12:47:29 | Phase 0 cgroup smoke v2 | Verify the actual inference process can run inside a strict 16GB host-memory cgroup after fixing the runner to move `$BASHPID`, not the outer shell. | N/A | `/root/lfz/runs/vendor-kimi-token-rate/20260701-124729Z-n2-cgroup-smoke-v2`: `rc=0`, output `France is`, cgroup peak 14.901 GiB. | 16GB/cold/smoke quality pass; not a baseline because `-n 2`. | Proceed to full `-n 96` baseline. |
+| 2026-07-01 12:50:35 | Phase 0 full baseline | The current accepted Kimi correctness config should produce stable `-n 96` output under a 16GB host-memory guard, but token rate may drop because page cache is constrained. | Previous unconstrained reference was about 0.51-0.52 tok/s; under strict 16GB, lower bound unknown before measurement. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline`: `rc=0`, prompt eval/TTFT 88.61s, eval 401.59s / 80 decode runs, 0.20 tok/s, total 490.26s. | 16GB pass by cgroup peak 14.901 GiB; cold pass; quality pass; `read_failures` not reported; TTFT becomes baseline; reproducibility recorded. VRAM/GPU-first not optimized: 15.9 GiB VRAM unused. | Baseline established. Next required step is profiling with `memory.stat` anon/file sampling and MoE per-stage timing, then prioritize VRAM expert cache/profile preload. |
+
+## Current bottleneck after Phase 0
+
+The first strict 16GB cold baseline shows the current path is not using the
+available GPU memory effectively:
+
+- Decode token rate is only 0.20 tok/s.
+- TTFT/prompt eval is 88.61s.
+- VRAM peak is 16224 MiB, with at least 15886 MiB still free.
+- The cgroup is constantly at its 16,000,000,000 byte memory limit during
+  decode and reports `memory.events max=245278`, with no OOM. This means the
+  kernel is reclaiming aggressively inside the memory cap.
+- The observed process state reached `D` during decode, consistent with IO wait
+  or reclaim stalls.
+
+Priority order before code changes:
+
+1. Rerun one profiling baseline with cgroup `memory.stat` sampling to split
+   anon/file/kernel memory and with MoE timing/counter envs enabled if available.
+2. Use the route cache simulator and MoE trace data to estimate the maximum gain
+   from filling the unused ~15.9 GiB VRAM with expert cache/profile preload.
+3. Only after the IO/cache bound is quantified, consider math/kernel changes
+   such as up/gate id-MMQ.
 
 ## Immediate next action
 
-Run Phase 0 baseline on the remote GPU host with a strict 16GB host-memory guard.
-Do not start a speed patch until the per-token breakdown shows the largest
-compressible bucket.
+Run the profiling baseline on the remote GPU host with the same strict 16GB
+host-memory guard. The profiling run must add cgroup `memory.stat` samples and
+MoE per-stage counters/timing. Do not start a code speed patch until this
+per-token breakdown identifies the largest compressible bucket.
