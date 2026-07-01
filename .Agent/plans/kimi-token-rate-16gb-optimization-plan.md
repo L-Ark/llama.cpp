@@ -2522,6 +2522,291 @@ Decision:
   3. isolate prompt-only `ffn_gate_exps` fallback such as layer 39 so it does
      not distort TTFT or decode profiling.
 
+## Next candidate: Phase 3V down batch-decline reason attribution
+
+Design timestamp: 2026-07-03 00:15 CST.
+
+Current bottleneck:
+
+- Phase 3U confirmed CPU backend MoE split dominance on the current Phase 3E
+  runtime, but the diagnostic itself failed the hard `launch_failures=0` gate.
+- Existing code inspection shows the down batch path declines when an expert has
+  more than one row in the current `MUL_MAT_ID` call:
+  `matrix_row_counts[e] > 1 -> multirow_not_supported`.
+- Phase 3H/3U per-name profiles show eligible down names usually have
+  `batch_accept=N-1`, `batch_decline=1`. That pattern is consistent with the
+  prompt call declining once because prompt has multiple tokens, while decode
+  token calls accept.
+- If the decline is prompt-only, optimizing it can improve TTFT but cannot move
+  decode token rate much. The next token-rate optimization should instead
+  target non-eligible fallback tensors or the accepted down path's staging cost.
+- If declines also happen during decode, then adding multi-row down batch support
+  can improve token rate and should be prioritized.
+
+Hypothesis:
+
+- Use the existing default-off decline logger:
+  `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+- Run the accepted Phase 3E runtime without graph/split profiling, so the run is
+  closer to promotion conditions and should not reproduce the Phase 3U profiling
+  launch failures.
+- Inspect decline reasons and tensor names:
+  - `multirow_not_supported` during the first prompt call only means the decline
+    path is mostly TTFT work.
+  - any repeated decline during decode on eligible down names means multi-row or
+    shape support still affects token rate.
+  - `unsupported_type` on Q4_0 down tensors confirms the already-tested Q4_0
+    path remains unattractive unless a new approach avoids the previous cache
+    pressure regression.
+
+Theoretical value:
+
+- This diagnostic does not itself improve token rate.
+- It decides whether the next implementation should target prompt-only TTFT or
+  decode token-rate work.
+- Because the accepted full `-n 96` decode is 2.72551 s/token, a prompt-only
+  fix cannot get us toward 5 tok/s. A decode decline fix would have an upper
+  bound equal to the observed decline fallback time removed from each token.
+
+Execution:
+
+- No code change.
+- Use Phase 3E best runtime env and add:
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+  - keep `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - keep `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- Do not enable graph/split profiling in this phase.
+- Run cold `-n 4` under strict 16GB cgroup.
+- If the run passes quality, RAM, VRAM, TTFT, and failure gates, run cold
+  `-n 32` only if the n4 logs show decode-relevant declines that require longer
+  attribution.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs include decline reasons and CPU MoE per-name summary.
+- The result must identify whether `batch_decline=1` is prompt-only or decode
+  relevant before any implementation is attempted.
+
+Rollback:
+
+- No code rollback expected because this is env-only.
+- Reject the diagnostic if the decline logger causes quality regression, TTFT
+  failure, resource failure, launch/read failures, or excessive logging that
+  distorts the run.
+
+Result timestamp: 2026-07-03 00:22 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-213313Z-n4-phase3v-decline-debug`
+
+Measured result:
+
+- Commit/config: `1bc97b7ec`, Phase 3E runtime env plus:
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80493.87 ms, inside the 106331.72 ms gate.
+- Decode: 10916.57 ms / 3 runs, 3.63886 s/token, 0.27481 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=99`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=724, misses=1804,
+  hit_rate=28.6%.
+- Pinned staging: copies=1790, host_stage=2595.035 ms,
+  H2D=387.210 ms.
+- Up/gate profile: 85 calls, total=26.477 ms/call.
+- Down batch profile: 160 calls, stage=13.377 ms/call,
+  total=13.546 ms/call.
+- Decline reasons:
+  - 52 total down batch declines.
+  - All 52 were `multirow_not_supported`.
+  - All showed `rows_stride=136`, matching the prompt shape
+    (`17 prompt tokens * 8 selected experts`).
+  - The decline log appears before the decode batch active messages.
+- CPU MoE profile:
+  - up_gate: 85 calls, 26.944 ms/call, `batch_accept=85`,
+    `batch_decline=0`.
+  - down: 550 calls, 152.296 ms/call, `cuda_batch=4.128 ms/call`,
+    `fallback_t0=148.061 ms/call`, `batch_accept=160`,
+    `batch_decline=52`.
+- Per-name profile still shows decode-relevant fallback from non-eligible down
+  tensors:
+  - `blk.9.ffn_down_exps.weight`, `blk.7.ffn_down_exps.weight`,
+    `blk.6.ffn_down_exps.weight`, `blk.15.ffn_down_exps.weight`,
+    `blk.18.ffn_down_exps.weight`, `blk.10.ffn_down_exps.weight`,
+    `blk.8.ffn_down_exps.weight` all have `batch_eligible=0` and
+    fallback-dominated wall time.
+
+Decision:
+
+- Reject Phase 3V as a gate-passing diagnostic because `launch_failures=99`
+  violates the hard failure rule.
+- Do not run `-n 32` from this diagnostic configuration.
+- No code rollback is needed because Phase 3V was env-only.
+- The decline evidence indicates that `batch_decline=1` for otherwise eligible
+  down names is a prompt/TTFT issue, not the decode token-rate priority.
+- The next implementation candidate should target decode-relevant non-eligible
+  down fallback without repeating Phase 3I's rejected Q4_0 compact-batch cache
+  expansion, which increased staging pressure and slowed `-n32`.
+
+## Next candidate: Phase 3W Q4_0 down compact batch with separate small cache
+
+Design timestamp: 2026-07-03 00:31 CST.
+
+Current bottleneck:
+
+- Phase 3H/3V show decode-relevant non-eligible down fallback from Q4_0 layers
+  such as `blk.6`, `blk.7`, `blk.8`, `blk.9`, `blk.10`, `blk.15`, and
+  `blk.18` `ffn_down_exps.weight`.
+- Phase 3I enabled Q4_0 in the normal down compact-batch path, but it was
+  rejected because Q4_0's larger expert slot increased the shared down cache
+  slot size, reduced cache capacity, increased staging pressure, and slowed
+  `-n32`.
+- Current code has only two cache buckets selected by expert size and split
+  settings. In the accepted Phase 3E env, large down experts use the main bucket;
+  enabling Q4_0 there would again grow the main down slot size.
+
+Hypothesis:
+
+- Add a default-off Q4_0-only separate-cache mode:
+  `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=<MiB>`.
+- When enabled, Q4_0 down expert sizes above the accepted IQ3 down slot size use
+  the secondary cache bucket with a small explicit budget, while existing IQ3/IQ2
+  down cache remains unchanged.
+- Add Q4_0 to compact MMVQ batch support only under this mode.
+- This should move Q4_0 down layers from CPU fallback to GPU without reducing
+  the accepted main down cache capacity.
+
+Theoretical upper bound:
+
+- Phase 3H `-n32` showed several Q4_0 down names around 40-54 ms/call of CPU
+  fallback. With roughly 7 Q4_0 down layers, the absolute upper bound is on the
+  order of hundreds of milliseconds per decode token if all of that fallback is
+  removed.
+- A separate 512MiB Q4 cache can hold about 60 Q4_0 experts if Q4_0 slot size is
+  about 8.25MiB. It cannot cover all routed Q4 experts, so the practical gain is
+  bounded by its hit rate and H2D/read overhead.
+- The experiment should beat Phase 3E `-n32` 2.24573 s/token to justify a full
+  `-n96` run. If Q4 cache misses dominate, it will fail like Phase 3I.
+
+Execution:
+
+- Implement default-off routing for Q4_0 down compact batch to a separate cache
+  budget controlled by `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB`.
+- Build remotely.
+- Run cold `-n4` with accepted Phase 3E env plus:
+  - `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512`
+  - CPU MoE name profile enabled.
+- If n4 passes all gates and Q4_0 names become batch eligible, run cold `-n32`.
+- Promote only if `-n32` beats Phase 3E `-n32` and then full `-n96` beats
+  Phase 3E full `-n96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Main down cache must keep the accepted 7.44MiB slot / 2016-slot shape.
+- Logs must show a separate Q4 cache allocation and Q4_0 down names with
+  `batch_eligible>0`.
+- `-n32` must be faster than Phase 3E `-n32` before any full run.
+
+Rollback:
+
+- Revert the code if build fails, Q4_0 output quality regresses, cache shape is
+  not isolated, TTFT/RAM/VRAM gates fail, launch/read failures appear, or n32
+  token rate does not beat Phase 3E.
+
+Implementation/result timestamp: 2026-07-03 00:47 CST.
+
+Code attempted:
+
+- Added default-off `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB`.
+- First implementation changed CUDA-side support only. It built, but CPU
+  down-batch eligibility still rejected Q4_0, so Q4_0 never entered the GPU
+  batch path.
+- Second implementation added CPU-side Q4_0 down eligibility under the same env.
+  It built, but the initial separate-cache threshold was too high:
+  Q4_0 slot size was 7.88MiB, not >=8MiB, so it polluted the main down cache.
+- Third implementation moved the threshold to 7.5MiB, which finally isolated
+  Q4_0 into the secondary cache bucket.
+
+Run 1:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214009Z-n4-phase3w-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 75835.42 ms.
+- Decode: 10844.40 ms / 3 runs, 3.61480 s/token, 0.27664 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Main down cache stayed at 2016 slots / 7.44MiB, but Q4_0 names remained
+  `batch_eligible=0`; the CUDA-only gate was insufficient.
+
+Run 2:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214309Z-n4-phase3w2-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 75511.92 ms.
+- Decode: 10093.00 ms / 3 runs, 3.36433 s/token, 0.29724 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Q4_0 became batch-eligible, but the main down cache changed to
+  1904 slots / 7.88MiB. This violates the Phase 3W acceptance condition that
+  main down cache must keep the accepted 2016 slots / 7.44MiB shape.
+
+Run 3:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214619Z-n4-phase3w3-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 74626.23 ms.
+- Decode: 9744.96 ms / 3 runs, 3.24832 s/token, 0.30785 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Main down cache stayed isolated:
+  - down: 2016 slots, 7.44MiB, hits=728, misses=1800.
+  - q4_down secondary bucket: 65 slots, 7.88MiB, hits=38, misses=130.
+- Q4_0 down names became batch eligible; examples:
+  - `blk.6.ffn_down_exps.weight`: `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+  - `blk.9.ffn_down_exps.weight`: `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+  - `blk.18`, `blk.7`, `blk.10`, `blk.15` also became eligible.
+- No actual `failed/error/FAILED` lines were found in stderr, but the metrics
+  still reported `launch_failures=44`. Under the user's hard rule, the metrics
+  field is treated as failing evidence.
+
+Decision:
+
+- Reject Phase 3W.
+- Do not run `-n32`.
+- Revert all Phase 3W source changes locally and remotely.
+- Rebuild the remote binary from the clean source after rollback.
+- Keep Phase 3E / commit `9b64e4c8` as the accepted full `-n96` best.
+
+Analysis:
+
+- The separate-cache design did isolate Q4_0 and used VRAM more fully, but it
+  still failed the hard `launch_failures=0` gate.
+- The Q4 bucket had only 22.6% hit rate on n4, and pinned staging increased
+  copies from 1790 to 1915, host_stage to 2860.061 ms, and H2D to 425.998 ms.
+- Even though smoke decode improved versus the failed W1/W2 attempts, the run is
+  not valid for promotion and should not be stacked.
+- If Q4_0 is revisited, first fix the metrics/failure accounting or identify why
+  a non-empty `launch_failures` field appears with no corresponding stderr
+  failure lines, then use a profile-guided Q4 cache rather than pure LRU.
+
 Result timestamp: 2026-07-02 23:47 CST.
 
 Smoke run:
