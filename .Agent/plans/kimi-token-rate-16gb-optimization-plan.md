@@ -2338,6 +2338,206 @@ Rollback:
   quality regression, materially increases profiling-run TTFT beyond the gate,
   or produces incomplete/ambiguous timing records.
 
+Implementation result timestamp: 2026-07-02 19:30 CST.
+
+Code:
+
+- Commit: `d08eb4081 ggml: add Kimi CPU MoE wall profiling`
+- Remote build: PASS; `llama-completion` linked successfully.
+- The profiler is default-off and enabled only with
+  `GGML_KIMI_CPU_MOE_PROFILE=1`.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-185529Z-n4-phase3d-cpu-moe-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105959.74 ms, inside the 106331.72 ms gate.
+- Decode: 14130.52 ms / 3 runs, 4.71017 s/token, 0.21231 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=85, total=27.902 ms/call, cuda_batch=27.720,
+    post_cuda_barrier=0.153, fallback_t0=0.001.
+  - mul_mat_id/down path: calls=550, total=209.020 ms/call,
+    cuda_batch=4.276, cuda_single=92.676, fallback_t0=111.730.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-185844Z-n32-phase3d-cpu-moe-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105364.52 ms, inside the 106331.72 ms gate.
+- Decode: 94641.27 ms / 31 runs, 3.05294 s/token, 0.32755 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- MoE stream profile:
+  - up/gate: calls=869, total=18.325 ms/call, wall=18.351 ms/call.
+  - down batch: calls=1644, total=9.101 ms/call, wall=9.181 ms/call.
+- CPU MoE profile:
+  - up_gate: calls=869, total=18.517 ms/call, cuda_batch=18.362,
+    fallback_t0=0.001.
+  - mul_mat_id/down path: calls=4021, total=43.276 ms/call,
+    cuda_batch=3.758, cuda_single=20.010, fallback_t0=19.334.
+  - Totals: up_gate about 16.1s, mul_mat_id/down path about 174.0s.
+- Split/graph profile:
+  - split total: 199938.156 ms.
+  - graph submit total: 199960.617 ms.
+
+Analysis:
+
+- Phase 3D explains almost all of Phase 3C split wall time through CPU MoE op
+  wrappers. The problem is not final graph synchronization.
+- `up_gate` is already almost entirely the intended CUDA batch path.
+- The main remaining bottleneck inside the MoE CPU split is the
+  `MUL_MAT_ID` path outside down batch: `cuda_single` and fallback consume
+  about 158s combined on `-n 32`.
+- The accepted runtime sets `GGML_MOE_STREAM_BATCH_ONLY=1`, but the
+  `ggml_compute_forward_mul_mat_id` single-expert stream fallback is still
+  reachable when the down-batch path is not used.
+
+Decision:
+
+- Phase 3D diagnostic code is accepted.
+- Do not claim a performance improvement from Phase 3D.
+- Next candidate should make `GGML_MOE_STREAM_BATCH_ONLY=1` actually disable
+  the single-expert `ggml_cuda_moe_stream_one` path in `MUL_MAT_ID`, then test
+  whether CPU fallback plus down batch is faster and still correct.
+
+## Next candidate: Phase 3E honor batch-only by disabling single stream path
+
+Design timestamp: 2026-07-02 19:33 CST.
+
+Current bottleneck:
+
+- In Phase 3D `-n 32`, the `MUL_MAT_ID` CPU op path spent about:
+  - 15.1s in down `cuda_batch`.
+  - 80.5s in `cuda_single`.
+  - 77.7s in fallback CPU loop from thread 0's view.
+- This dominates the split wall and is the largest actionable component found
+  so far.
+
+Hypothesis:
+
+- `GGML_MOE_STREAM_BATCH_ONLY=1` should prevent the old single-expert stream
+  handoff path from running.
+- The single path launches many small expert calls and then synchronizes, which
+  can be slower than staying in the CPU fallback for those non-batched cases.
+- Disabling it may reduce wrapper wall time and eliminate many small CUDA
+  launches without changing the accepted down-batch path.
+
+Theoretical upper bound:
+
+- The hard upper bound is removing the measured `cuda_single` time:
+  about 80.5s on the Phase 3D `-n 32` run.
+- The practical bound is lower because CPU fallback must compute work that the
+  single path currently handles. If CPU fallback replaces all single work at the
+  same cost, this patch is neutral. If the single path overhead dominates, token
+  rate can improve.
+- A useful smoke signal is lower `mul_mat_id/down path total` without a large
+  increase in `fallback_t0`.
+
+Execution:
+
+- Change `ggml_compute_forward_mul_mat_id` so `use_gpu_stream` is false when
+  `GGML_MOE_STREAM_BATCH_ONLY` is set.
+- Keep down batch behavior unchanged.
+- Build remotely.
+- Run cold `-n 4` with Phase 3D profiling env.
+- If `-n 4` passes, run cold `-n 32`.
+- Promote to full `-n 96` only if `-n 32` improves and the France output,
+  RAM, VRAM, TTFT, launch/read gates all pass.
+
+Acceptance:
+
+- Build passes.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- CPU MoE profile shows `cuda_single` near zero when
+  `GGML_MOE_STREAM_BATCH_ONLY=1`.
+- `-n 32` must improve over the Phase 3D attribution run and remain plausible
+  against accepted Phase 2H before any `-n 96` run.
+- Full promotion still requires `-n 96` faster than Phase 2H
+  (3.47192 s/token, 0.29 tok/s) with all gates passing.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  `cuda_single` still runs under batch-only, fallback grows more than the
+  removed single time, or token rate regresses.
+
+Implementation result timestamp: 2026-07-02 19:44 CST.
+
+Code:
+
+- Change: `ggml_compute_forward_mul_mat_id` now disables the single-expert
+  `ggml_cuda_moe_stream_one` path when `GGML_MOE_STREAM_BATCH_ONLY=1`.
+- Remote build: PASS.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-190433Z-n4-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78321.61 ms, inside the 106331.72 ms gate.
+- Decode: 11124.44 ms / 3 runs, 3.70815 s/token, 0.26968 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=85, total=31.354 ms/call.
+  - mul_mat_id/down path: calls=550, total=150.769 ms/call,
+    cuda_batch=4.136, cuda_single=0.000, fallback_t0=146.511.
+- Split wall: 89418.640 ms, down from 120063.875 ms in Phase 3D smoke.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-190656Z-n32-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78000.71 ms, inside the 106331.72 ms gate.
+- Decode: 69617.76 ms / 31 runs, 2.24573 s/token, 0.44529 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=869, total=17.942 ms/call, cuda_batch=17.793.
+  - mul_mat_id/down path: calls=4022, total=28.657 ms/call,
+    cuda_batch=3.685, cuda_single=0.000, fallback_t0=24.920.
+- MoE stream profile:
+  - up/gate: 17.757 ms/call.
+  - down batch: 8.922 ms/call.
+- Split wall: 147559.707 ms, down from 199938.156 ms in Phase 3D.
+- Graph submit: 147577.128 ms.
+
+Analysis:
+
+- Phase 3E validates the bottleneck hypothesis. The batch-only env previously
+  did not prevent the single-expert CUDA path, and that path was expensive.
+- Disabling it removes `cuda_single` entirely and improves `-n 32` decode from
+  3.05294 s/token to 2.24573 s/token while preserving RAM, VRAM, TTFT, and
+  France-answer quality gates.
+- The remaining large cost is fallback_t0 at 24.920 ms/call in the
+  `MUL_MAT_ID` path.
+
+Decision:
+
+- Phase 3E is a valid gated improvement at `-n 32`; commit and push
+  immediately.
+- Continue to full cold `-n 96` promotion test. Accept as the new best only if
+  full `-n 96` beats Phase 2H 3.47192 s/token / 0.29 tok/s and all hard gates
+  pass.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.

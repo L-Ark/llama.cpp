@@ -1976,6 +1976,7 @@ static void ggml_compute_forward_mul_mat_id(
 
     const bool use_gpu_stream =
         !use_gpu_stream_batch &&
+        getenv("GGML_MOE_STREAM_BATCH_ONLY") == NULL &&
         ggml_cuda_moe_stream_one &&
         ggml_cuda_moe_stream_available &&
         ggml_cuda_moe_stream_available() &&
