@@ -2538,6 +2538,49 @@ Decision:
   full `-n 96` beats Phase 2H 3.47192 s/token / 0.29 tok/s and all hard gates
   pass.
 
+Full promotion run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Commit/config: `9b64e4c8`, accepted Phase 2H runtime env plus the Phase 3E
+  code change; Phase 3 graph/split/CPU diagnostic profilers disabled.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79721.89 ms, inside the 106331.72 ms gate.
+- Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/staging:
+  - down cache: slots=2016, slot=7.44 MiB, hits=33844, misses=40188,
+    hit_rate=45.7%.
+  - pinned staging: copies=35734, host_stage=47796.399 ms,
+    h2d=7736.929 ms.
+- MoE profile:
+  - up/gate: calls=2381, total=24.079 ms/call, wall=24.101 ms/call.
+  - down batch: calls=4506, stage=12.205 ms/call,
+    total=12.363 ms/call, wall=12.407 ms/call.
+
+Comparison:
+
+- Previous accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, about 0.29 tok/s.
+- Phase 3E `-n 96`: 231668.17 ms / 85 runs,
+  2.72551 s/token, 0.36690 tok/s.
+- Improvement: 63.45s less decode time over 85 tokens, about 21.5% lower
+  seconds/token and about 27% higher token/sec.
+
+Decision:
+
+- Accept Phase 3E as the new full `-n 96` best configuration.
+- Current best: `9b64e4c8`, 2.72551 s/token, 0.36690 tok/s under strict
+  16GB cold-start gates.
+- Next bottleneck after Phase 3E is fallback/staging in `MUL_MAT_ID` and down
+  expert staging: host_stage remains 47.8s and down batch stage is
+  12.205 ms/call.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
