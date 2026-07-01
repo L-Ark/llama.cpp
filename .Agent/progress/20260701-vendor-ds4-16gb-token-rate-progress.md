@@ -237,3 +237,11 @@ Rejected higher-rate candidates:
 - Result: rejected before generation. Host RAM stayed inside the 16GB cgroup (`memory_peak_bytes=16000000000`, `memory_max_events=604`), but process exited `134` after CUDA OOM.
 - Key stderr lines: `[moe_stream] VRAM cache: 13.0 GiB, 3132 slots (4.25 MiB each)`, then `ggml_cuda_compute_forward: GET_ROWS failed`, `CUDA error: out of memory`.
 - Interpretation: vram13 is beyond practical VRAM fit with current model/settings. Current usable upper bound is vram12; further work should optimize remaining misses or free other VRAM rather than increasing the cache directly.
+
+### 2026-07-01T10:08:28Z - Rejected 12800MiB stream cache
+
+- Purpose: test a finer-grained cache size between accepted 12GiB and vram13 OOM using `GGML_MOE_STREAM_ONE_CACHE_MIB=12800`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T100828Z-cold-ds4-gate-stream-src1-rowmod-cache12800-trace/france-cpu40-vram12gb`.
+- Result: rejected. Correctness passed and RAM stayed inside the 16GB cgroup, but `eval_tok_s=1.6`, `ttft_estimate_ms=46832.258829`, `memory_max_events=50973`, `pgmajfault=547758`, `workingset_refault_file=12232851`.
+- Trace: `cache_hits=29723`, `cache_inserts=5030`, `src0_ms=26107 ms`, `total_ms=28434 ms`. This is only slightly fewer inserts than vram12 (`5129`) but has worse staging time, TTFT, and token rate.
+- Interpretation: vram12 remains the current best cache point. Extra cache near the VRAM limit introduces pressure/variability that outweighs the small miss reduction.

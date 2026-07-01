@@ -1,0 +1,40 @@
+{
+  "timestamp_utc": "2026-07-01T10:08:28Z",
+  "classification": "rejected_vram_pressure_regression",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T100828Z-cold-ds4-gate-stream-src1-rowmod-cache12800-trace/france-cpu40-vram12gb",
+  "config": {
+    "cpu_moe": 40,
+    "vram_cache_gb_runner": 12,
+    "moe_stream_one_cache_mib": 12800,
+    "drop_caches_before_case": true,
+    "env": {
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "12800",
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 1.6,
+    "prompt_tok_s": 0.7,
+    "ttft_estimate_ms": 46832.258829,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 50973,
+    "memory_file_bytes": 14958878720,
+    "pgmajfault": 547758,
+    "workingset_refault_file": 12232851,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "trace_summary": {
+    "rows": 34753,
+    "cache_hits": 29723,
+    "cache_inserts": 5030,
+    "src0_ms_sum": 26106.641,
+    "kernel_ms_sum": 392.138,
+    "dontneed_ms_sum": 1243.014,
+    "total_ms_sum": 28434.467
+  },
+  "reason": "A 12800MiB stream cache fits and remains correct, but token rate falls below the accepted 12GB result. It reduces inserts only slightly versus 12GB while increasing src0 staging time and TTFT, so it is rejected.",
+  "current_sota_remains": "vram_cache_gb=12, eval_tok_s=2.6"
+}
