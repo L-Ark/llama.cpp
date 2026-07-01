@@ -2760,6 +2760,78 @@ Decision:
   15400 MiB violates TTFT at smoke, and 15200 MiB slows `-n 32`.
 - No code rollback is needed because this was env-only.
 
+## Next candidate: Phase 2T LFU/LRU VRAM cache eviction policy
+
+Design timestamp: 2026-07-02 17:51 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` still has 40316 cache misses and
+  50153.894 ms host staging time.
+- Larger single-cache budgets did not help:
+  - 15400 MiB violated TTFT at `-n 4`.
+  - 15200 MiB passed `-n 32` gates but slowed decode versus Phase 2H.
+- Down prefetch reduced local down-stage time but did not improve full `-n 96`.
+- Phase 2J rejected broad profile preload/protection because it added large
+  overhead. That does not rule out a policy-only eviction change without
+  preload/protect.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`
+- no `GGML_MOE_VRAM_PROFILE`.
+- no `GGML_MOE_VRAM_PROFILE_PROTECT`.
+- no split cache.
+- no down prefetch.
+- cache budget remains 15000 MiB.
+
+Default policy is effectively LRU. The LFU/LRU policy evicts the slot with the
+lowest observed hit count, using LRU only as a tie-break. Kimi routing reuses a
+small subset of experts repeatedly in the France prompt, so preserving high-hit
+experts may reduce misses and host staging without increasing VRAM or changing
+model math.
+
+Theoretical upper bound:
+
+- Full Phase 2H host staging is about 50.15s over 35787 staged copies.
+- If LFU/LRU avoids even 2-5% of misses after warmup, expected full-run savings
+  could be about 1-3s.
+- The policy scan cost is similar to current eviction scanning because both
+  inspect cache slots. Extra `slot_hits` comparisons should be much smaller
+  than the staging bucket.
+- Promotion requires full `-n 96` below 295113.58 ms / 85 runs while preserving
+  all hard gates.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Continue to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  or shows a clear hit-rate/staging improvement with acceptable TTFT.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should remain close to Phase 2H utilization without OOM.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM/RAM gates fail, output quality fails,
+  launch/read failures appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
