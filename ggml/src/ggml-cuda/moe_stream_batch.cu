@@ -4264,8 +4264,11 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
+        case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
+        case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:
+        case GGML_TYPE_IQ4_XS:
             break;
         default: return false;
     }

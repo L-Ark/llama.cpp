@@ -1287,3 +1287,46 @@ Rollback:
 - If the tiny smoke corrupts output, fails to build, or still reports decode
   `launch_moe_mmvq_compact_batch` failures, revert the code changes before
   trying new performance settings.
+
+Intermediate result:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-144022Z-n4-phase2h-down-decode-iq3s`
+  built and ran with an initial `IQ3_S` whitelist expansion.
+- Output prefix was coherent: `France is a country`.
+- The attempt is not acceptable: decode still reported
+  `launch_moe_mmvq_compact_batch` failures and no down profile calls.
+- Follow-up diagnostics:
+  - Entry logging showed up/gate compact calls use `type=18` (`IQ3_XXS`).
+  - Down compact calls use `type=11` and `type=23`, which map to `Q3_K` and
+    `IQ4_XS`, not `IQ2_S`/`IQ3_S`.
+  - `ggml/src/ggml-cuda/mmvq.cu` already has CUDA MMVQ switch cases for both
+    `Q3_K` and `IQ4_XS`.
+- Revised implementation target:
+  - Keep prompt multirow declines on CPU fallback.
+  - Extend `launch_moe_mmvq_compact_batch` to accept `Q3_K` and `IQ4_XS`.
+  - Remove temporary unconditional debug before committing.
+  - Re-run tiny cold `-n 4`; acceptance requires coherent output and zero
+    decode `launch_moe_mmvq_compact_batch` failures.
+
+Correctness result:
+
+- Result timestamp: 2026-07-01 15:09 UTC.
+- Code change: `launch_moe_mmvq_compact_batch` now accepts `Q3_K` and
+  `IQ4_XS` in addition to the existing compact MMVQ types.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-150614Z-n4-phase2h-down-q3-iq4`
+- Cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France prefix: `France is a country`.
+- TTFT: 101830.07 ms, within the 106331.72 ms gate.
+- Decode: 14378.79 ms / 3 runs, 4.79293 s/token, 0.21 tok/s.
+- Diagnostics:
+  - `launch_moe_mmvq_compact_batch` failures: 0.
+  - `multirow_not_supported` declines: 52, all from prompt/multi-token routing
+    that intentionally remains on CPU fallback.
+  - Down profile active: true.
+- Decision: accept Phase 2H as a correctness fix only. Next practice is a cold
+  `-n 32` performance smoke with `GGML_MOE_STREAM_DOWN_BATCH=1` but still
+  without `GGML_MOE_GPU_HANDOFF`; handoff remains a separate correctness risk.
