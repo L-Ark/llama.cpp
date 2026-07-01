@@ -2237,6 +2237,80 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+## Phase 2P full result: reject down prefetch depth 8 for n96
+
+Result timestamp: 2026-07-02 17:01 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-170118Z-n96-phase2p-down-prefetch`
+
+Reproduction:
+
+- Commit: `adf621b20`.
+- Start from accepted Phase 2H full configuration:
+  - expert pack enabled.
+  - VRAM cache budget: 15000 MiB.
+  - down batch enabled.
+  - GPU handoff disabled.
+  - no split cache.
+  - `-t 32 -tb 32`.
+- Add:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+- Run as a cold start:
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+  - cgroup `memory.max=16000000000`
+  - cgroup `memory.swap.max=0`
+- Prompt:
+  `Please introduce France in a short paragraph.`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache pressure.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 92848.35 ms, inside the 106331.72 ms gate.
+- Decode: 301072.16 ms / 85 runs, 3.54203 s/token, 0.28232 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=9157, hits=9157, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=42866, misses=31182,
+  preloads=9157, hit_rate=57.9%.
+- Pinned staging: copies=35790, host_stage=51604.703 ms, h2d=7772.206 ms.
+- Up/gate profile: calls=2381, total=24.696 ms/call.
+- Down profile: calls=4506, stage=4.771 ms/call, total=4.939 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2P depth 8 `-n 96`: 301072.16 ms / 85 runs,
+  3.54203 s/token, 0.28232 tok/s.
+- The prefetch mechanism behaves correctly and is useful for every recorded
+  prefetched down load, and it cuts down visible down stage time from
+  11.616 ms/call to 4.771 ms/call.
+- The full decode still regresses because host staging and up/gate compute both
+  get worse:
+  - host_stage rises from 50153.894 ms to 51604.703 ms.
+  - up/gate total rises from 22.785 ms/call to 24.696 ms/call.
+- The likely bottleneck is H2D/cache contention from prefetching too far ahead:
+  depth 8 helps the down layer but steals bandwidth/cache locality from
+  up/gate at full output length.
+
+Decision:
+
+- Reject Phase 2P depth 8 for full `-n 96` promotion.
+- No code rollback is needed because this path is fully default-off and was
+  enabled only by env vars.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Keep Phase 2M as an accepted short-run `-n 32` improvement only.
+- Next candidate should reduce down prefetch pressure instead of abandoning the
+  mechanism: test shallower depths, starting with depth 2, because Phase 2P
+  proves the mechanism can remove down stage time but depth 8 over-contends at
+  full length.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
