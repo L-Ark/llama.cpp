@@ -1860,3 +1860,32 @@ Rollback:
 - Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
   gates fail, launch/read failures appear, or `-n 32` does not improve over
   Phase 2H.
+
+Result timestamp: 2026-07-01 15:56 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-155605Z-n4-phase2l-cache-index`
+
+Measured result:
+
+- Commit/config: `a8eb2778-dirty-cache-index`, accepted Phase 2H config plus a
+  local dirty `batch_vram_cache` key-index implementation.
+- Build: remote `build-cuda-batch` compiled successfully.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 100320.04 ms, inside the 106331.72 ms gate.
+- Decode: 14031.68 ms / 3 runs, 4.67723 s/token, 0.21380 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=731, misses=1797, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2704.985 ms, h2d=386.983 ms.
+- Up/gate profile: calls=85, total=27.173 ms/call.
+- Down profile: calls=160, stage=13.295 ms/call, total=13.461 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, and launch/read gates.
+- Continue to cold `-n 32` before deciding whether to keep or revert the code.
+- Watch up/gate timing: the tiny smoke has a faster overall decode than recent
+  rejected configs, but up/gate is slower than Phase 2H n32, so this may still
+  fail at longer length.
