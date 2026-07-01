@@ -8099,3 +8099,90 @@ Decision:
 - Risk to watch:
   up/gate time rose sharply versus Phase 3ZD/3Z smoke, so n32 must prove that
   lower down staging offsets this contention before any n96 promotion.
+
+Result timestamp: 2026-07-02 23:19 UTC / 2026-07-03 07:19 CST.
+
+Strict n32 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-231617Z-n32-phase3ze-down-prefetch`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.839531 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  78625.00 ms, gate PASS.
+- Decode:
+  71.11917 s / 31 tokens = 2.29417 s/token, 0.43589 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3192, hits=3192, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13137, host_stage=17714.689 ms, h2d=2843.010 ms.
+- Up/gate CPU profile:
+  calls=869, total=29.081 ms/call, cuda_batch=28.903,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=28.305 ms/call, cuda_batch=1.413,
+  fallback_t0=26.841, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=3.245 ms/call, kernel=0.113 ms/call,
+  wall=3.441 ms/call.
+- VRAM cache:
+  hits=16105, misses=10855, preloads=3192, hit_rate=59.7%.
+
+Decision:
+
+- Do not promote to n96 yet.
+- Phase 3ZE n32 passes hard gates and proves down prefetch hides down staging,
+  but it also increases up/gate wall time.
+- The old Phase 3E n32 reference was 2.24573 s/token, faster than this
+  2.29417 s/token. However, it predates the corrected 15.9GB `BASHPID`
+  harness.
+- Before rejecting or promoting Phase 3ZE, run a strict no-prefetch n32 baseline
+  with the corrected harness. Use that apples-to-apples result as the n32
+  promotion decision.
+
+## Next measurement: Phase 3ZF strict n32 no-prefetch baseline
+
+Design timestamp: 2026-07-02 23:20 UTC / 2026-07-03 07:20 CST.
+
+Reason:
+
+- Phase 3ZE n32 is slower than the old Phase 3E n32 reference, but the old
+  reference was not collected with the corrected strict cgroup wrapper.
+- A current strict n32 no-prefetch baseline is required to avoid rejecting a
+  possibly useful config based on a mismatched harness.
+
+Run configuration:
+
+- Same source and strict harness as Phase 3ZD.
+- `-n 32`, `-t 32`, `-tb 32`.
+- Same env as Phase 3ZD:
+  - `GGML_MOE_PREFETCH_DOWN=0`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=0`,
+  - no trace/Q4/multirow experiments.
+
+Acceptance:
+
+- This is a measurement, not an optimization.
+- Must pass the same hard gates:
+  host RAM `< 16000000000`, TTFT `<= 106331.72 ms`, France quality PASS,
+  strict launch failures=0, read failures=0.
+- Use the result as the apples-to-apples n32 comparator:
+  - if Phase 3ZE n32 is slower, reject down prefetch without n96,
+  - if Phase 3ZE n32 is faster, continue to strict n96 promotion.
