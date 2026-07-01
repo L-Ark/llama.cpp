@@ -2304,3 +2304,60 @@ Decision:
 - Keep Phase 2H as the current best full `-n 96` configuration.
 - Next split-cache budget attempt, if pursued, should test an intermediate
   upgate pct around 40 rather than moving further toward down.
+
+## Next candidate: Phase 2O intermediate split-cache budget
+
+Design timestamp: 2026-07-02 16:41 CST.
+
+Current bottleneck:
+
+- Phase 2M pct45 and Phase 2N pct35 both passed quality, TTFT, host RAM, and
+  VRAM gates, but neither beat Phase 2H at full `-n 96`.
+- pct45 over-allocated upgate relative to down:
+  - down hit_rate=50.6%, upgate hit_rate=47.2%.
+  - Decode: 3.52464 s/token.
+- pct35 over-corrected toward down:
+  - down hit_rate=53.9%, upgate hit_rate=41.0%.
+  - Decode: 3.49838 s/token.
+- Phase 2H full target remains 3.47192 s/token / 0.29 tok/s.
+
+Hypothesis:
+
+Test the midpoint:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`
+
+This should give the upgate pool more capacity than pct35 while preserving more
+down capacity than pct45. If the optimal balance is between the prior two
+points, pct40 should improve both total staging pressure and up/gate regression.
+
+Theoretical upper bound:
+
+- pct35 improved decode over pct45 by 2.23198s total but stayed 2.24914s slower
+  than Phase 2H.
+- pct40 can at best recover the upgate regression from pct35 while retaining
+  some down-hit improvement. The likely gain range is small, about 1-4s on full
+  `-n 96`.
+- Promotion requires crossing below 295113.58 ms / 85 runs.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 96`.
+- Promote only if `-n 96` is faster than accepted Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token) with all gates passing.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, cache allocation fails, launch/read failures appear, or `-n 96` does
+  not improve over Phase 2H.
