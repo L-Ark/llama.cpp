@@ -2237,6 +2237,179 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+## Next candidate: Phase 3R consume host-prefetch in actual cache miss copy
+
+Design timestamp: 2026-07-02 22:31 CST.
+
+Current bottleneck:
+
+- Current accepted full `-n 96` best remains Phase 3E:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM: 14.901 GiB under the strict 16GB cgroup cap.
+  - VRAM: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E visible remaining staging cost:
+  - pinned staging host_stage=47796.399 ms.
+  - H2D=7736.929 ms.
+  - copies=35734.
+- Phase 3O-3Q found that trace host-prefetch can load the Phase 3E route trace,
+  but the actual hit counter stayed at zero:
+  - Phase 3Q host prefetch: submitted=4287, hits=0, evicted=4223.
+- Code inspection explains this:
+  - The accepted Phase 3E fused-MMQ up/gate path stages cache misses through
+    `stage_tensor_slots_only -> batch_cache_insert_slot`.
+  - `batch_cache_insert_slot` calls `batch_cache_copy_h2d`.
+  - `batch_cache_copy_h2d` currently checks RAM tier, then reads from expert
+    pack into the pinned staging slot.
+  - It does not call `host_prefetch_copy_h2d`, so host-prefetch buffers are
+    never consumed by the actual fused-MMQ miss path.
+
+Hypothesis:
+
+- Extend `batch_cache_copy_h2d` with optional `tensor_name` and `expert_idx`
+  arguments.
+- When `pack_entry` exists, try:
+  `host_prefetch_copy_h2d(pack_entry, tensor_name, expert_idx, dst, sz, st)`
+  before falling back to the synchronous expert-pack read.
+- Keep the bounded host-prefetch producer behavior from Phase 3Q:
+  - `window_start=max(cursor, skip_events)`
+  - `start=max(window_start, produce_cursor)`
+  - `end=min(trace.size(), window_start + lead_events)`
+- This connects background prefetch production to the real cache-miss
+  consumption point while preventing the producer from running far beyond the
+  current route window.
+- The change should not alter routing, quantization, CUDA kernels, cache keys,
+  or expert bytes; it only changes the source of the host buffer used for H2D
+  on a miss.
+
+Theoretical upper bound:
+
+- The hard upper bound is still the Phase 3E host_stage bucket:
+  47.8s out of 231.7s decode.
+- If host-prefetch hits cover 25% of current host_stage and are overlapped, full
+  decode could improve by about 12s:
+  219.7s / 85 = 2.58 s/token, 0.387 tok/s.
+- If hits remain low or evictions dominate, expected performance is worse than
+  Phase 3E due to extra worker I/O and pinned-memory pressure.
+
+Execution:
+
+- Code changes:
+  - Add optional `tensor_name` and `expert_idx` parameters to the pinned
+    `batch_cache_copy_h2d` helper.
+  - Try `host_prefetch_copy_h2d` before synchronous expert-pack staging when
+    a matching `pack_entry` and tensor metadata are available.
+  - Pass `tensor_name` and `expert_idx` from `batch_cache_insert_slot`.
+  - Reapply the bounded host-prefetch producer window from Phase 3Q.
+- Build the remote CUDA batch binary.
+- Run cold `-n 4` with:
+  - Phase 3E best runtime env.
+  - `GGML_MOE_HOST_PREFETCH` pointing to the Phase 3E full `route-trace.csv`.
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`.
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`.
+  - `GGML_MOE_HOST_PREFETCH_LEAD_EVENTS=2048`.
+  - strict `memory.max=16000000000`, `memory.swap.max=0`, and drop caches.
+- Continue to cold `-n 32` only if `-n 4` shows real host-prefetch hits,
+  bounded failures, quality/RAM/VRAM/TTFT gates passing, and no decode slowdown
+  severe enough to invalidate the mechanism.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned host-prefetch
+  buffers.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack direct path has `read_failures=0`.
+- Host-prefetch has `alloc_failures=0`.
+- Host-prefetch `hits>0` on the smoke run; otherwise the mechanism is still not
+  connected and the candidate is rejected.
+- Host-prefetch read failures and scan passes must remain bounded, not millions
+  of repeated misses.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if output quality changes, TTFT exceeds the gate, host RAM
+  exceeds 16GB, VRAM gates fail, host-prefetch remains unused, failures appear,
+  or matching token-count performance does not improve over Phase 3E.
+
+Result timestamp: 2026-07-02 22:59 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-205636Z-n4-phase3r-host-prefetch-consume`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty-phase3r`, Phase 3E env plus bounded
+  route-trace host prefetch consumed by `batch_cache_copy_h2d`.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache and pinned prefetch buffers.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76840.16 ms, inside the 106331.72 ms gate.
+- Decode: 11401.05 ms / 3 runs, 3.80035 s/token, 0.26313 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=4321, hits=88, misses=1702.
+  - evicted=4169, read_failures=305, alloc_failures=0, reserved_skips=47.
+  - scan_passes=8711, cursor=2640, produce_cursor=4688/74144.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1702, host_stage=2717.871 ms,
+  H2D=434.685 ms.
+- Up/gate: 85 calls, total=36.554 ms/call.
+- Down batch: 160 calls, stage=14.102 ms/call, total=14.267 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-205901Z-n32-phase3r-host-prefetch-consume`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80247.52 ms, inside the 106331.72 ms gate.
+- Decode: 75219.66 ms / 31 runs, 2.42644 s/token, 0.41213 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Host prefetch:
+  - calls=27056, matched=27056, submitted=26896, hits=209,
+    misses=12940.
+  - evicted=26623, read_failures=1757, alloc_failures=0,
+    reserved_skips=43.
+  - scan_passes=60148, cursor=27056, produce_cursor=29104/74144.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=12940, host_stage=19686.484 ms,
+  H2D=3136.170 ms.
+- Up/gate: 869 calls, total=20.567 ms/call.
+- Down batch: 1644 calls, stage=9.479 ms/call, total=9.632 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3R `-n 32`: 2.42644 s/token, 0.41213 tok/s.
+
+Analysis:
+
+- Phase 3R proves that the consumer hook works: host-prefetch hits are no
+  longer zero.
+- The hit rate is too low to be useful:
+  - `-n 4`: 88 hits / 1790 miss-consumption attempts, about 4.9%.
+  - `-n 32`: 209 hits / 13149 attempts, about 1.6%.
+- The prefetch worker submits and evicts far more entries than it successfully
+  serves: 26896 submissions and 26623 evictions for only 209 hits on `-n 32`.
+- The extra worker reads, pinned-memory traffic, lock work, and H2D contention
+  outweigh the small number of avoided synchronous reads.
+- This direction would need a different scheduler, likely planned prefetch at
+  actual `stage_copy_job` creation or a much tighter future-miss predictor, not
+  a route-trace scan worker.
+
+Decision:
+
+- Reject Phase 3R.
+- Do not run full `-n 96`.
+- Revert the host-prefetch consumer and bounded producer code changes.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 ## Next candidate: Phase 3O route-trace host prefetch
 
 Design timestamp: 2026-07-02 21:50 CST.
