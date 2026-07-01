@@ -11,5 +11,20 @@
 
 ## Run Log
 
-No accepted optimization runs yet.
+### 2026-07-01T04:44:44Z - Accepted hard-16GB vendor baseline
 
+- Accepted current highest compliant token rate: `eval_tok_s=7.9`, `prompt_tok_s=4.7`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T044444Z-hard16g-cpu40-vs-cpu37/france-cpu40-vram2gb`.
+- Repo commit used for the run: `7b2eab7783efe2cb11472ad8e129b04556ed3220`.
+- Memory gate: `MemoryMax=16000000000`, `MemorySwapMax=0`, `ram_kill_threshold_bytes=16000000000`, `ram_ok=true`, `ram_limit_killed=false`, `oom_seen=false`.
+- Host memory evidence: `memory_peak_bytes=16000000000`, `memory_max_events=58`. This touched the cgroup max boundary but did not exceed the hard limit or trigger OOM/kill.
+- TTFT gate: `ttft_estimate_ms=12823.978055`. This is the accepted baseline for the next TTFT +20% ceiling: `15388.773666 ms`.
+- Correctness gate: passed. The France answer is semantically correct and coherent; it contains a spelling typo (`Rennowned`) but no semantic issue.
+- VRAM evidence: the run used the strict vendor runner with GPU sampling archived in `resource_samples.tsv`.
+- Exact command and environment are committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/accepted-hard16g-cpu40-vram2.json`.
+
+Rejected higher-rate candidates:
+
+- `cpu_moe=37`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044444Z-hard16g-cpu40-vs-cpu37/france-cpu37-vram2gb`, reached `eval_tok_s=8.2` and correct output, but `ttft_estimate_ms=20090.7637`, which exceeds the accepted baseline by more than 20%.
+- `cpu_moe=39`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044615Z-hard16g-cpu39-cpu38/france-cpu39-vram2gb`, reached `eval_tok_s=8.4` and correct output, but `ttft_estimate_ms=18726.305226`, which exceeds the accepted baseline by more than 20%.
+- `cpu_moe=38`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044615Z-hard16g-cpu39-cpu38/france-cpu38-vram2gb`, reached `eval_tok_s=8.0` and correct output, but `ttft_estimate_ms=20417.454608`, which exceeds the accepted baseline by more than 20%.

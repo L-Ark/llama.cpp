@@ -1,0 +1,47 @@
+{
+  "accepted": true,
+  "accepted_at_utc": "2026-07-01T04:44:44Z",
+  "answer": "France is a Western European country known for its rich history, vibrant culture, and significant global influence. It is famous for iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. Rennowned for its cuisine, wine, and fashion, France is also a leader in art, philosophy, and science. The country is a founding member of the European Union and boasts a diverse landscape, from the beaches of the French Riviera to the mountains of the Alps. With Paris as its capital, France is a global center for culture, economy, and politics, and is known for its deep commitment to human rights and the arts.",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T044444Z-hard16g-cpu40-vs-cpu37/france-cpu40-vram2gb",
+  "command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts",
+  "correctness_ok": true,
+  "correctness_reason": "heuristic_pass_manual_review_required",
+  "cpu_moe": 40,
+  "env": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_VRAM_CACHE_GB": "2"
+  },
+  "eval_tok_s": 7.9,
+  "first_answer_ms": 12823.978055,
+  "hard_gates": {
+    "host_ram_under_16gb": true,
+    "output_correct": true,
+    "ram_limit_killed": false,
+    "ttft_20pct_ceiling_ms_for_next_candidate": 15388.773666,
+    "ttft_baseline_ms": 12823.978055
+  },
+  "memory_max_bytes": 16000000000,
+  "memory_max_events": 58,
+  "memory_peak_bytes": 16000000000,
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "oom_seen": false,
+  "prompt": "Please introduce France in a short paragraph.",
+  "prompt_tok_s": 4.7,
+  "ram_kill_threshold_bytes": 16000000000,
+  "ram_ok": true,
+  "reproduce_with_runner": "cd /root/lfz/vendor/llama.cpp-deepseek-v4 && .Agent/run-tools/strict_ds4_runner.py --run-name reproduce-accepted-hard16g-cpu40-vram2 --cpu-moe 40 --vram-cache-gb 2",
+  "repo_commit": "7b2eab7783efe2cb11472ad8e129b04556ed3220",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T044444Z-hard16g-cpu40-vs-cpu37",
+  "systemd": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "unit": "vendor-ds4-16gb-20260701T044444Z-cpu40.service"
+  },
+  "ttft_estimate_ms": 12823.978055,
+  "vram_cache_gb": 2
+}
