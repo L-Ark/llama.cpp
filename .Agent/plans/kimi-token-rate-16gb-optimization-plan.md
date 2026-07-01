@@ -513,6 +513,7 @@ Every implementation step must append one row before and after execution.
 | 2026-07-01 13:37:39 | Phase 2C src1 fix stream-only n16 | Verify stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`: output `France is a country in Western Europe known for its rich history, culture, and`, TTFT 101.88s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT pass; token-rate fail. | Accept as stream correctness progress only. Do not promote as performance. |
 | 2026-07-01 13:42:33 | Phase 2C src1 fix stream-only n32 | Verify longer stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`: output remained coherent about France, TTFT 111.49s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT fail; token-rate fail. | Commit the opt-in stream correctness fix because it restores semantic output and is default-off. Next work must address TTFT/decode speed before any stream/cache promotion. |
 | 2026-07-01 13:51:07 | Phase 2A rerun after src1 fix | Re-test expert pack + 15GB VRAM cache after fixing stream `src1` row selection. | If quality is restored, token rate should improve over 0.20 tok/s; TTFT may still fail because stream prompt eval was slow. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-135107Z-n32-phase2a-src1fix-vram-cache-profile`: quality pass, VRAM peak 31278 MiB / 832 MiB free, read_failures=0, TTFT 114.29s, decode 0.22 tok/s, cache hit 62.3%, up/gate total 13.046 ms/call. | Host RAM/cold/VRAM/read/quality pass; token-rate pass for n32; TTFT fail. | Rejected for promotion due TTFT. Next candidate combines this path with `-t 40 -tb 40`, which previously reduced prompt/TTFT on non-stream baseline. |
+| 2026-07-01 13:57:47 | Phase 2D src1 fix + VRAM cache + `-t 40 -tb 40` | Keep Phase 2A decode gains while reducing TTFT with more CPU threads. | Applying half of the earlier TTFT reduction should bring 114.29s near 99.4s; decode should ideally stay above 0.20 tok/s. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-135747Z-n32-phase2d-src1fix-vram-cache-t40`: quality pass, VRAM peak 31278 MiB, read_failures=0, TTFT 102.37s, decode 0.20 tok/s. | Host RAM/cold/VRAM/read/quality/TTFT pass; token-rate improvement absent. | Rejected for promotion. Need a thread-count balance between `t24` (0.22 tok/s, TTFT fail) and `t40` (TTFT pass, 0.20 tok/s). |
 
 ## Current bottleneck after Phase 0
 
@@ -842,6 +843,55 @@ Rollback:
 - If TTFT still fails, quality regresses, or token rate falls to <=0.20 tok/s,
   reject the candidate and do not stack further env changes on it.
 
+Result:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-135747Z-n32-phase2d-src1fix-vram-cache-t40`
+  passed quality, host RAM, VRAM, read failure, and TTFT gates.
+- TTFT recovered to 102374.15 ms.
+- Decode token rate was 0.20 tok/s, so this is not a performance improvement
+  over the Phase 0 baseline and cannot be promoted.
+
+## Next candidate: Phase 2E thread balance sweep
+
+Design timestamp: 2026-07-01 14:03 UTC.
+
+Current bottleneck:
+
+- `-t 24 -tb 24` with src1fix+VRAM cache improves decode to 0.22 tok/s but
+  fails TTFT at 114.29s.
+- `-t 40 -tb 40` passes TTFT at 102.37s but decode drops to 0.20 tok/s.
+
+Hypothesis:
+
+An intermediate thread count may keep enough CPU parallelism to satisfy TTFT
+while avoiding the decode contention/regression seen at 40 threads.
+
+Sweep order:
+
+1. `-t 32 -tb 32`
+2. If needed, `-t 28 -tb 28`
+3. If needed, `-t 36 -tb 36`
+
+Theoretical upper bound:
+
+- The best observed decode from this path is 0.22 tok/s.
+- The required TTFT is <=106331.72 ms.
+- A successful intermediate setting only needs to keep decode >0.20 tok/s while
+  keeping TTFT below the gate; the expected gain is modest, about 10% on n32.
+
+Acceptance:
+
+- Cold `-n 32`, host RAM <16GB, VRAM near full, quality pass, read_failures=0.
+- TTFT <=106331.72 ms.
+- Token rate >0.20 tok/s.
+- If a sweep point passes, run full cold `-n 96` with that exact setting before
+  promotion.
+
+Rollback:
+
+- Reject any sweep point that fails quality, TTFT, or token-rate gate. Do not
+  commit performance config until full `-n 96` passes.
+
 ## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
 
 Design timestamp: 2026-07-01 13:24 UTC.
@@ -901,5 +951,5 @@ Result:
 
 ## Immediate next action
 
-Run Phase 2D cold `-n 32` with src1 fix + expert pack + 15GB VRAM cache +
-`-t 40 -tb 40`.
+Run Phase 2E cold `-n 32` with src1 fix + expert pack + 15GB VRAM cache +
+`-t 32 -tb 32`.
