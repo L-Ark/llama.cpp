@@ -2237,6 +2237,157 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+## Next candidate: Phase 3S profile-guided 512MiB RAM tier
+
+Design timestamp: 2026-07-02 23:10 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM: 14.901 GiB under strict 16GB cgroup.
+  - VRAM: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E still spends 47796.399 ms in pinned staging host work and performs
+  35734 expert-pack reads on the critical path.
+- Phase 3R proved trace host-prefetch consumption can work but the trace worker
+  hit rate is too low and the eviction/submission overhead dominates.
+
+Hypothesis:
+
+- Use the existing RAM tier instead of a trace worker:
+  - `GGML_MOE_RAM_TIER_MIB=512`
+  - `GGML_MOE_RAM_TIER_PIN=1`
+  - `GGML_MOE_RAM_TIER_PIN_MIB=512`
+  - `GGML_MOE_RAM_TIER_PROFILE=<Phase 3E route-profile.csv>`
+  - `GGML_MOE_RAM_TIER_SKIP=0`
+- RAM tier loads a fixed hot expert set from the Phase 3E route profile into an
+  anonymous mmap and registers it for H2D. This removes repeated expert-pack
+  file reads for the hottest misses without a background scanner, route cursor,
+  or eviction churn.
+- This is an env-only candidate using existing code; it does not change
+  routing, quantization, CUDA kernels, cache keys, or output math.
+
+Theoretical upper bound:
+
+- A 512MiB tier can hold roughly 68-95 experts depending on 5.36-7.44MiB entry
+  size.
+- If the top profile entries cover 10-20% of critical-path staging reads, the
+  best possible full-run savings is roughly 4.8-9.6s from the 47.8s host_stage
+  bucket, before accounting for H2D and startup load overhead.
+- RAM risk is high but measurable:
+  - Phase 3E peak is 14.901 GiB.
+  - Adding a 512MiB resident tier gives a rough expected peak around 15.4GiB,
+    leaving about 0.6GiB headroom under the strict 16GB cap.
+  - Cold-start loading may also create page-cache pressure, so cgroup peak must
+    be treated as authoritative.
+- TTFT risk is also high because RAM tier loading happens during first expert
+  pack access. The TTFT gate remains 106331.72 ms.
+
+Execution:
+
+- No code change.
+- Reuse Phase 3E best runtime env, add the RAM tier env above, and keep
+  diagnostic profile output enabled.
+- Run cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- Continue to cold `-n 32` only if:
+  - host RAM stays below 16GB,
+  - TTFT stays under 106331.72 ms,
+  - RAM tier loads successfully and reports hits,
+  - quality and failure gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and RAM-tier resident/pinned
+  memory.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs must show RAM tier loaded entries and report nonzero RAM-tier hits.
+- `-n 32` must not be slower than Phase 3E `-n 32`:
+  2.24573 s/token, 0.44529 tok/s.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if RAM exceeds 16GB, TTFT exceeds the gate, RAM-tier load or pin fails,
+  RAM-tier hits remain zero, quality/failure gates fail, or matching token-count
+  performance does not improve over Phase 3E.
+
+Result timestamp: 2026-07-02 23:19 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-210604Z-n4-phase3s-ram-tier-512`
+
+Measured result:
+
+- Commit/config: `07e068e4e`, Phase 3E env plus:
+  - `GGML_MOE_RAM_TIER_MIB=512`
+  - `GGML_MOE_RAM_TIER_PIN=1`
+  - `GGML_MOE_RAM_TIER_PIN_MIB=512`
+  - `GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off/route-profile.csv`
+  - `GGML_MOE_RAM_TIER_SKIP=0`
+- RAM tier loaded 90 entries, 510.56MiB resident, 510.56MiB pinned.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 81586.64 ms, inside the 106331.72 ms gate.
+- Decode: 10385.95 ms / 3 runs, 3.46198 s/token, 0.28885 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- RAM tier: hits=86, total=1790, hit_rate=4.8%.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1704, host_stage=2529.102 ms,
+  H2D=370.173 ms.
+- Up/gate: 85 calls, total=53.486 ms/call.
+- Down batch: 160 calls, stage=13.022 ms/call, total=13.191 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-210847Z-n32-phase3s-ram-tier-512`
+
+Measured result:
+
+- RAM tier loaded 90 entries, 510.56MiB resident, 510.56MiB pinned.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79706.47 ms, inside the 106331.72 ms gate.
+- Decode: 70176.25 ms / 31 runs, 2.26375 s/token, 0.44174 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- RAM tier: hits=135, total=13149, hit_rate=1.0%.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=13014, host_stage=17546.082 ms,
+  H2D=2813.961 ms.
+- Up/gate: 869 calls, total=19.378 ms/call.
+- Down batch: 1644 calls, stage=8.664 ms/call, total=8.812 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3S `-n 32`: 2.26375 s/token, 0.44174 tok/s.
+
+Analysis:
+
+- The 512MiB RAM tier satisfies cold-start RAM, TTFT, VRAM, failure, and quality
+  gates, and it successfully serves some H2D reads from RAM.
+- The useful hit rate is too low at attribution length:
+  135 hits / 13149 tier lookups = 1.0%.
+- The top route-profile entries are mostly already captured by the VRAM cache
+  or do not represent the later miss set, so resident host RAM does not remove
+  enough critical-path staging.
+- A smaller tier would likely reduce the already-low hit count. A larger tier
+  would increase TTFT/RAM risk under the strict 16GB cap and is not justified by
+  this hit curve.
+
+Decision:
+
+- Reject Phase 3S.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 ## Next candidate: Phase 3R consume host-prefetch in actual cache miss copy
 
 Design timestamp: 2026-07-02 22:31 CST.
