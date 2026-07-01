@@ -1,0 +1,88 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T08:58:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "44bf509c5",
+  "purpose": "Trace MXFP4 per-block partial sums for DS4 gate stream mismatches and distinguish host activation quantization from CUDA kernel/vec-dot errors.",
+  "code_changes": [
+    "Added default-off GGML_MOE_STREAM_COMPARE_BLOCK_OUT block trace.",
+    "The corrected trace uses the CPU fallback wdata q8_0 row and also records post-src1 re-quantization for sanity checking."
+  ],
+  "invalid_or_superseded_runs": [
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T084754Z-cold-ds4-gate-stream-block-compare/france-cpu40-vram2gb",
+      "reason": "Initial block trace used post-scatter src1->data only; the corrected wdata trace supersedes it."
+    }
+  ],
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T085325Z-cold-ds4-gate-stream-block-compare-wdata/france-cpu40-vram2gb",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 2,
+      "drop_caches_before_case": true,
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+      "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8",
+      "GGML_MOE_STREAM_COMPARE_BLOCK_OUT": "{case_dir}/block_compare.csv"
+    },
+    "eval_tok_s": 2.5,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 54019.149062,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 32703,
+    "memory_file_bytes": 14960013312,
+    "pgmajfault": 344653,
+    "workingset_refault_file": 7680943,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "answer_quality": "Degenerated into repeated punctuation/list pattern."
+  },
+  "compare_summary": [
+    {
+      "seq": 0,
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 35,
+      "cpu_value": 1.64784455,
+      "gpu_value": 0.0,
+      "cpu_wdata_total": 1.64784458,
+      "post_src1_total": 1.64784458
+    },
+    {
+      "seq": 3,
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 222,
+      "cpu_value": 10.0311499,
+      "gpu_value": 10.0311489,
+      "cpu_wdata_total": 10.0311499,
+      "post_src1_total": 10.0311499
+    },
+    {
+      "seq": 4,
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 245,
+      "cpu_value": 9.97797775,
+      "gpu_value": -0.41251725,
+      "cpu_wdata_total": 9.97797799,
+      "post_src1_total": 9.97797799
+    },
+    {
+      "seq": 7,
+      "tensor": "blk.1.ffn_gate_exps.weight",
+      "expert": 97,
+      "cpu_value": 0.415755332,
+      "gpu_value": -1.87617469,
+      "cpu_wdata_total": 0.415755354,
+      "post_src1_total": 0.415755354
+    }
+  ],
+  "conclusion": "Host-side activation row selection and q8_0/q8_1-style quantization reproduce the CPU result. The DS4 gate stream mismatch remains in the CUDA MXFP4 MMVQ vec-dot/kernel path or its low-level launch assumptions.",
+  "next_steps": [
+    "Test CUDA VDR_MXFP4_Q8_1_MMVQ=2 to match SYCL, then rerun the same gated compare.",
+    "If VDR=2 does not fix correctness, add a CUDA-side single-row debug kernel that writes per-block partial sums for one failing row."
+  ]
+}

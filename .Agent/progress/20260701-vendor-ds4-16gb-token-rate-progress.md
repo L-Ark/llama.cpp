@@ -160,3 +160,16 @@ Rejected higher-rate candidates:
 - Result: rejected. `eval_tok_s=2.3`, `prompt_tok_s=0.6`, `ttft_estimate_ms=53691.425728`, `memory_peak_bytes=16000000000`, `memory_max_events=33434`, `pgmajfault=344445`, `workingset_refault_file=7776321`, `correctness_ok=false`.
 - `compare.csv` first eight rows were again identical to the ids-kernel, `DONTNEED=0`, and `VRAM_CACHE_GB=0` runs.
 - Interpretation: the dedicated MoE ids kernel is not the source of the numeric mismatch. The remaining likely layer is the MXFP4/q8_1 CUDA vec-dot or quantized activation layout itself. Next diagnostic should compare per-block partial sums for one matching and one failing expert.
+
+### 2026-07-01T08:53:25Z - Rejected DS4 gate stream MXFP4 block compare
+
+- Purpose: localize the remaining DS4 MXFP4 stream mismatch below the full expert dot product by tracing per-block partial sums for the same row/column where CPU-vs-GPU compare reports the maximum error.
+- Code change: added default-off `GGML_MOE_STREAM_COMPARE_BLOCK_OUT=<path>`. It writes `block_compare.csv` when `GGML_MOE_STREAM_COMPARE_CPU_OUT` is also active. The trace records per-32-element MXFP4 block partial sums using the CPU fallback `wdata` q8_0 row and a post-src1 re-quantization check.
+- First diagnostic run: `/root/lfz/runs/vendor-ds4-16gb/20260701T084754Z-cold-ds4-gate-stream-block-compare/france-cpu40-vram2gb`.
+  - Result was rejected and correctness failed, as expected. The first implementation used post-scatter `src1->data` only, which made some rows appear to match the wrong GPU value and showed the trace needed to use CPU fallback `wdata`.
+- Corrected diagnostic run: `/root/lfz/runs/vendor-ds4-16gb/20260701T085325Z-cold-ds4-gate-stream-block-compare-wdata/france-cpu40-vram2gb`.
+  - Result: rejected. `eval_tok_s=2.5`, `prompt_tok_s=0.6`, `ttft_estimate_ms=54019.149062`, `memory_peak_bytes=16000000000`, `memory_max_events=32703`, `pgmajfault=344653`, `workingset_refault_file=7680943`, `correctness_ok=false`.
+  - `compare.csv` remained identical to prior gate-stream failures: examples include expert `35` CPU `1.64784455` versus GPU `0`, expert `245` CPU `9.97797775` versus GPU `-0.41251725`, and expert `222` matching to about `1e-6`.
+  - `block_compare.csv` showed `cpu_wdata_total` reproduces the CPU compare value for all eight rows: seq `0` total `1.64784458`, seq `1` total `5.24980289`, seq `4` total `9.97797799`, seq `7` total `0.415755354`.
+  - `post_src1_total` matched `cpu_wdata_total` for all eight rows, so the host-side q8_0/q8_1-style activation quantization and row selection are not the source of the GPU mismatch.
+- Interpretation: the remaining bug is in the CUDA MXFP4 MMVQ vec-dot/kernel path or its low-level launch assumptions. A concrete next test is to validate the CUDA-only `VDR_MXFP4_Q8_1_MMVQ=4` choice against SYCL's `VDR_MXFP4_Q8_1_MMVQ=2`; higher-level cache, DONTNEED, ids-kernel, and activation quantization have now been ruled out.
