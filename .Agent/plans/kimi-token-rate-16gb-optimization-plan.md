@@ -3133,6 +3133,69 @@ Rollback:
 - Reject if prefetch is inactive/useless, output quality changes, TTFT exceeds
   the gate, RAM/VRAM gates fail, or `-n 32` token rate regresses.
 
+Interim result timestamp: 2026-07-02 21:22 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201720Z-n4-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 74687.68 ms, inside the 106331.72 ms gate.
+- Decode: 10645.22 ms / 3 runs, 3.54841 s/token, 0.28182 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=69, hits=69, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=803, misses=1741, preloads=69, hit_rate=31.6%.
+  - pinned staging: copies=1780, host_stage=2721.677 ms,
+    h2d=387.109 ms.
+  - up/gate: total=27.665 ms/call.
+  - down batch: stage=11.462 ms/call, total=11.636 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201930Z-n32-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 71086.16 ms, inside the 106331.72 ms gate.
+- Decode: 67232.53 ms / 31 runs, 2.16879 s/token, 0.46109 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=738, hits=738, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+  - pinned staging: copies=13136, host_stage=17294.231 ms,
+    h2d=2842.521 ms.
+  - up/gate: total=18.269 ms/call.
+  - down batch: stage=7.107 ms/call, total=7.259 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3J depth 1 only `-n 32`: 2.24900 s/token, 0.44464 tok/s.
+- Phase 3L `-t 28 -tb 32` only `-n 32`: 2.28465 s/token,
+  0.43770 tok/s.
+- Phase 3M combined `-n 32`: 2.16879 s/token, 0.46109 tok/s.
+
+Analysis:
+
+- The interaction is beneficial even though both individual changes missed the
+  Phase 3E threshold.
+- Depth 1 prefetch reduces down stage, and lowering decode threads reduces the
+  total contention enough to improve `-n 32`.
+
+Decision:
+
+- Phase 3M is a valid gated improvement at `-n 32`; record and push
+  immediately.
+- Continue to full cold `-n 96` promotion. Accept only if full `-n 96` beats
+  Phase 3E 2.72551 s/token / 0.36690 tok/s with all hard gates passing.
+
 Result timestamp: 2026-07-02 21:00 CST.
 
 Smoke run:
@@ -3303,6 +3366,60 @@ Decision:
 - Reject `-t 28 -tb 32` for promotion.
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3M combine depth 1 prefetch with lower decode threads
+
+Design timestamp: 2026-07-02 21:20 CST.
+
+Current bottleneck:
+
+- Phase 3J depth 1 prefetch improved down stage but missed the Phase 3E token
+  rate by a small margin:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3J `-n 32`: 2.24900 s/token.
+- Phase 3L `-t 28 -tb 32` regressed alone, but its smoke showed lower short-run
+  host_stage and up/gate than `-t 40`.
+
+Hypothesis:
+
+- Combining shallow prefetch with fewer decode threads may retain down-stage
+  improvement while reducing CPU contention from prefetch work.
+- Test:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`
+  - `-t 28 -tb 32`
+
+Theoretical upper bound:
+
+- The maximum plausible gain is small because both individual candidates missed
+  Phase 3E on `-n 32`.
+- If the interaction removes only 0.2-0.5s of contention over `-n 32`, it could
+  cross the Phase 3E line and justify a full run.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best env plus depth 1 prefetch and
+  `-t 28 -tb 32`.
+- If smoke passes all gates and prefetch is active, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch must be active and useful.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if prefetch is inactive/useless, output quality changes, TTFT exceeds
+  the gate, RAM/VRAM gates fail, or `-n 32` token rate regresses.
 
 Result timestamp: 2026-07-02 21:09 CST.
 
