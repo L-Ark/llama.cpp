@@ -2802,6 +2802,68 @@ Decision:
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
 
+## Next candidate: Phase 3H per-name CPU `MUL_MAT_ID` attribution
+
+Design timestamp: 2026-07-02 20:36 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` is current best, but the next actionable bucket is still
+  inside the CPU `MUL_MAT_ID` path:
+  - full `-n 96` pinned staging host_stage=47796.399 ms.
+  - full `-n 96` down batch stage=12.205 ms/call.
+  - Phase 3E `-n 32` CPU profile still showed `MUL_MAT_ID` fallback_t0
+    24.920 ms/call after `cuda_single` was removed.
+- The aggregate profile does not identify which tensor names/layers produce the
+  remaining fallback and total wall time.
+
+Hypothesis:
+
+- Add default-off per-name attribution under `GGML_KIMI_CPU_MOE_PROFILE=1`.
+- Record top `MUL_MAT_ID` source tensor names by:
+  - call count.
+  - thread-0 total wall time.
+  - fallback thread-0 wall time.
+  - down-batch accepted/declined counts.
+- This will distinguish whether the remaining cost is concentrated in
+  `ffn_down_exps` batch declines, non-down `MUL_MAT_ID` tensors, or specific
+  layers.
+
+Theoretical value:
+
+- If most fallback time is from non-down tensors, the next optimization is to
+  extend the GPU batch path or specialize those tensors.
+- If most fallback time is from down batch declines, the next optimization is to
+  fix the decline condition.
+- If time is spread across many tiny names, the next optimization target is
+  scheduler/fusion overhead, not another cache tuning pass.
+
+Execution:
+
+- Implement default-off per-name attribution in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Build remotely.
+- Run cold `-n 4` with current best env plus:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- If smoke passes, run cold `-n 32` with the same profile env.
+- Do not claim performance improvement from this diagnostic phase.
+
+Acceptance:
+
+- Code builds and remains default-off.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Logs include `[kimi_cpu_moe_name_profile]` top entries.
+
+Rollback:
+
+- Revert if the diagnostic code changes default behavior, fails to build,
+  produces ambiguous names/timings, or profiling overhead breaks the cold-start
+  gates.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
