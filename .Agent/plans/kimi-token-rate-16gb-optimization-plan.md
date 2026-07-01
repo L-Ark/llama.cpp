@@ -3225,6 +3225,50 @@ Rollback:
 - Revert if build fails, default execution path changes, output quality fails,
   or graph profile adds unacceptable overhead to the attribution runs.
 
+Implementation result timestamp: 2026-07-02 18:28 CST.
+
+Code:
+
+- Commit: `a2b7f6161 llama: add Kimi graph wall profiling`.
+- Remote build: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-182810Z-n4-phase3b-graph-profile`
+
+Measured result:
+
+- Commit/config: `a2b7f6161`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105156.37 ms, inside the 106331.72 ms gate.
+- Decode: 13617.57 ms / 3 runs, 4.53919 s/token, 0.22030 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Graph profile:
+  - submit: calls=4, total=118750.987 ms, avg=29687.747 ms/call.
+  - sync: calls=24, total=2.359 ms, avg=0.098 ms/call.
+  - decode sync: calls=3, total=2.313 ms.
+- MoE wall profile:
+  - up/gate total=26.528 ms/call, wall=26.619 ms/call,
+    wall_gap=0.091 ms/call.
+  - down total=13.042 ms/call, wall=13.703 ms/call,
+    wall_gap=0.661 ms/call.
+
+Analysis:
+
+- The graph profile confirms that the backend work is effectively happening in
+  `graph_compute_async` submit, not in the later `synchronize()` call.
+- This explains why prior local stream/copy optimizations did not map cleanly
+  to eval time: the next bottleneck has to be attributed inside the scheduler
+  graph compute path or backend graph splits, not at context-level sync.
+
+Decision:
+
+- The `-n 4` graph profile passes all gates and prints the required data.
+- Continue to cold `-n 32` for stable attribution.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
