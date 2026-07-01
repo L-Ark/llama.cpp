@@ -1096,3 +1096,33 @@ Rollback:
 - Reject if output quality changes, TTFT exceeds the gate, read_failures become
   nonzero, cgroup OOM occurs, or full `-n 96` does not improve over accepted
   Phase 2E `0.21 tok/s / 4.70878 s/token`.
+
+Result:
+
+- Result timestamp: 2026-07-01 14:28 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-142246Z-n32-phase2f-parallel-upgate`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous`
+- TTFT: 103570.58 ms, within the 106331.72 ms gate.
+- Decode: 141731.47 ms / 31 runs, 4.57198 s/token, 0.22 tok/s.
+- Comparison: accepted Phase 2E smoke was 4.53227 s/token, so this is slower.
+- Read/cache status: read_failures=0, VRAM cache hit_rate=62.3%.
+- Parallel path did activate:
+  `IQ2_S parallel up/gate streams active` and
+  `up/gate parallel CPU staging active`.
+- Gap analysis:
+  - Phase 2E smoke up/gate total was 13.652 ms/call.
+  - Phase 2F parallel up/gate total was 13.642 ms/call, effectively unchanged.
+  - The split profile shows `up=8.390 ms`, `gate=3.745 ms`,
+    `up_wait=5.158 ms`, and `gate_wait=7.112 ms`; stream/event wait and
+    staging synchronization consume the expected overlap.
+  - iouring became active (`iouring_reads=2766`) but did not improve end-to-end
+    decode because average inflight was only about 2.72 jobs and the up/gate
+    bucket remained flat.
+- Decision: reject Phase 2F; do not run full `-n 96` and do not promote these
+  env variables.
