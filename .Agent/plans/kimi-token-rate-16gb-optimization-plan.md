@@ -3447,6 +3447,64 @@ Decision:
 - Continue to cold `-n 32` to confirm the same CPU MoE split dominance in the
   decode phase, not just prompt/smoke.
 
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-184335Z-n32-phase3c-split-profile`
+
+Measured result:
+
+- Commit/config: `8040754e0`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104527.53 ms, inside the 106331.72 ms gate.
+- Decode: 97363.60 ms / 31 runs, 3.14076 s/token, 0.31839 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Split profile:
+  - total: signatures=242, calls=3904, wall=201827.779 ms.
+  - top split signatures are CPU backend MoE layer groups.
+  - examples:
+    - `ffn_moe_swiglu-1` to `ffn_moe_down-1`: calls=31,
+      wall=5000.364 ms, avg=161.302 ms/call.
+    - `ffn_moe_swiglu-2` to `ffn_moe_down-2`: calls=31,
+      wall=4979.801 ms, avg=160.639 ms/call.
+    - `ffn_moe_gate-9` to `ffn_moe_down-9`: calls=31,
+      wall=3022.938 ms, avg=97.514 ms/call.
+    - `ffn_moe_gate-51` to `ffn_moe_down-51`: calls=31,
+      wall=2770.623 ms, avg=89.375 ms/call.
+- Graph profile:
+  - submit: calls=32, total=201850.355 ms.
+  - sync: calls=192, total=24.157 ms.
+- MoE wall profile:
+  - up/gate: calls=869, wall=18.028 ms/call.
+  - down: calls=1644, wall=9.609 ms/call.
+
+Analysis:
+
+- Phase 3C confirms the decode bottleneck is dominated by CPU backend MoE
+  splits, not context synchronization and not the measured MoE stream function
+  wall gaps.
+- The split total almost exactly matches graph submit time:
+  201827.779 ms split wall vs 201850.355 ms submit wall.
+- The top decode splits call CPU backend groups that include MoE swiglu/gate/
+  down nodes. The custom CUDA MoE stream functions run inside this CPU backend
+  path but account for only part of the split wall time.
+- The next bottleneck to isolate is inside the CPU MoE op implementation around
+  swiglu/gate/down orchestration, especially time outside
+  `ggml_cuda_moe_stream_up_gate_batch` and `ggml_cuda_moe_stream_batch`.
+
+Decision:
+
+- Phase 3C split profiling is accepted as diagnostic code.
+- Do not claim token-rate improvement from Phase 3C.
+- Next candidate should instrument the CPU MoE op path by node/op family, or
+  move the MoE fused ops to a real CUDA backend path so scheduler split
+  execution no longer appears as CPU backend work.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
