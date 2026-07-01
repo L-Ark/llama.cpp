@@ -370,6 +370,7 @@ def main() -> int:
     parser.add_argument("--memory-max-bytes", type=int, default=MEMORY_MAX_BYTES)
     parser.add_argument("--ram-kill-threshold-bytes", type=int, default=MEMORY_MAX_BYTES)
     parser.add_argument("--drop-caches-before-case", action="store_true")
+    parser.add_argument("--env", action="append", default=[], help="Additional environment variable as KEY=VALUE. VALUE may contain {case_dir}.")
     parser.add_argument("--extra-arg", action="append", default=[])
     args = parser.parse_args()
 
@@ -413,6 +414,16 @@ def main() -> int:
         "GGML_CUDA_DISABLE_GRAPHS": "1",
         "GGML_MOE_STREAM_DONTNEED": "1",
     }
+    extra_env: dict[str, str] = {}
+    for item in args.env:
+        if "=" not in item:
+            print(f"--env must be KEY=VALUE, got: {item}", file=sys.stderr)
+            return 2
+        key, value = item.split("=", 1)
+        if not key:
+            print(f"--env key must not be empty: {item}", file=sys.stderr)
+            return 2
+        extra_env[key] = value
 
     summaries: list[dict[str, object]] = []
     extra_args = []
@@ -429,7 +440,7 @@ def main() -> int:
             binary=args.binary,
             model=args.model,
             cpu_moe=cpu_moe,
-            env=env,
+            env={**env, **{key: value.format(case_dir=str(case_dir)) for key, value in extra_env.items()}},
             extra_args=extra_args,
             ram_kill_threshold_bytes=args.ram_kill_threshold_bytes,
         )
