@@ -908,6 +908,68 @@ Result for `-t 32 -tb 32` smoke:
 - Decision: pass smoke gate. Next practice is a full cold `-n 96` with the exact
   same configuration before any performance promotion.
 
+Full `-n 96` validation result:
+
+- Result timestamp: 2026-07-01 14:18 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-141053Z-n96-phase2e-src1fix-vram-cache-t32`
+- Commit/config baseline: `051956009` plan state, code includes
+  `9b12713e2 cuda: fix Kimi MoE stream src1 row selection`.
+- Cold start: `sync; echo 3 > /proc/sys/vm/drop_caches` before launch.
+- Host RAM cgroup: `memory.max=16000000000`, `memory.swap.max=0`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- Page cache final: 13.783 GiB.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also recognized for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- TTFT: 105685.10 ms, within the 106331.72 ms gate.
+- Decode: 362575.94 ms / 77 runs, 4.70878 s/token, 0.21 tok/s.
+- MoE cache/read status: read_failures=0, VRAM cache hit_rate=63.1%.
+- Up/gate profile: calls=2157, avg_active=8.00, total=13.489 ms/call.
+- Decision: accept Phase 2E as a valid constrained improvement over the Phase 0
+  `-n 96` baseline of 0.20 tok/s / 5.01989 s/token. The gain is modest but
+  satisfies host RAM, VRAM use, quality, TTFT, and cold-start requirements.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase2e-src1fix-vram-cache-t32
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2e_n96_t32_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=300000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
+
 ## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
 
 Design timestamp: 2026-07-01 13:24 UTC.
@@ -967,5 +1029,6 @@ Result:
 
 ## Immediate next action
 
-Run Phase 2E full cold `-n 96` with src1 fix + expert pack + 15GB VRAM cache +
-`-t 32 -tb 32`, using the same cold-start and 16GB cgroup harness as the smoke.
+Design the next optimization based on the accepted Phase 2E bottleneck:
+`up/gate total=13.489 ms/call`, VRAM cache hit_rate=63.1%, and remaining misses
+still requiring expert-pack staging/H2D under the 16GB host-RAM cap.
