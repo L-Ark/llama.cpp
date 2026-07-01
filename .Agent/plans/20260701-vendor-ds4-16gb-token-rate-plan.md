@@ -1807,6 +1807,19 @@
 - `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
 - `rollback_status`: mixed top3/top4 branch closed. Both symmetric mixed probes improved token rate to `2.5` but failed manual correctness due the same incomplete answer ending. Revert per-tensor source patch and clean rebuild; current effective SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：expert-keep-top3-early20-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-early20-top4-rest`
+- `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
+- `status`: planned
+- `hypothesis`: Global top3 and up/down mixed top3 both improve speed but cause the France answer to become long and end incomplete. This suggests the approximation is too broad, not necessarily that every layer must stay top4. Keeping the current correct top4 policy as fallback while applying top3 only to earlier MoE layers (`blk.0-19`) may preserve later-layer output control/EOS behavior while saving part of the up/down fallback work.
+- `theoretical_upper_bound`: Global top3 versus top4 roughly saves one routed expert out of six for both up/down across 40 CPU-MoE layers, with coarse upper bound about `12.9s`. Applying top3 to half the layers gives a rough additional bound around `6.4s` before overhead/page effects. Expected speed should land between top4 `2.3 tok/s` and rejected global/mixed top3 observations (`2.5-2.8 tok/s`).
+- `implementation`: Add default-off layer-selective override in `ggml/src/ggml-cpu/ggml-cpu.c`. Existing `GGML_MOE_KEEP_TOPK_UPDOWN=4` remains the fallback. New env `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-19` plus `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` overrides topK only for matching `blk.<layer>.ffn_up_exps` and `blk.<layer>.ffn_down_exps`; unset env preserves current top4 SOTA behavior.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-19`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
