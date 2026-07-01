@@ -8384,3 +8384,71 @@ Promotion:
 - n96 promotion must beat Phase 3ZD strict baseline:
   2.69143 s/token, 0.37155 tok/s.
 - If n96 is slower, reject the config and keep Phase 3ZD as accepted runtime.
+
+Result timestamp: 2026-07-02 23:37 UTC / 2026-07-03 07:37 CST.
+
+Strict n32 depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-233303Z-n32-phase3zg-down-prefetch-depth2`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.849724 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  70547.30 ms, gate PASS.
+- Decode:
+  69.38871 s / 31 tokens = 2.23835 s/token, 0.44676 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=1446, hits=1446, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13136, host_stage=17221.128 ms, h2d=2842.400 ms.
+- Up/gate CPU profile:
+  calls=869, total=23.313 ms/call, cuda_batch=23.147,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=27.670 ms/call, cuda_batch=2.747,
+  fallback_t0=24.876, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=6.504 ms/call, kernel=0.112 ms/call,
+  wall=6.706 ms/call.
+- VRAM cache:
+  hits=14363, misses=12597, preloads=1446, hit_rate=53.3%.
+
+Comparison:
+
+- Phase 3ZF no-prefetch n32:
+  2.31041 s/token, 0.43282 tok/s.
+- Phase 3ZE depth=8 n32:
+  2.29417 s/token, 0.43589 tok/s.
+- Phase 3ZG depth=2 n32:
+  2.23835 s/token, 0.44676 tok/s.
+- Depth=2 is the best strict n32 result so far.
+- Mechanism:
+  - retains useful down staging reduction:
+    down stage 9.035 -> 6.504 ms/call vs no-prefetch,
+  - avoids depth=8's severe up/gate contention:
+    up/gate 29.081 -> 23.313 ms/call,
+  - improves host staging:
+    17701.828 -> 17221.128 ms.
+
+Decision:
+
+- Promote depth=2 to strict n96.
+- Full acceptance still requires beating Phase 3ZD strict n96:
+  2.69143 s/token, 0.37155 tok/s, with full France paragraph quality PASS.
