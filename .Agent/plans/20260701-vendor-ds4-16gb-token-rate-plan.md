@@ -1830,7 +1830,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-early10-top4-rest`
 - `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_correctness_and_speed
 - `hypothesis`: Top3 over early20 layers still fails output coherence, but a narrower early10 override may reduce enough up/down fallback work to beat top4 while preserving most of the correct top4 behavior. This tests whether there is a smaller safe approximation region before abandoning layer-selective top3.
 - `theoretical_upper_bound`: Applying top3 to one quarter of the 40 CPU-MoE layers gives a rough additional bound of `12.9s / 4 ≈ 3.2s` versus top4 before overhead/page effects. The expected gain is modest; promote only if measured `eval_tok_s > 2.3` and manual correctness passes.
 - `implementation`: Reuse the layer-selective source patch. Existing `GGML_MOE_KEEP_TOPK_UPDOWN=4` remains fallback; `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-9` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` override only early layers.
@@ -1838,6 +1838,11 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T232423Z-20260702_expert_keep_top3_early10_top4_rest/france-cpu40-vram0gb`
+- `result`: rejected. `eval_tok_s=2.1`, `prompt_tok_s=0.9`, `TTFT=39796.829755ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14964908032`, `pgmajfault=443589`, `workingset_refault_file=9083375`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=false`, `correctness_reason=degenerate_text`.
+- `correctness_manual_review`: fail. The initial English France paragraph is mostly correct, but the model continues into an unrelated Chinese detailed-answer section (`## 2. 详细解答` / `### 2.1 法国概况`), violating the required short coherent paragraph. It also does not beat top4 `2.3 tok/s`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: layer-selective top3 branch closed. Early20 improved speed but failed truncation/repetition; early10 failed both speed and correctness. Source patch reverted and clean rebuild completed. Current effective SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
