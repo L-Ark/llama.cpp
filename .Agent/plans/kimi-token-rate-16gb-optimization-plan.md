@@ -8452,3 +8452,72 @@ Decision:
 - Promote depth=2 to strict n96.
 - Full acceptance still requires beating Phase 3ZD strict n96:
   2.69143 s/token, 0.37155 tok/s, with full France paragraph quality PASS.
+
+Full promotion result timestamp: 2026-07-02 23:42 UTC / 2026-07-03 07:42 CST.
+
+Strict n96 depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.719044 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  74433.41 ms, gate PASS.
+- Decode:
+  219.13904 s / 85 tokens = 2.57811 s/token, 0.38788 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3994, hits=3994, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35733, host_stage=50722.324 ms, h2d=7746.187 ms.
+- Up/gate CPU profile:
+  calls=2381, total=29.981 ms/call, cuda_batch=29.790,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=18.436 ms/call, cuda_batch=3.771,
+  fallback_t0=14.612, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=8.779 ms/call, kernel=0.111 ms/call,
+  wall=8.955 ms/call.
+- VRAM cache:
+  hits=37837, misses=36211, preloads=3994, hit_rate=51.1%.
+
+Comparison against accepted strict baseline:
+
+- Phase 3ZD strict n96 no-prefetch:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZG strict n96 depth=2:
+  2.57811 s/token, 0.38788 tok/s.
+- Improvement:
+  - 0.11333 s/token faster,
+  - about 4.2% lower seconds/token,
+  - about 4.4% higher token rate.
+
+Decision:
+
+- Accept Phase 3ZG depth=2 as the current best strict n96 runtime.
+- This is a config-level improvement; no source change is required.
+- Accepted runtime delta from Phase 3ZD:
+  - set `GGML_MOE_PREFETCH_DOWN=1`,
+  - set `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Reproduction:
+  use `command.txt` and `env.txt` in the run directory after cold-start cache
+  drop inside a cgroup with `memory.max=15900000000` and `memory.swap.max=0`.
+- Future optimization target:
+  beat 2.57811 s/token under the same strict cold-start n96 gates.
