@@ -2263,6 +2263,51 @@ Decision:
   launch/read gates.
 - Continue to cold `-n 96`.
 
+Full-length result timestamp: 2026-07-02 16:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-164405Z-n96-phase2o-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, Phase 2M split-cache code with
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 103968.03 ms, inside the 106331.72 ms gate.
+- Decode: 302382.85 ms / 85 runs, 3.55745 s/token, 0.28110 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1210 slots, 7.44 MiB slot, hits=18825, misses=17191,
+    hit_rate=52.3%.
+  - upgate: 1119 slots, 5.36 MiB slot, hits=17370, misses=20726,
+    hit_rate=45.6%.
+- Pinned staging: copies=33515, host_stage=46970.468 ms, h2d=7236.745 ms.
+- Up/gate profile: calls=2381, total=23.427 ms/call.
+- Down profile: calls=4506, stage=10.954 ms/call, total=11.121 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 96`: 3.47192 s/token, 0.29 tok/s.
+- Phase 2M pct45 `-n 96`: 3.52464 s/token, 0.28372 tok/s.
+- Phase 2N pct35 `-n 96`: 3.49838 s/token, 0.28585 tok/s.
+- Phase 2O pct40 `-n 96`: 3.55745 s/token, 0.28110 tok/s.
+- pct40 balances hit rates but does not improve end-to-end decode; up/gate
+  remains slower than Phase 2H and total staging stays high.
+
+Decision:
+
+- Reject pct40 for full-length promotion.
+- Keep Phase 2H as the current best full `-n 96` configuration.
+- Keep Phase 2M split-cache code only as default-off functionality and as the
+  current best `-n 32` constrained config.
+- Do not continue fixed split-budget sweeps for `-n 96` without a new
+  bottleneck explanation. The next n96-focused design should target a different
+  mechanism: reducing graph replay/upgate cost, reducing the number of expert
+  loads, or making cache partitioning adaptive rather than fixed.
+
 Result timestamp: 2026-07-01 16:28 UTC.
 
 Run:
