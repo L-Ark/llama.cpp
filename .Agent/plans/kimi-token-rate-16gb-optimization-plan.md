@@ -1029,8 +1029,8 @@ Result:
 
 ## Immediate next action
 
-Run Phase 2G cold `-n 32` smoke with the accepted Phase 2E config plus GPU down
-batch and GPU handoff.
+Implement Phase 2H: make GPU down batch Kimi-correct on a tiny decode-only
+validation before any performance run.
 
 ## Next candidate: Phase 2F parallel up/gate streams
 
@@ -1220,3 +1220,70 @@ Result:
     active=8 Kimi down tensors.
   - A future down optimization must first fix down batch correctness on a tiny
     comparison run before any performance measurement.
+
+## Next candidate: Phase 2H decode-only down batch correctness
+
+Design timestamp: 2026-07-01 15:02 UTC.
+
+Current bottleneck:
+
+- Phase 2G showed that down batch is the right target, but the existing path is
+  not correct for Kimi.
+- Failure modes from the aborted smoke:
+  - Prompt/multi-token phase: `reason=multirow_not_supported`.
+  - Decode phase: `reason=launch_moe_mmvq_compact_batch` with active=8 on many
+    `ffn_down_exps` tensors.
+  - Output corrupted to `France the. with myol:,ing andn of of`.
+- Code inspection:
+  - CPU bridge calls down batch whenever `GGML_MOE_STREAM_DOWN_BATCH` is set.
+  - `ggml_cuda_moe_stream_batch` rejects any expert with more than one routed
+    row, so prompt-phase down must be excluded until a true multirow GPU down
+    implementation exists.
+  - `launch_moe_mmvq_compact_batch` only allows `IQ3_XXS` and `IQ2_S`, while
+    Kimi down tensors include `IQ3_S` (`type=23`) as well as `IQ2_S`
+    (`type=11`).
+
+Hypothesis:
+
+First make the down batch path decode-only and type-complete:
+
+1. In `ggml_cuda_moe_stream_batch`, if any expert has `matrix_row_counts[e] > 1`,
+   decline without changing output. This keeps prompt/multi-token phase on the
+   known-correct CPU fallback.
+2. Add `IQ3_S` to `launch_moe_mmvq_compact_batch`, matching CUDA MMVQ support
+   already present in `ggml/src/ggml-cuda/mmvq.cu`.
+3. Run a tiny cold correctness smoke with `-n 2` or `-n 4`,
+   `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_GPU_HANDOFF=0` initially, and
+   `GGML_MOE_STREAM_DECLINE_DEBUG=1`. The expected behavior is prompt down
+   declines cleanly for multirow, decode down activates for single-token rows,
+   and the answer prefix remains semantically correct.
+4. Only after non-handoff down correctness is demonstrated should handoff be
+   reintroduced. Handoff can change src1 row addressing and must be verified
+   separately.
+
+Theoretical upper bound:
+
+- This phase is a correctness gate, not a performance promotion.
+- If decode-only down batch becomes correct, the later performance bound remains
+  the Phase 2G estimate: removing half of the unexplained 3.97 s/token CPU
+  bucket would reach about 0.37 tok/s; removing most of it could approach
+  about 1 tok/s before other graph overhead dominates.
+
+Acceptance:
+
+- Build succeeds on the remote CUDA build.
+- Tiny cold smoke under the 16GB cgroup starts from dropped page cache.
+- Host RAM remains below the 16GB cap.
+- Output for the France prompt is not corrupted; for a short smoke it must at
+  least start coherently, e.g. `France is...`.
+- Prompt-phase down declines may occur only because of multirow routing; decode
+  phase must show either down profile calls or no `launch_moe_mmvq_compact_batch`
+  failures.
+- No performance promotion, commit, or full `n96` run until correctness is
+  stable.
+
+Rollback:
+
+- If the tiny smoke corrupts output, fails to build, or still reports decode
+  `launch_moe_mmvq_compact_batch` failures, revert the code changes before
+  trying new performance settings.
