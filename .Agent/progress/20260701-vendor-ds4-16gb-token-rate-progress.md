@@ -28,3 +28,17 @@ Rejected higher-rate candidates:
 - `cpu_moe=37`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044444Z-hard16g-cpu40-vs-cpu37/france-cpu37-vram2gb`, reached `eval_tok_s=8.2` and correct output, but `ttft_estimate_ms=20090.7637`, which exceeds the accepted baseline by more than 20%.
 - `cpu_moe=39`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044615Z-hard16g-cpu39-cpu38/france-cpu39-vram2gb`, reached `eval_tok_s=8.4` and correct output, but `ttft_estimate_ms=18726.305226`, which exceeds the accepted baseline by more than 20%.
 - `cpu_moe=38`, run directory `/root/lfz/runs/vendor-ds4-16gb/20260701T044615Z-hard16g-cpu39-cpu38/france-cpu38-vram2gb`, reached `eval_tok_s=8.0` and correct output, but `ttft_estimate_ms=20417.454608`, which exceeds the accepted baseline by more than 20%.
+
+### 2026-07-01T04:52:53Z - Accepted VRAM cache increase
+
+- Optimization: keep `cpu_moe=40` and increase `GGML_MOE_VRAM_CACHE_GB` from `2` to `4`.
+- Rationale: the previous accepted run spent most cgroup memory on file/page cache and touched the cgroup hard limit. More VRAM cache should reduce streamed expert/page-cache pressure while preserving the same CPU-MoE split and TTFT profile.
+- Accepted current highest compliant token rate: `eval_tok_s=8.2`, `prompt_tok_s=4.8`.
+- Previous accepted token rate: `eval_tok_s=7.9`, so measured gain is about `3.8%`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T045253Z-hard16g-cpu40-vram4/france-cpu40-vram4gb`.
+- Repo commit used for the run: `ed37b098b5ae19d8ca1a8ae04f3359756544e585`.
+- Memory gate: `MemoryMax=16000000000`, `MemorySwapMax=0`, `ram_kill_threshold_bytes=16000000000`, `ram_ok=true`, `ram_limit_killed=false`, `oom_seen=false`.
+- Host memory evidence: `memory_peak_bytes=15793479680`, `memory_max_events=0`. Page cache is included in the cgroup accounting: `file=14950096896`.
+- TTFT gate: `ttft_estimate_ms=12146.360264`, lower than the previous accepted `12823.978055`.
+- Correctness gate: passed. The France answer is semantically correct and coherent; it contains the same spelling typo (`Rennowned`) but no semantic issue.
+- Exact command and environment are committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/accepted-hard16g-cpu40-vram4.json`.
