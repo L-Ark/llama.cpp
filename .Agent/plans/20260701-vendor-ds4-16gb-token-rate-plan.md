@@ -1773,13 +1773,32 @@
 
 - `attempt_id`: `20260702-expert-keep-mixed-up3-down4`
 - `attempt_kind`: `source-probe/approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_manual_correctness_truncated_output
 - `hypothesis`: Global top3 is fast but over-prunes enough to produce repetitive/truncated France answers, while global top4 is correct. A mixed policy that keeps `top3` for `ffn_up_exps` and `top4` for `ffn_down_exps` may capture part of top3's speedup while preserving more output quality through the down projection path.
 - `theoretical_upper_bound`: If up/down fallback costs are roughly similar (`up≈41.1s`, `down≈36.2s` from op-wall trace), moving only up from top4 to top3 can ideally save about one routed expert out of six for the up path, roughly `41.1s / 6 ≈ 6.85s` before overhead/page effects. This is about half the additional theoretical gain of global top3 versus top4, so an improvement over `2.3 tok/s` is plausible but should be smaller than the rejected `2.7-2.8 tok/s` observations.
 - `implementation`: Add default-off per-tensor env overrides in `ggml/src/ggml-cpu/ggml-cpu.c`: `GGML_MOE_KEEP_TOPK_UP` applies to `ffn_up_exps`, `GGML_MOE_KEEP_TOPK_DOWN` applies to `ffn_down_exps`. If unset, both fall back to existing `GGML_MOE_KEEP_TOPK_UPDOWN`, preserving top4 SOTA behavior.
 - `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UP=3`, `GGML_MOE_KEEP_TOPK_DOWN=4`, no `GGML_MOE_KEEP_TOPK_UPDOWN`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit before promotion.
+- `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T230406Z-20260702_expert_keep_mixed_up3_down4/france-cpu40-vram0gb`
+- `result`: rejected despite speed improvement. `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=38796.748248ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15009513472`, `pgmajfault=379585`, `workingset_refault_file=7266975`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic but manual review failed.
+- `correctness_manual_review`: fail. The answer is mostly factual but too long for the short-paragraph prompt and ends with an incomplete trailing phrase: `The country is also known`. This is a coherence/truncation failure, so UP=3/DOWN=4 cannot be accepted.
+- `trace_summary`: `rows=47883`, `src0_ms_sum=29003.06`, `kernel_ms_sum=515.865`, `dontneed_ms_sum=1473.968`, `total_ms_sum=31937.225`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: source patch still retained only to run the symmetric DOWN=3/UP=4 probe below; if that also fails, revert source and clean rebuild. Current effective SOTA remains top4 `2.3 tok/s`.
+
+### 当前执行 attempt：expert-keep-mixed-up4-down3
+
+- `attempt_id`: `20260702-expert-keep-mixed-up4-down3`
+- `attempt_kind`: `source-probe/approximate-pruning`
+- `status`: planned
+- `hypothesis`: UP=3/DOWN=4 still had top3-like truncation. The symmetric policy UP=4/DOWN=3 preserves more up-path expert contribution while pruning the down path by one extra routed expert. If the quality failure is more sensitive to up pruning than down pruning, this may improve over top4 without causing the top3 truncation pattern.
+- `theoretical_upper_bound`: Moving only down from top4 to top3 can ideally save about `36.2s / 6 ≈ 6.03s` before overhead/page effects. Expected gain is slightly smaller than UP=3/DOWN=4 but may preserve correctness better.
+- `implementation`: Reuse the per-tensor env patch from UP=3/DOWN=4: `GGML_MOE_KEEP_TOPK_UP=4`, `GGML_MOE_KEEP_TOPK_DOWN=3`, no `GGML_MOE_KEEP_TOPK_UPDOWN`.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UP=4`, `GGML_MOE_KEEP_TOPK_DOWN=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
 
 ## 记录与验收
