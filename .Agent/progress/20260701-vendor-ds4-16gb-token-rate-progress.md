@@ -208,3 +208,14 @@ Rejected higher-rate candidates:
 - Answer: `France is a Western European country known for its rich history, vibrant culture, and significant global influence...`; semantically correct and coherent.
 - Trace interpretation: vram2 corrected stream had `16642` inserts and summed `src0_ms=73379 ms`; vram8 has `7110` inserts and `src0_ms=36392 ms`. CUDA activation quantization, MXFP4 MMVQ, D2H, sync, and scatter together remain around `1.1 s`, so the bottleneck remains cold expert weight staging/page faults rather than GPU compute.
 - Action: commit and push immediately. Next step is to probe higher VRAM cache sizes under the same 16GB RAM gate to find the cache knee, then stop when VRAM OOM, TTFT regression, or no token-rate gain appears.
+
+### 2026-07-01T09:55:26Z - Accepted cold SOTA with corrected DS4 gate stream and 12GB VRAM cache
+
+- Purpose: continue the VRAM cache knee sweep after vram8 improved cold token rate by reducing corrected stream expert reloads.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T095526Z-cold-ds4-gate-stream-src1-rowmod-vram12-trace/france-cpu40-vram12gb`.
+- Config: `cpu_moe=40`, `vram_cache=12`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`.
+- Result: accepted as current cold SOTA. `eval_tok_s=2.6`, `prompt_tok_s=0.8`, `ttft_estimate_ms=40836.003233`, `memory_peak_bytes=16000000000`, `memory_max_events=23908`, `memory_file_bytes=14958911488`, `pgmajfault=309216`, `workingset_refault_file=3371495`, `ram_ok=true`, `correctness_ok=true`.
+- TTFT gate: original cold vram2 baseline TTFT was `44034.028848 ms`; this run is `-7.3%`, so it passes the TTFT limit.
+- Answer: same coherent France paragraph as the vram8 run, semantically correct.
+- Trace interpretation: vram8 had `7110` inserts and `src0_ms=36392 ms`; vram12 has `5129` inserts and `src0_ms=23564 ms`. The gain is still from fewer expert staging misses/page faults. CUDA quantize/MMVQ/D2H/scatter remain small.
+- Action: commit and push immediately. Next step is to probe one higher VRAM cache size to identify whether there is still useful cache capacity before OOM or diminishing returns.

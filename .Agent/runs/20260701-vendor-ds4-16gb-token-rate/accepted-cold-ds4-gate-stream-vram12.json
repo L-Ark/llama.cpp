@@ -1,0 +1,64 @@
+{
+  "timestamp_utc": "2026-07-01T09:55:26Z",
+  "classification": "accepted_cold_sota",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_commit": "fcc937d01",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T095526Z-cold-ds4-gate-stream-src1-rowmod-vram12-trace/france-cpu40-vram12gb",
+  "command_class": "strict_ds4_runner cold drop_caches 16GB cgroup",
+  "config": {
+    "cpu_moe": 40,
+    "vram_cache_gb": 12,
+    "drop_caches_before_case": true,
+    "env": {
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 2.6,
+    "prompt_tok_s": 0.8,
+    "ttft_estimate_ms": 40836.003233,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 23908,
+    "memory_file_bytes": 14958911488,
+    "pgmajfault": 309216,
+    "workingset_refault_file": 3371495,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "France is a Western European country known for its rich history, vibrant culture, and significant global influence. It is famous for iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. Rennowned for its cuisine, wine, and fashion, France is also a leader in art, philosophy, and science. The country is a founding member of the European Union and boasts a diverse landscape, from the beaches of the French Riviera to the mountains of the Alps. With Paris as its capital, France is a global center for culture, economy, and politics, and is known for its strong sense of national identity and its contributions to world civilization.",
+  "baseline_comparison": {
+    "previous_cold_sota_eval_tok_s": 1.4,
+    "previous_cold_sota_ttft_ms": 47573.774683,
+    "original_cold_vram2_baseline_eval_tok_s": 1.3,
+    "original_cold_vram2_baseline_ttft_ms": 44034.028848,
+    "eval_tok_s_delta_vs_previous_sota": 1.2,
+    "ttft_delta_pct_vs_original_baseline": -7.26,
+    "ttft_gate": "pass_under_20_percent"
+  },
+  "trace_summary": {
+    "rows": 34753,
+    "cache_hits": 29624,
+    "cache_inserts": 5129,
+    "src0_ms_sum": 23564.133,
+    "src1_ms_sum": 184.19,
+    "kernel_ms_sum": 370.203,
+    "d2h_ms_sum": 109.242,
+    "sync_ms_sum": 346.992,
+    "scatter_ms_sum": 44.13,
+    "dontneed_ms_sum": 1162.838,
+    "total_ms_sum": 25786.372,
+    "src0_ms_p95": 4.684,
+    "src0_ms_max": 268.929
+  },
+  "interpretation": "Raising corrected vendor DS4 gate stream VRAM cache from 8GB to 12GB reduced inserts from 7110 to 5129 and summed src0 staging from 36392 ms to 23564 ms. This moved cold eval token rate from 1.4 to 2.6 tok/s while reducing TTFT below the original cold baseline.",
+  "next_steps": [
+    "Commit and push this record immediately as the current accepted cold SOTA.",
+    "Probe the next VRAM cache size to locate the OOM/knee boundary.",
+    "If higher VRAM no longer improves cold token rate, analyze remaining 5129 misses and consider selective residency or broader DS4 stream coverage."
+  ]
+}
