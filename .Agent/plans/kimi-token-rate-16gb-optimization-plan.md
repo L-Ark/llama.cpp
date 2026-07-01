@@ -2237,6 +2237,32 @@ Rollback:
   fail, cache allocation fails, launch/read failures appear, or `-n 96` does
   not improve over Phase 2H.
 
+Result timestamp: 2026-07-02 16:40 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-164058Z-n4-phase2o-split-cache`
+
+Measured result:
+
+- Config: Phase 2M split cache with `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 102663.93 ms, inside the 106331.72 ms gate.
+- Decode: 14358.45 ms / 3 runs, 4.78615 s/token, 0.20894 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1210 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 1119 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue to cold `-n 96`.
+
 Result timestamp: 2026-07-01 16:28 UTC.
 
 Run:
