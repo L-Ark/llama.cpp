@@ -8312,3 +8312,75 @@ Decision:
 - Do not use `GGML_MOE_PREFETCH_DOWN=1` in the accepted runtime unless a future
   implementation isolates prefetch bandwidth/stream contention or throttles it
   adaptively.
+
+## Next candidate: Phase 3ZG throttled down prefetch sweep
+
+Design timestamp: 2026-07-02 23:34 UTC / 2026-07-03 07:34 CST.
+
+Current bottleneck and gap:
+
+- Phase 3ZE depth=8 proved the prefetch mechanism is functionally correct:
+  - n96 prefetch useful-rate=100.0%,
+  - read failures=0,
+  - strict launch failures=0,
+  - quality PASS.
+- It also proved the implementation is too aggressive at full length:
+  - down stage improved 12.023 -> 4.327 ms/call,
+  - down hit-rate improved 45.7% -> 58.0%,
+  - but up/gate regressed 23.352 -> 38.009 ms/call,
+  - total n96 slowed 2.69143 -> 2.71191 s/token.
+- Therefore the bottleneck is no longer "can prefetch help"; it is "how much
+  prefetch can run without contending with up/gate compute/copy".
+
+Hypothesis:
+
+- Lower `GGML_MOE_PREFETCH_DOWN_DEPTH` should reduce prefetch stream pressure
+  and preserve more of the up/gate baseline while still improving down cache
+  misses.
+- Start with depth=2:
+  - expected prefetch load count roughly one quarter of depth=8,
+  - expected down stage improvement smaller than 3ZE,
+  - expected up/gate regression much smaller.
+- If depth=2 is still too aggressive, try depth=1.
+- If depth=2 is clearly better than strict no-prefetch n32 and has low up/gate
+  regression, promote depth=2 to n96.
+
+Theoretical bound:
+
+- Phase 3ZE n96 saved about 7.696 ms/call on 4506 down CUDA calls, a visible
+  down-stage reduction of roughly 34.7 s, but lost about 14.657 ms/call on
+  2381 up/gate calls, roughly 34.9 s, plus extra staging overhead.
+- A useful throttle must keep enough down-stage savings while reducing the
+  up/gate penalty below the savings.
+- If depth=2 keeps one quarter of the down-stage savings (~8.7 s) and reduces
+  the up/gate penalty below ~4 s, full n96 could improve by several seconds.
+
+Execution:
+
+1. Run strict cold `-n 32` with:
+   - `GGML_MOE_PREFETCH_DOWN=1`,
+   - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+2. Compare against Phase 3ZF strict n32 no-prefetch:
+   2.31041 s/token.
+3. If depth=2 passes all gates and beats 2.31041 s/token with up/gate total
+   much closer to baseline than depth=8, promote to strict n96.
+4. If depth=2 fails or is slower, reject depth=2 and try depth=1 only if the
+   profile shows up/gate contention remains the cause.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000` including page cache.
+- TTFT `<= 106331.72 ms`.
+- France output semantically correct and coherent.
+- Strict launch failures=0.
+- Read failures=0.
+- VRAM reserve visible, no OOM.
+- Down prefetch must activate and report useful-rate.
+
+Promotion:
+
+- n96 promotion must beat Phase 3ZD strict baseline:
+  2.69143 s/token, 0.37155 tok/s.
+- If n96 is slower, reject the config and keep Phase 3ZD as accepted runtime.
