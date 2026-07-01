@@ -3316,6 +3316,78 @@ Decision:
   backend graph split or op family, because context-level submit vs sync is now
   resolved.
 
+## Next candidate: Phase 3C scheduler split wall-time profile
+
+Design timestamp: 2026-07-02 18:41 CST.
+
+Current bottleneck:
+
+- Phase 3B proves almost all prompt+decode time is spent inside
+  `graph_compute_async` submit, not in `synchronize()`.
+- Phase 3A proves the currently instrumented MoE stream functions account for
+  only about 31.3s of a 95.6s `-n 32` decode.
+- The remaining time must be inside backend scheduler split execution or
+  non-MoE backend work.
+
+Hypothesis:
+
+Add default-off scheduler split wall profiling controlled by:
+
+- `GGML_KIMI_SPLIT_PROFILE=1`
+
+For each split in `ggml_backend_sched_compute_splits`, record:
+
+- split id.
+- backend name.
+- node range.
+- node count.
+- first and last node names.
+- total wall time for the split, including input copy handling and backend
+  graph compute for that split.
+
+Emit a capped per-process summary at exit:
+
+- aggregate total split wall time.
+- top N slowest split signatures by total wall time.
+- use `GGML_KIMI_SPLIT_PROFILE_TOP` to control N, default 40.
+
+This is lower risk than per-op timing because split count is already around the
+existing graph split count and does not require touching individual backend
+kernels.
+
+Theoretical value:
+
+- If a small number of non-MoE split signatures dominate, the next optimization
+  can target their op family or backend placement.
+- If time is evenly spread across many splits, the next target is graph split
+  count, scheduler overhead, or CUDA graph capture/reuse.
+- If MoE split signatures dominate despite Phase 3A low wall gaps, then MoE is
+  being split in a way that adds scheduler overhead outside the stream functions.
+
+Execution:
+
+- Implement default-off split profiling in `ggml/src/ggml-backend.cpp`.
+- Build remotely.
+- Run cold `-n 4` with accepted Phase 2H env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+
+Acceptance:
+
+- Code must build.
+- Default path must not change when `GGML_KIMI_SPLIT_PROFILE` is unset.
+- Runs must keep host RAM under 16GB, TTFT <=106331.72 ms, and semantically
+  correct France output.
+- Logs must print split profile totals and top slow split signatures.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+
+Rollback:
+
+- Revert if build fails, output quality fails, default execution changes, or
+  split profile overhead is too high for attribution runs.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
