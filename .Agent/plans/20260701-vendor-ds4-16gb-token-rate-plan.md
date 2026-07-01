@@ -1862,6 +1862,18 @@
 - `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
 - `rollback_status`: no source change. Current effective SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：expert-keep-top4-no-trace
+
+- `attempt_id`: `20260702-expert-keep-top4-no-trace`
+- `attempt_kind`: `config-diagnostic/trace-overhead`
+- `status`: planned
+- `hypothesis`: Current top4 SOTA measurements include per-expert `one_trace.csv` writes. Earlier clean-baseline no-trace testing did not help at `1.6 tok/s`, but top4 changes output length and expert activity. Removing trace can check whether the accepted `2.3 tok/s` line is artificially low due trace overhead.
+- `theoretical_upper_bound`: Trace writes one row per streamed gate expert. Current top4 traced runs have about `~41k` rows and `~30s` traced stream time; removing file writes should at most save a small fixed overhead unless trace I/O increases cgroup file-cache pressure. Treat any improvement as diagnostic unless a follow-up accepted evidence run can preserve enough reproduction trace.
+- `test_config`: clean source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: diagnostic only unless `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent, TTFT stays within gate, and a follow-up trace/evidence strategy is defined. If no improvement, close trace-overhead direction for top4.
+- `rollback`: No source change. If output fails, RAM/TTFT fails, or `eval_tok_s <= 2.3`, record rejected/diagnostic and keep top4 `2.3 tok/s` SOTA.
+- `required_evidence`: exact env/command proving trace disabled, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, cgroup `memory.*`, full France answer text, manual correctness note, and explicit diagnostic result.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
