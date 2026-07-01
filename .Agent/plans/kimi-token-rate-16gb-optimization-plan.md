@@ -1431,3 +1431,51 @@ Next bottleneck:
   h2d=7758.831 ms, plus up/gate total=22.785 ms/call.
 - The next candidate should target cache partitioning/policy or safe handoff
   only after a separate handoff correctness test.
+
+## Next candidate: Phase 2I GPU handoff correctness after down fix
+
+Design timestamp: 2026-07-01 15:27 UTC.
+
+Current bottleneck:
+
+- Phase 2H made down batch correct and improved full `-n 96` to 0.29 tok/s.
+- Down kernel itself is tiny: 0.115 ms/call.
+- Remaining visible costs are staging/cache misses and up/gate work:
+  host_stage=50153.894 ms, h2d=7758.831 ms, VRAM cache hit_rate=45.5%,
+  up/gate total=22.785 ms/call.
+- `GGML_MOE_GPU_HANDOFF=1` previously corrupted output in Phase 2G, but that
+  experiment also had broken down batch. It must be re-tested after the down
+  compact type fix.
+
+Hypothesis:
+
+Enable `GGML_MOE_GPU_HANDOFF=1` together with the accepted Phase 2H down batch.
+This should let the up/gate fused GPU buffer feed down batch directly when
+shape and pointer matching work, avoiding a host round trip for that adjacency.
+
+Theoretical upper bound:
+
+- Handoff does not address the large expert weight staging bucket, so it cannot
+  plausibly get near the larger cache-policy gains.
+- It can only save small activation transfers and synchronization around the
+  up/gate to down handoff. The expected gain is modest, likely below 5%, unless
+  it also removes hidden graph synchronization.
+- Because Phase 2G showed severe corruption with handoff, this phase is first a
+  correctness gate, not a performance promotion.
+
+Acceptance:
+
+- Tiny cold `-n 4` smoke under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM remains below the 16GB cap; VRAM remains near full without OOM.
+- France output starts coherently, e.g. `France is...`.
+- `launch_failures=0`, `read_failures=0`, and `down_profile=true`.
+- Logs should show `GPU handoff consumed`.
+- If and only if tiny smoke passes, run cold `-n 32` smoke with the same config.
+- Full `-n 96` promotion requires quality pass, TTFT <=106331.72 ms, and decode
+  faster than accepted Phase 2H 0.29 tok/s / 3.47192 s/token.
+
+Rollback:
+
+- Reject immediately if output corruption returns, handoff does not activate,
+  launch failures appear, TTFT fails, or token rate is not better than Phase 2H.
