@@ -338,6 +338,7 @@ struct batch_profile {
     double up_compute_ms = 0.0;
     double gate_compute_ms = 0.0;
     double fuse_ms = 0.0;
+    double wall_ms = 0.0;
 };
 
 static batch_profile g_bprof;
@@ -400,9 +401,13 @@ static expert_pack_state g_expert_pack;
 static void batch_profile_report_atexit() {
     if (!g_bprof.enabled || g_bprof.calls == 0) return;
     const double calls = (double)g_bprof.calls;
+    const double accounted_ms =
+        g_bprof.stage_ms + g_bprof.quant_ms + g_bprof.kernel_ms + g_bprof.d2h_ms + g_bprof.scatter_ms;
+    const double wall_gap_ms = g_bprof.wall_ms - accounted_ms;
     std::fprintf(stderr,
         "[moe_stream_batch] profile: calls=%lu avg_active=%.2f "
-        "stage=%.3f ms quant=%.3f ms kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
+        "stage=%.3f ms quant=%.3f ms kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms "
+        "total=%.3f ms/call wall=%.3f ms/call wall_gap=%.3f ms/call\n",
         g_bprof.calls,
         (double)g_bprof.active_experts / calls,
         g_bprof.stage_ms / calls,
@@ -410,18 +415,24 @@ static void batch_profile_report_atexit() {
         g_bprof.kernel_ms / calls,
         g_bprof.d2h_ms / calls,
         g_bprof.scatter_ms / calls,
-        (g_bprof.stage_ms + g_bprof.quant_ms + g_bprof.kernel_ms + g_bprof.d2h_ms + g_bprof.scatter_ms) / calls);
+        accounted_ms / calls,
+        g_bprof.wall_ms / calls,
+        wall_gap_ms / calls);
 }
 
 static void up_gate_profile_report_atexit() {
     if (!g_uprof.enabled || g_uprof.calls == 0) return;
     const double calls = (double)g_uprof.calls;
+    const double accounted_ms =
+        g_uprof.stage_ms + g_uprof.quant_ms + g_uprof.kernel_ms + g_uprof.d2h_ms + g_uprof.scatter_ms;
+    const double wall_gap_ms = g_uprof.wall_ms - accounted_ms;
     std::fprintf(stderr,
         "[moe_stream_batch] up/gate profile: calls=%lu avg_active=%.2f "
         "stage=%.3f ms quant=%.3f ms up=%.3f ms gate=%.3f ms "
         "up_stage_jobs=%.2f gate_stage_jobs=%.2f "
         "up_wait=%.3f ms gate_wait=%.3f ms up_compute=%.3f ms gate_compute=%.3f ms fuse=%.3f ms "
-        "kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms total=%.3f ms/call\n",
+        "kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms "
+        "total=%.3f ms/call wall=%.3f ms/call wall_gap=%.3f ms/call\n",
         g_uprof.calls,
         (double)g_uprof.active_experts / calls,
         g_uprof.stage_ms / calls,
@@ -438,7 +449,9 @@ static void up_gate_profile_report_atexit() {
         g_uprof.kernel_ms / calls,
         g_uprof.d2h_ms / calls,
         g_uprof.scatter_ms / calls,
-        (g_uprof.stage_ms + g_uprof.quant_ms + g_uprof.kernel_ms + g_uprof.d2h_ms + g_uprof.scatter_ms) / calls);
+        accounted_ms / calls,
+        g_uprof.wall_ms / calls,
+        wall_gap_ms / calls);
 }
 
 struct batch_vram_cache {
@@ -4586,6 +4599,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     batch_ctx &bc = g_batch;
     cudaStream_t st = bc.stream;
     const bool profile = g_uprof.enabled && bc.ev_start && bc.ev_stage && bc.ev_quant && bc.ev_kernel && bc.ev_d2h;
+    const auto wall_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     batch_ttft_call_scope ttft_scope("call_upgate", src0_up_name, n_active, src0_bytes);
@@ -5472,6 +5486,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (profile) {
         const auto scatter_end = std::chrono::steady_clock::now();
         const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
+        const double wall_ms = std::chrono::duration<double, std::milli>(scatter_end - wall_start).count();
         ++g_uprof.calls;
         g_uprof.active_experts += (uint64_t)n_active;
         g_uprof.up_stage_jobs += (uint64_t)up_stage_jobs_count;
@@ -5488,6 +5503,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         g_uprof.kernel_ms += kernel_ms;
         g_uprof.d2h_ms += d2h_ms;
         g_uprof.scatter_ms += scatter_ms;
+        g_uprof.wall_ms += wall_ms;
     }
     return true;
 }
@@ -5567,6 +5583,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         cudaStreamSynchronize(bc.prefetch_stream);
     }
     const bool profile = g_bprof.enabled && bc.ev_start && bc.ev_stage && bc.ev_quant && bc.ev_kernel && bc.ev_d2h;
+    const auto wall_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const char *down_parallel_stage_env = std::getenv("GGML_MOE_DOWN_PARALLEL_STAGE");
     const bool down_parallel_stage =
         down_parallel_stage_env && down_parallel_stage_env[0] && down_parallel_stage_env[0] != '0' &&
@@ -5812,6 +5829,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (profile) {
         const auto scatter_end = std::chrono::steady_clock::now();
         const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
+        const double wall_ms = std::chrono::duration<double, std::milli>(scatter_end - wall_start).count();
         ++g_bprof.calls;
         g_bprof.active_experts += (uint64_t)n_active;
         g_bprof.stage_ms += stage_ms;
@@ -5819,6 +5837,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_bprof.kernel_ms += kernel_ms;
         g_bprof.d2h_ms += d2h_ms;
         g_bprof.scatter_ms += scatter_ms;
+        g_bprof.wall_ms += wall_ms;
     }
     return true;
 }
