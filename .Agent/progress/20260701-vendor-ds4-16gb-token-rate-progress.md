@@ -197,3 +197,14 @@ Rejected higher-rate candidates:
 - Numeric evidence: first eight `compare.csv` rows now match CPU to about `1e-7` to `1e-6`. Examples: expert `35` CPU `1.4652648` vs GPU `1.46526492`; expert `245` CPU `10.0252676` vs GPU `10.0252686`.
 - Acceptance: rejected for token rate because cold baseline vram2 remains `eval_tok_s=1.3` with TTFT `44034.028848 ms`. This run's TTFT increase is about `18.8%`, within the 20% gate, but generation throughput is lower.
 - Action: keep and push as a correctness/diagnostic foundation only. Next optimization must profile the corrected stream path and recover the lost time before it can become an accepted SOTA.
+
+### 2026-07-01T09:50:31Z - Accepted cold SOTA with corrected DS4 gate stream and 8GB VRAM cache
+
+- Purpose: after fixing DS4 gate stream correctness, test whether increasing VRAM cache reduces corrected stream expert reloads enough to beat the cold baseline under the 16GB cgroup.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T095031Z-cold-ds4-gate-stream-src1-rowmod-vram8-trace/france-cpu40-vram8gb`.
+- Config: `cpu_moe=40`, `vram_cache=8`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`.
+- Result: accepted as current cold SOTA. `eval_tok_s=1.4`, `prompt_tok_s=0.6`, `ttft_estimate_ms=47573.774683`, `memory_peak_bytes=16000000000`, `memory_max_events=55388`, `memory_file_bytes=14967328768`, `pgmajfault=574410`, `workingset_refault_file=15540325`, `ram_ok=true`, `correctness_ok=true`.
+- TTFT gate: previous cold vram2 baseline TTFT was `44034.028848 ms`; this is `+8.0%`, below the 20% limit.
+- Answer: `France is a Western European country known for its rich history, vibrant culture, and significant global influence...`; semantically correct and coherent.
+- Trace interpretation: vram2 corrected stream had `16642` inserts and summed `src0_ms=73379 ms`; vram8 has `7110` inserts and `src0_ms=36392 ms`. CUDA activation quantization, MXFP4 MMVQ, D2H, sync, and scatter together remain around `1.1 s`, so the bottleneck remains cold expert weight staging/page faults rather than GPU compute.
+- Action: commit and push immediately. Next step is to probe higher VRAM cache sizes under the same 16GB RAM gate to find the cache knee, then stop when VRAM OOM, TTFT regression, or no token-rate gain appears.
