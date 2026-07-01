@@ -2409,6 +2409,42 @@ Decision:
 - Continue to cold `-n 32`.
 - Watch TTFT closely because this path has less headroom than Phase 2H.
 
+Result timestamp: 2026-07-02 17:06 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-165639Z-n32-phase2p-down-prefetch`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101970.04 ms, inside the 106331.72 ms gate.
+- Decode: 94356.18 ms / 31 runs, 3.04375 s/token, 0.32854 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=3196, hits=3196, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=16096, misses=10864,
+  preloads=3196, hit_rate=59.7%.
+- Pinned staging: copies=13123, host_stage=17959.990 ms, h2d=2848.131 ms.
+- Up/gate profile: calls=869, total=18.573 ms/call.
+- Down profile: calls=1644, stage=3.609 ms/call, total=3.776 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2P `-n 32`: 94356.18 ms / 31 runs, 3.04375 s/token, 0.32854 tok/s.
+- Down prefetch works as intended for `-n 32`: down stage falls from
+  9.065 ms/call to 3.609 ms/call with 100% useful prefetch hits.
+
+Decision:
+
+- Continue to cold full `-n 96`.
+- Full promotion still requires beating Phase 2H `-n 96` while preserving
+  quality, TTFT, RAM, VRAM, prefetch usefulness, and launch/read gates.
+
 Result timestamp: 2026-07-01 16:28 UTC.
 
 Run:
