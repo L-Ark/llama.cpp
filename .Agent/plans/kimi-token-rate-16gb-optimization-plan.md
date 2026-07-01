@@ -754,8 +754,54 @@ Rollback:
 - Revert any debug/fix patch that does not restore stream-only semantic quality
   or that worsens the accepted non-stream baseline.
 
+## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
+
+Design timestamp: 2026-07-01 13:24 UTC.
+
+Current bottleneck:
+
+- GPU stream path is unsafe for Kimi, so the accepted path remains non-stream
+  CPU fallback for deferred experts.
+- The baseline uses `-t 24 -tb 24` on a 40-thread host.
+- The baseline spends 401.59s in decode for 80 runs under the 16GB cgroup.
+
+Hypothesis:
+
+Increasing CPU worker threads to match the available 40 logical CPUs may improve
+the accepted non-stream fallback token rate without changing model math, output
+semantics, VRAM allocation, or page-cache policy. This does not satisfy the
+long-term GPU/VRAM-first goal, but it is allowed as a low-risk tuning step while
+the GPU stream path is known unsafe.
+
+Candidate configuration:
+
+```sh
+# Same as Phase 0 baseline, only changing:
+-t 40 -tb 40
+```
+
+Theoretical upper bound:
+
+- If CPU vec-dot work scales perfectly from 24 to 40 threads, the CPU portion
+  could improve by up to 1.67x.
+- Because the run is also constrained by page-cache reclaim and IO wait, the
+  realistic upper bound is lower. A cold `-n 32` smoke should first estimate
+  whether the gain is material before spending a full `-n 96` run.
+
+Acceptance:
+
+- Cold `-n 32` smoke must pass quality, host RAM < 16GB, and TTFT <= 106331.72 ms.
+- If token rate improves over the baseline trend, run full cold `-n 96`.
+- Promote only if full `-n 96` improves over 0.20 tok/s, keeps the France output
+  correct, keeps TTFT within +20%, and records exact reproduction.
+
+Rollback:
+
+- If token rate is flat/slower, TTFT fails, or quality changes, reject the
+  tuning and keep `-t 24 -tb 24`.
+
 ## Immediate next action
 
-Start Phase 2C by instrumenting or using existing debug hooks to compare the
-first `GGML_MOE_STREAM=1` expert output with the non-stream reference. Do not
-try more cache settings until stream-only output is semantically correct.
+Run Phase 1A `-t 40 -tb 40` cold `-n 32` smoke on the accepted non-stream path.
+In parallel, keep Phase 2C as the required path for future GPU/VRAM cache
+promotion.
