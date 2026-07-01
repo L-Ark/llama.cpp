@@ -8706,3 +8706,52 @@ Decision:
 - Keep Phase 3ZG depth=2 as the current accepted strict n96 runtime:
   `GGML_MOE_PREFETCH_DOWN=1`,
   `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+
+## Next candidate: Phase 3ZI down prefetch depth=3 full sweep
+
+Design timestamp: 2026-07-02 23:57 UTC / 2026-07-03 07:57 CST.
+
+Reason:
+
+- Full n96 is the only reliable comparator for this prefetch depth sweep:
+  - depth=1 had the best n32 result but lost to depth=2 at n96,
+  - depth=8 passed n32 but lost at n96 due to up/gate contention.
+- The current n96 curve:
+  - depth=0: 2.69143 s/token,
+  - depth=1: 2.67800 s/token,
+  - depth=2: 2.57811 s/token,
+  - depth=8: 2.71191 s/token.
+- The optimum may be near depth=2. Depth=3 is the next direct full-length check
+  around the accepted point.
+
+Hypothesis:
+
+- Depth=3 may keep more down-stage/cache benefit than depth=2 while adding only
+  modest up/gate contention.
+- If depth=3 crosses the contention knee, it will be slower than depth=2 and
+  should be rejected.
+
+Execution:
+
+- Run strict cold `-n 96` directly with:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=3`.
+- Direct n96 is justified because n32 has proven misleading for this parameter;
+  all tested depths in this bounded range have already passed quality, TTFT,
+  RAM, launch, and read gates.
+
+Hard gates:
+
+- Same strict cold-start gates as Phase 3ZG.
+- Full France paragraph quality PASS.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Strict launch failures=0.
+- Read failures=0.
+- Down prefetch active with useful-rate reported.
+
+Decision rule:
+
+- Accept depth=3 only if it beats the current accepted depth=2 result:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject depth=3 and keep depth=2 as the accepted runtime.
