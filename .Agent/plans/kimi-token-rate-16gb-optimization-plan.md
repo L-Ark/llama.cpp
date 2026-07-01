@@ -2396,6 +2396,132 @@ Rollback:
 - Revert if output quality fails, TTFT/RAM/VRAM gates fail, failures appear, or
   `-n 32` does not beat Phase 3E.
 
+## Next candidate: Phase 3U reprofile Phase 3E split/CPU-MoE bottleneck
+
+Design timestamp: 2026-07-02 23:58 CST.
+
+Current bottleneck:
+
+- Phase 3E is current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- Several post-Phase-3E candidates failed:
+  - no-profile production run did not improve n32.
+  - trace host prefetch had too-low useful hit rate.
+  - RAM tier had too-low useful hit rate.
+  - cache key index did not improve n32.
+- Phase 3C previously showed CPU backend MoE split dominance, but that
+  attribution was collected on the older Phase 2H runtime, before Phase 3E's
+  batch-only stream placement fix.
+- We need a fresh Phase 3E attribution before attempting backend placement or
+  CPU MoE op restructuring.
+
+Hypothesis:
+
+- Re-run existing default-off diagnostics on the current Phase 3E best env:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=40`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- This should identify whether the remaining Phase 3E decode time is still
+  dominated by CPU backend MoE splits, specific fallback tensor names, or
+  another graph split family.
+
+Theoretical value:
+
+- If Phase 3E still spends most time in CPU backend MoE splits, the next code
+  candidate should target backend placement or CPU op family scheduling.
+- If a small set of tensor names dominates fallback, the next candidate should
+  target those quant types or prompt/decode split.
+- If split profile shows overhead outside MoE, continuing MoE cache/host
+  experiments is the wrong direction.
+
+Execution:
+
+- No code change.
+- Use Phase 3E best runtime env with the profiling env vars above.
+- Run cold `-n 4` under strict 16GB cgroup.
+- If gates pass and profiles print, run cold `-n 32`.
+- This is diagnostic; do not promote performance from this phase.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs include graph profile, split profile, CPU MoE profile, and CPU MoE name
+  profile summaries.
+
+Rollback:
+
+- No code rollback expected because this is env-only.
+- Reject the diagnostic if profiling breaks quality, exceeds TTFT/RAM/VRAM
+  gates, or fails to print the required attribution.
+
+Result timestamp: 2026-07-02 23:52 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-212817Z-n4-phase3u-phase3e-reprofile`
+
+Measured result:
+
+- Commit/config: `97d230ced`, Phase 3E runtime env plus graph/split/CPU-MoE
+  profile env vars.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80993.39 ms, inside the 106331.72 ms gate.
+- Decode: 10549.18 ms / 3 runs, 3.51639 s/token, 0.28438 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=724, misses=1804,
+  hit_rate=28.6%.
+- Pinned staging: copies=1790, host_stage=2757.663 ms,
+  H2D=388.256 ms.
+- Up/gate profile: 85 calls, total=29.134 ms/call.
+- Down batch profile: 160 calls, stage=13.384 ms/call,
+  total=13.536 ms/call.
+- CPU MoE profile:
+  - up_gate: 85 calls, 29.480 ms/call, `cuda_batch=29.296 ms/call`,
+    `fallback_t0=0.001 ms/call`, `batch_accept=85`.
+  - down: 550 calls, 154.241 ms/call, `cuda_batch=4.138 ms/call`,
+    `fallback_t0=149.994 ms/call`, `batch_accept=160`,
+    `batch_decline=52`.
+- CPU MoE name top offenders:
+  - `blk.39.ffn_gate_exps.weight`: 811.640 ms/call,
+    `fallback_t0=811.606 ms/call`, not batch eligible.
+  - Q4_0/non-eligible down layers remain prominent:
+    `blk.9`, `blk.7`, `blk.6`, `blk.18`, `blk.10`, `blk.8`,
+    `blk.15` `ffn_down_exps.weight`, all with fallback-dominated wall time.
+  - Batch-eligible down names still decline once per 4 calls in the n4 run,
+    usually `batch_accept=3`, `batch_decline=1`.
+- Split profile:
+  - total: 242 signatures, 488 calls, 91510.307 ms wall.
+  - top split signatures are CPU backend MoE layer groups such as
+    `ffn_moe_gate-39` to `ffn_moe_down-39`, 3922.195 ms; layer 13,
+    3313.730 ms; layer 4, 1870.915 ms.
+- Graph profile:
+  - submit: 4 calls, 91519.578 ms total, 22879.894 ms/call.
+  - sync: 24 calls, 2.327 ms total; decode sync is only 2.294 ms.
+
+Decision:
+
+- Reject Phase 3U as a gate-passing diagnostic because `launch_failures=44`
+  violates the hard failure rule.
+- Do not run `-n 32` from this diagnostic configuration.
+- No code rollback is needed because Phase 3U was env-only.
+- The attribution is still directionally useful: after Phase 3E, the remaining
+  wall time is not CUDA sync but CPU backend MoE submit/split execution. The
+  next optimization should stop spending time on cache-key/prefetch micro
+  changes and instead target the down/fallback path:
+  1. make the remaining non-eligible Q4_0 down tensors batch-eligible or provide
+     a correct GPU path for them;
+  2. reduce one-call-per-token batch declines for otherwise eligible down names;
+  3. isolate prompt-only `ffn_gate_exps` fallback such as layer 39 so it does
+     not distort TTFT or decode profiling.
+
 Result timestamp: 2026-07-02 23:47 CST.
 
 Smoke run:
