@@ -3078,6 +3078,121 @@ Decision:
 - Do not run full `-n 96`.
 - Keep Phase 3E / commit `9b64e4c8` as current best.
 
+## Next candidate: Phase 3J down prefetch depth 1 retest
+
+Design timestamp: 2026-07-02 21:05 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current best.
+- Phase 3G depth 2 proved down prefetch is mechanically useful:
+  - down stage improved from 8.767 ms/call to 6.465 ms/call on `-n 32`.
+  - down cache hit rate improved from 47.9% to 53.3%.
+- But Phase 3G regressed total `-n 32` from 2.24573 s/token to
+  2.25564 s/token, partly because up/gate total increased from
+  17.757 ms/call to 19.503 ms/call.
+
+Hypothesis:
+
+- A shallower prefetch depth may keep some down-stage overlap while reducing
+  cache/stream pressure and up/gate interference.
+- Test:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`
+
+Theoretical upper bound:
+
+- Depth 2 reduced down stage by about 2.302 ms/call over 1644 down calls on
+  `-n 32`, about 3.8s of visible down-stage improvement.
+- If depth 1 keeps half of that benefit and avoids the up/gate regression, it
+  could beat Phase 3E by about 1-2s on `-n 32`.
+- Full `-n 96` upper bound scales roughly to a few seconds, so full promotion
+  requires clear `-n 32` evidence.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best code/config plus depth 1 down prefetch.
+- If smoke passes all gates and prefetch is active, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token and all gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch must be active and useful.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if prefetch is inactive/useless, output quality changes, TTFT exceeds
+  the gate, RAM/VRAM gates fail, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 21:00 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-195549Z-n4-phase3j-prefetch-depth1`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76121.62 ms, inside the 106331.72 ms gate.
+- Decode: 10821.17 ms / 3 runs, 3.60706 s/token, 0.27723 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=69, hits=69, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=803, misses=1741, preloads=69, hit_rate=31.6%.
+  - pinned staging: copies=1780, host_stage=2695.331 ms,
+    h2d=385.241 ms.
+  - up/gate: total=29.085 ms/call.
+  - down batch: stage=11.887 ms/call, total=12.045 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-195759Z-n32-phase3j-prefetch-depth1`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78477.11 ms, inside the 106331.72 ms gate.
+- Decode: 69719.05 ms / 31 runs, 2.24900 s/token, 0.44464 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=738, hits=738, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+  - pinned staging: copies=13136, host_stage=17623.663 ms,
+    h2d=2839.630 ms.
+  - up/gate: total=17.652 ms/call.
+  - down batch: stage=7.562 ms/call, total=7.712 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3G depth 2 `-n 32`: 2.25564 s/token, 0.44333 tok/s.
+- Phase 3J depth 1 `-n 32`: 2.24900 s/token, 0.44464 tok/s.
+
+Analysis:
+
+- Depth 1 avoids the large up/gate regression seen with depth 2 and improves
+  down stage, but total eval still does not beat Phase 3E.
+- The result is close, but the plan requires an improvement before full
+  promotion.
+
+Decision:
+
+- Reject down prefetch depth 1 for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
