@@ -1901,6 +1901,18 @@
 - `gap_analysis`: The unreproduced `2.6` delta is not explained by gate stream routing/cache policy: old and v2 have identical gate rows/hits/misses. Most of the span gap sits outside gate stream trace and aligns with unstreamed up/down CPU fallback and/or cgroup file-page reclaim stalls around that fallback. This strengthens the lost-binary/source or CPU fallback IO/reclaim hypothesis.
 - `rollback_status`: no source change. Current accepted SOTA remains top4 `2.3 tok/s`. This diagnostic result is pushed only as evidence, not as a promoted SOTA.
 
+### 当前执行 attempt：lost-cpu-fallback-source-binary-search
+
+- `attempt_id`: `20260702-lost-cpu-fallback-source-binary-search`
+- `attempt_kind`: `forensic-search`
+- `status`: planned
+- `hypothesis`: Since old `2.6` and current slow old-config reruns have identical gate rows/hits/misses, the missing speed may come from an unrecorded CPU fallback source/binary/shared-library state affecting `ffn_up_exps` / `ffn_down_exps`, or from a system IO/reclaim state not captured by run metadata. The next highest-value check is to search for preserved binaries, build directories, reflog states, patch files, temporary source copies, and shared libraries around the 09:55 UTC old run.
+- `expected_delta`: No direct token-rate improvement. Success means finding an exact candidate binary/source state that can be rerun under the strict 16GB cgroup. If a candidate reproduces a valid rate above current SOTA with correct output and TTFT gate, immediately follow the SOTA record/push/rerun protocol.
+- `search_scope`: repo reflog and branch history; `/root/lfz/vendor` and `/root/lfz` build/source copies; CMake build artifacts with mtimes around `2026-07-01 09:55 UTC`; `llama-cli`, `libggml*.so`, `ggml-cpu.c`, `moe_stream.cu` copies; `.Agent` patch/progress records; run dirs with matching `b9079-7353439ea` build line; shell history if available.
+- `acceptance_gate`: Search only. Do not promote any result unless a candidate is rebuilt/rerun from recorded source or a preserved binary is tied to full source evidence and then converted into a pushed source commit.
+- `rollback`: No source change. Do not delete files or reset branches. Any checkout/build probe must return to current clean HEAD if rejected.
+- `required_evidence`: search commands, candidate file paths, mtimes/sizes/sha256, build lines, git commits/diffs, and a conclusion separating lost binary/source evidence from external IO/page-cache evidence.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
