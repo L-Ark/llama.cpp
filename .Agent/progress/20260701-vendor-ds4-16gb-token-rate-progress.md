@@ -228,3 +228,12 @@ Rejected higher-rate candidates:
 - Result: rejected. Correctness passed and RAM stayed inside the 16GB cgroup, but `eval_tok_s=0.8`, `prompt_tok_s=0.6`, `ttft_estimate_ms=52889.140515`, `memory_max_events=72712`, `pgmajfault=606508`, `workingset_refault_file=26778917`.
 - Trace evidence: `cache_hits=0`, `cache_inserts=0`, `src0_ms=91071 ms`, `dontneed_ms=6640 ms`. The requested 14GB VRAM cache appears not to have inserted any experts, likely due practical VRAM fit after model allocation.
 - Interpretation: vram14 crosses a cache allocation cliff and must not be used. Probe vram13 next to locate whether the usable upper bound is exactly vram12 or if one more GB fits.
+
+### 2026-07-01T10:05:46Z - Rejected vram13 CUDA OOM
+
+- Purpose: locate the practical VRAM cache upper bound between accepted vram12 and rejected vram14.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T100546Z-cold-ds4-gate-stream-src1-rowmod-vram13-trace/france-cpu40-vram13gb`.
+- Config: `cpu_moe=40`, `vram_cache=13`, `drop_caches_before_case=true`, corrected DS4 gate stream enabled with trace.
+- Result: rejected before generation. Host RAM stayed inside the 16GB cgroup (`memory_peak_bytes=16000000000`, `memory_max_events=604`), but process exited `134` after CUDA OOM.
+- Key stderr lines: `[moe_stream] VRAM cache: 13.0 GiB, 3132 slots (4.25 MiB each)`, then `ggml_cuda_compute_forward: GET_ROWS failed`, `CUDA error: out of memory`.
+- Interpretation: vram13 is beyond practical VRAM fit with current model/settings. Current usable upper bound is vram12; further work should optimize remaining misses or free other VRAM rather than increasing the cache directly.

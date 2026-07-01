@@ -1,0 +1,39 @@
+{
+  "timestamp_utc": "2026-07-01T10:05:46Z",
+  "classification": "rejected_vram_oom",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_commit": "6967303f4",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T100546Z-cold-ds4-gate-stream-src1-rowmod-vram13-trace/france-cpu40-vram13gb",
+  "config": {
+    "cpu_moe": 40,
+    "vram_cache_gb": 13,
+    "drop_caches_before_case": true,
+    "env": {
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": null,
+    "prompt_tok_s": null,
+    "ttft_estimate_ms": null,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 604,
+    "memory_file_bytes": 15118622720,
+    "pgmajfault": 7096,
+    "workingset_refault_file": 2166,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "exit_status": 134,
+    "correctness_ok": false
+  },
+  "stderr_key_lines": [
+    "[moe_stream] VRAM cache: 13.0 GiB, 3132 slots (4.25 MiB each)",
+    "ggml_cuda_compute_forward: GET_ROWS failed",
+    "CUDA error: out of memory"
+  ],
+  "reason": "The model reached CUDA OOM during load/initial decode with 13GB VRAM cache, despite staying within the 16GB host RAM cgroup. This establishes vram_cache_gb=12 as the current practical upper bound for this configuration.",
+  "next_step": "Keep accepted vram12 as current SOTA. Further optimization should reduce remaining misses or reserve more VRAM by lowering other GPU allocations, not by increasing this cache size directly."
+}
