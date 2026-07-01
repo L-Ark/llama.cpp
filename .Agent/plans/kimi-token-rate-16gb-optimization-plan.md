@@ -2311,6 +2311,75 @@ Decision:
   proves the mechanism can remove down stage time but depth 8 over-contends at
   full length.
 
+## Next candidate: Phase 2Q shallow down prefetch depth 2
+
+Design timestamp: 2026-07-02 17:18 CST.
+
+Current bottleneck:
+
+- Phase 2P depth 8 cut down visible staging from 11.616 ms/call to
+  4.771 ms/call at full `-n 96`, and down prefetch useful_rate was 100.0%.
+- Full decode still regressed from 295113.58 ms to 301072.16 ms because:
+  - host_stage rose from 50153.894 ms to 51604.703 ms.
+  - up/gate total rose from 22.785 ms/call to 24.696 ms/call.
+- This points to prefetch pressure rather than a correctness issue: depth 8
+  starts too much down H2D/cache activity ahead of demand and interferes with
+  the up/gate path.
+
+Hypothesis:
+
+Run the same accepted Phase 2H configuration with shallower prefetch:
+
+- `GGML_MOE_PREFETCH_DOWN=1`
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+
+Depth 2 should preserve some down-stage overlap while reducing the amount of
+early H2D/cache traffic. If contention was the reason depth 8 lost at full
+length, depth 2 should show lower up/gate regression and lower host_stage than
+Phase 2P, while still improving down profile against Phase 2H.
+
+Theoretical upper bound:
+
+- Phase 2H down visible stage is about 52.3s total.
+- Phase 2P depth 8 reduced this bucket by about 30.8s, but added enough
+  contention to lose about 6.0s overall.
+- Depth 2 cannot hide as much down stage as depth 8. A realistic target is
+  hiding 10-18s while limiting contention to under 5s, producing a possible
+  full decode of 282-290s.
+- Promotion requires beating Phase 2H full `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s, with TTFT <=106331.72 ms and quality intact.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Promote to cold `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  and logs show prefetch useful activity without high evicted-unused count.
+
+Acceptance:
+
+- Host RAM must remain under 16GB including page cache.
+- VRAM should remain close to full without OOM.
+- TTFT must remain <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Logs must include down prefetch activity and its useful-rate counters.
+- Any full `-n 96` improvement that passes all gates must be committed and
+  pushed immediately with reproduction details.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, prefetch does not activate, evicted-unused is high, launch/read
+  failures appear, or full `-n 96` does not beat Phase 2H.
+- No code rollback should be needed because the experiment is env-only and the
+  prefetch path is default-off.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
