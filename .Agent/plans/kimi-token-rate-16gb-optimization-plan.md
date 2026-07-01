@@ -8046,3 +8046,56 @@ Rollback/rejection:
 - Reject the config if any hard gate fails, if prefetch does not activate, if
   useful-rate is poor with significant evictions, or if the promoted n96 run
   does not beat Phase 3ZD.
+
+Result timestamp: 2026-07-02 23:15 UTC / 2026-07-03 07:15 CST.
+
+Strict n4 smoke:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-231251Z-n4-phase3ze-down-prefetch`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  12.494991 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  80135.18 ms, gate PASS.
+- Decode:
+  11.77365 s / 3 tokens = 3.92455 s/token, 0.25481 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=406, hits=406, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=1780, host_stage=2832.727 ms, h2d=386.130 ms.
+- Up/gate CPU profile:
+  calls=85, total=45.620 ms/call, cuda_batch=45.411,
+  fallback_t0=0.001, batch_accept=85, batch_decline=0.
+- Down CPU profile:
+  calls=550, total=148.648 ms/call, cuda_batch=1.663,
+  fallback_t0=146.860, batch_accept=160, batch_decline=52.
+- Down CUDA profile:
+  calls=160, stage=5.168 ms/call, kernel=0.119 ms/call,
+  wall=5.641 ms/call.
+- VRAM cache:
+  hits=1140, misses=1404, preloads=406, hit_rate=44.8%.
+
+Decision:
+
+- Continue to strict `-n 32` because hard gates passed and prefetch usefulness
+  is 100%.
+- Risk to watch:
+  up/gate time rose sharply versus Phase 3ZD/3Z smoke, so n32 must prove that
+  lower down staging offsets this contention before any n96 promotion.
