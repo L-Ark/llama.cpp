@@ -1509,3 +1509,73 @@ Decision:
 - Future gates must treat the automated quality flag as a first filter only.
   The recorded answer text itself must be checked for semantic correctness and
   coherence before accepting any speedup.
+
+## Next candidate: Phase 2J profile-guided VRAM cache protection
+
+Design timestamp: 2026-07-01 15:39 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` spends most remaining visible time in two
+  buckets:
+  - Down batch staging: 4506 calls, 11.616 ms average stage time, about 52.3s
+    total visible stage time.
+  - Up/gate compute: 2381 calls, 22.785 ms average total, about 54.2s total.
+- Down batch kernel itself is only 0.115 ms/call, so optimizing down math is no
+  longer the next highest-return path.
+- VRAM cache hit rate is only 45.5% under a 15000 MiB cache:
+  hits=33716, misses=40316.
+- Route profile size distribution from the accepted Phase 2H run:
+  - 4702208-byte entries: 24480 uses, 5040 unique, 107.20 GiB logical traffic.
+  - 5619712-byte entries: 13616 uses, 3256 unique, 71.26 GiB logical traffic.
+  - 6307840-byte entries: 27888 uses, 5827 unique, 163.83 GiB logical traffic.
+  - 7798784-byte entries: 8160 uses, 1716 unique, 59.27 GiB logical traffic.
+- The down cache slot size is 7.44 MiB with 2016 slots, while the observed down
+  unique set is much larger than the cache. Plain LRU is likely evicting hot
+  experts during the long decode sequence.
+
+Hypothesis:
+
+Use the accepted Phase 2H route profile as a cold-start profile input and enable
+profile-aware cache protection/eviction:
+
+- `GGML_MOE_VRAM_PROFILE=<Phase 2H route-profile.csv>`
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+- `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`
+- `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`
+
+This should pin the highest-frequency experts while reserving 20% of slots for
+new traffic, and should prevent the hottest cached experts from being evicted by
+one-off experts. This is a low-code-risk config experiment because it uses
+existing cache policy code.
+
+Theoretical upper bound:
+
+- Phase 2H down visible stage time is about 52.3s inside a 295.1s decode.
+- If profile protection improves down cache hit rate from 45.5% to 70%, misses
+  drop by about 45% and the visible down stage bucket could shrink by about
+  23.5s.
+- The full `-n 96` decode lower bound would then be roughly
+  295.1s - 23.5s = 271.6s for 85 decode runs, or 3.20 s/token / 0.31 tok/s.
+- This cannot reach 5 tok/s by itself; it is a cache/staging step before the
+  larger up/gate compute work.
+
+Acceptance:
+
+- First run a cold `-n 4` smoke under `memory.max=16000000000`,
+  `memory.swap.max=0`, and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual France answer text must be semantically correct and coherent; the
+  automated quality flag alone is not sufficient after Phase 2I.
+- Logs must show profile preload/cache policy activity and no read failures or
+  launch failures.
+- If `-n 4` passes, run cold `-n 32`; promote to `-n 96` only if token rate is
+  better than accepted Phase 2H while satisfying all gates.
+
+Rollback:
+
+- Reject if profile preload increases TTFT above the gate, output quality fails,
+  host RAM exceeds the cgroup cap, VRAM OOMs, launch/read failures appear, or
+  token rate is not better than Phase 2H at the same token count.
