@@ -2941,6 +2941,143 @@ Decision:
 - Next candidate should add type/condition attribution or inspect GGUF tensor
   metadata for the non-eligible top names, then target the largest safe group.
 
+## Next candidate: Phase 3I enable Q4_0 down compact batch
+
+Design timestamp: 2026-07-02 20:51 CST.
+
+Current bottleneck:
+
+- Phase 3H showed several top fallback `ffn_down_exps` layers are not batch
+  eligible.
+- GGUF metadata inspection found those non-eligible down tensors are Q4_0:
+  - `blk.6.ffn_down_exps.weight`: Q4_0.
+  - `blk.7.ffn_down_exps.weight`: Q4_0.
+  - `blk.8.ffn_down_exps.weight`: Q4_0.
+  - `blk.9.ffn_down_exps.weight`: Q4_0.
+  - `blk.10.ffn_down_exps.weight`: Q4_0.
+- Existing CUDA code has Q4_0 MMVQ support, but the Kimi MoE stream compact
+  down-batch path excludes Q4_0 in:
+  - CPU eligibility: `ggml_cuda_moe_stream_supports_down_batch`.
+  - CUDA support gate: `moe_stream_type_supported`.
+  - compact batch switch: `launch_moe_mmvq_compact_batch`.
+
+Hypothesis:
+
+- Add Q4_0 to the standard down compact batch path, not to the Q8_K special
+  path.
+- Q4_0 down layers should move from CPU fallback to CUDA MMVQ compact batch.
+- This should reduce the per-name fallback time for Q4_0 down layers and lower
+  total `MUL_MAT_ID` fallback.
+
+Theoretical upper bound:
+
+- In Phase 3H `-n 32`, top Q4_0 down fallback examples were:
+  - `blk.6.ffn_down_exps.weight`: 53.763 ms/call fallback.
+  - `blk.9.ffn_down_exps.weight`: 45.302 ms/call fallback.
+  - `blk.7.ffn_down_exps.weight`: 41.985 ms/call fallback.
+  - `blk.8.ffn_down_exps.weight`: 40.220 ms/call fallback.
+  - `blk.10.ffn_down_exps.weight`: 39.972 ms/call fallback.
+- These are 32 calls each in `-n 32`; the upper bound is large enough to test.
+- Practical gain may be lower or negative because Q4_0 expert slots are larger
+  and may increase VRAM-cache pressure/staging.
+
+Execution:
+
+- Add Q4_0 to CPU down-batch eligibility and CUDA compact batch support.
+- Build remotely.
+- Run cold `-n 4` with current best env and CPU/name profiling enabled.
+- If smoke passes quality/RAM/VRAM/TTFT and Q4_0 names become batch eligible,
+  run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E or clearly reduces
+  fallback without TTFT/quality/cache risk.
+
+Acceptance:
+
+- Build passes.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Per-name profile shows Q4_0 down tensors with `batch_eligible>0` and
+  `batch_accept>0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if Q4_0 compact batch fails to launch, output quality changes, cache
+  pressure makes token rate worse, TTFT exceeds the gate, or resource/failure
+  gates fail.
+
+Result timestamp: 2026-07-02 20:58 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-194706Z-n4-phase3i-q4_0-down-batch`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 80173.60 ms, inside the 106331.72 ms gate.
+- Decode: 9128.79 ms / 3 runs, 3.04293 s/token, 0.32863 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- Q4_0 down batch became active:
+  - down batch calls increased from 160 in Phase 3H smoke to 181.
+  - `blk.6.ffn_down_exps.weight` became `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+- Cache/stage:
+  - down cache slot increased to 7.88 MiB, slots=1904.
+  - down cache hit_rate=28.3%.
+  - pinned staging host_stage=2995.265 ms.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-194940Z-n32-phase3i-q4_0-down-batch`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 81492.43 ms, inside the 106331.72 ms gate.
+- Decode: 79699.78 ms / 31 runs, 2.57096 s/token, 0.38896 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- Q4_0 down batch became active:
+  - down batch calls increased from 1644 in Phase 3H to 1861.
+  - Q4_0 down names such as `blk.6`, `blk.7`, `blk.8`, `blk.9` are now
+    `batch_eligible=32`, `batch_accept=31`, `batch_decline=1`.
+- Cache/stage:
+  - down cache slot increased from 7.44 MiB to 7.88 MiB.
+  - cache slots decreased from 2016 to 1904.
+  - hit_rate decreased from 47.9% to 40.7%.
+  - pinned staging copies increased to 15529, host_stage=21985.906 ms,
+    h2d=3448.346 ms.
+- MoE profile:
+  - up/gate regressed to 22.859 ms/call.
+  - down batch regressed to stage=11.489 ms/call, total=11.634 ms/call.
+
+Comparison:
+
+- Phase 3E current best `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3H diagnostic `-n 32`: 2.26050 s/token, 0.44238 tok/s.
+- Phase 3I `-n 32`: 2.57096 s/token, 0.38896 tok/s.
+
+Analysis:
+
+- Q4_0 compact batch launches and preserves semantic quality, but it is slower.
+- The larger Q4_0 down expert slots reduce cache capacity and increase staging
+  pressure enough to outweigh the reduction in per-name fallback for Q4_0
+  layers.
+
+Decision:
+
+- Reject Q4_0 down compact batch for promotion.
+- Revert the Q4_0 support-list changes.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
