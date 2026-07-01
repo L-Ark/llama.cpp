@@ -1,0 +1,38 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T08:08:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "462700ebc",
+  "purpose": "Test whether DS4 MXFP4 gate stream failure was caused by using the non-ids single-column MMVQ path instead of the dedicated MoE ids kernel.",
+  "code_changes": [
+    "Added default-off ggml_cuda_moe_stream_mmvq_rows_dev compact-rows helper.",
+    "For experimental DS4 MXFP4/F8 stream, compact cne1 rows are quantized together and routed through the existing MoE ids kernel with all ids set to zero for the current expert."
+  ],
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T080313Z-cold-ds4-stream-filter-gate-idskernel-cpu40-vram2/france-cpu40-vram2gb",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 2,
+      "drop_caches_before_case": true,
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps"
+    },
+    "eval_tok_s": 2.1,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 51806.596358,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 32813,
+    "memory_file_bytes": 14981419008,
+    "pgmajfault": 347048,
+    "workingset_refault_file": 7647805,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "answer_quality": "Degenerated into repeated punctuation/list pattern."
+  },
+  "conclusion": "The DS4 MXFP4 gate stream failure is not explained by the non-ids MMVQ path; a small CPU-vs-GPU numeric diff harness is required before further full-model stream trials.",
+  "next_steps": [
+    "Capture one MXFP4 expert and one activation row, then compare CPU vec_dot_mxfp4_q8_0 output against CUDA MXFP4 output for the same rows.",
+    "Localize mismatch to weight layout, activation quantization, output layout, or CUDA vec-dot."
+  ]
+}

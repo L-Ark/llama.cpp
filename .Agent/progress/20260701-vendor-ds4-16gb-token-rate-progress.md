@@ -116,3 +116,12 @@ Rejected higher-rate candidates:
   - Result: rejected as performance regression. Correctness passed, but `eval_tok_s=1.0`, `prompt_tok_s=0.8`, `ttft_estimate_ms=43646.226705`, `memory_peak_bytes=16000000000`, `memory_max_events=61442`, `pgmajfault=605870`, `workingset_refault_file=19860280`.
   - Compared with cold vram2 profile (`eval_tok_s=1.3`, `ttft_estimate_ms=44034.028848`, `pgmajfault=826309`), `WILLNEED` reduced major faults and slightly improved TTFT, but worsened generation throughput. The likely gap is that prefetch increases reclaim/read-ahead contention and does not overlap enough useful compute under the 16GB cgroup.
 - Next step: do not pursue broad `MADV_WILLNEED` as-is. For MXFP4/F8 stream correctness, compare `moe_stream_one` output against CPU for a tiny captured expert/input or add a targeted numeric diff harness before attempting another full model run.
+
+### 2026-07-01T08:03:13Z - Rejected DS4 gate stream with MoE ids kernel
+
+- Purpose: test whether the MXFP4 gate stream failure was caused by using the non-ids single-column MMVQ path. Added a default-off compact-rows helper, `ggml_cuda_moe_stream_mmvq_rows_dev`, that quantizes compact `cne1` rows and calls the existing MoE ids kernel with all expert ids set to zero for the current streamed expert.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T080313Z-cold-ds4-stream-filter-gate-idskernel-cpu40-vram2/france-cpu40-vram2gb`.
+- Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Result: rejected. `eval_tok_s=2.1`, `prompt_tok_s=0.6`, `ttft_estimate_ms=51806.596358`, `memory_peak_bytes=16000000000`, `memory_max_events=32813`, `pgmajfault=347048`, `workingset_refault_file=7647805`, but `correctness_ok=false`.
+- Output again degenerated into the same punctuation/list pattern and did not mention France or Europe.
+- Interpretation: the failure is not explained by using the non-ids MMVQ path. The next useful step is a small numeric CPU-vs-GPU diff for one MXFP4 expert/input to identify whether the mismatch is in weight layout, input quantization, output layout, or the CUDA vec-dot itself.

@@ -10,6 +10,7 @@ bool ggml_cuda_moe_stream_available(void) { return false; }
 int ggml_cuda_host_register(void *, size_t) { return 0; }
 bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
+bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
 void ggml_cuda_moe_stream_sync(void) {}
 }
@@ -84,6 +85,18 @@ bool ggml_cuda_moe_stream_mmvq_dev(
     size_t nb01,
     const float *d_src1_f32,
     void *d_src1_q8,
+    float *d_dst,
+    cudaStream_t stream);
+bool ggml_cuda_moe_stream_mmvq_rows_dev(
+    int src0_type_int,
+    const void *d_src0,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const float *d_src1_f32,
+    void *d_src1_q8,
+    const int32_t *d_x_ids,
+    int64_t cne1,
     float *d_dst,
     cudaStream_t stream);
 bool ggml_cuda_moe_stream_mmvq_batch_dev(
@@ -291,6 +304,8 @@ struct slot_ctx {
     size_t  d_src1_f32_sz = 0;
     void *  d_dst        = nullptr;
     size_t  d_dst_sz     = 0;
+    void *  d_ids        = nullptr;
+    size_t  d_ids_sz     = 0;
     void *  h_scratch    = nullptr;
     size_t  h_scratch_sz = 0;
     void *  h_bounce     = nullptr;
@@ -545,6 +560,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
         ok = ensure_dev(ctx.d_src0, ctx.d_src0_sz, src0_bytes)
           && ensure_dev(ctx.d_src1, ctx.d_src1_sz, src1_q8_1_bytes)
           && ensure_dev(ctx.d_dst,  ctx.d_dst_sz,  dst_bytes)
+          && ensure_dev(ctx.d_ids,  ctx.d_ids_sz,  (size_t)cne1 * sizeof(int32_t))
           && ensure_host_pinned(ctx.h_scratch, ctx.h_scratch_sz, dst_bytes);
     }
     if (!ok) { release_slot(s); return false; }
@@ -603,14 +619,27 @@ extern "C" bool ggml_cuda_moe_stream_one(
         return false;
     }
     const auto t_src1 = std::chrono::steady_clock::now();
-    const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
-    for (int64_t k = 0; k < cne1; ++k) {
-        const float *d_src1_row = (const float *)((const char *)ctx.d_src1_f32 + (size_t)k * ne00 * sizeof(float));
-        void *d_src1_q8_row = (char *)ctx.d_src1 + (size_t)k * src1_q8_row_bytes;
-        float *d_dst_row = (float *)ctx.d_dst + k * ne01;
-        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, kernel_src0, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
+    if ((t0 == GGML_TYPE_MXFP4 || t0 == GGML_TYPE_F8_E4M3_B128) && moe_stream_one_experimental_ds4_enabled()) {
+        if (cudaMemsetAsync(ctx.d_ids, 0, (size_t)cne1 * sizeof(int32_t), st) != cudaSuccess) {
             release_slot(s);
             return false;
+        }
+        if (!ggml_cuda_moe_stream_mmvq_rows_dev(src0_type_int, kernel_src0, ne01, ne00, nb01,
+                    (const float *)ctx.d_src1_f32, ctx.d_src1, (const int32_t *)ctx.d_ids, cne1,
+                    (float *)ctx.d_dst, st)) {
+            release_slot(s);
+            return false;
+        }
+    } else {
+        const int64_t src1_q8_row_bytes = src1_padded * (int64_t)sizeof(block_q8_1) / QK8_1;
+        for (int64_t k = 0; k < cne1; ++k) {
+            const float *d_src1_row = (const float *)((const char *)ctx.d_src1_f32 + (size_t)k * ne00 * sizeof(float));
+            void *d_src1_q8_row = (char *)ctx.d_src1 + (size_t)k * src1_q8_row_bytes;
+            float *d_dst_row = (float *)ctx.d_dst + k * ne01;
+            if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, kernel_src0, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
+                release_slot(s);
+                return false;
+            }
         }
     }
     const auto t_kernel = std::chrono::steady_clock::now();
