@@ -507,6 +507,8 @@ Every implementation step must append one row before and after execution.
 | 2026-07-01 12:50:35 | Phase 0 full baseline | The current accepted Kimi correctness config should produce stable `-n 96` output under a 16GB host-memory guard, but token rate may drop because page cache is constrained. | Previous unconstrained reference was about 0.51-0.52 tok/s; under strict 16GB, lower bound unknown before measurement. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline`: `rc=0`, prompt eval/TTFT 88.61s, eval 401.59s / 80 decode runs, 0.20 tok/s, total 490.26s. | 16GB pass by cgroup peak 14.901 GiB; cold pass; quality pass; `read_failures` not reported; TTFT becomes baseline; reproducibility recorded. VRAM/GPU-first not optimized: 15.9 GiB VRAM unused. | Baseline established. Next required step is profiling with `memory.stat` anon/file sampling and MoE per-stage timing, then prioritize VRAM expert cache/profile preload. |
 | 2026-07-01 13:03:05 | Phase 2A n32 expert pack + VRAM cache profile | Move repeated routed expert tensors into VRAM cache to reduce 16GB page-cache/reclaim stalls without changing model math. | Removing strict-cgroup reclaim stalls could recover the old unconstrained 0.51-0.52 tok/s ceiling; route replay with 15GB cache estimated up to 70.46% trace hit rate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`: VRAM peak 31278 MiB, minimum free 832 MiB, cache hit 60.0%, route replay hit estimate 70.46%, but TTFT 110.33s (+24.5%), decode 0.16 tok/s, output started `The user asks: ...`. | Host RAM/cold/read failures pass; VRAM/GPU-first pass; TTFT gate fail; token-rate fail; quality fail. | Rejected. Do not promote and do not stack optimizations on this env. The gap is that enabling `GGML_MOE_STREAM`/batched up-gate changes output semantics and is slower under the 16GB cap. |
 | 2026-07-01 13:11:49 | Phase 2B-1 stream-only isolation | If `GGML_MOE_STREAM=1` alone preserves quality, the Phase 2A regression is likely in expert pack/cache/fused up-gate. If it fails, stream path itself is the minimum bad switch. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`: cgroup peak 14.901 GiB, TTFT 109.13s, decode 0.26 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. Log shows `[moe_stream] enabled` and `VRAM cache: cudaMalloc 16.0 GiB FAILED`. | Host RAM/cold pass; TTFT fail; quality fail. | Rejected. Minimum semantic regression switch is `GGML_MOE_STREAM=1`; stop env sweep and debug stream one-path correctness before any VRAM cache promotion. |
+| 2026-07-01 13:17:22 | Phase 2C stream cache disabled isolation | Check whether stream-only corruption was caused by the default one-cache 16GiB cudaMalloc failure. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131722Z-n16-phase2c-stream-cache0`: `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, cgroup peak 14.901 GiB, TTFT 99.18s, decode 0.25 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. | Host RAM/cold pass; quality fail. | Rejected. one-cache allocation failure is not the root cause; stream compute/copy/scatter remains unsafe. |
+| 2026-07-01 13:23:17 | Phase 1A n32 `-t 40 -tb 40` | Increasing CPU threads on the accepted non-stream path may improve token rate without changing math. | Perfect CPU scaling from 24 to 40 would be 1.67x on the CPU portion, but IO/reclaim can dominate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-132317Z-n32-phase1a-threads40`: cgroup peak 14.901 GiB, quality pass, TTFT 65.28s, decode 155.51s / 31 runs, 0.20 tok/s. | Host RAM/cold/quality/TTFT pass; token-rate improvement absent. | Rejected for token-rate promotion. Useful observation: `-tb 40` may reduce prompt/TTFT, but decode remains page-cache/IO bound. |
 
 ## Current bottleneck after Phase 0
 
@@ -687,6 +689,9 @@ Result:
   `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`.
 - Output was corrupted:
   `The:ayt老爷 grave!!!!!!!!!!!`.
+- Disabling the default stream one-cache with `GGML_MOE_STREAM_ONE_CACHE_MIB=0`
+  produced the same corrupted output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-131722Z-n16-phase2c-stream-cache0`.
 - Because the first isolation switch failed, later combinations with expert
   pack, VRAM cache, or fused up/gate are invalid until the base stream path is
   corrected.
@@ -800,8 +805,20 @@ Rollback:
 - If token rate is flat/slower, TTFT fails, or quality changes, reject the
   tuning and keep `-t 24 -tb 24`.
 
+Result:
+
+- Rejected for token-rate promotion.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-132317Z-n32-phase1a-threads40`
+  passed quality and host RAM gates.
+- TTFT improved to 65280.14 ms, but decode remained 0.20 tok/s
+  (5016.38 ms/token), effectively the same as the Phase 0 baseline.
+- Conclusion: decode is not materially improved by more CPU threads; the
+  limiting bucket is page-cache/IO/reclaim and the unsafe stream path must be
+  fixed for VRAM/cache gains.
+
 ## Immediate next action
 
-Run Phase 1A `-t 40 -tb 40` cold `-n 32` smoke on the accepted non-stream path.
-In parallel, keep Phase 2C as the required path for future GPU/VRAM cache
-promotion.
+Implement Phase 2C debug instrumentation to compare the first stream one-path
+expert output against the accepted non-stream/CPU reference. The next code patch
+must be diagnostic or correctness-only; it is not a performance promotion until
+stream-only output passes semantic smoke.
