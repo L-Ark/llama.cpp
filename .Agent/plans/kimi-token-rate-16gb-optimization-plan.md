@@ -2722,6 +2722,44 @@ Decision:
   full `-n 96`; otherwise reject without full run because the TTFT margin is
   not reproducibility-friendly.
 
+Result timestamp: 2026-07-02 17:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-174416Z-n32-phase2t-lfu-cache-policy`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 99912.80 ms, inside the 106331.72 ms gate.
+- Decode: 95284.36 ms / 31 runs, 3.07369 s/token, 0.32534 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=10785, misses=16159,
+  preloads=0, hit_rate=40.0%.
+- Pinned staging: copies=15211, host_stage=21256.248 ms, h2d=3303.428 ms.
+- Up/gate profile: calls=869, total=18.744 ms/call.
+- Down profile: calls=1644, stage=9.910 ms/call, total=10.068 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2T `-n 32`: 95284.36 ms / 31 runs, 3.07369 s/token,
+  0.32534 tok/s.
+
+Decision:
+
+- The medium run passes all gates and is slightly faster than Phase 2H on the
+  matching token count.
+- Continue to full cold `-n 96`, but treat this as a marginal candidate:
+  cache hit-rate and staging metrics are not clearly better than Phase 2H, so
+  full promotion requires the actual `-n 96` decode to beat Phase 2H with
+  semantic quality and TTFT gates intact.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
