@@ -2690,6 +2690,37 @@ Rollback:
   launch/read failures appear, or full `-n 96` does not improve over Phase 2H.
 - No code rollback should be needed because this is env-only.
 
+Result timestamp: 2026-07-02 17:32 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-173240Z-n4-phase2s-vram-cache15200`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15200`, no split cache, no down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31540 MiB used, 570 MiB free.
+- TTFT: 106300.84 ms, inside the 106331.72 ms gate by only 30.88 ms.
+- Decode: 14654.49 ms / 3 runs, 4.88483 s/token, 0.20472 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2043, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2748.542 ms, h2d=387.967 ms.
+- Up/gate profile: calls=85, total=29.518 ms/call.
+- Down profile: calls=160, stage=14.049 ms/call, total=14.227 ms/call.
+
+Decision:
+
+- The smoke passes all hard gates, but TTFT headroom is only 30.88 ms. This is
+  a very narrow margin for cold-start reproducibility.
+- Continue to `-n 32` because the plan allows it after a passing smoke, but
+  Phase 2S should be promoted only if the speed/cache gain is clear and the
+  longer run still leaves TTFT below the gate.
+- If `-n 32` is slower than Phase 2H or has similarly tight TTFT without clear
+  cache/staging improvement, reject without running `-n 96`.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
