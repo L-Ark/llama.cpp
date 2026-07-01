@@ -2918,6 +2918,45 @@ Decision:
 - Continue to `-n 32` only to rule out tiny-sample noise. If `-n 32` does not
   beat Phase 2H or materially reduce down stage, reject without full `-n 96`.
 
+Result timestamp: 2026-07-02 18:00 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-180052Z-n32-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 99103.46 ms, inside the 106331.72 ms gate.
+- Decode: 94223.24 ms / 31 runs, 3.03946 s/token, 0.32901 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12892, misses=14052,
+  preloads=0, hit_rate=47.8%.
+- Pinned staging: copies=10390, host_stage=9152.341 ms, h2d=2213.267 ms.
+- Up/gate profile: calls=869, total=20.299 ms/call.
+- Down profile: calls=1644, stage=8.366 ms/call, total=8.528 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2U `-n 32`: 94223.24 ms / 31 runs, 3.03946 s/token,
+  0.32901 tok/s.
+
+Decision:
+
+- The medium run passes all gates and shows the intended local effect:
+  down stage is materially lower than the Phase 2H `-n 32` down profile
+  while the total decode is faster.
+- Continue to full cold `-n 96`.
+- Full promotion still requires beating accepted Phase 2H full `-n 96`
+  (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with full semantic
+  quality and all hard gates passing.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
