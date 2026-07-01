@@ -94,7 +94,7 @@ def check_correctness(answer: str) -> tuple[bool, str]:
         failures.append("missing_europe")
     if not any(term in lowered for term in ["paris", "culture", "history", "cuisine", "landmark", "art", "wine"]):
         failures.append("missing_expected_context")
-    if re.search(r"(!{3,}|#{3,}|\ufffd|\b(\w+)\s+\1\s+\1\b)", lowered):
+    if re.search(r"(?:!{3,}|#{3,}|\ufffd|\b(\w+)\s+\1\s+\1\b)", lowered):
         failures.append("degenerate_text")
     if re.search(r"\b(the the|of of|in the the)\b", lowered):
         failures.append("repetition")
