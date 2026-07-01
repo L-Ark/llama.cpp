@@ -1170,9 +1170,16 @@ static void load_prompt_profile_once() {
 static int batch_cache_id_for_size(size_t expert_sz) {
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
     const char *split_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT");
+    const char *split_max_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB");
+    size_t split_max_mib = 4;
+    if (split_max_env && split_max_env[0]) {
+        split_max_mib = (size_t)std::strtoull(split_max_env, nullptr, 10);
+        if (split_max_mib < 1) split_max_mib = 1;
+        if (split_max_mib > 64) split_max_mib = 64;
+    }
     if (fused_env && fused_env[0] && fused_env[0] != '0' &&
             split_env && split_env[0] && split_env[0] != '0' &&
-            expert_sz <= 4ULL*1024ULL*1024ULL) {
+            expert_sz <= split_max_mib*1024ULL*1024ULL) {
         return 1;
     }
     if (fused_env && fused_env[0] && fused_env[0] != '0' && expert_sz <= 2ULL*1024ULL*1024ULL) {

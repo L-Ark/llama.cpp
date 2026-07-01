@@ -2039,3 +2039,93 @@ Decision:
 - The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
   launch/read gates.
 - Continue to cold `-n 32` before deciding whether to keep or revert the code.
+
+Result timestamp: 2026-07-01 16:11 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-161150Z-n32-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `d7d0fa42-dirty-split-cache`, accepted Phase 2H config plus
+  local default-off split threshold code and:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 97293.10 ms, inside the 106331.72 ms gate.
+- Decode: 92447.06 ms / 31 runs, 2.98216 s/token, 0.33533 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1109 slots, 7.44 MiB slot, hits=6809, misses=6311,
+    hit_rate=51.9%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=6836, misses=7068,
+    hit_rate=49.2%.
+- Pinned staging: copies=12466, host_stage=16966.087 ms, h2d=2701.115 ms.
+- Up/gate profile: calls=869, total=16.697 ms/call.
+- Down profile: calls=1644, stage=8.608 ms/call, total=8.770 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2M `-n 32`: 92447.06 ms / 31 runs, 2.98216 s/token, 0.33533 tok/s.
+- Improvement: about 3.3% lower seconds/token at the same token count while
+  passing host RAM, VRAM, TTFT, quality, launch, and read gates.
+- The improvement matches the hypothesis: split pools reduce staging copies
+  (13135 -> 12466), host_stage (18199.846 ms -> 16966.087 ms), up/gate total
+  (18.938 ms/call -> 16.697 ms/call), and down total
+  (9.228 ms/call -> 8.770 ms/call).
+
+Decision:
+
+- Accept Phase 2M as a valid constrained `-n 32` improvement.
+- Commit and push the default-off code plus this plan record immediately.
+- Next practice: run cold `-n 96` with the same split-cache config before
+  promoting it as the new full-length best configuration.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase2m-split-cache
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2m_n32_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_STREAM_DOWN_BATCH=1
+export GGML_MOE_VRAM_CACHE_SPLIT=1
+export GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+export GGML_MOE_VRAM_CACHE_UPGATE_PCT=45
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=180000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
