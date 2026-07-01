@@ -2380,6 +2380,40 @@ Rollback:
 - No code rollback should be needed because the experiment is env-only and the
   prefetch path is default-off.
 
+Result timestamp: 2026-07-02 17:11 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171134Z-n4-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102188.15 ms, inside the 106331.72 ms gate.
+- Decode: 14379.67 ms / 3 runs, 4.79322 s/token, 0.20863 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=137, hits=137, evicted_unused=0, useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=878, misses=1666,
+  preloads=137, hit_rate=34.5%.
+- Pinned staging: copies=1773, host_stage=2778.373 ms, h2d=384.665 ms.
+- Up/gate profile: calls=85, total=28.221 ms/call.
+- Down profile: calls=160, stage=10.585 ms/call, total=10.750 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes the hard gates: strict RAM, VRAM, TTFT, launch/read,
+  prefetch activation, and semantic quality.
+- Depth 2 does not yet show the intended down-stage benefit on the tiny sample:
+  it has far fewer preloads than depth 8 and down stage remains near the
+  non-prefetch path.
+- Continue to `-n 32` because the plan requires the medium-length check after
+  a passing smoke, but promotion to `-n 96` will require `-n 32` to beat Phase
+  2H `-n 32` or show a clear bottleneck reason worth retuning.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
