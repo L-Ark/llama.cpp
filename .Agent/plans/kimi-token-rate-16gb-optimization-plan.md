@@ -2515,6 +2515,80 @@ Decision:
   optimization should instrument where the missing full-length time moves
   before changing prefetch policy again.
 
+## Next candidate: Phase 2R raise VRAM cache budget to 15400 MiB
+
+Design timestamp: 2026-07-02 17:29 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` leaves 772 MiB VRAM free while the down-cache
+  path still has 40316 misses and 50153.894 ms host staging time.
+- The strict host RAM limit is already the main model-size gate, but VRAM is
+  not completely filled. The requirement says to use VRAM as much as possible,
+  so the next low-risk test is to convert part of the remaining VRAM headroom
+  into additional expert cache capacity.
+- Phase 2H cache:
+  - budget=15000 MiB.
+  - down cache slot=7.44 MiB.
+  - slots=2016.
+  - hit_rate=45.5%.
+- Increasing to 15400 MiB should add about 400 MiB / 7.44 MiB = 53 additional
+  down-cache slots, while leaving roughly 300-400 MiB free if memory behavior
+  stays close to Phase 2H.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_MIB=15400`
+- no split cache.
+- no down prefetch.
+
+This should not affect model math or routing. It can only change which expert
+weights remain resident in VRAM. If the extra 53 slots catch frequently reused
+experts, host staging and misses should fall with no quality change.
+
+Theoretical upper bound:
+
+- The absolute upper bound is limited because 400 MiB is only about 2.6% more
+  cache than 15000 MiB.
+- If the marginal slots are high-value, avoiding 1000-2000 misses could save
+  roughly 1-3s of host staging/H2D work on the full run.
+- A realistic successful result is therefore modest: full `-n 96` must drop
+  below 295113.58 ms, but a 1-2s improvement is still valid if all gates pass
+  and is worth committing because it uses more VRAM without code risk.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes without OOM and leaves nonzero VRAM headroom, run cold
+  `-n 32`.
+- Promote to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  or if the cache-hit/staging metrics clearly improve without TTFT pressure.
+
+Acceptance:
+
+- Host RAM must remain under 16GB including page cache.
+- VRAM should be fuller than Phase 2H without CUDA OOM or allocation retries.
+- TTFT must remain <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96` to be promoted.
+- If promoted, commit and push immediately with the exact env vars and run
+  paths.
+
+Rollback:
+
+- Reject if VRAM OOMs, free VRAM becomes unstable, TTFT exceeds the gate,
+  host RAM exceeds the 16GB cap, output quality fails, launch/read failures
+  appear, or full `-n 96` does not beat Phase 2H.
+- No code rollback should be needed because this is env-only.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
