@@ -3238,6 +3238,125 @@ Decision:
 - Reject Phase 3M for full promotion.
 - Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
 
+## Next candidate: Phase 3N production run without diagnostic trace overhead
+
+Design timestamp: 2026-07-02 21:31 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- The accepted scripts still enable diagnostic MoE tracing/profiling:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `GGML_MOE_BATCH_PROFILE_OUT`
+  - `GGML_MOE_ROUTE_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_OUT`
+- These are useful for attribution, but they add CUDA event timing, counters,
+  route/TTFT trace bookkeeping, and atexit file writes.
+
+Hypothesis:
+
+- Disabling diagnostic profile/trace env vars while keeping the same compute
+  path may reduce decode overhead without changing output semantics.
+- Required metrics can still be recorded from:
+  - `common_perf_print` for TTFT and token rate.
+  - stdout answer for quality.
+  - cgroup memory samples for host RAM.
+  - `nvidia-smi` samples for VRAM.
+  - stderr failure counters such as `read_failures`.
+
+Theoretical upper bound:
+
+- The potential gain is bounded by profiling overhead, likely small but relevant
+  because Phase 3M missed full promotion by only about 0.18s total.
+- Even a 0.5-1.0% improvement on the Phase 3E full decode would save about
+  1.2-2.3s over 85 tokens.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` using the Phase 3E best runtime env, but unset/remove:
+  - `GGML_MOE_BATCH_PROFILE`
+  - `GGML_MOE_BATCH_PROFILE_OUT`
+  - `GGML_MOE_ROUTE_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`
+- If smoke passes quality/RAM/VRAM/TTFT gates, run cold `-n 32`.
+- If `-n 32` is not slower than Phase 3E and all gates pass, run full cold
+  `-n 96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+- Repro method must explicitly state that diagnostic tracing is disabled.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  failure counters appear, or full `-n 96` does not improve over Phase 3E.
+
+Result timestamp: 2026-07-02 21:38 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-203130Z-n4-phase3n-production-no-profile`
+
+Measured result:
+
+- Commit/config: `32b0d67c8`, Phase 3E best runtime env with diagnostic
+  route/TTFT/batch profile env vars disabled.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 75060.91 ms, inside the 106331.72 ms gate.
+- Decode: 10618.78 ms / 3 runs, 3.53959 s/token, 0.28252 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Diagnostic down/up profile fields are intentionally absent because this phase
+  disables profiling.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-203404Z-n32-phase3n-production-no-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78105.45 ms, inside the 106331.72 ms gate.
+- Decode: 71018.94 ms / 31 runs, 2.29093 s/token, 0.43650 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12906, misses=14038,
+  hit_rate=47.9%.
+
+Comparison:
+
+- Phase 3E `-n 32` reference: 2.24573 s/token.
+- Phase 3N `-n 32`: 2.29093 s/token.
+
+Analysis:
+
+- Disabling diagnostic trace/profile does not produce a measurable decode win in
+  the cold `-n 32` gate.
+- The measured result is about 2.0% slower than the Phase 3E `-n 32`
+  reference, so the expected instrumentation overhead is not the current
+  bottleneck.
+- Because the gate failed before full `-n 96`, this phase does not justify a
+  full cold run.
+
+Decision:
+
+- Reject Phase 3N.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 Result timestamp: 2026-07-02 21:00 CST.
 
 Smoke run:
