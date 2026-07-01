@@ -2621,6 +2621,75 @@ Decision:
   smaller step such as 15200 MiB and require TTFT headroom on smoke before
   continuing.
 
+## Next candidate: Phase 2S raise VRAM cache budget to 15200 MiB
+
+Design timestamp: 2026-07-02 17:43 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H uses `GGML_MOE_VRAM_CACHE_MIB=15000` and leaves 772 MiB
+  VRAM free at full `-n 96`.
+- Phase 2R with 15400 MiB used VRAM more fully, leaving 444 MiB free, but its
+  `-n 4` TTFT was 106568.74 ms, which exceeded the 106331.72 ms gate by
+  237.02 ms.
+- The failure was a tight TTFT margin rather than OOM, quality failure, or RAM
+  violation. A smaller cache increase may still satisfy the "use VRAM as much
+  as possible" requirement while keeping cold-start TTFT inside the gate.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_MIB=15200`
+- no split cache.
+- no down prefetch.
+
+This should add about 200 MiB / 7.44 MiB = 26 additional down-cache slots over
+Phase 2H, while preserving roughly 550-600 MiB free VRAM if memory behavior
+tracks linearly. The extra slots may reduce misses and host staging without the
+TTFT violation seen at 15400 MiB.
+
+Theoretical upper bound:
+
+- A 200 MiB cache increase is only about 1.3% over the accepted 15000 MiB cache.
+- The best realistic gain is modest: if the marginal 26 slots avoid a few
+  hundred to roughly 1000 full-run misses, expected full `-n 96` improvement is
+  likely 0.5-2.0s.
+- Promotion still requires full `-n 96` decode below 295113.58 ms / 85 runs
+  with all gates passing.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- Continue to cold `-n 32` only if:
+  - TTFT <=106331.72 ms.
+  - VRAM has nonzero stable headroom.
+  - semantic quality passes.
+  - launch/read failures remain zero.
+- Continue to cold `-n 96` only if `-n 32` is not slower than Phase 2H or shows
+  better cache/staging metrics with enough TTFT headroom to justify full run.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should be fuller than Phase 2H without OOM or allocation retries.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM/RAM gates fail, output quality fails,
+  launch/read failures appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
