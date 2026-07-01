@@ -1889,3 +1889,43 @@ Decision:
 - Watch up/gate timing: the tiny smoke has a faster overall decode than recent
   rejected configs, but up/gate is slower than Phase 2H n32, so this may still
   fail at longer length.
+
+Result timestamp: 2026-07-01 15:59 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-155938Z-n32-phase2l-cache-index`
+
+Measured result:
+
+- Commit/config: `ff2ec840-dirty-cache-index`, accepted Phase 2H config plus
+  the local dirty cache key-index implementation.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102493.78 ms, inside the 106331.72 ms gate.
+- Decode: 97355.97 ms / 31 runs, 3.14052 s/token, 0.31842 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=12892, misses=14052, hit_rate=47.8%.
+- Pinned staging: copies=13135, host_stage=17689.156 ms, h2d=2846.699 ms.
+- Up/gate profile: calls=869, total=18.410 ms/call.
+- Down profile: calls=1644, stage=9.078 ms/call, total=9.247 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2L `-n 32`: 97355.97 ms / 31 runs, 3.14052 s/token, 0.31842 tok/s.
+- The key index slightly reduced pinned staging host time
+  (18199.846 ms -> 17689.156 ms) and up/gate total
+  (18.938 ms/call -> 18.410 ms/call), but down total was slightly slower
+  (9.228 ms/call -> 9.247 ms/call) and the full decode was slower.
+
+Decision:
+
+- Reject Phase 2L.
+- Reverted the local cache key-index code and did not commit it.
+- Keep accepted Phase 2H as the current best valid configuration.
+- Next design should target a larger bucket than cache lookup overhead. The
+  remaining visible Phase 2H costs are still up/gate compute and expert staging;
+  a useful next step should either reduce actual up/gate graph replay time or
+  reduce the number/size of expert loads rather than just lookup overhead.
