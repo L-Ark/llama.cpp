@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "2026-07-01T09:59:42Z",
+  "classification": "rejected_cache_allocation_cliff",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_commit": "f7f9cdc48",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T095942Z-cold-ds4-gate-stream-src1-rowmod-vram14-trace/france-cpu40-vram14gb",
+  "config": {
+    "cpu_moe": 40,
+    "vram_cache_gb": 14,
+    "drop_caches_before_case": true,
+    "env": {
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 0.8,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 52889.140515,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 72712,
+    "memory_file_bytes": 14969606144,
+    "pgmajfault": 606508,
+    "workingset_refault_file": 26778917,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "correctness_ok": true
+  },
+  "trace_summary": {
+    "rows": 34753,
+    "cache_hits": 0,
+    "cache_inserts": 0,
+    "src0_ms_sum": 91070.676,
+    "kernel_ms_sum": 625.451,
+    "dontneed_ms_sum": 6640.483,
+    "total_ms_sum": 99095.271
+  },
+  "reason": "At vram_cache_gb=14, the VRAM cache did not insert any expert entries, likely because the requested cache is beyond practical VRAM fit after model allocation. The run remained correct and inside the 16GB host cgroup, but token rate and TTFT regressed badly.",
+  "next_step": "Probe vram_cache_gb=13 to see whether the fit cliff is between 12 and 13 or between 13 and 14."
+}

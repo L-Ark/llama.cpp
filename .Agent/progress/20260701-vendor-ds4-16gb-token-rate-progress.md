@@ -219,3 +219,12 @@ Rejected higher-rate candidates:
 - Answer: same coherent France paragraph as the vram8 run, semantically correct.
 - Trace interpretation: vram8 had `7110` inserts and `src0_ms=36392 ms`; vram12 has `5129` inserts and `src0_ms=23564 ms`. The gain is still from fewer expert staging misses/page faults. CUDA quantize/MMVQ/D2H/scatter remain small.
 - Action: commit and push immediately. Next step is to probe one higher VRAM cache size to identify whether there is still useful cache capacity before OOM or diminishing returns.
+
+### 2026-07-01T09:59:42Z - Rejected vram14 cache cliff
+
+- Purpose: test the next VRAM cache size after the accepted vram12 SOTA.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T095942Z-cold-ds4-gate-stream-src1-rowmod-vram14-trace/france-cpu40-vram14gb`.
+- Config: `cpu_moe=40`, `vram_cache=14`, `drop_caches_before_case=true`, corrected DS4 gate stream enabled with trace.
+- Result: rejected. Correctness passed and RAM stayed inside the 16GB cgroup, but `eval_tok_s=0.8`, `prompt_tok_s=0.6`, `ttft_estimate_ms=52889.140515`, `memory_max_events=72712`, `pgmajfault=606508`, `workingset_refault_file=26778917`.
+- Trace evidence: `cache_hits=0`, `cache_inserts=0`, `src0_ms=91071 ms`, `dontneed_ms=6640 ms`. The requested 14GB VRAM cache appears not to have inserted any experts, likely due practical VRAM fit after model allocation.
+- Interpretation: vram14 crosses a cache allocation cliff and must not be used. Probe vram13 next to locate whether the usable upper bound is exactly vram12 or if one more GB fits.
