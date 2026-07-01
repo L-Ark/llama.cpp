@@ -1188,3 +1188,35 @@ Rollback:
 
 - Reject if quality changes, TTFT exceeds the gate, down batch silently declines,
   cgroup OOM occurs, or decode does not improve over accepted Phase 2E.
+
+Result:
+
+- Result timestamp: 2026-07-01 14:36 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-143039Z-n32-phase2g-down-batch-handoff`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Run was terminated intentionally after quality failure; exit code 143.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- Quality: FAIL.
+- Partial answer before termination:
+  `France the. with myol:,ing andn of of`
+- TTFT/decode: no valid final `common_perf_print` because the run was aborted
+  after quality corruption.
+- Read status before abort: read_failures=0.
+- Down path diagnostics:
+  - `down batch declined` occurred 727 times.
+  - Prompt/multi-token phase declined with `reason=multirow_not_supported`,
+    e.g. active routes larger than one row for the same expert.
+  - Decode phase declined with `reason=launch_moe_mmvq_compact_batch` for many
+    `ffn_down_exps` tensors.
+- Decision: reject Phase 2G. Do not promote
+  `GGML_MOE_STREAM_DOWN_BATCH=1` or `GGML_MOE_GPU_HANDOFF=1`.
+- Gap analysis:
+  - The high-level bottleneck finding remains valid: accepted Phase 2E leaves
+    most decode time outside traced up/gate/load buckets.
+  - The existing vendor down batch implementation is not Kimi-safe yet because
+    prompt multirow routing is unsupported and the decode launch path fails for
+    active=8 Kimi down tensors.
+  - A future down optimization must first fix down batch correctness on a tiny
+    comparison run before any performance measurement.
