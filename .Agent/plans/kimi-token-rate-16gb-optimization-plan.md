@@ -3116,6 +3116,51 @@ Decision:
   sample suggests that the hidden gap is small inside the MoE functions, but
   `-n 32` is needed before moving the bottleneck search up the graph.
 
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-182027Z-n32-phase3a-wall-profile`
+
+Measured result:
+
+- Commit/config: `6536b772f`, accepted Phase 2H runtime env, with
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105745.41 ms, inside the 106331.72 ms gate.
+- Decode: 97526.35 ms / 31 runs, 3.14601 s/token, 0.31786 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12892, misses=14052,
+  preloads=0, hit_rate=47.8%.
+- Pinned staging: copies=13135, host_stage=17934.216 ms, h2d=2843.707 ms.
+- Wall profile:
+  - up/gate: calls=869, total=18.848 ms/call, wall=18.876 ms/call,
+    wall_gap=0.028 ms/call.
+  - down: calls=1644, total=9.186 ms/call, wall=9.271 ms/call,
+    wall_gap=0.084 ms/call.
+
+Analysis:
+
+- The MoE function wall gaps are tiny:
+  - up/gate hidden gap is about 24 ms total.
+  - down hidden gap is about 138 ms total.
+- MoE function wall time accounts for about:
+  - up/gate: 869 * 18.876 ms = 16.4s.
+  - down: 1644 * 9.271 ms = 15.2s.
+  - combined: about 31.6s of the 97.5s `-n 32` eval time.
+- Therefore the remaining bottleneck is mostly outside the MoE stream functions
+  themselves. Continuing to tune cache/preload/down-stage policy is unlikely to
+  reach large gains without first profiling graph-level or non-MoE CUDA work.
+
+Decision:
+
+- Phase 3A instrumentation is accepted as diagnostic code: it is default-off
+  outside `GGML_MOE_BATCH_PROFILE`, builds successfully, and preserves output
+  quality under the cold-start gates.
+- Do not claim a token-rate improvement from Phase 3A.
+- Next candidate should add or use graph-level per-op/per-split timing to find
+  the non-MoE decode bucket before making another optimization attempt.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
