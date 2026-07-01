@@ -2,29 +2,39 @@
 
 ## 目标
 
-- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，目标超过当前 `2.6 tok/s` 的合规线。
+- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，当前 source-backed 可回退 SOTA 为 `2.0 tok/s`；旧 `2.6 tok/s` 作为历史观测值继续排查，只有找回 exact source/binary 并通过 pushed-commit rerun 后才能重新作为 SOTA。
 - 严格保持：
   - Host RAM（含 page cache）`<= 16 GB`；
   - TTFT 不得高于当前 baseline 的 `20%` 阈值；
   - France 提示词输出语义正确且连贯；
   - 以 `vendor` 代码路径为准，不以 `ik_llama` 实现作为最终结果。
 
-## 当前基线（已确认）
+## 当前有效 SOTA / 基线（已确认）
 
-- cold-start baseline 合规线仍以：
+- 当前可从 pushed source 干净重建并复跑的 cold-start 合规 SOTA：
   - `vendor` 框架
   - `cpu_moe=40`
-  - `vram_cache=12GB`
-  - DS4 gate stream 修复后启用
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=5`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
   - cold drop_caches
   - 16GB cgroup
 - 当前记录：
-  - `eval_tok_s=2.6`
-  - `prompt_tok_s=0.8`
-  - `TTFT=40836ms`
+  - `eval_tok_s=2.0`（pushed-commit clean rebuild rerun）
+  - `prompt_tok_s=0.7`
+  - `TTFT=43188.681316ms`
   - `memory_peak_bytes=16000000000`
-  - `memory_file_bytes=14958911488`
+  - `memory_file_bytes=14968823808`
+  - `ram_ok=true`
   - `correctness_ok=true`
+  - source-bearing pushed commit: `07f1dc6bb8d8f80e00e30ad09529a939170c25d8`
+  - pushed remote/branch: `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`
+  - pushed rerun dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T222605Z-20260702_expert_keep_top5_updown_pushed_rerun/france-cpu40-vram0gb`
+- 旧 `2.6 tok/s` run 仍作为 forensic 排查对象，不作为当前可回退 SOTA：
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T095526Z-cold-ds4-gate-stream-src1-rowmod-vram12-trace/france-cpu40-vram12gb`
+  - 原记录 `eval_tok_s=2.6`, `TTFT=40836ms`, `memory_peak_bytes=16000000000`, `correctness_ok=true`
+  - 但后续 clean rebuild/rerun 未复现，且旧 binary/source 状态没有完整可重建证据；找到 exact source/binary 前只能标记为 historical/forensic observation。
 - 基准下线记录与回滚依据：
   - `vram13`：CUDA OOM（reject）
   - `vram14`：cache 插入失败、`0.8 tok/s`（reject）
@@ -71,6 +81,8 @@
 
 ### SOTA 记录与发布红线
 
+- **最高优先级硬规则：出现符合要求的新 SOTA 时，必须当场详细记录完整复现信息，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支，确保未来一定可以从 pushed source + run 记录完全复现；没有完成这件事的高指标一律无效。**
+- **任何新 SOTA 都不能只停留在临时服务器、临时二进制、未提交 diff、口头汇报或单次 run 目录中；必须有 pushed source commit、clean rebuild 命令、pushed-commit rerun 结果和完整指标证据。**
 - **2026-07-02 强化要求：出现符合要求的新 SOTA 时，必须暂停后续优化，先完成完整复现记录、源码 commit、push 到 `ssd-llama` 指定分支，并从 pushed commit 干净重建复跑通过；否则该结果不能进入“当前最高 token rate”。**
 - **不可弱化规则：只要出现符合要求的新 SOTA，必须把未来完全复现所需的信息详细写入 plan/progress/run 目录，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支；没有详细复现信息和 pushed source 的结果一律无效，不能作为当前最高 token rate。**
 - **最高优先级门禁：任何符合 16GB RAM、正确率、TTFT gate 且 token rate 更高的新 SOTA，必须详细记录足以未来完全复现的全部信息，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支。没有完成详细复现记录和源码 push 的结果，即使指标更高，也只能标记为 `unpromoted observation`，不得作为当前 SOTA 或后续优化基线。**
@@ -829,7 +841,7 @@
 
 - `attempt_id`: `20260702-cache13568-no-trace-cold-check`
 - `attempt_kind`: `config-diagnostic`
-- `status`: planned
+- `status`: completed / diagnostic_rejected_tie
 - `hypothesis`: Most `13568MiB` boundary runs write `one_trace.csv` for every streamed expert. The trace itself may add file writes and page-cache pressure inside the same 16GB cgroup, potentially under-reporting deploy token rate. A strict cold run with the same config but without `GGML_MOE_STREAM_ONE_TRACE_OUT` will measure the low-instrumentation deploy path.
 - `expected_delta`: If trace overhead is material, no-trace generation may exceed the traced `1.6 tok/s` boundary. This is not enough by itself to promote a SOTA because the plan requires detailed trace evidence for bottleneck accounting; a faster no-trace result should trigger a follow-up low-overhead evidence strategy. If no-trace also ties `1.6`, trace overhead is not the limiting issue.
 - `risk`: Without `one_trace.csv`, cache hit/miss counts are only available from stderr aggregate cache reporting, not per-expert timing. Treat as diagnostic unless paired with a later accepted evidence run.
@@ -1669,7 +1681,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top5-updown`
 - `attempt_kind`: `source-probe/approximate-pruning`
-- `status`: planned
+- `status`: promoted after pushed-source clean rebuild rerun
 - `hypothesis`: Op-level wall trace shows up/down CPU fallback dominates (`up≈41.1s`, `down≈36.2s`) and each op uses about 6 routed experts per token. If expert IDs are ordered by router rank, keeping only the first 5 routed experts for `ffn_up_exps` and `ffn_down_exps` may reduce roughly `1/6` of up/down fallback work while preserving enough semantic quality for the France prompt.
 - `theoretical_upper_bound`: Up/down fallback wall is about `77.3s`; pruning one of six routed experts has a rough upper bound near `12.9s` wall reduction before overhead and page effects. This is much larger than gate-cache/thread tweaks, but correctness risk is real. Promote only if France output remains semantically correct/coherent, RAM passes, TTFT stays within gate, and `eval_tok_s > 1.6`.
 - `implementation`: Add default-off env `GGML_MOE_KEEP_TOPK_UPDOWN=<K>` in `ggml/src/ggml-cpu/ggml-cpu.c`. During `matrix_row_counts` construction, for tensors whose name contains `ffn_up_exps` or `ffn_down_exps`, skip routed expert ranks `id >= K` and explicitly zero the corresponding output row `dst[id, iid1, :]`. Gate tensors are not pruned.
@@ -1678,12 +1690,19 @@
 - `required_evidence`: source diff, build log/hash, exact env/command, France answer text, `summary.json`, gate trace, cgroup memory files, stdout/stderr, and explicit promoted/rejected/rollback status.
 - `rollback`: If build fails, output correctness fails, RAM exceeds 16GB, TTFT exceeds gate, or `eval_tok_s <= 1.6`, revert source and clean rebuild. If accepted, immediately complete full reproduction record, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T221922Z-20260702_expert_keep_top5_updown/france-cpu40-vram0gb`
-- `result`: accepted candidate pending pushed-commit rerun. `eval_tok_s=1.9`, `prompt_tok_s=0.7`, `TTFT=43426.525893ms`, corrected `elapsed_seconds=127.94`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14970519552`, `pgmajfault=551675`, `workingset_refault_file=11094865`, `ram_ok=true`, `correctness_ok=true`.
+- `result`: accepted candidate and promoted after pushed-commit rerun. Original candidate produced `eval_tok_s=1.9`, `prompt_tok_s=0.7`, `TTFT=43426.525893ms`, corrected `elapsed_seconds=127.94`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14970519552`, `pgmajfault=551675`, `workingset_refault_file=11094865`, `ram_ok=true`, `correctness_ok=true`.
 - `correctness_manual_review`: pass. France answer is semantically correct and coherent: it identifies France/French Republic as a Western European country, mentions history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion, art/philosophy/science, EU membership, Paris, diverse regions, French Revolution, and economic/political role. Minor repetition of Eiffel Tower does not make the answer incorrect or incoherent.
 - `trace_summary`: gate stream still works: `rows=43123`, `cache_hits=37697`, `cache_inserts=5426`, `trace_span_ms=110181.209`, `src0_ms_sum=29038.595`, `total_ms_sum=31722.375`.
-- `sota_gate`: passes current gates: RAM including page cache is capped at `16000000000`, France correctness passes, and TTFT is below recent clean `~47s` controls, therefore not above the `+20%` limit. Token rate improves from clean reproducible `1.6` to `1.9`.
+- `sota_gate`: passes current gates: RAM including page cache is capped at `16000000000`, France correctness passes, and TTFT is below recent clean `~47s` controls, therefore not above the `+20%` limit. Token rate improves from clean reproducible `1.6` to `1.9` on the original candidate and to `2.0` on the pushed-source rerun.
 - `reproduction_record`: pre-commit reproduction artifacts written in the run directory: `source_state_precommit.txt`, `source_diff_precommit.patch`, `source_diff_precommit.stat`, `binary_sha256_precommit.txt`, `binary_stat_precommit.txt`, `binary_version_precommit.txt`, `model_stat.txt`, `runner_sha256_precommit.txt`, `plan_snapshot_precommit.md`, `progress_snapshot_precommit.md`, exact command/env/stdout/stderr/summary/trace/cgroup memory files.
-- `publish_status`: next required step is immediate commit/push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before final promotion.
+- `publish_status`: source committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- `pushed_commit`: `07f1dc6bb8d8f80e00e30ad09529a939170c25d8` (`vendor-ds4: add updown top5 expert pruning sota`).
+- `pushed_branch`: `vendor/deepseek-token-rate-16gb` on remote `ssd=https://github.com/wici-ai/ssd-llama.git`.
+- `pushed_rerun_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T222605Z-20260702_expert_keep_top5_updown_pushed_rerun/france-cpu40-vram0gb`.
+- `pushed_rerun_result`: `eval_tok_s=2.0`, `prompt_tok_s=0.7`, `TTFT=43188.681316ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14968823808`, `pgmajfault=538269`, `workingset_refault_file=11104561`, `ram_ok=true`, `correctness_ok=true`.
+- `pushed_rerun_binary`: stdout build line `build : b9086-07f1dc6bb`; binary was rebuilt after push from commit `07f1dc6bb`.
+- `pushed_rerun_correctness_manual_review`: pass. France answer is semantically correct and coherent, with the same minor Eiffel Tower repetition as the candidate but no factual/semantic failure.
+- `current_effective_sota`: `2.0 tok/s` under strict 16GB cgroup from pushed source. This replaces clean reproducible `1.6 tok/s` as the current source-backed line; old `2.6 tok/s` remains a forensic target until exact source/binary state is recovered.
 
 ## 记录与验收
 
