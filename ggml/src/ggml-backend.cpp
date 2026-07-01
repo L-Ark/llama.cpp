@@ -22,7 +22,10 @@
 #include <string.h>
 #include <algorithm>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -1707,6 +1710,118 @@ static bool ggml_backend_sched_moe_cache_prime_last_enabled() {
     return enabled;
 }
 
+struct ggml_kimi_split_profile_key {
+    std::string backend;
+    std::string first;
+    std::string last;
+    int i_start = 0;
+    int i_end = 0;
+
+    bool operator<(const ggml_kimi_split_profile_key & other) const {
+        return std::tie(backend, first, last, i_start, i_end) <
+               std::tie(other.backend, other.first, other.last, other.i_start, other.i_end);
+    }
+};
+
+struct ggml_kimi_split_profile_value {
+    uint64_t calls = 0;
+    uint64_t nodes = 0;
+    uint64_t wall_us = 0;
+};
+
+static std::mutex g_kimi_split_profile_mutex;
+static std::map<ggml_kimi_split_profile_key, ggml_kimi_split_profile_value> g_kimi_split_profile;
+
+static int ggml_kimi_split_profile_top() {
+    const char * env = getenv("GGML_KIMI_SPLIT_PROFILE_TOP");
+    int top = (env && env[0]) ? atoi(env) : 40;
+    if (top < 1) {
+        top = 1;
+    }
+    if (top > 512) {
+        top = 512;
+    }
+    return top;
+}
+
+static void ggml_kimi_split_profile_report() {
+    std::vector<std::pair<ggml_kimi_split_profile_key, ggml_kimi_split_profile_value>> rows;
+    {
+        std::lock_guard<std::mutex> lock(g_kimi_split_profile_mutex);
+        rows.reserve(g_kimi_split_profile.size());
+        for (const auto & kv : g_kimi_split_profile) {
+            rows.push_back(kv);
+        }
+    }
+    if (rows.empty()) {
+        return;
+    }
+    std::sort(rows.begin(), rows.end(), [](const auto & a, const auto & b) {
+        return a.second.wall_us > b.second.wall_us;
+    });
+    uint64_t total_us = 0;
+    uint64_t total_calls = 0;
+    for (const auto & row : rows) {
+        total_us += row.second.wall_us;
+        total_calls += row.second.calls;
+    }
+    GGML_LOG_INFO(
+        "[kimi_split_profile] total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
+        rows.size(), total_calls, (double) total_us / 1000.0);
+    const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) rows.size());
+    for (int i = 0; i < top; ++i) {
+        const auto & key = rows[i].first;
+        const auto & val = rows[i].second;
+        GGML_LOG_INFO(
+            "[kimi_split_profile] top%d: backend=%s range=%d:%d nodes_avg=%.2f calls=%" PRIu64
+            " wall=%.3f ms avg=%.3f ms/call first=%s last=%s\n",
+            i + 1,
+            key.backend.c_str(),
+            key.i_start,
+            key.i_end,
+            val.calls == 0 ? 0.0 : (double) val.nodes / (double) val.calls,
+            val.calls,
+            (double) val.wall_us / 1000.0,
+            val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls,
+            key.first.c_str(),
+            key.last.c_str());
+    }
+}
+
+static bool ggml_kimi_split_profile_enabled() {
+    static bool enabled = []() {
+        const char * env = getenv("GGML_KIMI_SPLIT_PROFILE");
+        const bool on = env && env[0] && env[0] != '0';
+        if (on) {
+            atexit(ggml_kimi_split_profile_report);
+        }
+        return on;
+    }();
+    return enabled;
+}
+
+static void ggml_kimi_split_profile_record(
+        const ggml_backend_sched_split * split,
+        ggml_backend_t backend,
+        uint64_t wall_us) {
+    if (split == nullptr || backend == nullptr || split->graph.n_nodes <= 0) {
+        return;
+    }
+    ggml_kimi_split_profile_key key;
+    key.backend = ggml_backend_name(backend);
+    key.i_start = split->i_start;
+    key.i_end = split->i_end;
+    const ggml_tensor * first = split->graph.nodes[0];
+    const ggml_tensor * last = split->graph.nodes[split->graph.n_nodes - 1];
+    key.first = first && first->name[0] ? first->name : "<unnamed>";
+    key.last = last && last->name[0] ? last->name : "<unnamed>";
+    std::lock_guard<std::mutex> lock(g_kimi_split_profile_mutex);
+    ggml_kimi_split_profile_value & val = g_kimi_split_profile[key];
+    val.calls++;
+    val.nodes += (uint64_t) split->graph.n_nodes;
+    val.wall_us += wall_us;
+}
+
 static const char * ggml_backend_sched_tensor_name(const ggml_tensor * tensor) {
     return tensor->name[0] != '\0' ? tensor->name : "<unnamed>";
 }
@@ -2286,11 +2401,13 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
     const int moe_cache_slots = ggml_backend_sched_moe_cache_slots();
     const enum ggml_backend_sched_moe_prefetch_policy moe_prefetch_policy = ggml_backend_sched_moe_prefetch_policy();
     const int moe_prefetch_limit = ggml_backend_sched_moe_prefetch_limit();
+    const bool split_profile = ggml_kimi_split_profile_enabled();
 
     for (int split_id = 0; split_id < sched->n_splits; split_id++) {
         struct ggml_backend_sched_split * split = &splits[split_id];
         int split_backend_id = split->backend_id;
         ggml_backend_t split_backend = sched->backends[split_backend_id];
+        const int64_t split_start_us = split_profile ? ggml_time_us() : 0;
         std::vector<ggml_backend_sched_moe_restore> moe_restores;
 
         // copy the input tensors to the split backend
@@ -2557,6 +2674,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
             if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                 ggml_backend_event_record(sched->events[split_backend_id][sched->cur_copy], split_backend);
             }
+        }
+        if (split_profile) {
+            ggml_kimi_split_profile_record(split, split_backend, (uint64_t) (ggml_time_us() - split_start_us));
         }
     }
 
