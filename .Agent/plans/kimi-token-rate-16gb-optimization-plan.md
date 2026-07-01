@@ -2319,6 +2319,142 @@ Rollback:
   RAM-tier hits remain zero, quality/failure gates fail, or matching token-count
   performance does not improve over Phase 3E.
 
+## Next candidate: Phase 3T retest VRAM cache key index after Phase 3E
+
+Design timestamp: 2026-07-02 23:35 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - TTFT: 79721.89 ms.
+  - Host RAM: 14.901 GiB.
+  - VRAM: 31286 MiB used, 824 MiB free.
+- Phase 3E full cache traffic remains high:
+  - hits=33844, misses=40188, hit_rate=45.7%.
+  - down cache slots=2016, slot=7.44MiB.
+  - pinned staging host_stage=47796.399 ms, H2D=7736.929 ms.
+- `batch_cache_lookup_slot`, `batch_cache_find_slot`, and
+  `batch_cache_contains_slot` still linearly scan up to the active cache slot
+  count for every lookup.
+- Phase 2L tried a key index before Phase 3E and was rejected:
+  - Phase 2H n32: 3.08431 s/token.
+  - Phase 2L n32: 3.14052 s/token.
+  - It reduced some local host/upgate counters but not end-to-end time.
+- Since Phase 3E changed graph behavior and current n32 best is much faster
+  (2.24573 s/token), a scoped retest can determine whether lookup overhead is
+  still irrelevant or has become visible.
+
+Hypothesis:
+
+- Add a `key -> slot` index to `batch_vram_cache`.
+- Use it in lookup/find/contains while keeping eviction victim selection
+  unchanged.
+- Maintain the index on insert, clear, failed copy rollback, and cache reset.
+- This should reduce CPU key comparisons without changing routing, CUDA math,
+  expert bytes, cache size, or eviction policy.
+
+Theoretical upper bound:
+
+- On Phase 3E n32, cache events are about 27044 and each linear lookup may scan
+  up to about 2016 slots.
+- If key scans are now a few seconds of CPU overhead after Phase 3E, an index
+  might save 1-3s on n32 and a few seconds on n96.
+- The upper bound is modest; promotion requires measured improvement, not just
+  cleaner local counters.
+
+Correctness risk:
+
+- A stale index can silently return an evicted slot for a different expert and
+  corrupt output.
+- The implementation must erase any previous key before slot reuse and erase on
+  clear/failure rollback.
+
+Execution:
+
+- Implement a minimal `std::unordered_map<uintptr_t, int>` per
+  `batch_vram_cache`.
+- Build remote CUDA batch binary.
+- Run cold `-n 4` first under strict 16GB cgroup and Phase 3E best env.
+- If quality/RAM/VRAM/TTFT/failure gates pass, run cold `-n 32`.
+- Do not run full `-n 96` unless `-n 32` beats Phase 3E n32.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- `-n 32` must beat Phase 3E n32:
+  2.24573 s/token, 0.44529 tok/s.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert if output quality fails, TTFT/RAM/VRAM gates fail, failures appear, or
+  `-n 32` does not beat Phase 3E.
+
+Result timestamp: 2026-07-02 23:47 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-211930Z-n4-phase3t-cache-index`
+
+Measured result:
+
+- Commit/config: `c00f0a72b-dirty-phase3t`, Phase 3E env plus local
+  `batch_vram_cache` key-index implementation.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80366.41 ms, inside the 106331.72 ms gate.
+- Decode: 11252.90 ms / 3 runs, 3.75097 s/token, 0.26660 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Pinned staging: copies=1790, host_stage=2714.495 ms,
+  H2D=388.408 ms.
+- Up/gate: 85 calls, total=32.202 ms/call.
+- Down batch: 160 calls, stage=13.440 ms/call, total=13.595 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-212145Z-n32-phase3t-cache-index`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77377.36 ms, inside the 106331.72 ms gate.
+- Decode: 71242.37 ms / 31 runs, 2.29814 s/token, 0.43513 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=12906, misses=14038, hit_rate=47.9%.
+- Pinned staging: copies=13149, host_stage=17427.528 ms,
+  H2D=2846.623 ms.
+- Up/gate: 869 calls, total=18.920 ms/call.
+- Down batch: 1644 calls, stage=8.875 ms/call, total=9.036 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3T `-n 32`: 2.29814 s/token, 0.43513 tok/s.
+
+Analysis:
+
+- The key index preserves output correctness and passes all resource gates.
+- It does not improve end-to-end decode. Even though some local counters are
+  similar or slightly better, total eval regresses by about 1.64s on `-n 32`.
+- This confirms the Phase 2L conclusion after the Phase 3E change: linear cache
+  lookup is not a dominant enough bottleneck, and the unordered_map/index
+  maintenance does not pay for itself.
+
+Decision:
+
+- Reject Phase 3T.
+- Do not run full `-n 96`.
+- Revert the key-index code.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
 Result timestamp: 2026-07-02 23:19 CST.
 
 Smoke run:
