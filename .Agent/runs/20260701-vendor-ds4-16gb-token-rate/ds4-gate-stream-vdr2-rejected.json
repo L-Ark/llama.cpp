@@ -1,0 +1,66 @@
+{
+  "accepted": false,
+  "classification": "rejected_diagnostic",
+  "created_at_utc": "2026-07-01T09:09:00Z",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "base_repo_commit": "7538597f1",
+  "purpose": "Test whether CUDA MXFP4 MMVQ mismatches are caused by CUDA using VDR_MXFP4_Q8_1_MMVQ=4 while SYCL uses 2.",
+  "code_change_tested": {
+    "file": "ggml/src/ggml-cuda/vecdotq.cuh",
+    "from": "#define VDR_MXFP4_Q8_1_MMVQ 4",
+    "to": "#define VDR_MXFP4_Q8_1_MMVQ 2"
+  },
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T090522Z-cold-ds4-gate-stream-vdr2-compare/france-cpu40-vram2gb",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 2,
+      "drop_caches_before_case": true,
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_COMPARE_CPU_OUT": "{case_dir}/compare.csv",
+      "GGML_MOE_STREAM_COMPARE_CPU_LIMIT": "8"
+    },
+    "eval_tok_s": 2.7,
+    "prompt_tok_s": 0.6,
+    "ttft_estimate_ms": 52739.864209,
+    "elapsed_seconds": 56.35,
+    "memory_peak_bytes": 16000000000,
+    "memory_max_events": 32188,
+    "memory_file_bytes": 15044788224,
+    "pgmajfault": 341250,
+    "workingset_refault_file": 6931721,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+    "answer_quality": "Degenerated into repeated punctuation and quote patterns."
+  },
+  "compare_summary": [
+    {
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 35,
+      "cpu_value": 1.64784455,
+      "gpu_value": 0.0
+    },
+    {
+      "tensor": "blk.0.ffn_gate_exps.weight",
+      "expert": 245,
+      "cpu_value": 9.97797775,
+      "gpu_value": -0.41251722
+    },
+    {
+      "tensor": "blk.1.ffn_gate_exps.weight",
+      "expert": 97,
+      "cpu_value": 0.415755332,
+      "gpu_value": -1.87617469
+    }
+  ],
+  "action": "The VDR code change was reverted after the run. It is not accepted.",
+  "conclusion": "Changing CUDA MXFP4 MMVQ VDR from 4 to 2 does not fix the DS4 gate stream mismatch. The next diagnostic needs actual CUDA-side per-block partial sums for failing and matching rows.",
+  "next_steps": [
+    "Add a default-off CUDA debug kernel that writes per-block MXFP4/q8_1 partial sums for selected expert/output rows.",
+    "Compare GPU-side partial sums against block_compare.csv CPU wdata partial sums."
+  ]
+}

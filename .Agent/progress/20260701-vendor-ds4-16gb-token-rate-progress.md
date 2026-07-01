@@ -173,3 +173,14 @@ Rejected higher-rate candidates:
   - `block_compare.csv` showed `cpu_wdata_total` reproduces the CPU compare value for all eight rows: seq `0` total `1.64784458`, seq `1` total `5.24980289`, seq `4` total `9.97797799`, seq `7` total `0.415755354`.
   - `post_src1_total` matched `cpu_wdata_total` for all eight rows, so the host-side q8_0/q8_1-style activation quantization and row selection are not the source of the GPU mismatch.
 - Interpretation: the remaining bug is in the CUDA MXFP4 MMVQ vec-dot/kernel path or its low-level launch assumptions. A concrete next test is to validate the CUDA-only `VDR_MXFP4_Q8_1_MMVQ=4` choice against SYCL's `VDR_MXFP4_Q8_1_MMVQ=2`; higher-level cache, DONTNEED, ids-kernel, and activation quantization have now been ruled out.
+
+### 2026-07-01T09:05:22Z - Rejected CUDA MXFP4 MMVQ VDR=2 test
+
+- Purpose: test the concrete low-level hypothesis from the block trace: CUDA defines `VDR_MXFP4_Q8_1_MMVQ=4` while SYCL defines `2`; if CUDA's one-thread-per-MXFP4-block schedule were wrong, changing VDR to `2` should improve CPU-vs-GPU agreement.
+- Code change tested: changed only `ggml/src/ggml-cuda/vecdotq.cuh` from `#define VDR_MXFP4_Q8_1_MMVQ 4` to `2`.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T090522Z-cold-ds4-gate-stream-vdr2-compare/france-cpu40-vram2gb`.
+- Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=8`.
+- Result: rejected. `eval_tok_s=2.7`, `prompt_tok_s=0.6`, `ttft_estimate_ms=52739.864209`, `memory_peak_bytes=16000000000`, `memory_max_events=32188`, `pgmajfault=341250`, `workingset_refault_file=6931721`, `correctness_ok=false`.
+- Answer degenerated into punctuation/quote repetition and did not mention France or Europe.
+- Numeric result: core compare rows did not improve. Expert `35` still had CPU `1.64784455` versus GPU `0`; expert `245` still had CPU `9.97797775` versus GPU about `-0.412517`; expert `97` still had CPU `0.415755332` versus GPU `-1.87617469`.
+- Action: reverted the VDR code change; it is not accepted. Next step is a CUDA-side debug kernel that writes actual per-block partial sums from the GPU for one failing row and one matching row.
