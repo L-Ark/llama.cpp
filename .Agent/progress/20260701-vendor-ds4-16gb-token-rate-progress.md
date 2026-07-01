@@ -53,3 +53,21 @@ Rejected higher-rate candidates:
 - Interpretation: France-only warmup does not heat enough prompt-dependent MoE expert pages under the 16 GB cgroup. The run remains dominated by file/page-cache churn and major faults (`pgmajfault=4774376`, `workingset_refault_file=147025029`).
 - Follow-up bottleneck: to make prompt-independent steady state stable, we need either a broader multi-prompt warmup that stays within 16 GB, more selective/high-frequency expert residency, or a streaming/prefetch change that reduces page-cache churn across changing experts.
 - Full reproducibility record is committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/promptset-vram4-cpu40-failed.json`.
+
+### 2026-07-01T06:21:11Z - Cold-start profile, VRAM cache sweep
+
+- Purpose: execute the first cold-start plan step with explicit `sync; echo 3 > /proc/sys/vm/drop_caches` before each case, and record page-fault/reclaim counters directly from the runner.
+- Runner/tooling commit: `63c79da05 vendor-ds4: add cold-start profiling to runner`.
+- Common config: `cpu_moe=40`, `MemoryMax=16000000000`, `MemorySwapMax=0`, `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_DONTNEED=1`, `GGML_CUDA_DISABLE_GRAPHS=1`.
+
+| vram cache | eval tok/s | prompt tok/s | TTFT ms | memory max events | pgmajfault | workingset refault file | run dir |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 2 GB | 1.3 | 0.8 | 44034.028848 | 66823 | 826309 | 17684614 | `/root/lfz/runs/vendor-ds4-16gb/20260701T062433Z-cold-profile-cpu40-vram2/france-cpu40-vram2gb` |
+| 4 GB | 1.2 | 0.7 | 45177.675222 | 76608 | 906331 | 20521336 | `/root/lfz/runs/vendor-ds4-16gb/20260701T062111Z-cold-profile-cpu40-vram4/france-cpu40-vram4gb` |
+| 5 GB | 1.2 | 0.8 | 43243.127206 | 52576 | 730394 | 12260048 | `/root/lfz/runs/vendor-ds4-16gb/20260701T062724Z-cold-profile-cpu40-vram5/france-cpu40-vram5gb` |
+
+- Correctness: all three outputs passed the France semantic/coherence heuristic.
+- RAM: all three stayed inside the model cgroup hard limit with no OOM and no runner RAM-limit kill, but all reached `memory_peak_bytes=16000000000`, so the cold-start path is still at the cgroup boundary.
+- Interpretation: cold-start performance is not improved by the warm-optimal `vram_cache=4`; all variants remain around `1.2-1.3 tok/s`. `vram5` reduced major faults/refaults but did not improve decode rate, indicating remaining serial I/O/reclaim or stream scheduling stalls.
+- Next step: stop broad VRAM cache sweeping for now. Focus on reducing cold expert page churn with trace-guided expert residency/pinning or asynchronous prefetch/overlap. Any candidate must cold-validate with this runner.
+- Full reproducibility record is committed in `.Agent/runs/20260701-vendor-ds4-16gb-token-rate/cold-profile-vram-sweep.json`.

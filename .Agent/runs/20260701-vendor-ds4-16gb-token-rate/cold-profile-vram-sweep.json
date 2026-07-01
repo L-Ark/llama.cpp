@@ -1,0 +1,66 @@
+{
+  "accepted": false,
+  "classification": "cold_start_bottleneck_profile",
+  "created_at_utc": "2026-07-01T06:27:24Z",
+  "purpose": "Profile cold-start page-fault/reclaim behavior for neighboring VRAM cache sizes under the 16GB cgroup.",
+  "runner_commit": "63c79da05",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "common_config": {
+    "cpu_moe": 40,
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "drop_caches_before_case": true,
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "cases": [
+    {
+      "vram_cache_gb": 2,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T062433Z-cold-profile-cpu40-vram2/france-cpu40-vram2gb",
+      "eval_tok_s": 1.3,
+      "prompt_tok_s": 0.8,
+      "ttft_estimate_ms": 44034.028848,
+      "memory_peak_bytes": 16000000000,
+      "memory_max_events": 66823,
+      "memory_file_bytes": 15006949376,
+      "pgmajfault": 826309,
+      "workingset_refault_file": 17684614,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": true
+    },
+    {
+      "vram_cache_gb": 4,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T062111Z-cold-profile-cpu40-vram4/france-cpu40-vram4gb",
+      "eval_tok_s": 1.2,
+      "prompt_tok_s": 0.7,
+      "ttft_estimate_ms": 45177.675222,
+      "memory_peak_bytes": 16000000000,
+      "memory_max_events": 76608,
+      "memory_file_bytes": 14990061568,
+      "pgmajfault": 906331,
+      "workingset_refault_file": 20521336,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": true
+    },
+    {
+      "vram_cache_gb": 5,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260701T062724Z-cold-profile-cpu40-vram5/france-cpu40-vram5gb",
+      "eval_tok_s": 1.2,
+      "prompt_tok_s": 0.8,
+      "ttft_estimate_ms": 43243.127206,
+      "memory_peak_bytes": 16000000000,
+      "memory_max_events": 52576,
+      "memory_file_bytes": 15017684992,
+      "pgmajfault": 730394,
+      "workingset_refault_file": 12260048,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": true
+    }
+  ],
+  "interpretation": "Cold-start performance remains page-cache/reclaim limited. Higher VRAM cache can reduce fault/refault counters, but the measured decode rate stays around 1.2-1.3 tok/s, so the next bottleneck is likely serialized cold expert I/O or lack of useful overlap rather than raw expert compute.",
+  "next_step": "Use trace-guided expert residency/pinning or asynchronous prefetch/overlap; cold-validate any candidate with --drop-caches-before-case."
+}
