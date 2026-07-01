@@ -1792,7 +1792,7 @@
 
 - `attempt_id`: `20260702-expert-keep-mixed-up4-down3`
 - `attempt_kind`: `source-probe/approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_manual_correctness_truncated_output
 - `hypothesis`: UP=3/DOWN=4 still had top3-like truncation. The symmetric policy UP=4/DOWN=3 preserves more up-path expert contribution while pruning the down path by one extra routed expert. If the quality failure is more sensitive to up pruning than down pruning, this may improve over top4 without causing the top3 truncation pattern.
 - `theoretical_upper_bound`: Moving only down from top4 to top3 can ideally save about `36.2s / 6 ≈ 6.03s` before overhead/page effects. Expected gain is slightly smaller than UP=3/DOWN=4 but may preserve correctness better.
 - `implementation`: Reuse the per-tensor env patch from UP=3/DOWN=4: `GGML_MOE_KEEP_TOPK_UP=4`, `GGML_MOE_KEEP_TOPK_DOWN=3`, no `GGML_MOE_KEEP_TOPK_UPDOWN`.
@@ -1800,6 +1800,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T230856Z-20260702_expert_keep_mixed_up4_down3/france-cpu40-vram0gb`
+- `result`: rejected despite speed improvement. `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=38605.179576ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14995591168`, `pgmajfault=371743`, `workingset_refault_file=7406044`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic but manual review failed.
+- `correctness_manual_review`: fail. The answer is mostly factual but too long for the short-paragraph prompt and ends with an incomplete trailing phrase: `The country is also known`. This is the same coherence/truncation failure as UP=3/DOWN=4.
+- `trace_summary`: `rows=47883`, `src0_ms_sum=30217.351`, `kernel_ms_sum=510.942`, `dontneed_ms_sum=1470.558`, `total_ms_sum=33133.8`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: mixed top3/top4 branch closed. Both symmetric mixed probes improved token rate to `2.5` but failed manual correctness due the same incomplete answer ending. Revert per-tensor source patch and clean rebuild; current effective SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
