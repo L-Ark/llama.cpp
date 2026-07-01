@@ -1811,11 +1811,30 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-early20-top4-rest`
 - `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_manual_correctness_truncated_repetitive_output
 - `hypothesis`: Global top3 and up/down mixed top3 both improve speed but cause the France answer to become long and end incomplete. This suggests the approximation is too broad, not necessarily that every layer must stay top4. Keeping the current correct top4 policy as fallback while applying top3 only to earlier MoE layers (`blk.0-19`) may preserve later-layer output control/EOS behavior while saving part of the up/down fallback work.
 - `theoretical_upper_bound`: Global top3 versus top4 roughly saves one routed expert out of six for both up/down across 40 CPU-MoE layers, with coarse upper bound about `12.9s`. Applying top3 to half the layers gives a rough additional bound around `6.4s` before overhead/page effects. Expected speed should land between top4 `2.3 tok/s` and rejected global/mixed top3 observations (`2.5-2.8 tok/s`).
 - `implementation`: Add default-off layer-selective override in `ggml/src/ggml-cpu/ggml-cpu.c`. Existing `GGML_MOE_KEEP_TOPK_UPDOWN=4` remains the fallback. New env `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-19` plus `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` overrides topK only for matching `blk.<layer>.ffn_up_exps` and `blk.<layer>.ffn_down_exps`; unset env preserves current top4 SOTA behavior.
 - `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-19`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T231934Z-20260702_expert_keep_top3_early20_top4_rest/france-cpu40-vram0gb`
+- `result`: rejected despite speed improvement. `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=38883.79964ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15005384704`, `pgmajfault=368596`, `workingset_refault_file=7321945`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic but manual review failed.
+- `correctness_manual_review`: fail. The answer is mostly factual but becomes repetitive and ends with an incomplete trailing sentence: `The country is a`. Applying top3 to `blk.0-19` is still too broad.
+- `trace_summary`: `rows=47887`, `src0_ms_sum=31528.676`, `kernel_ms_sum=518.32`, `dontneed_ms_sum=1477.302`, `total_ms_sum=34470.686`.
+- `reproduction_record`: rejected run directory contains source commit/status/diff, binary sha256/stat/version/build line, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, manual correctness review, and rejected status.
+- `rollback_status`: source patch retained only for the narrower early10 probe below. Current effective SOTA remains top4 `2.3 tok/s`.
+
+### 当前执行 attempt：expert-keep-top3-early10-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-early10-top4-rest`
+- `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
+- `status`: planned
+- `hypothesis`: Top3 over early20 layers still fails output coherence, but a narrower early10 override may reduce enough up/down fallback work to beat top4 while preserving most of the correct top4 behavior. This tests whether there is a smaller safe approximation region before abandoning layer-selective top3.
+- `theoretical_upper_bound`: Applying top3 to one quarter of the 40 CPU-MoE layers gives a rough additional bound of `12.9s / 4 ≈ 3.2s` versus top4 before overhead/page effects. The expected gain is modest; promote only if measured `eval_tok_s > 2.3` and manual correctness passes.
+- `implementation`: Reuse the layer-selective source patch. Existing `GGML_MOE_KEEP_TOPK_UPDOWN=4` remains fallback; `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-9` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` override only early layers.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-9`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected/unpromoted. If accepted, immediately write full reproduction evidence, commit/push source and records, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
