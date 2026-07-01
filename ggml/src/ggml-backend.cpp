@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include <cinttypes>
 #include <limits>
 #include <map>
 #include <mutex>
