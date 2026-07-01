@@ -7900,3 +7900,60 @@ Acceptance:
 - If the strict n96 baseline fails, do not optimize further; first investigate
   why the accepted Phase 3E result no longer reproduces under the corrected
   strict harness.
+
+Result timestamp: 2026-07-02 23:09 UTC / 2026-07-03 07:09 CST.
+
+Strict n96 baseline result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-230430Z-n96-phase3zd-strict-baseline-refresh`
+- Commit:
+  `32b0d67c804abaa1acfd74a087e201c6bbaed171`
+- Branch:
+  `vendor/kimi-moe-stream-on-vendor`
+- Cold-start proof:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`, cgroup
+  `memory.max=15900000000`, `memory.swap.max=0`, process entered cgroup via
+  `BASHPID`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.718571 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  74550.06 ms, gate PASS.
+- Decode:
+  228.77195 s / 85 tokens = 2.69143 s/token, 0.37155 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Pinned staging:
+  copies=35734, host_stage=47257.080 ms, h2d=7731.993 ms.
+- Up/gate CPU profile:
+  calls=2381, total=23.352 ms/call, cuda_batch=23.194,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=20.476 ms/call, cuda_batch=5.140,
+  fallback_t0=15.279, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=12.023 ms/call, kernel=0.111 ms/call,
+  wall=12.220 ms/call.
+- VRAM cache:
+  hits=33844, misses=40188, preloads=0, hit_rate=45.7%.
+
+Decision:
+
+- Accept this as the refreshed strict n96 baseline.
+- This supersedes Phase 3E for the current hard constraints:
+  - Phase 3E old n96: 2.72551 s/token, 0.36690 tok/s.
+  - Phase 3ZD strict n96: 2.69143 s/token, 0.37155 tok/s.
+- Next optimization must beat 2.69143 s/token under the same strict cold-start
+  harness and quality gates.
