@@ -1352,3 +1352,82 @@ Performance smoke result:
 - Up/gate profile: calls=869, total=18.938 ms/call.
 - Decision: pass smoke gate. Next practice is full cold `-n 96` with the exact
   same config before performance promotion.
+
+Full `-n 96` validation result:
+
+- Result timestamp: 2026-07-01 15:23 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-151516Z-n96-phase2h-down-batch-nohandoff`
+- Commit/config: `83ab7ce63`, code includes
+  `a1702641b cuda: allow Kimi down batch compact quant types`.
+- Cold `-n 96` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Enabled `GGML_MOE_STREAM_DOWN_BATCH=1`; did not enable
+  `GGML_MOE_GPU_HANDOFF`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- Page cache final: 13.815 GiB.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- TTFT: 98846.25 ms, within the 106331.72 ms gate.
+- Decode: 295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s.
+- Read/correctness status: read_failures=0, launch_failures=0, down_profile=true.
+- Down profile: calls=4506, avg_active=8.00, stage=11.616 ms,
+  kernel=0.115 ms, d2h=0.015 ms, scatter=0.034 ms, total=11.781 ms/call.
+- Up/gate profile: calls=2381, total=22.785 ms/call.
+- Cache/staging: VRAM cache hit_rate=45.5%, pinned staging
+  host_stage=50153.894 ms and h2d=7758.831 ms.
+- Decision: accept Phase 2H as a valid constrained performance improvement.
+  Compared with accepted Phase 2E full `-n 96` (0.21 tok/s, 4.70878 s/token),
+  this improves to 0.29 tok/s, 3.47192 s/token while satisfying host RAM, VRAM,
+  quality, TTFT, read failure, launch failure, and cold-start gates.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase2h-down-batch-nohandoff
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2h_n96_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_STREAM_DOWN_BATCH=1
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=300000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
+
+Next bottleneck:
+
+- Down compute is no longer the bottleneck: kernel is only 0.115 ms/call.
+- The next largest directly visible bucket is down/upgate staging and cache
+  misses: VRAM cache hit_rate=45.5%, host_stage=50153.894 ms,
+  h2d=7758.831 ms, plus up/gate total=22.785 ms/call.
+- The next candidate should target cache partitioning/policy or safe handoff
+  only after a separate handoff correctness test.
