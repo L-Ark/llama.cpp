@@ -1704,6 +1704,19 @@
 - `pushed_rerun_correctness_manual_review`: pass. France answer is semantically correct and coherent, with the same minor Eiffel Tower repetition as the candidate but no factual/semantic failure.
 - `current_effective_sota`: `2.0 tok/s` under strict 16GB cgroup from pushed source. This replaces clean reproducible `1.6 tok/s` as the current source-backed line; old `2.6 tok/s` remains a forensic target until exact source/binary state is recovered.
 
+### 当前执行 attempt：expert-keep-top4-updown
+
+- `attempt_id`: `20260702-expert-keep-top4-updown`
+- `attempt_kind`: `config-probe/approximate-pruning`
+- `status`: planned
+- `hypothesis`: Top5 up/down pruning is the current source-backed SOTA and shows that dropping one routed up/down expert can preserve the France answer. Remaining up/down fallback work is still large, so lowering `GGML_MOE_KEEP_TOPK_UPDOWN` from `5` to `4` may remove another routed expert from every up/down expert op and increase generation rate.
+- `theoretical_upper_bound`: Original op-wall trace estimated up/down fallback at about `77.3s`. Top5 roughly removes one of six routed experts, with an ideal reduction near `12.9s`. Top4 removes two of six, so the coarse upper bound versus no pruning is about `25.8s`, or about `12.9s` additional wall reduction versus top5 before overhead/page effects. Real gain is lower because gate streaming and non-expert work remain, but a measurable improvement over the current `2.0 tok/s` SOTA is plausible.
+- `risk`: This is a stronger approximation than top5. It may remove semantically important routed expert contribution and produce fluent but wrong, repetitive, or under-specified output. The France answer must be manually reviewed; heuristic correctness alone is insufficient.
+- `test_config`: pushed source commit lineage at HEAD `21b428080` with model source from `07f1dc6bb`, no source change, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.0`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent under manual review, and TTFT does not exceed the top5 pushed rerun TTFT by more than `20%` (`43188.681316ms * 1.2 = 51826.417579ms`).
+- `rollback`: No source change. If token rate does not exceed `2.0`, output correctness fails, RAM exceeds limit, or TTFT exceeds the gate, mark rejected/unpromoted and keep current top5 SOTA. If accepted, immediately write full reproduction evidence, commit/push any changed records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, and run a pushed-commit clean rebuild/rerun before promotion.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
