@@ -1029,6 +1029,70 @@ Result:
 
 ## Immediate next action
 
-Design the next optimization based on the accepted Phase 2E bottleneck:
-`up/gate total=13.489 ms/call`, VRAM cache hit_rate=63.1%, and remaining misses
-still requiring expert-pack staging/H2D under the 16GB host-RAM cap.
+Run Phase 2F cold `-n 32` smoke with the accepted Phase 2E config plus
+up/gate parallel streams and parallel staging.
+
+## Next candidate: Phase 2F parallel up/gate streams
+
+Design timestamp: 2026-07-01 14:29 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2E full `-n 96` spends 362575.94 ms in decode for 77 runs:
+  4.70878 s/token, 0.21 tok/s.
+- Up/gate profile: 2157 calls, total=13.489 ms/call, with up=6.581 ms and
+  gate=6.828 ms.
+- This is about 28.0 up/gate calls per decoded token, or about 378 ms/token in
+  the measured up/gate bucket.
+- VRAM cache is near full but not complete: 31278 MiB used, 832 MiB free,
+  hit_rate=63.1%, misses=12734.
+- Miss staging/H2D is smaller than compute but still measurable:
+  host_stage=13760.938 ms and h2d=2143.731 ms across the `-n 96` run.
+
+Hypothesis:
+
+Enable the existing parallel up/gate path:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+This should keep the same numerical path but launch up and gate work on separate
+CUDA streams, while staging up/gate misses from separate CPU threads/rings. The
+change targets the largest directly compressible bucket that remains after the
+VRAM cache improvement.
+
+Theoretical upper bound:
+
+- If only the up/gate kernels parallelize, the per-call bucket can drop from
+  about `6.581 + 6.828 = 13.409 ms` to `max(6.581, 6.828) = 6.828 ms`.
+- With 28.0 calls/token, the hard compute-only saving is about
+  `(13.409 - 6.828) * 28.0 = 184 ms/token`.
+- Starting from 4.70878 s/token, the compute-only upper-bound token rate is
+  `1 / (4.70878 - 0.184) = 0.221 tok/s`.
+- If parallel staging also halves the measured staging/H2D miss bucket, the
+  additional upper-bound saving is about
+  `(13760.938 + 2143.731) ms / 77 / 2 = 103 ms/token`, giving a best case near
+  `1 / (4.70878 - 0.184 - 0.103) = 0.226 tok/s`.
+- Therefore this candidate is expected to be modest, roughly 5-8%, but it is
+  mathematically safe and aligned with the measured bottleneck.
+
+Acceptance:
+
+- Cold `-n 32` smoke under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches`.
+- Host RAM must remain below the 16GB cgroup cap, including page cache.
+- VRAM should remain near full without OOM; expected free VRAM may be slightly
+  lower due additional stream/ring buffers.
+- France answer must be semantically correct and coherent.
+- TTFT <= 106331.72 ms.
+- Decode token rate must exceed the accepted Phase 2E smoke trend of 0.22 tok/s
+  or at minimum show a clear per-token reduction without TTFT/quality risk.
+- If smoke passes, run full cold `-n 96` before promotion.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, read_failures become
+  nonzero, cgroup OOM occurs, or full `-n 96` does not improve over accepted
+  Phase 2E `0.21 tok/s / 4.70878 s/token`.
