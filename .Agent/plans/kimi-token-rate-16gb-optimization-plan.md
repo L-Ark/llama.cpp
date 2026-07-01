@@ -512,6 +512,7 @@ Every implementation step must append one row before and after execution.
 | 2026-07-01 13:34:48 | Phase 2C src1 row fix compare | Stream one-path likely reads the wrong `src1` row. Compare stream output against CPU reference and then fix row selection. | Correctness-only. A fixed stream path should reduce compare max_abs from O(1e-1) to quantization-level O(1e-3), then restore `France is` prefix. | Before fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133121Z-n2-phase2c-stream-compare` showed `max_abs` up to 0.527928 and no output yet. After fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133448Z-n2-phase2c-stream-src1fix-compare` showed `max_abs <= 0.00151799` and output `France is`. | Host RAM/cold pass; compare pass; n2 prefix pass. | Keep the src1 row-selection fix. It is required before any VRAM/cache stream work. |
 | 2026-07-01 13:37:39 | Phase 2C src1 fix stream-only n16 | Verify stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`: output `France is a country in Western Europe known for its rich history, culture, and`, TTFT 101.88s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT pass; token-rate fail. | Accept as stream correctness progress only. Do not promote as performance. |
 | 2026-07-01 13:42:33 | Phase 2C src1 fix stream-only n32 | Verify longer stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`: output remained coherent about France, TTFT 111.49s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT fail; token-rate fail. | Commit the opt-in stream correctness fix because it restores semantic output and is default-off. Next work must address TTFT/decode speed before any stream/cache promotion. |
+| 2026-07-01 13:51:07 | Phase 2A rerun after src1 fix | Re-test expert pack + 15GB VRAM cache after fixing stream `src1` row selection. | If quality is restored, token rate should improve over 0.20 tok/s; TTFT may still fail because stream prompt eval was slow. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-135107Z-n32-phase2a-src1fix-vram-cache-profile`: quality pass, VRAM peak 31278 MiB / 832 MiB free, read_failures=0, TTFT 114.29s, decode 0.22 tok/s, cache hit 62.3%, up/gate total 13.046 ms/call. | Host RAM/cold/VRAM/read/quality pass; token-rate pass for n32; TTFT fail. | Rejected for promotion due TTFT. Next candidate combines this path with `-t 40 -tb 40`, which previously reduced prompt/TTFT on non-stream baseline. |
 
 ## Current bottleneck after Phase 0
 
@@ -794,6 +795,53 @@ Re-test Phase 2A-style expert pack + VRAM cache with the src1 fix, starting with
 cold `-n 32`. Promotion still requires full `-n 96`, host RAM <16GB, quality
 pass, TTFT <=106331.72 ms, and token rate >0.20 tok/s.
 
+Result:
+
+- Rerun completed at
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-135107Z-n32-phase2a-src1fix-vram-cache-profile`.
+- Quality recovered and VRAM was used as intended.
+- Decode improved to 0.22 tok/s versus 0.20 tok/s baseline.
+- TTFT failed at 114285.53 ms, above the 106331.72 ms gate.
+- Not promoted.
+
+## Next candidate: Phase 2D src1 fix + VRAM cache + 40 CPU threads
+
+Design timestamp: 2026-07-01 13:58 UTC.
+
+Current bottleneck:
+
+- Phase 2A after src1 fix restored quality and improved decode rate to
+  0.22 tok/s, but TTFT failed.
+- Phase 1A showed `-t 40 -tb 40` reduced TTFT on the accepted non-stream path
+  from 88.61s to 65.28s while preserving quality.
+
+Hypothesis:
+
+Combining the corrected VRAM cache path with `-t 40 -tb 40` may keep the
+0.22 tok/s decode improvement while reducing prompt eval/TTFT below the
+106331.72 ms gate. This changes scheduling only; model math remains the same
+as the src1-fixed stream/cache path.
+
+Theoretical upper bound:
+
+- Decode upper bound is the measured Phase 2A+src1fix value, about 0.22 tok/s,
+  unless extra CPU threads also reduce staging/reclaim overhead.
+- TTFT could improve by up to the Phase 1A observed prompt reduction
+  (88.61s -> 65.28s, about 26%). Applying even half of that to the 114.29s
+  Phase 2A+src1fix TTFT would bring TTFT near 99.4s, under the gate.
+
+Acceptance:
+
+- Cold `-n 32`: host RAM <16GB, VRAM near full, quality pass, read_failures=0,
+  TTFT <=106331.72 ms, token rate >0.20 tok/s.
+- If `-n 32` passes, run full cold `-n 96` with the same config.
+- Commit/push only after full `-n 96` passes the complete gate.
+
+Rollback:
+
+- If TTFT still fails, quality regresses, or token rate falls to <=0.20 tok/s,
+  reject the candidate and do not stack further env changes on it.
+
 ## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
 
 Design timestamp: 2026-07-01 13:24 UTC.
@@ -853,6 +901,5 @@ Result:
 
 ## Immediate next action
 
-Commit and push the default-off Phase 2C stream correctness fix. Then rerun the
-Phase 2A expert pack + VRAM cache candidate with the src1 fix, starting with
-cold `-n 32`.
+Run Phase 2D cold `-n 32` with src1 fix + expert pack + 15GB VRAM cache +
+`-t 40 -tb 40`.
