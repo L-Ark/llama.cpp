@@ -1579,3 +1579,40 @@ Rollback:
 - Reject if profile preload increases TTFT above the gate, output quality fails,
   host RAM exceeds the cgroup cap, VRAM OOMs, launch/read failures appear, or
   token rate is not better than Phase 2H at the same token count.
+
+Result timestamp: 2026-07-01 15:31 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-153115Z-n4-phase2j-profile-cache`
+
+Measured result:
+
+- Commit/config: `7941c8d40`, accepted Phase 2H config plus profile-guided
+  cache:
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-151516Z-n96-phase2h-down-batch-nohandoff/route-profile.csv`
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+  - `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`
+  - `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103969.80 ms, inside the 106331.72 ms gate but close to the limit.
+- Decode: 16782.27 ms / 3 runs, 5.59409 s/token, 0.18 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Profile activity: enabled.
+- Cache policy diag: enabled.
+- Cache result: hits=1338, misses=1190, preloads=1430, pinned=1430,
+  hit_rate=52.9%.
+- Pinned staging: copies=2673, host_stage=4087.613 ms, h2d=582.502 ms.
+- Cache policy diag:
+  profile_count_lookups=1275, hits=1263, inserted_nonzero=2917,
+  inserted_avg=14.55, evictions=604, victim_nonzero=592,
+  victim_avg=2.34.
+
+Decision:
+
+- The `-n 4` smoke satisfies the hard gates and proves the profile policy is
+  active.
+- Continue to cold `-n 32` with the same config before any promotion.
+- Watch TTFT carefully because profile preload has only about 2.36s headroom
+  under the gate.
