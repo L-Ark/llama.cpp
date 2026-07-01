@@ -2325,17 +2325,22 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                             node = candidate;
                             break;
                         }
+                        if (candidate->op == GGML_OP_MOE_FUSED_UP_GATE &&
+                                (candidate->src[0] == input_cpy || candidate->src[1] == input_cpy)) {
+                            node = candidate;
+                            break;
+                        }
                     }
                 }
                 if (node != nullptr) {
 
-                    const int64_t n_expert   = node->op == GGML_OP_MUL_MAT_ID ? input->ne[2] : input->ne[1];
-                    const size_t expert_size = node->op == GGML_OP_MUL_MAT_ID ? input->nb[2] : input->nb[1];
+                    const int64_t n_expert   = input->ne[2];
+                    const size_t expert_size = input->nb[2];
 
                     ggml_backend_synchronize(input_backend);
 
                     // get the ids
-                    ggml_tensor * ids_tensor = node->src[2];
+                    ggml_tensor * ids_tensor = node->op == GGML_OP_MOE_FUSED_UP_GATE ? node->src[3] : node->src[2];
                     ggml_backend_t ids_backend = split_backend;
 
                     // if the ids tensor is also an input of the split, it may not have been copied yet to the split backend

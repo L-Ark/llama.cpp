@@ -1038,6 +1038,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
 
     "MUL_MAT",
     "MUL_MAT_ID",
+    "MOE_FUSED_UP_GATE",
     "OUT_PROD",
 
     "SCALE",
@@ -1114,7 +1115,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "LIGHTNING_INDEXER",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 98");
+static_assert(GGML_OP_COUNT == 99, "GGML_OP_COUNT != 99");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -1150,6 +1151,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
 
     "X*Y",
     "X[i]*Y",
+    "up[i]*act(gate[i])",
     "X*Y",
 
     "x*v",
@@ -1226,7 +1228,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "lightning_indexer(q,k,weights,scale_embd,scale_heads)",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 98");
+static_assert(GGML_OP_COUNT == 99, "GGML_OP_COUNT != 99");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -3418,6 +3420,57 @@ struct ggml_tensor * ggml_mul_mat_id(
     result->src[0] = as;
     result->src[1] = b;
     result->src[2] = ids;
+
+    return result;
+}
+
+struct ggml_tensor * ggml_moe_up_gate(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * as_up,
+        struct ggml_tensor  * as_gate,
+        struct ggml_tensor  * b,
+        struct ggml_tensor  * ids,
+        enum ggml_unary_op    op) {
+    if (as_gate == NULL || as_up->type != as_gate->type || !ggml_are_same_shape(as_up, as_gate)) {
+        struct ggml_tensor * up   = ggml_mul_mat_id(ctx, as_up, b, ids);
+        struct ggml_tensor * gate = as_gate ? ggml_mul_mat_id(ctx, as_gate, b, ids) : up;
+
+        switch (op) {
+            case GGML_UNARY_OP_SILU:
+                return as_gate ? ggml_swiglu_split(ctx, gate, up) : ggml_swiglu(ctx, up);
+            case GGML_UNARY_OP_GELU:
+                return as_gate ? ggml_geglu_split(ctx, gate, up) : ggml_geglu(ctx, up);
+            case GGML_UNARY_OP_GELU_ERF:
+                return as_gate ? ggml_geglu_erf_split(ctx, gate, up) : ggml_geglu_erf(ctx, up);
+            case GGML_UNARY_OP_GELU_QUICK:
+                return as_gate ? ggml_geglu_quick_split(ctx, gate, up) : ggml_geglu_quick(ctx, up);
+            default:
+                GGML_ABORT("unsupported MoE fused up/gate op");
+        }
+    }
+
+    GGML_ASSERT(!ggml_is_transposed(as_up));
+    GGML_ASSERT(!ggml_is_transposed(as_gate));
+    GGML_ASSERT(ids->type == GGML_TYPE_I32);
+
+    GGML_ASSERT(as_up->ne[3] == 1);
+    GGML_ASSERT(as_gate->ne[3] == 1);
+    GGML_ASSERT(b->ne[3] == 1);
+    GGML_ASSERT(ids->ne[2] == 1 && ids->ne[3] == 1);
+    GGML_ASSERT(ids->ne[1] == b->ne[2]);
+    GGML_ASSERT(as_up->ne[0] == b->ne[0]);
+    GGML_ASSERT(ids->ne[0] % b->ne[1] == 0);
+
+    const int64_t ne[4] = { as_up->ne[1], ids->ne[0], b->ne[2], 1 };
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+
+    ggml_set_op_params_i32(result, 0, (int32_t) op);
+
+    result->op     = GGML_OP_MOE_FUSED_UP_GATE;
+    result->src[0] = as_up;
+    result->src[1] = as_gate;
+    result->src[2] = b;
+    result->src[3] = ids;
 
     return result;
 }

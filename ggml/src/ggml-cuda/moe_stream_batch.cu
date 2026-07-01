@@ -24,14 +24,12 @@ bool ggml_cuda_moe_stream_up_gate_batch(int, const char *, const void *, const c
 
 #include "common.cuh"
 #include "ggml-quants.h"
-#include "iqk/iqk_mul_mat.h"
-#include "mmq_id_common.cuh"
 #include "quantize.cuh"
-#include "quantize_id.cuh"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdint>
@@ -57,7 +55,7 @@ bool ggml_cuda_moe_stream_up_gate_batch(int, const char *, const void *, const c
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#if defined(__linux__) && __has_include(<liburing.h>)
+#if defined(__linux__) && !defined(GGML_MOE_DISABLE_LIBURING) && __has_include(<liburing.h>)
 #include <liburing.h>
 #define GGML_MOE_HAS_LIBURING 1
 static inline void ggml_moe_io_uring_sqe_set_data64(struct io_uring_sqe * sqe, uint64_t data) {
@@ -293,6 +291,11 @@ static batch_ctx g_batch;
 static std::mutex g_batch_mu;
 static std::atomic<bool> g_batch_inited{false};
 static std::atomic<bool> g_pinned_stage_report_registered{false};
+
+static size_t moe_stream_q8_1_row_bytes(int64_t ne00) {
+    const int64_t ne00_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+    return (size_t)ne00_padded * sizeof(block_q8_1) / QK8_1;
+}
 
 struct registered_tensor {
     int type = 0;
@@ -3392,6 +3395,10 @@ static __device__ __forceinline__ int moe_q8k_nearest_int(float fval) {
     return (i & 0x007fffff) - 0x00400000;
 }
 
+static __device__ __forceinline__ int moe_q8k_nearest_even_int(float fval) {
+    return __float2int_rn(fval);
+}
+
 static __global__ void moe_quantize_row_q8_k_kernel(const float * x, block_q8_K * y, int nblocks) {
     const int ib = blockIdx.x;
     if (ib >= nblocks || threadIdx.x != 0) {
@@ -3401,13 +3408,11 @@ static __global__ void moe_quantize_row_q8_k_kernel(const float * x, block_q8_K 
     const float * xb = x + (size_t)ib * QK_K;
     block_q8_K * yb = y + ib;
 
-    float max = 0.0f;
     float amax = 0.0f;
     for (int j = 0; j < QK_K; ++j) {
         const float ax = fabsf(xb[j]);
         if (ax > amax) {
             amax = ax;
-            max = xb[j];
         }
     }
 
@@ -3422,11 +3427,14 @@ static __global__ void moe_quantize_row_q8_k_kernel(const float * x, block_q8_K 
         return;
     }
 
-    const float iscale = -127.0f / max;
+    const float d = amax / 127.0f;
+    const float id = 127.0f / amax;
     for (int j = 0; j < QK_K; ++j) {
-        int v = moe_q8k_nearest_int(iscale * xb[j]);
+        int v = moe_q8k_nearest_even_int(id * xb[j]);
         if (v > 127) {
             v = 127;
+        } else if (v < -128) {
+            v = -128;
         }
         yb->qs[j] = (int8_t)v;
     }
@@ -3437,7 +3445,7 @@ static __global__ void moe_quantize_row_q8_k_kernel(const float * x, block_q8_K 
         }
         yb->bsums[j] = (int16_t)sum;
     }
-    yb->d = 1.0f / iscale;
+    yb->d = d;
 }
 
 static __device__ __forceinline__ int moe_iq3_xxs_q8k_block_sum(
@@ -3553,6 +3561,80 @@ static __device__ __forceinline__ float moe_iq2_s_q8k_r8_block_dot(
     return scale * y->d * (float)bsum;
 }
 
+static __device__ __forceinline__ int moe_q3_k_scale(const block_q3_K * x, int is) {
+    const uint8_t * sc = x->scales;
+    if (is < 4) {
+        return (int)((sc[is] & 0x0f) | (((sc[is + 8] >> 0) & 3) << 4)) - 32;
+    }
+    if (is < 8) {
+        return (int)((sc[is] & 0x0f) | (((sc[is + 4] >> 2) & 3) << 4)) - 32;
+    }
+    if (is < 12) {
+        return (int)((sc[is - 8] >> 4) | (((sc[is] >> 4) & 3) << 4)) - 32;
+    }
+    return (int)((sc[is - 8] >> 4) | (((sc[is - 4] >> 6) & 3) << 4)) - 32;
+}
+
+static __device__ __forceinline__ int moe_q3_k_q8k_block_sum(
+        const block_q3_K * x,
+        const block_q8_K * y) {
+    int bsum = 0;
+    for (int n = 0; n < QK_K/128; ++n) {
+        for (int j = 0; j < 4; ++j) {
+            const int shift = 2*j;
+            const int m = 1 << (4*n + j);
+            for (int is0 = 0; is0 < 2; ++is0) {
+                const int is = 8*n + 2*j + is0;
+                const int sc = moe_q3_k_scale(x, is);
+                const int qidx_base = 32*n + 16*is0;
+                const int yidx_base = 128*n + 32*j + 16*is0;
+                for (int l = 0; l < 16; ++l) {
+                    const int q = (int)((x->qs[qidx_base + l] >> shift) & 3) - ((x->hmask[16*is0 + l] & m) ? 0 : 4);
+                    bsum += sc * q * (int)y->qs[yidx_base + l];
+                }
+            }
+        }
+    }
+    return bsum;
+}
+
+static __device__ __forceinline__ int moe_sat_i16(int v) {
+    return v > 32767 ? 32767 : (v < -32768 ? -32768 : v);
+}
+
+static __device__ __forceinline__ int moe_iq4_xs_q8k_maddubs_corrected_sum32(
+        const uint8_t * q4,
+        const int8_t * y) {
+    int sum = 0;
+    for (int j = 0; j < 16; j += 2) {
+        const int v0 = ((int)kvalues_iq4nl[q4[j + 0] & 0x0f] + 128) * (int)y[j + 0];
+        const int v1 = ((int)kvalues_iq4nl[q4[j + 1] & 0x0f] + 128) * (int)y[j + 1];
+        sum += moe_sat_i16(v0 + v1) - 128 * ((int)y[j + 0] + (int)y[j + 1]);
+    }
+    for (int j = 0; j < 16; j += 2) {
+        const int v0 = ((int)kvalues_iq4nl[q4[j + 0] >> 4] + 128) * (int)y[16 + j + 0];
+        const int v1 = ((int)kvalues_iq4nl[q4[j + 1] >> 4] + 128) * (int)y[16 + j + 1];
+        sum += moe_sat_i16(v0 + v1) - 128 * ((int)y[16 + j + 0] + (int)y[16 + j + 1]);
+    }
+    return sum;
+}
+
+static __device__ __forceinline__ int moe_iq4_xs_q8k_block_sum(
+        const block_iq4_xs * x,
+        const block_q8_K * y) {
+    int bsum = 0;
+    uint16_t h = x->scales_h;
+    for (int ib = 0; ib < QK_K/64; ++ib) {
+        const int sc1 = ((x->scales_l[ib] & 0x0f) | ((h << 4) & 0x30)) - 32;
+        const int sc2 = ((x->scales_l[ib] >>  4) | ((h << 2) & 0x30)) - 32;
+        const int sumi1 = moe_iq4_xs_q8k_maddubs_corrected_sum32(x->qs + 32*ib,      y->qs + 64*ib);
+        const int sumi2 = moe_iq4_xs_q8k_maddubs_corrected_sum32(x->qs + 32*ib + 16, y->qs + 64*ib + 32);
+        bsum += sc1 * sumi1 + sc2 * sumi2;
+        h >>= 4;
+    }
+    return bsum;
+}
+
 static __global__ void moe_iq3_xxs_q8k_mat_kernel(
         int src0_type,
         const char * __restrict__ x_pool,
@@ -3593,6 +3675,14 @@ static __global__ void moe_iq3_xxs_q8k_mat_kernel(
             } else {
                 sum += moe_iq2_s_q8k_r8_block_dot(x_iq2 + ib, y_row + ib);
             }
+        } else if (src0_type == GGML_TYPE_Q3_K) {
+            const block_q3_K * x_q3 = (const block_q3_K *)x_row_base;
+            const float d = __half2float(x_q3[ib].d) * y_row[ib].d;
+            sum += d * (float)moe_q3_k_q8k_block_sum(x_q3 + ib, y_row + ib);
+        } else if (src0_type == GGML_TYPE_IQ4_XS) {
+            const block_iq4_xs * x_iq4 = (const block_iq4_xs *)x_row_base;
+            const float d = __half2float(x_iq4[ib].d) * y_row[ib].d;
+            sum += d * (float)moe_iq4_xs_q8k_block_sum(x_iq4 + ib, y_row + ib);
         }
     }
 
@@ -3678,190 +3768,8 @@ static void moe_iq2_selftest_fill_row(uint8_t * dst, int row, int k) {
 }
 
 extern "C" bool ggml_cuda_moe_iq2_q8k_r8_selftest(void) {
-    constexpr int k = 256 * 2;
-    constexpr int n_rows = 8;
-    constexpr int n_active = 4;
-
-    if (cudaSetDevice(0) != cudaSuccess) {
-        std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator: cudaSetDevice failed\n");
-        return false;
-    }
-
-    ggml_quantize_init(GGML_TYPE_IQ2_S);
-    ggml_quantize_init(GGML_TYPE_Q8_K);
-
-    const ggml_type_traits_t q8_traits = ggml_internal_get_type_traits(GGML_TYPE_Q8_K);
-    if (!q8_traits.from_float) {
-        std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator: missing quantization callbacks\n");
-        return false;
-    }
-
-    const size_t iq2_stride = ggml_row_size(GGML_TYPE_IQ2_S, k);
-    const size_t q8_stride = ggml_row_size(GGML_TYPE_Q8_K, k);
-    const size_t r8_stride = ggml_row_size(GGML_TYPE_Q8_K_R8, k);
-    const size_t slot_sz = (size_t)n_rows * iq2_stride;
-
-    std::vector<float> prompt(k);
-    std::vector<uint8_t> iq2(slot_sz);
-    std::vector<uint8_t> q8(q8_stride);
-    std::vector<uint8_t> r8((size_t)n_rows * r8_stride);
-    std::vector<float> expect(n_rows);
-    std::vector<float> got(n_rows);
-    std::vector<uint8_t> iq2_multi((size_t)n_active * slot_sz);
-    std::vector<uint8_t> q8_multi((size_t)n_active * q8_stride);
-    std::vector<float> expect_multi((size_t)n_active * n_rows);
-    std::vector<float> got_multi((size_t)n_active * n_rows);
-
-    for (int r = 0; r < n_rows; ++r) {
-        moe_iq2_selftest_fill_row(iq2.data() + (size_t)r * iq2_stride, r, k);
-    }
-    for (int c = 0; c < k; ++c) {
-        prompt[c] = moe_iq2_selftest_value_for_prompt(c);
-    }
-    q8_traits.from_float(prompt.data(), q8.data(), k);
-
-    if (!iqk_convert_repack_q8_r8(GGML_TYPE_IQ2_S, k, iq2.data(), iq2_stride, r8.data(), k, n_rows) ||
-            !iqk_mul_mat(n_rows, 1, k, GGML_TYPE_Q8_K_R8, r8.data(), r8_stride,
-                GGML_TYPE_Q8_K, q8.data(), q8_stride, expect.data(), 0, 0, 1)) {
-        std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator: CPU repack oracle failed\n");
-        return false;
-    }
-
-    for (int a = 0; a < n_active; ++a) {
-        uint8_t *iq2_base = iq2_multi.data() + (size_t)a * slot_sz;
-        for (int r = 0; r < n_rows; ++r) {
-            moe_iq2_selftest_fill_row(iq2_base + (size_t)r * iq2_stride, a * n_rows + r, k);
-        }
-        std::vector<float> prompt_a(k);
-        for (int c = 0; c < k; ++c) {
-            prompt_a[c] = moe_iq2_selftest_value_for_prompt(c + a * 13);
-        }
-        q8_traits.from_float(prompt_a.data(), q8_multi.data() + (size_t)a * q8_stride, k);
-        if (!iqk_convert_repack_q8_r8(GGML_TYPE_IQ2_S, k, iq2_base, iq2_stride, r8.data(), k, n_rows) ||
-                !iqk_mul_mat(n_rows, 1, k, GGML_TYPE_Q8_K_R8, r8.data(), r8_stride,
-                    GGML_TYPE_Q8_K, q8_multi.data() + (size_t)a * q8_stride, q8_stride,
-                    expect_multi.data() + (size_t)a * n_rows, 0, 0, 1)) {
-            std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator: multi-active CPU oracle failed active=%d\n", a);
-            return false;
-        }
-    }
-
-    cudaStream_t stream = nullptr;
-    uint8_t *d_iq2 = nullptr;
-    uint8_t *d_iq2_multi = nullptr;
-    block_q8_K *d_q8 = nullptr;
-    block_q8_K *d_q8_multi = nullptr;
-    int32_t *d_x_ids = nullptr;
-    int32_t *d_dst_ids = nullptr;
-    float *d_dst = nullptr;
-    int32_t *d_x_ids_multi = nullptr;
-    int32_t *d_dst_ids_multi = nullptr;
-    float *d_dst_multi = nullptr;
-
-    bool ok = cudaStreamCreate(&stream) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_iq2, iq2.size()) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_iq2_multi, iq2_multi.size()) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_q8, q8.size()) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_q8_multi, q8_multi.size()) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_x_ids, sizeof(int32_t)) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_dst_ids, sizeof(int32_t)) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_dst, got.size() * sizeof(float)) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_x_ids_multi, n_active * sizeof(int32_t)) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_dst_ids_multi, n_active * sizeof(int32_t)) == cudaSuccess;
-    ok = ok && cudaMalloc(&d_dst_multi, got_multi.size() * sizeof(float)) == cudaSuccess;
-
-    const int32_t zero = 0;
-    if (ok) {
-        ok = ok && cudaMemcpyAsync(d_iq2, iq2.data(), iq2.size(), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_iq2_multi, iq2_multi.data(), iq2_multi.size(), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_q8, q8.data(), q8.size(), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_q8_multi, q8_multi.data(), q8_multi.size(), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_x_ids, &zero, sizeof(zero), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_dst_ids, &zero, sizeof(zero), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemsetAsync(d_dst, 0, got.size() * sizeof(float), stream) == cudaSuccess;
-        int32_t ids_multi[n_active];
-        for (int a = 0; a < n_active; ++a) {
-            ids_multi[a] = a;
-        }
-        ok = ok && cudaMemcpyAsync(d_x_ids_multi, ids_multi, sizeof(ids_multi), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemcpyAsync(d_dst_ids_multi, ids_multi, sizeof(ids_multi), cudaMemcpyHostToDevice, stream) == cudaSuccess;
-        ok = ok && cudaMemsetAsync(d_dst_multi, 0, got_multi.size() * sizeof(float), stream) == cudaSuccess;
-    }
-    if (ok) {
-        ok = launch_moe_iq3_xxs_q8k_batch(GGML_TYPE_IQ2_S, (const char *)d_iq2, d_q8,
-                d_dst_ids, d_x_ids, d_dst, k, n_rows, iq2_stride, slot_sz, 1, 1, false, stream);
-    }
-    ok = ok && cudaMemcpyAsync(got.data(), d_dst, got.size() * sizeof(float), cudaMemcpyDeviceToHost, stream) == cudaSuccess;
-    if (ok) {
-        ok = launch_moe_iq3_xxs_q8k_batch(GGML_TYPE_IQ2_S, (const char *)d_iq2_multi, d_q8_multi,
-                d_dst_ids_multi, d_x_ids_multi, d_dst_multi, k, n_rows, iq2_stride, slot_sz,
-                n_active, n_active, false, stream);
-    }
-    ok = ok && cudaMemcpyAsync(got_multi.data(), d_dst_multi, got_multi.size() * sizeof(float), cudaMemcpyDeviceToHost, stream) == cudaSuccess;
-    ok = ok && cudaStreamSynchronize(stream) == cudaSuccess;
-
-    cudaFree(d_dst_multi);
-    cudaFree(d_dst_ids_multi);
-    cudaFree(d_x_ids_multi);
-    cudaFree(d_dst);
-    cudaFree(d_dst_ids);
-    cudaFree(d_x_ids);
-    cudaFree(d_q8_multi);
-    cudaFree(d_q8);
-    cudaFree(d_iq2_multi);
-    cudaFree(d_iq2);
-    if (stream) {
-        cudaStreamDestroy(stream);
-    }
-
-    float max_abs = 0.0f;
-    float max_expect_abs = 0.0f;
-    int max_row = -1;
-    for (int r = 0; ok && r < n_rows; ++r) {
-        const float diff = std::fabs(expect[r] - got[r]);
-        max_expect_abs = std::max(max_expect_abs, std::fabs(expect[r]));
-        if (diff > max_abs) {
-            max_abs = diff;
-            max_row = r;
-        }
-    }
-    const float tol = std::max(2.0f, max_expect_abs * 1.0e-5f);
-    ok = ok && max_abs <= tol;
-    float multi_max_abs = 0.0f;
-    float multi_max_expect_abs = 0.0f;
-    int multi_max_active = -1;
-    int multi_max_row = -1;
-    for (int a = 0; ok && a < n_active; ++a) {
-        for (int r = 0; r < n_rows; ++r) {
-            const size_t idx = (size_t)a * n_rows + r;
-            const float diff = std::fabs(expect_multi[idx] - got_multi[idx]);
-            multi_max_expect_abs = std::max(multi_max_expect_abs, std::fabs(expect_multi[idx]));
-            if (diff > multi_max_abs) {
-                multi_max_abs = diff;
-                multi_max_active = a;
-                multi_max_row = r;
-            }
-        }
-    }
-    const float multi_tol = std::max(2.0f, multi_max_expect_abs * 1.0e-5f);
-    ok = ok && multi_max_abs <= multi_tol;
-    std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator: %s rows=%d k=%d max_abs=%g tol=%g row=%d\n",
-            ok ? "ok" : "failed", n_rows, k, max_abs, tol, max_row);
-    if (!ok && max_row >= 0) {
-        std::fprintf(stderr, "[moe_stream_batch] IQ2_S CUDA comparator row %d expect=%g got=%g\n",
-                max_row, expect[max_row], got[max_row]);
-    }
-    std::fprintf(stderr,
-            "[moe_stream_batch] IQ2_S CUDA multi-active comparator: %s active=%d rows=%d max_abs=%g tol=%g active_row=%d/%d\n",
-            multi_max_abs <= multi_tol ? "ok" : "failed", n_active, n_rows,
-            multi_max_abs, multi_tol, multi_max_active, multi_max_row);
-    if (multi_max_abs > multi_tol && multi_max_active >= 0 && multi_max_row >= 0) {
-        const size_t idx = (size_t)multi_max_active * n_rows + multi_max_row;
-        std::fprintf(stderr,
-                "[moe_stream_batch] IQ2_S CUDA multi-active mismatch active=%d row=%d expect=%g got=%g\n",
-                multi_max_active, multi_max_row, expect_multi[idx], got_multi[idx]);
-    }
-    return ok;
+    std::fprintf(stderr, "[moe_stream_batch] IQ2_S Q8_K_R8 selftest unavailable in vendor correctness path\n");
+    return false;
 }
 
 static float moe_host_silu(float x) {
@@ -4035,7 +3943,34 @@ static bool prompt_up_gate_stream_enabled() {
 }
 
 static bool moe_stream_type_supported(ggml_type type) {
-    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ2_S;
+    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S ||
+        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
+}
+
+static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
+    if (!range || !range[0]) return true;
+    if (!name) return false;
+    const char *p = std::strstr(name, "blk.");
+    if (!p) return false;
+    p += 4;
+    char *end = nullptr;
+    const long layer = std::strtol(p, &end, 10);
+    if (end == p) return false;
+    const char *r = range;
+    while (*r) {
+        char *next = nullptr;
+        const long lo = std::strtol(r, &next, 10);
+        if (next == r) break;
+        long hi = lo;
+        if (*next == '-') {
+            r = next + 1;
+            hi = std::strtol(r, &next, 10);
+            if (next == r) return false;
+        }
+        if (layer >= lo && layer <= hi) return true;
+        r = (*next == ',') ? next + 1 : next;
+    }
+    return false;
 }
 
 static bool init_batch_once() {
@@ -4314,56 +4249,93 @@ static void preload_registered_down_for_active(const char *src_name, const int *
     }
 }
 
-static bool launch_moe_mmq_id_batch(
+static bool launch_moe_mmvq_compact_batch(
         ggml_type src0_type,
-        const char * d_src0, const int * d_src1_q8, const int32_t * d_ids_dst,
-        const int32_t * d_bounds, const int32_t * d_x_ids, float * d_dst,
-        int64_t ne00, int64_t ne01, int64_t src0_stride, int64_t src0_channel_stride,
-        int64_t n_active, int64_t dst_cols, cudaStream_t st, bool dynamic_mmq_x = false) {
-    const mmq_args_id args = {
-        d_src0, src0_type, d_src1_q8, d_ids_dst, d_bounds, d_x_ids, d_dst,
-        ne00, ne01, dst_cols, src0_stride, n_active, ne01,
-        n_active, n_active, src0_channel_stride, 0, 0,
-        1, 1, 0, 0, 0,
-        false, n_active};
-    ggml_backend_cuda_context * null_ctx = nullptr;
+        const char * d_src0_pool,
+        const int32_t * h_x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        const float * d_src1_f32,
+        int64_t src1_row_stride,
+        const int32_t * h_src1_rows,
+        void * d_src1_q8,
+        float * d_dst,
+        int64_t n_active,
+        cudaStream_t st) {
     switch (src0_type) {
         case GGML_TYPE_IQ3_XXS:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case_id<GGML_TYPE_IQ3_XXS>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q_id<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
-            }
-            break;
         case GGML_TYPE_IQ2_S:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case_id<GGML_TYPE_IQ2_S>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q_id<GGML_TYPE_IQ2_S, 8>(*null_ctx, args, st);
-            }
             break;
         default: return false;
     }
-    return cudaGetLastError() == cudaSuccess;
+    const size_t q8_row_bytes = moe_stream_q8_1_row_bytes(ne00);
+    for (int64_t j = 0; j < n_active; ++j) {
+        const int32_t slot = h_x_ids[j];
+        if (slot < 0) return false;
+        const int64_t src1_row = h_src1_rows ? h_src1_rows[j] : j;
+        const char * d_expert = d_src0_pool + (size_t)slot * (size_t)slot_stride;
+        const float * d_src1_row = d_src1_f32 + (size_t)src1_row * (size_t)src1_row_stride;
+        void * d_src1_q8_row = (char *)d_src1_q8 + (size_t)j * q8_row_bytes;
+        float * d_dst_row = d_dst + (size_t)j * (size_t)ne01;
+        if (!ggml_cuda_moe_stream_mmvq_dev(
+                src0_type, d_expert, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, st)) {
+            return false;
+        }
+    }
+    return true;
 }
 
-static bool launch_moe_mmq_id_one(
+static bool launch_moe_mmq_slot_batch(
         ggml_type src0_type,
-        const char * d_src0, const int * d_src1_q8, const int32_t * d_ids_dst,
-        const int32_t * d_bounds, const int32_t * d_x_ids, float * d_dst,
-        int64_t ne00, int64_t ne01, int64_t src0_stride, int64_t src0_channel_stride,
-        int64_t dst_cols, cudaStream_t st) {
-    const mmq_args_id args = {
-        d_src0, src0_type, d_src1_q8, d_ids_dst, d_bounds, d_x_ids, d_dst,
-        ne00, ne01, dst_cols, src0_stride, 1, ne01,
-        1, 1, src0_channel_stride, 0, 0,
+        const char * d_src0_pool,
+        const int * d_src1_q8,
+        const int32_t * d_ids_dst,
+        const int32_t * d_bounds,
+        const int32_t * d_x_ids,
+        float * d_dst,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t src0_stride,
+        int64_t src0_channel_stride,
+        int64_t n_active,
+        int64_t dst_cols,
+        cudaStream_t st) {
+    if (!d_src0_pool || !d_src1_q8 || !d_ids_dst || !d_bounds || !d_x_ids || !d_dst ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || dst_cols <= 0) {
+        return false;
+    }
+    const size_t ts_src0 = ggml_type_size(src0_type);
+    if (ts_src0 == 0 || src0_stride % (int64_t)ts_src0 != 0 || src0_channel_stride % (int64_t)ts_src0 != 0) {
+        return false;
+    }
+    const int64_t src0_row_stride_blocks = src0_stride / (int64_t)ts_src0;
+    const int64_t src0_channel_stride_blocks = src0_channel_stride / (int64_t)ts_src0;
+
+    const mmq_args args = {
+        d_src0_pool, src0_type, d_src1_q8, d_ids_dst, d_bounds, d_x_ids, d_dst,
+        ne00, ne01, dst_cols, src0_row_stride_blocks, n_active, ne01,
+        n_active, n_active, src0_channel_stride_blocks, 0, 0,
         1, 1, 0, 0, 0,
-        false, 1};
+        false, n_active
+    };
+
     ggml_backend_cuda_context * null_ctx = nullptr;
     switch (src0_type) {
-        case GGML_TYPE_IQ3_XXS: launch_mul_mat_q_id<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st); break;
-        case GGML_TYPE_IQ2_S:   launch_mul_mat_q_id<GGML_TYPE_IQ2_S,   8>(*null_ctx, args, st); break;
-        default: return false;
+        case GGML_TYPE_IQ3_XXS:
+            launch_mul_mat_q<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
+            break;
+        case GGML_TYPE_IQ2_S:
+            launch_mul_mat_q<GGML_TYPE_IQ2_S, 8>(*null_ctx, args, st);
+            break;
+        case GGML_TYPE_Q3_K:
+            launch_mul_mat_q<GGML_TYPE_Q3_K, 8>(*null_ctx, args, st);
+            break;
+        case GGML_TYPE_IQ4_XS:
+            launch_mul_mat_q<GGML_TYPE_IQ4_XS, 8>(*null_ctx, args, st);
+            break;
+        default:
+            return false;
     }
     return cudaGetLastError() == cudaSuccess;
 }
@@ -4425,6 +4397,67 @@ static void moe_stream_dump_prefuse_rows(const char *tag, const float *buf, int 
         std::fprintf(stderr, " row%d_l1=%g row%d_max=%g", r, l1, r, max_abs);
     }
     std::fprintf(stderr, "\n");
+}
+
+static bool moe_stream_compare_device_rows(
+        const char *tag,
+        const float *got_d,
+        const float *ref_d,
+        void *scratch_host,
+        size_t scratch_host_sz,
+        int n_rows,
+        int64_t ne01,
+        cudaStream_t st) {
+    const size_t n_vals = (size_t)n_rows * (size_t)ne01;
+    const size_t bytes = n_vals * sizeof(float);
+    if (!tag || !got_d || !ref_d || !scratch_host || scratch_host_sz < bytes || n_rows <= 0 || ne01 <= 0) {
+        return false;
+    }
+
+    std::vector<float> got(n_vals);
+    if (cudaMemcpyAsync(scratch_host, got_d, bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+        return false;
+    }
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        return false;
+    }
+    std::memcpy(got.data(), scratch_host, bytes);
+
+    if (cudaMemcpyAsync(scratch_host, ref_d, bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+        return false;
+    }
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        return false;
+    }
+    const float *ref = (const float *)scratch_host;
+
+    double l1 = 0.0;
+    double l2 = 0.0;
+    double ref_l2 = 0.0;
+    double max_abs = 0.0;
+    int bad = 0;
+    for (size_t i = 0; i < n_vals; ++i) {
+        const double g = (double)got[i];
+        const double r = (double)ref[i];
+        const double d = g - r;
+        const double ad = std::fabs(d);
+        l1 += ad;
+        l2 += d*d;
+        ref_l2 += r*r;
+        if (ad > max_abs) {
+            max_abs = ad;
+        }
+        if (!std::isfinite(g) || !std::isfinite(r)) {
+            ++bad;
+        }
+    }
+
+    const double denom = n_vals > 0 ? (double)n_vals : 1.0;
+    std::fprintf(stderr,
+        "[moe_stream] up/gate MMQ compare %s: rows=%d ne01=%ld l1_avg=%g max=%g rmse=%g rel_rmse=%g bad=%d\n",
+        tag, n_rows, (long)ne01, l1 / denom, max_abs,
+        std::sqrt(l2 / denom), std::sqrt(l2 / std::max(ref_l2, 1e-30)), bad);
+    return true;
 }
 
 static void moe_stream_dump_f32_rows(const char *tag, const float *buf, int n_rows, int64_t ne00) {
@@ -4546,12 +4579,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     batch_ttft_call_scope ttft_scope("call_upgate", src0_up_name, n_active, src0_bytes);
-    const int64_t ne00_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
-    const size_t src1_q8_bytes = (size_t)n_active * ne00_padded * sizeof(block_q8_1) / QK8_1
-        + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
-    const size_t src1_q8_one_bytes = (size_t)ne00_padded * sizeof(block_q8_1) / QK8_1
-        + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
+    const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);
+    const size_t src1_q8_one_bytes = moe_stream_q8_1_row_bytes(ne00);
     const size_t src1_q8k_bytes = exact_prompt_q8k ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
     const int64_t dst_cols = max_dst_id + 1;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
@@ -4602,7 +4632,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool serial_up_gate = serial_env && serial_env[0] && serial_env[0] != '0';
     static std::atomic<int> first_serial_up_gate{0};
     if (serial_up_gate && first_serial_up_gate.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream] up/gate serial MMQ probe active\n");
+        std::fprintf(stderr, "[moe_stream] up/gate serial MMVQ compatibility path active\n");
     }
     const char *iq2s_batch_env = std::getenv("GGML_MOE_STREAM_IQ2S_BATCH_MMVQ");
     const bool iq2s_batch_mmvq = !iq2s_batch_env || !iq2s_batch_env[0] || iq2s_batch_env[0] != '0';
@@ -4627,6 +4657,18 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (parallel_stage && first_parallel_stage.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] up/gate parallel CPU staging active\n");
     }
+    const char *fused_mmq_env = std::getenv("GGML_MOE_STREAM_UP_GATE_FUSED_MMQ");
+    const bool fused_mmq_up_gate =
+        fused_mmq_env && fused_mmq_env[0] && fused_mmq_env[0] != '0' &&
+        !prompt_mode && !exact_prompt_q8k && !serial_up_gate &&
+        (src0_type == GGML_TYPE_IQ3_XXS || src0_type == GGML_TYPE_IQ2_S);
+    static std::atomic<int> first_fused_mmq_up_gate{0};
+    if (fused_mmq_up_gate && first_fused_mmq_up_gate.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream] vendor MMQ up/gate path active: type=%d\n", (int)src0_type);
+    }
+    const char *mmq_compare_env = std::getenv("GGML_MOE_STREAM_UP_GATE_MMQ_COMPARE");
+    const bool mmq_compare =
+        fused_mmq_up_gate && mmq_compare_env && mmq_compare_env[0] && mmq_compare_env[0] != '0';
 
     auto stage_tensor = [&](
             const char *key_name, const void *host_base, void *d_out,
@@ -4666,49 +4708,36 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 src0_type == GGML_TYPE_IQ2_S && exact_prompt_q8k_iq2_direct_probe_enabled(),
                 run_stream);
         }
-        if (src0_type == GGML_TYPE_IQ2_S) {
-            if (iq2s_batch_mmvq) {
-                return ggml_cuda_moe_stream_mmvq_batch_dev(
-                    src0_type, cache->pool, ne01, ne00, (const float *)bc.d_src1_f32, d_src1_q8,
-                    (float *)d_out, d_x_ids, n_active, cache->slot_sz, run_stream);
-            }
-            for (int j = 0; j < n_active; ++j) {
-                const char *d_expert = (const char *)cache->pool + (size_t)h_x_ids[j] * cache->slot_sz;
-                float *d_row = (float *)d_out + (size_t)j * ne01;
-                const float *d_src1_row = (const float *)bc.d_src1_f32 + (size_t)j * ne00;
-                if (!ggml_cuda_moe_stream_mmvq_dev(
-                        src0_type, d_expert, ne01, ne00, d_src1_row, bc.d_src1_q8_one, d_row, run_stream)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        if (serial_up_gate) {
-            bc.h_bounds[0] = 0;
-            bc.h_bounds[1] = 1;
-            if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, 2 * sizeof(int32_t), cudaMemcpyHostToDevice, run_stream) != cudaSuccess) return false;
-            for (int j = 0; j < n_active; ++j) {
-                bc.h_up_gate_ids_dst[0] = j;
-                bc.h_up_gate_ids_dst[1] = h_x_ids[j];
-                if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_up_gate_ids_dst, sizeof(int32_t), cudaMemcpyHostToDevice, run_stream) != cudaSuccess) return false;
-                if (cudaMemcpyAsync(d_x_ids, bc.h_up_gate_ids_dst + 1, sizeof(int32_t), cudaMemcpyHostToDevice, run_stream) != cudaSuccess) return false;
-                quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32 + (size_t)j * ne00, bc.d_ids_src1, bc.d_src1_q8_one,
-                    src0_type, ne00, ne00, ne00, ne00,
-                    ne00_padded, 1, 1, 1, run_stream);
-                if (cudaGetLastError() != cudaSuccess) return false;
-                if (!launch_moe_mmq_id_one(
-                        src0_type,
-                        (const char *)cache->pool, (const int *)bc.d_src1_q8_one, bc.d_ids_dst, bc.d_bounds,
-                        d_x_ids, (float *)d_out, ne00, ne01, nb01, src0_bytes, dst_cols, run_stream)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return launch_moe_mmq_id_batch(
+        GGML_UNUSED(serial_up_gate);
+        return launch_moe_mmvq_compact_batch(
             src0_type,
-            (const char *)cache->pool, (const int *)d_src1_q8, bc.d_ids_dst, bc.d_bounds,
-            d_x_ids, (float *)d_out, ne00, ne01, nb01, src0_bytes, n_active, dst_cols, run_stream, prompt_mode);
+            (const char *)cache->pool, h_x_ids, cache->slot_sz,
+            ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+            d_src1_q8, (float *)d_out, n_active, run_stream);
+    };
+
+    auto stage_tensor_slots_only = [&](
+            const char *key_name, const void *host_base,
+            cudaStream_t run_stream, int32_t *d_x_ids,
+            int32_t *h_x_ids, int *slots_out,
+            const int *avoid_slots, int n_avoid_slots) -> bool {
+        for (int j = 0; j < n_active; ++j) {
+            const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * nb02;
+            const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
+            int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            if (cache_slot < 0) {
+                cache_slot = batch_cache_insert_slot(
+                    cache, cache_key, expert_host, src0_bytes, run_stream, true, false,
+                    avoid_slots, n_avoid_slots, true, key_name, active_experts[j]);
+            } else {
+                batch_ttft_trace_record("cache_hit", key_name, active_experts[j], src0_bytes, true, false, false, 0.0);
+            }
+            if (cache_slot < 0) return false;
+            h_x_ids[j] = cache_slot;
+            if (slots_out) slots_out[j] = cache_slot;
+            batch_route_profile_hit(key_name, active_experts[j], src0_bytes);
+        }
+        return cudaMemcpyAsync(d_x_ids, h_x_ids, ids_bytes, cudaMemcpyHostToDevice, run_stream) == cudaSuccess;
     };
 
     struct stage_copy_job {
@@ -4851,15 +4880,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (profile) cudaEventRecord(bc.ev_stage, st);
 
-    const bool iq2s_batched_stage = src0_type == GGML_TYPE_IQ2_S && iq2s_batch_mmvq;
     if (exact_prompt_q8k) {
         if (ne00 % QK_K != 0) return false;
         const int nblocks = (int)(n_active * (ne00 / QK_K));
         moe_quantize_row_q8_k_kernel<<<nblocks, 1, 0, st>>>((const float *)bc.d_src1_f32, (block_q8_K *)bc.d_src1_q8k, nblocks);
         if (cudaGetLastError() != cudaSuccess) return false;
-    } else if (!serial_up_gate && !iq2s_batched_stage) {
-        quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
-            src0_type, ne00, ne00, n_active * ne00, n_active * ne00,
+    } else if (fused_mmq_up_gate) {
+        const int64_t ne00_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+        quantize_mmq_q8_1_cuda((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
+            src0_type, ne00, ne00, (int64_t)n_active * ne00, (int64_t)n_active * ne00,
             ne00_padded, n_active, 1, 1, st);
         if (cudaGetLastError() != cudaSuccess) return false;
     }
@@ -4882,6 +4911,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         std::atoi(std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_FLAT")) : -1;
     const int point_col = point_dump && std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_COL") ?
         std::atoi(std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_COL")) : -1;
+
     if (exact_prompt_q8k && n_active * 2 > cache->n_slots) {
         const bool exact_debug = []() {
             const char *env = std::getenv("GGML_MOE_STREAM_EXACT_PROMPT_DEBUG");
@@ -5017,7 +5047,83 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         return true;
     }
 
-    if (parallel_up_gate) {
+    if (fused_mmq_up_gate) {
+        int up_slots[MOE_STREAM_MAX_ACTIVE] = {};
+        if (!stage_tensor_slots_only(
+                up_key_name, src0_up_data, st,
+                bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
+            return false;
+        }
+        if (!stage_tensor_slots_only(
+                gate_key_name, src0_gate_data, st,
+                bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
+            return false;
+        }
+
+        for (int j = 0; j < n_active; ++j) {
+            bc.h_ids_dst[j] = j;
+        }
+        if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+        if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) return false;
+        if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) return false;
+        if (!launch_moe_mmq_slot_batch(
+                src0_type, (const char *)cache->pool, (const int *)bc.d_src1_q8,
+                bc.d_ids_dst, bc.d_bounds, bc.d_x_ids_up, (float *)bc.d_up,
+                ne00, ne01, nb01, cache->slot_sz, n_active, n_active, st)) {
+            return false;
+        }
+        if (profile) cudaEventRecord(bc.ev_up, st);
+        if (!launch_moe_mmq_slot_batch(
+                src0_type, (const char *)cache->pool, (const int *)bc.d_src1_q8,
+                bc.d_ids_dst, bc.d_bounds, bc.d_x_ids_gate, (float *)bc.d_gate,
+                ne00, ne01, nb01, cache->slot_sz, n_active, n_active, st)) {
+            return false;
+        }
+        if (profile) cudaEventRecord(bc.ev_gate, st);
+
+        static std::atomic<int> mmq_compare_count{0};
+        const int compare_call = mmq_compare ? mmq_compare_count.fetch_add(1) : INT_MAX;
+        if (mmq_compare && compare_call < 4) {
+            void *compare_buf = use_handoff ? bc.d_dst : bc.d_handoff;
+            if (!use_handoff && !ensure_dev(bc.d_handoff, bc.d_handoff_sz, dst_bytes)) {
+                return false;
+            }
+            compare_buf = use_handoff ? bc.d_dst : bc.d_handoff;
+            const size_t compact_bytes = (size_t)n_active * (size_t)ne01 * sizeof(float);
+            if (cudaMemsetAsync(compare_buf, 0, compact_bytes, st) != cudaSuccess) return false;
+            if (!launch_moe_mmvq_compact_batch(
+                    src0_type,
+                    (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_up, (float *)compare_buf, n_active, st)) {
+                return false;
+            }
+            if (!moe_stream_compare_device_rows(
+                    "up", (const float *)bc.d_up, (const float *)compare_buf,
+                    bc.h_dst, bc.h_dst_sz, n_active, ne01, st)) {
+                return false;
+            }
+            if (cudaMemsetAsync(compare_buf, 0, compact_bytes, st) != cudaSuccess) return false;
+            if (!launch_moe_mmvq_compact_batch(
+                    src0_type,
+                    (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_gate, (float *)compare_buf, n_active, st)) {
+                return false;
+            }
+            if (!moe_stream_compare_device_rows(
+                    "gate", (const float *)bc.d_gate, (const float *)compare_buf,
+                    bc.h_dst, bc.h_dst_sz, n_active, ne01, st)) {
+                return false;
+            }
+        }
+
+        for (int j = 0; j < n_active; ++j) {
+            bc.h_ids_dst[j] = flat_dst_ids[j];
+        }
+        if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+        if (cudaMemsetAsync(fused_d, 0, dst_bytes, st) != cudaSuccess) return false;
+    } else if (parallel_up_gate) {
         if (cudaEventRecord(bc.ev_stage_ready, st) != cudaSuccess) return false;
         if (cudaStreamWaitEvent(bc.up_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
         if (cudaStreamWaitEvent(bc.gate_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
@@ -5412,6 +5518,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         return false;
     };
     if (!init_batch_once()) return decline("init_batch_once");
+    if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
     if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
@@ -5462,10 +5569,22 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const size_t src0_bytes = (size_t)ne01 * nb01;
     batch_ttft_call_scope ttft_scope("call_down", src0_name, n_active, src0_bytes);
     const size_t src0_all_bytes = (size_t)n_active * src0_bytes;
-    const int64_t ne00_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
-    const size_t src1_q8_bytes = (size_t)n_active * ne00_padded * sizeof(block_q8_1) / QK8_1
-        + (size_t)get_mmq_x_max_host(ggml_cuda_info().devices[ggml_cuda_get_device()].cc) * sizeof(block_q8_1_mmq);
+    const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);
+    const char *down_q8k_env = std::getenv("GGML_MOE_STREAM_DOWN_Q8K");
+    const char *down_q8k_types_env = std::getenv("GGML_MOE_STREAM_DOWN_Q8K_TYPES");
+    const char *down_q8k_layer_range = std::getenv("GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE");
+    const bool down_q8k_type_allowed =
+        !down_q8k_types_env || !down_q8k_types_env[0] ||
+        std::strcmp(down_q8k_types_env, "all") == 0 ||
+        (std::strcmp(down_q8k_types_env, "q3") == 0 && src0_type == GGML_TYPE_Q3_K) ||
+        (std::strcmp(down_q8k_types_env, "iq4") == 0 && src0_type == GGML_TYPE_IQ4_XS);
+    const bool down_q8k_candidate =
+        down_q8k_env && down_q8k_env[0] && down_q8k_env[0] != '0' &&
+        (src0_type == GGML_TYPE_Q3_K || src0_type == GGML_TYPE_IQ4_XS) &&
+        down_q8k_type_allowed &&
+        (!src0_name || std::strstr(src0_name, ".ffn_down_exps.") || std::strstr(src0_name, "ffn_down_exps")) &&
+        moe_tensor_layer_in_simple_range(src0_name, down_q8k_layer_range);
     const int64_t dst_cols = max_dst_id + 1;
     const bool use_handoff =
         gpu_handoff_enabled() &&
@@ -5473,6 +5592,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_handoff.d_data &&
         g_handoff.ne01 == ne00 &&
         g_handoff.dst_cols >= dst_cols;
+    const bool down_q8k_requested = down_q8k_candidate && !use_handoff;
+    const size_t src1_q8k_bytes = down_q8k_requested ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
@@ -5480,6 +5601,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)
         && (use_handoff || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
+        && (!down_q8k_requested || ensure_dev(bc.d_src1_q8k, bc.d_src1_q8k_sz, src1_q8k_bytes))
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
         && ensure_dev((void *&)bc.d_ids_src1, bc.d_ids_src1_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)
@@ -5488,6 +5610,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
     if (!ok) return decline("ensure_buffers");
+    static std::atomic<int> first_down_q8k{0};
+    if (down_q8k_requested && first_down_q8k.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] down Q3_K/IQ4_XS Q8_K-reference batch path active\n");
+    }
 
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
     if (!cache) return decline("cache_get");
@@ -5623,24 +5749,33 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             std::fprintf(stderr, "[moe_stream_batch] GPU handoff consumed: ne00=%ld dst_cols=%ld\n",
                          (long)ne00, (long)dst_cols);
         }
-        quantize_mmq_q8_1_cuda_id(g_handoff.d_data, bc.d_ids_dst, bc.d_src1_q8,
-            src0_type, ne00, g_handoff.ne01, g_handoff.ne01 * g_handoff.dst_cols, g_handoff.ne01 * g_handoff.dst_cols,
-            ne00_padded, n_active, 1, 1, st);
-        g_handoff.host_ptr = nullptr;
-        g_handoff.d_data = nullptr;
-    } else {
-        quantize_mmq_q8_1_cuda_id((const float *)bc.d_src1_f32, bc.d_ids_src1, bc.d_src1_q8,
-            src0_type, ne00, ne00, n_active * ne00, n_active * ne00,
-            ne00_padded, n_active, 1, 1, st);
     }
-    if (cudaGetLastError() != cudaSuccess) return decline("quantize_cuda_error");
     if (profile) cudaEventRecord(bc.ev_quant, st);
 
-    if (!launch_moe_mmq_id_batch(
-            src0_type,
-            (const char *)cache->pool, (const int *)bc.d_src1_q8, bc.d_ids_dst, bc.d_bounds,
-            bc.d_x_ids, (float *)bc.d_dst, ne00, ne01, nb01, src0_bytes, n_active, dst_cols, st, false)) {
-        return decline("launch_moe_mmq_id_batch");
+    const float *d_src1_run = use_handoff ? g_handoff.d_data : (const float *)bc.d_src1_f32;
+    const int64_t src1_run_stride = use_handoff ? g_handoff.ne01 : ne00;
+    const int32_t *src1_rows = use_handoff ? bc.h_ids_dst : nullptr;
+    if (down_q8k_requested) {
+        if (ne00 % QK_K != 0) return decline("down_q8k_bad_ne00");
+        const int nblocks = (int)(n_active * (ne00 / QK_K));
+        moe_quantize_row_q8_k_kernel<<<nblocks, 1, 0, st>>>((const float *)bc.d_src1_f32, (block_q8_K *)bc.d_src1_q8k, nblocks);
+        if (cudaGetLastError() != cudaSuccess) return decline("down_q8k_quantize");
+        if (!launch_moe_iq3_xxs_q8k_batch(
+                src0_type, (const char *)cache->pool, (const block_q8_K *)bc.d_src1_q8k,
+                bc.d_ids_dst, bc.d_x_ids, (float *)bc.d_dst,
+                ne00, ne01, nb01, cache->slot_sz, n_active, dst_cols, false, st)) {
+            return decline("launch_down_q8k_batch");
+        }
+    } else if (!launch_moe_mmvq_compact_batch(
+                src0_type,
+                (const char *)cache->pool, bc.h_x_ids, cache->slot_sz,
+                ne00, ne01, d_src1_run, src1_run_stride, src1_rows,
+                bc.d_src1_q8, (float *)bc.d_dst, n_active, st)) {
+            return decline("launch_moe_mmvq_compact_batch");
+    }
+    if (use_handoff) {
+        g_handoff.host_ptr = nullptr;
+        g_handoff.d_data = nullptr;
     }
     if (profile) cudaEventRecord(bc.ev_kernel, st);
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
@@ -5662,7 +5797,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const auto scatter_start = std::chrono::steady_clock::now();
     for (int j = 0; j < n_active; ++j) {
         float *dst_row = (float *)((char *)dst + (size_t)dst_ids[j] * dst_nb1 + (size_t)token_ids[j] * dst_nb2);
-        std::memcpy(dst_row, tmp + (size_t)dst_ids[j] * ne01, (size_t)ne01 * sizeof(float));
+        std::memcpy(dst_row, tmp + (size_t)j * ne01, (size_t)ne01 * sizeof(float));
     }
     if (profile) {
         const auto scatter_end = std::chrono::steady_clock::now();

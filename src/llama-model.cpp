@@ -1995,11 +1995,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     }
                 }
 
-                if (ml.get_key(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, hparams.rope_yarn_log_mul, 0.0f)) {
-                    // [TAG_DEEPSEEK2_YARN_LOG_MUL_FIX]
-                    // cancel the factor from the convert script
-                    hparams.rope_yarn_log_mul /= 0.1f;
-                }
+                ml.get_key(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, hparams.rope_yarn_log_mul, 0.0f);
 
                 // (optional) temperature tuning - used by mistral-large
                 ml.get_key(LLM_KV_ATTENTION_TEMPERATURE_SCALE,  hparams.f_attn_temp_scale,       false);
@@ -3016,6 +3012,9 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
 
     const int n_layer      = hparams.n_layer;
     const int n_gpu_layers = this->n_gpu_layers();
+    const llama_model_tensor_buft_override * original_tensor_buft_overrides = ml.tensor_buft_overrides;
+    std::vector<llama_model_tensor_buft_override> deferred_expert_buft_overrides;
+    std::vector<std::string> deferred_expert_buft_override_patterns;
 
     const bool use_mmap_buffer = true;
 
@@ -3095,6 +3094,47 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
 
     // assign the output layer
     pimpl->dev_output = get_layer_buft_list(n_layer);
+
+    bool defer_expert_mmap = ml.should_defer_expert_mmaps();
+    LLAMA_LOG_INFO("%s: defer expert mmap probe: defer_experts=%d use_mmap=%d expert_ranges=%zu dense=%.2f GiB deferred=%.2f GiB active=%d\n",
+            __func__,
+            ml.defer_experts ? 1 : 0,
+            ml.use_mmap ? 1 : 0,
+            ml.expert_tensor_index.file_ranges.size(),
+            ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
+            ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0,
+            defer_expert_mmap ? 1 : 0);
+    if (defer_expert_mmap && use_mlock) {
+        LLAMA_LOG_WARN("%s: deferred expert loading disabled because mlock keeps mmap ranges resident\n", __func__);
+        defer_expert_mmap = false;
+    }
+    if (defer_expert_mmap && ml.check_tensors) {
+        LLAMA_LOG_WARN("%s: deferred expert loading disabled because tensor validation would fault expert pages eagerly\n", __func__);
+        defer_expert_mmap = false;
+    }
+    if (defer_expert_mmap && !devices.empty() && n_gpu_layers > 0) {
+        deferred_expert_buft_override_patterns.reserve(n_layer);
+        deferred_expert_buft_overrides.reserve(n_layer + 1);
+
+        for (int il = 0; il < n_layer; ++il) {
+            deferred_expert_buft_override_patterns.emplace_back(
+                    "blk\\." + std::to_string(il) + "\\.(ffn_(up|down|gate|gate_up)_(ch)?exps\\.(weight|scale|bias))");
+            deferred_expert_buft_overrides.push_back({
+                    deferred_expert_buft_override_patterns.back().c_str(),
+                    ggml_backend_cpu_buffer_type(),
+            });
+        }
+        if (original_tensor_buft_overrides) {
+            for (const llama_model_tensor_buft_override * override = original_tensor_buft_overrides; override->pattern != nullptr; ++override) {
+                deferred_expert_buft_overrides.push_back(*override);
+            }
+        }
+        deferred_expert_buft_overrides.push_back({ nullptr, nullptr });
+        ml.tensor_buft_overrides = deferred_expert_buft_overrides.data();
+
+        LLAMA_LOG_INFO("%s: keeping deferred expert tensors on CPU with %d overrides while applying %d GPU layers\n",
+                __func__, n_layer, n_gpu_layers);
+    }
 
     const auto TENSOR_DUPLICATED      = llama_model_loader::TENSOR_DUPLICATED;
     const auto TENSOR_NOT_REQUIRED    = llama_model_loader::TENSOR_NOT_REQUIRED;
@@ -5364,7 +5404,10 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                             layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd,   n_ff}, 0);
                         } else {
                             layer.ffn_gate_inp = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP, "weight", i), {n_embd, n_expert}, 0);
-                            layer.ffn_exp_probs_b = create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B, i), {n_expert}, TENSOR_NOT_REQUIRED);
+                            layer.ffn_exp_probs_b = create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B, "bias", i), {n_expert}, TENSOR_NOT_REQUIRED);
+                            if (!layer.ffn_exp_probs_b) {
+                                layer.ffn_exp_probs_b = create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B, i), {n_expert}, TENSOR_NOT_REQUIRED);
+                            }
 
                             if (n_expert == 0) {
                                 throw std::runtime_error("n_expert must be > 0");
@@ -8069,24 +8112,6 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         }
     }
 
-    bool defer_expert_mmap = ml.should_defer_expert_mmaps();
-    LLAMA_LOG_INFO("%s: defer expert mmap probe: defer_experts=%d use_mmap=%d expert_ranges=%zu dense=%.2f GiB deferred=%.2f GiB active=%d\n",
-            __func__,
-            ml.defer_experts ? 1 : 0,
-            ml.use_mmap ? 1 : 0,
-            ml.expert_tensor_index.file_ranges.size(),
-            ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
-            ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0,
-            defer_expert_mmap ? 1 : 0);
-    if (defer_expert_mmap && use_mlock) {
-        LLAMA_LOG_WARN("%s: deferred expert loading disabled because mlock keeps mmap ranges resident\n", __func__);
-        defer_expert_mmap = false;
-    }
-    if (defer_expert_mmap && ml.check_tensors) {
-        LLAMA_LOG_WARN("%s: deferred expert loading disabled because tensor validation would fault expert pages eagerly\n", __func__);
-        defer_expert_mmap = false;
-    }
-
     ml.done_getting_tensors();
 
     // populate tensors_by_name
@@ -8221,6 +8246,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
     // load tensor data
     for (auto & [ctx, buf_map] : ctx_buf_maps) {
         if (!ml.load_all_data(ctx, buf_map, use_mlock ? &pimpl->mlock_mmaps : NULL, params.progress_callback, params.progress_callback_user_data)) {
+            ml.tensor_buft_overrides = original_tensor_buft_overrides;
             return false;
         }
     }
@@ -8232,6 +8258,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                 ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
                 ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0);
     }
+
+    ml.tensor_buft_overrides = original_tensor_buft_overrides;
 
     if (use_mmap_buffer) {
         for (auto & mapping : ml.mappings) {

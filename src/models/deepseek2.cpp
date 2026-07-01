@@ -24,8 +24,10 @@ llm_build_deepseek2::llm_build_deepseek2(const llama_model & model, const llm_gr
     GGML_ASSERT(ext_factor >= 0.0f);
     const float attn_factor_org = attn_factor * (1.0f + 0.1f * logf(1.0f / freq_scale));
 
-    // use the original attn_factor to pre-scale the kq_scale
-    const float mscale   = attn_factor_org * (1.0f + 0.1f * hparams.rope_yarn_log_mul * logf(1.0f / freq_scale));
+    // Use the original attention factor to pre-scale kq_scale.  Kimi/DeepSeek2
+    // stores yarn_log_multiplier as the full mscale multiplier (0.1 in the
+    // GGUF), so do not apply the generic YaRN 0.1 factor a second time here.
+    const float mscale   = attn_factor_org * (1.0f + hparams.rope_yarn_log_mul * logf(1.0f / freq_scale));
     const float kq_scale = 1.0f * mscale * mscale / sqrtf(float(n_embd_head_k));
 
     ggml_tensor * cur;

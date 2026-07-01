@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 typedef float (*vec_dot_q_cuda_t)(const void * __restrict__ vbq, const block_q8_1 * __restrict__ bq8_1, const int & kbx, const int & iqs);
 
@@ -1305,20 +1306,36 @@ extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
     const float *d_src1_f32,
     void *d_src1_q8,
     float *d_dst,
-    const int32_t *,
+    const int32_t *d_x_ids,
     int64_t n_active,
-    int64_t,
+    int64_t src0_stride,
     cudaStream_t stream) {
     if (n_active <= 0) {
         return false;
     }
+    if (src0_stride <= 0) {
+        return false;
+    }
+
     const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
     const int64_t src1_q8_row_bytes = src1_padded * (int64_t) sizeof(block_q8_1) / QK8_1;
+    std::vector<int32_t> h_x_ids(n_active);
+    if (cudaMemcpyAsync(h_x_ids.data(), d_x_ids, (size_t) n_active * sizeof(int32_t), cudaMemcpyDeviceToHost, stream) != cudaSuccess) {
+        return false;
+    }
+    if (cudaStreamSynchronize(stream) != cudaSuccess) {
+        return false;
+    }
+
     for (int64_t k = 0; k < n_active; ++k) {
+        if (h_x_ids[k] < 0) {
+            return false;
+        }
+        const void *d_src0_row = (const char *) d_src0 + (size_t) h_x_ids[k] * (size_t) src0_stride;
         const float *d_src1_row = d_src1_f32 + k * ne00;
         void *d_src1_q8_row = (char *) d_src1_q8 + (size_t) k * src1_q8_row_bytes;
         float *d_dst_row = d_dst + k * ne01;
-        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0_row, ne01, ne00, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
             return false;
         }
     }

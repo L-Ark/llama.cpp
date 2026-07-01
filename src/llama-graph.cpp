@@ -13,6 +13,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <numeric>
 #include <sstream>
@@ -1450,7 +1451,10 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     }
 
     // select experts
-    ggml_tensor * selected_experts = ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
+    ggml_tensor * selected_experts =
+        (arch == LLM_ARCH_DEEPSEEK2 || arch == LLM_ARCH_MISTRAL4 || arch == LLM_ARCH_KIMI_LINEAR)
+        ? ggml_top_k(ctx0, selection_probs, n_expert_used)
+        : ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
     cb(selected_experts->src[0], "ffn_moe_argsort", il);
     cb(selected_experts, "ffn_moe_topk", il);
 
@@ -1498,16 +1502,42 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     ggml_build_forward_expand(gf, weights);
 
     cur = ggml_reshape_3d(ctx0, cur, n_embd, 1, n_tokens);
+    ggml_tensor * ffn_inp = cur;
 
     if (weight_before_ffn) {
         // repeat cur to [n_embd, n_expert_used, n_tokens]
         ggml_tensor * repeated = ggml_repeat_4d(ctx0, cur, n_embd, n_expert_used, n_tokens, 1);
         cur = ggml_mul(ctx0, repeated, weights);
         cb(cur, "ffn_moe_weighted", il);
+        ffn_inp = cur;
     }
 
     ggml_tensor * up = nullptr;
     ggml_tensor * experts = nullptr;
+    bool fused_up_gate_done = false;
+
+    const bool use_stream_fused_up_gate =
+        std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE") != nullptr &&
+        n_tokens == 1 &&
+        gate_up_exps == nullptr &&
+        up_exps != nullptr &&
+        gate_exps != nullptr &&
+        up_exps_b == nullptr &&
+        gate_exps_b == nullptr &&
+        up_exps_s == nullptr &&
+        gate_exps_s == nullptr &&
+        type_op == LLM_FFN_SILU &&
+        up_exps->type == gate_exps->type &&
+        ggml_are_same_shape(up_exps, gate_exps);
+    const bool build_gate_first_for_cuda_fusion =
+        gate_up_exps == nullptr &&
+        !use_stream_fused_up_gate &&
+        gate_exps != nullptr &&
+        up_exps_b == nullptr &&
+        gate_exps_b == nullptr &&
+        up_exps_s == nullptr &&
+        gate_exps_s == nullptr &&
+        (type_op == LLM_FFN_SILU || type_op == LLM_FFN_GELU);
 
     if (gate_up_exps) {
         // merged gate_up path: one mul_mat_id, then split into gate and up views
@@ -1532,6 +1562,16 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cur = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], 0);
         cb(cur, "ffn_moe_gate", il);
         up  = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], n_ff * gate_up->nb[0]);
+        cb(up, "ffn_moe_up", il);
+    } else if (use_stream_fused_up_gate) {
+        cur = ggml_moe_up_gate(ctx0, up_exps, gate_exps, cur, selected_experts, GGML_UNARY_OP_SILU);
+        cb(cur, "ffn_moe_swiglu", il);
+        fused_up_gate_done = true;
+    } else if (build_gate_first_for_cuda_fusion) {
+        cur = build_lora_mm_id(gate_exps, cur, selected_experts); // [n_ff, n_expert_used, n_tokens]
+        cb(cur, "ffn_moe_gate", il);
+
+        up = build_lora_mm_id(up_exps, ffn_inp, selected_experts); // [n_ff, n_expert_used, n_tokens]
         cb(up, "ffn_moe_up", il);
     } else {
         // separate gate and up path
@@ -1578,6 +1618,9 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
 
     switch (type_op) {
         case LLM_FFN_SILU:
+            if (fused_up_gate_done) {
+                break;
+            }
             if (gate_exps) {
                 // Step35: per-layer clamp for routed experts
                 if (arch == LLM_ARCH_STEP35 && il >= 0) {
