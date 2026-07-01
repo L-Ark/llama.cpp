@@ -8247,3 +8247,68 @@ Decision:
 - Promotion threshold remains strict:
   Phase 3ZE n96 must beat Phase 3ZD n96 2.69143 s/token and preserve full
   France paragraph quality.
+
+Full promotion result timestamp: 2026-07-02 23:31 UTC / 2026-07-03 07:31 CST.
+
+Strict n96 down prefetch result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-232523Z-n96-phase3ze-down-prefetch`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.722328 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  77565.28 ms, gate PASS.
+- Decode:
+  230.51220 s / 85 tokens = 2.71191 s/token, 0.36874 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=9132, hits=9132, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35739, host_stage=49103.088 ms, h2d=7744.678 ms.
+- Up/gate CPU profile:
+  calls=2381, total=38.009 ms/call, cuda_batch=37.814,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=17.941 ms/call, cuda_batch=1.904,
+  fallback_t0=15.981, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=4.327 ms/call, kernel=0.114 ms/call,
+  wall=4.514 ms/call.
+- VRAM cache:
+  hits=42966, misses=31082, preloads=9132, hit_rate=58.0%.
+
+Comparison against strict baseline:
+
+- Phase 3ZD strict n96 no-prefetch:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZE strict n96 down prefetch:
+  2.71191 s/token, 0.36874 tok/s.
+- Down prefetch improves down stage substantially:
+  12.023 -> 4.327 ms/call.
+- But it regresses up/gate substantially:
+  23.352 -> 38.009 ms/call.
+- Host staging also rises:
+  47257.080 -> 49103.088 ms.
+
+Decision:
+
+- Reject Phase 3ZE.
+- The mechanism is correct and useful for down cache hits, but full-length
+  contention with up/gate makes total token rate worse under the strict n96
+  gate.
+- Do not use `GGML_MOE_PREFETCH_DOWN=1` in the accepted runtime unless a future
+  implementation isolates prefetch bandwidth/stream contention or throttles it
+  adaptively.
