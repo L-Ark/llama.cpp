@@ -1885,13 +1885,21 @@
 
 - `attempt_id`: `20260702-old-config-cpu-chunk-trace-forensic`
 - `attempt_kind`: `forensic-diagnostic/cpu-fallback-wall`
-- `status`: planned
+- `status`: completed / diagnostic_not_sota
 - `hypothesis`: The old `2.6 tok/s` run and slow clean reruns have the same gate stream rows/hits/misses (`34753/29624/5129`), while trace span differs sharply (`~71s` old versus `~113s` slow) and only about `3.2s` of that gap is explained by gate `src0_ms`. The missing time is likely in unstreamed CPU fallback (`ffn_up_exps` / `ffn_down_exps`), cgroup reclaim stalls around those CPU reads, or a lost binary/source behavior in that path.
 - `theoretical_upper_bound`: If CPU fallback/reclaim accounts for most of the extra `~42s` trace-span gap, fixing that path could recover a large fraction of the historical `2.6 tok/s` observation without changing model quality. If CPU fallback trace shows only a small gap, the remaining delta is likely external IO/page-cache state or lost binary/shared-object state.
 - `test_config`: current pushed source HEAD, clean rebuilt binary, old 2.6 command shape (`-n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=12`, no `GGML_MOE_KEEP_TOPK_UPDOWN`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`), cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace plus `GGML_MOE_CPU_CHUNK_TRACE_OUT`.
 - `acceptance_gate`: diagnostic only. It cannot promote a SOTA because CPU chunk trace adds file-write/timing overhead. The run must still keep RAM within 16GB and produce a semantically correct/coherent France answer to be comparable.
 - `rollback`: No source change. If CPU chunk trace overhead makes the run unusably slow, terminate and record as failed diagnostic; current accepted SOTA remains top4 `2.3 tok/s`.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, cgroup memory files, gate `one_trace.csv`, CPU chunk trace, top tensor/layer wall-time aggregation, correctness output, and explicit conclusion about where the `2.6` gap moved.
+- `run_dir_v1_cpu_only`: `/root/lfz/runs/vendor-ds4-16gb/20260701T235124Z-20260702_old_config_cpu_chunk_trace_forensic/france-cpu40-vram12gb`
+- `run_dir_v2_gate_cpu`: `/root/lfz/runs/vendor-ds4-16gb/20260701T235508Z-20260702_old_config_cpu_gate_trace_forensic_v2/france-cpu40-vram12gb`
+- `result_v2`: completed and not promoted. `eval_tok_s=1.6`, `prompt_tok_s=0.7`, `TTFT=45769.753411ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14964662272`, `pgmajfault=592341`, `workingset_refault_file=12362483`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct and coherent; the misspelling `Rennowned` does not affect semantic correctness.
+- `gate_trace_comparison`: v2 exactly matches the old `2.6` gate stream shape: `rows=34753`, `cache_hits=29624`, `cache_inserts/misses=5129`. However old `2.6` gate trace span was `71223.061ms`, while v2 span is `110024.491ms`. Gate `src0_ms` explains only about `3141.851ms` of the gap (`23564.133ms -> 26705.984ms`), and gate `total_ms` only about `3263.396ms` (`25786.372ms -> 29049.768ms`).
+- `cpu_chunk_trace_summary`: CPU chunk trace is limit-capped and only valid for distribution, not wall-clock. v2 captured `150000` CPU fallback chunks with partial summed thread time `114539.541ms`: `ffn_down_exps=60788.91ms`, `ffn_up_exps=53750.631ms`. Top early layers by partial time include `blk.1`, `blk.0`, `blk.9`, `blk.2`, `blk.3`, `blk.11`, `blk.4`, `blk.12`, `blk.8`, `blk.10`, `blk.6`, `blk.7`, and `blk.5`.
+- `gap_analysis`: The unreproduced `2.6` delta is not explained by gate stream routing/cache policy: old and v2 have identical gate rows/hits/misses. Most of the span gap sits outside gate stream trace and aligns with unstreamed up/down CPU fallback and/or cgroup file-page reclaim stalls around that fallback. This strengthens the lost-binary/source or CPU fallback IO/reclaim hypothesis.
+- `rollback_status`: no source change. Current accepted SOTA remains top4 `2.3 tok/s`. This diagnostic result is pushed only as evidence, not as a promoted SOTA.
 
 ## 记录与验收
 
