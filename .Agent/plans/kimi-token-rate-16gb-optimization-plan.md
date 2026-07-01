@@ -2458,6 +2458,63 @@ Decision:
   (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with strict RAM,
   VRAM, TTFT, launch/read, and semantic quality gates passing.
 
+Full result timestamp: 2026-07-02 17:18 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171854Z-n96-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus depth 2 down
+  prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103081.24 ms, inside the 106331.72 ms gate.
+- Decode: 304478.65 ms / 85 runs, 3.58210 s/token, 0.27917 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=3992, hits=3992, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=37713, misses=36335,
+  preloads=3992, hit_rate=50.9%.
+- Pinned staging: copies=35780, host_stage=49805.170 ms, h2d=7758.946 ms.
+- Up/gate profile: calls=2381, total=23.671 ms/call.
+- Down profile: calls=4506, stage=8.748 ms/call, total=8.915 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2P depth 8 `-n 96`: 301072.16 ms / 85 runs,
+  3.54203 s/token, 0.28232 tok/s.
+- Phase 2Q depth 2 `-n 96`: 304478.65 ms / 85 runs,
+  3.58210 s/token, 0.27917 tok/s.
+
+Analysis:
+
+- Depth 2 reduced prefetch pressure compared with depth 8:
+  - host_stage improved from 51604.703 ms to 49805.170 ms.
+  - up/gate total improved from 24.696 ms/call to 23.671 ms/call.
+- It still regressed versus Phase 2H:
+  - up/gate total is worse than 22.785 ms/call.
+  - cache hit_rate falls to 50.9%, worse than depth 8 and only modestly useful
+    for down.
+  - down total improves from 11.781 ms/call to 8.915 ms/call, but the measured
+    full decode does not realize that apparent local saving. The prefetch path
+    likely shifts work into hidden synchronization/cache refill points outside
+    the down-profile bucket.
+- The `-n 32` win does not generalize to full length, so this cannot be used as
+  a stable optimization under the current cold-start acceptance rule.
+
+Decision:
+
+- Reject Phase 2Q for full `-n 96` promotion.
+- No code rollback is needed because this path is env-only and default-off.
+- Stop pursuing blind prefetch-depth sweeps as the next main path. The next
+  optimization should instrument where the missing full-length time moves
+  before changing prefetch policy again.
+
 Result timestamp: 2026-07-02 16:40 CST.
 
 Run:
