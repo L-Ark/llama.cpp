@@ -89,6 +89,7 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
     const float * src1_f32,
     size_t src1_nb1,
     size_t src1_nb2,
+    int64_t src1_ne1,
     int64_t cne1,
     const void * src1_q8_1,
     size_t src1_padded_num_cols,
@@ -101,7 +102,7 @@ static bool (*ggml_cuda_moe_stream_available)(void) = NULL;
 static void (*ggml_cuda_moe_stream_sync)(void) = NULL;
 static bool (*ggml_cuda_moe_stream_one)(
     int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t,
-    int64_t, const void *, size_t, float *, size_t, size_t,
+    int64_t, int64_t, const void *, size_t, float *, size_t, size_t,
     const ggml_moe_stream_row_mapping *) = NULL;
 #endif
 
@@ -2157,6 +2158,7 @@ static void ggml_compute_forward_mul_mat_id(
                     ne01, ne00, nb01,
                     (const float *) src1->data,
                     nb11, nb12,
+                    ne11,
                     cne1,
                     NULL, 0,
                     (float *) dst->data,

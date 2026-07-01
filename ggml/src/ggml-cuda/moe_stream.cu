@@ -8,7 +8,7 @@ typedef struct { int32_t i1; int32_t i2; } ggml_moe_row_mapping;
 void ggml_cuda_moe_stream_link_anchor(void) {}
 bool ggml_cuda_moe_stream_available(void) { return false; }
 int ggml_cuda_host_register(void *, size_t) { return 0; }
-bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
+bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
@@ -31,6 +31,7 @@ void ggml_cuda_moe_stream_sync(void) {}
 
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -68,6 +69,7 @@ bool ggml_cuda_moe_stream_one(
     size_t nb01,
     const float *src1_f32,
     size_t src1_nb1, size_t src1_nb2,
+    int64_t src1_ne1,
     int64_t cne1,
     const void *src1_q8_1,             // optional pre-quantized (unused if src1_f32 set)
     size_t src1_padded_num_cols,
@@ -428,6 +430,129 @@ static bool moe_stream_one_name_filter_allows(const char * name) {
     return name && std::strstr(name, filter) != nullptr;
 }
 
+static const int8_t moe_stream_mxfp4_values[16] = {
+    0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12,
+};
+
+static int moe_stream_env_int(const char * name, int fallback) {
+    const char * env = std::getenv(name);
+    return env && env[0] ? std::atoi(env) : fallback;
+}
+
+static FILE * moe_stream_q8_debug_fp() {
+    static FILE * fp = nullptr;
+    static int initialized = 0;
+    static std::mutex mu;
+
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = 1;
+        const char * path = std::getenv("GGML_MOE_STREAM_Q8_DEBUG_OUT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "w");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+                std::fprintf(fp,
+                    "tensor,expert,row_id,i12,out_col,block,gpu_q81_part,gpu_q81_total,gpu_value,d_q,e,sumi_q81\n");
+            } else {
+                std::fprintf(stderr, "[moe_stream_q8_debug] failed to open trace: %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
+static void moe_stream_q8_debug_maybe(
+    const char * src0_name,
+    int64_t expert_index,
+    const void * src0_data,
+    int64_t ne00,
+    size_t nb01,
+    const void * d_src1_q8,
+    const void * d_dst,
+    int64_t src1_padded,
+    int64_t ne01,
+    int64_t cne1,
+    const ggml_moe_row_mapping * rows,
+    cudaStream_t st) {
+    FILE * fp = moe_stream_q8_debug_fp();
+    if (!fp || !src0_data || !d_src1_q8 || !d_dst || !rows) {
+        return;
+    }
+
+    const int target_expert = moe_stream_env_int("GGML_MOE_STREAM_Q8_DEBUG_EXPERT", -1);
+    const int target_row    = moe_stream_env_int("GGML_MOE_STREAM_Q8_DEBUG_ROW", -1);
+    const int target_i12    = moe_stream_env_int("GGML_MOE_STREAM_Q8_DEBUG_I12", -1);
+    const int target_col    = moe_stream_env_int("GGML_MOE_STREAM_Q8_DEBUG_COL", -1);
+    if (target_expert >= 0 && expert_index != target_expert) {
+        return;
+    }
+    if (target_col < 0 || target_col >= ne01) {
+        return;
+    }
+
+    int64_t target_k = -1;
+    for (int64_t k = 0; k < cne1; ++k) {
+        if ((target_row < 0 || rows[k].i1 == target_row) && (target_i12 < 0 || rows[k].i2 == target_i12)) {
+            target_k = k;
+            break;
+        }
+    }
+    if (target_k < 0) {
+        return;
+    }
+
+    const size_t src1_q8_row_bytes = (size_t)(src1_padded / QK8_1) * sizeof(block_q8_1);
+    std::vector<uint8_t> q8_row(src1_q8_row_bytes);
+    float gpu_value = 0.0f;
+    const char * d_q8_row = (const char *) d_src1_q8 + (size_t) target_k * src1_q8_row_bytes;
+    const float * d_dst_value = (const float *) d_dst + (size_t) target_k * ne01 + (size_t) target_col;
+
+    if (cudaMemcpyAsync(q8_row.data(), d_q8_row, src1_q8_row_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+        return;
+    }
+    if (cudaMemcpyAsync(&gpu_value, d_dst_value, sizeof(float), cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+        return;
+    }
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        return;
+    }
+
+    const block_q8_1 * y = (const block_q8_1 *) q8_row.data();
+    const block_mxfp4 * x = (const block_mxfp4 *) ((const char *) src0_data + (size_t) target_col * nb01);
+    const int64_t nb = ne00 / QK_MXFP4;
+    double total = 0.0;
+
+    flockfile(fp);
+    for (int64_t ib = 0; ib < nb; ++ib) {
+        int sumi = 0;
+        for (int j = 0; j < QK_MXFP4/2; ++j) {
+            const int v0 = moe_stream_mxfp4_values[x[ib].qs[j] & 0x0F];
+            const int v1 = moe_stream_mxfp4_values[x[ib].qs[j] >> 4];
+            sumi += y[ib].qs[j] * v0;
+            sumi += y[ib].qs[j + QK_MXFP4/2] * v1;
+        }
+        const float d_q = __low2float(y[ib].ds);
+        const double part = (double) GGML_E8M0_TO_FP32_HALF(x[ib].e) * (double) d_q * (double) sumi;
+        total += part;
+        std::fprintf(fp,
+            "%s,%" PRId64 ",%d,%d,%d,%" PRId64 ",%.9g,%.9g,%.9g,%.9g,%d,%d\n",
+            src0_name ? src0_name : "",
+            expert_index,
+            rows[target_k].i1,
+            rows[target_k].i2,
+            target_col,
+            ib,
+            part,
+            total,
+            (double) gpu_value,
+            (double) d_q,
+            (int) x[ib].e,
+            sumi);
+    }
+    funlockfile(fp);
+}
+
 static bool moe_stream_one_type_allowed(ggml_type type, const char * name) {
     if (type == GGML_TYPE_IQ3_XXS) {
         return moe_stream_one_name_filter_allows(name);
@@ -529,6 +654,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
     size_t nb01,
     const float *src1_f32,
     size_t src1_nb1, size_t src1_nb2,
+    int64_t src1_ne1,
     int64_t cne1,
     const void *src1_q8_1,
     size_t src1_padded_num_cols,
@@ -542,6 +668,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
     const ggml_type t0 = (ggml_type)src0_type_int;
     if (!moe_stream_one_type_allowed(t0, src0_name)) return false;
     if (cne1 < 1 || cne1 > MMVQ_MAX_BATCH_SIZE) return false;
+    if (src1_ne1 <= 0) return false;
     if (!src1_f32) return false;   // require F32 src1 for on-GPU quantization
 
     static std::atomic<int> first_call{0};
@@ -616,7 +743,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
         char *bounce = (char *)ctx.h_bounce;
         const char *src1_base = (const char *)src1_f32;
         for (int64_t k = 0; k < cne1; ++k) {
-            const int32_t i1 = rows[k].i1;
+            const int32_t i1 = rows[k].i1 % src1_ne1;
             const int32_t i2 = rows[k].i2;
             const char *src_row = src1_base + (size_t)i1 * src1_nb1 + (size_t)i2 * src1_nb2;
             std::memcpy(bounce + (size_t)k * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
@@ -653,6 +780,11 @@ extern "C" bool ggml_cuda_moe_stream_one(
         }
     }
     const auto t_kernel = std::chrono::steady_clock::now();
+
+    if (t0 == GGML_TYPE_MXFP4) {
+        moe_stream_q8_debug_maybe(src0_name, expert_index, src0_data, ne00, nb01, ctx.d_src1, ctx.d_dst,
+                src1_padded, ne01, cne1, rows, st);
+    }
 
     if (cudaMemcpyAsync(ctx.h_scratch, ctx.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) { release_slot(s); return false; }
     const auto t_d2h = std::chrono::steady_clock::now();

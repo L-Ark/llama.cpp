@@ -184,3 +184,16 @@ Rejected higher-rate candidates:
 - Answer degenerated into punctuation/quote repetition and did not mention France or Europe.
 - Numeric result: core compare rows did not improve. Expert `35` still had CPU `1.64784455` versus GPU `0`; expert `245` still had CPU `9.97797775` versus GPU about `-0.412517`; expert `97` still had CPU `0.415755332` versus GPU `-1.87617469`.
 - Action: reverted the VDR code change; it is not accepted. Next step is a CUDA-side debug kernel that writes actual per-block partial sums from the GPU for one failing row and one matching row.
+
+### 2026-07-01T09:36:40Z - Corrected DS4 gate stream src1 row mapping; rejected for token rate
+
+- Purpose: fix the DS4 MXFP4 gate stream numeric mismatch after q8 debug showed failing `row_id > 0` activations were staged as zero or wrong data on GPU while `row_id=0` matched CPU.
+- Root cause: CPU `mul_mat_id` uses `i11 = id % ne11` when selecting the source activation row, but `ggml_cuda_moe_stream_one` staged F32 `src1` rows with raw `rows[k].i1`. This made expert rows with `id >= ne11` read the wrong activation row before CUDA q8 quantization.
+- Code change: pass `ne11` as `src1_ne1` into `ggml_cuda_moe_stream_one` and stage with `rows[k].i1 % src1_ne1`; destination scatter still uses the original row id.
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260701T093640Z-cold-ds4-gate-stream-src1-rowmod-fix/france-cpu40-vram2gb`.
+- Config: `cpu_moe=40`, `vram_cache=2`, `drop_caches_before_case=true`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=8`.
+- Result: correctness passed and CPU-vs-GPU compare is fixed, but token rate regressed. Metrics: `eval_tok_s=0.9`, `prompt_tok_s=0.6`, `ttft_estimate_ms=52299.175473`, `memory_peak_bytes=16000000000`, `memory_max_events=67170`, `memory_file_bytes=14877372416`, `pgmajfault=600997`, `workingset_refault_file=25222398`, `ram_ok=true`.
+- Answer: `France is a Western European country known for its rich history, vibrant culture, and significant global influence...`; the response is semantically correct and coherent.
+- Numeric evidence: first eight `compare.csv` rows now match CPU to about `1e-7` to `1e-6`. Examples: expert `35` CPU `1.4652648` vs GPU `1.46526492`; expert `245` CPU `10.0252676` vs GPU `10.0252686`.
+- Acceptance: rejected for token rate because cold baseline vram2 remains `eval_tok_s=1.3` with TTFT `44034.028848 ms`. This run's TTFT increase is about `18.8%`, within the 20% gate, but generation throughput is lower.
+- Action: keep and push as a correctness/diagnostic foundation only. Next optimization must profile the corrected stream path and recover the lost time before it can become an accepted SOTA.
