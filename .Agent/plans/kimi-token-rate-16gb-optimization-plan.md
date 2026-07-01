@@ -8186,3 +8186,64 @@ Acceptance:
 - Use the result as the apples-to-apples n32 comparator:
   - if Phase 3ZE n32 is slower, reject down prefetch without n96,
   - if Phase 3ZE n32 is faster, continue to strict n96 promotion.
+
+Result timestamp: 2026-07-02 23:24 UTC / 2026-07-03 07:24 CST.
+
+Strict n32 no-prefetch baseline result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-232053Z-n32-phase3zf-no-prefetch-baseline`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.830254 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  81097.79 ms, gate PASS.
+- Decode:
+  71.62278 s / 31 tokens = 2.31041 s/token, 0.43282 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Pinned staging:
+  copies=13149, host_stage=17701.828 ms, h2d=2844.782 ms.
+- Up/gate CPU profile:
+  calls=869, total=18.898 ms/call, cuda_batch=18.744,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=30.734 ms/call, cuda_batch=3.791,
+  fallback_t0=26.891, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=9.035 ms/call, kernel=0.110 ms/call,
+  wall=9.265 ms/call.
+- VRAM cache:
+  hits=12906, misses=14038, preloads=0, hit_rate=47.9%.
+
+Comparison:
+
+- Phase 3ZE strict n32 down prefetch:
+  2.29417 s/token, 0.43589 tok/s.
+- Phase 3ZF strict n32 no-prefetch baseline:
+  2.31041 s/token, 0.43282 tok/s.
+- Prefetch improves the strict n32 decode by 0.01625 s/token, about 0.7%.
+- Mechanism:
+  - down stage improves 9.035 -> 3.245 ms/call,
+  - cache hit-rate improves 47.9% -> 59.7%,
+  - prefetch useful-rate is 100%,
+  - but up/gate regresses 18.898 -> 29.081 ms/call.
+
+Decision:
+
+- Continue to strict n96 promotion because the apples-to-apples n32 comparison
+  is positive and all hard gates passed.
+- Promotion threshold remains strict:
+  Phase 3ZE n96 must beat Phase 3ZD n96 2.69143 s/token and preserve full
+  France paragraph quality.
