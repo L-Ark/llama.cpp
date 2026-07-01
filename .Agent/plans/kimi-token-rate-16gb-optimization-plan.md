@@ -1790,3 +1790,73 @@ Decision:
 - The next design should inspect why up/gate profile only reports one call under
   vendor MMQ and where the missing decode time is spent before trying another
   up/gate kernel change.
+
+## Next candidate: Phase 2L VRAM cache key index
+
+Design timestamp: 2026-07-01 16:03 UTC.
+
+Current bottleneck:
+
+- Phase 2K explains the vendor MMQ gap enough for prioritization: CUDA graph
+  replay hides most per-call profiling, but total `-n 32` eval is still much
+  slower, so vendor MMQ is not a useful next path.
+- Accepted Phase 2H `-n 32` visible costs:
+  - Eval: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+  - Up/gate profile: 869 calls, 18.938 ms/call, about 16.5s.
+  - Down profile: 1644 calls, 9.228 ms/call, about 15.2s.
+  - Pinned staging: 13135 copies, host_stage=18199.846 ms,
+    h2d=2844.363 ms.
+  - VRAM cache: hits=12892, misses=14052, hit_rate=47.8%.
+- The cache lookup path currently linearly scans up to the cache slot count:
+  2798 slots for 5.36 MiB up, 2493 slots for 6.02 MiB gate, and 2016 slots for
+  7.44 MiB down. This scan happens in `batch_cache_lookup_slot`,
+  `batch_cache_find_slot`, and `batch_cache_contains_slot`.
+- Phase 2J proved that broad profile preloading/protection increases overhead.
+  A key index targets fixed per-call CPU overhead without changing math,
+  routing, cache size, or eviction policy.
+
+Hypothesis:
+
+Add an in-memory `key -> slot` index to each `batch_vram_cache` and keep it in
+sync on insert, clear, and cache reinitialization. Use it for lookup/find/
+contains while preserving the existing LRU/LFU victim scan for misses and
+evictions.
+
+Theoretical upper bound:
+
+- Phase 2H `-n 32` has 26944 cache events (hits+misses) and thousands of
+  additional find/contains checks. A linear scan over about 2000-2800 slots can
+  easily add millions of key comparisons per short run.
+- If this removes 5-10 ms from each down batch call, the upper bound on
+  `-n 32` is roughly 8-16s saved from the 95.6s decode, or 2.57-2.83 s/token
+  (0.35-0.39 tok/s).
+- If lookup overhead is mostly hidden by IO/kernel time, expected gain may be
+  only a few percent. This still has low correctness risk because it should not
+  change selected experts, math kernels, or cache capacity.
+
+Correctness risk:
+
+- A stale key index could return the wrong slot after eviction or failed copy,
+  causing silent semantic corruption.
+- The implementation must erase the previous key before overwriting a slot,
+  erase on clear/failure, and clear the index on cache reset.
+
+Acceptance:
+
+- First run cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual France answer must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`.
+- Accept and push the code only if `-n 32` is faster than accepted Phase 2H
+  `-n 32` (0.32 tok/s / 3.08431 s/token) with all gates passing; otherwise
+  revert the code and record rejection.
+
+Rollback:
+
+- Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
+  gates fail, launch/read failures appear, or `-n 32` does not improve over
+  Phase 2H.
