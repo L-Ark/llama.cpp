@@ -2129,3 +2129,47 @@ PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph
     --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
     > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
 ```
+
+Full-length result timestamp: 2026-07-01 16:18 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-161815Z-n96-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, same split-cache config as the accepted `-n 32`
+  run.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 104536.59 ms, inside the 106331.72 ms gate.
+- Decode: 299594.70 ms / 85 runs, 3.52464 s/token, 0.28372 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1109 slots, 7.44 MiB slot, hits=18230, misses=17786,
+    hit_rate=50.6%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=17991, misses=20105,
+    hit_rate=47.2%.
+- Pinned staging: copies=33497, host_stage=45305.989 ms, h2d=7268.052 ms.
+- Up/gate profile: calls=2381, total=22.493 ms/call.
+- Down profile: calls=4506, stage=11.130 ms/call, total=11.300 ms/call.
+
+Comparison against accepted Phase 2H `-n 96`:
+
+- Phase 2H `-n 96`: 295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s.
+- Phase 2M `-n 96`: 299594.70 ms / 85 runs, 3.52464 s/token, 0.28372 tok/s.
+- Phase 2M improves some visible buckets but does not improve full-length
+  end-to-end decode.
+
+Decision:
+
+- Do not promote Phase 2M as the full-length `-n 96` best.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Keep the default-off `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB` code because Phase
+  2M is a valid `-n 32` constrained improvement and does not change default
+  behavior.
+- Next design should target the gap between `-n 32` and `-n 96`: split-cache
+  helps shorter runs but loses at longer output. The next experiment should
+  tune split budget for `-n 96` specifically, or target graph replay/upgate
+  cost rather than fixed cache partitioning.
