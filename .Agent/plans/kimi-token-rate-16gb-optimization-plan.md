@@ -1723,3 +1723,32 @@ Rollback:
 - Reject immediately if output corruption appears, vendor MMQ does not activate,
   TTFT exceeds the gate, RAM/VRAM gates fail, launch/read failures appear, or
   the `-n 32` rate is not better than accepted Phase 2H.
+
+Result timestamp: 2026-07-01 15:41 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-154139Z-n4-phase2k-vendor-mmq-upgate`
+
+Measured result:
+
+- Commit/config: `6280c4f6d`, accepted Phase 2H config plus
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103384.78 ms, inside the 106331.72 ms gate.
+- Decode: 18614.36 ms / 3 runs, 6.20479 s/token, 0.16117 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Vendor MMQ activated: log contains `vendor MMQ up/gate path active: type=18`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=733, misses=1795, hit_rate=29.0%.
+- Pinned staging: copies=1782, host_stage=2636.471 ms, h2d=388.503 ms.
+- Up/gate profile: calls=1, total=121.721 ms/call.
+- Down profile: calls=160, stage=13.286 ms/call, total=13.465 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes the hard correctness/TTFT/memory gates and proves
+  vendor MMQ activation.
+- The single sampled up/gate call is much slower than Phase 2H, but `-n 4` has
+  only one up/gate profile call, so run the planned cold `-n 32` before final
+  rejection.
