@@ -83,6 +83,7 @@
 ### SOTA 记录与发布红线
 
 - **最高优先级硬规则：出现符合要求的新 SOTA 时，必须当场详细记录完整复现信息，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支，确保未来一定可以从 pushed source + run 记录完全复现；没有完成这件事的高指标一律无效。**
+- **新 SOTA 处理流程必须原子化执行：一旦某次 run 同时满足更高 token rate、16GB RAM（含 page cache）、France 正确率和 TTFT gate，必须立刻停止继续试新参数，先补齐 run 目录内的复现包、把源码和 plan/progress 记录 commit，并 push 到 `ssd` remote 的 `vendor/deepseek-token-rate-16gb` 分支；随后必须从该 pushed commit 干净重建并 rerun 通过，才允许把它写成“当前有效 SOTA”。**
 - **任何新 SOTA 都不能只停留在临时服务器、临时二进制、未提交 diff、口头汇报或单次 run 目录中；必须有 pushed source commit、clean rebuild 命令、pushed-commit rerun 结果和完整指标证据。**
 - **2026-07-02 强化要求：出现符合要求的新 SOTA 时，必须暂停后续优化，先完成完整复现记录、源码 commit、push 到 `ssd-llama` 指定分支，并从 pushed commit 干净重建复跑通过；否则该结果不能进入“当前最高 token rate”。**
 - **不可弱化规则：只要出现符合要求的新 SOTA，必须把未来完全复现所需的信息详细写入 plan/progress/run 目录，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支；没有详细复现信息和 pushed source 的结果一律无效，不能作为当前最高 token rate。**
@@ -1866,13 +1867,19 @@
 
 - `attempt_id`: `20260702-expert-keep-top4-no-trace`
 - `attempt_kind`: `config-diagnostic/trace-overhead`
-- `status`: planned
+- `status`: completed / diagnostic_rejected_tie
 - `hypothesis`: Current top4 SOTA measurements include per-expert `one_trace.csv` writes. Earlier clean-baseline no-trace testing did not help at `1.6 tok/s`, but top4 changes output length and expert activity. Removing trace can check whether the accepted `2.3 tok/s` line is artificially low due trace overhead.
 - `theoretical_upper_bound`: Trace writes one row per streamed gate expert. Current top4 traced runs have about `~41k` rows and `~30s` traced stream time; removing file writes should at most save a small fixed overhead unless trace I/O increases cgroup file-cache pressure. Treat any improvement as diagnostic unless a follow-up accepted evidence run can preserve enough reproduction trace.
 - `test_config`: clean source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: diagnostic only unless `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France output is semantically correct and coherent, TTFT stays within gate, and a follow-up trace/evidence strategy is defined. If no improvement, close trace-overhead direction for top4.
 - `rollback`: No source change. If output fails, RAM/TTFT fails, or `eval_tok_s <= 2.3`, record rejected/diagnostic and keep top4 `2.3 tok/s` SOTA.
 - `required_evidence`: exact env/command proving trace disabled, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, cgroup `memory.*`, full France answer text, manual correctness note, and explicit diagnostic result.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260701T234100Z-20260702_expert_keep_top4_no_trace/france-cpu40-vram0gb`
+- `result`: completed and not promoted. `eval_tok_s=2.3`, `prompt_tok_s=0.8`, `TTFT=40557.47877ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15003897856`, `pgmajfault=398324`, `workingset_refault_file=6398679`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct and coherent, matching the accepted top4 style.
+- `trace_status`: disabled as intended; `one_trace.csv` is absent and `GGML_MOE_STREAM_ONE_TRACE_OUT` is absent from `environment.txt`.
+- `gap_analysis`: Removing per-expert trace did not improve token rate beyond current SOTA and TTFT was slightly worse than top4 pushed rerun. Trace write overhead is not hiding a higher top4 cold-start SOTA.
+- `rollback_status`: no source change. Current effective SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
