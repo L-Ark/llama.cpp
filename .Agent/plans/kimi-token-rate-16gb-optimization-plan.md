@@ -8577,3 +8577,70 @@ Decision rule:
 - If depth=1 is slower than depth=2 at n32, reject depth=1 and keep depth=2 as
   current accepted runtime.
 - If depth=1 wins at n32, run strict n96 and require beating 2.57811 s/token.
+
+Result timestamp: 2026-07-02 23:48 UTC / 2026-07-03 07:48 CST.
+
+Strict n32 depth=1 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-234437Z-n32-phase3zh-down-prefetch-depth1`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.846878 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  65625.23 ms, gate PASS.
+- Decode:
+  68.49730 s / 31 tokens = 2.20959 s/token, 0.45257 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=738, hits=738, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13136, host_stage=17603.383 ms, h2d=2839.753 ms.
+- Up/gate CPU profile:
+  calls=869, total=20.613 ms/call, cuda_batch=20.452,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=26.340 ms/call, cuda_batch=3.047,
+  fallback_t0=23.249, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=7.248 ms/call, kernel=0.110 ms/call,
+  wall=7.439 ms/call.
+- VRAM cache:
+  hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+
+Comparison:
+
+- Phase 3ZF no-prefetch n32:
+  2.31041 s/token, 0.43282 tok/s.
+- Phase 3ZG depth=2 n32:
+  2.23835 s/token, 0.44676 tok/s.
+- Phase 3ZH depth=1 n32:
+  2.20959 s/token, 0.45257 tok/s.
+- Depth=1 is now the best strict n32 result.
+- Mechanism:
+  - lowers up/gate contention versus depth=2:
+    23.313 -> 20.613 ms/call,
+  - retains some down improvement versus no-prefetch:
+    down stage 9.035 -> 7.248 ms/call,
+  - preserves 100% useful prefetch with no evicted-unused entries.
+
+Decision:
+
+- Promote depth=1 to strict n96.
+- It must beat the current accepted Phase 3ZG depth=2 n96:
+  2.57811 s/token, 0.38788 tok/s.
