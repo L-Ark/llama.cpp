@@ -1479,3 +1479,33 @@ Rollback:
 
 - Reject immediately if output corruption returns, handoff does not activate,
   launch failures appear, TTFT fails, or token rate is not better than Phase 2H.
+
+Result timestamp: 2026-07-01 15:24 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-152433Z-n4-phase2i-handoff-correctness`
+
+Measured result:
+
+- Commit/config: `9498d1452`, accepted Phase 2H config plus
+  `GGML_MOE_GPU_HANDOFF=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103601.35 ms, inside the 106331.72 ms gate.
+- Decode: 26878.70 ms / 3 runs, 8.95957 s/token, 0.11 tok/s.
+- `launch_failures=0`, `down_profile=true`.
+- Handoff activated: log contains
+  `GPU handoff consumed: ne00=2048 dst_cols=8`.
+- Automated quality script printed PASS, but the actual France answer was:
+  `France isneedator`
+
+Decision:
+
+- Reject Phase 2I immediately on semantic quality.
+- Do not run the planned `-n 32` or `-n 96` handoff tests.
+- This fails the hard correctness gate because the answer is not a coherent
+  short paragraph and is clearly corrupted, despite the prefix-based quality
+  script returning PASS.
+- Future gates must treat the automated quality flag as a first filter only.
+  The recorded answer text itself must be checked for semantic correctness and
+  coherence before accepting any speedup.
