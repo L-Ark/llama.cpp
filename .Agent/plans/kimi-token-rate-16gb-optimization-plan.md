@@ -2957,6 +2957,57 @@ Decision:
   (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with full semantic
   quality and all hard gates passing.
 
+Full result timestamp: 2026-07-02 18:05 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-180510Z-n96-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102802.72 ms, inside the 106331.72 ms gate.
+- Decode: 304623.67 ms / 85 runs, 3.58381 s/token, 0.27903 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=33716, misses=40316,
+  preloads=0, hit_rate=45.5%.
+- Pinned staging: copies=28304, host_stage=27237.971 ms, h2d=5985.814 ms.
+- Up/gate profile: calls=2381, total=25.491 ms/call.
+- Down profile: calls=4506, stage=10.890 ms/call, total=11.056 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2U `-n 96`: 304623.67 ms / 85 runs,
+  3.58381 s/token, 0.27903 tok/s.
+
+Analysis:
+
+- The full run does not reproduce the `-n 32` benefit.
+- Down parallel staging lowers the pinned staging counters, but the end-to-end
+  decode regresses:
+  - up/gate total worsens from 22.785 ms/call to 25.491 ms/call.
+  - down total only improves slightly from 11.781 ms/call to 11.056 ms/call.
+  - full decode is 9510.09 ms slower than Phase 2H.
+- This suggests the parallel copy threads/streams are shifting work into
+  synchronization or GPU scheduling contention that is not represented by the
+  local down-stage event timing.
+
+Decision:
+
+- Reject Phase 2U for full `-n 96`.
+- Do not use `GGML_MOE_DOWN_PARALLEL_STAGE=1` in the accepted config.
+- No code rollback is needed because this was env-only.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Next work should add wall-time instrumentation around up/gate, down, cache
+  insert/copy, and stream synchronization because repeated env-only attempts
+  improve local CUDA-event buckets without improving end-to-end decode.
+
 Result timestamp: 2026-07-02 17:32 CST.
 
 Run:
