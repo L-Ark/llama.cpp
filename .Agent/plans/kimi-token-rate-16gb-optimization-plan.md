@@ -2864,6 +2864,83 @@ Rollback:
   produces ambiguous names/timings, or profiling overhead breaks the cold-start
   gates.
 
+Implementation result timestamp: 2026-07-02 20:40 CST.
+
+Code:
+
+- Commit: `35bfc0281 ggml: add Kimi CPU MoE name profiling`
+- Remote build: PASS.
+- The per-name profiler is default-off and requires both:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-193343Z-n4-phase3h-name-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 72593.11 ms, inside the 106331.72 ms gate.
+- Decode: 9674.63 ms / 3 runs, 3.22488 s/token, 0.31009 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU profile:
+  - up_gate: calls=85, total=30.488 ms/call.
+  - mul_mat_id/down path: calls=550, total=141.381 ms/call,
+    cuda_batch=4.241, cuda_single=0.000, fallback_t0=137.025.
+- Per-name profile top entries are mostly `blk.*.ffn_down_exps.weight`; some
+  down tensors are not batch eligible, and many eligible tensors have one
+  decline out of four calls on the smoke.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-193559Z-n32-phase3h-name-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78437.92 ms, inside the 106331.72 ms gate.
+- Decode: 70075.53 ms / 31 runs, 2.26050 s/token, 0.44238 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU profile:
+  - up_gate: calls=869, total=18.511 ms/call.
+  - mul_mat_id/down path: calls=4022, total=29.342 ms/call,
+    cuda_batch=3.718, cuda_single=0.000, fallback_t0=25.573.
+- Per-name top findings:
+  - `blk.1.ffn_down_exps.weight`: total=80.543 ms/call,
+    fallback_t0=14.345, batch_eligible=32, batch_accept=31,
+    batch_decline=1.
+  - `blk.2.ffn_down_exps.weight`: total=77.097 ms/call,
+    fallback_t0=12.137, batch_eligible=32, batch_accept=31,
+    batch_decline=1.
+  - `blk.6.ffn_down_exps.weight`: total=53.820 ms/call,
+    fallback_t0=53.763, batch_eligible=0.
+  - `blk.9.ffn_down_exps.weight`: total=45.323 ms/call,
+    fallback_t0=45.302, batch_eligible=0.
+  - Several `ffn_gate_exps` and `ffn_up_exps` tensors also appear in the top 40
+    as CPU fallback, for example `blk.30.ffn_gate_exps.weight` at
+    30.160 ms/call and `blk.7.ffn_up_exps.weight` at 27.113 ms/call.
+
+Analysis:
+
+- Phase 3H proves the remaining fallback is not caused only by cache misses.
+- There are two actionable groups:
+  - `ffn_down_exps` tensors that are not considered batch eligible.
+  - `ffn_gate_exps`/`ffn_up_exps` tensors still using the generic
+    `MUL_MAT_ID` fallback rather than the fused up/gate path.
+- Before changing kernels, identify the tensor types and shape/condition that
+  make those names ineligible.
+
+Decision:
+
+- Phase 3H diagnostic code is accepted.
+- Do not claim token-rate improvement from Phase 3H.
+- Next candidate should add type/condition attribution or inspect GGUF tensor
+  metadata for the non-eligible top names, then target the largest safe group.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
