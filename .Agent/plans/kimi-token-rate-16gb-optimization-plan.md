@@ -2581,6 +2581,117 @@ Decision:
   expert staging: host_stage remains 47.8s and down batch stage is
   12.205 ms/call.
 
+## Next candidate: Phase 3F retest larger VRAM cache after TTFT headroom
+
+Design timestamp: 2026-07-02 19:58 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` is the current best, but down expert staging remains
+  large:
+  - down cache hit_rate=45.7%.
+  - pinned staging host_stage=47796.399 ms.
+  - down batch stage=12.205 ms/call.
+- VRAM is still not completely full: 31286 MiB used, 824 MiB free.
+- Earlier Phase 2R with `GGML_MOE_VRAM_CACHE_MIB=15400` was rejected because
+  smoke TTFT exceeded the gate by 237.02 ms, but Phase 3E now has about
+  26.6s TTFT headroom on full `-n 96`.
+
+Hypothesis:
+
+- Increasing `GGML_MOE_VRAM_CACHE_MIB` from 15000 to 15400 should use more
+  VRAM and reduce down expert cache misses.
+- Because Phase 3E removed the expensive single stream path, the prior TTFT
+  rejection may no longer apply.
+
+Theoretical upper bound:
+
+- The extra 400 MiB is about 53 more 7.44 MiB down-cache slots.
+- If those slots reduce misses proportionally, the maximum direct gain is a
+  small fraction of the 47.8s host_stage cost. A realistic full `-n 96` gain is
+  likely a few seconds unless routing locality is highly concentrated.
+- This is still worth testing because it also better satisfies the "use VRAM"
+  constraint and has low code risk.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best code/config but
+  `GGML_MOE_VRAM_CACHE_MIB=15400`.
+- If smoke passes RAM, VRAM, TTFT, and quality gates, run cold `-n 32`.
+- If `-n 32` improves over Phase 3E `-n 32` or materially improves cache/stage
+  metrics without TTFT risk, run cold `-n 96`.
+- Commit/push only the plan/result record if this config is accepted. No code
+  commit is needed for an env-only candidate.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E current best:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM allocation becomes unstable, output
+  quality changes, read/launch failures appear, or token rate does not improve
+  on the required full run.
+
+Result timestamp: 2026-07-02 20:23 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-191826Z-n4-phase3f-vram-cache15400`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 78540.52 ms, inside the 106331.72 ms gate.
+- Decode: 10631.97 ms / 3 runs, 3.54399 s/token, 0.28217 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: slots=2067, hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2725.427 ms,
+    h2d=389.254 ms.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192038Z-n32-phase3f-vram-cache15400`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 76281.51 ms, inside the 106331.72 ms gate.
+- Decode: 70572.68 ms / 31 runs, 2.27654 s/token, 0.43926 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: slots=2067, hits=13035, misses=13909, hit_rate=48.4%.
+  - pinned staging: copies=13045, host_stage=17634.678 ms,
+    h2d=2824.389 ms.
+- MoE profile:
+  - up/gate: calls=869, total=17.713 ms/call.
+  - down batch: calls=1644, stage=8.966 ms/call,
+    total=9.121 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3F `-n 32`: 2.27654 s/token, 0.43926 tok/s.
+- Extra VRAM improved down-cache hit rate only from 47.9% to 48.4% and did not
+  reduce total token time.
+
+Decision:
+
+- Reject `GGML_MOE_VRAM_CACHE_MIB=15400` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
 ## Phase 2P full result: reject down prefetch depth 8 for n96
 
 Result timestamp: 2026-07-02 17:01 CST.
