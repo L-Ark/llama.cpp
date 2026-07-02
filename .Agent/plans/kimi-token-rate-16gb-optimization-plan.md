@@ -13091,3 +13091,939 @@ Decision:
 - Accept Phase 6A.
 - Commit and push the default-off source implementation plus the plan/runtime
   record immediately.
+
+## Phase 7A - drop dense mmap page cache
+
+Timestamp: `2026-07-02`.
+
+Source input:
+
+- User-provided plan:
+  `/Users/spark/.codex/attachments/522c759e-b670-48cb-ab90-e5d7ef0b8a10/pasted-text-1.txt`
+
+Goal:
+
+- Release useless GGUF dense/non-expert mmap page cache after model load.
+- Keep the mapping valid by using `MADV_DONTNEED`, not `munmap`.
+- Preserve 16GB strict host RAM, cold start, TTFT, and France quality gates.
+- Only after proving page-cache release is safe, consider using freed host RAM
+  for RAM hot tier, larger pinned staging, or higher io_uring depth.
+
+Important baseline correction:
+
+- The pasted text references Phase 5A `0.745392 tok/s`.
+- Current accepted SOTA is Phase 6A:
+  - n96 average `0.795899 tok/s`;
+  - min `0.789359 tok/s`;
+  - max TTFT `73141.11 ms`;
+  - host RAM peak `15899996160` bytes;
+  - France output correct.
+- Phase 7 acceptance must beat Phase 6A, not Phase 5A.
+
+Current code finding:
+
+- Expert page-cache drop already exists:
+  - `llama_model_loader::drop_mmap_expert_pages()`;
+  - it iterates `expert_tensor_index.file_ranges`;
+  - it calls `llama_mmap::dontneed_fragment()`.
+- Loader already tracks mmap ranges used by loaded tensors:
+  - `llama_model_loader::mmaps_used`;
+  - updated in `load_all_data()` for mmap-backed tensor allocations.
+- Dense/non-expert drop can be implemented as:
+  - for each file, take `mmaps_used[idx]`;
+  - subtract coalesced `expert_tensor_index.file_ranges[idx]`;
+  - call `MADV_DONTNEED` for the remaining dense/non-expert spans.
+
+Phase 7A implementation:
+
+1. Add default-off env:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+```
+
+2. Add loader counters/logs:
+
+- `dense_mmap_dontneed_bytes`;
+- `dense_mmap_dontneed_ranges`;
+- `dense_mmap_dontneed_failures`.
+
+3. Use `MADV_DONTNEED` only:
+
+- no `munmap`;
+- no tensor pointer invalidation;
+- CPU fallback can refault if needed.
+
+4. Place call after tensor load and after expert page drop:
+
+- dense GPU tensors should already be uploaded;
+- expert ranges remain handled separately;
+- if CPU fallback touches dense mmap later, correctness is preserved by refault.
+
+Phase 7A validation:
+
+- First run strict cold `-n 4` with Phase 6A accepted env plus
+  `LLAMA_DROP_DENSE_MMAP_CACHE=1`.
+- Record:
+  - memory.stat `file`, `inactive_file`, `active_file`, `anon`;
+  - token rate;
+  - TTFT;
+  - pinned staging `host_stage`;
+  - expert-pack direct/io_uring reads;
+  - dense drop counters;
+  - France output;
+  - `read_failures`.
+- Continue to `-n 32` only if:
+  - host RAM `<16GB`;
+  - TTFT `<=106331.72 ms`;
+  - output is coherent;
+  - `read_failures=0`;
+  - dense drop counters are non-zero.
+- Promote to `-n 96` only if n32 token rate does not regress and memory.stat
+  shows useful file-cache reduction or at least no RAM/TTFT regression.
+
+Phase 7 acceptance:
+
+- Three strict cold n96 runs.
+- Host RAM peak `<16GB`.
+- TTFT `<=106331.72 ms`.
+- France output complete and semantically correct.
+- `read_failures=0`.
+- Token rate must beat Phase 6A average `0.795899 tok/s`, or this source
+  change must remain default-off and be rejected for runtime acceptance.
+
+Rollback:
+
+- If dense drop causes correctness, TTFT, RAM, or token-rate regression, revert
+  the source change unless it remains strictly default-off and provides useful
+  diagnostic counters without affecting accepted runtime.
+
+Phase 7A n4 smoke result:
+
+- Source state: `1d456eafa-dirty-phase7a`.
+- Build: `cmake --build build-cuda-batch -j 8 --target llama-completion`
+  passed after fixing `llama_file_range` field usage to `first/last`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-063154Z-n4-phase7a-drop-dense-mmap-cache`
+- env delta:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- loader proof:
+  - defer expert mmap probe reports `dense=12.05 GiB`,
+    `deferred=365.49 GiB`;
+  - `drop_mmap_dense_pages: dense mmap dontneed bytes=10598.28 MiB ranges=172 failures=0`.
+- memory.stat:
+  - `file=13064310784`;
+  - `inactive_file=9008955392`;
+  - `active_file=4054786048`;
+  - `workingset_refault_file=258385`;
+  - `pgmajfault=961819`.
+- Phase 6A n4 memory.stat reference:
+  - `file=14885548032`;
+  - `inactive_file=9324376064`;
+  - `active_file=5560446976`;
+  - `workingset_refault_file=258991`;
+  - `pgmajfault=935876`.
+- TTFT/prompt eval: `62947.64 ms`, under the `106331.72 ms` gate;
+- decode: `5145.12 ms / 3 runs`, `0.583077 tok/s`;
+- output: `France is a country`;
+- `read_failures=0`;
+- pinned staging main ring:
+  - `host_stage=2540.166 ms`;
+  - `h2d=530.813 ms`.
+- current down overlap:
+  - `planned_jobs=459`;
+  - `completed_jobs=459`;
+  - `failed_batches=0`.
+
+Decision after n4:
+
+- Dense/non-expert mmap drop is active and safe at smoke length.
+- It requests about `10.35 GiB` of dense mmap `MADV_DONTNEED` with zero failures.
+- Final cgroup `file` drops by about `1.82 GB` versus the Phase 6A n4
+  reference; this is smaller than the requested drop, but the direction is
+  correct and correctness gates pass.
+- Continue to strict cold `-n 32`.
+
+Phase 7A n32 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-063426Z-n32-phase7a-drop-dense-mmap-cache`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- dense mmap drop:
+  - `bytes=10598.28 MiB`;
+  - `ranges=172`;
+  - `failures=0`.
+- memory.stat:
+  - `file=14886584320`;
+  - `inactive_file=10532790272`;
+  - `active_file=4353024000`;
+  - `workingset_refault_file=618716`;
+  - `pgmajfault=926783`.
+- TTFT/prompt eval: `64499.73 ms`, under the `106331.72 ms` gate;
+- decode: `40775.81 ms / 31 runs`, `0.760255 tok/s`;
+- Phase 6A n32 reference: `0.754410 tok/s`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- `read_failures=0`;
+- pinned staging main ring:
+  - `host_stage=18711.342 ms`;
+  - `h2d=4356.574 ms`;
+  - Phase 6A n32 reference was `host_stage=18844.249 ms`,
+    `h2d=4361.637 ms`.
+- current down overlap:
+  - `planned_jobs=3664`;
+  - `completed_jobs=3664`;
+  - `failed_batches=0`.
+
+Decision after n32:
+
+- Phase 7A is safe and gives a small n32 token-rate/host-stage improvement.
+- Final n32 `file` memory returns near the cgroup ceiling, so dense cache drop
+  is not enough by itself to create a large persistent free-RAM pool.
+- Promote to strict cold `-n 96` before accepting.
+
+Phase 7A n96 first result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-063753Z-n96-phase7a-drop-dense-mmap-cache`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- dense mmap drop:
+  - `bytes=10598.28 MiB`;
+  - `ranges=172`;
+  - `failures=0`.
+- memory.stat:
+  - `file=14874783744`;
+  - `inactive_file=8726753280`;
+  - `active_file=6147649536`;
+  - `workingset_refault_file=992243`;
+  - `pgmajfault=993216`.
+- TTFT/prompt eval: `71233.67 ms`, under the `106331.72 ms` gate;
+- decode: `96761.26 ms / 77 runs`, `0.795773 tok/s`;
+- output is the complete, correct France paragraph;
+- `read_failures=0`;
+- pinned staging main ring:
+  - `host_stage=46517.341 ms`;
+  - `h2d=10860.567 ms`;
+- expert-pack io:
+  - `iouring_reads=16394`;
+  - `iouring_bytes=109577273344`;
+  - `iouring_fallbacks=0`;
+- current down overlap:
+  - `planned_jobs=9109`;
+  - `completed_jobs=9109`;
+  - `failed_batches=0`.
+
+Decision after n96 first run:
+
+- Phase 7A is safe but does not clearly beat Phase 6A average
+  `0.795899 tok/s`.
+- Do not accept dense mmap drop alone as a new runtime SOTA.
+- Keep the source path default-off and use it for the next RAM-tier experiment,
+  because it can release cold dense page cache and may reduce memory pressure
+  when resident hot experts are introduced.
+
+## Phase 7B - dense-drop assisted RAM hot tier
+
+Timestamp: `2026-07-02`.
+
+Goal:
+
+- Use the dense mmap page-cache drop from Phase 7A to make room for a small,
+  explicit RAM resident hot-expert tier.
+- Reduce expert-pack disk/io_uring traffic and the down wait that remains after
+  Phase 6A current-down overlap.
+- Preserve the strict gates:
+  - total host RAM under the 16GB cgroup, including page cache;
+  - strict cold start;
+  - TTFT no higher than `106331.72 ms`;
+  - `read_failures=0`;
+  - correct and coherent France output;
+  - no accepted runtime unless n96 three-run average beats Phase 6A
+    `0.795899 tok/s`.
+
+Bottleneck hypothesis:
+
+- Phase 6A already overlaps current down staging with up/gate compute, but
+  up/gate is too short to hide all down movement.
+- Phase 7A n96 still spends `46517.341 ms` in pinned host staging and reads
+  `109577273344` expert-pack bytes through io_uring.
+- A RAM tier can replace some expert-pack reads with host-memory-to-GPU copies.
+  The theoretical ceiling for a resident expert is bounded by H2D bandwidth and
+  staging overhead instead of NVMe/page-cache refault plus staging.
+- The first probe must be small because final `file` memory still reaches the
+  cgroup ceiling; RAM tier can displace file cache and increase page faults if
+  oversized.
+
+Initial experiment design:
+
+- Reuse Phase 6A accepted env.
+- Add Phase 7A dense drop:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+```
+
+- Add a conservative unpinned RAM tier:
+
+```sh
+GGML_MOE_RAM_TIER_MIB=1024
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+- Keep the default RAM-tier skip first, because the top route-profile entries
+  may already be better covered by the VRAM split cache.
+- Start with strict cold `-n 4`, then `-n 32`, then only promote to n96 if:
+  - RAM tier reports nonzero hits;
+  - host RAM and TTFT pass;
+  - token rate and `host_stage` do not regress materially;
+  - output remains coherent and `read_failures=0`.
+
+Expected upper bound:
+
+- If 1GiB resident entries hit 5-10% of expert movements, the maximum direct
+  byte reduction at n96 is roughly `5.5-11.0 GiB` out of the Phase 7A
+  `109.6 GiB` io_uring bytes.
+- Because total decode time is about `96.8 s`, perfect conversion of that byte
+  reduction into saved IO time would be at most a few percent unless the hits
+  target the long-latency down path.
+- Acceptance therefore requires measured n96 improvement, not just RAM-tier
+  hit count.
+
+Rollback:
+
+- If RAM tier increases TTFT by more than the gate, causes OOM/page-cache
+  thrash, reduces correctness, or reduces n96 token rate, disable the RAM-tier
+  runtime env and keep no accepted performance commit for it.
+
+Phase 7B n4 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-064532Z-n4-phase7b-ramtier1024-unpinned`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_RAM_TIER_MIB=1024
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- output: `France is a country`;
+- TTFT/prompt eval: `77712.09 ms`, still below the global gate but much higher
+  than Phase 7A n4 `62947.64 ms`;
+- decode: `5820.38 ms / 3 runs`, `0.52 tok/s`, worse than Phase 7A n4
+  `0.583077 tok/s`;
+- dense mmap drop: `10598.28 MiB`, `ranges=172`, `failures=0`;
+- RAM tier:
+  - loaded `206` entries after default `skip=500`;
+  - resident `1019.92 MiB`;
+  - unpinned path;
+  - hits=`93`, total=`2790`, hit_rate=`3.3%`;
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_reads=825`;
+  - `iouring_bytes=5506629632`.
+- current down overlap:
+  - `planned_jobs=459`;
+  - `completed_jobs=459`;
+  - `failed_batches=0`.
+
+Decision after Phase 7B n4:
+
+- Reject the 1GiB unpinned RAM tier probe.
+- Do not run n32 from this configuration.
+- Reason:
+  - RAM tier loaded and was correct, but the useful hit rate was only `3.3%`;
+  - TTFT increased by about `14.8s` versus Phase 7A n4;
+  - decode token rate regressed.
+- This matches the earlier Phase 3S finding that generic route profiles produce
+  too few RAM-tier hits because hot entries are already covered by VRAM or are
+  not the current miss set.
+- Do not spend more time on RAM-tier capacity sweeps until there is a
+  current-runtime miss-specific profile.
+
+## Phase 7C - isolated Q4_0 down batch retest on current SOTA
+
+Timestamp: `2026-07-02`.
+
+Bottleneck:
+
+- Phase 7A n96 still has decode-relevant CPU fallback in `down`:
+  - `[kimi_cpu_moe_profile] down ... fallback_t0=15.718 ms/call`;
+  - top fallback names include Q4_0 down tensors such as `blk.6`, `blk.7`,
+    `blk.8`, `blk.9`, `blk.10`, `blk.15`, and `blk.18`;
+  - these names show `unsupported=78`, `decode_unsupported=77`.
+- This is more promising than Phase 7B RAM tier because it removes CPU fallback
+  work instead of only replacing a small fraction of IO reads.
+
+Prior evidence:
+
+- Earlier Q4 separate-cache attempts failed at n32 because the Q4 cache had low
+  hit rate and increased staging pressure.
+- That evidence was collected before the current Phase 6A current-down overlap
+  SOTA. It is not enough to accept Q4, but it justifies one strict retest on the
+  current runtime if the implementation is default-off and isolated.
+
+Implementation:
+
+- Add default-off env:
+
+```sh
+GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=<MiB>
+```
+
+- CPU side:
+  - treat `GGML_TYPE_Q4_0` as down-batch eligible only when this env is set.
+- CUDA side:
+  - treat Q4_0 as stream-supported only when this env is set;
+  - add Q4_0 to the compact down MMVQ batch allowlist;
+  - route expert slots `>=7.5 MiB` to a third cache bucket `q4_down`;
+  - assign this bucket only the explicit `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB`
+    budget, so existing down/upgate split-cache shape is not reduced.
+
+Theory and upper bound:
+
+- Removing the unsupported Q4_0 down fallback could save up to the sum of the
+  per-token Q4 decode fallback time, roughly tens of milliseconds per token.
+- The practical ceiling is lower because every Q4 cache miss adds staging and
+  H2D traffic. If q4_down hit rate stays near the previous 20-30% range, n32
+  will likely regress and must be rejected.
+- Start with `512 MiB`, enough for about 65 Q4_0 experts at `7.88 MiB` each.
+
+Validation:
+
+- Build remotely.
+- Run strict cold n4 with Phase 7A env plus:
+
+```sh
+GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512
+```
+
+- Continue to n32 only if:
+  - host RAM remains under the 16GB cgroup;
+  - TTFT remains under `106331.72 ms`;
+  - France output remains coherent;
+  - `read_failures=0`;
+  - no real CUDA/launch failure lines;
+  - logs show `VRAM cache q4_down`;
+  - existing `down` and `upgate` cache bucket shapes do not regress.
+- Run n96 only if n32 beats Phase 6A/7A n32 token rate without quality or TTFT
+  regression.
+
+Rollback:
+
+- If build fails, Q4_0 still declines as unsupported, q4_down pollutes existing
+  buckets, n32 regresses, or any hard gate fails, revert Phase 7C source
+  changes and keep Phase 6A as accepted SOTA.
+
+Phase 7C n4 512MiB result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-070011Z-n4-phase7c-q4-down-separate-cache`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- output: `France is a country`;
+- TTFT/prompt eval: `61179.58 ms`, under the `106331.72 ms` gate and slightly
+  better than Phase 7A n4;
+- decode: `5531.14 ms / 3 runs`, `0.54 tok/s`, worse than Phase 7A n4
+  `0.583077 tok/s`;
+- cache shape:
+  - down: `806` slots, `7.44 MiB`, hit_rate=`67.6%`;
+  - upgate: `1679` slots, `5.36 MiB`, hit_rate=`30.5%`;
+  - q4_down: `65` slots, `7.88 MiB`, hit_rate=`56.5%`.
+- Q4_0 eligibility worked:
+  - `blk.6`, `blk.7`, `blk.9`, `blk.15`, and `blk.18`
+    `ffn_down_exps.weight` report `unsupported=0`;
+  - decode fallback for those accepted calls is effectively zero.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_reads=960`;
+  - `iouring_bytes=6617612288`.
+- current down overlap:
+  - `planned_jobs=517`;
+  - `completed_jobs=517`;
+  - `failed_batches=0`.
+
+Analysis:
+
+- The implementation is functionally correct and isolated: existing down/upgate
+  bucket shapes did not shrink, and q4_down is separate.
+- The 512MiB bucket is not acceptable as-is:
+  - n4 decode regressed versus Phase 7A;
+  - expert-pack IO increased from the Phase 7B/7A-class n4 range;
+  - current-down overlap has more jobs because Q4_0 down is now staged for GPU.
+- Do not promote 512MiB directly to n32.
+- Try one smaller smoke with `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=256` to see
+  whether lower VRAM/IO pressure keeps enough Q4 hit rate. If this also
+  regresses n4, reject Phase 7C and revert the source change.
+
+Phase 7C n4 256MiB result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-070319Z-n4-phase7c-q4-down-separate-cache-256m`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=256
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- output: `France is a country`;
+- TTFT/prompt eval: `76151.91 ms`, under the global gate but much worse than
+  the 512MiB Q4 smoke and Phase 7A n4;
+- decode: `6091.15 ms / 3 runs`, `0.49 tok/s`, worse than Phase 7A n4 and the
+  512MiB Q4 smoke;
+- cache shape:
+  - down: `806` slots, `7.44 MiB`, hit_rate=`67.6%`;
+  - upgate: `1679` slots, `5.36 MiB`, hit_rate=`30.5%`;
+  - q4_down: `32` slots, `7.88 MiB`, hit_rate=`42.9%`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_reads=998`;
+  - `iouring_bytes=6931398656`.
+- current down overlap:
+  - `planned_jobs=532`;
+  - `completed_jobs=532`;
+  - `failed_batches=0`.
+
+Decision:
+
+- Reject Phase 7C.
+- Do not run n32.
+- Revert the Phase 7C source changes locally and remotely.
+- Reason:
+  - Q4_0 down GPU batch eligibility works and removes decode unsupported status;
+  - however both 512MiB and 256MiB q4_down buckets regress n4 decode;
+  - smaller q4_down budget lowers hit rate and increases IO;
+  - the extra Q4 staging/current-down-overlap work outweighs removed CPU
+    fallback in this implementation.
+- Keep Phase 6A as accepted SOTA.
+
+## Phase 7E - io_uring depth/refill sweep
+
+Timestamp: `2026-07-02`.
+
+Bottleneck:
+
+- Phase 7A n96 expert-pack io_uring counters:
+  - `iouring_reads=16394`;
+  - `iouring_bytes=109577273344`;
+  - `iouring_submit_us=5393258`;
+  - `iouring_wait_us=14362379`;
+  - `inflight_avg=2.61`;
+  - `inflight_max=8`;
+  - batch histogram mostly `2-4`.
+- The accepted runtime uses:
+
+```sh
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=4
+```
+
+Hypothesis:
+
+- Increasing the queue depth and refill batch may reduce wait time when current
+  down overlap and runtime staging submit several reads together.
+- This is env-only and does not change model math, routing, quantization, cache
+  keys, or CUDA kernels.
+
+Candidate:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+Theoretical upper bound:
+
+- The hard visible IO wait bucket is about `14.36s` on Phase 7A n96.
+- If deeper refill cuts this by 25%, upper-bound decode saving is about `3.6s`,
+  taking `0.7958 tok/s` to roughly `0.826 tok/s`.
+- Real gain may be much smaller because batch sizes are often only `2-4`, and
+  extra inflight IO can compete with H2D/staging or page cache under the 16GB
+  cgroup.
+
+Validation:
+
+- No source change.
+- Run strict cold n4 with Phase 7A env plus depth/refill change.
+- Continue to n32 only if:
+  - hard gates pass;
+  - output remains coherent;
+  - `read_failures=0`;
+  - no real CUDA/launch failures;
+  - `iouring_fallbacks=0`;
+  - `inflight_avg` or wait counters improve without decode regression.
+- Promote to n96 only if n32 beats Phase 6A/7A n32.
+
+Rollback:
+
+- Reject the env if TTFT or decode regresses, inflight does not improve, or any
+  hard gate fails.
+
+Phase 7E n4 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-071454Z-n4-phase7e-iouring-depth16-refill8`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- output: `France is a country`;
+- TTFT/prompt eval: `76329.98 ms`, under the global gate but worse than Phase
+  7A n4 and the 512MiB Q4 smoke;
+- decode: `6393.14 ms / 3 runs`, `0.47 tok/s`, worse than Phase 7A n4;
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_reads=830`;
+  - `iouring_bytes=5539659776`;
+  - `iouring_fallbacks=0`;
+  - `iouring_submit_us=272241`;
+  - `iouring_wait_us=664442`;
+  - `inflight_avg=2.92`;
+  - `inflight_max=8`;
+  - batch histogram remains mostly `2-4`.
+- pinned staging main iouring:
+  - `inflight_avg=3.17`;
+  - `inflight_max=8`;
+  - no `9-16` batches.
+- current down overlap:
+  - `planned_jobs=459`;
+  - `completed_jobs=459`;
+  - `failed_batches=0`.
+
+Decision:
+
+- Reject Phase 7E.
+- Do not run n32.
+- Reason:
+  - deeper depth/refill does not increase effective inflight beyond 8 on this
+    workload;
+  - batch sizes remain too small to use the larger queue;
+  - TTFT and decode regress.
+- Keep Phase 6A as accepted SOTA.
+
+## Phase 7D - mixed up/gate dual-stream compute
+
+Timestamp: `2026-07-02`.
+
+Bottleneck:
+
+- Current Phase 7A n96 profile:
+  - up/gate calls=`2157`;
+  - `up=7.593 ms/call`;
+  - `gate=7.367 ms/call`;
+  - `kernel=14.964 ms/call`;
+  - total up/gate wall=`15.059 ms/call`.
+- This is about `32.5s` of the `96.8s` n96 decode window.
+- Existing `GGML_MOE_STREAM_UP_GATE_PARALLEL` does not apply because it is
+  gated by `!mixed_types`; current Kimi SOTA uses mixed IQ2/IQ3 fused up/gate.
+
+Hypothesis:
+
+- Add a new default-off mixed-only env:
+
+```sh
+GGML_MOE_STREAM_MIXED_UP_GATE_PARALLEL=1
+```
+
+- Keep current mixed staging/cache lookup unchanged on the main stream.
+- After up/gate slots and ids are staged, launch the up compact MMVQ on
+  `up_stream` and the gate compact MMVQ on `gate_stream`.
+- Wait for both streams on the main stream before fuse and D2H.
+- Leave prompt path unchanged; apply only to decode mixed path first.
+
+Theoretical upper bound:
+
+- If the two kernels overlap perfectly, the per-call kernel time can fall from
+  `up + gate ~= 14.96 ms` to `max(up, gate) ~= 7.6 ms`.
+- For `2157` calls, the absolute upper-bound saving is about `15.9s`.
+- Phase 7A n96 decode would improve from `96.8s` to about `80.9s`, or from
+  `0.7958 tok/s` to roughly `0.95 tok/s`.
+- Real gain may be lower if the two kernels compete for the same SM or memory
+  bandwidth. The profile must show `up_compute/gate_compute` and total wall,
+  not just activated logs.
+
+Validation:
+
+- Build remotely.
+- Run strict cold n4 with Phase 7A env plus:
+
+```sh
+GGML_MOE_STREAM_MIXED_UP_GATE_PARALLEL=1
+```
+
+- Continue to n32 only if:
+  - hard gates pass;
+  - output remains coherent;
+  - no real CUDA/launch failures;
+  - logs show mixed parallel path activated;
+  - up/gate total or eval time does not regress materially.
+- Continue to n96 only if n32 beats Phase 6A/7A n32.
+
+Rollback:
+
+- Revert Phase 7D source if mixed parallel causes wrong output, launch/read
+  failures, TTFT regression beyond the gate, or n32 performance regression.
+
+Phase 7D n4 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-071036Z-n4-phase7d-mixed-upgate-parallel`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_STREAM_MIXED_UP_GATE_PARALLEL=1
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- output: `France is a country`;
+- TTFT/prompt eval: `67042.56 ms`, under the global gate;
+- decode: `6794.62 ms / 3 runs`, `0.44 tok/s`, worse than Phase 7A n4;
+- logs show activation:
+  - `mixed-type up/gate compact path active`;
+  - `mixed-type parallel up/gate streams active`.
+- up/gate profile:
+  - `up=13.448 ms/call`;
+  - `gate=11.783 ms/call`;
+  - `kernel=25.266 ms/call`;
+  - `total=25.337 ms/call`.
+- Phase 7A n96 reference:
+  - `up=7.593 ms/call`;
+  - `gate=7.367 ms/call`;
+  - `kernel=14.964 ms/call`;
+  - `total=15.036 ms/call`.
+- current down overlap:
+  - `planned_jobs=459`;
+  - `completed_jobs=459`;
+  - `failed_batches=0`.
+- `read_failures=0`.
+
+Decision:
+
+- Reject Phase 7D.
+- Do not run n32.
+- Revert the Phase 7D source change locally and remotely.
+- Reason:
+  - correctness and hard gates pass;
+  - however up and gate MMVQ kernels contend heavily when launched on separate
+    streams, so the total up/gate bucket grows instead of shrinking;
+  - this disproves the perfect-overlap assumption for the current kernels and
+    GPU.
+- Keep Phase 6A as accepted SOTA.
+
+## Phase 7F - 5GB dense-drop RAM hot tier n32 test
+
+User override: run the larger hot expert experiment directly with a `5GB` RAM
+tier and validate with `n32` under the strict 16GB cold-start gate.
+
+Implementation:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+GGML_MOE_RAM_TIER_MIB=5120
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+Validation gates: cold start, cgroup memory.max `15900000000`, swap off, France
+prompt semantic correctness, TTFT <= `106331.72 ms`, `read_failures=0`, and n32
+token rate above Phase 7A n32 `0.760255 tok/s` to accept.
+
+Phase 7F n32 5GB RAM tier result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-072620Z-n32-phase7f-ramtier5120`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_RAM_TIER_MIB=5120
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes under strict 16GB cgroup;
+- cgroup events: `oom=0`, `oom_kill=0`;
+- dense mmap drop: `10598.28 MiB`, `ranges=172`, `failures=0`;
+- RAM tier: loaded `1041` entries, `5119.84 MiB` anonymous mmap, unpinned;
+- RAM tier hits: `3031 / 22814`, hit_rate `13.3%`;
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- quality: pass for n32 prefix, coherent and semantically correct;
+- TTFT/prompt eval: `86220.14 ms`, under `106331.72 ms`;
+- decode: `38876.85 ms / 31 runs`, `0.80 tok/s`;
+- comparison: Phase 7A n32 `0.760255 tok/s`, Phase 6A n32 `0.754410 tok/s`, so Phase 7F improves n32 by about `5.2%` over Phase 7A;
+- expert pack: `read_failures=0`, `iouring_reads=6474`, `iouring_bytes=43279122432`;
+- staging: main `host_stage=15625.084 ms`, `h2d=3792.286 ms`; gate `host_stage=15.036 ms`, `h2d=368.729 ms`;
+- current down overlap: `planned_jobs=3664`, `completed_jobs=3664`, `failed_batches=0`.
+
+Decision: accept Phase 7F as an n32-positive strict-cold 16GB configuration, but do not call it global n96 SOTA until an n96 run validates the same 5GB RAM tier.
+
+## Phase 7G - 10GB dense-drop RAM hot tier n32 test
+
+User request: increase the dense-drop RAM hot tier to `10GB` and validate with
+strict cold n32.
+
+Implementation env delta over Phase 7A:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+GGML_MOE_RAM_TIER_MIB=10240
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+Acceptance: strict cold 16GB cgroup, `oom=0`, coherent France output, TTFT <=
+`106331.72 ms`, `read_failures=0`, and n32 token rate above Phase 7F `0.80 tok/s`.
+
+Phase 7G n32 10GB RAM tier result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-074112Z-n32-phase7g-ramtier10240`
+- env delta over Phase 7A:
+
+```sh
+GGML_MOE_RAM_TIER_MIB=10240
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PIN_MIB=0
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
+```
+
+- rc: `0`;
+- host RAM peak: `15899996160` bytes under strict 16GB cgroup;
+- cgroup events: `oom=0`, `oom_kill=0`;
+- dense mmap drop: `10598.28 MiB`, `ranges=172`, `failures=0`;
+- RAM tier: loaded `2079` entries, `10237.72 MiB` anonymous mmap, unpinned;
+- RAM tier hits: `5239 / 22814`, hit_rate `23.0%`;
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- quality: pass for n32 prefix;
+- TTFT/prompt eval: `98970.58 ms`, under `106331.72 ms`, but `12.75s` slower than Phase 7F 5GB;
+- decode: `42029.01 ms / 31 runs`, `0.74 tok/s`;
+- comparison: Phase 7F 5GB n32 `0.80 tok/s`; Phase 7A n32 `0.760255 tok/s`; Phase 7G regresses;
+- expert pack: `read_failures=0`, `iouring_reads=6354`, `iouring_bytes=42474471424`;
+- staging: main `host_stage=13289.031 ms`, `h2d=3368.561 ms`; gate `host_stage=20.994 ms`, `h2d=361.522 ms`.
+
+Decision: reject Phase 7G. Keep Phase 7F 5GB as the best n32 RAM-tier setting so far.
+
+## Phase 7H - no RAM tier memory breakdown diagnostic
+
+Run strict cold n32 with dense mmap page-cache drop enabled and no
+`GGML_MOE_RAM_TIER_*` env. Sample cgroup `memory.current` and `memory.stat` during
+the run to report peak total RAM and breakdown by `anon`, `file`, `kernel`,
+`slab`, page faults, and reclaim counters.
+
+Phase 7H no RAM tier n32 memory diagnostic result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-075408Z-n32-phase7h-no-ramtier-memdiag`
+- rc: `0`;
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- quality: pass for n32 prefix;
+- dense mmap drop: `10598.28 MiB`, `ranges=172`, `failures=0`;
+- TTFT/prompt eval: `68821.59 ms`;
+- decode: `42736.41 ms / 31 runs`, `0.73 tok/s`;
+- read failures: `0`;
+- cgroup memory.peak: `15899996160` bytes;
+- peak sampled `memory.current`: `15899996160` bytes;
+- peak sampled memory.stat: `anon=382402560`, `file=15186100224`, `kernel=323514368`, `kernel_stack=573440`, `pagetables=156442624`, `slab=164260032`, `inactive_file=7054524416`, `active_file=8085004288`, `pgscan=19584414`, `pgsteal=12799476`, `pgfault=2001920`, `pgmajfault=682524`;
+- cgroup events: `oom=0`, `oom_kill=0`.
+
+Interpretation: with RAM tier disabled, the run still reaches the strict cgroup limit. The peak is dominated by `file` memory (`~14.14 GiB`), split between `inactive_file` (`~6.57 GiB`) and `active_file` (`~7.53 GiB`). This is file-backed page cache / mmap accounting, not expert-pack buffered page cache, because the expert-pack path reports direct/io_uring reads with no fallback. Disabling RAM tier does not leave 10GB unused; the space is consumed by file-backed model/mmap working set plus kernel accounting under the cgroup.
+
+## Phase 7I - no RAM tier smaps file attribution diagnostic
+
+Re-run strict cold n32 with dense mmap page-cache drop and no RAM tier. Sample
+cgroup memory and `/proc/<pid>/smaps`, aggregate RSS by mapping pathname at the
+highest observed `memory.current`, and use that to identify whether `memory.stat
+file` is dense/model GGUF, expert, expert-pack, or shared-library mappings.
+
+Phase 7I first attempt note: memory sampling worked, but smaps attribution did
+not capture a pid because `/proc/<pid>/comm` truncates `llama-completion` to 15
+characters. Re-run with `/proc/<pid>/cmdline` matching.
+
+## Phase 7J - identify why GGUF expert mmap pages refault
+
+Run strict cold n32, no RAM tier, dense mmap drop enabled, with
+`GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`, `GGML_MOE_TTFT_TRACE_OUT`, and peak
+smaps attribution. This distinguishes CPU fallback touching GGUF `src0->data`
+from expert-pack miss fallback and from pure loader/drop residue.
+
+Phase 7J result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-081807Z-n32-phase7j-refault-cause`
+- rc: `0`; output coherent; dense mmap drop `10598.28 MiB`, `ranges=172`, `failures=0`.
+- TTFT/prompt eval: `75263.24 ms`; decode: `42190.92 ms / 31 runs`, `0.73 tok/s`.
+- expert pack: `hits=22744`, `misses=1170`, `read_failures=0`, `direct_fallbacks=0`, `iouring_fallbacks=0`, `iouring_bytes=44250759168`.
+- peak cgroup: `memory.current=15899996160`, `file=15179091968`, `anon=383594496`, `kernel=314978304`.
+- peak smaps top: `00007-of-00010.gguf` `7406600 kB`, `00006-of-00010.gguf` `6735584 kB`.
+- shard metadata: `00006` is expert-heavy for layers `29..36`; `00007` is expert-heavy for layers `37..44`, dominated by large `ffn_{down,gate,up}_exps.weight` ranges.
+- CPU fallback profile total: `25672` rows, `14719` calls, `73.851277 s`, `78436040704` bytes (`~73.05 GiB`) read through fallback from GGUF `src0->data`.
+- fallback by phase/type: `decode,type=2` `4.399 GiB`; `prompt,type=2` `3.476 GiB`; `prompt,type=11` `17.812 GiB`; `prompt,type=18` `19.988 GiB`; `prompt,type=22` `21.077 GiB`; `prompt,type=23` `6.297 GiB`.
+- fallback overlap with high-RSS shards: layers `29..36` / shard `00006` `9.494 GiB`, `1839` calls, `9.767 s`; layers `37..44` / shard `00007` `9.401 GiB`, `1821` calls, `10.299 s`; other layers `54.154 GiB`, `11059` calls, `53.785 s`.
+- corrected TTFT trace summary: `cache_hit` `22678` events / `120.302 GiB`; `runtime_load` `20250` events / `102.523 GiB`; runtime-load `pack_hit` `19116` events; runtime-load with no cache/pack/ram source `1134` events; `current_down_overlap` `3495` events / `20.532 GiB`, all pack hits.
+- The `1134` runtime-load host-fallback events plus current-down-overlap `missing_pack=36` exactly match `expert pack misses=1170`.
+
+Conclusion: the primary cause is runtime refault, not loader residue. CPU fallback/unsupported MoE computation is the dominant source, reading about `73.05 GiB` from GGUF expert `src0->data`. A secondary source is expert-pack miss fallback to GGUF host data (`1170` misses total). Phase 7A skipping expert ranges only means those refaulted expert pages are not re-dropped later; it is not the root cause by itself, because `drop_mmap_expert_pages()` already runs after loading.
+
+## Phase 7L - drop expert GGUF mmap page cache after prompt
+
+Design: after prompt eval and before decode, release GGUF expert mmap page cache with targeted `madvise(MADV_DONTNEED)` instead of global `drop_caches`.
+
+Implementation:
+
+```sh
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+```
+
+- Store `expert_tensor_index.file_ranges` in `llama_model::impl` when `--defer-experts` builds the expert mmap index.
+- Add one-shot `llama_model::drop_expert_mmap_pages_after_prompt()`.
+- Trigger it after successful `llama_context::decode()` calls where `batch_inp.n_tokens > 1`.
+- The hook is default-off and logs bytes/ranges/failures.
+
+n32 validation after removing Q4_0 experiment remnants:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-091221Z-n32-phase7l-drop-expert-after-prompt-r2`
+- hook log: `expert mmap dontneed after prompt bytes=374261.30 MiB ranges=180 failures=0`
+- output: coherent France paragraph.
+- TTFT: `64224.28 ms`, pass.
+- decode: `37906.93 ms / 31`, `0.82 tok/s`.
+- RAM: `memory.max=15899996160`, `memory.swap.max=0`, `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- expert pack: `read_failures=0`.
+
+n96 validation:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-091611Z-n96-phase7l-drop-expert-after-prompt`
+- hook log: `expert mmap dontneed after prompt bytes=374261.30 MiB ranges=180 failures=0`
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `73445.51 ms`, pass.
+- decode: `92985.35 ms / 77`, `0.83 tok/s`.
+- RAM: `memory.max=15899996160`, `memory.swap.max=0`, `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- expert pack: `hits=56724`, `misses=3076`, `read_failures=0`, `iouring_bytes=109577273344`.
+- VRAM cache: total hit rate `52.5%`, down `73.4%`, upgate `43.2%`.
+
+Decision: accept Phase 7L. It improves over the previous accepted split-cache n96 average `0.714926 tok/s` and reproduces across strict cold n32 (`0.82-0.86 tok/s`) and n96 (`0.83 tok/s`) under the 16GB host RAM gate. Commit and push.

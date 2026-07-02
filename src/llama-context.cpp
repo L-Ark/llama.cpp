@@ -1985,6 +1985,10 @@ int llama_context::decode(const llama_batch & batch_inp) {
     // wait for the computation to finish (automatically done when obtaining the model output)
     //synchronize();
 
+    if (batch_inp.n_tokens > 1) {
+        model.drop_expert_mmap_pages_after_prompt();
+    }
+
     return 0;
 }
 
