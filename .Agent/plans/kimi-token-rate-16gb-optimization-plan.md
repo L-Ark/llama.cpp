@@ -12803,3 +12803,291 @@ GGML_MOE_IO_SORT_OFFSET=1
 - No source-code change is required; the existing down miss-job path and
   `expert_pack_iouring_copy_jobs()` already implement the minimal experiment.
 - Commit and push the plan/runtime record immediately.
+
+## Phase 6A - current-token down overlap during up/gate compute
+
+Timestamp: `2026-07-02`.
+
+Goal:
+
+- Start loading the current token's down experts while the current token's
+  up/gate GPU work is still running.
+- Keep the math path unchanged.
+- Keep the accepted split-cache and Phase 5A down io_uring batch runtime.
+- The loader must not artificially stop at a small prefetch depth; it should
+  try to schedule every active current-token down miss that can fit in the
+  down VRAM cache.
+
+Current-state finding:
+
+- `GGML_MOE_PREFETCH_DOWN=1` already exists, but
+  `preload_registered_down_for_active()` is called before up/gate compute and
+  performs normal cache insertion/copy on the prefetch stream. This is early
+  prefetch, not true overlap with current up/gate compute.
+- Phase 5A `GGML_MOE_DOWN_PARALLEL_STAGE=1` batches down miss staging, but that
+  starts inside `call_down`, after up/gate has returned.
+- The cache already supports pending slots:
+  - `batch_cache_insert_slot(... do_copy=false ...)` can reserve a slot;
+  - `slot_pending` plus `slot_ready` event lets a later lookup wait for the
+    async load only if needed.
+
+Implementation plan:
+
+1. Add a default-off env gate:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+2. In `ggml_cuda_moe_stream_up_gate_batch()`:
+   - skip the old synchronous `preload_registered_down_for_active()` when the
+     overlap env is enabled;
+   - derive the matching `ffn_down_exps` tensor from the current up/gate tensor;
+   - use the current `active_experts[]` list to plan every down miss;
+   - reserve each miss in the down VRAM cache with `do_copy=false` and
+     `prefetch_down=true`;
+   - collect jobs with `pack_entry`, destination slot, tensor name, and expert id.
+
+3. Start the copy after up/gate compute has been launched:
+   - for the Kimi mixed-type path, start immediately after the up and gate MMVQ
+     launches and before the fuse/D2H path;
+   - run the copy in a short CPU thread so the main thread can continue enqueueing
+     fuse/D2H work while io_uring and H2D are in flight;
+   - use `expert_pack_iouring_copy_jobs(jobs, down_expert_bytes,
+     prefetch_stream, stage_ring, "current_down_overlap")`;
+   - on success, record `slot_ready` events on the prefetch stream and mark all
+     slots `slot_pending=true`;
+   - on failure, synchronize the prefetch stream and clear reserved slots so
+     `call_down` falls back to the existing correct loader.
+
+4. In `call_down`, keep existing behavior:
+   - `batch_cache_lookup_slot()` will hit the reserved down slot;
+   - if it is still pending, `batch_cache_wait_slot_ready()` waits for the event;
+   - no numerical path changes are needed.
+
+Counters to add:
+
+- overlap calls;
+- planned jobs;
+- skipped cache hits;
+- missing down tensor / pack misses;
+- successful async batches;
+- fallback/failed batches;
+- max jobs per call;
+- histogram of planned batch size;
+- these are in addition to existing `down prefetch`, `async prefetch waits`,
+  pinned staging, and expert-pack io_uring counters.
+
+Theory:
+
+- Let current down staging expose `S_down` ms/token and up/gate compute/fuse/D2H
+  expose `C_upgate` ms/token after current Phase 5A.
+- If down jobs are planned immediately after up/gate kernels are launched, the
+  best case hides:
+
+```text
+min(S_down, C_upgate + upgate D2H/scatter enqueue window)
+```
+
+- The practical upper bound is smaller because the CPU thread still needs to
+  plan, submit, and wait for io_uring completions, and down may still wait on
+  pending events if H2D is not finished.
+- Success should show:
+  - current-down-overlap counters non-zero;
+  - down prefetch useful hits increase;
+  - `async prefetch waits` may appear but should be much smaller than the old
+    exposed down host_stage;
+  - Phase 5A down `iouring_reads` inside `call_down` should decrease or shift
+    earlier into overlap;
+  - token rate improves without quality/TTFT/RAM regression.
+
+Validation gates:
+
+- Build must pass.
+- Strict cold `-n 4`:
+  - host RAM `<16GB`;
+  - TTFT `<=106331.72 ms`;
+  - output starts as a coherent France answer;
+  - current-down-overlap counters non-zero;
+  - `read_failures=0`.
+- Strict cold `-n 32`:
+  - compare against Phase 5A n32 `~0.710 tok/s`;
+  - require no quality, TTFT, or RAM regression;
+  - only promote if token rate or host-stage/pending-wait evidence improves.
+- Strict cold `-n 96`:
+  - compare against Phase 5A average `0.745392 tok/s`;
+  - accept only with reproducible improvement and correct France output.
+
+Rollback:
+
+- If the source change builds but quality/TTFT/RAM/read gates fail, revert the
+  source and keep the plan record.
+- If counters prove the path runs but token rate regresses, revert source unless
+  the result exposes a clear next fix that can be completed immediately before
+  commit.
+
+Phase 6A n4 smoke result:
+
+- Source state: `110b284e2-dirty-phase6a`.
+- Build: `cmake --build build-cuda-batch -j 8 --target llama-completion`
+  passed.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-060559Z-n4-phase6a-current-down-overlap`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- TTFT/prompt eval: `62007.85 ms`, under the `106331.72 ms` gate;
+- decode: `5939.47 ms / 3 runs`, `0.51 tok/s`;
+- output: `France is a country`;
+- `read_failures=0`;
+- current down overlap proof:
+  - log contains `current down overlap active`;
+  - `calls=96`;
+  - `planned_jobs=459`;
+  - `completed_jobs=459`;
+  - `failed_batches=0`;
+  - `max_jobs=8`;
+  - histogram `1:3,2-4:33,5-8:51`;
+  - `worker_us=397960`.
+- cache/prefetch proof:
+  - down prefetch `loads=459`, `hits=459`, `evicted_unused=0`,
+    useful rate `100.0%`;
+  - `async prefetch waits=459`.
+- io_uring proof:
+  - `iouring_reads=830`;
+  - `iouring_bytes=5539659776`;
+  - `iouring_fallbacks=0`;
+  - global io_uring histogram `1:21,2-4:146,5-8:48`;
+  - `inflight_max=8`.
+- pinned staging:
+  - main ring `host_stage=2487.452 ms`, `h2d=532.600 ms`.
+
+Decision after n4:
+
+- The new path is active, value-preserving at smoke length, and does not violate
+  host RAM, TTFT, read failure, or France quality gates.
+- Continue to strict cold `-n 32`; acceptance still requires token-rate or
+  exposed-stage improvement versus Phase 5A.
+
+Phase 6A n32 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-060812Z-n32-phase6a-current-down-overlap`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- TTFT/prompt eval: `70592.04 ms`, under the `106331.72 ms` gate;
+- decode: `41091.73 ms / 31 runs`, `0.754410 tok/s`;
+- Phase 5A n32 reference: about `0.710 tok/s`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- `read_failures=0`;
+- current down overlap:
+  - `calls=992`;
+  - `planned_jobs=3664`;
+  - `completed_jobs=3664`;
+  - `cache_hits=3528`;
+  - `failed_batches=0`;
+  - `max_jobs=8`;
+  - histogram `1:40,2-4:525,5-8:331`;
+  - `worker_us=3703296`.
+- cache/prefetch:
+  - down prefetch `loads=3664`, `hits=3664`, `evicted_unused=0`,
+    useful rate `100.0%`;
+  - `async prefetch waits=3664`;
+  - down cache hit rate improved to `73.6%`.
+- pinned staging:
+  - main ring `host_stage=18844.249 ms`, `h2d=4361.637 ms`;
+  - Phase 5A n32 main ring reference was `host_stage=23225.715 ms`,
+    `h2d=4355.926 ms`.
+- expert pack io_uring:
+  - `iouring_reads=6620`;
+  - `iouring_bytes=44250759168`;
+  - `iouring_fallbacks=0`;
+  - global histogram `1:284,2-4:1592,5-8:314`;
+  - `inflight_max=8`.
+
+Decision after n32:
+
+- The overlap path improves both token rate and exposed host_stage while
+  passing host RAM, TTFT, read failure, and France quality gates.
+- Promote to strict cold `-n 96`.
+
+Phase 6A n96 promotion:
+
+| run | token rate | decode | TTFT | RAM | quality | read failures |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-061126Z-n96-phase6a-current-down-overlap` | `0.789359 tok/s` | `97547.52 ms / 77` | `73141.11 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-061509Z-n96-phase6a-current-down-overlap-r2` | `0.793738 tok/s` | `97009.28 ms / 77` | `55342.27 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-061804Z-n96-phase6a-current-down-overlap-r3` | `0.804599 tok/s` | `95699.87 ms / 77` | `65408.96 ms` | `14.808 GiB` | pass | `0` |
+
+Promotion summary:
+
+- average token rate: `0.795899 tok/s`;
+- min token rate: `0.789359 tok/s`;
+- max token rate: `0.804599 tok/s`;
+- average TTFT: `64630.78 ms`;
+- max TTFT: `73141.11 ms`, below the `106331.72 ms` gate;
+- Phase 5A n96 average: `0.745392 tok/s`;
+- improvement vs Phase 5A average: about `+6.78%`;
+- improvement vs old `0.65 tok/s` SOTA profile: about `+22.45%`.
+
+Exact n96 answer, all three Phase 6A promotion runs:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+Representative n96 counters from the first Phase 6A promotion run:
+
+- current down overlap:
+  - `calls=2464`;
+  - `planned_jobs=9109`;
+  - `completed_jobs=9109`;
+  - `cache_hits=8755`;
+  - `failed_batches=0`;
+  - `mark_failed=0`;
+  - `max_jobs=8`;
+  - histogram `1:104,2-4:1283,5-8:837`;
+  - `worker_us=8966627`.
+- cache/prefetch:
+  - down prefetch `loads=9109`, `hits=9109`, `evicted_unused=0`,
+    useful rate `100.0%`;
+  - `async prefetch waits=9109`;
+  - down cache hit rate `73.4%`.
+- pinned staging:
+  - main ring `copies=53228`, `host_stage=47421.632 ms`,
+    `h2d=10882.208 ms`;
+  - main-ring io_uring `batches=3792`, `jobs=12939`,
+    histogram `1:280,2-4:2724,5-8:788`;
+  - gate ring `copies=3496`, `host_stage=93.707 ms`,
+    `h2d=965.311 ms`.
+- expert pack io_uring:
+  - `iouring_reads=16394`;
+  - `iouring_bytes=109577273344`;
+  - `iouring_fallbacks=0`;
+  - global histogram `1:694,2-4:3938,5-8:788`;
+  - `inflight_max=8`.
+- up/gate profile:
+  - total `15.223 ms/call`;
+  - wall `15.245 ms/call`.
+
+Comparison to Phase 5A representative n96:
+
+- token rate average improved from `0.745392 tok/s` to `0.795899 tok/s`;
+- pinned main-ring host stage dropped from `55859.752 ms` to
+  `47421.632 ms`;
+- down cache hit rate improved from `70.0%` to `73.4%`;
+- current down overlap moved `9109` current-token down jobs ahead of `call_down`;
+- output text remained exactly correct for the France prompt;
+- host RAM, TTFT, read failure, and cold-start gates all passed.
+
+Accepted runtime delta on top of Phase 5A:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+Decision:
+
+- Accept Phase 6A.
+- Commit and push the default-off source implementation plus the plan/runtime
+  record immediately.
