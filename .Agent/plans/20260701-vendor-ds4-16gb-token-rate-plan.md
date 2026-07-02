@@ -2296,7 +2296,7 @@
 
 - `attempt_id`: `20260702-late10-stream-alloc-lock-coalesce`
 - `attempt_kind`: `implementation/cpu-overhead-reduction`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: Current accepted trace still has `35151` streamed expert calls. In `ggml_cuda_moe_stream_one()`, each call enters `g_resize_mu` twice: first for `d_src0/d_src1/d_dst/d_ids/h_scratch`, then again for `d_src1_f32/h_bounce`. Resizes are rare after warm slot sizing, but the global mutex acquisition and size checks remain on every call and are outside the dominant `src0_ms` trace field.
 - `hypothesis`: Coalescing `d_src1_f32` and `h_bounce` allocation into the first resize-guarded block removes one global mutex lock/unlock path per streamed expert without changing math, routing, cache behavior, memory capacity, or output semantics.
 - `theoretical_upper_bound`: The hard bound is small because source page loading remains dominant. With `35151` calls, saving even `5-20us` per second mutex/check block would be about `0.18-0.70s`; larger lock contention could save more, but expected gain is at most low single-digit seconds. Promote only if rounded `eval_tok_s` strictly exceeds `2.6`.
@@ -2305,6 +2305,13 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache hit/miss behavior remains consistent with accepted late10, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache behavior diverges unexpectedly, revert source and clean rebuild. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T022358Z-20260702_late10_stream_alloc_lock_coalesce/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38048.101123ms`, `elapsed_seconds=89.77`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15002759168`, `pgmajfault=284181`, `workingset_refault_file=3514771`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`).
+- `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24474.499`, `dontneed_ms=1182.592`, `total_ms=26744.375`.
+- `gap_analysis`: Coalescing the allocation lock path preserved correctness and cache behavior but did not improve token rate. The trace total regressed slightly versus the current SOTA reproduction (`26450.962 -> 26744.375`) and `eval_tok_s` tied `2.6`, so the saved mutex path is not a first-order bottleneck under cold 16GB conditions.
+- `rollback_status`: source patch reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
