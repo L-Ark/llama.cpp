@@ -3017,3 +3017,12 @@
 - `decision`: commit and push this guarded Kimi merge checkpoint to `ssd/vendor/deepseek-token-rate-16gb`, then run a clean pushed-commit reproduction before claiming the branch is fully reproducible. This is not a new DeepSeek token-rate SOTA beyond `2.7 tok/s`; it is a compatibility checkpoint that keeps Kimi changes while maintaining current DeepSeek SOTA.
 - `next_design`: continue from the plan reset direction: focus on cold-start expert pack/io_uring or source-load/page-cache churn reduction rather than re-enabling rejected up/gate fused paths.
 
+### 当前执行：pushed-kimi-new-changes-clean-ds-sota
+
+- `attempt_id`: `20260702-pushed-kimi-new-changes-clean-ds-sota`
+- `status`: completed_reproduced_guarded_merge_from_pushed_commit
+- `pushed_commit`: `0cb2332f4` (`vendor-ds4: record kimi new changes guard run`), pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T104550Z-20260702_pushed_kimi_new_changes_clean_ds_sota/france-cpu40-vram0gb`.
+- `result`: DeepSeek SOTA preserved after Kimi new changes. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=37346.733086ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15025664000`, `pgmajfault=297401`, `workingset_refault_file=2899805`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `decision`: This confirms the branch can be rolled back to the pushed guarded Kimi-new-changes checkpoint while preserving current DeepSeek SOTA. Continue optimization from this checkpoint, with current accepted token rate still `2.7 tok/s`.
+
