@@ -2353,6 +2353,19 @@
 - `gap_analysis`: `chunk32` plus no-trace preserved correctness and had low major faults/elapsed, but runner `eval_tok_s` still tied `2.6`. The chunk scheduling change improves secondary timing but not the accepted token-rate metric, so it cannot be promoted. Further chunk-size tuning is deprioritized unless paired with a larger CPU fallback reduction.
 - `rollback_status`: source patch reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-no-trace-n160
+
+- `attempt_id`: `20260702-late10-no-trace-n160`
+- `attempt_kind`: `config-probe/generation-budget`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Multiple compute/cache/page experiments now tie at `2.6 tok/s`. Current accepted runs use `-n 192`, while the France prompt asks for a short paragraph. Historical `-n 128` failed by truncating the answer, so the next narrow boundary is `-n 160`: shorter than accepted, but with more headroom than the rejected `128`.
+- `hypothesis`: Under accepted late10 top3/no-trace config, `-n 160` may still allow a complete, coherent short France paragraph while reducing tail generation work or improving the measured generation-rate window enough to exceed the rounded `2.6 tok/s` gate.
+- `theoretical_upper_bound`: This does not change model math, routing, cache misses, or per-token compute. It can only alter output length/stop point and measurement averaging. If the accepted answer naturally needs more than 160 generated tokens, correctness will fail via truncation. If it finishes before 160, performance should tie. Promote only on strict `eval_tok_s > 2.6` and manual completeness pass.
+- `test_config`: accepted late10 config without `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-n 160 -c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review with no final-sentence truncation, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`). Because this changes generation budget, require clean pushed-commit rerun before any SOTA promotion.
+- `rollback`: No source change. If token rate does not exceed `2.6`, output correctness/completeness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 `-n 192` SOTA.
+- `required_evidence`: exact env/command showing `-n 160` and trace disabled, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, full France answer text, manual correctness/completeness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
