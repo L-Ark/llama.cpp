@@ -2103,7 +2103,7 @@
 
 - `attempt_id`: `20260702-late10-cache13760mib`
 - `attempt_kind`: `config-probe/vram-cache-boundary`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: `13700MiB` ran with only about `106 MiB` CUDA free and produced 3223 slots, but did not improve rounded token rate. To satisfy the “use VRAM as much as practical” constraint, run one final small boundary probe before leaving cache-size-only tuning.
 - `hypothesis`: Increasing `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13700` to `13760` may add roughly `60 / 4.25 ≈ 14` slots and leave only a narrow CUDA free-memory margin. It may still run, but the expected miss reduction and token-rate benefit are tiny; CUDA OOM or allocator fragility is plausible.
 - `theoretical_upper_bound`: Fourteen extra slots can at best avoid about fourteen immediate misses on the observed sequence. At `~4.9ms` average traced `src0` cost per miss, the direct bound is about `0.07s` before secondary effects. This is not expected to beat SOTA unless there is a nonlinear cache/reclaim effect; reject on tie.
@@ -2111,6 +2111,13 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change is required. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `13568MiB` late10 as SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command, stderr cache size/slot/free-memory lines, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace if generated, cgroup `memory.*`, France answer text if generated, manual correctness note, trace summary, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T011242Z-20260702_late10_cache13760mib/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=36167.894934ms`, `elapsed_seconds=87.67`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15034978304`, `pgmajfault=292684`, `workingset_refault_file=3494699`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `cache_observation`: stderr reports `[moe_stream] VRAM cache: 13.4 GiB, 3237 slots (4.25 MiB each)`, CUDA free memory around `46 MiB`, and `hits=30215 misses=4936`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `rows=35151`, `cache_hits=30215`, `cache_misses=4936`, `span_ms=69585.306`, `src0_ms=23966.665`, `total_ms=26231.251`.
+- `gap_analysis`: `13760MiB` is the practical VRAM boundary found so far: it leaves only about `46 MiB` CUDA free and reduces misses by only `35` versus accepted SOTA (`4971 -> 4936`). Trace time improves slightly (`src0_ms 24305.283 -> 23966.665`, `total_ms 26552.328 -> 26231.251`) and TTFT improves, but runner `eval_tok_s` still ties `2.6`. Since the gate requires a strictly higher token rate, do not promote. Cache-size-only tuning is now at diminishing returns; going higher is likely allocator-fragile and has a sub-0.1s direct miss-saving bound.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s` with `13568MiB` stream cache; `13760MiB` is recorded as a non-promoted tie and possible TTFT/reference config only.
 
 ## 记录与验收
 
