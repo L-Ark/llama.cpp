@@ -16595,6 +16595,98 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AN - enable Q4_0 down compact GPU batch path
+
+Design timestamp: 2026-07-02 19:05 UTC.
+
+Reason:
+
+- Current fallback profiles repeatedly show `decode,type=2`, where type `2` is
+  `GGML_TYPE_Q4_0`.
+- Example rejected Phase 7AM n32:
+  - down total `31.264 ms/call`;
+  - down `fallback_t0=28.494 ms/call`;
+  - top fallback names include multiple `src0_type=2` down tensors with
+    `eligible=0` and `unsupported=31`.
+- Earlier n96 SOTA records showed `decode,type=2` around `8.067 GiB` and
+  `6.754 s`. This is one of the remaining real decode buckets after expert-pack
+  streaming, SQPOLL, split VRAM cache, and mmap drops.
+
+Current code finding:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` excludes `GGML_TYPE_Q4_0` from
+  `moe_stream_type_supported()`.
+- The compact MMVQ launch wrapper also excludes Q4_0, even though the generic
+  CUDA MMQ/MMVQ implementation already has Q4_0 vecdot and `mul_mat_q` cases.
+- The Q8_K reference down path currently handles `Q3_K` and `IQ4_XS` only. Do
+  not route Q4_0 through that path in this phase because its custom kernel does
+  not implement a Q4_0 block-sum branch.
+
+Hypothesis:
+
+- Add Q4_0 only to the regular MoE stream compact MMVQ support path:
+  - `moe_stream_type_supported()`;
+  - `launch_moe_mmvq_compact_batch()` type switch.
+- Keep Q4_0 out of `down_q8k_candidate`.
+- Do not change routing, cache sizing, expert-pack IO, quantization, prompt
+  template, generation args, or env.
+- If the generic MMVQ helper handles Q4_0 correctly, residual Q4_0 down experts
+  can move from CPU fallback to GPU batch/cache. This should reduce fallback
+  time and may improve token rate.
+
+Theoretical upper bound:
+
+- Maximum visible n96 saving is bounded by the prior measured Q4_0 decode
+  fallback bucket, about `6-7 s`.
+- Phase 7AE n96 confirm decode is `88889.08 ms / 77`. Removing all Q4_0
+  fallback wait would give about `82.1 s / 77`, or roughly `0.94 tok/s`.
+- Realistic upper bound is lower because:
+  - Q4_0 GPU work still costs kernel time;
+  - some Q4_0 experts may miss VRAM cache and still require staging;
+  - moving work to GPU may interfere with up/gate/down overlap.
+- A useful target is `1-4 s` n96 reduction if Q4_0 fallback is material and GPU
+  compact MMVQ is fast enough.
+
+Implementation:
+
+1. Update `moe_stream_type_supported()` to include `GGML_TYPE_Q4_0`.
+2. Update `launch_moe_mmvq_compact_batch()` to allow `GGML_TYPE_Q4_0`.
+3. Do not add Q4_0 to `launch_moe_iq3_xxs_q8k_batch()` or the
+   `down_q8k_candidate` allowed types.
+4. Build `build-cuda-batch/bin/llama-completion`.
+5. Run a strict cold n4 smoke first to catch CUDA launch errors and output
+   corruption before a full n32.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Source diff must be recorded in `git.txt`; accepted source must be committed
+  and pushed immediately after n96 confirmation.
+
+Acceptance:
+
+- n4 smoke must pass quality, TTFT, RAM, read path, and no CUDA errors.
+- n32 must beat accepted Phase 7AE best `36687.31 ms / 31` twice.
+- n96 must beat accepted Phase 7AE best `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Fallback profile should show reduced or eliminated `decode,type=2` Q4_0
+  fallback. If decode gets faster without that evidence, inspect before
+  accepting.
+
+Rollback:
+
+- If build fails, CUDA launch fails, n4 output is wrong, n32 regresses, n32
+  improvement does not reproduce, n96 fails, RAM/TTFT gates fail, or
+  `decode,type=2` is not reduced, revert the source change and keep only the
+  plan/run record.
+
 ## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
 
 Design timestamp: 2026-07-02 17:35 UTC.
