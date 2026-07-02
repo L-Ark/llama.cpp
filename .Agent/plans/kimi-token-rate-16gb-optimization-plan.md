@@ -15374,3 +15374,83 @@ Decision:
 - Keep Phase 7P as SOTA.
 - Do not spend more time on coarse split-cache percentage sweeps unless a new
   route trace or critical-path profile shows a different exposed cost model.
+
+## Phase 7AB - current SOTA route trace and critical-path refresh
+
+Design timestamp: 2026-07-02 13:45 UTC.
+
+Reason:
+
+- Phase 7P is the accepted runtime SOTA, but the accepted 7P confirmation run
+  did not save `route-profile.csv` or `route-trace.csv`.
+- Phase 7AA showed that coarse split-cache changes are not predictable from
+  aggregate counters alone. The next optimization needs current-SOTA route
+  order, hot tensors, miss sequence, and fallback timing in the same run.
+- Older route traces come from pre-7P runtimes and are not authoritative after
+  expert-pack mmap CPU fallback, prompt/dense mmap drops, current down overlap,
+  and split-cache behavior changed.
+
+Goal:
+
+- Collect one strict cold `-n 32` diagnostic under the exact Phase 7P SOTA env,
+  adding only:
+
+```sh
+GGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv
+```
+
+- Keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`.
+- Keep all Phase 7P accepted runtime env vars.
+- Do not use this run as a new performance SOTA because trace writing may add
+  overhead. Use it as diagnostic evidence only.
+
+What to measure:
+
+- Per-token decode time and TTFT under the trace overhead.
+- Host RAM/page-cache split under strict 16GB cgroup.
+- `route-profile.csv` top tensors by count and expert bytes.
+- `route-trace.csv` event count and whether residual Q4_0 fallback appears only
+  in `fallback-profile.csv` or also in the route trace.
+- Cache counters for upgate/down, pinned staging main/gate, expert-pack reads,
+  and `kimi_cpu_fallback_pack_mmap` hits/misses.
+- Fallback-profile breakdown by phase and quant type.
+
+Expected result and upper bound:
+
+- This diagnostic should not improve token rate; the upper bound for accepted
+  performance gain is zero for this phase.
+- The value is narrowing the next implementation target. If route trace proves
+  that most remaining miss sequence is upgate, the next candidate must target
+  up/gate compute or staging. If fallback-profile proves residual Q4_0 down is
+  still the only decode fallback, the next candidate must reduce or overlap
+  that path without changing math.
+- If trace overhead makes decode much slower, do not compare it to SOTA except
+  as diagnostic overhead.
+
+Reproducibility:
+
+- Use a new runner `/tmp/run_phase7ab_repro.sh` derived from
+  `/tmp/run_phase7t_repro.sh`, recording `README.md`, `command.txt`,
+  `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `route-profile.csv`, `route-trace.csv`, `ttft-trace.csv`,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Run under `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0`.
+
+Acceptance as diagnostic evidence:
+
+- Build/source remains unchanged.
+- Exit code `0`.
+- France answer is semantically correct.
+- TTFT `<= 106331.72 ms`.
+- `memory.peak <= 15899996160`, `oom=0`.
+- `read_failures=0`.
+- `route-profile.csv` and `route-trace.csv` are non-empty.
+
+Next-step rule:
+
+- Do not implement another cache/prefetch/kernel change until this diagnostic
+  is recorded or a stronger current-SOTA profile is already available.
