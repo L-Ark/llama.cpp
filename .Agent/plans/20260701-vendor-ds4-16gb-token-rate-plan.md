@@ -2537,7 +2537,7 @@
 
 - `attempt_id`: `20260702-late10-cpu-willneed-no-trace`
 - `attempt_kind`: `config-probe/cpu-fallback-page-prefetch`
-- `status`: planned_before_execution
+- `status`: completed_rejected_regression_not_sota
 - `bottleneck_basis`: Accepted late10 still spends about `31.4s` parallel-normalized in up/down CPU fallback and cold runs remain at the 16GB cgroup ceiling. Broad `GGML_MOE_CPU_WILLNEED=1` was rejected before late10 top3 pruning, but late10 reduces active up/down experts and refault pressure versus the older top4 path. A single no-source late10 retest can determine whether the changed active set makes existing page prefetch useful.
 - `hypothesis`: Enabling existing `GGML_MOE_CPU_WILLNEED=1` may reduce CPU fallback major faults/page stalls by advising active up/down expert pages before compute. Because it prefetches many pages, it may also increase reclaim pressure and regress; this is a bounded one-run retest, not a direction to expand if it fails.
 - `theoretical_upper_bound`: It cannot reduce CPU arithmetic or gate stream misses. The hard upside is limited to the page-fault/reclaim portion of the remaining `~31.4s` CPU fallback plus secondary TTFT/refault improvements. If compute dominates or prefetch displaces useful cache, token rate will tie/regress. Promote only on strict `eval_tok_s > 2.6`.
@@ -2545,6 +2545,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache summary remains accepted-like, and TTFT does not exceed `45449.496149ms`.
 - `rollback`: no source change. If token rate ties/regresses, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or refault/page evidence worsens materially, record rejected and keep accepted late10 SOTA. Do not continue broader/larger CPU prefetch if this fails.
 - `required_evidence`: exact env/command proving trace disabled and WILLNEED enabled, source commit/status, binary/shared-library hashes, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness note, and explicit rejected/promoted status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T034123Z-20260702_late10_cpu_willneed_no_trace/france-cpu40-vram0gb`.
+- `result`: rejected regression. `eval_tok_s=2.5`, `prompt_tok_s=1.0`, `TTFT=35387.340617ms`, `elapsed_seconds=88.07`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15029985280`, `pgmajfault=190937`, `workingset_refault_file=3289956`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France output is semantically correct, coherent, complete, and matches accepted SOTA answer shape.
+- `cache_observation`: trace disabled as intended; stderr reports accepted cache shape `13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`.
+- `gap_analysis`: WILLNEED reduced major faults versus accepted no-trace/SOTA-like runs (`~261k-296k -> 190937`) and slightly improved TTFT, but token rate regressed to `2.5`. This indicates page-fault count alone is not the current token-rate limiter; broad prefetch adds enough overhead/reclaim disturbance or leaves CPU compute dominant. Do not continue broader CPU fallback prefetch under late10 without a new mechanism.
+- `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
