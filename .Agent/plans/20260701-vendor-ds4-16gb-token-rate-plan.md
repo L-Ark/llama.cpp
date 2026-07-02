@@ -3026,3 +3026,80 @@
 - `result`: DeepSeek SOTA preserved after Kimi new changes. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=37346.733086ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15025664000`, `pgmajfault=297401`, `workingset_refault_file=2899805`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
 - `decision`: This confirms the branch can be rolled back to the pushed guarded Kimi-new-changes checkpoint while preserving current DeepSeek SOTA. Continue optimization from this checkpoint, with current accepted token rate still `2.7 tok/s`.
 
+### 当前设计：dense-mmap-drop-cold-start-probe
+
+- `attempt_id`: `20260702-dense-mmap-drop-cold-start-probe`
+- `status`: planned
+- `bottleneck_basis`: After the Kimi new changes merge, the current DeepSeek SOTA still runs at `2.7 tok/s` with about `15.0GB` file page cache under a strict 16GB cgroup. Direct `GGML_MOE_EXPERT_PACK` is not yet connected to the SOTA one-stream gate path (`moe_stream.cu`); the expert-pack reader is in `moe_stream_batch.cu`. The newly merged Kimi mmap controls are therefore the first default-off cold-start mechanism that can be tested without changing the SOTA compute path.
+- `hypothesis`: Enabling `LLAMA_DROP_DENSE_MMAP_CACHE=1` should call `drop_mmap_dense_pages()` after model tensor loading and release dense mmap file pages while keeping expert mmap pages available. Because dense tensors are already loaded/offloaded, this may reduce cgroup page-cache pressure and refaults during generation. It should not change model numerics. The upper bound is limited to reducing page-cache reclaim/refault overhead; it cannot reduce GPU/CPU expert matmul cost.
+- `test_config`: strict cold 16GB cgroup, accepted SOTA env, plus `LLAMA_DROP_DENSE_MMAP_CACHE=1`, France prompt, same CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.7`, `ram_ok=true`, France output semantically correct/coherent, and TTFT within the accepted gate. If token rate ties but pgmajfault/refault improves, record as diagnostic only.
+
+### 当前执行：dense-mmap-drop-cache-probe-result
+
+- `attempt_id`: `20260702-dense-mmap-drop-cache-probe`
+- `status`: rejected_tie_diagnostic
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T104903Z-20260702_dense_mmap_drop_cache_ds_sota_probe/france-cpu40-vram0gb`.
+- `result`: `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=37772.882214ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15017316352`, `pgmajfault=294380`, `workingset_refault_file=2895919`, `ram_ok=true`, `correctness_ok=true`.
+- `decision`: do not promote. It ties current SOTA and does not materially improve page-cache/refault metrics versus the pushed clean baseline. No clear dense mmap drop log was observed, so this env path may not release meaningful pages in the current loader mode.
+
+### 当前设计：dense-mmap-drop-after-prompt-probe
+
+- `attempt_id`: `20260702-dense-mmap-drop-after-prompt-probe`
+- `status`: planned
+- `hypothesis`: `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1` is triggered explicitly after the prompt decode (`batch_inp.n_tokens > 1`). If dense file pages remain resident after prompt evaluation, dropping them before generation may reduce cgroup reclaim pressure without dropping expert pages needed by one-stream misses. It should preserve numerics and Kimi functionality because it is env-gated.
+- `test_config`: accepted SOTA env plus `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`, strict cold 16GB cgroup, France prompt, same CLI args.
+- `acceptance_gate`: same as current SOTA promotion gate; ties are diagnostic only.
+
+### 当前执行：dense-mmap-drop-after-prompt-results
+
+- `attempt_id`: `20260702-dense-mmap-drop-after-prompt-probe`
+- `status`: rejected_tie_diagnostic
+- `run_1`: `/root/lfz/runs/vendor-ds4-16gb/20260702T105127Z-20260702_dense_mmap_drop_after_prompt_ds_sota_probe/france-cpu40-vram0gb`, `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=35781.844462ms`, `memory_file_bytes=12457873408`, `pgmajfault=289189`, `workingset_refault_file=3115207`, `ram_ok=true`, `correctness_ok=true`.
+- `run_2`: `/root/lfz/runs/vendor-ds4-16gb/20260702T105336Z-20260702_dense_mmap_drop_after_prompt_ds_sota_probe_rerun/france-cpu40-vram0gb`, `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=37181.348802ms`, `memory_file_bytes=15031271424`, `pgmajfault=291882`, `workingset_refault_file=2912850`, `ram_ok=true`, `correctness_ok=true`.
+- `decision`: do not promote. The first run lowered final file cache and TTFT, but token rate tied and the second run returned to normal file-cache footprint. This env may remain useful as a TTFT/page-cache diagnostic, but it is not a stable token-rate improvement.
+- `next_design`: Direct expert pack is not yet connected to the current one-stream gate SOTA path. The next implementation-level optimization should add default-off one-stream pack reads for `ffn_gate_exps` cache misses, then test buffered/direct/io_uring pack reads under strict 16GB.
+
+
+### 方案重置：rollback-unverified-pack-patch-and-redesign
+
+- `reset_id`: `20260702-rollback-unverified-pack-patch-and-redesign`
+- `status`: active_plan
+- `time`: `2026-07-02T11:12Z`
+- `rollback_action`: Reverted the uncommitted `ggml/src/ggml-cuda/moe_stream.cu` one-stream expert-pack patch before build/test. The source tree is back on the pushed accepted SOTA code path at `25037165d` plus this plan-only update.
+- `current_accepted_sota`: `2.7 tok/s`, strict cold `drop_caches`, 16GB cgroup including page cache, `cpu_moe=40`, gate-only one-stream DS4 cache, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `--vram-cache-gb 0`, accepted admission profile `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, France correctness OK, TTFT `37346.733086ms` in the pushed clean rerun.
+- `important_clarification`: The current accepted SOTA does **not** use an expert pack. Expert data on cache miss still comes from the original GGUF mmap/page-cache path. The SOTA VRAM expert cache mainly stores admitted hot `ffn_gate_exps` experts after they are loaded; it is not backed by a compact pack file today.
+- `why_replan`: Adding a pack reader directly into the one-stream path is an implementation change before enough measurement. It could improve cold random source loads, but it also risks serializing miss reads behind one `FILE*` lock, duplicating host buffers, changing page-cache behavior, or creating a new correctness/TTFT risk. The next step must return to the required design/execute loop: measure the per-token cold bottleneck first, compute the bound, then implement only the highest-return path.
+- `branch_policy`: All accepted or rejected checkpoints for this vendor work must be committed and pushed to GitHub remote `ssd`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`. If a new accepted SOTA appears, immediately record exact source commit, run directory, env, CLI, cgroup limit, page-cache metrics, answer text, pack/profile hashes if any, commit the source/plan/metadata, push, then rerun from the pushed commit so future rollback can reproduce the metric.
+
+#### 新设计阶段 1：重新定位当前 cold-start bottleneck
+
+- `goal`: Produce a fresh per-token profile for the accepted SOTA, not just aggregate tok/s.
+- `experiment`: Re-run accepted SOTA with existing trace/profile envs and strict 16GB cgroup. Capture per-token wall time split into source load/page fault, H2D copy, VRAM cache lookup/insert, GPU gate matmul, CPU fallback/up/down work if any, sampler/output, plus `memory.current`, `memory.stat`, `pgmajfault`, `workingset_refault_file`, and page-cache scan/steal counters.
+- `expected_bottleneck`: The prior data points to cold source-load/page-cache churn and cache-miss expert movement as the likely limiter, because RAM is almost entirely file cache (`~15GB`) and major faults/refaults are high. Verify rather than assume.
+- `acceptance`: No source change in this stage. It only updates the plan with measured bottleneck and a prioritized optimization list.
+
+#### 新设计阶段 2：expert-pack feasibility without touching compute path
+
+- `goal`: Decide whether an expert pack can help the current one-stream SOTA before wiring it into `moe_stream.cu`.
+- `inventory`: List all `ffn_gate_exps` `(tensor, expert_id)` pairs admitted by `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, estimate entry count, expert bytes, total pack size, and compare to cold miss count from the SOTA trace. Record the profile hash and exact model GGUF hash.
+- `theoretical_bound`: Bound the possible gain from pack I/O as `miss_bytes / achievable_read_bandwidth` plus H2D copy. If the observed per-token non-compute time is already below this bound, deprioritize pack work. If random GGUF page faults dominate and sequential pack read can remove many major faults/refaults, promote pack implementation.
+- `no-source probe`: If possible, build a minimal offline pack and run a separate reader benchmark inside the same 16GB cgroup to compare random GGUF expert reads vs sequential/aligned pack reads for the exact SOTA miss sequence. This avoids changing inference code before the I/O bound is proven.
+
+#### 新执行 candidate A：default-off one-stream expert pack, only if stage 2 proves value
+
+- `implementation_rule`: Keep default behavior unchanged. Add pack support behind `GGML_MOE_STREAM_ONE_EXPERT_PACK`, limited initially to `ffn_gate_exps` cache misses. Do not change Kimi code paths or batch fused paths.
+- `correctness_rule`: For every promoted run, France output must remain semantic/coherent. For large token-rate movement, also run the small prompt set used earlier to verify prompt robustness.
+- `performance_rule`: Promote only if strict cold `eval_tok_s > 2.7`, host RAM including page cache remains `<=16000000000`, and TTFT stays within the 20% gate. If TTFT exceeds the gate but token rate improves, commit only as `rejected_ttft` and immediately plan TTFT recovery.
+- `gap_analysis`: If measured speed differs from the theoretical bound, analyze pack hit/miss count, read serialization, direct I/O alignment, page-cache residency, H2D overlap, and CPU fallback before guessing.
+
+#### 新执行 candidate B：cache-admission/profile refinement
+
+- `goal`: Improve hit rate without increasing RAM or reducing correctness.
+- `method`: Use the fresh trace to identify high-frequency misses not admitted by `current_sota_gate_freq_ge2.tsv`, then test small profile changes under the same 13568MiB one-stream cache. This is lower risk than compute-path fusion because it only changes which gate experts are cached.
+- `bound`: Estimate gain from eliminated miss load time and available VRAM cache capacity. Reject profile changes that reduce hit quality, raise TTFT over gate, or push RAM above 16GB.
+
+#### 新执行 candidate C：CPU fallback reduction after I/O work
+
+- `goal`: Only revisit up/down or fused paths after I/O/cache bottleneck is quantified.
+- `rule`: Any up/gate/down fusion must first show true parallel work in traces, not just branch entry. Prior rejected fused runs stayed around `0.8 tok/s`, so this path is lower priority until a trace proves CPU fallback or GPU matmul is the dominant remaining time.
