@@ -22,6 +22,7 @@
 ## 当前 accepted SOTA（回退后基线）
 
 - 范围：France single-prompt strict cold-start accepted SOTA。
+- 当前最高 accepted token rate：`4.2 tok/s`（2026-07-02 one-pack O_DIRECT）。
 - run dir：`/root/lfz/runs/vendor-ds4-16gb/20260702T112702Z-20260702_pushed_one_pack_buffered_firstorder_sota_rerun/france-cpu40-vram0gb`。
 - 配置：
   - `vendor` 框架，`cpu_moe=40`；
@@ -128,6 +129,12 @@
 - `direct_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - `trace_delta`: one-stream traced `src0_ms` dropped from `13394.225ms` to `5353.209ms`; traced `total_ms` dropped from `15419.15ms` to `7132.354ms`; kernel remained small (`342.57ms`).
 - `promotion_status`: candidate only until source commit, push, clean rebuild, and pushed-commit strict cold rerun pass.
+- `accepted_sota`: promoted on 2026-07-02 after pushed-commit clean rebuild/rerun from commit `771966944ddb204fe6ec3d321c1e597eee63664e` pushed to `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`.
+- `accepted_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun/france-cpu40-vram0gb`.
+- `accepted_metrics`: `eval_tok_s=4.2`, `prompt_tok_s=1.5`, `TTFT=29984.770823ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15080456192`, `pgmajfault=272611`, `workingset_refault_file=1635934`, `ram_ok=true`, `correctness_ok=true`.
+- `accepted_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `accepted_fingerprints`: `libggml-cuda.so` sha256 `26d61a0a23eb0f3d9a64dde89cb2072787cc0c20032248743ce29fb30d841d45`; `llama-cli` sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; gate pack sha256 `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; admission profile sha256 `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
+- `accepted_command_delta`: same SOTA command as previous France baseline plus `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`.
 
 ### Phase 3：减少 fallback 与搬运次数
 
