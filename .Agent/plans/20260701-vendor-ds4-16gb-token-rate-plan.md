@@ -2433,7 +2433,7 @@
 
 - `attempt_id`: `20260702-current-sota-repro-after-cpumoe39-reject`
 - `attempt_kind`: `reproduction/current-accepted-sota`
-- `status`: planned_before_execution
+- `status`: completed_reproduced_sota
 - `bottleneck_basis`: User asked whether the current SOTA is reproducible. The accepted SOTA is late10 top3 with `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, DS4 gate stream enabled, cold `drop_caches`, and strict 16GB cgroup. This run verifies the current pushed code path still reproduces `2.6 tok/s` after rejected probes.
 - `hypothesis`: With no source changes after the accepted SOTA path, a cold run from the current pushed branch should reproduce `eval_tok_s≈2.6`, preserve France semantic correctness, keep RAM including page cache within `16000000000` bytes, and keep TTFT below the accepted gate threshold `45449.496149ms`.
 - `theoretical_upper_bound`: This is not an optimization attempt; expected result is a tie with accepted SOTA. Any `eval_tok_s <2.6`, correctness failure, RAM breach, or TTFT gate failure means the SOTA is not currently reproducible and must be investigated before further optimization.
@@ -2441,6 +2441,14 @@
 - `acceptance_gate`: reproduction passes if `eval_tok_s=2.6` or better by the existing rounded metric, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed `45449.496149ms`.
 - `rollback`: no source change. If reproduction fails, stop optimization and investigate reproducibility before any new tuning.
 - `required_evidence`: exact run dir, source commit/status, binary sha256/build line/stat, exact env/command, summary.json, trace summary, cgroup memory evidence, full France answer text, and manual correctness note.
+- `source_commit`: `bdad53b29e7683a85e5d669b973ab91b2dffa948` on pushed branch `ssd/vendor/deepseek-token-rate-16gb`; worktree clean before evidence collection.
+- `binary`: `build-ds4-moe-stream/bin/llama-cli`, sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, size `1625488`, mtime `2026-07-02 02:37:25 +0000`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T030252Z-20260702_current_sota_repro_after_cpumoe39_reject/france-cpu40-vram0gb`.
+- `result`: reproduced current accepted SOTA. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=37379.491412ms`, `elapsed_seconds=88.98`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15040561152`, `pgmajfault=281682`, `workingset_refault_file=3422905`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. Output: "France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+- `cache_observation`: stderr reports `[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)` and `hits=30180 misses=4971 hit_rate=85.9%`.
+- `trace_summary`: `/root/lfz/runs/vendor-ds4-16gb/20260702T030252Z-20260702_current_sota_repro_after_cpumoe39_reject/france-cpu40-vram0gb/trace_summary.json` recorded `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24770.360`, `dontneed_ms=1185.232`, `total_ms=27042.197`.
+- `repro_conclusion`: current SOTA is reproducible under cold `drop_caches` and strict 16GB cgroup. Metrics match the accepted late10 top3 path; TTFT is below the `45449.496149ms` gate and RAM including page cache is constrained by `memory_peak_bytes=16000000000`.
 
 ## 记录与验收
 
