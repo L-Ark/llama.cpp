@@ -155,6 +155,15 @@
 - `next_after_reject`: The MXFP4 down-batch path requires a separate numerical correctness investigation before any performance run: compare one CPU fallback down row vs GPU `ggml_cuda_moe_stream_mmvq_dev` output for the same MXFP4 expert/src1 row, then reason about row mapping/multirow semantics. Until that proof exists, keep accepted build at `GGML_CUDA_MOE_STREAM_BATCH=OFF` and continue optimization from the O_DIRECT SOTA.
 - `revert_guard`: After reverting MXFP4 down-batch source and rebuilding with `GGML_CUDA_MOE_STREAM_BATCH=OFF`, strict cold guard `/root/lfz/runs/vendor-ds4-16gb/20260702T143722Z-20260702_after_reject_revert_odirect_sota_guard/france-cpu40-vram0gb` produced `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30600.945998ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15095304192`, `pgmajfault=275181`, `workingset_refault_file=1675221`, `ram_ok=true`, `correctness_ok=true`. O_DIRECT pack counters matched accepted SOTA: `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`. Current accepted SOTA remains the post-Kimi O_DIRECT run at `4.2 tok/s`; reverted head maintains the same configuration in the `4.1-4.2 tok/s` band.
 
+### Phase 2B 执行计划：MXFP4 down 单流 GPU/CPU 数值对齐
+
+- `attempt_id`: `20260702-mxfp4-down-single-compare`
+- `attempt_kind`: `diagnostic-no-source-change`
+- `why`: MXFP4 down-batch was rejected because it broke France output and slowed generation. Before any new batch or fusion implementation, verify whether the underlying single-expert CUDA MMVQ result for `ffn_down_exps` matches CPU fallback. The code already has `GGML_MOE_STREAM_COMPARE_CPU_OUT`, which recomputes accepted `ggml_cuda_moe_stream_one()` results with CPU `vec_dot` and writes max/mean error.
+- `method`: Rebuild/keep default accepted source with `GGML_CUDA_MOE_STREAM_BATCH=OFF`. Run a short strict cold diagnostic with `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_down_exps`, `GGML_MOE_STREAM_COMPARE_CPU_OUT=<diag>/compare.csv`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=16`, and no accepted-SOTA promotion. Keep host RAM under 16GB; use a short `-n` because this is numerical validation, not a correctness/token-rate claim.
+- `expected_evidence`: `compare.csv` rows for type `39` down tensors with `max_abs`, `mean_abs`, `max_rel`, expert id, row/col of max difference, plus run output/cgroup metrics. If max errors are small but full batch was wrong, investigate batch row mapping/multirow/scatter. If single down already diverges, investigate MXFP4 CUDA vecdot vs CPU vecdot/dequant semantics before any performance work.
+- `rollback`: no source changes. If the diagnostic run gives bad answer or low tok/s, only record it as diagnostic; it cannot affect accepted SOTA.
+
 ### Phase 3：执行和提交规则
 
 - 每次实践前先在本 plan 中新增 attempt：写 `hypothesis`、理论上界、预期指标、rollback 条件。
