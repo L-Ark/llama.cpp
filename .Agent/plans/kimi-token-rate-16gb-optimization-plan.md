@@ -11902,3 +11902,364 @@ Rollback:
 - Revert immediately if correctness compare fails, if France quality fails, if
   TTFT rises above the gate, if RAM exceeds the 16 GB cgroup, if shared cache
   slot sizes change unexpectedly, or if strict cold n32 does not improve.
+
+## Phase 3ZZ result - partial-row Q4_0 hot cache rejected
+
+Timestamp: `2026-07-02 03:58 UTC`.
+
+Code state tested: `8c8a5882d-dirty-phase3zz`.
+
+Strict runs:
+
+- n4 smoke, accepted env plus partial Q4:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-034532Z-n4-phase3zz-q4-partial-accepted-env`
+- n32 validation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-034713Z-n32-phase3zz-q4-partial-accepted-env`
+- n96 promotion:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-035208Z-n96-phase3zz-q4-partial-accepted-env`
+
+n32 result:
+
+- token rate: `0.584649 tok/s`, effectively tied with accepted comparable
+  `0.584465 tok/s`;
+- TTFT: `71921.70 ms`, pass;
+- host RAM: `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- partial counters:
+  - calls: `224`;
+  - active rows: `2030`;
+  - GPU rows: `690`;
+  - CPU rows: `1340`;
+  - loads: `65`;
+  - wall: `1.522 ms/call`.
+
+n96 result:
+
+- token rate: `0.532629 tok/s`, fail against current SOTA `0.634-0.65 tok/s`;
+- TTFT: `72796.28 ms`, pass;
+- host RAM: `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- partial counters:
+  - calls: `623`;
+  - active rows: `5222`;
+  - GPU rows: `1699`;
+  - CPU rows: `3523`;
+  - loads: `65`;
+  - staged: `0.500 GiB`;
+  - wall: `0.521 ms/call`.
+
+Gap analysis:
+
+- The partial path was mechanically active and cheap per call, but it changed
+  the runtime balance without improving end-to-end decode.
+- n96 decode length changed from the accepted profile's `77` decode runs to
+  `88` decode runs for the same prompt, which means value-level or scheduling
+  perturbation affected generation trajectory despite the France answer still
+  being semantic.
+- Down profile regressed:
+  - accepted Phase 3ZW diagnostic down total: `18.954 ms/call`;
+  - partial Q4 n96 down total: `21.024 ms/call`.
+- This violates the plan requirement that each step preserve correctness and
+  improve token rate.
+
+Decision:
+
+- Reject dirty Phase 3ZZ source changes.
+- Revert source code on local and remote worktrees.
+- Keep this result as a plan-only record.
+- Do not continue Q4 partial-cache work before a value-equivalence compare
+  explains the generation-length change.
+
+## Phase 4A - SOTA-based split-pool simulation plan
+
+Timestamp: `2026-07-02 04:05 UTC`.
+
+Source of this plan:
+
+- user-provided split-pool plan:
+  `/Users/spark/.codex/attachments/639b3f87-838d-46f2-a863-5e81763ce48f/pasted-text-1.txt`.
+
+Current SOTA baseline:
+
+- Source code state: `8c8a5882d` with plan-only commits after the accepted
+  runtime; no unaccepted source changes.
+- Accepted runtime env is the Phase 3ZW/3ZT env:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+Authoritative SOTA profile:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`
+
+Key metrics:
+
+- token rate: `0.65 tok/s`;
+- decode: `117578.26 ms / 77 runs`;
+- TTFT: `63209.39 ms`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`;
+- quality: pass;
+- `read_failures=0`;
+- shared cache:
+  - `15000 MiB`;
+  - slot sizes initialized by class of current request:
+    - `5.36 MiB`;
+    - `6.02 MiB`;
+    - `7.44 MiB`;
+  - down cache final: `2016` slots of `7.44 MiB`;
+  - hit rate: `44.2%`;
+- pinned staging:
+  - copies: `64145`;
+  - host stage: `79083.729 ms`;
+  - H2D: `13310.781 ms`;
+- down profile:
+  - calls: `4798`;
+  - total: `18.954 ms/call`;
+  - cuda batch: `4.908 ms/call`;
+  - fallback exposed: `13.993 ms/call`;
+- up/gate profile:
+  - calls: `4621`;
+  - total: `17.903 ms/call`;
+  - fallback exposed: effectively zero.
+
+Problem statement:
+
+- Current shared cache is keyed by expert byte size, but the operational cache
+  still wastes VRAM when a pool's slot size is pulled toward larger tensors.
+- The split-pool hypothesis is that separating up/gate and down experts by size
+  class increases resident expert count, reduces miss GiB, reduces host_stage
+  and H2D, and improves decode token rate without touching math.
+- This is safer than Q4 partial paths because it does not change operator
+  values; it changes only cache placement and eviction.
+
+Strict constraints:
+
+- Host RAM must remain below `16 GB` including page cache under cgroup
+  `memory.max=15900000000`, `memory.swap.max=0`.
+- Runs must be strict cold start:
+
+```sh
+sync
+echo 3 > /proc/sys/vm/drop_caches
+```
+
+- TTFT must remain below `106331.72 ms`.
+- France prompt must be semantic and coherent:
+  `Please introduce France in a short paragraph.`
+- `read_failures=0` and no CUDA launch failures.
+- Any accepted improvement must be committed and pushed immediately.
+- Any regression, quality failure, TTFT failure, RAM failure, launch/read
+  failure, or n32 token-rate failure requires immediate source revert and a
+  plan-only rejection record.
+
+Phase 4A.1: size distribution audit only, no inference changes.
+
+Input files:
+
+- `route-profile.csv`;
+- `route-trace.csv`;
+- `fallback-profile.csv`;
+- `stderr.txt`;
+- all from the SOTA profile directory above.
+
+Required output:
+
+- expert size classes and route counts for:
+  - `4.48 MiB`;
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`;
+  - `7.88 MiB Q4_0`.
+- per class:
+  - route count;
+  - routed GiB;
+  - fallback exposed ms;
+  - cache hit/miss estimate under current shared-cache replay;
+  - observed host_stage and H2D contribution where measurable.
+
+Phase 4A.2: split-pool simulator.
+
+Extend or wrap `scripts/moe-route-cache-sim.py` to model independent pools.
+The simulator must replay the actual `route-trace.csv`; profile-only estimates
+are not enough.
+
+Candidate pools:
+
+1. SOTA single/shared baseline:
+   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+   - current behavior.
+2. two-pool candidate A:
+   - small up/gate pool:
+     - max slot: `5.5 MiB`;
+     - budget: `7000 MiB`;
+   - large down pool:
+     - max slot: `7.5 MiB`;
+     - budget: `8000 MiB`;
+   - Q4_0 excluded.
+3. two-pool candidate B:
+   - small: `8000 MiB`;
+   - large: `7000 MiB`;
+   - Q4_0 excluded.
+4. two-pool candidate C:
+   - small: `9000 MiB`;
+   - large: `6000 MiB`;
+   - Q4_0 excluded.
+5. three-pool diagnostic only:
+   - up/gate small;
+   - normal down;
+   - Q4_0 hot/diagnostic;
+   - no implementation unless simulation shows more than `5 s/n96` net gain
+     and avoids the Phase 3ZZ value-change issue.
+
+Simulator output for every candidate:
+
+- per pool:
+  - slot size;
+  - budget MiB;
+  - slot count;
+  - hits;
+  - misses;
+  - hit rate;
+  - miss GiB;
+  - evictions;
+  - preload hits/misses;
+- global:
+  - total miss GiB;
+  - expected host_stage ms using measured `host_stage_gib_s`;
+  - expected H2D ms using measured `h2d_gib_s`;
+  - expected exposed down-stage saving using calibrated
+    `52.84 ms/GiB` lower bound;
+  - expected decode wall saving;
+  - expected token rate upper bound.
+
+Gate to enter implementation:
+
+- Do not implement unless simulation predicts more than `5.0 s` decode saving
+  on SOTA n96 after subtracting:
+  - any reduced down-pool capacity cost;
+  - any up/gate miss increase;
+  - expected extra bookkeeping cost.
+- If no candidate crosses `5.0 s/n96`, stop at plan-only simulation result and
+  choose a different bottleneck.
+
+## Phase 4B - env-gated two-pool implementation plan
+
+Implement only after Phase 4A passes the `>5 s/n96` theoretical gate.
+
+Feature gate:
+
+```sh
+GGML_MOE_VRAM_CACHE_SIZE_CLASSES=1
+GGML_MOE_VRAM_CACHE_CLASS_MIB=5.5,7.5
+GGML_MOE_VRAM_CACHE_CLASS_BUDGET_MIB=7000,8000
+```
+
+Design:
+
+- Disabled by default.
+- Q4_0 must not enter these shared pools.
+- Each pool owns independent:
+  - device allocation;
+  - slot size;
+  - slot count;
+  - hash table;
+  - LRU/LFU state;
+  - preload profile;
+  - hit/miss/preload/eviction counters.
+- Expert insertion chooses the smallest pool that fits the expert byte size.
+- If no class fits, if env parsing fails, if allocation fails, or if pool
+  metadata is inconsistent, fall back to current SOTA single-cache behavior.
+- Down prefetch must target only the pool selected for the registered down
+  tensor. It must not pollute the up/gate pool.
+- Existing mixed up/gate fused path must keep the same semantics and output.
+
+Required counters:
+
+```text
+[moe_stream_batch] VRAM size-class cache: enabled=1 pools=N total=...
+[moe_stream_batch] pool0: max=5.50 MiB budget=... slots=... hits=... misses=... hit_rate=... preloads=... evictions=...
+[moe_stream_batch] pool1: max=7.50 MiB budget=... slots=... hits=... misses=... hit_rate=... preloads=... evictions=...
+```
+
+Acceptance flow:
+
+1. Build:
+   - `cmake --build build-cuda-batch --target llama-completion -j$(nproc)`.
+2. Strict cold n4 smoke:
+   - France prefix semantic;
+   - no CUDA launch failure;
+   - `read_failures=0`;
+   - host RAM below 16 GB;
+   - TTFT below `106331.72 ms`;
+   - per-pool counters printed;
+   - current large tensor must not force all pools to `7.44 MiB` slots.
+3. Strict cold n32:
+   - compare against accepted `0.584465 tok/s`;
+   - token rate must improve;
+   - up/gate timing must not regress materially;
+   - down stage must drop;
+   - quality/RAM/TTFT/read gates must pass.
+4. Strict cold n96 promotion:
+   - run three times if n32 passes;
+   - average token rate must beat accepted `0.634-0.65 tok/s`;
+   - TTFT below `106331.72 ms`;
+   - host RAM below 16 GB;
+   - quality pass;
+   - `read_failures=0`;
+   - no launch failures;
+   - record exact France answers.
+5. Commit and push immediately only after n96 promotion passes.
+
+Rollback:
+
+- If n32 token rate does not improve, immediately revert source changes.
+- If n96 average does not beat SOTA, revert source changes.
+- If any quality/RAM/TTFT/read/launch gate fails, revert source changes.
+- Keep all failed metrics and reproduction commands as plan-only records.
+
+## Phase 4F - auto size-class follow-up
+
+Only after two-pool passes strict n96 promotion.
+
+Target env:
+
+```sh
+GGML_MOE_VRAM_CACHE_SIZE_CLASSES=auto
+GGML_MOE_VRAM_CACHE_MAX_POOLS=4
+GGML_MOE_VRAM_CACHE_CLASS_ALIGN_MIB=0.25
+```
+
+Auto mode must derive:
+
+- class sizes;
+- budgets;
+- preload entries;
+- admission policy;
+- per-pool protected profile reserve;
+
+from the route profile and replay simulation, without Kimi-specific hardcoded
+sizes.
