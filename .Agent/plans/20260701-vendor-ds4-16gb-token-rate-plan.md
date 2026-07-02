@@ -3513,3 +3513,38 @@
 - `guard_answer`: France output is semantic and coherent: it identifies France/French Republic in Western Europe, mentions history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and historical/modern vitality.
 - `guard_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - `decision`: Kimi latest merge is safe for DeepSeek SOTA. Push the merge and this record to `ssd/vendor/deepseek-token-rate-16gb`, then continue with down expert staging/cache feasibility.
+
+### 当前设计：down-top2048-pack-feasibility-and-probe
+
+- `attempt_id`: `20260702-down-top2048-pack-feasibility-and-probe`
+- `status`: active_design_before_practice
+- `time`: `2026-07-02T16:00Z`
+- `source_base`: `1e9b327d57e4f75be101f1b88cf064df7d39a658`, already pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `reason`: MXFP4 down batch is now numerically understood: compact dst rows must be allocated with `max(dst_cols,n_active)`. The remaining rejection reason is performance: down batch staging/cache had only `34` slots and `0%` down cache hit rate, so expert movement dominates. Before implementing a persistent source change, measure whether a compact down expert pack can reduce staging I/O enough to matter.
+- `profile_source`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151000Z-post-odirect-bottleneck-trace/fallback-profile.csv`, the full post-O_DIRECT SOTA CPU fallback profile.
+- `fallback_inventory`: down fallback has `2974` unique `(tensor,expert)` pairs, `19111` calls, `13915.390ms` fallback time, and `12.343GiB` unique payload. Up fallback is similarly `2974` pairs, `19111` calls, `12935.977ms`, `12.343GiB`. A full up+down resident set is about `24.7GiB`, so it cannot simply fit in available VRAM/RAM alongside the accepted gate cache.
+- `top2048_pack`: generated from the hottest down fallback rows only: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-down-top2048-20260702.pack`.
+- `top2048_pack_input`: `/root/lfz/runs/vendor-ds4-16gb/20260702T160000Z-down-pack-feasibility/down_top2048_fake_trace.csv`.
+- `top2048_pack_contents`: selected top `2048` fallback rows, deduped by pack builder to `1927` unique down experts, payload `8587575296` bytes (`7.998GiB`). The selected rows cover `17644` down calls and `11214.413ms` aggregate down fallback time in the profile.
+- `read_sequence`: `/root/lfz/runs/vendor-ds4-16gb/20260702T160000Z-down-pack-feasibility/down_top2048_pack_reads.tsv`, `17644` reads, `78629568512` bytes (`73.229GiB`) when repeated according to fallback call counts.
+- `readbench`: isolated 16GB `MemoryMax` readbench with cold `drop_caches`: direct `25.283121s`, `2.896GiB/s`; buffered `7.684598s`, `9.529GiB/s`. Buffered is faster because the compact `~8GiB` pack working set can fit in the 16GB cgroup page cache, while O_DIRECT rereads every repeated expert from storage.
+- `theoretical_bound`: Replacing random GGUF fallback/staging with a buffered compact down pack could at most remove part of the selected `11214ms` down fallback time. The readbench lower bound for repeated pack reads is `~7.7s`, so a large net speedup is not guaranteed; the realistic benefit depends on overlap with GPU work, page-cache competition with model mappings, and whether batch cache/staging avoids repeated H2D.
+- `next_practice`: Temporarily re-enable the correctness-fixed MXFP4 down batch path (`GGML_TYPE_MXFP4` support and `dst_tmp_rows=max(dst_cols,n_active)`) and run a full strict 16GB France probe with `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_EXPERT_PACK=<down_top2048_pack>`, and buffered pack I/O. Keep the accepted gate O_DIRECT pack config unchanged.
+- `acceptance`: Promote only if `eval_tok_s > 4.2`, RAM including page cache remains `<=16000000000`, France output is semantic/coherent, TTFT stays within the accepted gate, pack counters show meaningful down-pack hits, and a rerun from pushed commit reproduces. If it is slower or correctness/RAM fails, record rejected and revert source.
+
+### 当前执行：down-top2048-pack-buffered-full-probe-results
+
+- `attempt_id`: `20260702-down-top2048-pack-buffered-full-probe-results`
+- `status`: rejected_no_token_rate_sota_source_reverted_pack_deleted`
+- `time`: `2026-07-02T16:01Z-16:06Z`
+- `temporary_source_change`: MXFP4 enabled in `moe_stream_batch.cu` down batch allowlist and `dst_tmp_rows=max(dst_cols,n_active)` compact dst fix. Source was reverted after the rejected run and build restored to `GGML_CUDA_MOE_STREAM_BATCH=OFF`.
+- `pack_sha256`: deleted rejected pack after recording sha to restore disk: `f64682efb263de46d6eea7389494552305012b403932cf7da77767fa1164d539  ds4-france-down-top2048-20260702.pack`.
+- `repro_inputs`: fake trace sha256 `1467bf050ee9d1cba99067b72dfb42054785c8a42d221565324a9b22459076d7`; read sequence sha256 `e5bb9b17279e5d49a6ba224111c13c96152960c74feb5cc00aac292df300b63c`.
+- `full_probe_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T160118Z-20260702_down_top2048_pack_buffered_full_probe/france-cpu40-vram0gb`.
+- `full_probe_config`: accepted gate O_DIRECT SOTA env plus temporary `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_MIB=512`, `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-down-top2048-20260702.pack`, `GGML_MOE_IO_BACKEND=buffered`, strict cold 16GB cgroup.
+- `full_probe_result`: `eval_tok_s=2.3`, `prompt_tok_s=1.5`, `TTFT=31313.021254ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15010816000`, `pgmajfault=202310`, `workingset_refault_file=8747095`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `answer`: France output stayed semantic/coherent but was repetitive and truncated at the token budget.
+- `pack_counters`: down expert pack loaded `1927` entries and reported `hits=22911 misses=1979 read_failures=0`; down batch VRAM cache still had only `34` slots with `hits=0 misses=24890`; accepted gate one-pack counters changed to `hits=5062 misses=1235` because the batch-on path changed graph/cache behavior during this rejected probe.
+- `profile`: down batch accepted `7644` calls, declined `116`; batch stage `6.015ms/call`, kernel `0.031ms/call`, d2h `0.005ms/call`; `kimi_cpu_moe_profile` down total `3.526ms/call`, `cuda_batch=1.994ms`, `cuda_single=0.577ms`, `fallback_t0=0.931ms`.
+- `gap_analysis`: The isolated buffered readbench looked favorable because the `~8GiB` pack fits in a 16GB page cache. In full inference, the same buffered pack competes with model mmap/page cache and gate O_DIRECT staging under the strict 16GB cgroup, increasing `workingset_refault_file` to `8.7M` and making staging slower than the no-pack down-batch probe. This path is rejected.
+- `next_design`: A useful down compute path needs either real VRAM residency/split allocation for hot down experts, or a smaller/layer-targeted pack that does not consume enough page cache to destabilize the model. Do not pursue large buffered down packs under the current 16GB cold-start constraint.
