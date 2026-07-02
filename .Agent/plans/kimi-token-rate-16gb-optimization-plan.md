@@ -16869,6 +16869,160 @@ Rollback:
 - If n32 candidate is slower or type `22` wall does not improve, reject without
   confirmation.
 
+Phase 7AS result - accepted as new SOTA:
+
+- source delta:
+  - no source change;
+  - uses current committed diagnostic source from Phase 7AR.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- runner:
+  - `/tmp/run_phase7as_repro.sh`;
+  - default is Phase 7AE runtime;
+  - adds the two env vars only with `IQ2_UPGATE_PARALLEL=1`.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-154511Z-n32-phase7as-iq2-upgate-parallel`.
+- git:
+  - head `f0d44910233b0bcf52050025a522313a78b93232`;
+  - clean at run start.
+- quality: pass.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `72180.96 ms`.
+- decode: `33811.07 ms / 31`, `0.92 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- mechanism:
+  - log shows `IQ2_S parallel up/gate streams active`;
+  - aggregate up/gate wall `11.083 ms/call`;
+  - type `18` wall `18.727 ms/call`;
+  - type `22` wall `6.822 ms/call`, down from Phase 7AR `13.509 ms/call`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-154750Z-n32-phase7as-iq2-upgate-parallel-confirm`.
+- quality: pass.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `80106.15 ms`.
+- decode: `33471.59 ms / 31`, `0.93 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- mechanism:
+  - log shows `IQ2_S parallel up/gate streams active`;
+  - aggregate up/gate wall `11.198 ms/call`;
+  - type `18` wall `18.646 ms/call`;
+  - type `22` wall `7.048 ms/call`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-155050Z-n96-phase7as-iq2-upgate-parallel`.
+- quality: pass.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- TTFT: `75358.76 ms`.
+- decode: `84615.82 ms / 77`, `0.91 tok/s`.
+- comparison:
+  - faster than Phase 7AE n96 confirm `88889.08 ms / 77` by `4273.26 ms`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- mechanism:
+  - aggregate up/gate wall `10.854 ms/call`;
+  - type `18` wall `18.719 ms/call`;
+  - type `22` wall `6.479 ms/call`.
+
+n96 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm`.
+- git:
+  - head `f0d44910233b0bcf52050025a522313a78b93232`;
+  - clean at run start.
+- quality: pass.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- TTFT: `77844.70 ms`.
+- decode: `84173.24 ms / 77`, `0.91 tok/s`.
+- comparison:
+  - faster than Phase 7AE n96 confirm `88889.08 ms / 77` by `4715.84 ms`;
+  - improves token rate from `0.87 tok/s` to `0.91 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- mechanism:
+  - log shows `IQ2_S parallel up/gate streams active`;
+  - aggregate up/gate wall `11.001 ms/call`;
+  - type `18` wall `18.396 ms/call`;
+  - type `22` wall `6.888 ms/call`.
+
+Gap analysis:
+
+- The type `22` IQ2_S same-type bucket was the larger total up/gate bucket in
+  Phase 7AR.
+- Under current SQPOLL/pack-mmap/down-overlap SOTA, the old IQ2 parallel path
+  finally provides real overlap:
+  - type `22` wall is reduced from about `13.5 ms/call` to `6.5-7.0 ms/call`;
+  - n96 total up/gate wall drops from about `15.2 ms/call` diagnostic baseline
+    to about `11.0 ms/call`.
+- The improvement is partially offset by more gate-side staging/io_uring work:
+  - expert-pack io_uring bytes increase because gate staging now has its own
+    parallel stream and refill activity;
+  - nevertheless end-to-end decode improves reproducibly on n32 and n96.
+
+Decision:
+
+- Accept Phase 7AS as the new current SOTA.
+- Required env additions:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- Current accepted SOTA reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7as-iq2-upgate-parallel-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- Next bottleneck:
+  - type `18` IQ3_XXS remains around `18.4 ms/call`;
+  - previous IQ3 parallel and true compact-batch attempts regressed, so the next
+    optimization should target a different IQ3 kernel implementation or reduce
+    exposed down fallback/staging without reusing rejected broad Q4_0 GPU
+    coverage.
+
 ## Phase 7AQ - narrow VRAM cache 15100 MiB retest
 
 Design timestamp: 2026-07-02 16:26 UTC.
