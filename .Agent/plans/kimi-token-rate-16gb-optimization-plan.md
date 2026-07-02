@@ -8815,3 +8815,74 @@ Decision:
   - depth=3 and depth=8 add too much up/gate contention,
   - depth=2 has the best total decode time despite non-minimal individual
     down/up buckets.
+
+## Next candidate: Phase 3ZJ split cache plus depth=2 prefetch
+
+Design timestamp: 2026-07-03 00:08 UTC / 2026-07-03 08:08 CST.
+
+Current accepted best:
+
+- Phase 3ZG strict n96:
+  `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`,
+  2.57811 s/token, 0.38788 tok/s.
+
+Current bottleneck/gap:
+
+- Depth=2 improves total decode but raises up/gate time:
+  - Phase 3ZD no-prefetch up/gate: 23.352 ms/call,
+  - Phase 3ZG depth=2 up/gate: 29.981 ms/call.
+- The old split-cache experiments failed as standalone full n96 improvements,
+  but they reduced up/gate time:
+  - Phase 2M split pct45 no-prefetch up/gate: 22.493 ms/call,
+  - Phase 2M split pct45 decode still lost because down cache became too small.
+- Combining split-cache with depth=2 may be complementary:
+  - split cache isolates up/gate from down/prefetch pressure,
+  - depth=2 offsets the smaller down pool by preloading upcoming down experts.
+
+Hypothesis:
+
+- Test:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`,
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`,
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`,
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- `SPLIT_MAX_MIB=6` routes Kimi up/gate experts into the upgate pool while
+  leaving larger down experts in the down pool.
+- `UPGATE_PCT=45` was the prior split setting that protected up/gate best,
+  and it is a conservative first combination with prefetch.
+
+Theoretical upper bound:
+
+- If split restores most of the up/gate regression from depth=2
+  (29.981 -> about 22-24 ms/call), it could save 14-19s over 2381 calls.
+- If the smaller down pool adds misses not covered by depth=2 prefetch, it can
+  lose those savings. The visible bound depends on down hit-rate and prefetch
+  useful-rate.
+- A useful result must keep down prefetch useful-rate high and avoid the old
+  split-only down-cache regression.
+
+Execution:
+
+- Run strict cold full `-n 96` directly.
+- Direct n96 is justified because previous split-cache and prefetch sweeps show
+  n32 can mis-rank full-length behavior.
+- This is a config-only experiment; no source change is expected.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Full France paragraph quality PASS.
+- Strict launch failures=0.
+- Read failures=0.
+- Logs must show two cache pools and down prefetch useful-rate.
+
+Decision rule:
+
+- Accept only if strict n96 beats current Phase 3ZG:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject and keep Phase 3ZG depth=2 unified cache as accepted runtime.
