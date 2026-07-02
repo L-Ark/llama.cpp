@@ -14713,3 +14713,117 @@ Decision:
 
 - Do not keep the diagnostic source as a performance change; revert `ggml/src/ggml-cuda/moe_stream_batch.cu` after recording results.
 - Next implementation target should be IQ3_XXS same-type up/gate MMVQ efficiency, or a replacement that reduces the two serial IQ3 kernels without triggering the previously rejected MMQ or dual-stream contention paths.
+
+## Phase 7V - true compact-batch MMVQ for IQ3_XXS up/gate
+
+Design timestamp: 2026-07-02 12:05 UTC.
+
+Goal:
+
+- Improve decode token rate under the existing 16GB host-RAM cold-start gate by reducing the same-type `IQ3_XXS` up/gate cost identified in Phase 7U.
+- Preserve the accepted Phase 7P/7P+ behavior unless the new path is explicitly enabled.
+- Every accepted result must be reproducible from committed source, exact command, exact env, and recorded git state.
+
+Current bottleneck:
+
+- Phase 7U showed decode up/gate same-type buckets:
+  - `type=18` (`IQ3_XXS`): `18.568 ms/call`, `311` calls at n32, `avg_active=8.00`.
+  - `type=22` (`IQ2_S`): `13.706 ms/call`, `558` calls at n32, `avg_active=8.00`.
+- The current compact launcher calls `ggml_cuda_moe_stream_mmvq_dev` once per active expert for up and once per active expert for gate.
+- For `avg_active=8`, each up/gate call launches roughly 16 per-expert MMVQ kernels plus per-row q8 quantization work.
+- `ggml/src/ggml-cuda/mmvq.cu` already has a multi-column MoE MMVQ kernel (`mul_mat_vec_q_moe`) selected when `ids != nullptr`, but `ggml_cuda_moe_stream_mmvq_batch_dev` currently copies ids to host and loops over the single-expert function. The existing batch entry point is therefore not a true GPU-side batch path.
+
+Optimization hypothesis:
+
+- Add an explicit true compact-batch MMVQ path for same-type `IQ3_XXS` up/gate.
+- Quantize the active input rows into the existing q8 staging buffer, then invoke the existing ids-aware MoE MMVQ kernel once for up and once for gate with `ncols_dst=n_active` and `ids[token_idx]=slot`.
+- This should reduce launch overhead and scheduling overhead for `IQ3_XXS` same-type layers while keeping the same mathematical operation and quantized weight format.
+- Initial scope is intentionally narrow:
+  - decode path only;
+  - `src0_type == GGML_TYPE_IQ3_XXS`;
+  - same-type up/gate;
+  - compact cache path with active slot ids already known;
+  - no prompt fallback changes;
+  - no CPU fallback or down path changes.
+
+Theoretical upper bound:
+
+- If the `IQ3_XXS` bucket can be brought down to the observed `IQ2_S` bucket, n32 can save about:
+  - `(18.568 - 13.706) ms * 311 ~= 1.51 s`.
+- Scaled to n96, the expected upper bound is roughly `3.7-4.0 s` decode-time reduction.
+- The real bound may be lower because the true batch kernel still performs the same dequantization and dot-product work; the removable part is primarily launch/scheduling overhead and duplicated per-expert setup.
+- If measured gain is much lower than expected, debug must separate:
+  - q8 quantization time;
+  - MoE kernel time;
+  - active-id staging/copy time;
+  - occupancy or register-pressure regressions in `mul_mat_vec_q_moe`.
+
+Implementation plan:
+
+1. Add a default-off env gate, for example `GGML_MOE_STREAM_COMPACT_BATCH_MMVQ=1`.
+2. Add minimal counters printed under existing profiling:
+   - number of compact-batch MMVQ calls;
+   - active experts per call;
+   - quantize time;
+   - batch MMVQ kernel time;
+   - fallback-to-loop count and reason.
+3. Extend the compact up/gate launcher so the caller can pass device-side active slot ids, or build a small device ids array from already-known compact cache ids without forcing a synchronize.
+4. Implement a narrow `IQ3_XXS` same-type path using the existing ids-aware `mul_mat_vec_q_moe` dispatch.
+5. Keep the old per-expert loop as the fallback for all unsupported cases and for `GGML_MOE_STREAM_COMPACT_BATCH_MMVQ=0`.
+6. Build `llama-completion` and run a small cold smoke only to catch crashes/corruption before n32.
+
+Correctness gates:
+
+- The France prompt must answer in a short, semantically correct, coherent paragraph.
+- Any incoherent answer, repeated junk, CUDA error, wrong tensor shape, or nonzero read failure rejects the optimization.
+- Because the math path changes GPU kernel grouping, not model weights or routing, output does not have to be byte-identical, but semantic correctness is mandatory.
+- If the first n32 quality passes but output differs materially from Phase 7P, run an additional n32 correctness confirmation before performance acceptance.
+
+Performance gates:
+
+- All runs must be cold start: `sync; echo 3 > /proc/sys/vm/drop_caches` immediately before the cgroup run.
+- Host RAM gate: `memory.peak <= 15899996160`, `oom=0`, no swap.
+- TTFT gate: `<= 106331.72 ms`, i.e. no more than 20% above the established baseline gate.
+- `read_failures=0`; no CUDA launch/copy failures.
+- Acceptance requires:
+  - n32 candidate faster than Phase 7P n32 by raw decode time;
+  - n32 confirm faster than Phase 7P n32 by raw decode time;
+  - n96 candidate faster than Phase 7P n96 by raw decode time;
+  - n96 confirm faster than Phase 7P n96 by raw decode time.
+- The accepted run pair must explain the gain with the new counters and/or lower up/gate profile time.
+
+Reproducibility requirements:
+
+- Every experiment directory must contain:
+  - `command.txt` with the exact command line;
+  - `env.txt` with every `GGML_*`, CUDA, thread, and cache env var used;
+  - `git.txt` with branch, exact commit, dirty status, and remotes;
+  - `script.sh` containing the exact runnable reproduction script;
+  - stdout and stderr logs;
+  - cgroup `memory.current`, `memory.peak`, `memory.events`, and relevant `/proc/meminfo` snapshots;
+  - `fallback-profile.csv`;
+  - `metrics.txt` with TTFT, decode time, token count, token rate, quality decision, and pass/fail gate summary.
+- A result is not considered valid unless it can be re-run from the saved `script.sh` after checking out the recorded commit and setting the recorded env.
+- If a run uses dirty source for diagnostics, it must be labeled diagnostic-only and cannot be accepted as SOTA.
+- If source changes are rejected, revert source changes but keep plan entries and run directories for audit.
+
+Commit and push rule:
+
+- Do not commit the kernel change until n32 and n96 both pass their confirmation runs.
+- If the optimization is accepted, commit source + plan + reproduction notes in one commit and push to `wici/vendor/kimi-moe-stream-on-vendor` immediately.
+- If it fails any hard gate or is not reproducibly faster, revert runtime source, append the measured result to this plan, and push only the plan/log update if useful.
+
+Rollback criteria:
+
+- Revert immediately if any of these occur:
+  - RAM peak exceeds the 16GB gate;
+  - TTFT exceeds the gate;
+  - France output is semantically wrong or incoherent;
+  - CUDA errors or read failures occur;
+  - n32 confirm is slower than accepted Phase 7P;
+  - the new path cannot produce complete reproducibility artifacts.
+
+Next action:
+
+- Inspect the exact argument contract for `mul_mat_vec_q_switch_type`, `mul_mat_vec_q_switch_ncols_dst`, and `quantize_row_q8_1_cuda`.
+- Only after this inspection, implement the default-off `IQ3_XXS` compact-batch MMVQ candidate.
