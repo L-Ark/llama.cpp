@@ -2513,6 +2513,20 @@
 - `gap_analysis`: Even pruning only layer 0 perturbs the generation trajectory enough to increase rows from accepted `35151` to `47865`, misses from `4971` to `6400`, and refaults to `7.25M`, while token rate regresses to `2.5` and output truncates. This closes early-layer top3 pruning under the current prompt/quality gate; do not continue layer1/layer2 variants without a different quality-preserving mechanism.
 - `rollback_status`: the RANGE2 source patch was reverted, clean rebuild completed, and `build-ds4-moe-stream/bin/llama-cli` returned to sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` with version `9164 (9600b5e1b)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`; no source push as SOTA.
 
+### 当前执行 attempt：late10-cpu-fallback-chunk24-no-trace
+
+- `attempt_id`: `20260702-late10-cpu-fallback-chunk24-no-trace`
+- `attempt_kind`: `implementation/cpu-fallback-scheduling-boundary`
+- `status`: planned_before_execution
+- `bottleneck_basis`: The latest CPU chunk diagnostic still shows `31390.003ms` parallel-normalized up/down CPU fallback under accepted late10. Previous late10 `chunk32` improved traced elapsed/TTFT slightly but only tied `2.6`; old `chunk8` and old/late `chunk32` evidence suggest the chunk-size optimum, if any, is narrow. After early-layer pruning failed correctness, a final intermediate `chunk24` probe can test whether less aggressive coarsening keeps load balance while reducing scheduling overhead.
+- `hypothesis`: Setting multi-row CPU fallback chunk size to `24` may reduce atomic/scheduling overhead versus default `16` while avoiding some load-balance/page-wait regression risk from `32`. Model math, routing, VRAM cache policy, and output semantics should remain unchanged.
+- `theoretical_upper_bound`: This cannot reduce gate stream misses or arithmetic count. It can only reduce CPU fallback scheduling/tail overhead inside the remaining `~31.4s` parallel-normalized up/down component. Since `chunk32` tied and improved only secondary timing, expected gain is at most a small rounded-boundary chance. Promote only on strict `eval_tok_s > 2.6`.
+- `implementation`: Add default-off env `GGML_MOE_CPU_CHUNK_SIZE=<N>` at the CPU `mul_mat_id` chunk-size selection. Unset env preserves current behavior exactly; `nr0 == 1 || nr1 == 1` still uses `chunk_size=64`. Test only `GGML_MOE_CPU_CHUNK_SIZE=24` with trace disabled to measure production path.
+- `test_config`: patched source, `GGML_MOE_CPU_CHUNK_SIZE=24`, accepted late10 config without `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache summary remains accepted-like, and TTFT does not exceed `45449.496149ms`.
+- `rollback`: If build fails, token rate ties/regresses, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or refault/page evidence worsens materially, revert source and clean rebuild. If accepted, immediately stop exploration, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build hash/version, exact env/command proving trace disabled and chunk24 enabled, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness note, explicit rejected/promoted/rollback status, and if promoted the full pushed-rerun SOTA package.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
