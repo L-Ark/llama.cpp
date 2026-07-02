@@ -2224,7 +2224,7 @@
 
 - `attempt_id`: `20260702-late10-cache13760-no-trace`
 - `attempt_kind`: `config-probe/vram-cache-boundary-plus-trace-overhead`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Two isolated low-risk probes tied but improved secondary metrics: `13760MiB` reduced misses (`4971 -> 4936`) and trace total slightly, while no-trace reduced elapsed (`89.48s -> 87.18s`) without changing cache hit/miss behavior. Neither alone crossed the strict `>2.6 tok/s` gate, so the next efficient probe is their combination before leaving cache-size/trace-overhead tuning.
 - `hypothesis`: Running the accepted late10 top3 config with `GGML_MOE_STREAM_ONE_CACHE_MIB=13760` and no `GGML_MOE_STREAM_ONE_TRACE_OUT` may combine a small miss reduction with lower trace overhead while preserving model math and France correctness. It also uses VRAM close to the practical boundary already shown to run with about `46 MiB` free.
 - `theoretical_upper_bound`: The 13760MiB cache adds about 45 slots versus accepted 13568MiB and previously reduced misses by only `35`; at `~4.9ms` per miss the direct bound is about `0.17s`. Removing trace previously reduced elapsed by about `2.3s` but still tied token rate. The combined optimistic elapsed improvement is therefore low single-digit seconds, enough only for a possible rounded move to `2.7 tok/s`; reject on any tie.
@@ -2232,6 +2232,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `13568MiB` late10 as SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command showing trace disabled and cache `13760`, stderr cache size/slot/free-memory lines, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T020100Z-20260702_late10_cache13760_no_trace/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38087.247563ms`, `elapsed_seconds=89.23`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15014617088`, `pgmajfault=290998`, `workingset_refault_file=3490683`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `cache_observation`: stderr reports `[moe_stream] VRAM cache: 13.4 GiB, 3237 slots (4.25 MiB each)`, CUDA free memory about `46 MiB`, and `hits=30215 misses=4936 hit_rate=86.0%`; cache insertion succeeded and VRAM was used near the practical boundary.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `gap_analysis`: Combining no-trace with the 13760MiB cache did not combine favorably. It preserved the lower miss count from `13760MiB` (`4936` misses) and remained within the 16GB cgroup, but elapsed time regressed versus the `13568MiB` no-trace run (`87.18s -> 89.23s`) and token rate still tied `2.6`. The 46 MiB CUDA free margin likely makes this boundary fragile without a meaningful token-rate gain, so keep accepted late10 `13568MiB` as SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s` with `13568MiB` stream cache.
 
 ## 记录与验收
 
