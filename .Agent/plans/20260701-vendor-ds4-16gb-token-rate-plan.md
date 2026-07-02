@@ -1923,13 +1923,21 @@
 
 - `attempt_id`: `20260702-old-sequence-vram8-then-vram12-repro`
 - `attempt_kind`: `forensic-execution/run-sequence`
-- `status`: planned
+- `status`: completed / rejected_ram_gate
 - `hypothesis`: The historical 2.6 run may have depended on immediately preceding vram8/vram4 runs creating useful kernel workingset shadow entries, device cache state, or readahead behavior that survives `drop_caches` enough to reduce refault/reclaim cost. Replaying the old sequence (`vram8` cold run followed by `vram12` cold run) with the current clean pushed source can test whether sequence state, rather than source, explains the low `workingset_refault_file` in the 09:55 result.
 - `expected_delta`: If sequence state is the cause, the second vram12 run should show materially lower `pgmajfault`/`workingset_refault_file` than standalone slow reruns and token rate should move toward historical `2.6`. If it remains `1.5-1.6`, the sequence hypothesis is weak and remaining explanation is lost binary/source or unobserved system/storage state.
 - `test_config`: current clean pushed source and rebuilt binary, old command shape, no `GGML_MOE_KEEP_TOPK_UPDOWN`, `cpu_moe=40`, first run `vram_cache=8GB`, second run `vram_cache=12GB`, each with cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled.
 - `acceptance_gate`: forensic only unless second run exceeds current accepted SOTA and also passes RAM, TTFT, correctness, full reproduction, push, and clean pushed-commit rerun gates.
 - `rollback`: No source change. If either run fails or exceeds runtime/memory limits, record failure and keep current top4 `2.3 tok/s` SOTA.
 - `required_evidence`: both run dirs, exact commands/env, cgroup memory files, summaries, gate trace summaries, France outputs, manual correctness, and comparison to the 09:50/09:55 historical pair.
+- `vram8_run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T000300Z-20260702_sequence_vram8_prelude/france-cpu40-vram8gb`
+- `vram8_result`: completed. `eval_tok_s=1.4`, `prompt_tok_s=0.7`, `TTFT=47551.568213ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14977544192`, `pgmajfault=628591`, `workingset_refault_file=15251384`, `ram_ok=true`, `correctness_ok=true`.
+- `vram8_gate_trace`: `rows=34753`, `hits=27643`, `misses=7110`, `span_ms=123427.823`, `src0_ms=36141.13`, `total_ms=38888.795`. This reproduces the slow vram8 shape from the historical prelude.
+- `vram12_run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T000554Z-20260702_sequence_vram12_after_vram8/france-cpu40-vram12gb`
+- `vram12_result`: rejected. `eval_tok_s=0.0`, `prompt_tok_s=0.0`, `TTFT=None`, `exit_status=143`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102951424`, `file_mapped=12557213696`, `pgmajfault=213971`, `workingset_refault_file=44767`, `ram_ok=false`, `ram_limit_killed=true`, `correctness_ok=false`.
+- `vram12_partial_gate_trace`: killed early after `rows=2113`, `hits=556`, `misses=1557`, `span_ms=22826.206`, `src0_ms=7947.844`, `total_ms=8345.008`.
+- `gap_analysis`: The vram8 -> vram12 sequence does change kernel file-page state: vram12 refaults are extremely low before kill, and `active_file` is high. However that state also leaves `file_mapped≈12.56GB` and `memory_file≈15.10GB`, causing the strict 16GB RAM gate to terminate the run before any answer. Therefore this sequence cannot be accepted as a cold-start SOTA and does not reproduce the historical `2.6 tok/s` under current strict accounting.
+- `rollback_status`: no source change. Current accepted SOTA remains top4 `2.3 tok/s`. Sequence-induced low-refault state is useful evidence but is non-compliant unless future work can keep the same low refault behavior while staying below the 16GB RAM gate and producing a correct answer.
 
 ## 记录与验收
 
