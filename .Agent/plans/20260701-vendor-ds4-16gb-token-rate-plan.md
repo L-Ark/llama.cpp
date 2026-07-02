@@ -3415,3 +3415,32 @@
 - `post_merge_answer`: France output is semantic and coherent: it identifies France/French Republic in Western Europe, mentions history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and historical/modern vitality.
 - `post_merge_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - `decision`: Merge is safe for the DeepSeek SOTA path. Push this merge plus plan record to `ssd/vendor/deepseek-token-rate-16gb`, then continue with the next design stage: post-O_DIRECT token-level bottleneck trace.
+
+### 当前设计：post-odirect-bottleneck-trace-and-thread-sweep
+
+- `attempt_id`: `20260702-post-odirect-bottleneck-trace-and-thread-sweep`
+- `status`: active_design_before_practice
+- `time`: `2026-07-02T15:06Z-15:12Z`
+- `source_commit`: `9bafd4377c060e08022dc69f6c56905e4cb1d901` (`vendor-ds4: record kimi latest merge guard`), already pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `trace_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T150610Z-20260702_post_kimi_odirect_bottleneck_trace/france-cpu40-vram0gb`.
+- `diag_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151000Z-post-odirect-bottleneck-trace`.
+- `trace_result`: `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=30026.483027ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15078334464`, `ram_ok=true`, `correctness_ok=true`.
+- `one_stream_summary`: `rows=35151`, `hits=30528`, `misses=4623`, `inserts=3337`, `hit_rate=86.85%`, `src0_ms=5405.510`, `miss_src0_ms=5383.069`, `src1_ms=164.101`, `kernel_ms=339.665`, `sync_ms=1018.218`, `total_ms=7160.844`, `span_ms=44433.202`, `gap_sum_ms=37272.358`.
+- `fallback_summary`: total CPU fallback `26851.367ms`; decode fallback `up=9727.651ms`, `down=9574.938ms`; prompt fallback `up=3208.326ms`, `down=4340.452ms`.
+- `bottleneck`: After O_DIRECT, gate I/O is no longer the dominant bottleneck. The hard upper bound for further gate read tuning is roughly the measured `5.38s` miss source-load time, while CPU up/down fallback is about `26.85s` total and decode up/down alone is about `19.30s`.
+- `next_practice`: Run a low-risk thread sweep before source changes: keep all SOTA env/pack/profile fixed and test `-t/-tb` values above the current `20` to see whether CPU fallback is under-threaded. This does not change model math, Kimi functionality, pack contents, or admission profile.
+- `thread_sweep_bound`: If CPU fallback scaled perfectly from 20 to 28-32 threads, the absolute ceiling is removal of part of the `26.85s` fallback time. In practice memory bandwidth and scheduling overhead will limit gains. A valid accepted improvement must still pass RAM `<=16000000000`, France correctness, and TTFT within the 20% gate.
+- `thread_sweep_candidates`: test `-t 24 -tb 24`, then `-t 28 -tb 28`, then `-t 32 -tb 32` only if prior candidates do not regress sharply. If token rate improves, rerun the best candidate once for reproducibility before promoting.
+
+### 当前执行：post-odirect-thread-sweep-results
+
+- `attempt_id`: `20260702-post-odirect-thread-sweep-results`
+- `status`: rejected_no_token_rate_sota
+- `time`: `2026-07-02T15:08Z-15:13Z`
+- `common_config`: current O_DIRECT SOTA env/pack/profile, strict cold `drop_caches`, 16GB cgroup, France prompt, only `-t/-tb` changed.
+- `t24_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T150844Z-20260702_odirect_thread24_sweep/france-cpu40-vram0gb`, `eval_tok_s=4.0`, `prompt_tok_s=1.7`, `TTFT=27911.745904ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15077531648`, `ram_ok=true`, `correctness_ok=true`.
+- `t28_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151004Z-20260702_odirect_thread28_sweep/france-cpu40-vram0gb`, `eval_tok_s=4.1`, `prompt_tok_s=1.7`, `TTFT=28009.794829ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15098593280`, `ram_ok=true`, `correctness_ok=true`.
+- `t32_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151127Z-20260702_odirect_thread32_sweep/france-cpu40-vram0gb`, `eval_tok_s=2.3`, `prompt_tok_s=1.6`, `TTFT=30367.436186ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15071858688`, `ram_ok=true`, `correctness_ok=true`.
+- `interpretation`: Increasing CPU threads does not improve generation token rate. `t24/t28` improve TTFT but stay below or equal normal SOTA variance, while `t32` likely oversubscribes memory bandwidth or scheduling and strongly regresses decode speed.
+- `decision`: Do not promote any thread-sweep config as token-rate SOTA. Keep accepted config at `-t 20 -tb 20` unless a later TTFT-specific pass needs `t28`.
+- `next_design`: Since simple CPU thread scaling did not remove the `~26.85s` fallback bottleneck, test up/down fallback reduction via cache/admission/top-k configuration before source changes. First low-risk probe: vary `GGML_MOE_KEEP_TOPK_UPDOWN` while keeping gate pack and cache unchanged. Theoretical upper bound is the measured decode up/down fallback (`~19.30s`) minus added GPU/cache overhead. Reject if VRAM OOM, RAM exceeds 16GB, correctness fails, or token rate/TTFT regress.
