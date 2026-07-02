@@ -79,6 +79,12 @@
   - 如果复现低于 `4.0 tok/s`，先排查 binary/pack/profile/cgroup/direct I/O 差异，不进入新优化。
 - `required_evidence`: pushed commit、dirty status、build command、binary sha256、model/pack/profile sha256、exact env/run command、cgroup `memory.peak`/`memory.stat`/`memory.events`、stdout/stderr、summary、trace/counters、France 原文输出。
 - `rollback`: 不改源码；如果复现失败，仍停在 `5d65239a7`，只追加 rejected/repro-failed 记录。
+- `result_1`: completed on 2026-07-02 after clean rebuild at `5324b90d3` with `GGML_CUDA_MOE_STREAM_BATCH=OFF`. Run dir `/root/lfz/runs/vendor-ds4-16gb/20260702T140255Z-20260702_pre_kimi_latest_merge_odirect_sota_repro/france-cpu40-vram0gb`; `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=29108.584955ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15089516544`, `pgmajfault=268771`, `workingset_refault_file=1723767`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `result_2`: second strict cold rerun completed on 2026-07-02. Run dir `/root/lfz/runs/vendor-ds4-16gb/20260702T140551Z-20260702_pre_kimi_latest_merge_odirect_sota_repro2/france-cpu40-vram0gb`; `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30034.533955ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15101833216`, `pgmajfault=268416`, `workingset_refault_file=1638894`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `fingerprints`: `llama-cli sha256=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; `libggml-cuda.so sha256=a468b55ae19e7a79914b6b9e05ecf3da7597081de0595fb7d487e045a50e0b89`; `pack_sha256=7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; `profile_sha256=8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
+- `counters`: both reruns used O_DIRECT expert pack with `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`.
+- `answer`: France output is semantic and coherent; it identifies France/French Republic in Western Europe and mentions history, culture, global influence, landmarks, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
+- `decision`: historical accepted SOTA remains `4.2 tok/s` from run `20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun`; the current clean rebuild reproduces the same accepted configuration at `4.0-4.1 tok/s`, under the 16GB cgroup with correct output. Proceed to merge latest Kimi changes, then require a post-merge SOTA guard in the same range before continuing optimization.
 
 ### Phase 1：重新定位 4.2 SOTA 的真实瓶颈
 
