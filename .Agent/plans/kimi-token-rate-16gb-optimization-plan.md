@@ -9674,3 +9674,124 @@ Rollback:
 - Revert Q4_0 source changes if build fails, output quality fails, TTFT exceeds
   the gate, RAM/VRAM gates fail, Q4_0 launch errors appear, or `-n 32` does
   not show a credible improvement.
+
+Smoke result timestamp: 2026-07-02 21:16 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-005027Z-n4-phase3zo-q4down-smoke`
+
+Measured result:
+
+- Initial Q4_0 patch:
+  - added `GGML_TYPE_Q4_0` to CPU-side
+    `ggml_cuda_moe_stream_supports_down_batch()`;
+  - added `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()`.
+- Build: passed.
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- TTFT: `74328.88 ms`, pass.
+- Decode: `10.26055 s / 3 tokens = 3.42018 s/token`.
+- Quality: PASS for smoke answer `France is a country`.
+- `read_failures=0`; launch failures `=0`.
+- Q4_0 eligibility top lines changed from unsupported to eligible:
+  - `q4_down_unsupported_top=0`;
+  - `q4_down_eligible_top=28`.
+- Down profile: `550` calls, `145.418 ms/call`,
+  `cuda_batch=3.469 ms/call`, `fallback_t0=141.841 ms/call`,
+  `batch_accept=160`, `batch_decline=80`.
+
+Gap:
+
+- `-n 32` with the initial patch showed the Q4_0 entries as CPU-eligible, but
+  `ggml_cuda_moe_stream_batch()` still declined them internally with
+  `reason=unsupported_type`.
+- Root cause: CUDA-side `moe_stream_type_supported()` did not include
+  `GGML_TYPE_Q4_0`.
+- Fix for v2: also add `GGML_TYPE_Q4_0` to `moe_stream_type_supported()`.
+
+V2 smoke result timestamp: 2026-07-02 21:20 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-005814Z-n4-phase3zo-q4down-v2-smoke`
+
+Measured result:
+
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- TTFT: `76862.57 ms`, pass.
+- Decode: `10.33272 s / 3 tokens = 3.44424 s/token`.
+- Quality: PASS for smoke answer `France is a country`.
+- `read_failures=0`; launch failures `=0`.
+- Declines: only `multirow_not_supported=59`; `unsupported_type=0`.
+- Down profile: `549` calls, `147.811 ms/call`,
+  `cuda_batch=4.410 ms/call`, `fallback_t0=143.294 ms/call`,
+  `batch_accept=181`, `batch_decline=59`.
+
+V2 `-n 32` result timestamp: 2026-07-02 21:25 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-010103Z-n32-phase3zo-q4down-v2`
+
+Measured result:
+
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- VRAM peak: `31290 MiB`; minimum free/reserve: `821 MiB`.
+- TTFT: `78104.04 ms`, pass.
+- Decode: `78.15089 s / 31 tokens = 2.5209964516129033 s/token`,
+  `0.3966685472168007 tok/s`.
+- Answer text:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- The answer is semantically plausible as a prefix, but the run is rejected on
+  performance before any promotion decision.
+- `read_failures=0`; launch failures `=0`.
+- Declines: only `multirow_not_supported=59`; `unsupported_type=0`.
+- Down profile: `4022` calls, `30.735 ms/call`,
+  `cuda_batch=4.222 ms/call`, `fallback_t0=26.444 ms/call`,
+  `batch_accept=1861`, `batch_decline=59`.
+- Up/gate profile regressed: `28.608 ms/call` versus Phase 3ZN
+  `23.036 ms/call`.
+- Cache/staging regressed:
+  - VRAM cache `hits=13372`, `misses=15276`, `preloads=1706`,
+    `hit_rate=46.7%`;
+  - Phase 3ZN cache hit rate was `53.3%`;
+  - pinned staging `host_stage=21237.318 ms`, `h2d=3451.761 ms`;
+  - Phase 3ZN staging was `host_stage=17685.176 ms`, `h2d=2845.054 ms`.
+
+Comparison:
+
+- Phase 3ZN diagnostic baseline:
+  - `2.302778064516129 s/token`, `0.4342580882670189 tok/s`.
+- Phase 3ZO v2:
+  - `2.5209964516129033 s/token`, `0.3966685472168007 tok/s`.
+- Current accepted Phase 3ZG full `-n 96`:
+  - `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`.
+
+Decision:
+
+- Reject Phase 3ZO.
+- Revert all Q4_0 source changes locally and remotely.
+- Do not run full `-n 96`; the `-n 32` diagnostic clearly regressed against the
+  comparable Phase 3ZN run.
+- Keep only the accepted default-off eligibility diagnostic code from
+  `7d2dcd47a`.
+
+Gap analysis:
+
+- The original theory was incomplete. Q4_0 down batch did remove the
+  `unsupported_type` decline and increased down batch accepts, but the extra
+  Q4_0 GPU path increased CUDA/staging/cache pressure more than it removed CPU
+  fallback.
+- The evidence points to cache/stream contention:
+  - cache hit rate dropped from `53.3%` to `46.7%`;
+  - host staging increased by about `3.55 s`;
+  - H2D increased by about `0.61 s`;
+  - up/gate time worsened by about `5.57 ms/call`.
+- Future type-coverage work must include cache impact in the theoretical bound,
+  not only CPU fallback removal.
+
+Next direction:
+
+- Do not reattempt Q4_0 down batch without a cache-protected policy or a
+  per-type/layer allowlist that proves it does not evict useful Q3_K/IQ4_XS
+  entries.
+- Use the eligibility diagnostic to rank unsupported up/gate `IQ3_XXS`/`IQ2_S`
+  generic fallback, but first distinguish prompt-only generic calls from decode
+  calls so the implementation target is not inflated by prompt behavior.
