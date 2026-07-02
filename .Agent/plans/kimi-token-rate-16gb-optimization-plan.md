@@ -8953,3 +8953,82 @@ Decision:
 - A future split retry would need a larger upgate pool or different split
   threshold, but fixed split-cache has repeatedly failed to beat unified cache
   at full n96.
+
+## Next candidate: Phase 3ZK hybrid profile eviction plus depth=2 prefetch
+
+Design timestamp: 2026-07-03 00:16 UTC / 2026-07-03 08:16 CST.
+
+Current accepted best:
+
+- Phase 3ZG strict n96 unified cache + depth=2 prefetch:
+  2.57811 s/token, 0.38788 tok/s.
+
+Current bottleneck:
+
+- Even with depth=2 prefetch, unified cache still has many misses:
+  - hits=37837,
+  - misses=36211,
+  - hit_rate=51.1%,
+  - preloads=3994.
+- Full depth sweep shows fixed prefetch depth alone is saturated:
+  - depth=1 under-prefetches,
+  - depth=3/depth=8 add up/gate contention,
+  - depth=2 is best among tested depths.
+- Split cache improved down hit-rate but hurt total performance, so the next
+  cache attempt should not statically partition the cache.
+
+Hypothesis:
+
+- Use existing `hybrid_profile_lfu_lru` eviction with the accepted Phase 3ZG
+  route profile:
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2/route-profile.csv`
+  - `GGML_MOE_VRAM_CACHE_POLICY=hybrid_profile_lfu_lru`
+  - `GGML_MOE_VRAM_CACHE_PROFILE_AFTER=20000`
+  - keep `GGML_MOE_PREFETCH_DOWN=1`
+  - keep `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- Do not enable `GGML_MOE_VRAM_PROFILE_PROTECT` and do not enable profile
+  preload. This avoids the Phase 2J preload/pinning overhead.
+- The hybrid policy stays LRU early and only switches to profile-weighted
+  victim selection after the cache has warmed up, avoiding the Phase 2T problem
+  where pure LFU/LRU over-protected early-hot experts.
+
+Theoretical upper bound:
+
+- If hybrid eviction reduces only 5% of the remaining 36211 misses without
+  increasing up/gate contention, it could avoid around 1800 loads. At observed
+  staging costs, that could save a few seconds on n96.
+- The realistic target is modest: beat 2.57811 s/token by any reproducible
+  amount while preserving quality and hard gates.
+
+Risks:
+
+- A bad profile policy can worsen long-run recency behavior, as Phase 2T did.
+- Profile lookup overhead can add CPU time.
+- The accepted depth=2 run's route profile is from the same prompt, so this is
+  prompt-specific. It is acceptable for this controlled optimization loop, but
+  must be documented as profile-guided.
+
+Execution:
+
+- Run strict cold full `-n 96` directly.
+- Direct n96 is justified because earlier cache policies and prefetch depths
+  repeatedly mis-ranked at n32.
+- This is config-only; no source rollback is expected.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Full France paragraph quality PASS.
+- Strict launch failures=0.
+- Read failures=0.
+- Down prefetch active with useful-rate reported.
+- Cache policy diag must show profile lookups/evictions.
+
+Decision rule:
+
+- Accept only if strict n96 beats Phase 3ZG:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject and keep Phase 3ZG as accepted runtime.
