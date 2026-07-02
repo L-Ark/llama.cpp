@@ -111,6 +111,10 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const int64_t * matrix_row_counts,
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
+__attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr(
+    const char * tensor_name,
+    int expert_idx,
+    size_t nbytes);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     int src0_up_type_int,
     int src0_gate_type_int,
@@ -263,6 +267,77 @@ struct ggml_kimi_cpu_moe_fallback_profile_state {
 };
 
 static struct ggml_kimi_cpu_moe_fallback_profile_state ggml_kimi_cpu_moe_fallback_profile;
+
+struct ggml_kimi_cpu_fallback_pack_mmap_state {
+    bool initialized;
+    bool enabled;
+    bool registered;
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t bytes;
+    uint64_t fallback_gguf;
+};
+
+static struct ggml_kimi_cpu_fallback_pack_mmap_state ggml_kimi_cpu_fallback_pack_mmap;
+
+static void ggml_kimi_cpu_fallback_pack_mmap_report(void) {
+    if (!ggml_kimi_cpu_fallback_pack_mmap.enabled &&
+            ggml_kimi_cpu_fallback_pack_mmap.hits == 0 &&
+            ggml_kimi_cpu_fallback_pack_mmap.misses == 0) {
+        return;
+    }
+    fprintf(stderr,
+            "[kimi_cpu_fallback_pack_mmap] enabled=%d hits=%" PRIu64 " misses=%" PRIu64
+            " bytes=%" PRIu64 " fallback_gguf=%" PRIu64 "\n",
+            ggml_kimi_cpu_fallback_pack_mmap.enabled ? 1 : 0,
+            ggml_kimi_cpu_fallback_pack_mmap.hits,
+            ggml_kimi_cpu_fallback_pack_mmap.misses,
+            ggml_kimi_cpu_fallback_pack_mmap.bytes,
+            ggml_kimi_cpu_fallback_pack_mmap.fallback_gguf);
+}
+
+static bool ggml_kimi_cpu_fallback_pack_mmap_enabled(void) {
+    if (!ggml_kimi_cpu_fallback_pack_mmap.initialized) {
+        ggml_kimi_cpu_fallback_pack_mmap.initialized = true;
+        const char * env = getenv("GGML_MOE_CPU_FALLBACK_PACK_MMAP");
+        ggml_kimi_cpu_fallback_pack_mmap.enabled = env && env[0] && env[0] != '0';
+        if (ggml_kimi_cpu_fallback_pack_mmap.enabled && !ggml_kimi_cpu_fallback_pack_mmap.registered) {
+            ggml_kimi_cpu_fallback_pack_mmap.registered = true;
+            atexit(ggml_kimi_cpu_fallback_pack_mmap_report);
+        }
+    }
+    return ggml_kimi_cpu_fallback_pack_mmap.enabled && ggml_cuda_moe_expert_pack_mmap_ptr != NULL;
+}
+
+static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
+        const char * tensor_name,
+        bool prompt_phase,
+        int64_t n_as,
+        const int64_t * matrix_row_counts,
+        size_t expert_bytes,
+        const void ** mmap_ptrs) {
+    for (int64_t cur_a = 0; cur_a < n_as; ++cur_a) {
+        mmap_ptrs[cur_a] = NULL;
+    }
+    if (prompt_phase || !ggml_kimi_cpu_fallback_pack_mmap_enabled() ||
+            !tensor_name || !tensor_name[0] || expert_bytes == 0) {
+        return;
+    }
+    for (int64_t cur_a = 0; cur_a < n_as; ++cur_a) {
+        if (matrix_row_counts[cur_a] == 0) {
+            continue;
+        }
+        const void * ptr = ggml_cuda_moe_expert_pack_mmap_ptr(tensor_name, (int) cur_a, expert_bytes);
+        if (ptr) {
+            mmap_ptrs[cur_a] = ptr;
+            ggml_kimi_cpu_fallback_pack_mmap.hits++;
+            ggml_kimi_cpu_fallback_pack_mmap.bytes += expert_bytes;
+        } else {
+            ggml_kimi_cpu_fallback_pack_mmap.misses++;
+            ggml_kimi_cpu_fallback_pack_mmap.fallback_gguf++;
+        }
+    }
+}
 
 static bool ggml_kimi_cpu_moe_eligibility_profile_enabled(void) {
     static int initialized = 0;
@@ -2224,6 +2299,9 @@ static void ggml_compute_forward_mul_mat_id(
     char (*atomic_current_chunk)[CACHE_LINE_SIZE] = // [n_as]
         incr_ptr_aligned(&wdata_cur, CACHE_LINE_SIZE * n_as, CACHE_LINE_SIZE);
 
+    const void ** fallback_pack_mmap_ptrs =
+        incr_ptr_aligned(&wdata_cur, n_as*sizeof(void *), sizeof(void *));
+
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
     const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
@@ -2432,6 +2510,17 @@ static void ggml_compute_forward_mul_mat_id(
         }
     }
 
+    if (ith == 0) {
+        ggml_kimi_cpu_fallback_pack_mmap_prepare(
+                src0->name,
+                ids->ne[1] > 1,
+                n_as,
+                matrix_row_counts,
+                (size_t) ne01 * nb01,
+                fallback_pack_mmap_ptrs);
+    }
+    ggml_barrier(params->threadpool);
+
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
@@ -2440,7 +2529,9 @@ static void ggml_compute_forward_mul_mat_id(
             continue;
         }
 
-        const char * src0_cur = (const char *) src0->data + cur_a * nb02;
+        const char * src0_cur = fallback_pack_mmap_ptrs[cur_a] ?
+            (const char *) fallback_pack_mmap_ptrs[cur_a] :
+            (const char *) src0->data + cur_a * nb02;
         const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
         const size_t row_size = ggml_row_size(vec_dot_type, ne10);
 
@@ -4023,6 +4114,8 @@ struct ggml_cplan ggml_graph_plan(
                         cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                         // atomic_current_chunk
                         cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;
+                        // CPU fallback expert-pack mmap pointers
+                        cur += n_as * sizeof(void *) + sizeof(void *);
                     } break;
                 case GGML_OP_MOE_FUSED_UP_GATE:
                     {

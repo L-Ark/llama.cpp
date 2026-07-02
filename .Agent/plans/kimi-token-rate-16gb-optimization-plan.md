@@ -14099,3 +14099,343 @@ Phase 7M result:
 - n96 fallback: `decode,type=2` `6.754 s`, `8.067 GiB`; prompt fallback total remains the main source of GGUF mmap refault.
 
 Decision: accept Phase 7M. The improvement is small but reproducible under the strict cold-start 16GB host-RAM gate, with correct output, TTFT within limit, no OOM, and no expert-pack read failures. Commit and push.
+
+
+## Phase 7N - CPU fallback expert-pack direct read
+
+Goal: move remaining CPU fallback reads for down experts away from GGUF mmap page cache and onto expert pack direct/io_uring reads into ordinary aligned host buffers. GPU staging/cache fill continues to use the existing pinned staging path.
+
+Design:
+
+- Add a default-off switch:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK=1
+```
+
+- In `ggml_compute_forward_mul_mat_id`, after CUDA batch/single paths leave residual `matrix_row_counts`, thread 0 allocates one ordinary aligned host buffer per residual fallback expert and reads the matching expert-pack entry into it.
+- The aligned buffers are shared through `params->wdata` pointer slots. CPU worker threads use these pointers instead of `src0->data + cur_a * nb02` during fallback.
+- Buffers are freed after a post-fallback barrier by thread 0.
+- Expert-pack lookup/read is exposed from the CUDA MoE stream module as an extern C helper. It uses the existing expert-pack index and read path; when `GGML_MOE_IO_BACKEND=iouring` and `GGML_MOE_IO_URING_SINGLE=1`, it can use the existing single-entry io_uring direct read. Otherwise it uses the existing direct `pread` fallback. No CUDA pinned allocation is used for CPU fallback buffers.
+- If lookup/read/allocation fails for an expert, that expert falls back to the existing GGUF mmap pointer so correctness is preserved.
+
+Theory:
+
+- Current n96 Phase 7M still has `decode,type=2` fallback of `8.067 GiB` and `6.754 s` through GGUF mmap. Moving those reads to expert pack should reduce major faults and page-cache refaults.
+- Upper bound if all measured decode fallback wall time disappeared: `91.376 s - 6.754 s = 84.622 s`, or `77 / 84.622 = 0.91 tok/s`.
+- Realistic bound is lower because CPU dot compute remains; expected useful target is `0.86-0.90 tok/s` if IO/page-fault wait is a material part of the fallback time.
+
+Acceptance gates:
+
+- Strict cold start, 16GB cgroup, swap off.
+- France output semantic and coherent.
+- TTFT <= `106331.72 ms`.
+- `read_failures=0` and no CUDA errors.
+- n32 must not regress vs Phase 7M n32 `0.83 tok/s`.
+- n96 must improve over Phase 7M n96 `0.84 tok/s` before commit/push.
+- Record fallback bytes/time, `memory.stat file/active_file/inactive_file`, `pgmajfault`, and expert-pack read counters.
+
+Rollback:
+
+- If token rate regresses, output quality fails, TTFT rises past the gate, RAM exceeds the strict cgroup, or expert-pack failures appear, revert source and keep only the plan/run record.
+
+
+Phase 7N n32 rejected result:
+
+- implementation tested: CPU residual down fallback reads matching expert-pack entries into ordinary aligned host buffers, shared by CPU worker threads; GPU staging/cache fill remains pinned path. Prompt fallback pack-read remained disabled.
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-101940Z-n32-phase7n-cpu-fallback-pack-batch`
+- output: coherent France paragraph prefix; quality pass.
+- TTFT: `75287.89 ms`, within gate.
+- decode: `47950.77 ms / 31`, `0.65 tok/s`, regression vs Phase 7M n32 `0.83 tok/s`.
+- RAM: `memory.max=15899996160`, `memory.swap.max=0`, `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- CPU fallback pack stats: `hits=1727`, `misses=9`, `alloc_failures=0`, `bytes=14260764672`.
+- expert pack: `read_failures=0`, `direct_reads=16124`, `iouring_reads=8347`, `iouring_bytes=58511523840`, `iouring_wait_us=6050670`.
+- fallback profile: `decode,type=2` fell to `1.928 s` / `4.399 GiB`, but down profile total rose to `45.616 ms/call` and `fallback_t0=36.920 ms/call`.
+- final file cache remained high: `file=14862278656`, `inactive_file=4884590592`, `active_file=9977106432`; `pgmajfault=933799`.
+
+Analysis:
+
+- The direct expert-pack buffer path reduced the measured `decode,type=2` GGUF fallback time, but it moved each residual expert into short-lived anonymous buffers and made the CPU dot path slower overall.
+- The likely causes are extra direct-read/submit overhead on small per-call residual batches, repeated allocation/free and memory bandwidth pressure, and losing the kernel page-cache locality/readahead that the CPU fallback was implicitly benefiting from after prompt/decode refaults.
+- This does not satisfy the optimization gate because token rate regressed despite correct output and valid RAM/TTFT.
+
+Decision: reject Phase 7N implementation and revert source. Keep this record as evidence that naive CPU fallback expert-pack direct/aligned buffering is not a valid SOTA path under the current execution schedule. A future attempt must avoid per-call transient buffers, e.g. persistent per-thread/per-expert buffer pools or moving the residual down path fully into the existing GPU cache/staging scheduler instead of CPU fallback.
+
+
+## Phase 7O+ - reproducible RAM/page-cache optimization sequence
+
+Goal: continue from the accepted Phase 7M SOTA and optimize token rate through RAM/page-cache/pinned-staging changes only when the improvement is reproducible under the strict 16GB host-RAM cold-start gate.
+
+Current accepted SOTA baseline:
+
+- commit: `046d8e2de` (`llama: drop dense mmap cache after prompt`)
+- n32 Phase 7M: `/root/lfz/runs/vendor-kimi-token-rate/20260702-094419Z-n32-phase7m-drop-all-after-prompt-r2`, decode `37540.69 ms / 31`, `0.83 tok/s`
+- n96 Phase 7M: `/root/lfz/runs/vendor-kimi-token-rate/20260702-094720Z-n96-phase7m-drop-all-after-prompt`, decode `91376.03 ms / 77`, `0.84 tok/s`
+- required env kept for baseline-compatible runs:
+
+```sh
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_DOWN_PARALLEL_STAGE=1
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+Global reproducibility requirements for every new experiment:
+
+- Every run directory must contain `command.txt`, `env.txt`, `git.txt`, `script.sh`, `stdout.txt`, `stderr.txt`, `fallback-profile.csv`, cgroup memory files, `exit.txt`, and `metrics.txt`.
+- `command.txt` records the exact `systemd-run` command and inner llama command.
+- `env.txt` records sorted runtime env used by llama.
+- `git.txt` records branch, HEAD commit, dirty status, and source diffstat.
+- `script.sh` is the exact runnable script snapshot used by that run.
+- `metrics.txt` records parsed TTFT, decode time, token rate, quality verdict, RAM peak, file/active_file/inactive_file, pgmajfault, expert-pack counters, and pinned-staging counters.
+- Every accepted improvement must be reproduced at least twice before commit: one n32 confirmation after first positive n32, one n96 run after n32 confirms, and one n96 confirmation after first positive n96.
+- A result is not accepted if it depends on warm page cache, missing env, a dirty unrecorded source diff, or an unstored script.
+- Cold start is mandatory for every run:
+
+```sh
+sync
+echo 3 > /proc/sys/vm/drop_caches
+systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 ...
+```
+
+- Quality gate: `Please introduce France in a short paragraph.` must produce a coherent, semantically correct paragraph.
+- TTFT gate remains `<= 106331.72 ms`.
+- RAM gate remains `memory.peak <= 15899996160`, `memory.swap.max=0`, `oom=0`, `oom_kill=0`.
+- Expert-pack gate: `read_failures=0`, no CUDA failures.
+- Commit/push rule: only commit and push if all gates pass and the n96 confirmation is better than Phase 7M `0.84 tok/s`; otherwise revert source changes and keep only plan/run records.
+
+### Phase 7O - pinned staging slots sweep
+
+Purpose: determine whether increasing pinned staging capacity improves H2D overlap/token rate or only consumes scarce host RAM.
+
+No source changes. Create a reproducible temporary runner from the Phase 7M script that records `command.txt`, `env.txt`, `git.txt`, `script.sh`, and `metrics.txt`.
+
+Sweep n32 first:
+
+```sh
+GGML_MOE_STAGE_PINNED=1
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STAGE_PINNED_SLOTS=16
+GGML_MOE_STAGE_PINNED_SLOTS=24
+GGML_MOE_STAGE_PINNED_SLOTS=32
+```
+
+Acceptance to continue to n96:
+
+- n32 token rate must beat Phase 7M n32 `0.83 tok/s` in two cold runs.
+- pinned-staging counters must show a real reason for the improvement: lower slot waits, lower host-stage time, lower H2D wait, or better overlap without increasing TTFT/RAM pressure.
+- If slot increase does not beat n32 baseline, stop Phase 7O and do not run n96.
+
+n96 acceptance:
+
+- n96 token rate must beat `0.84 tok/s` twice under cold start.
+- `file`, `active_file`, and `pgmajfault` must not worsen enough to explain an unstable gain.
+
+### Phase 7P - expert-pack mmap CPU fallback
+
+Purpose: test a page-cache-friendly alternative to the rejected Phase 7N direct-buffer path.
+
+Implement default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
+```
+
+Required behavior:
+
+- mmap the expert pack once after loading its index.
+- For residual CPU down fallback, lookup `(tensor_name, expert_idx, expert_bytes)` in expert pack.
+- If found, use the expert-pack mmap address directly as `src0_cur`.
+- Do not allocate transient buffers.
+- Do not copy expert data.
+- Do not use pinned memory.
+- If mmap, lookup, size, or type check fails, fall back to existing GGUF mmap `src0->data + cur_a * nb02`.
+- GPU staging/cache fill remains unchanged and continues to use the existing pinned path.
+
+Required counters:
+
+```text
+[kimi_cpu_fallback_pack_mmap] enabled=... hits=... misses=... bytes=... fallback_gguf=...
+```
+
+Acceptance:
+
+- n32 must beat `0.83 tok/s` twice.
+- n96 must beat `0.84 tok/s` twice.
+- `decode,type=2` should decrease without increasing `down total` enough to erase the gain.
+- `file/active_file` or `pgmajfault` should improve, or token-rate gain must be large enough to justify no memory-stat improvement.
+
+### Phase 7Q - small persistent CPU fallback cache
+
+Only start if Phase 7P does not pass. Do not use per-call direct reads.
+
+Implement default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_CACHE_MIB=256
+GGML_MOE_CPU_FALLBACK_CACHE_PROFILE=<route-profile.csv>
+GGML_MOE_CPU_FALLBACK_CACHE_PIN=0
+```
+
+Required behavior:
+
+- Load only hot residual CPU fallback down experts from profile.
+- Store them in ordinary anonymous aligned memory.
+- CPU fallback uses cached pointer on hit.
+- Miss falls back to Phase 7P mmap path if enabled, otherwise GGUF mmap.
+- Start at `256 MiB`; only test `512 MiB` if `256 MiB` improves n32.
+- Do not use pinned memory for this cache.
+
+Acceptance:
+
+- useful residual fallback hit rate should be at least `20%`.
+- n32 and n96 must beat Phase 7M in two cold runs each.
+- TTFT increase from preload must stay within gate.
+- `anon` increase must be justified by decode improvement.
+
+### Phase 7R - reduce residual CPU fallback
+
+Only start if 7O/7P/7Q fail. Focus on eliminating residual CPU fallback instead of optimizing it.
+
+Required diagnosis:
+
+- Add or use existing decline profiling for down batch residuals.
+- Identify top tensor/type/layer reasons for `down.cuda_batch_decline` and `decode,type=2` fallback.
+- Prioritize fixes that route residual Q4_0/down fallback into existing GPU cache/staging, not CPU fallback.
+
+Acceptance:
+
+- `down.cuda_batch_decline` decreases.
+- `decode,type=2` calls/bytes decrease.
+- n32 and n96 beat Phase 7M in two cold runs each.
+
+
+Phase 7O result - pinned staging slots sweep rejected:
+
+- runner: `/tmp/run_phase7o_repro.sh`; every run captured `command.txt`, `env.txt`, `git.txt`, `script.sh`, cgroup memory files, `fallback-profile.csv`, and `metrics.txt`.
+- control slots=8: `/root/lfz/runs/vendor-kimi-token-rate/20260702-103712Z-n32-phase7o-pinned8-control`
+  - output quality: pass; TTFT `60750.90 ms`; decode `38024.90 ms / 31`, `0.82 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - pinned staging main: `slots=8`, `slot_wait=54.310 ms`, `host_stage=25019.474 ms`, `h2d=4562.259 ms`.
+- slots=16 first run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-103941Z-n32-phase7o-pinned16`
+  - output quality: pass; TTFT `77233.06 ms`; decode `37459.39 ms / 31`, displayed `0.83 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - pinned staging main: `slots=16`, `slot_wait=57.116 ms`, `host_stage=24161.265 ms`, `h2d=4570.657 ms`.
+- slots=24: `/root/lfz/runs/vendor-kimi-token-rate/20260702-104200Z-n32-phase7o-pinned24`
+  - output quality: pass; TTFT `65373.57 ms`; decode `38088.98 ms / 31`, `0.81 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - pinned staging main: `slots=24`, `slot_wait=60.039 ms`, `host_stage=25341.833 ms`, `h2d=4586.104 ms`.
+- slots=32: `/root/lfz/runs/vendor-kimi-token-rate/20260702-104409Z-n32-phase7o-pinned32`
+  - output quality: pass; TTFT `66630.93 ms`; decode `38491.94 ms / 31`, `0.81 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - pinned staging main: `slots=32`, `slot_wait=60.594 ms`, `host_stage=25095.604 ms`, `h2d=4573.399 ms`.
+- slots=16 confirmation: `/root/lfz/runs/vendor-kimi-token-rate/20260702-104656Z-n32-phase7o-pinned16-confirm`
+  - output quality: pass; TTFT `75845.82 ms`; decode `38296.15 ms / 31`, `0.81 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - pinned staging main: `slots=16`, `slot_wait=55.006 ms`, `host_stage=25012.986 ms`, `h2d=4573.086 ms`.
+
+Analysis:
+
+- Larger pinned slot counts do not reduce H2D time (`~4.56-4.59 s`) or slot wait meaningfully; slot wait slightly worsens at 24/32.
+- slots=16 had one marginal first-run decode improvement, but the mandatory cold confirmation regressed to `0.81 tok/s`, so the improvement is not reproducible.
+- Larger pinned staging also changes page-cache split but does not reduce RAM peak; every run still reaches the strict 16GB cgroup ceiling.
+
+Decision: reject Phase 7O. Do not increase `GGML_MOE_STAGE_PINNED_SLOTS`; keep the Phase 7M/SOTA value `8`. Proceed to Phase 7P expert-pack mmap CPU fallback.
+
+### Phase 7P status - expert-pack mmap CPU fallback decode-only candidate
+
+Plan update time: 2026-07-02 10:59 UTC.
+
+Reproducibility rule for this phase:
+
+- No result is accepted from a single run.
+- A candidate must pass n32 cold start twice, then n96 cold start twice.
+- Each run must be reproducible from its run directory: `command.txt`, `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup memory files, fallback profile, and `metrics.txt` are mandatory.
+- If any confirmation fails to beat Phase 7M while satisfying quality, TTFT, RAM, and `read_failures=0`, reject the source change and revert code, keeping only plan/run records.
+
+First n32 candidate:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-105729Z-n32-phase7p-pack-mmap-decode-only`
+- runner: `/tmp/run_phase7p_repro.sh`
+- output quality: pass; output starts `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine...`
+- TTFT: `78354.34 ms`, within gate `106331.72 ms`.
+- decode: `37517.60 ms / 31`, displayed `0.83 tok/s`.
+- Phase 7M n32 comparison: `37540.69 ms / 31`, displayed `0.83 tok/s`; this is only `23.09 ms` faster and is not sufficient by itself.
+- RAM: `memory.peak=15899996160`, `oom=0`; strict 16GB cgroup respected.
+- expert pack: `read_failures=0`, `iouring_bytes=44250759168`.
+- mmap CPU fallback: `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=1727 misses=9 bytes=14260764672 fallback_gguf=9`.
+- fallback profile: `decode,type=2 calls=1736 us=2.955 s GiB=4.399`; prompt fallback remains on original path by design.
+- down profile: `total=40.340 ms/call`, `fallback_t0=37.580 ms`, so the CPU fallback local time improved versus GGUF-fault-heavy behavior, but total decode gain is only marginal.
+
+Decision before next action:
+
+- Treat this as a candidate only because it barely beats Phase 7M by raw decode milliseconds.
+- Run one n32 confirmation before any n96 test.
+- If confirmation is not faster than Phase 7M n32, reject Phase 7P and revert source changes.
+
+Phase 7P n32 confirmation:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-110048Z-n32-phase7p-pack-mmap-decode-only-confirm`
+- runner: `/tmp/run_phase7p_repro.sh`
+- output quality: pass; output starts `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine...`
+- TTFT: `75798.02 ms`, within gate `106331.72 ms`.
+- decode: `37379.97 ms / 31`, displayed `0.83 tok/s`.
+- comparison to Phase 7M n32: faster by `160.72 ms` raw decode time.
+- RAM: `memory.peak=15899996160`, `oom=0`; strict 16GB cgroup respected.
+- expert pack: `read_failures=0`, `iouring_bytes=44250759168`.
+- mmap CPU fallback: `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=1727 misses=9 bytes=14260764672 fallback_gguf=9`.
+- fallback profile: `decode,type=2 calls=1736 us=2.362 s GiB=4.399`; prompt fallback remains on original path by design.
+- down profile: `total=39.008 ms/call`, `fallback_t0=36.165 ms`.
+
+Decision after n32 confirmation:
+
+- Phase 7P passes the n32 reproducibility gate by raw decode time, but the gain is small and rounded token rate remains `0.83 tok/s`.
+- Continue to n96 cold-start validation.
+- Phase 7P can only be accepted if n96 and n96 confirmation both beat Phase 7M n96 (`91376.03 ms / 77`, `0.84 tok/s`) while preserving quality, TTFT, RAM, and `read_failures=0`.
+
+Phase 7P n96 first validation:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-110350Z-n96-phase7p-pack-mmap-decode-only`
+- runner: `/tmp/run_phase7p_repro.sh`
+- output quality: pass; complete answer: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `71454.27 ms`, within gate `106331.72 ms`.
+- decode: `90013.57 ms / 77`, `0.86 tok/s`.
+- comparison to Phase 7M n96: faster than `91376.03 ms / 77`, gain `1362.46 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`; strict 16GB cgroup respected.
+- expert pack: `read_failures=0`, `iouring_bytes=109577273344`.
+- mmap CPU fallback: `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`.
+- fallback profile: `decode,type=2 calls=4312 us=5.393 s GiB=8.067`; prompt fallback remains on original path by design.
+- down profile: `total=17.663 ms/call`, `fallback_t0=14.880 ms`.
+- memory final: `file=14865694720`, `inactive_file=6137470976`, `active_file=8727715840`.
+
+Decision after first n96:
+
+- Phase 7P passes first n96 gate and has a visible rounded token-rate improvement (`0.84 -> 0.86 tok/s`).
+- Run one n96 cold-start confirmation before accepting.
+- If confirmation fails to beat Phase 7M n96, reject and revert; if it passes, commit and push immediately with reproduction details.
+
+Phase 7P n96 confirmation and acceptance:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm`
+- runner: `/tmp/run_phase7p_repro.sh`
+- output quality: pass; complete answer: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `60313.44 ms`, within gate `106331.72 ms`.
+- decode: `90610.91 ms / 77`, `0.85 tok/s`.
+- comparison to Phase 7M n96: faster than `91376.03 ms / 77`, gain `765.12 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`; strict 16GB cgroup respected.
+- expert pack: `read_failures=0`, `iouring_bytes=109577273344`.
+- mmap CPU fallback: `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`.
+- fallback profile: `decode,type=2 calls=4312 us=3.878 s GiB=8.067`; prompt fallback remains on original path by design.
+- down profile: `total=15.604 ms/call`, `fallback_t0=12.844 ms`.
+- memory final: `file=14864592896`, `inactive_file=5417836544`, `active_file=9446330368`.
+
+Acceptance decision:
+
+- Phase 7P passes all required gates: n32 twice, n96 twice, cold start, strict 16GB cgroup, France prompt semantic correctness, TTFT within gate, and `read_failures=0`.
+- The accepted improvement is small but reproducible on n96: Phase 7M `0.84 tok/s` becomes Phase 7P `0.85-0.86 tok/s`.
+- Main reason: residual decode CPU fallback can read down expert data from expert-pack mmap instead of faulting scattered GGUF tensor pages. This reduces local `decode,type=2` CPU fallback time, while prompt fallback is intentionally not moved to this path.
+- Commit and push this phase immediately after source diff review.
