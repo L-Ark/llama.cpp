@@ -2556,7 +2556,7 @@
 
 - `attempt_id`: `20260702-global-top3-n160-quality-boundary`
 - `attempt_kind`: `config-probe/quality-preserving-generation-budget`
-- `status`: planned_before_execution
+- `status`: completed_rejected_correctness_fail_not_sota
 - `bottleneck_basis`: Global `GGML_MOE_KEEP_TOPK_UPDOWN=3` produced high speed (`2.7-2.8 tok/s`) but failed manual correctness because the answer continued too long and ended in an incomplete trailing sentence. The first several sentences were semantically correct, so a shorter generation budget may convert the same fast path into a complete short paragraph if it stops after a natural sentence boundary. This is a quality gate experiment, not permission to accept truncation.
 - `hypothesis`: Running global top3 with `-n 160` may stop before the known top3 tail degeneration while preserving a coherent short France paragraph. `-n 160` is chosen because accepted late10 remained complete at this budget and it is materially below the rejected top3 `-n 192`, while leaving more room than the historically truncated `-n 128` probe.
 - `theoretical_upper_bound`: Compute path is global top3, so generation rate can remain near the rejected `2.7-2.8 tok/s` if output quality passes. Wall time should fall relative to `-n 192` if fewer tokens are generated. The run must be rejected if the final token limit cuts a sentence, if the answer is repetitive/too long, or if semantics degrade.
@@ -2564,6 +2564,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, TTFT does not exceed `45449.496149ms`, and manual review confirms the France answer is a semantically correct, coherent, complete short paragraph with no incomplete final sentence or repetitive tail. Heuristic correctness is insufficient.
 - `rollback`: no source change. If token rate does not exceed `2.6`, output is incomplete/repetitive/too long, RAM exceeds limit, or TTFT exceeds gate, record rejected and close this top3 budget-stop direction unless a future stop criterion can end on semantic sentence boundaries rather than token count.
 - `required_evidence`: exact env/command showing global top3 and `-n 160`, source commit/status, binary/shared-library hashes, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness/completeness note, and explicit rejected/promoted status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T034655Z-20260702_global_top3_n160_quality_boundary/france-cpu40-vram0gb`.
+- `result`: rejected despite candidate speed. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=37264.537833ms`, `elapsed_seconds=92.41`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15002345472`, `pgmajfault=283387`, `workingset_refault_file=4158551`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic only.
+- `correctness_manual_review`: fail. The answer is factually plausible at the start but ends incomplete at `particularly in the areas of art,`. This is still token-limit truncation, not a coherent complete short paragraph, so it cannot be accepted.
+- `cache_observation`: trace disabled as intended; stderr reports `13.2 GiB`, `3192 slots`, `hits=34865 misses=5338 hit_rate=86.7%`. Gate rows/misses are higher than accepted late10, consistent with changed top3 trajectory.
+- `gap_analysis`: Reducing global top3 budget from `-n 192` to `-n 160` does not solve the quality problem; it only moves the truncation point earlier. The high-speed global top3 path remains unusable without a semantic stop mechanism or a quality-preserving routing policy. Do not promote token-limit clipped top3 outputs as SOTA.
+- `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
