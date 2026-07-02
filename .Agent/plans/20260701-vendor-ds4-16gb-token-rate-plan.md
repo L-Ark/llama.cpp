@@ -3,27 +3,32 @@
 ## 目标
 
 - 在 `vendor` 实现上继续优化 DeepSeek V4 Flash cold-start 解码速度；最终结果必须体现在 `vendor`，`ik_llama` 只能作为参考。
-- 当前分支已回退到上一版可复现 SOTA 记录点 `e4e63606b`，后续优化必须从该点重新设计和推进。
+- 当前分支已回退到 accepted O_DIRECT expert-pack SOTA 记录点 `5d65239a7`，后续优化必须从该点重新设计和推进。
 - 严格保持：
   - Host RAM（含 page cache、进程 RSS、cgroup 内所有 file/anon memory）`<= 16 GB`；
   - 尽可能用满 VRAM，但不能造成 CUDA OOM、cache 插入失败或正确率退化；
   - France prompt: `Please introduce France in a short paragraph.` 必须语义正确、连贯、非重复、非截断；
   - accepted SOTA 的 TTFT 不得高于当前 accepted baseline 的 `20%`；若 TTFT 超过 20% 但 token rate 有参考价值，只能标记为 `not accepted`，不得替代 SOTA。
 
-## 回退状态（2026-07-02）
+## 二次回退状态（2026-07-02）
 
-- 已执行回退：当前源码分支重置到 `e4e63606b`（`vendor-ds4: record pushed one-pack sota rerun`）。
-- 回退目的：撤销后续基于 prompt-set/top5000/chunk/direct-read 方向的实验作为当前基线，重新从上一版 accepted France cold-start SOTA 制定方案。
-- 源码 SOTA commit：`0312377cec2b617c64b97f30a14e5d474a3b2893`（`vendor-ds4: add one-stream expert pack sota`）。
-- SOTA 记录 commit：`e4e63606b`。
+- 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
+- 回退目的：撤销后续 rejected plan/checkpoint commits (`760e7f99b`..`3fb1f351d`) 对当前开发基线的影响，重新从已接受的 4.2 tok/s O_DIRECT expert-pack SOTA 制定方案。
+- 源码 SOTA commit：`771966944ddb204fe6ec3d321c1e597eee63664e`（`vendor-ds4: add direct one-pack reads`）。
+- SOTA 记录 commit：`5d65239a74c9512967eb557743dc3cb5d1cf6c76`。
 - push 目标固定：`https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`。
 - Git identity 固定：`L-Ark <fliangae@connect.ust.hk>`。
+- 新 accepted SOTA 出现时必须：
+  - 详细记录 source commit、run dir、完整 env/CLI、build command、binary sha256、model/profile/pack sha256、cgroup memory peak/stat/events、TTFT、prompt/eval token rate、耗时、France 原文输出、trace/counters；
+  - 立即 commit 并 push 到 `ssd/vendor/deepseek-token-rate-16gb`；
+  - 从 pushed commit clean rebuild/rerun，确认未来回退可完全复现指标；
+  - 若性能下降、正确率下降、RAM 超 16GB、TTFT 超过 accepted gate，则只可记录为 rejected/not_accepted，不得替代 SOTA。
 
 ## 当前 accepted SOTA（回退后基线）
 
 - 范围：France single-prompt strict cold-start accepted SOTA。
 - 当前最高 accepted token rate：`4.2 tok/s`（2026-07-02 one-pack O_DIRECT）。
-- run dir：`/root/lfz/runs/vendor-ds4-16gb/20260702T112702Z-20260702_pushed_one_pack_buffered_firstorder_sota_rerun/france-cpu40-vram0gb`。
+- run dir：`/root/lfz/runs/vendor-ds4-16gb/20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun/france-cpu40-vram0gb`。
 - 配置：
   - `vendor` 框架，`cpu_moe=40`；
   - `GGML_MOE_KEEP_TOPK_UPDOWN=4`；
@@ -34,49 +39,85 @@
   - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`；
   - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`；
   - `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`；
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`；
   - `--vram-cache-gb 0`；
   - extra args：`-c 256 -b 16 -ub 16 -t 20 -tb 20`；
   - strict cold `drop_caches`，16GB cgroup。
 - 指标：
-  - `eval_tok_s=3.4`；
-  - `prompt_tok_s=1.2`；
-  - `TTFT=33395.660286ms`；
+  - `eval_tok_s=4.2`；
+  - `prompt_tok_s=1.5`；
+  - `TTFT=29984.770823ms`；
   - `memory_peak_bytes=16000000000`；
-  - `memory_file_bytes=15040389120`，page cache 计入 16GB cgroup；
-  - `pgmajfault=270675`；
-  - `workingset_refault_file=2207042`；
+  - `memory_file_bytes=15080456192`，page cache 计入 16GB cgroup；
+  - `pgmajfault=272611`；
+  - `workingset_refault_file=1635934`；
   - `ram_ok=true`，`ram_limit_killed=false`，`correctness_ok=true`。
 - pack：
   - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`；
   - sha256：`7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`；
   - 4599 unique gate miss pairs，first-miss order，约 20GB。
+- binary/source fingerprints：
+  - `llama-cli` sha256：`c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`；
+  - `libggml-cuda.so` sha256：`26d61a0a23eb0f3d9a64dde89cb2072787cc0c20032248743ce29fb30d841d45`；
+  - profile sha256：`8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`。
 - 计数：
-  - one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599`；
+  - one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`；
   - VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`。
 
-## 回退后的重新方案
+## 从 4.2 SOTA 重新制定的方案
 
-### Phase 0：冻结并复现回退 SOTA
+### Phase 0：冻结、推送并复现 4.2 SOTA
 
-- `attempt_id`: `20260702-rollback-sota-freeze-rerun`
+- `attempt_id`: `20260702-rollback-to-odirect-sota-freeze`
 - `attempt_kind`: `baseline-repeat`
-- `hypothesis`: 回退到 `e4e63606b` 后，SOTA 配置应能再次复现 France cold-start `~3.4 tok/s`，且 RAM/page cache 全部在 16GB cgroup 内。
+- `hypothesis`: 回退到 `5d65239a7` 后，SOTA 配置应能再次复现 France cold-start `~4.2 tok/s`，且 RAM/page cache 全部在 16GB cgroup 内。
 - `expected_delta`: 无提升预期；目标是确认回退点仍可作为后续优化基线。
-- `rollback`: 不改源码；如果复现低于 SOTA，先排查 binary/pack/profile/cgroup 差异，不进入新优化。
-- `required_evidence`: pushed commit、dirty status、build command、binary sha256、model/pack sha256、exact env/run command、cgroup `memory.peak`/`memory.stat`/`memory.events`、stdout/stderr、summary、trace、France 原文输出。
-- `result`: completed on 2026-07-02. First strict cold rerun produced `3.3 tok/s` with matching pack/cache counters and correct output; second strict cold rerun reproduced accepted SOTA `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=33000.871093ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15053250560`, `pgmajfault=258814`, `workingset_refault_file=2076392`, `ram_ok=true`, `correctness_ok=true`.
-- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T131016Z-20260702_rollback_sota_freeze_rerun2/france-cpu40-vram0gb`.
-- `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
+- `actions`:
+  - clean rebuild 当前 HEAD，确认 build-info 与 `5d65239a7` 一致；
+  - force-with-lease push rollback 后的分支到 `ssd/vendor/deepseek-token-rate-16gb`；
+  - strict cold `drop_caches` rerun 一次 France SOTA；
+  - 如果复现低于 `4.0 tok/s`，先排查 binary/pack/profile/cgroup/direct I/O 差异，不进入新优化。
+- `required_evidence`: pushed commit、dirty status、build command、binary sha256、model/pack/profile sha256、exact env/run command、cgroup `memory.peak`/`memory.stat`/`memory.events`、stdout/stderr、summary、trace/counters、France 原文输出。
+- `rollback`: 不改源码；如果复现失败，仍停在 `5d65239a7`，只追加 rejected/repro-failed 记录。
 
-### Kimi merge guard（2026-07-02）
+### Phase 1：重新定位 4.2 SOTA 的真实瓶颈
 
-- `attempt_id`: `20260702-post-kimi-merge-sota-guard`
-- `merge_commit`: `52ccb0877` (`vendor-ds4: merge kimi vendor stream updates`) merged `ssd/vendor/kimi-moe-stream-on-vendor` through `122b44dc6`.
-- `conflict_resolution`: kept both DeepSeek CPU fallback willneed path and Kimi `GGML_MOE_CPU_FALLBACK_PACK_MMAP` path; Kimi feature remains default-off and uses expert-pack mmap pointers for residual CPU fallback when enabled.
-- `build`: clean build from merge commit; `llama-cli` sha256 remained `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
-- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T131409Z-20260702_post_kimi_merge_sota_guard/france-cpu40-vram0gb`.
-- `result`: DeepSeek France strict cold SOTA maintained after Kimi merge: `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=33852.388253ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043092480`, `pgmajfault=268426`, `workingset_refault_file=2023181`, `ram_ok=true`, `correctness_ok=true`.
-- `decision`: accepted guard. Push merged source and plan to `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`, then continue Phase 1 bottleneck slicing from this merged commit.
+- `attempt_id`: `20260702-odirect-sota-bottleneck-slice`
+- `attempt_kind`: `measurement-design`
+- `hypothesis`: O_DIRECT expert pack 已把 gate miss source load 从 buffered 版本显著降低；当前主要瓶颈更可能是 residual up/down CPU fallback、H2D/sync 序列化、pack direct-read 与 GPU work 的 overlap 不足，而不是 admission profile 本身。
+- `required_measurement`:
+  - one-stream trace：`src0_ms`、H2D copy、kernel、sync、cache hit/miss/insert、direct read counters；
+  - CPU fallback profile：按 prompt/decode、up/down、layer/expert 汇总；
+  - wall-clock per-token breakdown：TTFT、decode elapsed、non-MoE gap；
+  - cgroup：`memory.peak`、`memory.stat` 中 file/anon、`memory.events`、`pgmajfault`、`workingset_refault_file`；
+  - correctness：France 原文输出必须记录。
+- `priority_rule`: 只优先做硬上界最高的部分；若某部分占比低于 5%，先不改。
+- `acceptance`: Phase 1 不应改变默认行为。若需要新增 trace，必须 default-off；trace run 不替代 SOTA。
+
+### Phase 2：按瓶颈设计候选优化
+
+- `candidate A: residual CPU fallback / up-down`：
+  - 先解释为什么会 CPU fallback：当前 gate 走 one-stream VRAM cache/pack；up/down 仍有大量路径没有命中 GPU-resident expert，未命中时落到 CPU fallback。
+  - 理论上界必须由 fallback profile 计算：`fallback_ms_saved / decode_wall_time`，并区分 up/down、prompt/decode。
+  - 实现方向优先检查 `GGML_TYPE_MXFP4(type=39)` 的 batch/down 支持是否完整。不能只把 type 加入 allowlist；必须确认 cache_get、pack layout、kernel、scatter、同步都真的执行并并行。
+  - 如果开启 `GGML_CUDA_MOE_STREAM_BATCH=ON` 或 `GGML_MOE_STREAM_DOWN_BATCH=1`，必须先短跑正确性，再 strict 16GB full run。
+- `candidate B: direct I/O overlap / async read`：
+  - 理论上界来自 direct pack readbench 与 one-stream trace 的 `src0_ms`，如果剩余 read 时间已小，不能优先做。
+  - 可研究 io_uring，但必须先证明当前 `pread(O_DIRECT)` 在 decode 中仍阻塞 GPU；否则 io_uring 只是复杂化。
+  - 不接受任何额外 host RAM buffer 导致 cgroup file+anon 超 16GB 的实现。
+- `candidate C: prompt-general pack/profile`：
+  - France first-miss pack 只能证明 France cold-start SOTA。若要声明不同 prompt steady/cold 稳定，必须构建小 prompt set 的通用 profile/pack，并单独记录每个 prompt 的 correctness、TTFT、tok/s、RAM。
+  - 该方向不优先于 cold-start France SOTA，除非用户要求泛化验证。
+- `candidate D: VRAM allocation/cache tuning`：
+  - 当前 12GB/one-cache 经验不能盲目增加；vram13/14/12800MiB 曾 rejected。新调参必须说明 cache slots、insert failures、CUDA OOM 风险和理论 hit-rate 上界。
+
+### Phase 3：执行和提交规则
+
+- 每次实践前先在本 plan 中新增 attempt：写 `hypothesis`、理论上界、预期指标、rollback 条件。
+- 每次实践后记录时间、run dir、完整指标、France 输出、counters、gap analysis。
+- 出现符合要求的新 SOTA：立刻 commit source+plan+metadata，push 到 `ssd/vendor/deepseek-token-rate-16gb`，然后从 pushed commit clean rebuild/rerun。
+- 若只是 TTFT 超过 20% 但 token rate 更高：可以 commit/push 为 `not_accepted` 诊断，但不得改写当前 accepted SOTA，并必须写下一步如何压回 TTFT。
+- 若性能下降/准确率下降/RAM 超限：记录 rejected，回退源码到上一 accepted SOTA。
 
 ### Phase 1：重新定位 SOTA bottleneck
 
