@@ -2161,7 +2161,7 @@
 
 - `attempt_id`: `20260702-late10-last10-top2`
 - `attempt_kind`: `implementation/layer-selective-approximate-pruning`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: Gate stream/cache, block readahead, simple page advice, cache lookup, and thread-count probes have not exceeded the late10 SOTA. The remaining confirmed high-impact bottleneck is broad non-streamed `ffn_up_exps` / `ffn_down_exps` CPU fallback. Current SOTA uses `0-9=>top4` and `10-39=>top3`; late5/late8 showed moving the top3 boundary earlier changes trajectory and hurts misses/correctness, so the next structural reduction should happen only in the latest layers.
 - `hypothesis`: Keep the accepted early/mid policy but prune the last ten CPU-MoE layers further: `0-9=>top4`, `10-29=>top3`, `30-39=>top2`. Late layers may tolerate more aggressive approximate pruning while reducing one more routed up/down expert in 10 of 40 CPU-MoE layers. This targets CPU fallback work directly without increasing VRAM cache or page readahead.
 - `theoretical_upper_bound`: The global top4->top3 one-expert reduction had a coarse bound around `12.9s` before overhead and quality effects. Applying another one-expert reduction only to 10 of 40 CPU-MoE layers gives a similar coarse incremental bound of `12.9s * 10/40 ≈ 3.2s`. Real gain may be lower due layer imbalance, unchanged gate stream, output length changes, and quality constraints. The expected improvement, if quality holds, is a small but meaningful chance to exceed the rounded `2.6 tok/s` SOTA.
@@ -2170,6 +2170,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace shows late5-like miss/refault explosion, revert source and clean rebuild. If accepted, immediately write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T013948Z-20260702_late10_last10_top2/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=36462.76209ms`, `elapsed_seconds=109.36`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15010971648`, `pgmajfault=340053`, `workingset_refault_file=6462646`, `ram_ok=true`, `ram_limit_killed=false`.
+- `correctness_manual_review`: fail. The answer is broadly about France, but it is cut off at the fixed output limit after `founding member of the European Union` and contains the misspelling `Fratinité`; this is not a clean complete coherent short paragraph.
+- `trace_summary`: `rows=47872`, `cache_hits=41515`, `cache_misses=6357`, `span_ms=90850.725`, `src0_ms=32004.770`, `dontneed_ms=1531.861`, `total_ms=34990.887`.
+- `gap_analysis`: Last10 top2 did reduce configured up/down routed experts in the latest layers, but it changed the generation trajectory enough to increase gate stream rows and misses (`35151/4971 -> 47872/6357`), widen trace span (`69920.848 -> 90850.725`), increase refault pressure (`workingset_refault_file=6462646`), and truncate the answer. Like late5/late8, this shows more aggressive pruning beyond the accepted late10 boundary can backfire by generating longer/different trajectories and more gate cache traffic. Do not pursue top2 late-layer pruning without a stronger quality-preserving strategy.
+- `rollback_status`: source change reverted and clean rebuild completed; worktree clean and binary sha256 returned to `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
