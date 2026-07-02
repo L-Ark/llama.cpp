@@ -16143,3 +16143,68 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If first n32 is slower than `36687.31 ms / 31`, reject Phase 7AF and keep
   Phase 7AE as SOTA.
+- If first n32 is faster but the cold-start confirmation does not beat
+  `36687.31 ms / 31`, treat the first run as diagnostic noise and reject
+  Phase 7AF. Do not proceed to n96, because the result is not reproducible.
+
+Phase 7AF result - rejected:
+
+- no source change.
+- run recipe:
+
+```sh
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 \
+  -p MemorySwapMax=0 \
+  env RUN=<run-dir> N=32 VRAM_MIB=15200 THREADS=32 \
+      PINNED_SLOTS=8 UPGATE_PCT=60 \
+      /tmp/run_phase7ae_repro.sh
+```
+
+- candidate run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-132244Z-n32-phase7af-sqpoll-vram15200`.
+- candidate quality: pass.
+- candidate TTFT: `62644.55 ms`.
+- candidate decode: `36132.44 ms / 31`, `0.86 tok/s`.
+- candidate RAM: `memory.peak=15899996160`, `oom=0`.
+- candidate read path: `read_failures=0`, `iouring_fallbacks=0`.
+- candidate cache:
+  - total hit rate `53.4%`;
+  - down `817` slots, `73.7%`;
+  - upgate `1701` slots, `44.5%`.
+- confirmation run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-132511Z-n32-phase7af-sqpoll-vram15200-confirm`.
+- confirmation quality: pass.
+- confirmation output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- confirmation TTFT: `63963.32 ms`.
+- confirmation decode: `36997.52 ms / 31`, `0.84 tok/s`.
+- confirmation RAM: `memory.peak=15899996160`, `oom=0`.
+- confirmation read path: `read_failures=0`, `iouring_fallbacks=0`.
+- confirmation cache:
+  - total hit rate `53.4%`;
+  - down `817` slots, `73.7%`;
+  - upgate `1701` slots, `44.5%`.
+- confirmation counters:
+  - expert-pack `iouring_submit_us=47796`;
+  - expert-pack `iouring_wait_us=7829993`;
+  - pinned main host stage `24766.508 ms`, H2D `4514.270 ms`;
+  - up/gate total `15.099 ms/call`;
+  - down total `33.637 ms/call`, fallback_t0 `30.823 ms`.
+
+Decision:
+
+- Reject Phase 7AF.
+- Reason: first n32 beat Phase 7AE best n32, but the required cold-start
+  confirmation was `36997.52 ms / 31`, slower than the Phase 7AE best
+  `36687.31 ms / 31` and also slower than Phase 7AE confirm
+  `36973.83 ms / 31`.
+- Do not proceed to n96, because the improvement is not reproducible.
+- Keep Phase 7AE as the current accepted SOTA:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
