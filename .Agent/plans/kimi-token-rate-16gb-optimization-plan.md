@@ -14936,3 +14936,48 @@ Phase 7W n32 confirm result - rejected:
 - comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `230.71 ms`.
 - profile: up_gate `14.985 ms/call`; down `40.323 ms/call`; down fallback_t0 `37.492 ms/call`.
 - decision: reject Phase 7W because the candidate improvement did not reproduce on n32 confirm. Do not run n96. Keep Phase 7P as SOTA.
+
+## Phase 7X - re-test down parallel staging necessity after pack-mmap SOTA
+
+Design timestamp: 2026-07-02 12:24 UTC.
+
+Reason:
+
+- Phase 7W rejected profile trimming because n32 confirm did not reproduce the small gain.
+- Current decode bottleneck remains down fallback/staging variance. Phase 7W confirm showed down `40.323 ms/call`, `fallback_t0=37.492 ms/call`, and pinned main host_stage `24731.513 ms`.
+- The accepted Phase 7P env includes `GGML_MOE_DOWN_PARALLEL_STAGE=1`. Earlier phases rejected or accepted variants before the current pack-mmap fallback and page-cache-drop sequence, so the interaction may have changed.
+
+Hypothesis:
+
+- If down parallel staging currently contends with CPU fallback mmap reads, io_uring wait, or current-down overlap, disabling it may reduce wall-clock decode even if staging becomes less parallel.
+- If it is still beneficial, disabling it will increase host_stage/H2D or fallback wall time and should be rejected after one n32 run.
+
+Experiment design:
+
+1. Create `/tmp/run_phase7x_repro.sh` from the accepted Phase 7T/7P runner.
+2. Keep Phase 7P env exactly except remove `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+3. Keep `THREADS=32`, `VRAM_MIB=15000`, `GGML_MOE_CURRENT_DOWN_OVERLAP=1`, pack mmap fallback, and all memory-drop envs.
+4. Run strict cold n32 candidate under the 16GB cgroup.
+5. Continue only if n32 candidate beats Phase 7P n32 confirm `37379.97 ms / 31` and all gates pass.
+6. If positive, run n32 confirm, then n96/n96 confirm.
+
+Hard gates:
+
+- Cold start, host RAM peak `<= 15899996160`, `oom=0`, TTFT `<= 106331.72 ms`, `read_failures=0`, no CUDA errors, coherent France output, full reproducibility artifacts.
+
+Decision rule:
+
+- This is env-only. If n32 is not faster, reject without source rollback and record metrics.
+
+Phase 7X n32 result - rejected:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-120322Z-n32-phase7x-no-down-parallel-stage`
+- source state: clean runtime source at `8bf9ecc5815495b0d4c01d6f917b60bee82b965e`; plan dirty only.
+- env delta over Phase 7P: removed `GGML_MOE_DOWN_PARALLEL_STAGE=1` only.
+- hard gates: quality pass, TTFT `69440.85 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `40195.15 ms / 31`, `0.77 tok/s`.
+- comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `2815.18 ms`.
+- profile: up_gate `15.282 ms/call`; down `36.580 ms/call`; down fallback_t0 `32.722 ms/call`; pinned host_stage `30513.281 ms`.
+- interpretation: removing down parallel staging reduces some io_uring/H2D accounting but increases exposed host staging and worsens end-to-end decode. The current SOTA should keep `GGML_MOE_DOWN_PARALLEL_STAGE=1` together with current-down overlap.
+- decision: reject Phase 7X. Do not run n96. Keep Phase 7P as SOTA.
