@@ -112,6 +112,13 @@
   - correctness：France 原文输出必须记录。
 - `priority_rule`: 只优先做硬上界最高的部分；若某部分占比低于 5%，先不改。
 - `acceptance`: Phase 1 不应改变默认行为。若需要新增 trace，必须 default-off；trace run 不替代 SOTA。
+- `result`: completed diagnostic on merged head `d68452865` with strict cold 16GB cgroup and the accepted O_DIRECT expert-pack SOTA config plus `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`.
+- `diag_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T141200Z-odirect-post-kimi-bottleneck-diag`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T141143Z-20260702_odirect_post_kimi_bottleneck_trace_profile/france-cpu40-vram0gb`.
+- `run_result`: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=30207.999303ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15089967104`, `pgmajfault=267869`, `workingset_refault_file=1690515`, `ram_ok=true`, `correctness_ok=true`.
+- `one_stream_trace`: `rows=35151`, `hits=30528`, `misses=4623`, `inserts=3337`, `src0_ms=5291.874`, `miss_src0_ms=5269.225`, `hit_src0_ms=22.649`, `kernel_ms=345.971`, `sync_ms=1017.478`, `total_ms=7055.857`, `miss_total_ms=6128.377`, `hit_total_ms=927.480`.
+- `cpu_fallback_profile`: `total_fallback_ms=26131.116`; decode fallback `up=9362.934ms`, `down=9376.150ms`; prompt fallback `up=3262.913ms`, `down=4129.119ms`.
+- `interpretation`: After O_DIRECT, gate pack/source load is no longer the biggest bottleneck (`~7.1s` one-stream total, `~5.3s` miss source read). Residual up/down CPU fallback dominates (`~26.1s` total, `~18.7s` decode). With `138` decode tokens at about `4.1 tok/s`, eliminating all decode up/down fallback would bound decode speed near `138 / (138/4.1 - 18.739) ~= 9.2 tok/s` before GPU kernel, copy, sync, and scheduling overhead. This is only an upper bound; the next practical target is to prove that a portion of type-39 down/up fallback can really execute on GPU without correctness loss.
 
 ### Phase 2：按瓶颈设计候选优化
 
@@ -129,6 +136,17 @@
   - 该方向不优先于 cold-start France SOTA，除非用户要求泛化验证。
 - `candidate D: VRAM allocation/cache tuning`：
   - 当前 12GB/one-cache 经验不能盲目增加；vram13/14/12800MiB 曾 rejected。新调参必须说明 cache slots、insert failures、CUDA OOM 风险和理论 hit-rate 上界。
+
+### Phase 2A 执行计划：MXFP4(type=39) down-batch probe
+
+- `attempt_id`: `20260702-mxfp4-down-batch-probe`
+- `attempt_kind`: `implementation-probe`
+- `why_this_first`: The current largest measured bottleneck is decode up/down CPU fallback (`~18.7s`). Previous `GGML_MOE_STREAM_DOWN_BATCH=1` probe declined every route with `unsupported_type tensor=... type=39`. In this codebase, type `39` is `GGML_TYPE_MXFP4`; generic CUDA MMVQ/MMQ code has MXFP4 support, but `moe_stream_batch.cu::moe_stream_type_supported()` excludes it.
+- `theoretical_bound`: If down-batch could remove all decode down fallback (`~9.376s`), decode speed upper bound is about `138 / (138/4.1 - 9.376) ~= 5.7 tok/s`. If it also enables more up/gate handoff and later removes up fallback too, absolute decode bound is about `9.2 tok/s`. The first probe only targets down-batch acceptance, so any accepted gain above `4.2 tok/s` is useful; a no-gain acceptance is diagnostic only.
+- `implementation_rule`: Add `GGML_TYPE_MXFP4` to the batch-supported type list only behind the already default-off build/runtime path: build with `-DGGML_CUDA_MOE_STREAM_BATCH=ON`, run with `GGML_MOE_STREAM_DOWN_BATCH=1`. Do not change default build behavior or Kimi runtime functionality.
+- `safety_checks`: Before full run, do a short strict run (`-n` small if runner allows or direct systemd wrapper if not) with `GGML_MOE_STREAM_DECLINE_DEBUG=1` and batch/profile envs. Verify no `unsupported_type`, no `launch_moe_mmvq_compact_batch` failure, France text starts coherently, and RAM stays under 16GB.
+- `full_run_gate`: Full accepted run must use strict cold `drop_caches`, 16GB cgroup, France correctness, TTFT within the 20% gate, and exact counters/profile. If batch accepts but token rate falls or correctness breaks, revert source and record rejected with the decline/failure reason.
+- `gap_analysis`: If batch accepts but speed does not improve, inspect batch cache hits/misses, `stage_ms`, `kernel_ms`, `d2h_ms`, cache insert failures, and CPU fallback profile. A path that only accepts but still leaves fallback unchanged is not an optimization.
 
 ### Phase 3：执行和提交规则
 
