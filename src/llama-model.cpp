@@ -658,6 +658,7 @@ struct llama_model::impl {
     // model memory mapped files
     llama_mmaps mappings;
     std::vector<std::vector<llama_file_range>> expert_mmap_ranges;
+    std::vector<llama_file_range> mmap_used_ranges;
     mutable bool expert_mmap_drop_after_prompt_done = false;
 
     // objects representing data potentially being locked in memory
@@ -8257,6 +8258,12 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         }
     }
 
+    pimpl->mmap_used_ranges.clear();
+    pimpl->mmap_used_ranges.reserve(ml.mmaps_used.size());
+    for (const auto & range : ml.mmaps_used) {
+        pimpl->mmap_used_ranges.push_back({ range.first, range.second });
+    }
+
     if (defer_expert_mmap) {
         ml.drop_mmap_expert_pages();
         LLAMA_LOG_INFO("%s: dense parameters loaded, expert mmap pages deferred/dropped (dense %.2f GiB, deferred %.2f GiB)\n",
@@ -8282,40 +8289,97 @@ std::string llama_model::arch_name() const {
 }
 
 void llama_model::drop_expert_mmap_pages_after_prompt() const {
-    const char * env = std::getenv("LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT");
-    if (!env || !env[0] || env[0] == '0') {
+    const char * expert_env = std::getenv("LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT");
+    const char * dense_env  = std::getenv("LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT");
+    const bool drop_expert = expert_env && expert_env[0] && expert_env[0] != '0';
+    const bool drop_dense  = dense_env  && dense_env[0]  && dense_env[0]  != '0';
+    if (!drop_expert && !drop_dense) {
         return;
     }
     if (pimpl->expert_mmap_drop_after_prompt_done) {
         return;
     }
     pimpl->expert_mmap_drop_after_prompt_done = true;
-    if (pimpl->mappings.empty() || pimpl->expert_mmap_ranges.empty()) {
+    if (pimpl->mappings.empty()) {
         return;
     }
 
-    size_t bytes = 0;
-    size_t ranges = 0;
-    size_t failures = 0;
-    const size_t n = std::min(pimpl->mappings.size(), pimpl->expert_mmap_ranges.size());
-    for (size_t i = 0; i < n; ++i) {
-        if (!pimpl->mappings[i]) {
-            continue;
-        }
-        for (const llama_file_range & range : pimpl->expert_mmap_ranges[i]) {
-            size_t len = 0;
-            const bool ok = pimpl->mappings[i]->dontneed_fragment(range.first, range.last, &len);
-            bytes += len;
-            ++ranges;
-            if (!ok) {
-                ++failures;
+    if (drop_expert) {
+        size_t bytes = 0;
+        size_t ranges = 0;
+        size_t failures = 0;
+        const size_t n = std::min(pimpl->mappings.size(), pimpl->expert_mmap_ranges.size());
+        for (size_t i = 0; i < n; ++i) {
+            if (!pimpl->mappings[i]) {
+                continue;
+            }
+            for (const llama_file_range & range : pimpl->expert_mmap_ranges[i]) {
+                size_t len = 0;
+                const bool ok = pimpl->mappings[i]->dontneed_fragment(range.first, range.last, &len);
+                bytes += len;
+                ++ranges;
+                if (!ok) {
+                    ++failures;
+                }
             }
         }
+        LLAMA_LOG_INFO("%s: expert mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
+                __func__, bytes / 1024.0 / 1024.0, ranges, failures);
     }
-    LLAMA_LOG_INFO("%s: expert mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
-            __func__, bytes / 1024.0 / 1024.0, ranges, failures);
-}
 
+    if (drop_dense) {
+        size_t bytes = 0;
+        size_t ranges = 0;
+        size_t failures = 0;
+        const size_t n = std::min(pimpl->mappings.size(), pimpl->mmap_used_ranges.size());
+        for (size_t idx = 0; idx < n; ++idx) {
+            if (!pimpl->mappings[idx]) {
+                continue;
+            }
+            const llama_file_range & used = pimpl->mmap_used_ranges[idx];
+            if (used.last <= used.first) {
+                continue;
+            }
+
+            size_t cursor = used.first;
+            const auto * expert_ranges = idx < pimpl->expert_mmap_ranges.size() ?
+                &pimpl->expert_mmap_ranges[idx] : nullptr;
+
+            auto drop_range = [&](size_t first, size_t last) {
+                if (last <= first) {
+                    return;
+                }
+                size_t len = 0;
+                const bool ok = pimpl->mappings[idx]->dontneed_fragment(first, last, &len);
+                bytes += len;
+                ++ranges;
+                if (!ok) {
+                    ++failures;
+                }
+            };
+
+            if (expert_ranges) {
+                for (const llama_file_range & range : *expert_ranges) {
+                    if (range.last <= used.first || range.first >= used.last) {
+                        continue;
+                    }
+                    const size_t expert_first = std::max(range.first, used.first);
+                    const size_t expert_last  = std::min(range.last, used.last);
+                    if (cursor < expert_first) {
+                        drop_range(cursor, expert_first);
+                    }
+                    cursor = std::max(cursor, expert_last);
+                }
+            }
+
+            if (cursor < used.last) {
+                drop_range(cursor, used.last);
+            }
+        }
+        LLAMA_LOG_INFO("%s: dense mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
+                __func__, bytes / 1024.0 / 1024.0, ranges, failures);
+    }
+}
 std::string llama_model::type_name() const {
     return llm_type_name(type);
 }

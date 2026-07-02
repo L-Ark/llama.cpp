@@ -14026,4 +14026,76 @@ n96 validation:
 - expert pack: `hits=56724`, `misses=3076`, `read_failures=0`, `iouring_bytes=109577273344`.
 - VRAM cache: total hit rate `52.5%`, down `73.4%`, upgate `43.2%`.
 
-Decision: accept Phase 7L. It improves over the previous accepted split-cache n96 average `0.714926 tok/s` and reproduces across strict cold n32 (`0.82-0.86 tok/s`) and n96 (`0.83 tok/s`) under the 16GB host RAM gate. Commit and push.
+Decision: accept Phase 7L. It improves over the previous accepted SOTA from `1d456eafa` (`cuda: overlap current down staging with upgate`, n96 about `0.795899 tok/s`) and reproduces across strict cold n32 (`0.82-0.86 tok/s`) and n96 (`0.83 tok/s`) under the 16GB host RAM gate. Commit and push.
+
+## Phase 7M - drop expert plus dense GGUF mmap page cache after prompt
+
+User request: test whether prompt-end `MADV_DONTNEED` should also cover dense/non-expert mmap ranges, not only expert ranges.
+
+Design:
+
+- Keep Phase 7L expert hook default-off:
+
+```sh
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+```
+
+- Add a second default-off env:
+
+```sh
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+- Store `ml.mmaps_used` in `llama_model::impl` so runtime can reconstruct the same dense/non-expert ranges used by load-time `drop_mmap_dense_pages()`.
+- At the prompt-end hook, do:
+  - drop expert mmap ranges when `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1`;
+  - drop `mmaps_used - expert_ranges` when `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`.
+- The experiment uses both envs together to test the requested behavior:
+
+```sh
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+Theory:
+
+- Dense/attention/norm/output weights are resident in VRAM for the accepted Kimi run, so their GGUF mmap host pages should usually be disposable after load/prompt.
+- If prompt or mmap prefetch reactivates dense/non-expert GGUF pages, dropping them after prompt may further reduce file-backed RAM pressure before decode.
+- Risk: if some non-expert tensor still falls back to CPU or is accessed through host mmap in decode, dense-after-prompt drop can cause refault and regress token rate.
+
+Acceptance gates:
+
+- Strict cold start with 16GB cgroup and swap off.
+- France prompt output semantic and coherent.
+- TTFT <= `106331.72 ms`.
+- `read_failures=0`.
+- Logs must show both prompt-end expert and dense mmap drop with `failures=0`.
+- n32 must not regress versus Phase 7L n32 (`0.82-0.86 tok/s`).
+- n96 must improve over Phase 7L n96 `0.83 tok/s` before commit/push.
+
+Rollback:
+
+- If build fails, output quality fails, TTFT/RAM/read gates fail, or n32/n96 token rate regresses, revert source and keep only this plan/run record.
+
+
+Phase 7M result:
+
+- n32 run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-094419Z-n32-phase7m-drop-all-after-prompt-r2`
+- n32 hook logs: expert mmap drop `374261.30 MiB`, dense mmap drop `10598.28 MiB`, both `failures=0`.
+- n32 output: coherent France paragraph prefix; quality pass.
+- n32 TTFT: `71041.35 ms`, pass.
+- n32 decode: `37540.69 ms / 31`, `0.83 tok/s`.
+- n32 RAM: `memory.max=15899996160`, `memory.swap.max=0`, `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- n32 expert pack: `read_failures=0`, `iouring_bytes=44250759168`.
+
+- n96 run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-094720Z-n96-phase7m-drop-all-after-prompt`
+- n96 hook logs: expert mmap drop `374261.30 MiB`, dense mmap drop `10598.28 MiB`, both `failures=0`.
+- n96 output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`
+- n96 TTFT: `81334.22 ms`, pass and below `106331.72 ms`.
+- n96 decode: `91376.03 ms / 77`, `0.84 tok/s`, better than Phase 7L n96 `0.83 tok/s`.
+- n96 RAM: `memory.max=15899996160`, `memory.swap.max=0`, `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- n96 final file cache: `file=14870528000`, `inactive_file=7103078400`, `active_file=7766831104`.
+- n96 expert pack: `hits=56724`, `misses=3076`, `read_failures=0`, `iouring_bytes=109577273344`.
+- n96 fallback: `decode,type=2` `6.754 s`, `8.067 GiB`; prompt fallback total remains the main source of GGUF mmap refault.
+
+Decision: accept Phase 7M. The improvement is small but reproducible under the strict cold-start 16GB host-RAM gate, with correct output, TTFT within limit, no OOM, and no expert-pack read failures. Commit and push.
