@@ -2493,6 +2493,20 @@
 - `gap_analysis`: The narrow early `0-2=>top3` override improved the rounded token rate but changed the generation trajectory in the same qualitative direction as rejected broader top3 probes: gate rows grew from accepted `35151` to `47880`, misses grew from `4971` to `5827`, refaults grew from about `3.4M` to `5.8M`, and output ran into an incomplete tail. Early-layer top3 is therefore quality/trajectory unsafe even when limited to `0-2`.
 - `rollback_status`: the RANGE2 source patch was reverted, clean rebuild completed, and `build-ds4-moe-stream/bin/llama-cli` returned to sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` with version `9162 (83bfd9b63)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`; no source push as SOTA.
 
+### 当前执行 attempt：late10-plus-layer0-top3
+
+- `attempt_id`: `20260702-late10-plus-layer0-top3`
+- `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
+- `status`: planned_before_execution
+- `bottleneck_basis`: `0-2=>top3` failed manual correctness, but it also showed that early pruning can move the rounded speed metric. To close the boundary carefully, test only the single largest early layer `blk.0`: the CPU chunk diagnostic measured `ffn_up_exps:L0=1102.408ms` and `ffn_down_exps:L0=774.254ms` parallel-normalized, about `1876.662ms` before pruning.
+- `hypothesis`: Keeping accepted `10-39=>top3` and additionally applying `0=>top3` may recover a small portion of early CPU fallback while avoiding the severe trajectory/output damage from `0-2=>top3` and prior `0-9=>top3`.
+- `theoretical_upper_bound`: Layer 0 up/down cost is about `1.88s` parallel-normalized. Reducing one retained expert out of top4 gives a rough upper bound around `0.47s` if cost scales linearly; this is only a rounding-boundary chance. If token rate ties, regresses, or correctness changes, close this early-layer pruning direction.
+- `implementation`: Reuse the default-off RANGE2 patch from the rejected `0-2` probe only for this experiment, then revert unless promoted. Existing behavior must remain unchanged when RANGE2 is unset.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE2=0-0`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE2=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, gate trace enabled, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, gate rows/misses stay close to accepted SOTA and do not approach rejected `0-2` behavior, and TTFT does not exceed `45449.496149ms`.
+- `rollback`: If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or rows/misses/refaults grow materially, revert source and clean rebuild. If accepted, immediately stop exploration, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, exact env/command, build hash/version, summary.json, gate trace summary, cgroup memory evidence, full France answer text, manual correctness note, rollback/promoted status, and if promoted the full pushed-rerun SOTA package.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
