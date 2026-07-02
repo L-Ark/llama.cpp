@@ -118,6 +118,17 @@
 - `execution_order`: 先做外部读基准（buffered vs direct）和 trace 切片；只有 direct/aligned 路径显示硬收益，才实现默认关闭的 `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`。
 - `rollback`: direct IO 若 token rate 不升、TTFT 超 20%、RAM 证据不合规、或 correctness 失败，回退源码，只保留 rejected 记录。
 
+### Phase 2 result：one-pack O_DIRECT promoted candidate
+
+- `attempt_id`: `20260702-onepack-odirect-probe`
+- `implementation`: added default-off `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct` in `ggml/src/ggml-cuda/moe_stream.cu`. Header/index still use buffered fd; aligned payload reads use an `O_DIRECT` fd when requested; any direct read failure increments counters and falls back to buffered read, preserving correctness. Default behavior is unchanged when env is unset.
+- `readbench`: France gate pack sequence (`4623` reads, `19.187GiB`) improved from buffered `8.651684s` (`2.218GiB/s`, cgroup peak `16GB`) to direct `5.451716s` (`3.519GiB/s`, cgroup peak `6492160` bytes).
+- `dirty_probe_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T132829Z-20260702_onepack_odirect_probe_dirty/france-cpu40-vram0gb`.
+- `dirty_probe_result`: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30350.466436ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15092461568`, `pgmajfault=269973`, `workingset_refault_file=1684863`, `ram_ok=true`, `correctness_ok=true`.
+- `direct_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `trace_delta`: one-stream traced `src0_ms` dropped from `13394.225ms` to `5353.209ms`; traced `total_ms` dropped from `15419.15ms` to `7132.354ms`; kernel remained small (`342.57ms`).
+- `promotion_status`: candidate only until source commit, push, clean rebuild, and pushed-commit strict cold rerun pass.
+
 ### Phase 3：减少 fallback 与搬运次数
 
 - `attempt_id`: `20260702-miss-path-fusion-design`

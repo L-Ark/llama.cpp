@@ -388,6 +388,8 @@ struct one_expert_pack_entry {
 
 struct one_expert_pack_state {
     int fd = -1;
+    int fd_direct = -1;
+    bool direct_enabled = false;
     std::vector<one_expert_pack_entry> entries;
     bool inited = false;
     bool enabled = false;
@@ -397,6 +399,9 @@ struct one_expert_pack_state {
     std::atomic<uint64_t> reads{0};
     std::atomic<uint64_t> bytes{0};
     std::atomic<uint64_t> failures{0};
+    std::atomic<uint64_t> direct_reads{0};
+    std::atomic<uint64_t> direct_failures{0};
+    std::atomic<uint64_t> direct_fallbacks{0};
 };
 
 static one_expert_pack_state g_one_pack;
@@ -419,9 +424,13 @@ static void one_pack_report_atexit() {
         return;
     }
     std::fprintf(stderr,
-        "[moe_stream] one expert pack: hits=%lu misses=%lu reads=%lu bytes=%lu failures=%lu entries=%zu\n",
+        "[moe_stream] one expert pack: hits=%lu misses=%lu reads=%lu bytes=%lu failures=%lu entries=%zu"
+        " direct_enabled=%d direct_reads=%lu direct_failures=%lu direct_fallbacks=%lu\n",
         g_one_pack.hits.load(), g_one_pack.misses.load(), g_one_pack.reads.load(),
-        g_one_pack.bytes.load(), g_one_pack.failures.load(), g_one_pack.entries.size());
+        g_one_pack.bytes.load(), g_one_pack.failures.load(), g_one_pack.entries.size(),
+        g_one_pack.direct_enabled ? 1 : 0,
+        g_one_pack.direct_reads.load(), g_one_pack.direct_failures.load(),
+        g_one_pack.direct_fallbacks.load());
 }
 
 static void one_pack_init_once() {
@@ -491,6 +500,20 @@ static void one_pack_init_once() {
             return a.nbytes < b.nbytes;
         });
         g_one_pack.fd = fd;
+        const char * io_env = std::getenv("GGML_MOE_STREAM_ONE_EXPERT_PACK_IO");
+        if (io_env && (std::strcmp(io_env, "direct") == 0 || std::strcmp(io_env, "odirect") == 0)) {
+#if defined(__linux__) && defined(O_DIRECT)
+            g_one_pack.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
+            if (g_one_pack.fd_direct >= 0) {
+                g_one_pack.direct_enabled = true;
+                std::fprintf(stderr, "[moe_stream] one expert pack: O_DIRECT payload reads enabled: %s\n", path);
+            } else {
+                std::fprintf(stderr, "[moe_stream] one expert pack: O_DIRECT open failed; using buffered payload reads: %s\n", path);
+            }
+#else
+            std::fprintf(stderr, "[moe_stream] one expert pack: O_DIRECT requested but unavailable; using buffered payload reads\n");
+#endif
+        }
         g_one_pack.entries = std::move(entries);
         g_one_pack.enabled = true;
         g_one_pack.inited = true;
@@ -547,6 +570,16 @@ static const one_expert_pack_entry * one_pack_lookup(const char * tensor_name, i
 static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst, size_t sz) {
     if (!entry || g_one_pack.fd < 0 || entry->nbytes != sz) {
         return false;
+    }
+    if (g_one_pack.fd_direct >= 0) {
+        if (one_pack_read_exact_fd(g_one_pack.fd_direct, dst, sz, entry->offset)) {
+            ++g_one_pack.reads;
+            ++g_one_pack.direct_reads;
+            g_one_pack.bytes.fetch_add(sz);
+            return true;
+        }
+        ++g_one_pack.direct_failures;
+        ++g_one_pack.direct_fallbacks;
     }
     if (!one_pack_read_exact_fd(g_one_pack.fd, dst, sz, entry->offset)) {
         ++g_one_pack.failures;
