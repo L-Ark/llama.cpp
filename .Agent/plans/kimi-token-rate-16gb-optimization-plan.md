@@ -16310,3 +16310,112 @@ Rollback:
   Phase 7AE as SOTA.
 - If first n32 is faster but confirmation does not reproduce, reject Phase 7AG
   and do not run n96.
+
+Phase 7AG result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ag_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- reproduction command shape:
+
+```sh
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 \
+  -p MemorySwapMax=0 \
+  env RUN=<run-dir> N=<32-or-96> VRAM_MIB=15000 THREADS=32 \
+      PINNED_SLOTS=8 UPGATE_PCT=60 IO_DEPTH=8 IO_REFILL_BATCH=8 \
+      /tmp/run_phase7ag_repro.sh
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-133139Z-n32-phase7ag-sqpoll-refill8`.
+- quality: pass.
+- TTFT: `60564.41 ms`.
+- decode: `36389.14 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `298.17 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=41413`;
+  - `iouring_wait_us=7714275`;
+  - `inflight_avg=2.60`, `inflight_max=8`;
+  - batch histogram unchanged: mostly `2-4`, with `5-8:314`.
+- pinned main: host stage `24707.771 ms`, H2D `4551.124 ms`.
+- up/gate total: `14.943 ms/call`.
+- down total: `31.663 ms/call`, fallback_t0 `28.993 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-133403Z-n32-phase7ag-sqpoll-refill8-confirm`.
+- quality: pass.
+- TTFT: `53709.17 ms`.
+- decode: `36377.50 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 by `309.81 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=41070`;
+  - `iouring_wait_us=7845915`;
+  - `inflight_avg=2.58`, `inflight_max=8`;
+  - batch histogram unchanged: mostly `2-4`, with `5-8:314`.
+- pinned main: host stage `24533.997 ms`, H2D `4548.964 ms`.
+- up/gate total: `14.915 ms/call`.
+- down total: `28.500 ms/call`, fallback_t0 `25.775 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-133622Z-n96-phase7ag-sqpoll-refill8`.
+- quality: pass; full answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `68898.00 ms`.
+- decode: `92361.09 ms / 77`, `0.83 tok/s`.
+- comparison: slower than Phase 7AE best n96 `88889.08 ms / 77` by
+  `3472.01 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=111079`;
+  - `iouring_wait_us=19343908`;
+  - `inflight_avg=2.60`, `inflight_max=8`;
+  - batch histogram unchanged: mostly `2-4`, with `5-8:788`.
+- pinned main: host stage `62069.075 ms`, H2D `11385.320 ms`.
+- up/gate total: `14.435 ms/call`.
+- down total: `17.328 ms/call`, fallback_t0 `14.437 ms`.
+
+Interpretation:
+
+- `IO_REFILL_BATCH=8` produces a small, reproducible n32 improvement but does
+  not generalize to n96.
+- Effective inflight remains capped at `8`, and batch distribution remains
+  effectively unchanged from Phase 7AE.
+- The n96 regression is explained by higher pinned host stage:
+  `62069.075 ms` versus Phase 7AE confirm `60514.789 ms`, while H2D is
+  unchanged at about `11.38 s`.
+- Since the target gate is stable n96 semantic output and the n96 candidate is
+  slower by `3.47 s`, this env is rejected despite passing n32.
+
+Decision:
+
+- Reject Phase 7AG.
+- Do not run n96 confirmation.
+- Keep Phase 7AE as the current accepted SOTA:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
