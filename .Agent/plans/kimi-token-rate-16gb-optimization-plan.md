@@ -16575,6 +16575,118 @@ Decision:
   - TTFT `64612.02 ms`;
   - RAM/read/quality gates pass.
 
+## Phase 7AQ - narrow VRAM cache 15100 MiB retest
+
+Design timestamp: 2026-07-02 16:26 UTC.
+
+Reason:
+
+- The plan requires using VRAM as fully as possible while preserving quality,
+  TTFT, and the strict 16GB host-RAM gate.
+- Accepted Phase 7AE uses `GGML_MOE_VRAM_CACHE_MIB=15000`.
+- Phase 7AF tested `15200` under the SQPOLL SOTA:
+  - n32 candidate improved to `36132.44 ms / 31`;
+  - n32 confirmation regressed to `36997.52 ms / 31`;
+  - therefore it was rejected as non-reproducible.
+- Phase 7AJ tested `14900`:
+  - n32 improved, but n96 regressed to `91176.17 ms / 77`;
+  - therefore lowering the cache budget is also rejected.
+- `15100` is the untested narrow point between accepted `15000` and rejected
+  `15200`. It adds about:
+  - `~5` down slots at `7.44 MiB`;
+  - `~11` upgate slots at `5.36 MiB`;
+  - `~100 MiB` less free VRAM headroom.
+
+Bottleneck model:
+
+- Phase 7AE n96 has down hit rate `73.4%` and upgate hit rate `43.2%`.
+- If the additional slots capture hot experts, they can slightly reduce SSD
+  reads and pinned staging.
+- The upper bound is small:
+  - only a few cache misses can be avoided at n32/n96 scale;
+  - no compute path changes;
+  - no expected improvement to Q4_0 fallback.
+- A valid improvement must therefore be reproducible. A single fast n32 is
+  treated as variance, following Phase 7AF and 7AJ.
+
+Experiment:
+
+- No source change.
+- Use the accepted Phase 7AE runtime.
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15100
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - split cache `UPGATE_PCT=60`;
+  - pinned slots `8`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7aq-vram15100"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7aq_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+- Promotion requires:
+  - n32 candidate and n32 confirmation both beat Phase 7AE best
+    `36687.31 ms / 31`;
+  - n96 candidate and n96 confirmation both beat Phase 7AE confirm
+    `88889.08 ms / 77`.
+
+Acceptance gates:
+
+- Host RAM:
+  - cgroup `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France prompt answer must be coherent and semantically correct.
+- IO/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate does not beat the accepted best, reject immediately.
+- If n32 candidate beats but confirmation fails, reject and record as
+  non-reproducible, same as Phase 7AF.
+
 Rollback:
 
 - Reverted uncommitted source patch for:
