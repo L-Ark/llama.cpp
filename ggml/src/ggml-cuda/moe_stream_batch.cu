@@ -14,6 +14,7 @@ bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *,
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
 }
 #else
 // Decode-only batched streaming MoE path.
@@ -385,6 +386,13 @@ struct expert_pack_state {
     int fd_direct = -1;
 #endif
     std::vector<expert_pack_entry> entries;
+    void *mmap_base = nullptr;
+    size_t mmap_size = 0;
+    bool mmap_attempted = false;
+    bool mmap_enabled = false;
+    std::atomic<uint64_t> mmap_hits{0};
+    std::atomic<uint64_t> mmap_misses{0};
+    std::atomic<uint64_t> mmap_bytes{0};
     bool inited = false;
     bool enabled = false;
     bool reported_io_backend = false;
@@ -1839,6 +1847,69 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
     }
     ++g_expert_pack.misses;
     return nullptr;
+}
+
+
+static bool expert_pack_mmap_ensure() {
+    expert_pack_init_once();
+    if (!g_expert_pack.enabled || g_expert_pack.mmap_base) {
+        return g_expert_pack.mmap_base != nullptr;
+    }
+    if (g_expert_pack.mmap_attempted) {
+        return false;
+    }
+    g_expert_pack.mmap_attempted = true;
+#if !defined(_WIN32)
+    const char *env = std::getenv("GGML_MOE_CPU_FALLBACK_PACK_MMAP");
+    if (!env || !env[0] || env[0] == '0') {
+        return false;
+    }
+    if (!g_expert_pack.file) {
+        return false;
+    }
+    const int fd = fileno(g_expert_pack.file);
+    if (fd < 0) {
+        return false;
+    }
+    struct stat st = {};
+    if (fstat(fd, &st) != 0 || st.st_size <= 0) {
+        return false;
+    }
+    void *base = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: mmap failed\n");
+        return false;
+    }
+    g_expert_pack.mmap_base = base;
+    g_expert_pack.mmap_size = (size_t) st.st_size;
+    g_expert_pack.mmap_enabled = true;
+    std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: enabled size=%.2f MiB\n",
+                 g_expert_pack.mmap_size / (1024.0 * 1024.0));
+    return true;
+#else
+    return false;
+#endif
+}
+
+extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *tensor_name, int expert_idx, size_t nbytes) {
+    if (!tensor_name || !tensor_name[0] || nbytes == 0) {
+        return nullptr;
+    }
+    if (!expert_pack_mmap_ensure()) {
+        return nullptr;
+    }
+    const expert_pack_entry *entry = expert_pack_lookup(tensor_name, expert_idx, nbytes);
+    if (!entry) {
+        ++g_expert_pack.mmap_misses;
+        return nullptr;
+    }
+    if (entry->offset > g_expert_pack.mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > g_expert_pack.mmap_size) {
+        ++g_expert_pack.mmap_misses;
+        return nullptr;
+    }
+    ++g_expert_pack.mmap_hits;
+    g_expert_pack.mmap_bytes.fetch_add(nbytes);
+    return (const char *) g_expert_pack.mmap_base + entry->offset;
 }
 
 static bool trace_entry_matches(const batch_route_trace_entry &e, const char *tensor_name, int expert_idx, size_t expert_bytes);
