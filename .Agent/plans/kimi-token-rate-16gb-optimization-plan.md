@@ -10132,3 +10132,153 @@ Rollback:
 
 - Revert if the diagnostic changes graph behavior, breaks build, fails hard
   gates, or cannot attribute the fused up/gate decision.
+
+Result timestamp: 2026-07-02 22:44 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-012536Z-n4-phase3zr-graph-profile`
+
+Validation run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-012842Z-n32-phase3zr-graph-profile`
+
+Measured result:
+
+- Source state: `62b77028f-dirty-phase3zr`, default-off graph attribution
+  diagnostic added behind `GGML_KIMI_MOE_GRAPH_PROFILE=1`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.851818 GiB`.
+- TTFT: `75789.67 ms`, inside the `106331.72 ms` gate.
+- Decode: `68.49431 s / 31 tokens = 2.209493870967742 s/token`,
+  `0.45259233942206295 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Graph attribution lines: `480` total, `113` fused, `367` non-fused.
+
+Decode-only graph attribution:
+
+- Decode graph decisions: `241`.
+- Fused decode decisions: `113`.
+- Non-fused decode decisions: `128`.
+- Non-fused decode blockers:
+  - `same_type=0`: `128`;
+  - all other conditions pass for decode (`env`, `one_token`, no bias/scale,
+    `silu`, and shape all pass).
+- Decode non-fused type pairs:
+  - `up=iq2_s`, `gate=iq3_xxs`: `116`;
+  - `up=iq3_xxs`, `gate=iq2_s`: `12`.
+
+Prompt graph attribution:
+
+- Prompt graph decisions: `239`.
+- Prompt non-fused blocker is `one_token=0` by design.
+- Prompt mixed-type layers also have `same_type=0`, but prompt is not the
+  current token-rate target.
+
+Decision:
+
+- Accept Phase 3ZR as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, and attribution
+  gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- The remaining decode up/gate graph fallback is not caused by bias tensors,
+  scale tensors, shape mismatch, activation mismatch, or the fused env being
+  absent.
+- The blocker is mixed quantization across up/gate expert tensors. Most missed
+  fused opportunities are `up=iq2_s` with `gate=iq3_xxs`.
+- The next implementation must either:
+  - teach the fused up/gate path to handle mixed quant types without changing
+    math; or
+  - prove that mixed-type fusion would introduce more staging/cache/H2D cost
+    than it saves and return to another bottleneck.
+
+## Next candidate: Phase 3ZS mixed-type fused up/gate feasibility
+
+Design timestamp: 2026-07-02 22:50 CST.
+
+Current bottleneck:
+
+- Phase 3ZR attributes all decode fused-upgate misses to mixed up/gate tensor
+  types.
+- Phase 3ZQ shows top unsupported decode fallback buckets for `IQ3_XXS` and
+  `IQ2_S`, matching the mixed pairs from Phase 3ZR.
+- The existing graph condition requires `up_exps->type == gate_exps->type`.
+  Removing that condition is unsafe unless the CUDA/CPU fused op and expert
+  pack staging can read two independent quant formats correctly.
+
+Math requirement:
+
+For each selected expert `e` and token vector `x`, the fused path must compute:
+
+```text
+up   = x * W_up[e]
+gate = x * W_gate[e]
+out  = up * silu(gate)
+```
+
+The mixed-type version is mathematically identical to the current separate
+path if each matrix multiply uses the same dequantization and accumulation
+logic as the accepted separate `mul_mat_id` fallback for its own tensor type.
+The only allowed change is scheduling/fusion, not quant math.
+
+Theoretical upper bound:
+
+- Phase 3ZR n32 decode wall time: `68.49431 s`.
+- Phase 3ZQ measured decode fallback time by type:
+  - `IQ3_XXS`: `5.643922 s`;
+  - `IQ2_S`: `4.609576 s`.
+- The mixed-type fused path can only target the subset of those buckets caused
+  by up/gate mixed pairs, not Q4_0 down fallback.
+- Absolute upper bound if all mixed up/gate fallback disappears with no added
+  staging/cache cost: about `10.25 s` saved over 31 decode tokens, or
+  `68.49 / (68.49 - 10.25) = 1.18x`, around `0.534 tok/s`.
+- A realistic bound must subtract extra H2D/staging and cache pressure. Phase
+  3ZO showed that adding a GPU path can regress if it evicts hot cache entries
+  or increases pinned staging, so the first implementation must measure these
+  buckets explicitly.
+
+Execution plan:
+
+1. Inspect `ggml_moe_up_gate` graph op and CUDA implementation to determine
+   whether it assumes one shared quant type for up/gate.
+2. If the implementation already handles independent source tensor types, run
+   a guarded experiment that relaxes only the graph `same_type` condition for
+   decode, behind a new env such as
+   `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`.
+3. If the implementation assumes one shared type, do not relax the graph
+   condition. Instead add a smaller diagnostic around the fused CUDA op to
+   identify the exact single-type assumptions before writing kernels.
+4. For any mixed-type execution attempt:
+   - run `-n 4` compare/quality first;
+   - then run strict cold `-n 32`;
+   - promote only after strict full `-n 96` if token-rate improves and the
+     France paragraph remains semantically correct.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold run passes host RAM, cold start, TTFT, France semantic quality,
+  read failure, launch failure, and VRAM gates.
+- `GGML_KIMI_MOE_GRAPH_PROFILE=1` shows mixed-type decode layers entering the
+  fused path when the experiment is enabled.
+- Token rate improves versus the comparable strict Phase 3ZR/3ZQ baseline.
+- Cache hit rate, pinned staging, and H2D time do not regress enough to erase
+  the theoretical gain.
+- Full `-n 96` promotion is required before committing an enabled performance
+  change.
+
+Rollback:
+
+- Revert if output changes semantically, if malformed text appears, if TTFT
+  exceeds `106331.72 ms`, if host RAM exceeds 16GB, if `read_failures` or CUDA
+  launch failures appear, or if token rate regresses.

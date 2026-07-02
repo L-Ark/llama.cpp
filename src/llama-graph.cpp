@@ -12,7 +12,9 @@
 #include "llama-memory-recurrent.h"
 
 #include <cassert>
+#include <cinttypes>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <numeric>
@@ -20,6 +22,19 @@
 #include <unordered_set>
 
 // dedup helpers
+
+static bool llama_kimi_moe_graph_profile_enabled() {
+    static const bool enabled = std::getenv("GGML_KIMI_MOE_GRAPH_PROFILE") != nullptr;
+    return enabled;
+}
+
+static const char * llama_tensor_name_or_null(const ggml_tensor * t) {
+    return t ? t->name : "(null)";
+}
+
+static const char * llama_tensor_type_name_or_null(const ggml_tensor * t) {
+    return t ? ggml_type_name(t->type) : "(null)";
+}
 
 static ggml_tensor * build_attn_inp_kq_mask(
         ggml_context * ctx,
@@ -1529,6 +1544,57 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         type_op == LLM_FFN_SILU &&
         up_exps->type == gate_exps->type &&
         ggml_are_same_shape(up_exps, gate_exps);
+    if (llama_kimi_moe_graph_profile_enabled()) {
+        const bool env_fused          = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE") != nullptr;
+        const bool one_token          = n_tokens == 1;
+        const bool no_gate_up         = gate_up_exps == nullptr;
+        const bool has_up             = up_exps != nullptr;
+        const bool has_gate           = gate_exps != nullptr;
+        const bool no_up_bias         = up_exps_b == nullptr;
+        const bool no_gate_bias       = gate_exps_b == nullptr;
+        const bool no_up_scale        = up_exps_s == nullptr;
+        const bool no_gate_scale      = gate_exps_s == nullptr;
+        const bool silu_op            = type_op == LLM_FFN_SILU;
+        const bool same_type          = up_exps != nullptr && gate_exps != nullptr && up_exps->type == gate_exps->type;
+        const bool same_shape         = up_exps != nullptr && gate_exps != nullptr && ggml_are_same_shape(up_exps, gate_exps);
+
+        fprintf(stderr,
+                "[kimi_moe_graph_profile] il=%d n_tokens=%" PRId64
+                " fused_up_gate=%d env=%d one_token=%d no_gate_up=%d has_up=%d has_gate=%d"
+                " no_up_bias=%d no_gate_bias=%d no_up_scale=%d no_gate_scale=%d"
+                " silu=%d same_type=%d same_shape=%d"
+                " up_name=%s up_type=%s gate_name=%s gate_type=%s gate_up_name=%s"
+                " up_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
+                " gate_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]\n",
+                il,
+                n_tokens,
+                use_stream_fused_up_gate ? 1 : 0,
+                env_fused ? 1 : 0,
+                one_token ? 1 : 0,
+                no_gate_up ? 1 : 0,
+                has_up ? 1 : 0,
+                has_gate ? 1 : 0,
+                no_up_bias ? 1 : 0,
+                no_gate_bias ? 1 : 0,
+                no_up_scale ? 1 : 0,
+                no_gate_scale ? 1 : 0,
+                silu_op ? 1 : 0,
+                same_type ? 1 : 0,
+                same_shape ? 1 : 0,
+                llama_tensor_name_or_null(up_exps),
+                llama_tensor_type_name_or_null(up_exps),
+                llama_tensor_name_or_null(gate_exps),
+                llama_tensor_type_name_or_null(gate_exps),
+                llama_tensor_name_or_null(gate_up_exps),
+                up_exps ? up_exps->ne[0] : -1,
+                up_exps ? up_exps->ne[1] : -1,
+                up_exps ? up_exps->ne[2] : -1,
+                up_exps ? up_exps->ne[3] : -1,
+                gate_exps ? gate_exps->ne[0] : -1,
+                gate_exps ? gate_exps->ne[1] : -1,
+                gate_exps ? gate_exps->ne[2] : -1,
+                gate_exps ? gate_exps->ne[3] : -1);
+    }
     const bool build_gate_first_for_cuda_fusion =
         gate_up_exps == nullptr &&
         !use_stream_fused_up_gate &&
