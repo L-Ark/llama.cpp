@@ -86,6 +86,26 @@
 - `priority_rule`: 只优先做硬上界最高的部分；如果某部分占比低于 5%，先不改。
 - `rollback`: 只加默认关闭的 trace 或外部分析脚本；若 trace 改动影响性能或正确率，立即回退。
 
+### Phase 1 result：post-Kimi SOTA bottleneck slice
+
+- `attempt_id`: `20260702-phase1-sota-bottleneck-trace-post-kimi`
+- `runs`:
+  - one-stream + CPU chunk trace: `/root/lfz/runs/vendor-ds4-16gb/20260702T131703Z-20260702_phase1_sota_bottleneck_trace_post_kimi/france-cpu40-vram0gb`, `eval_tok_s=3.3`, `ram_ok=true`, `correctness_ok=true`.
+  - CPU MoE profile: `/root/lfz/runs/vendor-ds4-16gb/20260702T131926Z-20260702_phase1_sota_cpu_profile_post_kimi/france-cpu40-vram0gb`, `eval_tok_s=3.3`, `ram_ok=true`, `correctness_ok=true`.
+- `one_stream_trace`: `35151` rows, VRAM cache hits `30528`, misses `4623`; expert pack hits `4623`, misses `0`, bytes `20602159104`; summed one-stream `total_ms=15419.15`, `src0_ms=13394.225`, `sync_ms=1251.6`, `kernel_ms=360.769`.
+- `cpu_fallback_profile`: residual CPU fallback is still larger than the one-stream gate path: total fallback `28091.121ms`, split into `decode=20304.189ms` and `prompt=7786.932ms`, logical fallback bytes `~158.6GiB`; top1024 unique fallback experts are `4.25GiB` and cover `49.77%` of fallback time.
+- `bottleneck_priority`: current SOTA is not GPU kernel bound. Highest-value target is residual up/down CPU fallback and its page/refault behavior; second target is one-stream pack `src0/read` time; kernel fusion alone has low expected payoff.
+
+### Phase 1 next attempt：hot up/down CPU fallback pack mmap
+
+- `attempt_id`: `20260702-hot1024-cpu-fallback-pack-mmap`
+- `attempt_kind`: `config/data-pack-probe`
+- `hypothesis`: Kimi merge added default-off `GGML_MOE_CPU_FALLBACK_PACK_MMAP`. A 4.25GiB expert pack containing the top1024 residual up/down fallback experts may replace scattered GGUF mmap fallback reads with a compact pack mmap, reducing page-cache refault and CPU fallback wall time while staying under the 16GB cgroup.
+- `theoretical_bound`: top1024 covers `13980.911ms` of the measured `28091.121ms` fallback time. Removing all covered fallback wait would be an unrealistic upper bound; a practical target is reducing several seconds if compact pack locality materially improves page-in/refault behavior.
+- `pack_generation`: derive a fake trace from `fallback-profile.csv` top1024 rows, then use `.Agent/run-tools/create_ds4_gate_trace_pack.py` with the DeepSeek GGUF to create `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-fallback-hot1024-20260702.pack`.
+- `test_config`: keep accepted gate one-pack env unchanged; additionally set `GGML_MOE_EXPERT_PACK=<hot1024 pack>` and `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`; strict cold 16GB cgroup; France prompt.
+- `rollback`: no source change. Reject if token rate does not exceed `3.4`, TTFT exceeds gate, RAM/correctness fail, or Kimi expert-pack mmap reports high misses/overhead. If accepted SOTA appears, immediately record full reproduction info, commit, push, and clean rerun.
+
 ### Phase 2：pack IO / page-cache 路径优化
 
 - `attempt_id`: `20260702-pack-io-cold-path`
