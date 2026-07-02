@@ -12371,6 +12371,19 @@ Interpretation:
 - Expected token-rate upper bound stays around `0.661-0.668 tok/s`, not the
   target `0.70-0.75 tok/s`.
 
+Baseline modeling note:
+
+- The current SOTA env does not set `GGML_MOE_VRAM_CACHE_SPLIT`, so Kimi
+  expert tensors use the default shared cache path rather than an explicit
+  upgate/down budget split.
+- The plan's stated baseline, `15000 MiB / 7.44 MiB = 2016 slots`, is therefore
+  the relevant baseline for this split-pool proposal.
+- Existing `scripts/moe-route-cache-sim.py --upgate-pct=65` remains useful for
+  split-budget sensitivity analysis, but it models an explicit upgate/down
+  allocation that is not enabled in the SOTA env. It should not replace the
+  current shared-slot baseline when deciding whether the new size-class feature
+  is worth implementing.
+
 Decision:
 
 - Do not enter Phase 4B implementation from the current SOTA trace.
