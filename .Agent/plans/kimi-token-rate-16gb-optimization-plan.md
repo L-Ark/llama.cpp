@@ -67,6 +67,9 @@ that violates any one gate is rejected even if token rate improves.
      clean machine to rerun it: commit, branch, command, env, model path, expert
      pack path, cgroup/memory setup, cold-start method, GPU model, driver/CUDA
      version, exact prompt, seed, and output.
+   - All reported benchmark conclusions must be reproducible. A run that cannot
+     be reproduced from the recorded artifacts is only a diagnostic observation,
+     not a result that can guide SOTA selection or further optimization.
    - Results are not considered valid unless they can be reproduced from the
      run directory alone plus the referenced git commit and model/expert-pack
      files. This applies to baselines, diagnostics, rejected attempts, and
@@ -16899,6 +16902,67 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If n32 does not beat Phase 7AE best, reject immediately.
 - If n32 passes but confirmation or n96 fails, reject Phase 7AL.
+
+Phase 7AL result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7al_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_IO_BYTES=4194304
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-143748Z-n32-phase7al-sqpoll-iobytes4m`.
+- env validation:
+  - `command.txt` records `IO_BYTES=4194304`;
+  - `env.txt` has `GGML_MOE_IO_BYTES=4194304`.
+- quality: pass; output prefix:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- TTFT: `70676.12 ms`.
+- decode: `37476.10 ms / 31`, `0.83 tok/s`.
+- comparison: slower than Phase 7AE best n32 `36687.31 ms / 31` by
+  `788.79 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_reads=6620`;
+  - `iouring_bytes=44250759168`;
+  - `iouring_submit_us=48644`;
+  - `iouring_wait_us=7737131`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- pinned main: host stage `24724.039 ms`, H2D `4558.309 ms`.
+- up/gate total: `14.778 ms/call`.
+- down total: `35.684 ms/call`, fallback_t0 `32.845 ms`.
+
+Interpretation:
+
+- The 4MiB setting did not change the observed read count or total expert-pack
+  bytes for this n32 run (`6620` reads, `44.25 GB`), so this path is not
+  actually gaining useful finer-grained completion behavior.
+- Wall decode regressed on the first cold n32 run while all correctness/RAM/read
+  gates passed. Under the reproducibility rule, a slower first candidate stops
+  the phase immediately; no n32 confirmation or n96 run is warranted.
+
+Decision:
+
+- Reject Phase 7AL.
+- No source rollback is required because the experiment was env-only.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
 
 ## Phase 7AH - production run without batch CUDA profiling
 
