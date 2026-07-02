@@ -2454,7 +2454,7 @@
 
 - `attempt_id`: `20260702-late10-cpu-chunk-bottleneck-trace`
 - `attempt_kind`: `diagnostic/bottleneck-localization`
-- `status`: planned_before_execution
+- `status`: completed_diagnostic_only_not_sota
 - `bottleneck_basis`: The reproduced SOTA gate trace accounts for only about `27.0s` of the `88.98s` cold run (`rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24770.360`, `total_ms=27042.197`). The remaining trace-outside wall is still the largest unresolved component and is expected to be dominated by non-streamed `ffn_up_exps` / `ffn_down_exps` CPU fallback under the accepted late10 top3 routing.
 - `hypothesis`: Running the accepted SOTA config with the existing default-off `GGML_MOE_CPU_CHUNK_TRACE_OUT` hook will identify the current post-top3 CPU fallback distribution by tensor, layer, expert, chunk count, and summed chunk time. This should show whether future work should target specific layers/experts, chunk scheduling, page/refault behavior, or a broader routing/streaming strategy.
 - `theoretical_upper_bound`: This diagnostic cannot improve token rate and may slow the run because chunk tracing writes many rows. Its value is a hard upper-bound estimate for future optimizations: any proposed CPU fallback optimization cannot save more than the traced up/down fallback component it removes, and any stream replacement must beat the measured CPU fallback cost plus cache/page-in overhead.
@@ -2462,6 +2462,16 @@
 - `acceptance_gate`: diagnostic passes if the run completes without RAM breach, France output remains semantically correct/coherent enough to trust the trace, and trace files can be summarized. It is not promoted even if rounded `eval_tok_s` ties or improves, because tracing changes runtime behavior.
 - `rollback`: no source change. If the run fails or trace files are incomplete, record the failure and do not use the data for optimization decisions.
 - `required_evidence`: exact run dir, source commit/status, binary sha256/build line/stat, summary.json, gate trace summary, CPU chunk trace summary by tensor/layer and top-cost entries, cgroup memory evidence, full France answer text, and explicit diagnostic conclusion with next optimization priority.
+- `source_commit`: `dfafbbf080492b6b6296c6d7a1160ea54593c76e`, binary sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T030820Z-20260702_late10_cpu_chunk_bottleneck_trace/france-cpu40-vram0gb`.
+- `result`: diagnostic completed. `eval_tok_s=2.5` with trace overhead, `prompt_tok_s=0.9`, `TTFT=36302.523358ms`, `elapsed_seconds=89.89`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15006539776`, `pgmajfault=276444`, `workingset_refault_file=3599864`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass for diagnostic trust. France output is semantically correct, coherent, complete, and matches the accepted SOTA answer shape.
+- `trace_files`: gate trace `/root/lfz/runs/vendor-ds4-16gb/LATE10_CPU_CHUNK_TRACE_GATE_TRACE` (`4.3MB`), CPU chunk trace `/root/lfz/runs/vendor-ds4-16gb/LATE10_CPU_CHUNK_TRACE_CPU_TRACE` (`66MB`, `909952` data rows).
+- `summary_files`: `/root/lfz/runs/vendor-ds4-16gb/20260702T030820Z-20260702_late10_cpu_chunk_bottleneck_trace/france-cpu40-vram0gb/cpu_chunk_summary.json`, plus `top_tensor_layer.tsv` and `top_tensor_layer_expert.tsv`.
+- `gate_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24778.664`, `total_ms=27036.245`; this matches the accepted SOTA cache shape.
+- `cpu_chunk_summary`: `cpu_rows=909952`, `cpu_parallel_norm_ms=31390.003`. By tensor: `ffn_up_exps` has `427904` chunks, `sum_ms=352519.789`, `norm_ms=17625.989`; `ffn_down_exps` has `482048` chunks, `sum_ms=275280.281`, `norm_ms=13764.014`.
+- `top_layers_by_parallel_norm`: top contributors are `ffn_up_exps:L0=1102.408ms`, `ffn_up_exps:L1=1070.596ms`, `ffn_up_exps:L2=1047.312ms`, `ffn_down_exps:L2=826.074ms`, `ffn_down_exps:L1=825.978ms`, `ffn_down_exps:L0=774.254ms`, `ffn_up_exps:L4=670.665ms`, `ffn_up_exps:L3=639.501ms`, `ffn_up_exps:L9=608.899ms`, `ffn_up_exps:L19=570.556ms`.
+- `diagnostic_conclusion`: accepted late10 top3 still leaves about `31.4s` parallel-normalized up/down CPU fallback, with early layers `0-2` contributing about `5.65s` before any pruning. Prior `0-9=>top3` failed correctness/speed, but the new trace suggests a narrower `0-2=>top3` plus accepted `10-39=>top3` probe is the next bounded structural experiment. Current source supports only one layer range, so that experiment requires a default-off second-range implementation; do not spend more runs on simple gate cache/thread/page advice until this early0-2 boundary is tested or ruled out.
 
 ## 记录与验收
 
