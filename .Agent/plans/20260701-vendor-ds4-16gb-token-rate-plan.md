@@ -2594,7 +2594,7 @@
 
 - `attempt_id`: `20260702-global-top3-reverse-stop-two-sentence`
 - `attempt_kind`: `config-probe/semantic-stop-boundary`
-- `status`: planned_before_execution
+- `status`: completed_rejected_token_rate_regression_not_sota
 - `bottleneck_basis`: The first reverse-stop probe stopped on `. ` and removed the period, making the output too short. Historical global top3 output has a stable first two-sentence prefix ending in `fields.` before the next sentence begins with `The country is home...`. Stopping on `The country` may preserve two complete sentences and avoid the repetitive/incomplete tail.
 - `hypothesis`: With global top3 and `--reverse-prompt "The country"`, visible output should contain the first two complete sentences: a compact introduction of France plus key cultural strengths. This may satisfy the short-paragraph gate while retaining the fast top3 compute path.
 - `theoretical_upper_bound`: Per-token compute remains global top3, but output is much shorter than accepted late10. Very short outputs can lower the measured generation-rate metric due fixed overhead, as seen in the first reverse-stop probe (`1.8 tok/s`). Promotion requires measured `eval_tok_s > 2.6`, not only shorter wall time.
@@ -2602,6 +2602,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, TTFT does not exceed `45449.496149ms`, and manual review confirms the output is a complete, semantically correct, coherent short paragraph with final punctuation and no reverse-prompt artifact.
 - `rollback`: no source change. If token rate does not exceed `2.6`, output is incomplete/too terse/artifacted, RAM exceeds limit, or TTFT exceeds gate, record rejected and close substring-stop top3 rescue for this prompt unless a non-fragile semantic stopping mechanism is implemented.
 - `required_evidence`: exact env/command showing global top3 and `--reverse-prompt "The country"`, source commit/status, binary/shared-library hashes, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness/completeness note, and explicit rejected/promoted status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T035635Z-20260702_global_top3_reverse_stop_two_sentence/france-cpu40-vram0gb`.
+- `result`: rejected. `eval_tok_s=2.3`, `prompt_tok_s=1.0`, `TTFT=37966.771791ms`, `elapsed_seconds=56.03`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15116042240`, `pgmajfault=174208`, `workingset_refault_file=342049`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass for content. Output is a complete two-sentence short paragraph: `France is a Western European country known for its rich history, diverse culture, and iconic landmarks. It is famous for its cuisine, art, and fashion, with Paris serving as its capital and a global center for these fields.`
+- `cache_observation`: stderr reports `13.2 GiB`, `3192 slots`, `hits=10070 misses=3253 hit_rate=75.6%`; the short stopped output does not reach the accepted SOTA generation/cache window.
+- `gap_analysis`: This stop target fixes the visible truncation issue, but the measured generation rate falls to `2.3`, below the accepted `2.6`. Substring stop does not provide a valid token-rate improvement because the shorter output changes measurement behavior and cache reuse. Close prompt-specific substring-stop rescue for global top3 unless a future semantic stopping mechanism can preserve both quality and measured rate.
+- `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
