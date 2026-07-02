@@ -16809,6 +16809,97 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AL - SQPOLL io_uring chunk size 4MiB retest
+
+Design timestamp: 2026-07-02 18:15 UTC.
+
+Reason:
+
+- Accepted Phase 7AE uses `GGML_MOE_IO_BYTES=8388608`.
+- Kimi hot expert sizes are around `5.36 MiB` for up/gate and `7.44 MiB` for
+  down. With `8 MiB`, most miss loads are one io_uring read per expert.
+- Smaller `IO_BYTES` may split larger down experts into multiple completions,
+  potentially improving overlap and queue utilization under SQPOLL. It may also
+  simply double read count and overhead.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm:
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack batch histogram mostly `2-4`.
+- This experiment targets read/completion granularity only. It does not change
+  cache capacity, routing, tensor values, CUDA kernels, or math.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_IO_BYTES=4194304
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache, current down overlap, down parallel staging, pack mmap
+    fallback, dense/expert mmap drops, pinned slots `8`, and `THREADS=32`.
+
+Theoretical upper bound:
+
+- If 4MiB chunks allow earlier partial completions to feed H2D overlap, n96
+  might save a fraction of the visible `~19 s` io_uring wait bucket.
+- Realistic upside is small, about `0.5-2 s` on n96.
+- If read count doubles without better overlap, submit/wait calls and staging
+  overhead will rise and decode will regress. This is the expected failure mode.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7al_repro.sh` from the Phase 7AE runner.
+- Parameterize `IO_BYTES`, defaulting to `4194304`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 IO_BYTES=4194304
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AL cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show lower wait/host-stage or better overlap; if read count
+  rises without wall-clock gain, reject.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AL.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
