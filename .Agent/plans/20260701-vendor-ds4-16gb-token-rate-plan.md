@@ -3103,3 +3103,39 @@
 
 - `goal`: Only revisit up/down or fused paths after I/O/cache bottleneck is quantified.
 - `rule`: Any up/gate/down fusion must first show true parallel work in traces, not just branch entry. Prior rejected fused runs stayed around `0.8 tok/s`, so this path is lower priority until a trace proves CPU fallback or GPU matmul is the dominant remaining time.
+
+### 当前执行：sota-bottleneck-trace-after-replan
+
+- `attempt_id`: `20260702-sota-bottleneck-trace-after-replan`
+- `status`: completed_diagnostic
+- `time`: `2026-07-02T11:02Z-11:18Z`
+- `source_commit`: `cb89fccb9` (`vendor-ds4: replan after pack rollback`).
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T110237Z-20260702_sota_bottleneck_trace_after_replan/france-cpu40-vram0gb`.
+- `config`: accepted SOTA config plus `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`; strict cold `drop_caches`, 16GB cgroup, France prompt.
+- `result`: `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=37444.46683ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15026978816`, `pgmajfault=292790`, `workingset_refault_file=2912935`, `ram_ok=true`, `correctness_ok=true`.
+- `trace_summary`: `rows=35151`, all `ffn_gate_exps.weight`, `cache_hits=30528`, `cache_misses=4623`, `cache_inserts=3337`, `unique_miss_pairs=4599`, `src0_ms=22933.823`, `miss_src0_ms=22910.543`, `total_ms=25124.006`, `span_ms=67669.820`, `gap_sum_ms=42545.854`.
+- `interpretation`: The one-stream gate path itself spends about `25.1s`, dominated by cold miss source load (`~22.9s`). The larger `~42.5s` trace gap is outside one-stream gate and must be CPU fallback/up/down or graph scheduling. Therefore pack/source-load can help but is not the only bottleneck.
+
+### 当前执行：sota-cpu-gap-profile-after-replan
+
+- `attempt_id`: `20260702-sota-cpu-gap-profile-after-replan`
+- `status`: completed_diagnostic
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T110537Z-20260702_sota_cpu_gap_profile_after_replan/france-cpu40-vram0gb`.
+- `config`: same traced SOTA plus `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, and `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-profile.csv`.
+- `result`: `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=38428.228915ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15034163200`, `pgmajfault=273332`, `workingset_refault_file=2881507`, `ram_ok=true`, `correctness_ok=true`.
+- `cpu_profile`: profile printed `down calls=16920 total=3.351 ms/call cuda_single=1.533 fallback_t0=1.804`, with `single_accept=35151` and `single_decline=38222`. Since one-stream trace has `35151` gate calls, the accepted single path is gate; the declined/fallback side is up/down.
+- `fallback_summary`: decode fallback `up=13142.825ms`, `down=9202.939ms`; prompt fallback `up=3896.147ms`, `down=4261.930ms`. Combined fallback measured in CSV is about `30.5s`, with decode up/down alone about `22.35s`.
+- `interpretation`: Current cold SOTA has two comparable bottlenecks: gate miss source load (`~23s`) and up/down CPU fallback (`~30.5s` total, `~22.35s` decode). Previous fused up/down attempts regressed to `0.8 tok/s`, so the next implementation should prefer low-risk gate miss I/O reduction first, while keeping CPU fallback reduction as the next major direction after I/O is quantified.
+
+### 当前执行：expert-pack-feasibility-no-source-probe
+
+- `attempt_id`: `20260702-expert-pack-feasibility-no-source-probe`
+- `status`: completed_diagnostic_bound_supports_implementation
+- `profile_inventory`: `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `3313` pairs, `sha256=8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`. In the traced SOTA, all `3313` profile pairs were seen and inserted; additional `1286` miss pairs were single-use and not admitted. This means cache-admission refinement is unlikely to help without more VRAM, because the non-profile misses have only one event each.
+- `model_inventory`: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760`, mtime `2026-06-22 14:12:05.810122536 +0000`. Full sha256 was intentionally skipped during this diagnostic because hashing 156GB took too long; compute it before promoting a new SOTA if required.
+- `minimal_pack`: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, first-miss order, `4599` unique gate miss pairs, payload `20495204352` bytes (`19.088GiB`), file size about `20G`.
+- `read_sequences`: `/root/lfz/runs/vendor-ds4-16gb/20260702T110237Z-20260702_sota_bottleneck_trace_after_replan/read-sequences/{orig_miss_sequence.tsv,pack_miss_sequence.tsv}`, `4623` miss events, total read bytes `20602159104` (`19.187GiB`).
+- `readbench_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T111430Z-readbench-ds4-gate-pack-feasibility`, each case cold `drop_caches` and 16GB `MemoryMax`.
+- `readbench_result`: original GGUF miss sequence `22.505063s`, `0.852575GiB/s`; first-order pack miss sequence `13.656855s`, `1.404954GiB/s`; both read `20602159104` bytes and produced the same checksum.
+- `theoretical_bound`: A perfect one-stream pack implementation for this exact France trace can at most save roughly `8.85s` from the measured gate miss source-load path before accounting for integration overhead, read serialization, H2D overlap, and page-cache differences inside inference. Against the traced `span_ms≈67.7s`, this is an upper-bound speedup around `15%` for generation-side wall time, so an accepted improvement from `2.7 tok/s` toward about `3.0-3.1 tok/s` is plausible but not guaranteed.
+- `next_design`: Implement default-off one-stream pack reads only after this bound. Use `GGML_MOE_STREAM_ONE_EXPERT_PACK=<pack>` so Kimi and existing batch pack paths are unchanged. Start with buffered reads into existing pinned staging; then test direct/io_uring only if buffered pack improves or shows read serialization as the gap. Do not promote unless strict 16GB RAM, correctness, and TTFT gates pass. If the measured gain is far below the `~8.85s` I/O bound, debug pack hit count, read order, page-cache residency, and H2D overlap before changing compute.
