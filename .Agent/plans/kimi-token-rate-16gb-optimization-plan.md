@@ -16738,3 +16738,129 @@ Rollback:
 - If fallback CSV is missing or empty, reject the run as invalid.
 - If n32 does not reproducibly beat Phase 7AE best, reject Phase 7AI.
 - If n32 passes but n96 fails, reject Phase 7AI and keep Phase 7AE as SOTA.
+
+Phase 7AI initial n32 result - invalid, source adjustment required:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-135545Z-n32-phase7ai-min-profile-sqpoll`.
+- env validation:
+  - `env.txt` kept only
+    `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv` from
+    the Kimi CPU profile family;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`, name/eligibility profile,
+    `GGML_MOE_BATCH_PROFILE=1`, and `GGML_MOE_STREAM_DECLINE_DEBUG=1` were
+    absent.
+- hard gates:
+  - quality pass;
+  - TTFT `64045.31 ms`;
+  - decode `35235.59 ms / 31`, `0.88 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- invalid artifact:
+  - `fallback-profile.csv` was missing.
+- root cause:
+  - `ggml_kimi_cpu_moe_fallback_profile_record()` and the fallback profile data
+    structure are independent of aggregate CPU profile;
+  - however the down fallback timing/recording block is still wrapped by
+    `if (kimi_cpu_moe_profile && ith == 0)`;
+  - therefore setting only `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` does not
+    actually record fallback rows.
+
+Implementation adjustment before any promotion:
+
+1. In `ggml/src/ggml-cpu/ggml-cpu.c`, introduce a local
+   `kimi_cpu_moe_fallback_profile` boolean in the down MoE path, using
+   `ggml_kimi_cpu_moe_fallback_profile_enabled()`.
+2. Start the fallback timer when either aggregate CPU profile or fallback CSV
+   profile is enabled.
+3. After the down CPU fallback loop, if `ith == 0` and either profile mode is
+   enabled:
+   - compute `kimi_cpu_moe_fallback_us`;
+   - record fallback CSV rows when fallback CSV profile is enabled;
+   - update aggregate CPU profile counters only when
+     `GGML_KIMI_CPU_MOE_PROFILE=1`.
+4. Preserve default behavior when neither env is set:
+   - no timestamp;
+   - no fallback CSV;
+   - no aggregate profile.
+5. Rebuild and rerun n32. The previous `35235.59 ms / 31` run remains invalid
+   and cannot be used as acceptance evidence.
+
+Phase 7AI result after fallback CSV fix - rejected:
+
+- source delta tested:
+  - `ggml/src/ggml-cpu/ggml-cpu.c` down fallback CSV timing/recording was
+    decoupled from aggregate `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - no math, routing, cache, IO, CUDA, or generation-setting changes.
+- build: `cmake --build build-cuda-batch -j 32 --target llama-completion`,
+  success.
+
+n32 candidate after source adjustment:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140059Z-n32-phase7ai-min-profile-sqpoll-fallback-fix`.
+- env validation:
+  - only `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` remains from the Kimi CPU
+    profile family;
+  - aggregate CPU profile, name/eligibility profile, batch profile, and decline
+    debug are absent.
+- fallback artifact:
+  - `fallback-profile.csv`, `859752` bytes;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- quality: pass.
+- TTFT: `59917.94 ms`.
+- decode: `36395.18 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `292.13 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=25037`;
+  - `iouring_wait_us=7978130`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- cache:
+  - down `806` slots, hit rate `73.6%`;
+  - upgate `1679` slots, hit rate `43.7%`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140327Z-n32-phase7ai-min-profile-sqpoll-fallback-fix-confirm`.
+- fallback artifact:
+  - `fallback-profile.csv`, `860136` bytes;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- quality: pass.
+- TTFT: `71719.66 ms`.
+- decode: `37064.53 ms / 31`, `0.84 tok/s`.
+- comparison:
+  - slower than Phase 7AE best n32 `36687.31 ms / 31` by `377.22 ms`;
+  - slower than the 7AI candidate by `669.35 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=25556`;
+  - `iouring_wait_us=7816890`;
+  - `inflight_avg=2.58`, `inflight_max=8`.
+
+Interpretation:
+
+- The fallback CSV fix worked and preserved the required artifact in
+  minimal-profile mode.
+- The token-rate improvement did not reproduce. This matches earlier Phase 7Y:
+  minimal-profile can produce a favorable single n32 run, but the effect is
+  within cold-run variance and does not satisfy the promotion gate.
+- Because n32 confirmation failed, do not run n96.
+
+Decision:
+
+- Reject Phase 7AI.
+- Revert the tested `ggml/src/ggml-cpu/ggml-cpu.c` source change before
+  continuing.
+- Keep Phase 7AE as the current accepted SOTA:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
