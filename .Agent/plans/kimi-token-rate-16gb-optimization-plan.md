@@ -8886,3 +8886,70 @@ Decision rule:
 - Accept only if strict n96 beats current Phase 3ZG:
   2.57811 s/token, 0.38788 tok/s.
 - Otherwise reject and keep Phase 3ZG depth=2 unified cache as accepted runtime.
+
+Result timestamp: 2026-07-03 00:12 UTC / 2026-07-03 08:12 CST.
+
+Strict n96 split pct45 plus depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-000532Z-n96-phase3zj-split-pct45-prefetch-depth2`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.728348 GiB.
+- VRAM:
+  peak 31290 MiB, minimum reserve 821 MiB.
+- TTFT:
+  80087.73 ms, gate PASS.
+- Decode:
+  223.86929 s / 85 tokens = 2.63376 s/token, 0.37969 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3963, hits=3963, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=33492, host_stage=45611.884 ms, h2d=7256.822 ms.
+- Up/gate CPU profile:
+  calls=2381, total=28.267 ms/call, cuda_batch=28.081,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=19.673 ms/call, cuda_batch=3.623,
+  fallback_t0=15.991, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=8.430 ms/call, kernel=0.111 ms/call,
+  wall=8.604 ms/call.
+- Aggregate VRAM cache:
+  hits=40232, misses=33880, preloads=3963, hit_rate=54.3%.
+- Split pools:
+  - down: slots=1109, slot=7.44 MiB, hits=22199, misses=13817,
+    preloads=3963, hit_rate=61.6%.
+  - upgate: slots=1259, slot=5.36 MiB, hits=18033, misses=20063,
+    preloads=0, hit_rate=47.3%.
+
+Comparison:
+
+- Phase 3ZG unified depth=2:
+  2.57811 s/token, 0.38788 tok/s.
+- Phase 3ZJ split pct45 + depth=2:
+  2.63376 s/token, 0.37969 tok/s.
+- Split improves visible staging and down hit-rate:
+  - host_stage 50722.324 -> 45611.884 ms,
+  - down hit-rate 51.1% aggregate/unified -> 61.6% down-pool.
+- But upgate pool hit-rate is only 47.3%, and the total decode is still
+  slower than the unified depth=2 accepted runtime.
+
+Decision:
+
+- Reject Phase 3ZJ split pct45 + depth=2.
+- Keep Phase 3ZG unified cache depth=2 as the current accepted runtime.
+- A future split retry would need a larger upgate pool or different split
+  threshold, but fixed split-cache has repeatedly failed to beat unified cache
+  at full n96.
