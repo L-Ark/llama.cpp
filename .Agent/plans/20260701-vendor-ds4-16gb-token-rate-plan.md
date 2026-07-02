@@ -1939,6 +1939,19 @@
 - `gap_analysis`: The vram8 -> vram12 sequence does change kernel file-page state: vram12 refaults are extremely low before kill, and `active_file` is high. However that state also leaves `file_mapped≈12.56GB` and `memory_file≈15.10GB`, causing the strict 16GB RAM gate to terminate the run before any answer. Therefore this sequence cannot be accepted as a cold-start SOTA and does not reproduce the historical `2.6 tok/s` under current strict accounting.
 - `rollback_status`: no source change. Current accepted SOTA remains top4 `2.3 tok/s`. Sequence-induced low-refault state is useful evidence but is non-compliant unless future work can keep the same low refault behavior while staying below the 16GB RAM gate and producing a correct answer.
 
+### 当前执行 attempt：cpu-fallback-dontneed-top4
+
+- `attempt_id`: `20260702-cpu-fallback-dontneed-top4`
+- `attempt_kind`: `source-probe/cgroup-file-cache-pressure`
+- `status`: planned
+- `hypothesis`: Gate stream is not the remaining bottleneck for the historical `2.6` gap; diagnostics point to unstreamed `ffn_up_exps` / `ffn_down_exps` CPU fallback and cgroup file-page reclaim. Adding a default-off `MADV_DONTNEED` after each unstreamed CPU fallback expert finishes may reduce file-cache pressure, lower `memory.max` reclaim churn, and avoid the low-refault-but-over-RAM state observed in the sequence run.
+- `theoretical_upper_bound`: CPU fallback trace distribution captured `up+down` as the dominant non-gate work. If reclaim stalls around up/down account for tens of seconds of the old-config span gap, the hard upside could approach part of that gap. Direct advice overhead is one syscall per nonzero unstreamed expert; if the same expert is reused soon, the optimization can regress by forcing refaults. Promote only on measured token-rate improvement over current top4 `2.3 tok/s` with RAM/correctness/TTFT gates passing.
+- `implementation`: Add default-off env `GGML_MOE_CPU_DONTNEED_AFTER_EXPERT=1` in `ggml/src/ggml-cpu/ggml-cpu.c`. For tensors whose name contains `ffn_up_exps` or `ffn_down_exps`, after all CPU chunks for one `cur_a` expert finish, thread `ith==0` calls a page-aligned `madvise(..., MADV_DONTNEED)` for that expert's `src0` page range. Unset env preserves current behavior.
+- `test_config`: patched source, current top4 SOTA config (`GGML_MOE_KEEP_TOPK_UPDOWN=4`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`), cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`, plus `GGML_MOE_CPU_DONTNEED_AFTER_EXPERT=1`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000` with no runner kill/OOM, France output passes manual semantic/coherence review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: If build fails, token rate does not improve, correctness fails, RAM gate fails, or TTFT gate fails, revert source and clean rebuild; record rejected. If accepted, immediately write complete reproduction info, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup memory files, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
