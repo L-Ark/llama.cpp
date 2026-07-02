@@ -3005,3 +3005,15 @@
 - `result`: reproduced accepted SOTA. `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=38591.376792ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043362816`, `pgmajfault=282230`, `workingset_refault_file=2816754`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
 - `decision`: This is the baseline to preserve while merging newer Kimi changes. Any post-merge checkpoint must keep DeepSeek at `>=2.7 tok/s` with RAM/correctness/TTFT gates passing before push as a guarded merge.
 
+### 当前执行：merge-kimi-new-changes-guarded
+
+- `attempt_id`: `20260702-merge-kimi-new-changes-guarded`
+- `status`: accepted_as_guarded_merge_checkpoint
+- `merged_commits`: cherry-picked Kimi code commits `1d456eafa` (`cuda: overlap current down staging with upgate`), `342ea9481` (`llama: drop expert mmap cache after prompt`), and `046d8e2de` (`llama: drop dense mmap cache after prompt`) on top of the restored DeepSeek SOTA branch. This preserves the Kimi functionality while avoiding a raw merge that would delete DeepSeek `.Agent` reproduction artifacts.
+- `build_result`: `cmake --build build-ds4-moe-stream-batch --target llama-cli -j 8` passed after the cherry-picks.
+- `guard_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T104255Z-20260702_post_kimi_new_changes_ds_sota_guard/france-cpu40-vram0gb`.
+- `guard_config`: same accepted DeepSeek SOTA env as pre-merge: strict cold `drop_caches`, 16GB cgroup, `cpu_moe=40`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, repo cache-admission profile `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `guard_result`: DeepSeek SOTA preserved. `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=38843.150588ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15041540096`, `pgmajfault=291550`, `workingset_refault_file=2817341`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `decision`: commit and push this guarded Kimi merge checkpoint to `ssd/vendor/deepseek-token-rate-16gb`, then run a clean pushed-commit reproduction before claiming the branch is fully reproducible. This is not a new DeepSeek token-rate SOTA beyond `2.7 tok/s`; it is a compatibility checkpoint that keeps Kimi changes while maintaining current DeepSeek SOTA.
+- `next_design`: continue from the plan reset direction: focus on cold-start expert pack/io_uring or source-load/page-cache churn reduction rather than re-enabling rejected up/gate fused paths.
+
