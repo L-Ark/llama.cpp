@@ -2041,6 +2041,19 @@
 - `reproduction_guardrail`: this promotion is only valid because the run directory now contains source state, pushed remote/branch, binary version/stat/sha256, runner sha256, model stat, exact command/env, stdout/stderr, summary.json, cgroup memory files, `one_trace.csv`, `trace_summary.json`, and manual correctness review. Any future new SOTA must repeat this full record + immediate source push + pushed-commit clean rebuild rerun sequence before being called accepted.
 - `publish_status`: promoted; this plan update itself must be committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` as the promotion record.
 
+### 当前执行 attempt：expert-keep-top3-late5-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-late5-top4-rest`
+- `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Current accepted late10 SOTA trace still spends `src0_ms=24305.283ms` out of `total_ms=26552.328ms` in streamed gate expert source loading, while the late20->late10 expansion reduced trace rows, cache misses, major faults, and end-to-end wall time without harming France correctness. The next highest-leverage low-risk probe is therefore a small additional layer-range expansion before changing IO/prefetch code.
+- `hypothesis`: Expanding the top3 override from `blk.10-39` to `blk.5-39` prunes five additional CPU-MoE layers while keeping the first five layers at top4. This may reduce up/down fallback work and indirectly reduce page/refault pressure enough to move beyond the current rounded `2.6 tok/s`; correctness risk is higher because this enters earlier representation layers.
+- `theoretical_upper_bound`: Using the previous coarse global top4->top3 bound of about `12.9s`, the incremental bound for five more layers is `12.9s * 5/40 ≈ 1.6s` before overhead and layer imbalance. Since current pushed late10 elapsed time is `89.48s`, the optimistic wall-time floor for this isolated change is around `87.9s`; if output length stays similar this could only modestly improve token rate, likely toward `2.7 tok/s` rather than a large jump. The hard correctness gate dominates this probe.
+- `test_config`: pushed source with layer-range support, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=5-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change is required for this config probe. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep late10 `2.6 tok/s` SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
