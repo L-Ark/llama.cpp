@@ -15184,3 +15184,122 @@ Phase 7Z n32 result - rejected:
   - bytes served `3806724096`.
 - interpretation: the cache mechanically worked and avoided repeated file-backed reads for hot Q4_0 experts, but the first-load memcpy/cache lookup/memory pressure cost outweighed the saved residual fallback at n32. The measured residual Q4_0 bucket is too small for a 256MiB anonymous cache to reliably improve token rate under the 16GB cgroup.
 - decision: reject Phase 7Z. Do not run confirm or n96. Revert source and keep Phase 7P as SOTA.
+
+## Phase 7AA - post-7P split-cache upgate percentage sweep
+
+Design timestamp: 2026-07-02 13:05 UTC.
+
+Current accepted SOTA:
+
+- Runtime source: Phase 7P, accepted commit
+  `b64b467ac80598136167096aaaeda0b30165f856`; later commits are plan-only.
+- Current branch head at design time:
+  `f58bfea8ef60e86e516e0f2fac8ffc6c4af319d8`.
+- Accepted n32 comparison:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-110048Z-n32-phase7p-pack-mmap-decode-only-confirm`,
+  decode `37379.97 ms / 31`.
+- Accepted n96 comparison:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm`,
+  decode `90610.91 ms / 77`, token rate `0.85 tok/s`.
+
+Bottleneck from Phase 7P n96 confirmation:
+
+- up/gate profile: `calls=2157`, `kernel=14.182 ms/call`,
+  `total=14.244 ms/call`.
+- CPU wrapper up/gate: `calls=4621`, `cuda_batch=14.907 ms/call`.
+- down profile: `calls=4798`, `total=15.604 ms/call`,
+  `cuda_batch=2.718 ms/call`, `fallback_t0=12.844 ms/call`.
+- split cache at `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`:
+  - upgate pool: `1679` slots, hit rate `43.2%`;
+  - down pool: `806` slots, hit rate `73.4%`.
+- pinned staging:
+  - main host stage `61282.701 ms`, H2D `11400.638 ms`;
+  - gate host stage `2146.108 ms`, H2D `1043.319 ms`.
+
+Hypothesis:
+
+- `VRAM_MIB=15200` was rejected because increasing total cache capacity did not
+  reproduce. The safer remaining cache knob is to keep total VRAM cache fixed at
+  `15000 MiB` and change only the split between upgate and down.
+- `UPGATE_PCT=60` allocates about `9000 MiB` to upgate and `6000 MiB` to down.
+  `UPGATE_PCT=65` allocates about `9750 MiB` to upgate and `5250 MiB` to down.
+- At current slot sizes, this adds roughly `750 MiB / 5.36 MiB ~= 139`
+  upgate slots and removes roughly `750 MiB / 7.44 MiB ~= 100` down slots.
+- The possible win is fewer upgate expert loads and lower staging pressure; the
+  risk is more down misses, higher down fallback exposure, and worse decode.
+- This is env-only and does not change math, routing, tensor values, kernels, or
+  CPU fallback semantics, so correctness risk should be low. It still must pass
+  the France semantic gate on every run.
+
+Theoretical upper bound:
+
+- The absolute upper bound is the amount of exposed staging/fallback time that
+  can be moved by about `139` extra upgate slots before the lost `100` down
+  slots add more exposed down time.
+- From Phase 7P, down exposed fallback is about `12.844 ms/call * 4798 calls =
+  61.6 s` local profile time, but only a small fraction is available on the
+  critical path because accepted n96 decode is `90.6 s` total and down compute
+  overlaps with other work.
+- Upgate total is about `14.244 ms/call * 2157 calls = 30.7 s` on the CUDA
+  batch profile. The split sweep can only affect the staging/cache miss part,
+  not the fixed up/gate kernel compute. Therefore the expected realistic gain is
+  small, likely `0-2 s/n96`; a bigger gain must be explained by measured
+  counters.
+- Because the expected gain is small, reproducibility is mandatory: a single
+  faster n32 run is not accepted.
+
+Experiment design:
+
+- No source change.
+- Create `/tmp/run_phase7aa_repro.sh` from `/tmp/run_phase7t_repro.sh`, adding
+  an explicit `UPGATE_PCT` parameter and recording it into `env.txt`,
+  `command.txt`, and the copied `script.sh`.
+- Keep all accepted Phase 7P env vars:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - pinned staging slots `8`;
+  - dense/expert mmap drop after prompt.
+- Candidate order:
+  1. Run strict cold n32 with `UPGATE_PCT=65`.
+  2. If n32 is faster than `37379.97 ms / 31` and all hard gates pass, run an
+     n32 confirmation with the same recipe.
+  3. If both n32 runs pass, run n96 and n96 confirmation.
+  4. If `65` is slower and counters show down miss/fallback regression, run one
+     diagnostic strict cold n32 with `UPGATE_PCT=55`. Do not run a broad sweep
+     unless the counters justify it.
+
+Reproducibility requirements:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- `script.sh` plus the recorded env and command must be enough to rerun the
+  result from the recorded commit and model/expert-pack paths.
+- Every promotion candidate must have a repeat cold-start run with the same
+  recipe. Non-reproducible improvements are rejected.
+
+Acceptance gates:
+
+- Cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- `memory.peak <= 15899996160`, `oom=0`.
+- TTFT `<= 106331.72 ms`.
+- `read_failures=0`; no CUDA launch/copy failures.
+- France prompt output must be coherent and semantically correct.
+- n32 must beat Phase 7P n32 confirm `37379.97 ms / 31` twice.
+- n96 must beat Phase 7P n96 confirm `90610.91 ms / 77` twice.
+- The counter evidence must be consistent with the gain: better cache hit/miss,
+  lower host stage/H2D, lower upgate/down profile time, or a clear explanation
+  of why wall decode improved.
+
+Rollback/commit rule:
+
+- Env-only failures require no source rollback, but the rejected run and reason
+  must be recorded in this plan.
+- Do not promote a single run.
+- If the setting passes n32 twice and n96 twice, record exact reproduction,
+  commit the plan/config documentation, and push immediately.
