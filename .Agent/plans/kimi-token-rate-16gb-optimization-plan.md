@@ -15944,3 +15944,127 @@ Rollback:
 
 - Env-only failure needs no source rollback.
 - If n32 is slower, SQPOLL is rejected and no confirm/n96 is run.
+
+Phase 7AE result - accepted as new config SOTA:
+
+- runner: `/tmp/run_phase7ae_repro.sh`.
+- env delta over Phase 7P:
+
+```sh
+GGML_MOE_IO_SQPOLL=1
+```
+
+- no source change.
+- every run captured `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-130727Z-n32-phase7ae-iouring-sqpoll`.
+- git head: `f525c712216d20396f9121caf99460cf23d734dd`.
+- quality: pass.
+- TTFT: `58754.49 ms`.
+- decode: `36687.31 ms / 31`, `0.84 tok/s`.
+- comparison: faster than Phase 7P n32 confirm `37379.97 ms / 31` by
+  `692.66 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=44267`;
+  - `iouring_wait_us=7915314`.
+- pinned staging main: host stage `24429.536 ms`, H2D `4558.687 ms`.
+- up/gate profile: total `14.648 ms/call`.
+- down profile: total `30.865 ms/call`, fallback_t0 `28.033 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-131002Z-n32-phase7ae-iouring-sqpoll-confirm`.
+- quality: pass.
+- TTFT: `79174.41 ms`.
+- decode: `36973.83 ms / 31`, `0.84 tok/s`.
+- comparison: faster than Phase 7P n32 confirm by `406.14 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=46278`;
+  - `iouring_wait_us=7397029`.
+- pinned staging main: host stage `24157.298 ms`, H2D `4558.592 ms`.
+- up/gate profile: total `14.574 ms/call`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-131306Z-n96-phase7ae-iouring-sqpoll`.
+- quality: pass; complete answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `62623.32 ms`.
+- decode: `90099.60 ms / 77`, `0.85 tok/s`.
+- comparison:
+  - faster than Phase 7P n96 confirm `90610.91 ms / 77` by `511.31 ms`;
+  - slightly slower than Phase 7P first n96 `90013.57 ms / 77` by `86.03 ms`,
+    so confirmation was mandatory.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=108882`;
+  - `iouring_wait_us=19313782`.
+- pinned staging main: host stage `61569.400 ms`, H2D `11373.778 ms`.
+- up/gate profile: total `14.193 ms/call`.
+- down profile: total `16.138 ms/call`, fallback_t0 `13.257 ms`.
+
+n96 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`.
+- quality: pass; complete answer matches the candidate answer shape and is
+  semantically correct.
+- TTFT: `64612.02 ms`.
+- decode: `88889.08 ms / 77`, `0.87 tok/s`.
+- comparison:
+  - faster than Phase 7P n96 confirm by `1721.83 ms`;
+  - faster than Phase 7P first n96 by `1124.49 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=95306`;
+  - `iouring_wait_us=19187389`.
+- pinned staging main: host stage `60514.789 ms`, H2D `11381.667 ms`.
+- up/gate profile: total `14.151 ms/call`.
+- down profile: total `16.369 ms/call`, fallback_t0 `13.544 ms`.
+
+Accepted comparison:
+
+| config | run | decode | token rate |
+| --- | --- | ---: | ---: |
+| Phase 7P n96 first | `20260702-110350Z-n96-phase7p-pack-mmap-decode-only` | `90013.57 ms / 77` | `0.86 tok/s` |
+| Phase 7P n96 confirm | `20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm` | `90610.91 ms / 77` | `0.85 tok/s` |
+| Phase 7AE n96 first | `20260702-131306Z-n96-phase7ae-iouring-sqpoll` | `90099.60 ms / 77` | `0.85 tok/s` |
+| Phase 7AE n96 confirm | `20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm` | `88889.08 ms / 77` | `0.87 tok/s` |
+
+Interpretation:
+
+- SQPOLL sharply reduces io_uring submit accounting:
+  - Phase 7AB n32 diagnostic submit was about `2.29 s`;
+  - Phase 7AE n32 submit is about `0.044-0.046 s`;
+  - Phase 7AE n96 submit is about `0.095-0.109 s`.
+- Wait time increases compared with non-SQPOLL, so the benefit is not purely
+  submit-time removal. The accepted wall-clock gain is modest but reproducible
+  across n32 and n96 confirmations.
+- The likely reason for the net gain is lower CPU-side submission overhead and
+  slightly lower host-stage/upgate wall time without changing cache contents,
+  tensor values, routing, or math.
+
+Decision:
+
+- Accept Phase 7AE as the new config SOTA.
+- New accepted env delta: `GGML_MOE_IO_SQPOLL=1`.
+- New accepted n96 range: `0.85-0.87 tok/s`, best confirmed raw decode
+  `88889.08 ms / 77`.
+- Commit and push this plan/config record immediately.
