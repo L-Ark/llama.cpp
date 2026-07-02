@@ -9240,3 +9240,437 @@ Rollback/rejection:
   cannot be reproduced.
 - Env-only failed runs are recorded as rejected and must not be stacked into the
   next candidate.
+
+Result timestamp: 2026-07-02 20:32 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-002710Z-n96-phase3zl-accepted-runtime-reprofile`
+
+Measured result:
+
+- Commit/config: `536c4715785f920ad16e700b86b41adbd4582845`, accepted Phase
+  3ZG runtime env.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID` before inference launch.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches` recorded in
+  `cold-start.txt`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`, below 16GB.
+- Page cache final: `13.726364 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `77413.38 ms`, inside the `106331.72 ms` gate.
+- Decode: `226.68758 s / 85 tokens = 2.666912705882353 s/token`,
+  `0.3749654039272906 tok/s`.
+- Quality: PASS. Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Declines: `multirow_not_supported=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=37837`, `misses=36211`, `preloads=3994`,
+    `hit_rate=51.1%`;
+  - down prefetch `loads=3994`, `hits=3994`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=35733`, `host_stage=49522.536 ms`,
+  `h2d=7740.443 ms`.
+- Expert pack: `direct_reads=35733`, `iouring_reads=0`, `read_failures=0`.
+- Up/gate profile:
+  - CPU profile: `2381` calls, `29.988 ms/call`,
+    `cuda_batch=29.798 ms/call`, `fallback_t0=0.001 ms/call`;
+  - CUDA wall profile: `29.772 ms/call`, `wall_gap=5.466 ms/call`.
+- Down profile:
+  - CPU profile: `10718` calls, `19.389 ms/call`,
+    `cuda_batch=3.831 ms/call`, `fallback_t0=15.500 ms/call`,
+    `batch_accept=4506`, `batch_decline=52`;
+  - CUDA batch profile: `4506` calls, `stage=8.915 ms/call`,
+    `kernel=0.111 ms/call`, `wall=9.100 ms/call`.
+
+Comparison:
+
+- Current accepted Phase 3ZG:
+  - `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`,
+    TTFT `74433.41 ms`.
+- Phase 3ZL reprofile:
+  - `2.666912705882353 s/token`, `0.3749654039272906 tok/s`,
+    TTFT `77413.38 ms`.
+
+Decision:
+
+- Accept Phase 3ZL as strict profiling evidence because every hard gate passed:
+  host RAM, cold start, VRAM, TTFT, semantic quality, read failures, and launch
+  failures.
+- Do not promote it as a new runtime because it is slower than Phase 3ZG.
+- Keep Phase 3ZG unified cache + depth=2 prefetch as the accepted runtime.
+
+Updated bottleneck:
+
+- Up/gate remains stable at about `71.4 s` visible aggregate time
+  (`2381 * 29.988 ms`), with essentially no fallback.
+- Down remains the highest priority:
+  - aggregate visible down profile is about `207.8 s`
+    (`10718 * 19.389 ms`);
+  - fallback is about `166.1 s` (`10718 * 15.500 ms`);
+  - accepted CUDA down kernel work itself is only about `0.111 ms/call`;
+  - only `52` calls explicitly decline as `multirow_not_supported`.
+- The name profile shows many expensive entries with `batch_eligible=0`, not
+  only accepted/declined down batch calls. The current profile does not explain
+  which eligibility predicate fails for those layers.
+- `GGML_MOE_GPU_HANDOFF=1` is not a safe shortcut: Phase 2I already showed
+  handoff activation with corrupt output (`France isneedator`).
+
+## Next candidate: Phase 3ZM down batch eligibility reason profile
+
+Design timestamp: 2026-07-02 20:44 CST.
+
+Current bottleneck:
+
+- Phase 3ZL proves the largest visible removable bucket is down fallback:
+  `15.500 ms/call` across `10718` calls, about `166 s` of the full run.
+- Only `52` down batch calls are known declines with reason
+  `multirow_not_supported`.
+- Many high-cost layer entries report `batch_eligible=0`, but the current CPU
+  name profile only records the final boolean `use_gpu_stream_batch`; it does
+  not say whether the failure is:
+  - env missing;
+  - CUDA function pointer unavailable;
+  - stream runtime unavailable;
+  - unsupported quant type/name;
+  - `src1` not F32;
+  - `ne13 != 1`;
+  - `dst` not F32.
+
+Hypothesis:
+
+Add a default-off diagnostic profile controlled by
+`GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`. It must not change math, routing,
+cache policy, launch conditions, or accepted runtime behavior unless the env is
+set. With the env set, it should aggregate per-name eligibility failure counts
+and print them next to `kimi_cpu_moe_name_profile`.
+
+Theoretical value and bound:
+
+- This diagnostic does not directly improve token rate, so it has no
+  performance promotion bound.
+- It bounds the next implementation choice:
+  - if `ne13 != 1` dominates, the next mathematical target is a decode/prompt
+    shape split or multirow-safe down batch;
+  - if unsupported type/name dominates, the next target is quant/type coverage;
+  - if `src1` or `dst` layout dominates, the next target is a layout-preserving
+    GPU path;
+  - if runtime availability dominates, the issue is scheduling/config rather
+    than kernel math.
+- The optimization ceiling remains the Phase 3ZL fallback bucket: a perfect
+  removal of down fallback would bound the run near
+  `(226.68758 - 166.1) / 85 = 0.713 s/token` before new GPU/cache overhead.
+  A realistic first target is removing 10-20% of that fallback bucket, which
+  would improve full decode by about `16-33 s`, enough to exceed Phase 3ZG if
+  quality and TTFT hold.
+
+Execution:
+
+1. Implement only default-off counters and reporting in `ggml/src/ggml-cpu`.
+2. Build the remote CUDA target.
+3. Run a strict cold `-n 32` diagnostic with:
+   - accepted Phase 3ZG runtime env;
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - strict `memory.max=15900000000`, `memory.swap.max=0`;
+   - cold `sync; echo 3 > /proc/sys/vm/drop_caches`;
+   - France prompt quality gate.
+4. Promote to `-n 96` diagnostic only if `-n 32` passes quality/RAM/TTFT and
+   produces actionable eligibility reason counts.
+
+Acceptance:
+
+- Source change is accepted only as diagnostic/default-off code.
+- With diagnostic env enabled:
+  - build succeeds;
+  - host RAM remains below 16GB including page cache;
+  - TTFT remains `<= 106331.72 ms`;
+  - answer is semantically correct for the France prompt;
+  - `read_failures=0`, launch failures `=0`;
+  - logs show per-name or aggregate eligibility reason counts.
+- It is not a performance promotion and must not replace Phase 3ZG.
+
+Rollback:
+
+- Revert the source change if it affects default runtime behavior, breaks the
+  build, changes output quality, introduces launch/read failures, or causes
+  unacceptable profiling overhead under the diagnostic env.
+
+Result timestamp: 2026-07-02 20:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-003738Z-n32-phase3zm-down-eligibility-profile`
+
+Measured result:
+
+- Source state: `536c4715785f920ad16e700b86b41adbd4582845-dirty-phase3zm`,
+  default-off diagnostic counters added to `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.832169 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `74933.04 ms`, inside the `106331.72 ms` gate.
+- Decode: `71.21795 s / 31 tokens = 2.2973532258064515 s/token`,
+  `0.4352835205169483 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `23.836 ms/call`,
+  `cuda_batch=23.643 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.985 ms/call`, `cuda_batch=2.746 ms/call`,
+  `fallback_t0=26.191 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17836.630 ms`,
+  `h2d=2843.779 ms`.
+
+Eligibility result:
+
+- The diagnostic profile printed 40 ranked eligibility lines.
+- High-cost ineligible entries are dominated by `unsupported`, not by
+  `ne13_not1`, `src1_not_f32`, `dst_not_f32`, runtime availability, or env
+  gating.
+- Examples:
+  - `blk.9.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.6.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.7.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.18.ffn_down_exps.weight`: `unsupported=32`;
+  - many `ffn_gate_exps` / `ffn_up_exps` entries also show
+    `unsupported=32`.
+- This changes the bottleneck interpretation: the large fallback bucket is not
+  mainly from the 52 multirow declines. It is mostly unsupported tensor
+  type/name combinations in the generic `mul_mat_id` path.
+
+Decision:
+
+- Accept Phase 3ZM as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, and launch failure gates
+  passed.
+- Do not promote it as a runtime improvement.
+- The diagnostic is still incomplete for implementation planning because it
+  prints the reason but not the numeric `src0->type`. The next step must add
+  tensor type to the eligibility profile before changing kernel support.
+
+## Next candidate: Phase 3ZN eligibility profile with tensor type
+
+Design timestamp: 2026-07-02 20:53 CST.
+
+Current bottleneck:
+
+- Phase 3ZM proves that `unsupported` dominates the high-cost ineligible
+  entries, but it does not tell which quant type is unsupported.
+- Without `src0->type`, extending support would be guessing. That is unsafe
+  because previous direct mathematical changes, such as Phase 3ZC flattening
+  and Phase 2I handoff, produced crashes or semantic corruption.
+
+Hypothesis:
+
+Extend the default-off eligibility diagnostic to print the numeric `src0->type`
+for each profiled tensor name. This still must not alter math or runtime
+selection. With type information, the next real optimization can rank:
+
+- adding missing type coverage to the up/gate batch path;
+- adding missing type coverage to the down batch path;
+- rejecting a type if no matching CUDA kernel exists;
+- or leaving it on CPU if the theoretical gain is smaller than the risk.
+
+Theoretical value and bound:
+
+- This step is still diagnostic-only and has no direct token-rate promotion
+  bound.
+- It enables a hard upper bound for the next implementation by summing fallback
+  time for names of the same unsupported type and comparing it with the
+  existing accepted CUDA batch cost for supported types.
+
+Execution:
+
+1. Add `src0_type` to the default-off
+   `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1` output.
+2. Rebuild remote CUDA `llama-completion`.
+3. Run strict cold `-n 32` with the same Phase 3ZM env and gates.
+4. Record the type-ranked unsupported entries and decide the next actual
+   optimization target.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, TTFT, semantic quality, VRAM, read
+  failure, and launch failure gates.
+- Logs contain `src0_type` for the eligibility lines.
+
+Rollback:
+
+- Revert if the default-off diagnostic affects runtime behavior, build fails,
+  quality fails, TTFT fails, or the profile no longer prints actionable
+  eligibility lines.
+
+Result timestamp: 2026-07-02 21:03 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-004324Z-n32-phase3zn-eligibility-type-profile`
+
+Measured result:
+
+- Source state: `536c4715785f920ad16e700b86b41adbd4582845-dirty-phase3zn`,
+  Phase 3ZM diagnostic plus `src0_type` in eligibility output.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.824005 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `75189.51 ms`, inside the `106331.72 ms` gate.
+- Decode: `71.38612 s / 31 tokens = 2.302778064516129 s/token`,
+  `0.4342580882670189 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `23.036 ms/call`,
+  `cuda_batch=22.852 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.647 ms/call`, `cuda_batch=2.771 ms/call`,
+  `fallback_t0=25.833 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17685.176 ms`,
+  `h2d=2845.054 ms`.
+
+Eligibility/type result:
+
+- The diagnostic profile printed 40 ranked lines with `src0_type`.
+- Type mapping from `ggml/include/ggml.h`:
+  - `2 = GGML_TYPE_Q4_0`;
+  - `11 = GGML_TYPE_Q3_K`;
+  - `18 = GGML_TYPE_IQ3_XXS`;
+  - `22 = GGML_TYPE_IQ2_S`;
+  - `23 = GGML_TYPE_IQ4_XS`.
+- Top visible unsupported counts by `src0_type`:
+  - `18`: `640` top-line unsupported counts, mostly `ffn_gate_exps` and
+    `ffn_up_exps` entries in the generic `mul_mat_id` path;
+  - `2`: `224` top-line unsupported counts, all visible examples are
+    `ffn_down_exps` Q4_0 layers (`blk.6`, `blk.7`, `blk.8`, `blk.9`,
+    `blk.10`, `blk.15`, `blk.18`);
+  - `22`: `96` top-line unsupported counts, visible as `ffn_up_exps`;
+  - `11` and `23`: visible down entries are eligible.
+
+Decision:
+
+- Accept Phase 3ZN as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, launch failure, and
+  profile-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record before attempting a real
+  optimization patch.
+
+Next bottleneck conclusion:
+
+- The safest first implementation target is Q4_0 down batch coverage:
+  - it is specifically a down tensor path, unlike the IQ3_XXS/IQ2_S up/gate
+    entries that may reflect prompt/generic fallback interactions;
+  - Q4_0 is already supported by CUDA MMVQ (`mmvq.cu` has Q4_0 switch cases);
+  - the current `launch_moe_mmvq_compact_batch` whitelist excludes Q4_0, so the
+    initial code change is narrow and testable.
+
+## Next candidate: Phase 3ZO Q4_0 down batch coverage
+
+Design timestamp: 2026-07-02 21:08 CST.
+
+Current bottleneck:
+
+- Phase 3ZN shows Q4_0 down layers are currently rejected before CUDA down
+  batch because `ggml_cuda_moe_stream_supports_down_batch()` does not include
+  `GGML_TYPE_Q4_0`, and `launch_moe_mmvq_compact_batch()` also excludes it.
+- Visible examples in the `-n 32` top profile:
+  - `blk.6.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.7.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.8.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.9.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.10.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.15.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.18.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`.
+- Existing CUDA support evidence:
+  - `ggml/src/ggml-cuda/mmvq.cu` includes Q4_0 in
+    `mul_mat_vec_q_switch_type`;
+  - `ggml_cuda_moe_stream_mmvq_dev()` routes through that switch;
+  - therefore the minimal testable change is to admit Q4_0 through the Kimi
+    MoE down-batch eligibility/launch whitelist.
+
+Hypothesis:
+
+Add `GGML_TYPE_Q4_0` to:
+
+- `ggml_cuda_moe_stream_supports_down_batch()` in `ggml/src/ggml-cpu`;
+- `launch_moe_mmvq_compact_batch()` in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+
+This should move Q4_0 `ffn_down_exps` layers from CPU fallback to the same CUDA
+MMVQ down batch path used by Q3_K/IQ4_XS down layers, without changing routing,
+cache policy, prompt multirow handling, or up/gate behavior.
+
+Theoretical upper bound:
+
+- Phase 3ZN `-n 32` top-line Q4_0 unsupported counts cover `224` calls across
+  the top 40 names. Each Q4_0 down layer appears once per token in the generic
+  fallback path.
+- If these calls move to the accepted down CUDA profile, their compute part
+  should be near the existing CUDA down kernel scale (`~0.111 ms/call`) plus
+  staging/cache cost, not the CPU fallback cost.
+- The realistic upper bound for this narrow patch is a fraction of Phase 3ZN's
+  generic fallback bucket:
+  - Phase 3ZN fallback bucket: `4022 * 25.833 ms = 103.9 s`;
+  - visible Q4_0 unsupported calls: `224 / 4022 = 5.6%` of calls;
+  - if their average fallback cost is similar to the generic average, maximum
+    `-n 32` savings is about `5.8 s`, or `0.19 s/token`;
+  - full `-n 96` bound scales to roughly `16 s`, enough to beat Phase 3ZG if
+    the staging overhead does not erase the gain.
+- If measured speedup is much smaller, inspect whether Q4_0 staging/cache
+  misses or new CUDA launch overhead consumes the removed CPU fallback time.
+
+Execution:
+
+1. Implement only Q4_0 down eligibility/launch whitelist expansion.
+2. Build remote CUDA `llama-completion`.
+3. Run strict cold `-n 4` with accepted Phase 3ZG env plus eligibility profile:
+   - quality must at least produce coherent `France is...`;
+   - Q4_0 down entries should become eligible/accepted, not unsupported;
+   - `launch_moe_mmvq_compact_batch` failures must remain zero.
+4. If `-n 4` passes, run strict cold `-n 32`.
+5. Promote to strict cold `-n 96` only if `-n 32` improves seconds/token versus
+   the comparable Phase 3ZN diagnostic and preserves all hard gates.
+
+Acceptance:
+
+- Host RAM `< 16 GB` including page cache.
+- Cold-start proof recorded.
+- VRAM remains near full with reserve recorded.
+- TTFT `<= 106331.72 ms`.
+- France prompt output is semantically correct and coherent.
+- `read_failures=0`; CUDA launch failures `=0`.
+- Q4_0 down entries no longer show `unsupported` in eligibility profile.
+- `-n 96` promotion must beat current accepted Phase 3ZG:
+  `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`.
+
+Rollback:
+
+- Revert Q4_0 source changes if build fails, output quality fails, TTFT exceeds
+  the gate, RAM/VRAM gates fail, Q4_0 launch errors appear, or `-n 32` does
+  not show a credible improvement.

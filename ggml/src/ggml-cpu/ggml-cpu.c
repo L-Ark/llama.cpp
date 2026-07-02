@@ -185,6 +185,19 @@ struct ggml_kimi_cpu_moe_profile_op {
 #define GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX 512
 #define GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN 96
 
+enum ggml_kimi_cpu_moe_eligibility_reason {
+    GGML_KIMI_CPU_MOE_ELIGIBLE = 0,
+    GGML_KIMI_CPU_MOE_INELIG_ENV,
+    GGML_KIMI_CPU_MOE_INELIG_BATCH_FN,
+    GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN,
+    GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE,
+    GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED,
+    GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE,
+    GGML_KIMI_CPU_MOE_INELIG_NE13,
+    GGML_KIMI_CPU_MOE_INELIG_DST_TYPE,
+    GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT,
+};
+
 struct ggml_kimi_cpu_moe_name_profile_entry {
     char name[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
     uint64_t calls;
@@ -193,6 +206,8 @@ struct ggml_kimi_cpu_moe_name_profile_entry {
     uint64_t cuda_batch_eligible;
     uint64_t cuda_batch_accepted;
     uint64_t cuda_batch_declined;
+    int src0_type;
+    uint64_t eligibility[GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT];
 };
 
 struct ggml_kimi_cpu_moe_profile_state {
@@ -206,6 +221,18 @@ struct ggml_kimi_cpu_moe_profile_state {
 };
 
 static struct ggml_kimi_cpu_moe_profile_state ggml_kimi_cpu_moe_profile;
+
+static bool ggml_kimi_cpu_moe_eligibility_profile_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+
+    if (!initialized) {
+        initialized = 1;
+        enabled = getenv("GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE") != NULL;
+    }
+
+    return enabled;
+}
 
 static void ggml_kimi_cpu_moe_profile_report_op(const char * name, const struct ggml_kimi_cpu_moe_profile_op * op) {
     if (op->calls == 0) {
@@ -276,6 +303,32 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
                     e->cuda_batch_eligible,
                     e->cuda_batch_accepted,
                     e->cuda_batch_declined);
+            if (ggml_kimi_cpu_moe_eligibility_profile_enabled()) {
+                fprintf(stderr,
+                        "[kimi_cpu_moe_eligibility_profile] top%d name=%s"
+                        " src0_type=%d"
+                        " eligible=%" PRIu64
+                        " env_missing=%" PRIu64
+                        " batch_fn_missing=%" PRIu64
+                        " available_fn_missing=%" PRIu64
+                        " available_false=%" PRIu64
+                        " unsupported=%" PRIu64
+                        " src1_not_f32=%" PRIu64
+                        " ne13_not1=%" PRIu64
+                        " dst_not_f32=%" PRIu64 "\n",
+                        rank + 1,
+                        e->name,
+                        e->src0_type,
+                        e->eligibility[GGML_KIMI_CPU_MOE_ELIGIBLE],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_ENV],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_BATCH_FN],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_NE13],
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_DST_TYPE]);
+            }
         }
     }
 }
@@ -341,6 +394,44 @@ static void ggml_kimi_cpu_moe_name_profile_record(
             e->cuda_batch_declined++;
         }
     }
+}
+
+static void ggml_kimi_cpu_moe_name_profile_record_eligibility(
+        const char * name,
+        int src0_type,
+        enum ggml_kimi_cpu_moe_eligibility_reason reason) {
+    if (!ggml_kimi_cpu_moe_profile.name_enabled ||
+            !ggml_kimi_cpu_moe_eligibility_profile_enabled()) {
+        return;
+    }
+    if (reason < 0 || reason >= GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT) {
+        return;
+    }
+
+    const char * safe_name = name ? name : "<unnamed>";
+    int idx = -1;
+
+    for (int i = 0; i < ggml_kimi_cpu_moe_profile.n_names; ++i) {
+        if (strncmp(ggml_kimi_cpu_moe_profile.names[i].name, safe_name, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_kimi_cpu_moe_profile.n_names >= GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX) {
+            idx = GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX - 1;
+        } else {
+            idx = ggml_kimi_cpu_moe_profile.n_names++;
+            snprintf(ggml_kimi_cpu_moe_profile.names[idx].name,
+                     GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN,
+                     "%s",
+                     safe_name);
+        }
+    }
+
+    ggml_kimi_cpu_moe_profile.names[idx].eligibility[reason]++;
+    ggml_kimi_cpu_moe_profile.names[idx].src0_type = src0_type;
 }
 
 // precomputed f32 table for f16 (256 KB) (simd-mappings.h)
@@ -2028,15 +2119,31 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_kimi_cpu_moe_profile.down.route_barrier_us += ggml_time_us() - kimi_cpu_moe_route_barrier_start;
     }
 
+    enum ggml_kimi_cpu_moe_eligibility_reason kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_ELIGIBLE;
+    if (getenv("GGML_MOE_STREAM_DOWN_BATCH") == NULL) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_ENV;
+    } else if (!ggml_cuda_moe_stream_batch) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_BATCH_FN;
+    } else if (!ggml_cuda_moe_stream_available) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN;
+    } else if (!ggml_cuda_moe_stream_available()) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE;
+    } else if (!ggml_cuda_moe_stream_supports_down_batch(src0->type, src0->name)) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED;
+    } else if (src1->type != GGML_TYPE_F32) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE;
+    } else if (ne13 != 1) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_NE13;
+    } else if (dst->type != GGML_TYPE_F32) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_DST_TYPE;
+    }
+
+    if (kimi_cpu_moe_profile && ith == 0) {
+        ggml_kimi_cpu_moe_name_profile_record_eligibility(src0->name, src0->type, kimi_cpu_moe_batch_reason);
+    }
+
     const bool use_gpu_stream_batch =
-        getenv("GGML_MOE_STREAM_DOWN_BATCH") != NULL &&
-        ggml_cuda_moe_stream_batch &&
-        ggml_cuda_moe_stream_available &&
-        ggml_cuda_moe_stream_available() &&
-        ggml_cuda_moe_stream_supports_down_batch(src0->type, src0->name) &&
-        src1->type == GGML_TYPE_F32 &&
-        ne13 == 1 &&
-        dst->type == GGML_TYPE_F32;
+        kimi_cpu_moe_batch_reason == GGML_KIMI_CPU_MOE_ELIGIBLE;
     bool kimi_cpu_moe_batch_done = false;
 
     if (use_gpu_stream_batch) {
