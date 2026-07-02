@@ -171,6 +171,39 @@ static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_t
            (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
 }
 
+
+static bool ggml_moe_stream_one_gpu_only_for_tensor(const char * name) {
+    const char * filter = getenv("GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER");
+    if (!filter || !filter[0] || !name || !name[0]) {
+        return false;
+    }
+    if (strcmp(filter, "1") == 0 || strcmp(filter, "all") == 0) {
+        return true;
+    }
+    const char * p = filter;
+    while (*p) {
+        while (*p == ',' || *p == ' ' || *p == '\t' || *p == ':') {
+            ++p;
+        }
+        const char * start = p;
+        while (*p && *p != ',' && *p != ':' && *p != ' ' && *p != '\t') {
+            ++p;
+        }
+        if (p > start) {
+            const size_t len = (size_t)(p - start);
+            char token[128];
+            if (len < sizeof(token)) {
+                memcpy(token, start, len);
+                token[len] = '\0';
+                if (strstr(name, token) != NULL) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
     if (!name || !strstr(name, "ffn_down_exps")) {
         return false;
@@ -2842,6 +2875,10 @@ static void ggml_compute_forward_mul_mat_id(
                     } else {
                         ggml_kimi_cpu_moe_profile.down.cuda_single_declined++;
                     }
+                }
+
+                if (!done && ggml_moe_stream_one_gpu_only_for_tensor(src0->name)) {
+                    GGML_ASSERT(!"GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER requested but CUDA one-stream declined");
                 }
 
                 if (done) {
