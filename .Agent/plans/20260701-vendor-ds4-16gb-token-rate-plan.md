@@ -2258,6 +2258,19 @@
 - `gap_analysis`: Disabling stream `DONTNEED` removes the direct `madvise` path, but under the 16GB cgroup it increases retained file pages/reclaim pressure and slows the run: elapsed regressed from the no-trace tie (`87.18s`) to `93.62s`, `workingset_refault_file` rose from `3484919` to `4459579`, and file-system inputs rose to `169695064`. Keep `GGML_MOE_STREAM_DONTNEED=1`; this confirms the syscall cost is outweighed by cgroup page-cache control.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-no-trace-cuda-graphs
+
+- `attempt_id`: `20260702-late10-no-trace-cuda-graphs`
+- `attempt_kind`: `config-probe/cuda-launch-overhead`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Page-cache/cache-size/DONTNEED probes have not exceeded accepted late10. The runner currently forces `GGML_CUDA_DISABLE_GRAPHS=1`, while the workload has many small CUDA operations per streamed expert. Even though `src0` remains the dominant traced field, launch/sync overhead outside source loading may still decide a rounded `2.6 -> 2.7` move.
+- `hypothesis`: Overriding the runner default with `GGML_CUDA_DISABLE_GRAPHS=0` under the accepted late10/no-trace config may reduce repeated CUDA launch overhead without changing model math, routing, VRAM cache capacity, or output semantics.
+- `theoretical_upper_bound`: Accepted late10 trace has `35151` streamed rows. If CUDA graph capture reduces even tens of microseconds of repeated launch overhead per row, the gross bound can be sub-second to low-single-digit seconds. If the stream path is not graph-captured or page faults dominate, there will be no gain; correctness should remain unchanged.
+- `test_config`: accepted late10 config, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_CUDA_DISABLE_GRAPHS=0`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change. If CUDA graphs fail, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command showing `GGML_CUDA_DISABLE_GRAPHS=0` and trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
