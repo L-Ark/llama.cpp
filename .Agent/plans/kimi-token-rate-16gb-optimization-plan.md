@@ -8755,3 +8755,63 @@ Decision rule:
 - Accept depth=3 only if it beats the current accepted depth=2 result:
   2.57811 s/token, 0.38788 tok/s.
 - Otherwise reject depth=3 and keep depth=2 as the accepted runtime.
+
+Result timestamp: 2026-07-03 00:02 UTC / 2026-07-03 08:02 CST.
+
+Strict n96 depth=3 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-235652Z-n96-phase3zi-down-prefetch-depth3`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.729706 GiB.
+- VRAM:
+  peak 31288 MiB, minimum reserve 823 MiB.
+- TTFT:
+  74271.51 ms, gate PASS.
+- Decode:
+  227.11458 s / 85 tokens = 2.67194 s/token, 0.37426 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=5748, hits=5748, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35738, host_stage=48510.158 ms, h2d=7740.982 ms.
+- Up/gate CPU profile:
+  calls=2381, total=32.341 ms/call, cuda_batch=32.154,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=18.837 ms/call, cuda_batch=3.193,
+  fallback_t0=15.584, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=7.396 ms/call, kernel=0.112 ms/call,
+  wall=7.582 ms/call.
+- VRAM cache:
+  hits=39586, misses=34462, preloads=5748, hit_rate=53.5%.
+
+Comparison:
+
+- depth=0: 2.69143 s/token.
+- depth=1: 2.67800 s/token.
+- depth=2: 2.57811 s/token.
+- depth=3: 2.67194 s/token.
+- depth=8: 2.71191 s/token.
+
+Decision:
+
+- Reject depth=3.
+- Keep Phase 3ZG depth=2 as the current accepted strict n96 runtime.
+- The full-length sweep shows depth=2 is the best tested throttle point:
+  - depth=1 under-prefetches,
+  - depth=3 and depth=8 add too much up/gate contention,
+  - depth=2 has the best total decode time despite non-minimal individual
+    down/up buckets.
