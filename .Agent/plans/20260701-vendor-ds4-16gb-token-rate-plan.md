@@ -2414,7 +2414,7 @@
 
 - `attempt_id`: `20260702-late10-cpumoe39-cache13000`
 - `attempt_kind`: `config-probe/gpu-residency-vs-stream-cache`
-- `status`: planned_before_execution
+- `status`: completed_rejected_regression_not_sota
 - `bottleneck_basis`: Current SOTA leaves substantial work in CPU MoE fallback. Prior `cpu_moe=41` with a larger cache regressed because it moved more work to CPU. The opposite direction, `cpu_moe=39`, may move one MoE layer back to GPU and reduce CPU fallback, but it requires reducing stream cache size to fit VRAM.
 - `hypothesis`: Lowering `--n-cpu-moe` from `40` to `39` and reducing `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13568` to `13000` may trade a small increase in gate stream misses for reduced CPU fallback on one MoE layer. `13000MiB` previously fit and had only slightly more misses than accepted cache, so this is a bounded VRAM-residency tradeoff.
 - `theoretical_upper_bound`: The cache reduction from `13568` to `13000` previously cost about `14` extra gate misses, roughly `14 * 4.9ms ≈ 0.07s` direct source-load cost. The upside is removing one layer of CPU fallback; if CPU fallback is distributed across ~40 layers, one layer could be low single-digit seconds. Practical gain may be erased by VRAM pressure, altered routing, or CUDA OOM. Promote only on strict `eval_tok_s > 2.6`.
@@ -2422,6 +2422,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `cpu_moe=40/cache13568` as SOTA.
 - `required_evidence`: exact env/command, stderr CUDA memory/cache size/slot/free-memory lines, source commit/status, binary sha256/build line/stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, full France answer text, manual correctness note, trace summary, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T025553Z-20260702_late10_cpumoe39_cache13000/france-cpu39-vram0gb`.
+- `result`: rejected regression. `eval_tok_s=1.2`, `prompt_tok_s=0.9`, `TTFT=43847.434760ms`, `elapsed_seconds=155.85`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15028203520`, `pgmajfault=327446`, `workingset_refault_file=13051461`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France output is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `/root/lfz/runs/vendor-ds4-16gb/20260702T025553Z-20260702_late10_cpumoe39_cache13000/france-cpu39-vram0gb/trace_summary.json` recorded `rows=34268`, `cache_hits=0`, `cache_misses=34268`, `src0_ms=71206.289`, `dontneed_ms=6086.638`, `total_ms=78610.455`.
+- `gap_analysis`: The intended win was reducing one CPU fallback MoE layer, but lowering stream cache to `13000MiB` under `cpu_moe=39` caused a complete cache insertion/hit cliff: `cache_hits=0` versus accepted SOTA `cache_hits=30180`, and `src0_ms` grew from about `24.2s` to `71.2s`. `workingset_refault_file` also jumped from about `3.49M` to `13.05M`, so host page churn dominated. This branch is not near the current bottleneck unless a separate VRAM-freeing change preserves at least the accepted `13568MiB` effective stream cache. Keep `cpu_moe=40/cache13568` as SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
