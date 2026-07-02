@@ -9102,3 +9102,141 @@ Decision:
   runtime without a new policy that explicitly protects pending/useful
   prefetch entries.
 - Keep Phase 3ZG unified cache + depth=2 prefetch as accepted runtime.
+
+## Current execution pointer: Phase 3ZL strict accepted-runtime reprofile
+
+Design timestamp: 2026-07-02 20:22 CST.
+
+Reason for updating the plan now:
+
+- The next optimization cycle must restart from the strict constraints the user
+  restated:
+  - host RAM below 16 GB including page cache, process RSS, pinned memory,
+    helper process memory, and cgroup-accounted kernel memory;
+  - cold start only, with `sync; echo 3 > /proc/sys/vm/drop_caches` recorded;
+  - use VRAM deliberately and keep GPU compute/cache preferred over host tiers;
+  - France prompt quality must pass at every step;
+  - TTFT must stay `<= 106331.72 ms`;
+  - a performance improvement is accepted only if it is reproducible and then
+    committed and pushed immediately;
+  - a failed performance/quality/TTFT/RAM change is rejected, not stacked.
+- Phase 3ZG is the current accepted strict `-n 96` runtime:
+  - run directory:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2`
+  - host RAM peak: `15899996160` bytes, `14.808025 GiB`;
+  - VRAM peak: `31286 MiB`, minimum free/reserve `824 MiB`;
+  - TTFT: `74433.41 ms`;
+  - decode: `219.13904 s / 85 tokens = 2.5781063529411763 s/token`,
+    `0.38788159334822314 tok/s`;
+  - quality: PASS for `Please introduce France in a short paragraph.`;
+  - cache: `hits=37837`, `misses=36211`, `preloads=3994`,
+    `hit_rate=51.1%`;
+  - up/gate profile: `2381` calls, `29.981 ms/call`;
+  - down profile: `10718` calls, `18.436 ms/call`, with CUDA batch
+    `3.771 ms/call`, fallback `14.612 ms/call`;
+  - pinned staging: `host_stage=50722.324 ms`, `h2d=7746.187 ms`.
+
+Current bottleneck:
+
+- The accepted runtime is no longer dominated by the original full expert-pack
+  cold-read cost; down prefetch depth=2 already hides some down staging.
+- The remaining visible cost is split across:
+  - up/gate wall time: about `2381 * 29.981 ms = 71.39 s`;
+  - down wall time: about `10718 * 18.436 ms = 197.60 s`;
+  - pinned host staging: `50.72 s`;
+  - H2D staging: `7.75 s`.
+- `GGML_MOE_DOWN_PARALLEL_STAGE=1` was already tested in Phase 2U and rejected
+  for full `-n 96`: it improved local down stage at `-n 32` but regressed full
+  decode by shifting cost into up/gate/synchronization contention. Do not retest
+  it blindly on top of Phase 3ZG unless a new profile proves the contention
+  mechanism has changed.
+- Phase 3ZK showed that a profile-guided hybrid eviction policy can damage both
+  performance and quality when it evicts useful prefetch entries. Any cache
+  policy optimization must preserve pending/useful down-prefetch entries first.
+
+Next design/execution step:
+
+Run a strict cold `-n 96` reprofile of the accepted Phase 3ZG runtime before
+editing performance code. This is not a new optimization; it is the required
+bottleneck-location step before the next optimization method.
+
+The reprofile must use:
+
+- branch: `vendor/kimi-moe-stream-on-vendor`;
+- source commit: current pushed source commit, recorded in `command.txt`;
+- model:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`;
+- expert pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack`;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - move the executing child shell with `$BASHPID` before launching inference;
+- cold start:
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`;
+  - record `memory.stat` before and after launch;
+- accepted Phase 3ZG env:
+  - `GGML_MOE_PREFETCH_DOWN=1`;
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`;
+  - same VRAM cache, graph reserve, expert-pack, and debug/profile env as the
+    accepted run.
+
+Measurements required for Phase 3ZL:
+
+- exact answer text and quality decision;
+- TTFT, decode seconds, decode tokens, seconds/token, token rate;
+- cgroup `memory.peak`, `memory.current`, page cache/file, anon/RSS proxy,
+  swap, OOM/max events;
+- VRAM before load, after load, first token, mid-decode, and after exit;
+- MoE counters:
+  - up/gate calls and wall/event time;
+  - down calls and wall/event time;
+  - fallback reasons, especially `multirow_not_supported`;
+  - cache hits/misses/preloads/evictions;
+  - down prefetch loads/hits/unused evictions/useful rate;
+  - pinned staging copies, host-stage time, H2D time;
+  - `direct_reads`, `iouring_reads`, `read_failures`;
+  - CUDA launch failures.
+
+Prioritization rule after Phase 3ZL:
+
+1. If down fallback time is still dominant and `multirow_not_supported` remains
+   the main decline reason, design a correctness-first down multirow solution
+   with a small proof case before touching full `-n 96`. Phase 3ZC's segfault
+   means this must start from tensor-shape/math proof, not from another quick
+   flattening attempt.
+2. If up/gate time regresses or dominates, investigate whether depth=2 down
+   prefetch is contending with up/gate cache/stream scheduling before adding
+   more prefetch.
+3. If host staging remains the largest removable bucket, analyze whether a
+   batched `io_uring` runtime-load path can replace per-copy direct reads
+   without increasing host RAM or TTFT. The theoretical bound must be computed
+   from expert tensor bytes, observed read bandwidth, H2D bandwidth, and number
+   of runtime misses.
+4. If no single bucket has at least a plausible 5% full-run gain, do not write a
+   speculative patch. Record the profile and choose the smallest diagnostic
+   change that disambiguates the bottleneck.
+
+Acceptance for the Phase 3ZL profile:
+
+- This profile is accepted as evidence only if all hard gates pass:
+  - host RAM `< 16 GB` under the strict cgroup;
+  - cold-start proof recorded;
+  - TTFT `<= 106331.72 ms`;
+  - France answer semantically correct and coherent;
+  - `read_failures=0` and CUDA launch failures `=0`;
+  - VRAM remains intentionally near full with explicit reserve recorded.
+- Phase 3ZL does not become a performance promotion unless it also
+  reproducibly beats Phase 3ZG. If it does beat Phase 3ZG, repeat once under the
+  same cold-start/cgroup rules before accepting, then commit and push the
+  updated plan/runtime config immediately.
+
+Rollback/rejection:
+
+- Any source change made after Phase 3ZL must be reverted if it worsens token
+  rate, fails quality, raises TTFT above the gate, exceeds strict host RAM, or
+  cannot be reproduced.
+- Env-only failed runs are recorded as rejected and must not be stacked into the
+  next candidate.
