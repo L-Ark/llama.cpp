@@ -2119,6 +2119,19 @@
 - `gap_analysis`: `13760MiB` is the practical VRAM boundary found so far: it leaves only about `46 MiB` CUDA free and reduces misses by only `35` versus accepted SOTA (`4971 -> 4936`). Trace time improves slightly (`src0_ms 24305.283 -> 23966.665`, `total_ms 26552.328 -> 26231.251`) and TTFT improves, but runner `eval_tok_s` still ties `2.6`. Since the gate requires a strictly higher token rate, do not promote. Cache-size-only tuning is now at diminishing returns; going higher is likely allocator-fragile and has a sub-0.1s direct miss-saving bound.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s` with `13568MiB` stream cache; `13760MiB` is recorded as a non-promoted tie and possible TTFT/reference config only.
 
+### 当前执行 attempt：late10-skip-dontneed-cache-hit
+
+- `attempt_id`: `20260702-late10-skip-dontneed-cache-hit`
+- `attempt_kind`: `implementation/io-refault-policy`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Current accepted late10 trace has `cache_hits=30180`, `cache_misses=4971`, `dontneed_ms=1169.862`, and `src0_ms=24305.283`. The current `moe_stream.cu` calls `MADV_DONTNEED` for every streamed expert call after scatter, including cache hits where the kernel used VRAM cache and did not need to touch the mmap source page for H2D. Since hits are `85.9%` of calls, most `DONTNEED` calls may be pure syscall/reclaim overhead or may drop pages that could be useful if an expert is later evicted.
+- `hypothesis`: Add a default-off env `GGML_MOE_STREAM_DONTNEED_ON_HIT=0` so `moe_stream_dontneed_source_pages()` is skipped for VRAM cache hits but remains enabled for misses/fallbacks. This may reduce direct `dontneed_ms` and possibly reduce refault churn without changing model math. It preserves current behavior when env is unset.
+- `theoretical_upper_bound`: If cache-hit `DONTNEED` cost is proportional to call count, skipping hits could remove up to `1169.862ms * 30180 / 35151 ≈ 1004ms` direct traced overhead. Secondary effects could be positive if refaults drop, or negative if retained file pages increase cgroup reclaim pressure. The hard upper bound is therefore around 1s direct plus reclaim variance; expected token-rate gain is modest but larger than cache-size-only probes.
+- `test_config`: patched source, accepted late10 config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_DONTNEED=1`, `GGML_MOE_STREAM_DONTNEED_ON_HIT=0`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace/refault evidence shows worse reclaim pressure, revert source and clean rebuild. If accepted, immediately write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
