@@ -14981,3 +14981,92 @@ Phase 7X n32 result - rejected:
 - profile: up_gate `15.282 ms/call`; down `36.580 ms/call`; down fallback_t0 `32.722 ms/call`; pinned host_stage `30513.281 ms`.
 - interpretation: removing down parallel staging reduces some io_uring/H2D accounting but increases exposed host staging and worsens end-to-end decode. The current SOTA should keep `GGML_MOE_DOWN_PARALLEL_STAGE=1` together with current-down overlap.
 - decision: reject Phase 7X. Do not run n96. Keep Phase 7P as SOTA.
+
+## Phase 7Y - minimal-profile production run
+
+Design timestamp: 2026-07-02 12:36 UTC.
+
+Reason:
+
+- Phase 7W removed name/eligibility/decline diagnostics, but kept `GGML_KIMI_CPU_MOE_PROFILE=1` and `GGML_MOE_BATCH_PROFILE=1`; n32 candidate improved but confirm did not reproduce.
+- Code inspection shows `GGML_MOE_BATCH_PROFILE=1` creates CUDA timing events for batch/down/upgate profiling and route/cache accounting. This may perturb scheduling enough to matter in a sub-1 tok/s run.
+- Code inspection also shows `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv` is independent of `GGML_KIMI_CPU_MOE_PROFILE=1`, so a required fallback profile can still be produced while aggregate CPU profile is disabled.
+
+Hypothesis:
+
+- Disabling runtime profiling counters/events while keeping all math, routing, cache, staging, mmap drop, and pack mmap behavior unchanged may reduce decode wall time.
+- Theoretical upper bound is limited to profile overhead. If each MoE call pays only tens of microseconds for event/accounting, n32 gain may be under one second. If CUDA event timing or locked route-profile accounting interferes with staging overlap, gain could be a few seconds.
+
+Experiment design:
+
+1. Create `/tmp/run_phase7y_repro.sh` from the accepted Phase 7T/7P runner.
+2. Keep Phase 7P production behavior env exactly, including `GGML_MOE_DOWN_PARALLEL_STAGE=1`, `GGML_MOE_CURRENT_DOWN_OVERLAP=1`, `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`, VRAM cache, pinned slots, dense/expert mmap drops, iouring, and `THREADS=32`.
+3. Remove only profiling/debug envs that are not required for model behavior:
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_MOE_BATCH_PROFILE=1`;
+   - `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+4. Keep `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv` so every run still has fallback attribution.
+5. Run strict cold n32 candidate.
+6. Continue only if n32 candidate beats Phase 7P n32 confirm `37379.97 ms / 31`, all hard gates pass, and `fallback-profile.csv` exists and is non-empty.
+7. If positive, run n32 confirm, then n96 and n96 confirm.
+
+Hard gates:
+
+- Cold start before every run.
+- Host RAM peak `<= 15899996160`, `oom=0`, no swap.
+- TTFT `<= 106331.72 ms`.
+- `read_failures=0` if expert-pack counters are printed; otherwise stderr must contain no read-failure/CUDA-error lines and exit must be `0`.
+- France output must be semantically correct and coherent.
+- Reproducibility artifacts remain mandatory: `command.txt`, `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and `metrics.txt`.
+
+Decision rule:
+
+- This is env-only. If n32 does not beat Phase 7P, reject and record the run.
+- If accepted, the new SOTA command should be documented as production/minimal-profile, with separate diagnostic commands used only when investigating bottlenecks.
+
+Phase 7Y candidate result and implementation adjustment:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-120837Z-n32-phase7y-min-profile-candidate`
+- source state: clean runtime source at `39045bf43e8ce5caca917a95c23ae6aed0b3034f`; plan dirty only.
+- env delta: removed aggregate CPU profile, name/eligibility profile, batch profile, and decline debug; kept `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`.
+- hard gates observed: quality pass, TTFT `76083.51 ms`, RAM peak `15899996160`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `36631.98 ms / 31`, `0.85 tok/s`, faster than Phase 7P n32 confirm `37379.97 ms / 31` by `747.99 ms`.
+- invalid artifact: `fallback-profile.csv` was missing despite `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` being set.
+- root cause from source inspection: fallback profile recording is inside the `kimi_cpu_moe_profile` timing/report block, so disabling `GGML_KIMI_CPU_MOE_PROFILE` also disables fallback-profile recording.
+
+Implementation adjustment before confirm:
+
+- Decouple fallback-profile timing/recording from aggregate CPU profile in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Default behavior must remain unchanged:
+  - if neither profile env is set, do not take timestamps or record anything;
+  - if `GGML_KIMI_CPU_MOE_PROFILE=1`, aggregate profile remains as before;
+  - if only `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` is set, record fallback csv with the same attribution fields but do not print aggregate CPU profile.
+- Rebuild and rerun n32 candidate. Acceptance still requires n32 candidate + n32 confirm + n96 + n96 confirm, all with non-empty `fallback-profile.csv` and the standard gates.
+
+Phase 7Y n32 candidate after fallback-profile decoupling:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-121248Z-n32-phase7y-min-profile-fallback-csv-candidate`
+- source state: dirty candidate on top of `39045bf43e8ce5caca917a95c23ae6aed0b3034f`.
+- source delta: `ggml/src/ggml-cpu/ggml-cpu.c` decouples fallback csv timing/recording from aggregate `GGML_KIMI_CPU_MOE_PROFILE`.
+- env delta over Phase 7P: disabled aggregate CPU profile, name/eligibility profile, batch profile, and decline debug; kept fallback-profile csv env.
+- hard gates: quality pass, TTFT `80368.49 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- fallback artifact: `/root/lfz/runs/vendor-kimi-token-rate/20260702-121248Z-n32-phase7y-min-profile-fallback-csv-candidate/fallback-profile.csv`, `841K`, `13625` entries, `dropped=0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `36520.24 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `859.73 ms`.
+- decision: pass n32 candidate; run n32 confirm with the same source/env before n96 promotion.
+
+Phase 7Y n32 confirm result - rejected:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-121551Z-n32-phase7y-min-profile-fallback-csv-confirm`
+- source state: same dirty candidate as the n32 candidate run.
+- hard gates: quality pass, TTFT `78708.64 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- fallback artifact: fallback-profile.csv exists, `841K`, `13625` entries, `dropped=0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `37666.88 ms / 31`, `0.82 tok/s`.
+- comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `286.91 ms`.
+- decision: reject Phase 7Y because the n32 improvement did not reproduce. Do not run n96.
+- action: revert `ggml/src/ggml-cpu/ggml-cpu.c`; keep this record as evidence that minimal-profile runs can show favorable variance but are not accepted without confirmation.
