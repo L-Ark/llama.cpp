@@ -16530,3 +16530,91 @@ Rollback:
 - If n32 does not reproducibly improve, reject Phase 7AH.
 - If n32 improves but n96 is slower or quality/RAM/TTFT gates fail, reject
   Phase 7AH and keep Phase 7AE as SOTA.
+
+Phase 7AH result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ah_repro.sh`.
+- intended env delta over Phase 7AE:
+
+```sh
+# removed from env.txt
+GGML_MOE_BATCH_PROFILE=1
+```
+
+- invalid first attempt:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-134519Z-n32-phase7ah-no-batch-profile`.
+- invalid reason:
+  - runner deletion logic did not remove `GGML_MOE_BATCH_PROFILE=1`;
+  - `env.txt` still contained `GGML_MOE_BATCH_PROFILE=1`;
+  - therefore this run was profile-on and is not used for Phase 7AH
+    acceptance or rejection.
+- invalid run observed decode: `36194.76 ms / 31`, `0.86 tok/s`.
+
+Valid n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-134822Z-n32-phase7ah-no-batch-profile-valid`.
+- command shape:
+
+```sh
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 \
+  -p MemorySwapMax=0 \
+  env RUN=<run-dir> N=32 VRAM_MIB=15000 THREADS=32 \
+      PINNED_SLOTS=8 UPGATE_PCT=60 BATCH_PROFILE=0 \
+      /tmp/run_phase7ah_repro.sh
+```
+
+- env validation:
+  - `command.txt` contains `BATCH_PROFILE=0`;
+  - `env.txt` has no `GGML_MOE_BATCH_PROFILE=1`;
+  - `fallback-profile.csv` exists and is non-empty.
+- quality: pass.
+- output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- TTFT: `77152.47 ms`.
+- decode: `36922.38 ms / 31`, `0.84 tok/s`.
+- comparison:
+  - slower than Phase 7AE best n32 `36687.31 ms / 31` by `235.07 ms`;
+  - slightly faster than Phase 7AE n32 confirm `36973.83 ms / 31` by
+    `51.45 ms`, but the acceptance gate is the best accepted n32 and requires
+    confirmation only after beating it.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=27720`;
+  - `iouring_wait_us=7688015`;
+  - `inflight_avg=2.58`, `inflight_max=8`.
+- cache:
+  - down `806` slots, hit rate `73.6%`;
+  - upgate `1679` slots, hit rate `43.7%`.
+- profile counters:
+  - up/gate and CUDA batch profile counters are intentionally absent because
+    `GGML_MOE_BATCH_PROFILE=1` was removed;
+  - Kimi CPU down profile remains: down total `39.730 ms/call`, fallback_t0
+    `36.953 ms`.
+
+Interpretation:
+
+- Disabling batch CUDA profile reduces some submit accounting
+  (`iouring_submit_us=27720`), but it does not improve end-to-end n32 decode.
+- The run also loses detailed up/gate/down CUDA profile counters, which makes
+  it less useful for iterative bottleneck work.
+- Since valid n32 does not beat the accepted Phase 7AE best, this is rejected
+  immediately without confirmation or n96.
+
+Decision:
+
+- Reject Phase 7AH.
+- Keep Phase 7AE as the current accepted SOTA:
+  - `GGML_MOE_BATCH_PROFILE=1` remains in the accepted reproduction runner;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
