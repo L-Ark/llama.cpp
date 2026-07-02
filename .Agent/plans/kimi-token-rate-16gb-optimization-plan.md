@@ -11492,3 +11492,157 @@ Next direction:
   - expected one-time fill cost;
   - expected per-token cache hit rate;
   - VRAM budget impact on the existing `15000 MiB` shared cache.
+
+## Phase 3ZY: isolated Q4_0 hot-cache design
+
+Design timestamp: 2026-07-03 10:16 CST.
+
+Reason to continue after Phase 3ZX:
+
+- Q4_0 one-shot failed because every decode call recopied active experts from
+  mmap host memory.
+- The Q4_0 CUDA kernel cost was small (`0.109 ms/call`), so the compute path is
+  viable if expert copies can be reused.
+- Therefore the next experiment must reuse copied Q4_0 experts without touching
+  the shared cache.
+
+Current data:
+
+- Phase 3ZW Q4_0 decode fallback:
+  - routed bytes: `33.161 GiB`;
+  - fallback time: `7.942 s`;
+  - calls: about `539`;
+  - average CPU fallback: about `14.7 ms/call`.
+- Phase 3ZX Q4_0 one-shot:
+  - stage: `105.832 ms/call`;
+  - staged bytes: `1.292 GiB / 21 calls`;
+  - implied stage bandwidth: about `1.72 s/GiB`;
+  - kernel: `0.109 ms/call`.
+
+Shared cache budget pressure:
+
+The accepted runtime uses:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+Phase 3ZX showed the shared cache still uses accepted slot sizes when Q4_0 is
+kept out:
+
+- `5.36 MiB`;
+- `6.02 MiB`;
+- `7.44 MiB`.
+
+Route replay with `admit_after=2`, accepted Phase 3ZU trace, and best
+`upgate_pct=65`:
+
+- `15000 MiB` shared cache:
+  - miss: `298.93 GiB`;
+  - hit: `46.08%`.
+- `14000 MiB` shared cache:
+  - miss: `307.35 GiB`;
+  - hit: `44.60%`;
+  - extra miss: `8.42 GiB`.
+- `13000 MiB` shared cache:
+  - miss: `315.95 GiB`;
+  - hit: `43.07%`;
+  - extra miss: `17.02 GiB`.
+
+Using the Phase 3ZU down exposed calibration (`55.20 ms/GiB`) as a lower-bound
+critical-path estimate:
+
+- giving up `1 GiB` shared cache costs at least about `0.46 s`;
+- giving up `2 GiB` shared cache costs at least about `0.94 s`;
+- additional up/gate wait leakage is possible and must be measured.
+
+Q4_0 hot-cache options:
+
+- `1024 MiB` isolated Q4_0 cache:
+  - hot slots: `130`;
+  - Q4_0 fallback coverage: `52.74%`;
+  - saved fallback upper bound: `4.189 s`;
+  - one-time fill cost at Phase 3ZX measured staging rate: about `1.72 s`;
+  - shared-cache lower-bound cost if reducing shared cache from `15000` to
+    `14000 MiB`: about `0.46 s`;
+  - rough net upper bound: `4.19 - 1.72 - 0.46 = 2.01 s`.
+- `2048 MiB` isolated Q4_0 cache:
+  - hot slots: `260`;
+  - Q4_0 fallback coverage: `69.77%`;
+  - saved fallback upper bound: `5.541 s`;
+  - one-time fill cost: about `3.44 s`;
+  - shared-cache lower-bound cost if reducing shared cache to `13000 MiB`:
+    about `0.94 s`;
+  - rough net upper bound: `5.54 - 3.44 - 0.94 = 1.16 s`.
+- `4096 MiB` isolated Q4_0 cache:
+  - hot slots: `520`;
+  - Q4_0 fallback coverage: `88.73%`;
+  - saved fallback upper bound: `7.047 s`;
+  - one-time fill cost: about `6.88 s`;
+  - rough net is too small before measuring shared-cache loss; reject for now.
+
+Selected next experiment:
+
+- Implement a `1024 MiB` isolated Q4_0 hot cache first.
+- Reduce shared cache to `14000 MiB` only for this experiment:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14000
+GGML_MOE_Q4_0_HOT_CACHE_MIB=1024
+GGML_MOE_Q4_0_HOT_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv
+GGML_MOE_Q4_0_HOT_CACHE_LAYERS=6,7,8,9,10,15,18
+```
+
+Implementation rules:
+
+1. Disabled by default.
+2. Decode-only Q4_0 down only.
+3. Use a separate device pool and metadata; never call `batch_cache_get()` for
+   Q4_0 and never change shared cache slot size.
+4. Admit only experts present in the Q4_0 hot-cache profile, sorted by measured
+   `fallback_us`, up to the slot budget.
+5. If an active expert is not admitted or cannot be loaded into the isolated
+   cache, decline the whole Q4_0 batch and let CPU fallback handle it. Do not
+   mix partial Q4 GPU rows in the first version.
+6. Record counters:
+   - calls;
+   - accepted;
+   - declined;
+   - hit/miss/admit/load counts;
+   - staged GiB;
+   - stage/kernel/D2H/wall ms per call;
+   - number of profile slots loaded.
+
+Theory:
+
+- Best possible `1024 MiB` cache net speedup is small:
+  - about `2.0 s` over the full `-n 96` decode in the optimistic estimate;
+  - token-rate upper movement from `117.578 s` decode is about `1.7%`.
+- This will not get close to `5 tok/s`, but it can remove a proven fallback
+  bucket without breaking the shared cache.
+- If the isolated cache does not improve strict cold `-n 32`, stop Q4_0 cache
+  work and move to larger bottlenecks such as prompt TTFT or up/gate scheduling.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 4` smoke:
+  - France prefix correct;
+  - Q4_0 hot-cache counters activate;
+  - shared cache slot size remains non-Q4;
+  - `read_failures=0`.
+- Strict cold `-n 32`:
+  - host RAM below 16 GB;
+  - TTFT below `106331.72 ms`;
+  - France output semantically correct and coherent;
+  - token rate improves over accepted comparable `0.584465 tok/s`;
+  - no launch/read failures.
+- Only if `-n 32` improves, run strict cold three-run `-n 96`.
+
+Rollback:
+
+- Revert source changes if strict cold `-n 32` does not improve, if quality
+  fails, if TTFT/RAM gates fail, if shared cache slot size changes, or if Q4_0
+  cache counters do not prove activation.
