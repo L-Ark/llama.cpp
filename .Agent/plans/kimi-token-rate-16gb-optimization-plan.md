@@ -14827,3 +14827,39 @@ Next action:
 
 - Inspect the exact argument contract for `mul_mat_vec_q_switch_type`, `mul_mat_vec_q_switch_ncols_dst`, and `quantize_row_q8_1_cuda`.
 - Only after this inspection, implement the default-off `IQ3_XXS` compact-batch MMVQ candidate.
+
+
+Phase 7V implementation note before build:
+
+- Source candidate added under default-off env `GGML_MOE_STREAM_COMPACT_BATCH_MMVQ=1`.
+- New CUDA entry point: `ggml_cuda_moe_stream_mmvq_batch_ids_dev`.
+- The new entry point quantizes all active rows together and calls the existing ids-aware `mul_mat_vec_q_moe` path with `ncols_dst=n_active`, `ids_stride=1`, and compact cache slot ids as `channel_x`.
+- Runtime scope is restricted in `launch_moe_mmvq_compact_batch` to `src0_type == GGML_TYPE_IQ3_XXS`, available device ids, no `h_src1_rows`, and `n_active <= 8`.
+- Old per-expert loop remains the fallback for all unsupported cases and when the env is unset or `0`.
+- Next required evidence: successful build, then cold smoke/n32 with full reproducibility artifacts before any acceptance.
+
+Phase 7V smoke result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-114923Z-n4-phase7v-compact-batch-smoke`
+- source state: dirty candidate on top of `9556c25f43c511e40291817305e95c1ec45f09e1`.
+- build: passed with existing warnings only.
+- env delta: `GGML_MOE_STREAM_COMPACT_BATCH_MMVQ=1`.
+- path activation: stderr printed `[moe_stream_batch] compact batch MMVQ active: type=18 n_active=8 ne00=7168 ne01=2048`.
+- hard smoke gates: exit `0`, TTFT `68684.02 ms`, RAM peak `15899996160`, `read_failures=0`.
+- output: `France is a country`; this is too short because `N=4`, so it is not used as a semantic acceptance test.
+- decode: `5595.96 ms / 3`, not comparable to n32/n96 SOTA.
+- next action before acceptance: run n32 cold candidate with full output quality gate.
+
+Phase 7V n32 candidate result - rejected:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-115144Z-n32-phase7v-compact-batch-candidate`
+- source state: dirty candidate on top of `9556c25f43c511e40291817305e95c1ec45f09e1`.
+- env delta: `GGML_MOE_STREAM_COMPACT_BATCH_MMVQ=1`.
+- path activation: stderr printed `[moe_stream_batch] compact batch MMVQ active: type=18 n_active=8 ne00=7168 ne01=2048`.
+- hard gates: quality pass, TTFT `77883.40 ms`, RAM peak `15899996160`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- decode: `46704.91 ms / 31`, `0.66 tok/s`.
+- comparison: rejected because it is much slower than Phase 7P accepted n32 confirm `37379.97 ms / 31`.
+- observed profile: `up_gate calls=1861 total=18.808 ms/call cuda_batch=18.643 ms/call`; this is worse than the accepted aggregate up/gate target and worse than the Phase 7U same-type analysis target.
+- interpretation: the ids-aware `mul_mat_vec_q_moe` true-batch kernel removes serial launches but is less efficient for this IQ3_XXS shape/path, likely due lower occupancy/vectorization or less favorable scheduling than eight single-column MMVQ launches. This closes Phase 7V as a performance candidate.
+- action: revert runtime source changes; keep this plan/run record for audit. Do not run n96 and do not commit runtime source.
