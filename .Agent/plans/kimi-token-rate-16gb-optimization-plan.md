@@ -11741,3 +11741,164 @@ Next design direction:
   correctness checks. Before coding, compute the upper bound using measured
   per-row fallback time, hot-row coverage, extra scatter/merge cost, and any
   shared-cache VRAM opportunity cost.
+
+## Phase 3ZZ design - partial-row Q4_0 hot cache
+
+Timestamp: `2026-07-02 03:50 UTC`.
+
+Current accepted code state:
+
+- commit: `3e99cc578`;
+- accepted runtime remains Phase 3ZT/3ZU/3ZW code path with plan-only commits
+  after it;
+- strict profile source:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+
+Current bottleneck from strict cold n96 profile:
+
+- decode wall: `117578.26 ms / 77 = 0.65 tok/s`;
+- TTFT: `63209.39 ms`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`;
+- quality: pass;
+- `read_failures=0`;
+- accepted answer for the required France prompt is coherent and semantic.
+
+Decode fallback by type:
+
+- Q4_0 down decode fallback:
+  - entries: `1049`;
+  - routed: `33.161 GiB`;
+  - fallback: `7942.040 ms`.
+- Up/gate generic fallback is effectively gone after Phase 3ZT.
+- All material remaining decode fallback is Q4_0 down, but its absolute ceiling
+  is only `7.942 s`.
+
+Q4_0 decode fallback concentration:
+
+- `blk.6.ffn_down_exps.weight`: `1854.496 ms`;
+- `blk.7.ffn_down_exps.weight`: `1153.368 ms`;
+- `blk.10.ffn_down_exps.weight`: `1142.320 ms`;
+- `blk.9.ffn_down_exps.weight`: `1050.752 ms`;
+- `blk.8.ffn_down_exps.weight`: `988.680 ms`;
+- `blk.15.ffn_down_exps.weight`: `895.080 ms`;
+- `blk.18.ffn_down_exps.weight`: `857.344 ms`.
+
+These seven Q4_0 down layers account for the entire Q4_0 decode fallback bucket.
+
+Partial-row hot-cache upper bounds from `fallback-profile.csv`, sorted by
+measured `fallback_us`:
+
+| isolated Q4 cache | slots | covered fallback | coverage | routed |
+| --- | ---: | ---: | ---: | ---: |
+| `256 MiB` | `32` | `2098.859 ms` | `26.43%` | `8.090 GiB` |
+| `512 MiB` | `65` | `3065.283 ms` | `38.60%` | `11.674 GiB` |
+| `768 MiB` | `97` | `3698.292 ms` | `46.57%` | `14.112 GiB` |
+| `1024 MiB` | `130` | `4188.665 ms` | `52.74%` | `15.996 GiB` |
+| `2048 MiB` | `260` | `5540.778 ms` | `69.77%` | `21.087 GiB` |
+| `4096 MiB` | `520` | `7046.978 ms` | `88.73%` | `26.517 GiB` |
+| `8192 MiB` | `1040` | `7940.121 ms` | `99.98%` | `33.084 GiB` |
+
+Shared-cache opportunity cost, replaying accepted route trace with
+`upgate_pct=65`, `policy=lfu_lru`, `preload=protected`, `admit_after=2`:
+
+| shared cache | miss | extra miss vs 15000 MiB | lower-bound cost at `52.84 ms/GiB` |
+| --- | ---: | ---: | ---: |
+| `15000 MiB` | `298.93 GiB` | `0.00 GiB` | `0.000 s` |
+| `14750 MiB` | `301.18 GiB` | `2.25 GiB` | `0.119 s` |
+| `14500 MiB` | `303.46 GiB` | `4.53 GiB` | `0.239 s` |
+| `14250 MiB` | `305.44 GiB` | `6.51 GiB` | `0.344 s` |
+| `14000 MiB` | `307.35 GiB` | `8.42 GiB` | `0.445 s` |
+| `13750 MiB` | `309.34 GiB` | `10.41 GiB` | `0.550 s` |
+| `13500 MiB` | `311.22 GiB` | `12.29 GiB` | `0.649 s` |
+
+Theory:
+
+- A full Q4_0 elimination upper bound is:
+  - `77 / ((117.578 - 7.942) s) = 0.702 tok/s`.
+- Therefore Q4_0 work cannot get close to `5 tok/s`; it is a small,
+  correctness-preserving decode cleanup step.
+- Partial-row caching avoids the Phase 3ZY failure mode because each hot row can
+  be accelerated independently; it does not need all eight experts in the batch
+  to be present.
+- The first practical target is `512 MiB` isolated Q4 cache with shared cache
+  reduced to `14500 MiB`:
+  - theoretical covered fallback: `3.065 s`;
+  - shared-cache lower-bound cost: `0.239 s`;
+  - copy/fill cost should be paid once per admitted expert and must be measured;
+  - optimistic net before scatter/merge overhead: about `2.8 s`;
+  - decode upper movement: `77 / (117.578 - 2.8) = 0.671 tok/s`.
+- A `1024 MiB` version has a better upper bound:
+  - `4.189 s - 0.445 s = 3.744 s` before fill/scatter overhead;
+  - decode upper movement: `77 / (117.578 - 3.744) = 0.676 tok/s`.
+- Because measured improvement is expected to be small, the implementation must
+  first pass `-n 32`; no n96 promotion unless n32 beats `0.584465 tok/s`.
+
+Implementation options:
+
+1. Preferred small-step protocol change:
+   - add a new CUDA entry point or extend the existing one to report a per-row
+     completion mask for Q4_0 down;
+   - GPU computes admitted hot rows;
+   - CPU fallback computes only rows not marked complete;
+   - CPU `matrix_row_counts` or an equivalent skip mask must ensure completed
+     rows are not recomputed.
+2. Fallback implementation if the protocol change is too invasive:
+   - keep the existing whole-batch API returning `true`;
+   - inside the CUDA batch function, compute admitted rows on GPU and compute
+     missed rows with a local Q4_0 CPU fallback before scattering into `dst`;
+   - this requires exact Q4_0 CPU math validation against the existing fallback
+     before performance testing.
+
+Correctness gates before performance promotion:
+
+- Add debug-only compare mode for the first few Q4_0 partial calls:
+  - run the partial path;
+  - also compute the existing CPU fallback result for the same rows;
+  - print max absolute error / RMSE;
+  - reject if values are not numerically equivalent for Q4_0.
+- Strict cold `-n 4` smoke:
+  - France prefix semantic;
+  - Q4 partial counters active;
+  - no `read_failures`;
+  - host RAM below 16 GB;
+  - TTFT below `106331.72 ms`.
+- Strict cold `-n 32` validation:
+  - France output semantic and coherent;
+  - host RAM below 16 GB including page cache;
+  - TTFT below `106331.72 ms`;
+  - token rate above comparable accepted n32 `0.584465 tok/s`;
+  - if failed, revert all source changes and keep a plan-only rejection record.
+- Strict cold n96 promotion only after n32 passes:
+  - run at least one n96 with exact reproduction command;
+  - if the gain is material, repeat to confirm stability before commit.
+
+Required counters:
+
+- partial calls;
+- GPU rows;
+- CPU fallback rows;
+- admitted slots;
+- cache hits/misses;
+- loads/load failures;
+- staged GiB;
+- GPU stage/kernel/D2H/scatter ms;
+- CPU fallback ms for missed rows;
+- compare max error / RMSE when compare mode is enabled.
+
+Initial runtime for implementation test:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14500
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_Q4_0_PARTIAL_CACHE_MIB=512
+GGML_MOE_Q4_0_PARTIAL_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv
+GGML_MOE_Q4_0_PARTIAL_LAYERS=6,7,8,9,10,15,18
+GGML_MOE_Q4_0_PARTIAL_COMPARE=1
+```
+
+Rollback:
+
+- Revert immediately if correctness compare fails, if France quality fails, if
+  TTFT rises above the gate, if RAM exceeds the 16 GB cgroup, if shared cache
+  slot sizes change unexpectedly, or if strict cold n32 does not improve.
