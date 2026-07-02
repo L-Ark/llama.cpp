@@ -16575,6 +16575,113 @@ Decision:
   - TTFT `64612.02 ms`;
   - RAM/read/quality gates pass.
 
+## Phase 7AR - up/gate type-pair profile for next kernel target
+
+Design timestamp: 2026-07-02 16:46 UTC.
+
+Reason:
+
+- Recent env-only optimizations were rejected:
+  - Phase 7AP pinned slots `16` regressed n32;
+  - Phase 7AQ VRAM cache `15100` did not beat the accepted n32 best;
+  - Phase 7AF `15200` and Phase 7AJ `14900` were not reproducible at n32/n96.
+- Current n96 SOTA bottlenecks:
+  - decode `88889.08 ms / 77`;
+  - up/gate aggregate profile about `14 ms/call`;
+  - down aggregate profile `16.369 ms/call`;
+  - decode fallback CSV total is only `3.978 s`, entirely `src0_type=2`
+    Q4_0 down.
+- Phase 7AO proved broad Q4_0 down GPU coverage removes `decode,type=2` rows
+  but slows n32 by `8.8 s`, so the next high-probability target is not broad
+  Q4_0 down.
+- To optimize up/gate safely, the plan needs type-pair attribution:
+  - same-type IQ3;
+  - same-type IQ2;
+  - mixed IQ2/IQ3;
+  - prompt versus decode.
+- Existing `GGML_MOE_BATCH_PROFILE=1` reports only one aggregate up/gate line,
+  so it cannot identify which kernel/path dominates.
+
+Bottleneck model:
+
+- This phase is diagnostic and default-off from a behavior perspective:
+  - it should not change math;
+  - it should not change cache/IO/routing;
+  - it should reuse the CUDA events already recorded by batch profile.
+- The only added work is a few host-side additions into small counters when
+  `GGML_MOE_BATCH_PROFILE=1`.
+- The diagnostic upper bound is not a token-rate win by itself. Its required
+  output is actionable attribution that determines the next implementation
+  target.
+
+Implementation plan:
+
+1. Extend `ggml/src/ggml-cuda/moe_stream_batch.cu` with an up/gate type-pair
+   profile bucket:
+   - key: `prompt_mode`, `up_type`, `gate_type`;
+   - counters: calls, active experts, stage, quant, up, gate, up/gate wait,
+     up/gate compute, fuse, kernel, d2h, scatter, wall.
+2. Update the existing two places that add to `g_uprof` so they also add to the
+   matching type-pair bucket.
+3. Print report lines at exit in the form:
+
+```text
+[moe_stream_batch] up/gate type profile: mode=decode up_type=18 gate_type=18 calls=...
+```
+
+4. Keep this tied to `GGML_MOE_BATCH_PROFILE=1`; no new env is required.
+5. Build `llama-completion`.
+6. Run a strict cold n32 diagnostic with accepted Phase 7AE env.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ar-upgate-type-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7ar_repro.sh
+```
+
+Reproducibility and gates:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include standard artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`,
+    `metrics.txt`.
+- The output must remain semantically correct for the France prompt.
+- Host RAM and TTFT gates remain active:
+  - `memory.peak<=15899996160`;
+  - `oom=0`;
+  - TTFT `<=106331.72 ms`.
+- Read/runtime gates:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Acceptance for keeping the diagnostic source:
+
+- Because this phase is diagnostic, it does not become SOTA by itself.
+- The source may be committed only if:
+  - default behavior is unchanged unless `GGML_MOE_BATCH_PROFILE=1`;
+  - n32 quality/RAM/TTFT/read gates pass;
+  - profile report contains type-pair lines;
+  - token-rate regression is within normal diagnostic-profile variance and does
+    not indicate added synchronization.
+- If it changes math, breaks gates, or materially slows n32 beyond profile
+  variance, revert the source and record rejection.
+
+Next action after diagnostic:
+
+- Choose the next implementation target from the dominant decode up/gate bucket.
+- Do not stack a performance optimization on this diagnostic if the diagnostic
+  source is rejected.
+
 ## Phase 7AQ - narrow VRAM cache 15100 MiB retest
 
 Design timestamp: 2026-07-02 16:26 UTC.
