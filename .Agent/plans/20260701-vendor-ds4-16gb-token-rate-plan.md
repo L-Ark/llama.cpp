@@ -2220,6 +2220,19 @@
 - `gap_analysis`: Disabling per-expert trace reduced elapsed time versus the accepted traced rerun (`89.48s -> 87.18s`) and improved TTFT, but runner `eval_tok_s` still tied `2.6` and therefore does not satisfy the strict promotion gate. Trace overhead is not large enough by itself to produce a new rounded token-rate SOTA.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`; no-trace is a useful production/diagnostic tie but not a promoted SOTA.
 
+### 当前执行 attempt：late10-cache13760-no-trace
+
+- `attempt_id`: `20260702-late10-cache13760-no-trace`
+- `attempt_kind`: `config-probe/vram-cache-boundary-plus-trace-overhead`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Two isolated low-risk probes tied but improved secondary metrics: `13760MiB` reduced misses (`4971 -> 4936`) and trace total slightly, while no-trace reduced elapsed (`89.48s -> 87.18s`) without changing cache hit/miss behavior. Neither alone crossed the strict `>2.6 tok/s` gate, so the next efficient probe is their combination before leaving cache-size/trace-overhead tuning.
+- `hypothesis`: Running the accepted late10 top3 config with `GGML_MOE_STREAM_ONE_CACHE_MIB=13760` and no `GGML_MOE_STREAM_ONE_TRACE_OUT` may combine a small miss reduction with lower trace overhead while preserving model math and France correctness. It also uses VRAM close to the practical boundary already shown to run with about `46 MiB` free.
+- `theoretical_upper_bound`: The 13760MiB cache adds about 45 slots versus accepted 13568MiB and previously reduced misses by only `35`; at `~4.9ms` per miss the direct bound is about `0.17s`. Removing trace previously reduced elapsed by about `2.3s` but still tied token rate. The combined optimistic elapsed improvement is therefore low single-digit seconds, enough only for a possible rounded move to `2.7 tok/s`; reject on any tie.
+- `test_config`: accepted late10 config, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13760`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `13568MiB` late10 as SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command showing trace disabled and cache `13760`, stderr cache size/slot/free-memory lines, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
