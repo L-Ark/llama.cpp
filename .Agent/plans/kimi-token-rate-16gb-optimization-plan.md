@@ -16682,6 +16682,87 @@ Next action after diagnostic:
 - Do not stack a performance optimization on this diagnostic if the diagnostic
   source is rejected.
 
+Phase 7AR n32 diagnostic result - accepted as diagnostic:
+
+- source delta:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added up/gate type-pair profile buckets keyed by:
+    - `prompt_mode`;
+    - `up_type`;
+    - `gate_type`;
+  - reused existing CUDA event timings from `GGML_MOE_BATCH_PROFILE=1`;
+  - no kernel, routing, cache, IO, or math changes.
+- build:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`;
+  - success, warnings only.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-153839Z-n32-phase7ar-upgate-type-profile`.
+- git at run start:
+  - head `5a6d82f3c4c1ebc12b437c2e11f70855e4878bac`;
+  - dirty only in `ggml/src/ggml-cuda/moe_stream_batch.cu`, as expected for
+    the diagnostic source under test.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13626` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `62693.86 ms`.
+- decode: `36913.52 ms / 31`, `0.84 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7915999`.
+- aggregate up/gate profile:
+  - calls `869`;
+  - avg active experts `8.00`;
+  - up `7.828 ms/call`;
+  - gate `7.298 ms/call`;
+  - kernel `15.133 ms/call`;
+  - wall `15.232 ms/call`.
+- type-pair profile:
+  - `mode=decode up_type=18 gate_type=18`:
+    - calls `311`;
+    - up `9.609 ms/call`;
+    - gate `8.589 ms/call`;
+    - kernel `18.209 ms/call`;
+    - wall `18.323 ms/call`;
+    - estimated wall total `5.70 s`.
+  - `mode=decode up_type=22 gate_type=22`:
+    - calls `558`;
+    - up `6.836 ms/call`;
+    - gate `6.578 ms/call`;
+    - kernel `13.418 ms/call`;
+    - wall `13.509 ms/call`;
+    - estimated wall total `7.54 s`.
+
+Interpretation:
+
+- The diagnostic source produced the required type-pair attribution and passed
+  quality, TTFT, RAM, and read gates.
+- The run is not a new SOTA candidate, and the decode time is within the normal
+  diagnostic-profile band around Phase 7AE n32.
+- Decode up/gate has no mixed type-pair in this prompt. It is dominated by:
+  - total wall: type `22` same-type bucket because it has more calls;
+  - per-call cost: type `18` same-type bucket.
+- Since the type `22` bucket contributes the larger total wall time, the next
+  implementation should target same-type type-22 up/gate first, unless source
+  inspection shows type 18 and type 22 share the same bottleneck kernel.
+
+Decision:
+
+- Accept Phase 7AR as diagnostic infrastructure.
+- Commit and push the diagnostic source with this plan result.
+- Keep Phase 7AE as the performance SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`.
+
 ## Phase 7AQ - narrow VRAM cache 15100 MiB retest
 
 Design timestamp: 2026-07-02 16:26 UTC.
