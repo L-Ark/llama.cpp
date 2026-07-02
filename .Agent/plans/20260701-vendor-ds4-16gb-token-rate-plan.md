@@ -3444,3 +3444,28 @@
 - `interpretation`: Increasing CPU threads does not improve generation token rate. `t24/t28` improve TTFT but stay below or equal normal SOTA variance, while `t32` likely oversubscribes memory bandwidth or scheduling and strongly regresses decode speed.
 - `decision`: Do not promote any thread-sweep config as token-rate SOTA. Keep accepted config at `-t 20 -tb 20` unless a later TTFT-specific pass needs `t28`.
 - `next_design`: Since simple CPU thread scaling did not remove the `~26.85s` fallback bottleneck, test up/down fallback reduction via cache/admission/top-k configuration before source changes. First low-risk probe: vary `GGML_MOE_KEEP_TOPK_UPDOWN` while keeping gate pack and cache unchanged. Theoretical upper bound is the measured decode up/down fallback (`~19.30s`) minus added GPU/cache overhead. Reject if VRAM OOM, RAM exceeds 16GB, correctness fails, or token rate/TTFT regress.
+
+### 当前执行：post-odirect-updown-topk-probe-results
+
+- `attempt_id`: `20260702-post-odirect-updown-topk-probe-results`
+- `status`: rejected_no_token_rate_sota
+- `time`: `2026-07-02T15:14Z-15:18Z`
+- `common_config`: current O_DIRECT SOTA env/pack/profile, strict cold `drop_caches`, 16GB cgroup, France prompt, only `GGML_MOE_KEEP_TOPK_UPDOWN` changed.
+- `topk5_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151413Z-20260702_odirect_keep_topk_updown5_probe/france-cpu40-vram0gb`, `eval_tok_s=3.1`, `prompt_tok_s=1.4`, `TTFT=31613.87263ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15049924608`, `workingset_refault_file=5135535`, `ram_ok=true`, `correctness_ok=true`.
+- `topk3_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151605Z-20260702_odirect_keep_topk_updown3_probe/france-cpu40-vram0gb`, `eval_tok_s=3.6`, `prompt_tok_s=1.6`, `TTFT=29104.280615ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15061024768`, `workingset_refault_file=3822457`, `ram_ok=true`, `correctness_ok=true`.
+- `interpretation`: Simple global up/down top-k changes are worse than the accepted `4` plus layer `10-39 -> 3` strategy. Increasing to `5` raises page/refault pressure and decode slows; decreasing to `3` also loses generation speed, likely because the fallback/GPU balance worsens rather than just reducing work.
+- `decision`: Keep accepted top-k config unchanged.
+- `next_design`: Probe one-stream gate VRAM cache capacity near the current boundary. The trace has `3337` inserts but the accepted cache reports `3192` slots (`13.2GiB`, `4.25MiB` each), so there are avoidable evictions. Increasing `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13568` toward `14080` may reduce repeat direct reads. The theoretical upper bound is limited to the repeat-miss portion of `miss_src0_ms=5383.069`, not the full CPU fallback. Reject on CUDA OOM, cache allocation failure, RAM >16GB, correctness failure, TTFT regression beyond gate, or token-rate regression.
+
+### 当前执行：post-odirect-onecache-capacity-probe-results
+
+- `attempt_id`: `20260702-post-odirect-onecache-capacity-probe-results`
+- `status`: rejected_no_token_rate_sota
+- `time`: `2026-07-02T15:18Z-15:24Z`
+- `common_config`: current O_DIRECT SOTA env/pack/profile, strict cold `drop_caches`, 16GB cgroup, France prompt, only `GGML_MOE_STREAM_ONE_CACHE_MIB` changed.
+- `onecache14080_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T151826Z-20260702_odirect_onecache14080_probe/france-cpu40-vram0gb`, `eval_tok_s=1.9`, `prompt_tok_s=1.4`, `TTFT=30430.474958ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`. Rejected because `cudaMalloc 13.7 GiB FAILED`; VRAM cache disabled and pack reads increased to `35151` (`156648603648` bytes).
+- `onecache13760_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T152039Z-20260702_odirect_onecache13760_probe/france-cpu40-vram0gb`, `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=28898.178863ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`. It allocated `13.4GiB`, `3237` slots, and reduced pack reads from `4623` to `4612`, but did not improve generation token rate.
+- `onecache13888_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T152209Z-20260702_odirect_onecache13888_probe/france-cpu40-vram0gb`, `eval_tok_s=1.9`, `prompt_tok_s=1.4`, `TTFT=31156.852055ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`. Rejected because `cudaMalloc 13.6 GiB FAILED`; VRAM cache disabled and pack reads increased to `35151`.
+- `interpretation`: The accepted `13568MiB` cache is near the practical allocation boundary. A small successful increase to `13760MiB` only eliminates 11 direct reads, far too little to move token rate. Larger requests fail allocation and catastrophically disable cache.
+- `decision`: Keep accepted `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`. Add a future robustness item to avoid all-or-nothing cache disable on overlarge cache requests, but this is not a token-rate SOTA path.
+- `next_design`: Remaining high-value work is CPU fallback/up-down compute. Since thread count and top-k config did not help, the next implementation must be a correctness-first diagnostic for a compute-path change, not another blind parameter sweep. Start by isolating one fallback route with CPU-vs-GPU compare on the exact accepted SOTA trace, then only benchmark after numerical equivalence is proven.
