@@ -2429,6 +2429,19 @@
 - `gap_analysis`: The intended win was reducing one CPU fallback MoE layer, but lowering stream cache to `13000MiB` under `cpu_moe=39` caused a complete cache insertion/hit cliff: `cache_hits=0` versus accepted SOTA `cache_hits=30180`, and `src0_ms` grew from about `24.2s` to `71.2s`. `workingset_refault_file` also jumped from about `3.49M` to `13.05M`, so host page churn dominated. This branch is not near the current bottleneck unless a separate VRAM-freeing change preserves at least the accepted `13568MiB` effective stream cache. Keep `cpu_moe=40/cache13568` as SOTA.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：current-sota-repro-20260702
+
+- `attempt_id`: `20260702-current-sota-repro-after-cpumoe39-reject`
+- `attempt_kind`: `reproduction/current-accepted-sota`
+- `status`: planned_before_execution
+- `bottleneck_basis`: User asked whether the current SOTA is reproducible. The accepted SOTA is late10 top3 with `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, DS4 gate stream enabled, cold `drop_caches`, and strict 16GB cgroup. This run verifies the current pushed code path still reproduces `2.6 tok/s` after rejected probes.
+- `hypothesis`: With no source changes after the accepted SOTA path, a cold run from the current pushed branch should reproduce `eval_tok_s≈2.6`, preserve France semantic correctness, keep RAM including page cache within `16000000000` bytes, and keep TTFT below the accepted gate threshold `45449.496149ms`.
+- `theoretical_upper_bound`: This is not an optimization attempt; expected result is a tie with accepted SOTA. Any `eval_tok_s <2.6`, correctness failure, RAM breach, or TTFT gate failure means the SOTA is not currently reproducible and must be investigated before further optimization.
+- `test_config`: current branch pushed to `ssd/vendor/deepseek-token-rate-16gb`, clean source, `cpu_moe=40`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, gate trace enabled, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: reproduction passes if `eval_tok_s=2.6` or better by the existing rounded metric, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed `45449.496149ms`.
+- `rollback`: no source change. If reproduction fails, stop optimization and investigate reproducibility before any new tuning.
+- `required_evidence`: exact run dir, source commit/status, binary sha256/build line/stat, exact env/command, summary.json, trace summary, cgroup memory evidence, full France answer text, and manual correctness note.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
