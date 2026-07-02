@@ -14863,3 +14863,76 @@ Phase 7V n32 candidate result - rejected:
 - observed profile: `up_gate calls=1861 total=18.808 ms/call cuda_batch=18.643 ms/call`; this is worse than the accepted aggregate up/gate target and worse than the Phase 7U same-type analysis target.
 - interpretation: the ids-aware `mul_mat_vec_q_moe` true-batch kernel removes serial launches but is less efficient for this IQ3_XXS shape/path, likely due lower occupancy/vectorization or less favorable scheduling than eight single-column MMVQ launches. This closes Phase 7V as a performance candidate.
 - action: revert runtime source changes; keep this plan/run record for audit. Do not run n96 and do not commit runtime source.
+
+## Phase 7W - production-profile env trim
+
+Design timestamp: 2026-07-02 12:14 UTC.
+
+Reason:
+
+- Phase 7V proved that changing the IQ3_XXS up/gate kernel grouping regresses decode.
+- The accepted Phase 7P runner still enables several diagnostic-only profiles:
+  - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+- These counters are useful for investigation but not required for production token rate. They may add string/map/accounting overhead and stderr volume during decode.
+- Required reproducibility and metrics can still be kept by leaving enabled:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1` for aggregate up/down timing;
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv`;
+  - `GGML_MOE_BATCH_PROFILE=1` for cache/staging profile;
+  - full command/env/git/cgroup artifacts.
+
+Hypothesis:
+
+- Removing diagnostic-only name/eligibility/decline debug will reduce CPU-side bookkeeping and stderr overhead without changing math, routing, cache policy, staging, or kernels.
+- Expected gain is modest. If SOTA n32 `37379.97 ms / 31` is dominated by actual compute and I/O, the difference may be noise; therefore acceptance still requires n32 and n96 confirmation.
+
+Experiment design:
+
+1. Create `/tmp/run_phase7w_repro.sh` from `/tmp/run_phase7t_repro.sh`.
+2. Keep accepted Phase 7P runtime env and command, including `VRAM_MIB=15000`, `THREADS=32`, current down overlap, pack mmap fallback, dense/expert mmap drops, and pinned slots.
+3. Remove only:
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+4. Run n32 cold candidate under the strict 16GB cgroup.
+5. Promote only if n32 candidate beats Phase 7P n32 confirm by raw decode time and all gates pass.
+6. If n32 passes, run n32 confirm, then n96 and n96 confirm.
+
+Hard gates:
+
+- Cold start before every run.
+- Host RAM peak `<= 15899996160`, `oom=0`, no swap.
+- TTFT `<= 106331.72 ms`.
+- `read_failures=0`; no CUDA errors.
+- France output semantically correct and coherent.
+- Full reproducibility artifacts are mandatory; a result without `command.txt`, `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup files, `fallback-profile.csv`, and `metrics.txt` is invalid.
+
+Commit rule:
+
+- This is env/script-only unless accepted into documentation. No runtime source change is expected.
+- If accepted after n32/n96 confirmations, commit and push the plan update and reproduction notes immediately.
+- If rejected, record the run path and measured metrics; keep Phase 7P as SOTA.
+
+Phase 7W n32 candidate result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-115639Z-n32-phase7w-profile-trim-candidate`
+- source state: clean runtime source at `76b1726fd838bf451223f50db204f98db845edf9`; plan dirty only.
+- env delta over Phase 7P: removed `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, and `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+- hard gates: quality pass, TTFT `70783.15 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `37117.70 ms / 31`, `0.84 tok/s`.
+- comparison: faster than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `262.27 ms`.
+- profile: up_gate `14.810 ms/call`; down `35.216 ms/call`; down fallback_t0 `32.468 ms/call`.
+- decision: small positive candidate; run n32 confirm before n96 promotion because the improvement is within normal cold-run variance risk.
+
+Phase 7W n32 confirm result - rejected:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-115937Z-n32-phase7w-profile-trim-confirm`
+- source state: clean runtime source at `76b1726fd838bf451223f50db204f98db845edf9`; plan dirty only.
+- hard gates: quality pass, TTFT `78975.55 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `37610.68 ms / 31`, `0.82 tok/s`.
+- comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `230.71 ms`.
+- profile: up_gate `14.985 ms/call`; down `40.323 ms/call`; down fallback_t0 `37.492 ms/call`.
+- decision: reject Phase 7W because the candidate improvement did not reproduce on n32 confirm. Do not run n96. Keep Phase 7P as SOTA.
