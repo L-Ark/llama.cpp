@@ -29,6 +29,7 @@ void ggml_cuda_moe_stream_sync(void) {}
 #include "mmvq.cuh"
 #include "quantize.cuh"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cinttypes>
@@ -43,7 +44,9 @@ void ggml_cuda_moe_stream_sync(void) {}
 #include <vector>
 
 #ifdef __linux__
+#include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 
@@ -357,6 +360,8 @@ struct slot_ctx {
     size_t  h_scratch_sz = 0;
     void *  h_bounce     = nullptr;
     size_t  h_bounce_sz  = 0;
+    void *  h_src0_pack  = nullptr;
+    size_t  h_src0_pack_sz = 0;
     std::atomic_flag in_use = ATOMIC_FLAG_INIT;
 };
 
@@ -372,6 +377,185 @@ static std::mutex        g_init_mu;
 // Slot resize is rare (only when needed > current); guard with one mutex
 // rather than per-slot.  Compute path doesn't need it.
 static std::mutex        g_resize_mu;
+
+
+struct one_expert_pack_entry {
+    char tensor[128] = {};
+    int32_t expert_idx = -1;
+    uint64_t offset = 0;
+    uint64_t nbytes = 0;
+};
+
+struct one_expert_pack_state {
+    int fd = -1;
+    std::vector<one_expert_pack_entry> entries;
+    bool inited = false;
+    bool enabled = false;
+    std::mutex mu;
+    std::atomic<uint64_t> hits{0};
+    std::atomic<uint64_t> misses{0};
+    std::atomic<uint64_t> reads{0};
+    std::atomic<uint64_t> bytes{0};
+    std::atomic<uint64_t> failures{0};
+};
+
+static one_expert_pack_state g_one_pack;
+
+static bool one_pack_read_exact_fd(int fd, void * dst, size_t sz, uint64_t off) {
+    char * out = (char *) dst;
+    size_t done = 0;
+    while (done < sz) {
+        const ssize_t got = ::pread(fd, out + done, sz - done, (off_t)(off + done));
+        if (got <= 0) {
+            return false;
+        }
+        done += (size_t) got;
+    }
+    return true;
+}
+
+static void one_pack_report_atexit() {
+    if (!g_one_pack.enabled) {
+        return;
+    }
+    std::fprintf(stderr,
+        "[moe_stream] one expert pack: hits=%lu misses=%lu reads=%lu bytes=%lu failures=%lu entries=%zu\n",
+        g_one_pack.hits.load(), g_one_pack.misses.load(), g_one_pack.reads.load(),
+        g_one_pack.bytes.load(), g_one_pack.failures.load(), g_one_pack.entries.size());
+}
+
+static void one_pack_init_once() {
+    std::lock_guard<std::mutex> lk(g_one_pack.mu);
+    if (g_one_pack.inited) {
+        return;
+    }
+    const char * path = std::getenv("GGML_MOE_STREAM_ONE_EXPERT_PACK");
+    if (!path || !path[0]) {
+        g_one_pack.inited = true;
+        return;
+    }
+    const int fd = ::open(path, O_RDONLY);
+    if (fd < 0) {
+        std::fprintf(stderr, "[moe_stream] one expert pack: open failed: %s\n", path);
+        g_one_pack.inited = true;
+        return;
+    }
+
+    char magic[16] = {};
+    uint32_t version = 0;
+    uint32_t header_size = 0;
+    uint64_t n_entries = 0;
+    uint64_t data_start = 0;
+    uint64_t off = 0;
+    if (!one_pack_read_exact_fd(fd, magic, sizeof(magic), off)) goto invalid_header;
+    off += sizeof(magic);
+    if (!one_pack_read_exact_fd(fd, &version, sizeof(version), off)) goto invalid_header;
+    off += sizeof(version);
+    if (!one_pack_read_exact_fd(fd, &header_size, sizeof(header_size), off)) goto invalid_header;
+    off += sizeof(header_size);
+    if (!one_pack_read_exact_fd(fd, &n_entries, sizeof(n_entries), off)) goto invalid_header;
+    off += sizeof(n_entries);
+    if (!one_pack_read_exact_fd(fd, &data_start, sizeof(data_start), off)) goto invalid_header;
+    if (std::memcmp(magic, "GGMLMOEPACKv1", 13) != 0 ||
+            version != 1 || header_size < 40 || data_start < header_size || n_entries > 10000000ULL) {
+        goto invalid_header;
+    }
+
+    {
+        std::vector<one_expert_pack_entry> entries;
+        entries.resize((size_t)n_entries);
+        uint64_t index_off = header_size;
+        for (uint64_t i = 0; i < n_entries; ++i) {
+            uint32_t reserved = 0;
+            one_expert_pack_entry & e = entries[(size_t)i];
+            if (!one_pack_read_exact_fd(fd, e.tensor, sizeof(e.tensor), index_off)) goto invalid_index;
+            index_off += sizeof(e.tensor);
+            if (!one_pack_read_exact_fd(fd, &e.expert_idx, sizeof(e.expert_idx), index_off)) goto invalid_index;
+            index_off += sizeof(e.expert_idx);
+            if (!one_pack_read_exact_fd(fd, &reserved, sizeof(reserved), index_off)) goto invalid_index;
+            index_off += sizeof(reserved);
+            if (!one_pack_read_exact_fd(fd, &e.offset, sizeof(e.offset), index_off)) goto invalid_index;
+            index_off += sizeof(e.offset);
+            if (!one_pack_read_exact_fd(fd, &e.nbytes, sizeof(e.nbytes), index_off)) goto invalid_index;
+            index_off += sizeof(e.nbytes);
+            e.tensor[sizeof(e.tensor) - 1] = '\0';
+        }
+        std::sort(entries.begin(), entries.end(), [](const one_expert_pack_entry & a, const one_expert_pack_entry & b) {
+            const int name_cmp = std::strcmp(a.tensor, b.tensor);
+            if (name_cmp != 0) {
+                return name_cmp < 0;
+            }
+            if (a.expert_idx != b.expert_idx) {
+                return a.expert_idx < b.expert_idx;
+            }
+            return a.nbytes < b.nbytes;
+        });
+        g_one_pack.fd = fd;
+        g_one_pack.entries = std::move(entries);
+        g_one_pack.enabled = true;
+        g_one_pack.inited = true;
+        std::atexit(one_pack_report_atexit);
+        std::fprintf(stderr, "[moe_stream] one expert pack: loaded %zu entries from %s\n", g_one_pack.entries.size(), path);
+        return;
+    }
+
+invalid_index:
+    std::fprintf(stderr, "[moe_stream] one expert pack: short index: %s\n", path);
+    ::close(fd);
+    g_one_pack.inited = true;
+    return;
+invalid_header:
+    std::fprintf(stderr, "[moe_stream] one expert pack: invalid header: %s\n", path);
+    ::close(fd);
+    g_one_pack.inited = true;
+}
+
+static const one_expert_pack_entry * one_pack_lookup(const char * tensor_name, int64_t expert_idx, size_t nbytes) {
+    one_pack_init_once();
+    if (!g_one_pack.enabled || !tensor_name || !tensor_name[0]) {
+        return nullptr;
+    }
+    size_t lo = 0;
+    size_t hi = g_one_pack.entries.size();
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        const one_expert_pack_entry & e = g_one_pack.entries[mid];
+        int cmp = std::strcmp(e.tensor, tensor_name);
+        if (cmp == 0) {
+            if (e.expert_idx < expert_idx) cmp = -1;
+            else if (e.expert_idx > expert_idx) cmp = 1;
+            else if (e.nbytes < nbytes) cmp = -1;
+            else if (e.nbytes > nbytes) cmp = 1;
+        }
+        if (cmp < 0) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < g_one_pack.entries.size()) {
+        const one_expert_pack_entry & e = g_one_pack.entries[lo];
+        if (std::strcmp(e.tensor, tensor_name) == 0 && e.expert_idx == expert_idx && e.nbytes == nbytes) {
+            ++g_one_pack.hits;
+            return &e;
+        }
+    }
+    ++g_one_pack.misses;
+    return nullptr;
+}
+
+static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst, size_t sz) {
+    if (!entry || g_one_pack.fd < 0 || entry->nbytes != sz) {
+        return false;
+    }
+    if (!one_pack_read_exact_fd(g_one_pack.fd, dst, sz, entry->offset)) {
+        ++g_one_pack.failures;
+        return false;
+    }
+    ++g_one_pack.reads;
+    g_one_pack.bytes.fetch_add(sz);
+    return true;
+}
 
 struct one_trace_state {
     std::mutex mu;
@@ -763,9 +947,20 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (cached_vram) {
         kernel_src0 = cached_vram;
     } else {
+        const void * copy_src = src0_data;
+        if (const one_expert_pack_entry * pack_entry = one_pack_lookup(src0_name, expert_index, src0_bytes)) {
+            std::lock_guard<std::mutex> rk(g_resize_mu);
+            if (!ensure_host_pinned(ctx.h_src0_pack, ctx.h_src0_pack_sz, src0_bytes)) {
+                release_slot(s);
+                return false;
+            }
+            if (one_pack_read_entry(pack_entry, ctx.h_src0_pack, src0_bytes)) {
+                copy_src = ctx.h_src0_pack;
+            }
+        }
         void *inserted = nullptr;
         if (moe_stream_cache_admit_allows(src0_name, expert_index)) {
-            inserted = vram_cache_insert(cache_key, src0_data, src0_bytes, st);
+            inserted = vram_cache_insert(cache_key, copy_src, src0_bytes, st);
         } else {
             g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
         }
@@ -773,7 +968,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
             cache_inserted = true;
             kernel_src0 = inserted;
         } else {
-            if (cudaMemcpyAsync(ctx.d_src0, src0_data, src0_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) { release_slot(s); return false; }
+            if (cudaMemcpyAsync(ctx.d_src0, copy_src, src0_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) { release_slot(s); return false; }
             kernel_src0 = ctx.d_src0;
         }
     }

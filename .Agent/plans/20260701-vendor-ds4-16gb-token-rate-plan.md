@@ -3139,3 +3139,23 @@
 - `readbench_result`: original GGUF miss sequence `22.505063s`, `0.852575GiB/s`; first-order pack miss sequence `13.656855s`, `1.404954GiB/s`; both read `20602159104` bytes and produced the same checksum.
 - `theoretical_bound`: A perfect one-stream pack implementation for this exact France trace can at most save roughly `8.85s` from the measured gate miss source-load path before accounting for integration overhead, read serialization, H2D overlap, and page-cache differences inside inference. Against the traced `span_ms≈67.7s`, this is an upper-bound speedup around `15%` for generation-side wall time, so an accepted improvement from `2.7 tok/s` toward about `3.0-3.1 tok/s` is plausible but not guaranteed.
 - `next_design`: Implement default-off one-stream pack reads only after this bound. Use `GGML_MOE_STREAM_ONE_EXPERT_PACK=<pack>` so Kimi and existing batch pack paths are unchanged. Start with buffered reads into existing pinned staging; then test direct/io_uring only if buffered pack improves or shows read serialization as the gap. Do not promote unless strict 16GB RAM, correctness, and TTFT gates pass. If the measured gain is far below the `~8.85s` I/O bound, debug pack hit count, read order, page-cache residency, and H2D overlap before changing compute.
+
+### 当前执行：one-stream-pack-buffered-firstorder-sota
+
+- `attempt_id`: `20260702-one-stream-pack-buffered-firstorder-sota`
+- `status`: accepted_new_cold_sota_pending_pushed_rerun
+- `time`: `2026-07-02T11:21Z-11:31Z`
+- `source_base`: `341ac191c` plus default-off `GGML_MOE_STREAM_ONE_EXPERT_PACK` implementation in `ggml/src/ggml-cuda/moe_stream.cu`.
+- `source_change`: Added one-stream expert-pack lookup/read on VRAM cache miss only when `GGML_MOE_STREAM_ONE_EXPERT_PACK` is set. It uses `pread` against the existing v1 pack format and per-slot pinned host staging, then feeds the existing `vram_cache_insert` or transient `cudaMemcpyAsync`. Default behavior is unchanged when the env is unset.
+- `pack_builder`: committed as `.Agent/run-tools/create_ds4_gate_trace_pack.py`; generated first-miss-order pack from the traced SOTA `one_trace.csv`.
+- `pack_path`: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`.
+- `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`.
+- `pack_contents`: `4599` unique `ffn_gate_exps.weight` miss pairs, payload `20495204352` bytes (`19.088GiB`), first-miss order for the France SOTA trace.
+- `default_off_guard`: `/root/lfz/runs/vendor-ds4-16gb/20260702T112109Z-20260702_one_pack_patch_default_off_guard/france-cpu40-vram0gb`, no pack env, strict cold 16GB. Result `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=38159.157809ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15026552832`, `pgmajfault=294655`, `workingset_refault_file=3122529`, `ram_ok=true`, `correctness_ok=true`. This proves default-off source does not regress current SOTA.
+- `accepted_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T112311Z-20260702_one_pack_buffered_firstorder_probe/france-cpu40-vram0gb`.
+- `accepted_config`: accepted SOTA env plus `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, strict cold `drop_caches`, 16GB cgroup, France prompt, CLI extra args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `accepted_result`: `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=32260.354472ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15040282624`, `pgmajfault=255092`, `workingset_refault_file=1945368`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `answer`: France answer was semantic and coherent: it identifies France as the French Republic in Western Europe, mentions history/culture/global influence, landmarks including the Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and historical/modern character.
+- `pack_counters`: `[moe_stream] one expert pack: hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `gap_vs_bound`: no-source readbench predicted at most `~8.85s` gate miss I/O savings. Accepted run reduced elapsed from about `85.81s` clean baseline to `72.19s`, and TTFT from `37346.733086ms` to `32260.354472ms`; this is directionally consistent with the I/O bound plus lower refault pressure (`workingset_refault_file 2.90M -> 1.95M`).
+- `decision`: This is a new accepted vendor DeepSeek cold-start SOTA if the pushed rerun reproduces. Commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from the pushed commit with the same pack path and sha to finalize reproducibility.
