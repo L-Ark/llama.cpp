@@ -16419,3 +16419,114 @@ Decision:
   - `GGML_MOE_IO_REFILL_BATCH=4`;
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AH - production run without batch CUDA profiling
+
+Design timestamp: 2026-07-02 16:35 UTC.
+
+Bottleneck:
+
+- The current accepted Phase 7AE runner keeps `GGML_MOE_BATCH_PROFILE=1` enabled
+  in every promoted run.
+- That profile mode records CUDA events and wall-clock buckets in hot MoE
+  up/gate and down paths. It is useful for diagnostics, but it is not part of
+  the model computation.
+- Current accepted n96 confirm still spends:
+  - up/gate total `14.151 ms/call`;
+  - down total `16.369 ms/call`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`.
+- Removing instrumentation cannot change routing, tensor values, cache keys,
+  quantization, IO backend, or generation settings, so it is a low-risk
+  production-token-rate candidate.
+
+Hypothesis:
+
+- Change only the diagnostics setting:
+
+```sh
+# remove
+GGML_MOE_BATCH_PROFILE=1
+```
+
+- Keep fallback CSV profiling enabled:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv
+```
+
+- Keep every accepted Phase 7AE runtime setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache, down overlap, down parallel staging, pack mmap fallback,
+    dense/expert mmap drops, pinned slots `8`, and `THREADS=32`.
+
+Theoretical upper bound:
+
+- There are thousands of profiled MoE calls in n96:
+  - up/gate calls about `2157`;
+  - down CUDA batch calls about `4082`;
+  - CPU down wrapper calls about `4798`.
+- If profiling costs only `0.02-0.05 ms` per profiled call, n96 can save roughly
+  `0.1-0.5 s`.
+- If CUDA event timing or profile wall-clock measurement introduces stream
+  synchronization or scheduling noise in a subset of calls, the practical upper
+  bound could be `1-2 s`.
+- No improvement should be accepted unless the wall-clock token rate improves
+  under the same cold-start 16GB gate. Missing up/gate/down profile counters are
+  expected in this phase, so the mechanism is the explicit removal of
+  instrumentation overhead rather than a cache/IO counter change.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ah_repro.sh` from the Phase 7AE runner.
+- Add a `BATCH_PROFILE` switch defaulting to `0`.
+- When `BATCH_PROFILE=0`, do not write `GGML_MOE_BATCH_PROFILE=1` into
+  `env.txt`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 BATCH_PROFILE=0
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must still include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- `metrics.txt` must include output, quality, TTFT, decode time, token rate,
+  cgroup memory, file/active/inactive page-cache counters, expert-pack counters,
+  and pinned-staging counters when printed by the runtime.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AH cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- `fallback-profile.csv` must exist and be non-empty even when batch CUDA
+  profile is disabled.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not reproducibly improve, reject Phase 7AH.
+- If n32 improves but n96 is slower or quality/RAM/TTFT gates fail, reject
+  Phase 7AH and keep Phase 7AE as SOTA.
