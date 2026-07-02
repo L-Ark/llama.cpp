@@ -2064,7 +2064,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-late8-top4-rest`
 - `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Late5 showed that pushing top3 too early changes the token trajectory and increases stream misses/refaults, while late10 is currently correct and fastest. The remaining useful question is whether only layers `8-9` can be added to the top3 region without triggering the late5 failure mode.
 - `hypothesis`: Expanding the accepted late10 boundary only slightly to `blk.8-39` may capture a small amount of additional up/down fallback saving while keeping the first eight CPU-MoE layers at top4 for quality stability. Because late5 regressed, this is a boundary-finding probe, not a high-upside code change.
 - `theoretical_upper_bound`: Relative to late10, adding two of forty CPU-MoE layers to the top3 region has a coarse upper bound of `12.9s * 2/40 ≈ 0.65s` wall time before overhead. With late10 elapsed `89.48s`, the expected token-rate gain is at most a small rounding move above `2.6 tok/s`; if cache misses or output length increase, it should be rejected.
@@ -2072,6 +2072,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change is required. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace shows the late5 miss/refault regression pattern, record rejected and keep late10 as SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T010316Z-20260702_expert_keep_top3_late8_top4_rest/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38342.670365ms`, `elapsed_seconds=100.31`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15009902592`, `pgmajfault=321844`, `workingset_refault_file=4991972`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `rows=41643`, `cache_hits=36050`, `cache_misses=5593`, `span_ms=80803.695`, `src0_ms=28245.587`, `total_ms=30850.588`.
+- `gap_analysis`: Late8 avoids the late5 truncation failure, but it still increases gate stream misses (`4971 -> 5593`), `src0_ms` (`24305.283 -> 28245.587`), refault pressure, and elapsed time relative to accepted late10. Since rounded token rate only ties `2.6` and does not exceed the current SOTA, the top3 boundary should remain at layer 10. Further layer-boundary expansion is deprioritized; the next optimization should target cache/IO behavior under the late10 config.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
