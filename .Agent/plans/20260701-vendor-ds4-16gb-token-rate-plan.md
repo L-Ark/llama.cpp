@@ -2239,6 +2239,19 @@
 - `gap_analysis`: Combining no-trace with the 13760MiB cache did not combine favorably. It preserved the lower miss count from `13760MiB` (`4936` misses) and remained within the 16GB cgroup, but elapsed time regressed versus the `13568MiB` no-trace run (`87.18s -> 89.23s`) and token rate still tied `2.6`. The 46 MiB CUDA free margin likely makes this boundary fragile without a meaningful token-rate gain, so keep accepted late10 `13568MiB` as SOTA.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s` with `13568MiB` stream cache.
 
+### 当前执行 attempt：late10-no-trace-dontneed0
+
+- `attempt_id`: `20260702-late10-no-trace-dontneed0`
+- `attempt_kind`: `config-probe/page-reclaim-policy`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Accepted late10 trace still spends `dontneed_ms=1169.862ms` and `src0_ms=24305.283ms`; no-trace at `13568MiB` already reduced elapsed to `87.18s` but tied token rate. Earlier clean-baseline `DONTNEED=0` regressed by increasing `src0_ms`, but the accepted late10 routing/cache regime has fewer rows and may respond differently.
+- `hypothesis`: Setting `GGML_MOE_STREAM_DONTNEED=0` under the accepted late10/no-trace config removes the direct per-expert `madvise(DONTNEED)` overhead and may reduce syscall/reclaim work enough to exceed the rounded `2.6 tok/s` gate. The main risk is that retaining mmap source pages increases file-cache pressure and refault churn under the strict 16GB cgroup.
+- `theoretical_upper_bound`: Direct traced `dontneed_ms` in accepted late10 is about `1.17s`. If disabling it had no secondary cost, elapsed could improve from `87.18s` no-trace toward `~86s`, a small but plausible rounding move. If `src0_ms` rises as in the earlier clean-baseline probe, token rate will tie or regress.
+- `test_config`: accepted late10 config, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_STREAM_DONTNEED=0`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or memory/refault evidence worsens materially, record rejected and keep accepted late10 SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command showing `GGML_MOE_STREAM_DONTNEED=0` and trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
