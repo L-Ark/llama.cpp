@@ -16423,6 +16423,813 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AO - isolated Q4_0 down VRAM cache - rejected
+
+Start time: 2026-07-02 15:13 UTC.
+
+Design update before implementation:
+
+- Bottleneck targeted:
+  - Phase 7AN showed that enabling Q4_0 down compact batching can eliminate
+    `decode,type=2` fallback rows, but naively admitting Q4_0 into the main
+    down cache increased the slot size from `7.44 MiB` to `7.88 MiB` and
+    reduced main down capacity from `806` to `761` slots.
+  - That capacity loss slowed n32 to `43642.08 ms / 31`, so the likely
+    bottleneck was cache-pool pollution, not Q4_0 math support alone.
+- Hypothesis:
+  - Keep the accepted Phase 7AE down/upgate pools unchanged.
+  - Add a default-off, separately budgeted Q4_0 down cache controlled by
+    `GGML_MOE_Q4_DOWN_CACHE_MIB`.
+  - If Q4_0 fallback cost is larger than the additional H2D/launch/cache
+    overhead, a small isolated pool should improve decode without hurting the
+    current main down hit rate.
+- Theoretical bound:
+  - Phase 7AE n32 still has `decode,type=2` fallback work. If all such rows are
+    moved from CPU fallback to the compact CUDA path, the upper bound is the
+    fallback CPU time minus Q4_0 staging and GPU launch overhead.
+  - Because each Q4_0 down expert is `7.88 MiB`, a `512 MiB` pool can hold
+    about `65` experts. The optimization can only help when locality is high
+    enough for that small pool to avoid repeated SSD-to-pinned transfers.
+- Acceptance rule:
+  - default-off behavior must match Phase 7AE;
+  - `GGML_MOE_Q4_DOWN_CACHE_MIB=512` must pass n32 quality, RAM, TTFT, and
+    read gates, then beat Phase 7AE n32 in candidate and confirmation before
+    any n96 run.
+
+Implementation tested:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - added a third, default-off VRAM cache pool for Q4_0 down tensors;
+  - routed Q4_0 down tensors to that pool only when
+    `GGML_MOE_Q4_DOWN_CACHE_MIB>0`;
+  - kept existing down/upgate budgets unchanged;
+  - made Q4_0 compact launch eligibility conditional on the same env.
+- `ggml/src/ggml-cpu/ggml-cpu.c`
+  - made down batch support for `GGML_TYPE_Q4_0` conditional on
+    `GGML_MOE_Q4_DOWN_CACHE_MIB>0`.
+- build:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`;
+  - success, warnings only.
+
+Reproduction method:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ao-q4cache512"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 Q4_DOWN_CACHE_MIB=512 \
+      /tmp/run_phase7ao_repro.sh
+```
+
+Default-off smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151319Z-n4-phase7ao-default-off-smoke`.
+- env:
+  - no `GGML_MOE_Q4_DOWN_CACHE_MIB`.
+- mechanism:
+  - no `q4_down` pool;
+  - main down cache preserved at `806` slots, `7.44 MiB` each;
+  - upgate cache preserved at `1679` slots, `5.36 MiB` each;
+  - `src0_type=2` remains unsupported;
+  - `decode_type2_count=122`.
+- gates:
+  - exit `0`;
+  - TTFT `77114.79 ms`;
+  - decode `5239.73 ms / 3`;
+  - RAM gate pass, read gate pass;
+  - quality marked fail only because n4 truncates the required paragraph.
+
+Q4 cache n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151534Z-n4-phase7ao-q4cache512-smoke`.
+- env:
+  - `GGML_MOE_Q4_DOWN_CACHE_MIB=512`.
+- mechanism:
+  - q4_down pool active: `65` slots, `7.88 MiB` each;
+  - q4_down hit rate `56.5%`;
+  - main down cache preserved at `806` slots;
+  - upgate cache preserved at `1679` slots;
+  - `src0_type=2 eligible=4 unsupported=0`;
+  - no `decode,type=2` fallback rows.
+- gates:
+  - exit `0`;
+  - TTFT `78487.75 ms`;
+  - decode `5030.11 ms / 3`;
+  - RAM gate pass, read gate pass;
+  - quality marked fail only because n4 truncates the required paragraph.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151902Z-n32-phase7ao-q4cache512`.
+- output:
+  - `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- quality: pass.
+- TTFT: `77212.74 ms`.
+- decode: `45525.81 ms / 31`, `0.68 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15133806592`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_bytes=50318327808`;
+  - `iouring_wait_us=8927585`.
+- cache:
+  - main down `806` slots, hit rate `72.1%`;
+  - upgate `1679` slots, hit rate `40.1%`;
+  - q4_down `65` slots, hit rate `59.9%`.
+- fallback:
+  - no `decode,type=2` rows.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `8838.50 ms`;
+  - slower than Phase 7AE n32 confirm `36973.83 ms / 31` by `8551.98 ms`.
+
+Gap analysis:
+
+- The mechanism worked: Q4_0 down fallback was removed without reducing the
+  accepted down/upgate cache capacities.
+- The performance model did not hold: the extra Q4_0 staging and compact CUDA
+  work cost more than the CPU fallback it replaced.
+- The q4_down cache had only `65` slots and `59.9%` hit rate, so many Q4_0
+  experts still required SSD/io_uring/pinned/H2D movement.
+- `pinned_staging_0 host_stage=34345.106 ms` and
+  `iouring_wait_us=8927585` show the additional stream work is not hidden well
+  enough by current up/gate compute.
+- Because n32 candidate failed the performance gate, no n32 confirmation or
+  n96 run is allowed.
+
+Decision:
+
+- Reject Phase 7AO.
+- Revert the tested source changes before continuing.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
+## Phase 7AR - up/gate type-pair profile for next kernel target
+
+Design timestamp: 2026-07-02 16:46 UTC.
+
+Reason:
+
+- Recent env-only optimizations were rejected:
+  - Phase 7AP pinned slots `16` regressed n32;
+  - Phase 7AQ VRAM cache `15100` did not beat the accepted n32 best;
+  - Phase 7AF `15200` and Phase 7AJ `14900` were not reproducible at n32/n96.
+- Current n96 SOTA bottlenecks:
+  - decode `88889.08 ms / 77`;
+  - up/gate aggregate profile about `14 ms/call`;
+  - down aggregate profile `16.369 ms/call`;
+  - decode fallback CSV total is only `3.978 s`, entirely `src0_type=2`
+    Q4_0 down.
+- Phase 7AO proved broad Q4_0 down GPU coverage removes `decode,type=2` rows
+  but slows n32 by `8.8 s`, so the next high-probability target is not broad
+  Q4_0 down.
+- To optimize up/gate safely, the plan needs type-pair attribution:
+  - same-type IQ3;
+  - same-type IQ2;
+  - mixed IQ2/IQ3;
+  - prompt versus decode.
+- Existing `GGML_MOE_BATCH_PROFILE=1` reports only one aggregate up/gate line,
+  so it cannot identify which kernel/path dominates.
+
+Bottleneck model:
+
+- This phase is diagnostic and default-off from a behavior perspective:
+  - it should not change math;
+  - it should not change cache/IO/routing;
+  - it should reuse the CUDA events already recorded by batch profile.
+- The only added work is a few host-side additions into small counters when
+  `GGML_MOE_BATCH_PROFILE=1`.
+- The diagnostic upper bound is not a token-rate win by itself. Its required
+  output is actionable attribution that determines the next implementation
+  target.
+
+Implementation plan:
+
+1. Extend `ggml/src/ggml-cuda/moe_stream_batch.cu` with an up/gate type-pair
+   profile bucket:
+   - key: `prompt_mode`, `up_type`, `gate_type`;
+   - counters: calls, active experts, stage, quant, up, gate, up/gate wait,
+     up/gate compute, fuse, kernel, d2h, scatter, wall.
+2. Update the existing two places that add to `g_uprof` so they also add to the
+   matching type-pair bucket.
+3. Print report lines at exit in the form:
+
+```text
+[moe_stream_batch] up/gate type profile: mode=decode up_type=18 gate_type=18 calls=...
+```
+
+4. Keep this tied to `GGML_MOE_BATCH_PROFILE=1`; no new env is required.
+5. Build `llama-completion`.
+6. Run a strict cold n32 diagnostic with accepted Phase 7AE env.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ar-upgate-type-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7ar_repro.sh
+```
+
+Reproducibility and gates:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include standard artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`,
+    `metrics.txt`.
+- The output must remain semantically correct for the France prompt.
+- Host RAM and TTFT gates remain active:
+  - `memory.peak<=15899996160`;
+  - `oom=0`;
+  - TTFT `<=106331.72 ms`.
+- Read/runtime gates:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Acceptance for keeping the diagnostic source:
+
+- Because this phase is diagnostic, it does not become SOTA by itself.
+- The source may be committed only if:
+  - default behavior is unchanged unless `GGML_MOE_BATCH_PROFILE=1`;
+  - n32 quality/RAM/TTFT/read gates pass;
+  - profile report contains type-pair lines;
+  - token-rate regression is within normal diagnostic-profile variance and does
+    not indicate added synchronization.
+- If it changes math, breaks gates, or materially slows n32 beyond profile
+  variance, revert the source and record rejection.
+
+Next action after diagnostic:
+
+- Choose the next implementation target from the dominant decode up/gate bucket.
+- Do not stack a performance optimization on this diagnostic if the diagnostic
+  source is rejected.
+
+Phase 7AR n32 diagnostic result - accepted as diagnostic:
+
+- source delta:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added up/gate type-pair profile buckets keyed by:
+    - `prompt_mode`;
+    - `up_type`;
+    - `gate_type`;
+  - reused existing CUDA event timings from `GGML_MOE_BATCH_PROFILE=1`;
+  - no kernel, routing, cache, IO, or math changes.
+- build:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`;
+  - success, warnings only.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-153839Z-n32-phase7ar-upgate-type-profile`.
+- git at run start:
+  - head `5a6d82f3c4c1ebc12b437c2e11f70855e4878bac`;
+  - dirty only in `ggml/src/ggml-cuda/moe_stream_batch.cu`, as expected for
+    the diagnostic source under test.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13626` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `62693.86 ms`.
+- decode: `36913.52 ms / 31`, `0.84 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7915999`.
+- aggregate up/gate profile:
+  - calls `869`;
+  - avg active experts `8.00`;
+  - up `7.828 ms/call`;
+  - gate `7.298 ms/call`;
+  - kernel `15.133 ms/call`;
+  - wall `15.232 ms/call`.
+- type-pair profile:
+  - `mode=decode up_type=18 gate_type=18`:
+    - calls `311`;
+    - up `9.609 ms/call`;
+    - gate `8.589 ms/call`;
+    - kernel `18.209 ms/call`;
+    - wall `18.323 ms/call`;
+    - estimated wall total `5.70 s`.
+  - `mode=decode up_type=22 gate_type=22`:
+    - calls `558`;
+    - up `6.836 ms/call`;
+    - gate `6.578 ms/call`;
+    - kernel `13.418 ms/call`;
+    - wall `13.509 ms/call`;
+    - estimated wall total `7.54 s`.
+
+Interpretation:
+
+- The diagnostic source produced the required type-pair attribution and passed
+  quality, TTFT, RAM, and read gates.
+- The run is not a new SOTA candidate, and the decode time is within the normal
+  diagnostic-profile band around Phase 7AE n32.
+- Decode up/gate has no mixed type-pair in this prompt. It is dominated by:
+  - total wall: type `22` same-type bucket because it has more calls;
+  - per-call cost: type `18` same-type bucket.
+- Since the type `22` bucket contributes the larger total wall time, the next
+  implementation should target same-type type-22 up/gate first, unless source
+  inspection shows type 18 and type 22 share the same bottleneck kernel.
+
+Decision:
+
+- Accept Phase 7AR as diagnostic infrastructure.
+- Commit and push the diagnostic source with this plan result.
+- Keep Phase 7AE as the performance SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`.
+
+## Phase 7AS - current-SOTA IQ2_S up/gate parallel retest
+
+Design timestamp: 2026-07-02 17:08 UTC.
+
+Reason:
+
+- Phase 7AR, under the current SQPOLL SOTA, shows decode up/gate type buckets:
+  - `type=18` same-type: `311` calls, `18.323 ms/call`, estimated `5.70 s`;
+  - `type=22` same-type: `558` calls, `13.509 ms/call`, estimated `7.54 s`.
+- Type `22` (`IQ2_S`) is the larger total up/gate bucket because it has more
+  calls.
+- Existing code already has an env-gated IQ2_S parallel up/gate path:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- Phase 2F rejected this path very early in the project, before the current
+  SQPOLL, pack-mmap fallback, current-down overlap, split cache, and 7AR
+  type-pair profile. It should be retested once under current SOTA before
+  dismissing the largest total up/gate bucket.
+
+Bottleneck model:
+
+- Current type `22` up/gate profile:
+  - up `6.836 ms/call`;
+  - gate `6.578 ms/call`;
+  - kernel `13.418 ms/call`;
+  - wall `13.509 ms/call`;
+  - calls `558` on n32.
+- Perfect overlap upper bound:
+  - lower bound roughly `max(6.836, 6.578) + fuse/d2h/scatter`, about
+    `6.9-7.1 ms/call`;
+  - n32 saving upper bound about `(13.509 - 7.1) * 558 ~= 3.6 s`.
+- Expected risk:
+  - earlier Phase 2F showed stream/event waits can erase overlap;
+  - if 7AS shows type `22` wall not lower, reject immediately.
+
+Experiment:
+
+- No source change.
+- Use current committed source with Phase 7AR diagnostic profile.
+- Use accepted Phase 7AE runtime and change only:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache `UPGATE_PCT=60`;
+  - pinned slots `8`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7as-iq2-upgate-parallel"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Runner requirement:
+
+- `/tmp/run_phase7as_repro.sh` must add the two parallel envs only when
+  `IQ2_UPGATE_PARALLEL=1`.
+- The run directory must include the standard reproduction artifacts.
+
+Acceptance gates:
+
+- Host RAM:
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France answer coherent and semantically correct.
+- Read/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+- Performance:
+  - first n32 must beat Phase 7AE best `36687.31 ms / 31`;
+  - type `22` profile wall must be lower than Phase 7AR `13.509 ms/call` or
+    the mechanism is considered failed even if wall time is noisy;
+  - only then run n32 confirmation, followed by n96 and n96 confirmation.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate is slower or type `22` wall does not improve, reject without
+  confirmation.
+
+## Phase 7AQ - narrow VRAM cache 15100 MiB retest
+
+Design timestamp: 2026-07-02 16:26 UTC.
+
+Reason:
+
+- The plan requires using VRAM as fully as possible while preserving quality,
+  TTFT, and the strict 16GB host-RAM gate.
+- Accepted Phase 7AE uses `GGML_MOE_VRAM_CACHE_MIB=15000`.
+- Phase 7AF tested `15200` under the SQPOLL SOTA:
+  - n32 candidate improved to `36132.44 ms / 31`;
+  - n32 confirmation regressed to `36997.52 ms / 31`;
+  - therefore it was rejected as non-reproducible.
+- Phase 7AJ tested `14900`:
+  - n32 improved, but n96 regressed to `91176.17 ms / 77`;
+  - therefore lowering the cache budget is also rejected.
+- `15100` is the untested narrow point between accepted `15000` and rejected
+  `15200`. It adds about:
+  - `~5` down slots at `7.44 MiB`;
+  - `~11` upgate slots at `5.36 MiB`;
+  - `~100 MiB` less free VRAM headroom.
+
+Bottleneck model:
+
+- Phase 7AE n96 has down hit rate `73.4%` and upgate hit rate `43.2%`.
+- If the additional slots capture hot experts, they can slightly reduce SSD
+  reads and pinned staging.
+- The upper bound is small:
+  - only a few cache misses can be avoided at n32/n96 scale;
+  - no compute path changes;
+  - no expected improvement to Q4_0 fallback.
+- A valid improvement must therefore be reproducible. A single fast n32 is
+  treated as variance, following Phase 7AF and 7AJ.
+
+Experiment:
+
+- No source change.
+- Use the accepted Phase 7AE runtime.
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15100
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - split cache `UPGATE_PCT=60`;
+  - pinned slots `8`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7aq-vram15100"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7aq_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+- Promotion requires:
+  - n32 candidate and n32 confirmation both beat Phase 7AE best
+    `36687.31 ms / 31`;
+  - n96 candidate and n96 confirmation both beat Phase 7AE confirm
+    `88889.08 ms / 77`.
+
+Acceptance gates:
+
+- Host RAM:
+  - cgroup `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France prompt answer must be coherent and semantically correct.
+- IO/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate does not beat the accepted best, reject immediately.
+- If n32 candidate beats but confirmation fails, reject and record as
+  non-reproducible, same as Phase 7AF.
+
+Phase 7AQ n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-153038Z-n32-phase7aq-vram15100`.
+- git:
+  - head `9df9682746d1c8a4375d526957b7fdca93e0be8c`;
+  - status clean at run start.
+- env delta:
+  - `GGML_MOE_VRAM_CACHE_MIB=15100`;
+  - all other accepted Phase 7AE runtime settings preserved.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13556` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `69239.57 ms`.
+- decode: `36721.35 ms / 31`, `0.84 tok/s`.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `34.04 ms`;
+  - faster than Phase 7AE n32 confirm `36973.83 ms / 31`, but this is not
+    sufficient because the promotion gate requires beating the accepted best
+    twice before n96.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - final `file=14885502976`, `kernel=239931392`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7929123`.
+- cache:
+  - down slots increased from Phase 7AE `806` to `812`;
+  - upgate slots increased from Phase 7AE `1679` to `1690`;
+  - down hit rate unchanged at `73.6%`;
+  - upgate hit rate improved from `43.7%` to `44.1%`.
+- staging:
+  - main host stage `24835.547 ms`, higher than Phase 7AE n32 best
+    `24429.536 ms`;
+  - main H2D `4547.617 ms`, similar to Phase 7AE;
+  - main slot wait `57.060 ms`, not improved.
+
+Interpretation:
+
+- The added VRAM was successfully converted into extra down/upgate cache slots.
+- The additional slots did not reduce down misses for this n32 prompt and only
+  modestly improved upgate hit rate.
+- Host staging time increased enough to erase the small potential cache benefit.
+- Since the first n32 candidate failed the accepted-best gate, do not run n32
+  confirmation or n96.
+
+Decision:
+
+- Reject Phase 7AQ.
+- No source rollback required.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
+Rollback:
+
+- Reverted uncommitted source patch for:
+  - `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Rebuilt accepted path with:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`.
+
+## Phase 7AP - pinned staging slots 16 retest
+
+Design timestamp: 2026-07-02 16:08 UTC.
+
+Reason:
+
+- The current accepted Phase 7AE path uses `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- The remaining bottleneck is dominated by staging and IO:
+  - n32 Phase 7AE best:
+    - decode `36687.31 ms / 31`;
+    - main pinned host stage `24429.536 ms`;
+    - main H2D `4558.687 ms`;
+    - main slot wait `55.161 ms`;
+    - expert-pack io_uring wait `7915314 us`.
+  - n96 Phase 7AE confirm:
+    - decode `88889.08 ms / 77`;
+    - main pinned host stage `60514.789 ms`;
+    - main H2D `11381.667 ms`;
+    - main slot wait `134.521 ms`;
+    - expert-pack io_uring wait `19187389 us`.
+- Slot wait is small, so this is not expected to be a large win. It is still a
+  necessary controlled check before changing lower-level staging because it
+  verifies whether pinned ring pressure is currently limiting overlap.
+
+Bottleneck model:
+
+- If pinned slot reuse is forcing producers to wait before issuing the next
+  SSD/io_uring read or H2D copy, increasing slots from `8` to `16` can improve
+  overlap.
+- The hard upper bound from current counters is roughly:
+  - n32 main slot wait `55.161 ms` plus gate slot wait `6.729 ms`;
+  - n96 main slot wait `134.521 ms` plus gate slot wait `14.920 ms`.
+- Therefore a real improvement beyond about `0.15 s` on n96 cannot be explained
+  by slot wait alone and must come from secondary effects such as better IO
+  queue occupancy, fewer producer stalls, or less synchronization jitter.
+
+Experiment:
+
+- No source change.
+- Use the accepted Phase 7AE runtime and runner shape.
+- Change only:
+
+```sh
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ap-pinned16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7ap_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+- A single faster run is diagnostic only.
+- Promotion requires:
+  - n32 candidate and n32 confirmation both beat Phase 7AE best
+    `36687.31 ms / 31`;
+  - n96 candidate and n96 confirmation both beat Phase 7AE confirm
+    `88889.08 ms / 77`.
+
+Acceptance gates:
+
+- Host RAM:
+  - cgroup `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France prompt answer must be coherent and semantically correct.
+- IO/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate does not beat the accepted best, reject immediately and keep
+  Phase 7AE as SOTA.
+
+Phase 7AP n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-152527Z-n32-phase7ap-pinned16`.
+- git:
+  - head `488f9038963babfd8c873a22070f524e3a302919`;
+  - status clean at run start.
+- env delta:
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`;
+  - all other accepted Phase 7AE runtime settings preserved.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13626` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `71525.46 ms`.
+- decode: `37768.04 ms / 31`, `0.82 tok/s`.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `1080.73 ms`;
+  - slower than Phase 7AE n32 confirm `36973.83 ms / 31` by `794.21 ms`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - final `file=14768238592`, `kernel=239910912`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7788797`.
+- pinned staging:
+  - main slots `16`, slot `7.44 MiB`;
+  - main slot wait `56.829 ms`, not lower than Phase 7AE n32 best
+    `55.161 ms`;
+  - main host stage `24869.897 ms`, higher than Phase 7AE n32 best
+    `24429.536 ms`;
+  - main H2D `4566.344 ms`, similar to Phase 7AE n32 best `4558.687 ms`;
+  - gate slot wait `6.806 ms`, similar to Phase 7AE n32 best `6.729 ms`.
+- cache:
+  - down `806` slots, hit rate `73.6%`;
+  - upgate `1679` slots, hit rate `43.7%`.
+
+Interpretation:
+
+- Increasing pinned slots from `8` to `16` did not reduce the measured slot
+  wait. The accepted runtime is not pinned-ring-capacity limited.
+- The extra pinned memory reduced free VRAM headroom and slightly increased
+  staging overhead without changing cache capacity or hit rate.
+- Because the n32 candidate failed the performance gate, no n32 confirmation or
+  n96 run is allowed.
+
+Decision:
+
+- Reject Phase 7AP.
+- No source rollback required.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
 ## Phase 7AM - SQPOLL io_uring depth 16 retest
 
 Design timestamp: 2026-07-02 18:50 UTC.
@@ -16686,6 +17493,235 @@ Rollback:
   improvement does not reproduce, n96 fails, RAM/TTFT gates fail, or
   `decode,type=2` is not reduced, revert the source change and keep only the
   plan/run record.
+
+Phase 7AN result - rejected:
+
+Source delta tested:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - added `GGML_TYPE_Q4_0` to `moe_stream_type_supported()`;
+  - added `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()`;
+  - did not add Q4_0 to the Q8_K reference path.
+- `ggml/src/ggml-cpu/ggml-cpu.c`
+  - added `GGML_TYPE_Q4_0` only to
+    `ggml_cuda_moe_stream_supports_down_batch()`;
+  - did not add Q4_0 to the shared up/gate support predicate.
+- Build:
+  `cmake --build build-cuda-batch -j 32 --target llama-completion`, success.
+
+n4 smoke 1, CUDA-side gate only:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145318Z-n4-phase7an-q4-down-compact-smoke`.
+- source status: dirty with only CUDA MoE batch changes.
+- result:
+  - exit `0`, no CUDA error;
+  - TTFT `56208.22 ms`;
+  - decode `5213.78 ms / 3`, `0.58 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- finding:
+  - `src0_type=2` Q4_0 remained `eligible=0`, `unsupported=4`;
+  - `decode,type=2` still present in fallback CSV;
+  - root cause was a separate CPU-side down eligibility gate.
+- decision:
+  - smoke was useful diagnostic evidence only;
+  - continue within the same phase by adding Q4_0 to the CPU down-only gate.
+
+n4 smoke 2, CUDA + CPU down gate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145611Z-n4-phase7an-q4-down-cpu-gate-smoke`.
+- source status: dirty with CPU and CUDA Q4_0 down compact changes.
+- result:
+  - exit `0`, no CUDA error;
+  - TTFT `63334.73 ms`;
+  - decode `5084.62 ms / 3`, `0.59 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- mechanism evidence:
+  - Q4_0 down tensors changed from unsupported to eligible, e.g.
+    `src0_type=2 eligible=4 unsupported=0`;
+  - `decode,type=2` fallback rows were eliminated in the n4 fallback CSV.
+- limitation:
+  - output was `France is a country`, which is too short for the full semantic
+    gate because this is only `-n 4`;
+  - proceed to n32 for real quality/performance judgment.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145819Z-n32-phase7an-q4-down-compact`.
+- source status: dirty with CPU and CUDA Q4_0 down compact changes.
+- quality: pass; output:
+
+```text
+France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre
+```
+
+- TTFT: `62702.35 ms`.
+- decode: `43642.08 ms / 31`, `0.71 tok/s`.
+- comparison: slower than accepted Phase 7AE best n32 `36687.31 ms / 31` by
+  `6954.77 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- mechanism:
+  - `decode,type=2` Q4_0 fallback rows were eliminated;
+  - Q4_0 down tensors became eligible and accepted in decode;
+  - however down cache slot size increased from the accepted `7.44 MiB` to
+    `7.88 MiB`, reducing down slots from `806` to `761`;
+  - down hit rate dropped to `67.5%`;
+  - pinned main host stage rose to `32342.257 ms`;
+  - expert-pack iouring bytes rose to `55.67 GB`;
+  - down total remained high at `32.896 ms/call`, with
+    `fallback_t0=28.844 ms/call`;
+  - up/gate total also rose to `18.834 ms/call`.
+
+Interpretation:
+
+- The implementation proved the missing gates and generic compact path can make
+  Q4_0 down tensors eligible and remove Q4_0 CPU fallback.
+- End-to-end token rate regressed because adding Q4_0 to the same down VRAM
+  cache pool increased the required slot size for all down entries. The smaller
+  slot count caused more misses and more expert-pack staging, which dominated
+  the saved CPU fallback work.
+- This is not an acceptable SOTA path in its naive form.
+- A future Q4_0 attempt must avoid poisoning the main down cache slot size. The
+  likely design is a separate Q4_0 size class/cache pool, a Q4_0-only scoped
+  layer/range experiment, or a policy that keeps Q4_0 on CPU unless a dedicated
+  pool can be provisioned without reducing the existing 7.44 MiB down pool.
+
+Decision:
+
+- Reject Phase 7AN.
+- Revert both source files to the previous accepted SOTA behavior.
+- Rebuild `build-cuda-batch/bin/llama-completion` after revert, success.
+- Keep Phase 7AE as current accepted SOTA:
+  - Q4_0 down remains CPU fallback under the accepted config;
+  - down cache slot remains `7.44 MiB` with `806` slots;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AO - Q4_0 down compact path with separate VRAM cache pool
+
+Design timestamp: 2026-07-02 19:35 UTC.
+
+Reason:
+
+- Phase 7AN proved that Q4_0 down tensors can be made eligible for the generic
+  compact GPU batch path and that `decode,type=2` CPU fallback can be removed.
+- Phase 7AN failed because Q4_0 experts are about `7.88 MiB`, while the accepted
+  main down pool uses `7.44 MiB` slots.
+- Placing Q4_0 into the same down pool increased every down slot to `7.88 MiB`,
+  reducing slots from `806` to `761`, increasing misses and host-stage time.
+- Therefore, the next Q4_0 attempt must preserve the accepted `7.44 MiB` down
+  pool and put Q4_0 in a separate, bounded pool.
+
+Current bottleneck:
+
+- Accepted Phase 7AE keeps Q4_0 on CPU fallback:
+  - prior n96 records showed `decode,type=2` around `8.067 GiB` and `6.754 s`;
+  - this is real decode work, but moving it naively to GPU increased staging
+    more than it saved.
+- Phase 7AN n32 showed the failure mode:
+  - Q4_0 fallback eliminated;
+  - down slots `806 -> 761`;
+  - down hit rate `73.6% -> 67.5%`;
+  - pinned main host stage rose to `32342.257 ms`;
+  - decode regressed to `43642.08 ms / 31`.
+
+Hypothesis:
+
+- Add a third cache pool for Q4_0 down experts only:
+  - `cid=0`: accepted main down pool, slot size remains `7.44 MiB`;
+  - `cid=1`: accepted upgate pool, slot size remains `5.36 MiB`;
+  - `cid=2`: new Q4_0 down pool, slot size about `7.88 MiB`.
+- Enable Q4_0 compact GPU batch only when the separate Q4_0 pool is explicitly
+  enabled, e.g. `GGML_MOE_Q4_DOWN_CACHE_MIB > 0`.
+- Keep the Q4_0 pool small at first, so it does not steal enough VRAM to hurt
+  the main down/upgate pools:
+  - initial diagnostic budget: `GGML_MOE_Q4_DOWN_CACHE_MIB=512`;
+  - if stable and helpful, sweep `1024` and `1536`.
+- Preserve accepted `GGML_MOE_VRAM_CACHE_MIB=15000` for the existing two pools
+  unless VRAM pressure forces a reduction. If total VRAM allocation fails, reject
+  or explicitly budget the Q4 pool from the main pool and rerun baseline.
+
+Theoretical upper bound:
+
+- Best possible n96 saving remains bounded by the prior Q4_0 fallback bucket,
+  about `6-7 s`.
+- A 512 MiB Q4_0 pool can hold roughly `64` Q4_0 experts
+  (`512 / 7.88 ~= 64`), so it cannot eliminate all Q4_0 misses. Its realistic
+  first-run upside is smaller, likely `0.5-2 s` n96 if hot Q4_0 routes repeat.
+- If the Q4_0 pool causes VRAM allocation pressure, graph reserve pressure, or
+  extra staging that slows the main pools, it will regress and must be rejected.
+
+Implementation plan:
+
+1. Extend cache-pool arrays from 2 to 3 with a named constant, not magic `2`.
+2. Add `batch_cache_id_for_request(type, expert_sz, tensor_name)` or equivalent
+   so Q4_0 down tensors can route to `cid=2` without changing the size-based
+   behavior for existing upgate/down entries.
+3. Keep existing `batch_cache_id_for_size()` behavior for profile/preload
+   compatibility, or add a typed variant where tensor type is available.
+4. Add a default-off env:
+
+```sh
+GGML_MOE_Q4_DOWN_CACHE_MIB=0
+```
+
+5. When the env is `0` or absent:
+   - Q4_0 down remains unsupported for GPU batch;
+   - behavior is exactly the accepted Phase 7AE path.
+6. When the env is positive:
+   - allow Q4_0 in CPU down eligibility;
+   - allow Q4_0 in CUDA compact MMVQ;
+   - route Q4_0 down cache/preload/runtime load to `cid=2`;
+   - do not add Q4_0 to the Q8_K reference path.
+7. Update cache reports to include labels `down`, `upgate`, and `q4_down`.
+8. Build and run cold n4 smoke, then n32 only if:
+   - no CUDA errors;
+   - Q4_0 is eligible;
+   - existing down pool still reports `7.44 MiB` slots;
+   - q4_down pool reports `7.88 MiB` slots.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Source diff must be recorded in `git.txt`.
+- Accepted source must be committed and pushed immediately after n96
+  confirmation. Failed source must be reverted before continuing.
+
+Acceptance:
+
+- n4 smoke must show:
+  - no CUDA errors;
+  - Q4_0 down eligible;
+  - no `decode,type=2` fallback for decode rows;
+  - main down pool still at `7.44 MiB`;
+  - separate q4_down pool active at about `7.88 MiB`.
+- n32 must beat accepted Phase 7AE best `36687.31 ms / 31` twice.
+- n96 must beat accepted Phase 7AE best `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Mechanism evidence must show that Q4_0 fallback is reduced without reducing
+  the main down slot count or materially increasing main down misses.
+
+Rollback:
+
+- Revert if:
+  - default-off behavior differs from Phase 7AE;
+  - build fails;
+  - VRAM allocation fails;
+  - q4_down pool steals enough VRAM to shrink or disable existing pools;
+  - n32 is slower than Phase 7AE best;
+  - n32 improvement does not reproduce;
+  - n96 fails any gate.
 
 ## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
 

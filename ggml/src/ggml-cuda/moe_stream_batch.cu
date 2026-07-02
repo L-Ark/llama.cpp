@@ -350,6 +350,88 @@ struct batch_profile {
 
 static batch_profile g_bprof;
 static batch_profile g_uprof;
+static batch_profile g_uprof_by_type[2][GGML_TYPE_COUNT][GGML_TYPE_COUNT];
+
+static void up_gate_profile_add(
+        batch_profile &p,
+        uint64_t active_experts,
+        uint64_t up_stage_jobs,
+        uint64_t gate_stage_jobs,
+        double stage_ms,
+        double quant_ms,
+        double up_ms,
+        double gate_ms,
+        double up_wait_ms,
+        double gate_wait_ms,
+        double up_compute_ms,
+        double gate_compute_ms,
+        double fuse_ms,
+        double kernel_ms,
+        double d2h_ms,
+        double scatter_ms,
+        double wall_ms) {
+    ++p.calls;
+    p.active_experts += active_experts;
+    p.up_stage_jobs += up_stage_jobs;
+    p.gate_stage_jobs += gate_stage_jobs;
+    p.stage_ms += stage_ms;
+    p.quant_ms += quant_ms;
+    p.up_ms += up_ms;
+    p.gate_ms += gate_ms;
+    p.up_wait_ms += up_wait_ms;
+    p.gate_wait_ms += gate_wait_ms;
+    p.up_compute_ms += up_compute_ms;
+    p.gate_compute_ms += gate_compute_ms;
+    p.fuse_ms += fuse_ms;
+    p.kernel_ms += kernel_ms;
+    p.d2h_ms += d2h_ms;
+    p.scatter_ms += scatter_ms;
+    p.wall_ms += wall_ms;
+}
+
+static void up_gate_type_profile_add(
+        bool prompt_mode,
+        ggml_type up_type,
+        ggml_type gate_type,
+        uint64_t active_experts,
+        uint64_t up_stage_jobs,
+        uint64_t gate_stage_jobs,
+        double stage_ms,
+        double quant_ms,
+        double up_ms,
+        double gate_ms,
+        double up_wait_ms,
+        double gate_wait_ms,
+        double up_compute_ms,
+        double gate_compute_ms,
+        double fuse_ms,
+        double kernel_ms,
+        double d2h_ms,
+        double scatter_ms,
+        double wall_ms) {
+    if (up_type < 0 || up_type >= GGML_TYPE_COUNT || gate_type < 0 || gate_type >= GGML_TYPE_COUNT) {
+        return;
+    }
+    batch_profile &p = g_uprof_by_type[prompt_mode ? 1 : 0][up_type][gate_type];
+    up_gate_profile_add(
+        p,
+        active_experts,
+        up_stage_jobs,
+        gate_stage_jobs,
+        stage_ms,
+        quant_ms,
+        up_ms,
+        gate_ms,
+        up_wait_ms,
+        gate_wait_ms,
+        up_compute_ms,
+        gate_compute_ms,
+        fuse_ms,
+        kernel_ms,
+        d2h_ms,
+        scatter_ms,
+        wall_ms);
+}
 
 struct current_down_overlap_profile {
     std::atomic<uint64_t> calls{0};
@@ -488,6 +570,49 @@ static void up_gate_profile_report_atexit() {
         accounted_ms / calls,
         g_uprof.wall_ms / calls,
         wall_gap_ms / calls);
+    for (int mode = 0; mode < 2; ++mode) {
+        for (int up_type = 0; up_type < GGML_TYPE_COUNT; ++up_type) {
+            for (int gate_type = 0; gate_type < GGML_TYPE_COUNT; ++gate_type) {
+                const batch_profile &p = g_uprof_by_type[mode][up_type][gate_type];
+                if (p.calls == 0) {
+                    continue;
+                }
+                const double pcalls = (double)p.calls;
+                const double p_accounted_ms =
+                    p.stage_ms + p.quant_ms + p.kernel_ms + p.d2h_ms + p.scatter_ms;
+                const double p_wall_gap_ms = p.wall_ms - p_accounted_ms;
+                std::fprintf(stderr,
+                    "[moe_stream_batch] up/gate type profile: mode=%s up_type=%d gate_type=%d "
+                    "calls=%lu avg_active=%.2f stage=%.3f ms quant=%.3f ms "
+                    "up=%.3f ms gate=%.3f ms up_stage_jobs=%.2f gate_stage_jobs=%.2f "
+                    "up_wait=%.3f ms gate_wait=%.3f ms up_compute=%.3f ms gate_compute=%.3f ms "
+                    "fuse=%.3f ms kernel=%.3f ms d2h=%.3f ms scatter=%.3f ms "
+                    "total=%.3f ms/call wall=%.3f ms/call wall_gap=%.3f ms/call\n",
+                    mode ? "prompt" : "decode",
+                    up_type,
+                    gate_type,
+                    p.calls,
+                    (double)p.active_experts / pcalls,
+                    p.stage_ms / pcalls,
+                    p.quant_ms / pcalls,
+                    p.up_ms / pcalls,
+                    p.gate_ms / pcalls,
+                    (double)p.up_stage_jobs / pcalls,
+                    (double)p.gate_stage_jobs / pcalls,
+                    p.up_wait_ms / pcalls,
+                    p.gate_wait_ms / pcalls,
+                    p.up_compute_ms / pcalls,
+                    p.gate_compute_ms / pcalls,
+                    p.fuse_ms / pcalls,
+                    p.kernel_ms / pcalls,
+                    p.d2h_ms / pcalls,
+                    p.scatter_ms / pcalls,
+                    p_accounted_ms / pcalls,
+                    p.wall_ms / pcalls,
+                    p_wall_gap_ms / pcalls);
+            }
+        }
+    }
 }
 
 struct batch_vram_cache {
@@ -5859,20 +5984,44 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             }
             cudaEventElapsedTime(&fuse_ms, bc.ev_gate, bc.ev_kernel);
             cudaEventElapsedTime(&kernel_ms, bc.ev_quant, bc.ev_kernel);
-            ++g_uprof.calls;
-            g_uprof.active_experts += (uint64_t)n_active;
-            g_uprof.up_stage_jobs += (uint64_t)up_stage_jobs_count;
-            g_uprof.gate_stage_jobs += (uint64_t)gate_stage_jobs_count;
-            g_uprof.stage_ms += stage_ms;
-            g_uprof.quant_ms += quant_ms;
-            g_uprof.up_ms += up_ms;
-            g_uprof.gate_ms += gate_ms;
-            g_uprof.up_wait_ms += up_wait_ms;
-            g_uprof.gate_wait_ms += gate_wait_ms;
-            g_uprof.up_compute_ms += up_compute_ms;
-            g_uprof.gate_compute_ms += gate_compute_ms;
-            g_uprof.fuse_ms += fuse_ms;
-            g_uprof.kernel_ms += kernel_ms;
+            up_gate_profile_add(
+                g_uprof,
+                (uint64_t)n_active,
+                (uint64_t)up_stage_jobs_count,
+                (uint64_t)gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                0.0,
+                0.0,
+                0.0);
+            up_gate_type_profile_add(
+                prompt_mode,
+                src0_type,
+                gate_type,
+                (uint64_t)n_active,
+                (uint64_t)up_stage_jobs_count,
+                (uint64_t)gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                0.0,
+                0.0,
+                0.0);
         }
         return true;
     }
@@ -5936,23 +6085,44 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         const auto scatter_end = std::chrono::steady_clock::now();
         const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
         const double wall_ms = std::chrono::duration<double, std::milli>(scatter_end - wall_start).count();
-        ++g_uprof.calls;
-        g_uprof.active_experts += (uint64_t)n_active;
-        g_uprof.up_stage_jobs += (uint64_t)up_stage_jobs_count;
-        g_uprof.gate_stage_jobs += (uint64_t)gate_stage_jobs_count;
-        g_uprof.stage_ms += stage_ms;
-        g_uprof.quant_ms += quant_ms;
-        g_uprof.up_ms += up_ms;
-        g_uprof.gate_ms += gate_ms;
-        g_uprof.up_wait_ms += up_wait_ms;
-        g_uprof.gate_wait_ms += gate_wait_ms;
-        g_uprof.up_compute_ms += up_compute_ms;
-        g_uprof.gate_compute_ms += gate_compute_ms;
-        g_uprof.fuse_ms += fuse_ms;
-        g_uprof.kernel_ms += kernel_ms;
-        g_uprof.d2h_ms += d2h_ms;
-        g_uprof.scatter_ms += scatter_ms;
-        g_uprof.wall_ms += wall_ms;
+        up_gate_profile_add(
+            g_uprof,
+            (uint64_t)n_active,
+            (uint64_t)up_stage_jobs_count,
+            (uint64_t)gate_stage_jobs_count,
+            stage_ms,
+            quant_ms,
+            up_ms,
+            gate_ms,
+            up_wait_ms,
+            gate_wait_ms,
+            up_compute_ms,
+            gate_compute_ms,
+            fuse_ms,
+            kernel_ms,
+            d2h_ms,
+            scatter_ms,
+            wall_ms);
+        up_gate_type_profile_add(
+            prompt_mode,
+            src0_type,
+            gate_type,
+            (uint64_t)n_active,
+            (uint64_t)up_stage_jobs_count,
+            (uint64_t)gate_stage_jobs_count,
+            stage_ms,
+            quant_ms,
+            up_ms,
+            gate_ms,
+            up_wait_ms,
+            gate_wait_ms,
+            up_compute_ms,
+            gate_compute_ms,
+            fuse_ms,
+            kernel_ms,
+            d2h_ms,
+            scatter_ms,
+            wall_ms);
     }
     return true;
 }
