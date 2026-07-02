@@ -1652,7 +1652,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         up  = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], n_ff * gate_up->nb[0]);
         cb(up, "ffn_moe_up", il);
     } else if (use_stream_fused_up_gate) {
-        cur = ggml_moe_up_gate(ctx0, up_exps, gate_exps, cur, selected_experts, GGML_UNARY_OP_SILU);
+        cur = ggml_moe_up_gate(ctx0, up_exps, gate_exps, cur, selected_experts, GGML_UNARY_OP_SILU, 0.0f);
         cb(cur, "ffn_moe_swiglu", il);
         fused_up_gate_done = true;
     } else if (build_gate_first_for_cuda_fusion) {

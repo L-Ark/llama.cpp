@@ -697,31 +697,49 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
             return out_dual;
         }
 
-        // === Default single-path (unchanged) ===
-        if (layer.ffn_gate_up_exps) {
-            ggml_tensor * gate_up = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
-            cb(gate_up, "ffn_moe_gate_up", il);
-
-            const int64_t n_ff = gate_up->ne[0] / 2;
-            gate = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], 0);
-            up = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], n_ff * gate_up->nb[0]);
-        } else {
-            gate = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
-            up = build_lora_mm_id(layer.ffn_up_exps, cur_experts_in, selected_experts);
-            cb(gate, "ffn_moe_gate", il);
-            cb(up, "ffn_moe_up", il);
-        }
-
+        // === Default single-path ===
         const float swiglu_limit = hparams.swiglu_clamp_exp[il];
-        if (swiglu_limit > 1e-6f) {
-            gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
-            up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
-            cb(gate, "ffn_moe_gate_clamped", il);
-            cb(up,   "ffn_moe_up_clamped",   il);
-        }
+        const bool use_fused_up_gate =
+            std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE") != nullptr &&
+            mix_tokens == 1 &&
+            layer.ffn_gate_up_exps == nullptr &&
+            layer.ffn_gate_exps != nullptr &&
+            layer.ffn_up_exps != nullptr;
 
-        ggml_tensor * act = ggml_swiglu_split(ctx0, gate, up);
-        cb(act, "ffn_moe_swiglu", il);
+        ggml_tensor * act = nullptr;
+        if (use_fused_up_gate) {
+            static bool first_fused_log = true;
+            if (first_fused_log) {
+                first_fused_log = false;
+                fprintf(stderr, "[deepseek4] fused up/gate decode path enabled limit=%g\n", (double) swiglu_limit);
+            }
+            act = ggml_moe_up_gate(ctx0, layer.ffn_up_exps, layer.ffn_gate_exps, cur_experts_in, selected_experts, GGML_UNARY_OP_SILU, swiglu_limit);
+            cb(act, "ffn_moe_swiglu", il);
+        } else {
+            if (layer.ffn_gate_up_exps) {
+                ggml_tensor * gate_up = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
+                cb(gate_up, "ffn_moe_gate_up", il);
+
+                const int64_t n_ff = gate_up->ne[0] / 2;
+                gate = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], 0);
+                up = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], n_ff * gate_up->nb[0]);
+            } else {
+                gate = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
+                up = build_lora_mm_id(layer.ffn_up_exps, cur_experts_in, selected_experts);
+                cb(gate, "ffn_moe_gate", il);
+                cb(up, "ffn_moe_up", il);
+            }
+
+            if (swiglu_limit > 1e-6f) {
+                gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
+                up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
+                cb(gate, "ffn_moe_gate_clamped", il);
+                cb(up,   "ffn_moe_up_clamped",   il);
+            }
+
+            act = ggml_swiglu_split(ctx0, gate, up);
+            cb(act, "ffn_moe_swiglu", il);
+        }
 
         ggml_tensor * experts = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
         experts = ggml_mul(ctx0, experts, weights);
