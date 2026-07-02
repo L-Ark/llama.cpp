@@ -37,7 +37,9 @@ void ggml_cuda_moe_stream_sync(void) {}
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #ifdef __linux__
@@ -196,6 +198,49 @@ static void moe_stream_dontneed_source_pages(const void * ptr, size_t size) {
     (void) ptr;
     (void) size;
 #endif
+}
+
+static bool moe_stream_cache_admit_allows(const char * tensor, int64_t expert) {
+    static std::mutex mu;
+    static bool initialized = false;
+    static bool enabled = false;
+    static std::unordered_set<std::string> allow;
+
+    if (!initialized) {
+        std::lock_guard<std::mutex> lk(mu);
+        if (!initialized) {
+            const char * path = std::getenv("GGML_MOE_STREAM_CACHE_ADMIT_PROFILE");
+            if (path && path[0]) {
+                FILE * fp = std::fopen(path, "r");
+                if (!fp) {
+                    std::fprintf(stderr, "[moe_stream] cache admission: failed to open %s\n", path);
+                } else {
+                    char line[4096];
+                    while (std::fgets(line, sizeof(line), fp)) {
+                        char name[3072];
+                        long long expert_id = -1;
+                        if (std::sscanf(line, "%3071[^\t]\t%lld", name, &expert_id) == 2 && expert_id >= 0) {
+                            allow.insert(std::string(name) + "\t" + std::to_string(expert_id));
+                        }
+                    }
+                    std::fclose(fp);
+                    enabled = true;
+                    std::fprintf(stderr, "[moe_stream] cache admission: loaded %zu entries from %s\n",
+                            allow.size(), path);
+                }
+            }
+            initialized = true;
+        }
+    }
+
+    if (!enabled) {
+        return true;
+    }
+    if (!tensor) {
+        return false;
+    }
+    const std::string key = std::string(tensor) + "\t" + std::to_string((long long) expert);
+    return allow.find(key) != allow.end();
 }
 
 static void vram_cache_init(size_t expert_sz) {
@@ -718,7 +763,12 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (cached_vram) {
         kernel_src0 = cached_vram;
     } else {
-        void *inserted = vram_cache_insert(cache_key, src0_data, src0_bytes, st);
+        void *inserted = nullptr;
+        if (moe_stream_cache_admit_allows(src0_name, expert_index)) {
+            inserted = vram_cache_insert(cache_key, src0_data, src0_bytes, st);
+        } else {
+            g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
+        }
         if (inserted) {
             cache_inserted = true;
             kernel_src0 = inserted;
