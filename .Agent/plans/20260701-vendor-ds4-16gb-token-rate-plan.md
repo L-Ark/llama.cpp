@@ -2609,6 +2609,21 @@
 - `gap_analysis`: This stop target fixes the visible truncation issue, but the measured generation rate falls to `2.3`, below the accepted `2.6`. Substring stop does not provide a valid token-rate improvement because the shorter output changes measurement behavior and cache reuse. Close prompt-specific substring-stop rescue for global top3 unless a future semantic stopping mechanism can preserve both quality and measured rate.
 - `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：current-sota-repro-check-20260702T040203Z
+
+- `attempt_id`: `20260702-current-sota-repro-check-040203`
+- `attempt_kind`: `repro-check/current-accepted-sota`
+- `status`: completed_reproduced_current_sota_not_new_sota
+- `bottleneck_basis`: User asked whether the current accepted SOTA is reproducible. This run checks the pushed `ssd/vendor/deepseek-token-rate-16gb` branch at `ae2183e49090dff7bb29eda26ddee2b554b4c4bf` using the accepted late10 top3 configuration, strict cold `drop_caches`, and a 16GB cgroup including page cache.
+- `test_config`: clean source, no source changes, binary hashes `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, `cpu_moe=40`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: reproduction passes if `eval_tok_s=2.6` or better by the existing rounded metric, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed `45449.496149ms`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T040203Z-20260702_sota_repro_check_040203/france-cpu40-vram0gb`.
+- `result`: reproduced current accepted SOTA. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=36099.909549ms`, `elapsed_seconds=87.39`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15036350464`, `pgmajfault=291555`, `workingset_refault_file=3568217`, `memory_max_events=25829`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. Output is a complete, coherent France paragraph: `Here is a short paragraph introducing France: France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.`
+- `ram_evidence`: cgroup `memory.peak=16000000000`, `memory.stat file=15036350464`, `active_file=10401259520`, `inactive_file=4635029504`, `oom=0`, `oom_kill=0`. Page cache is included inside the cgroup limit.
+- `trace_note`: `GGML_MOE_STREAM_ONE_TRACE_OUT` was passed, but the path did not pre-exist under the runner's timestamped run directory, so no new trace file was produced. This check is still valid as a SOTA reproduction because exact command/env, stdout, summary, cgroup memory files, and output correctness are recorded; previous accepted trace shape remains `/root/lfz/runs/vendor-ds4-16gb/20260702T030252Z-20260702_current_sota_repro_after_cpumoe39_reject/france-cpu40-vram0gb/trace_summary.json`.
+- `conclusion`: Current SOTA remains reproducible at `2.6 tok/s` under the strict 16GB host RAM/page-cache constraint. This is not a new SOTA and does not require source changes.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
