@@ -3497,3 +3497,19 @@
 - `performance_profile`: fixed down batch accepted `7644` calls and declined `116`; down batch VRAM cache only had `34` slots after `cudaMalloc 0.5GiB FAILED` retry, with `hits=0`, `misses=24890`. `kimi_cpu_moe_profile` showed down total `3.057ms/call`, split into `cuda_batch=1.400ms`, `cuda_single=0.595ms`, `fallback_t0=1.043ms`.
 - `interpretation`: The correctness bug in MXFP4 compact down batch is fixed by allocating enough temporary dst rows, but the path is still far slower than current O_DIRECT SOTA because down expert staging/cache misses dominate. This is not an accepted SOTA and must not remain enabled on the SOTA branch.
 - `rollback_action`: Revert temporary source changes and rebuild the accepted SOTA path with `GGML_CUDA_MOE_STREAM_BATCH=OFF`. Keep only this plan record. Future work on down batch should first solve staging/cache locality, likely with a down expert pack or a larger/split VRAM allocation strategy that does not starve the existing gate cache.
+
+### 当前执行：post-kimi-upgate-profile-merge-guard
+
+- `attempt_id`: `20260702-post-kimi-upgate-profile-merge-guard`
+- `status`: accepted_guard_pending_push
+- `time`: `2026-07-02T15:48Z`
+- `pre_merge_source`: `15e559953c409dadcfdb5724b92bd2d18adaf341` (`vendor-ds4: record mxfp4 down batch diagnosis`).
+- `kimi_latest`: fetched and merged `ssd/vendor/kimi-moe-stream-on-vendor` at `f0d44910233b0bcf52050025a522313a78b93232`. Delta from previous Kimi head `f6175d8e5` includes Kimi plan updates and `ggml/src/ggml-cuda/moe_stream_batch.cu` profile-only up/gate type breakdown (`dd44205e7 cuda: profile kimi upgate type pairs`). This adds diagnostic profile aggregation and does not change the batch-off DeepSeek SOTA path.
+- `merge_commit`: `87ddee861` (`vendor-ds4: merge kimi upgate profile update`).
+- `build`: rebuilt `build-ds4-moe-stream` with `GGML_CUDA_MOE_STREAM_BATCH=OFF`.
+- `guard_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T154804Z-20260702_post_kimi_upgate_profile_merge_odirect_sota_guard/france-cpu40-vram0gb`.
+- `guard_config`: current O_DIRECT SOTA config: `cpu_moe=40`, `--vram-cache-gb 0`, extra args `-c 256 -b 16 -ub 16 -t 20 -tb 20`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`, strict cold `drop_caches`, 16GB cgroup.
+- `guard_result`: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29056.139513ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15087562752`, `pgmajfault=266989`, `workingset_refault_file=1651369`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `guard_answer`: France output is semantic and coherent: it identifies France/French Republic in Western Europe, mentions history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and historical/modern vitality.
+- `guard_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `decision`: Kimi latest merge is safe for DeepSeek SOTA. Push the merge and this record to `ssd/vendor/deepseek-token-rate-16gb`, then continue with down expert staging/cache feasibility.
