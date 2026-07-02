@@ -2099,6 +2099,19 @@
 - `gap_analysis`: Increasing cache from `13568MiB` to `13700MiB` added 31 slots and reduced misses only `4971 -> 4943`. Direct traced `src0_ms` did not improve (`24305.283 -> 24631.968`), while rounded `eval_tok_s` tied current SOTA. The lower TTFT/elapsed likely reflects run-to-run page/reclaim variance rather than a strong token-rate gain. Because the token-rate gate is not exceeded, keep `13568MiB` as accepted SOTA; a final small VRAM boundary probe may test `13760MiB`, but expected gain is tiny and OOM risk is higher.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s` with `13568MiB` stream cache.
 
+### 当前执行 attempt：late10-cache13760mib
+
+- `attempt_id`: `20260702-late10-cache13760mib`
+- `attempt_kind`: `config-probe/vram-cache-boundary`
+- `status`: planned_before_execution
+- `bottleneck_basis`: `13700MiB` ran with only about `106 MiB` CUDA free and produced 3223 slots, but did not improve rounded token rate. To satisfy the “use VRAM as much as practical” constraint, run one final small boundary probe before leaving cache-size-only tuning.
+- `hypothesis`: Increasing `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13700` to `13760` may add roughly `60 / 4.25 ≈ 14` slots and leave only a narrow CUDA free-memory margin. It may still run, but the expected miss reduction and token-rate benefit are tiny; CUDA OOM or allocator fragility is plausible.
+- `theoretical_upper_bound`: Fourteen extra slots can at best avoid about fourteen immediate misses on the observed sequence. At `~4.9ms` average traced `src0` cost per miss, the direct bound is about `0.07s` before secondary effects. This is not expected to beat SOTA unless there is a nonlinear cache/reclaim effect; reject on tie.
+- `test_config`: accepted late10 config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13760`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change is required. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `13568MiB` late10 as SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, stderr cache size/slot/free-memory lines, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace if generated, cgroup `memory.*`, France answer text if generated, manual correctness note, trace summary, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
