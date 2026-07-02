@@ -916,6 +916,69 @@ void llama_model_loader::drop_mmap_expert_pages() const {
     }
 }
 
+void llama_model_loader::drop_mmap_dense_pages() const {
+    const char * env = std::getenv("LLAMA_DROP_DENSE_MMAP_CACHE");
+    if (!env || !env[0] || env[0] == '0') {
+        return;
+    }
+    if (!use_mmap || mappings.empty() || mmaps_used.empty()) {
+        return;
+    }
+
+    size_t dense_mmap_dontneed_bytes = 0;
+    size_t dense_mmap_dontneed_ranges = 0;
+    size_t dense_mmap_dontneed_failures = 0;
+
+    for (size_t idx = 0; idx < mappings.size() && idx < mmaps_used.size(); ++idx) {
+        const auto & used = mmaps_used[idx];
+        if (used.second <= used.first) {
+            continue;
+        }
+
+        size_t cursor = used.first;
+        const auto * expert_ranges = idx < expert_tensor_index.file_ranges.size() ?
+            &expert_tensor_index.file_ranges[idx] : nullptr;
+
+        auto drop_range = [&](size_t first, size_t last) {
+            if (last <= first) {
+                return;
+            }
+            size_t len = 0;
+            const bool ok = mappings[idx]->dontneed_fragment(first, last, &len);
+            dense_mmap_dontneed_bytes += len;
+            ++dense_mmap_dontneed_ranges;
+            if (!ok) {
+                ++dense_mmap_dontneed_failures;
+            }
+        };
+
+        if (expert_ranges) {
+            for (const auto & range : *expert_ranges) {
+                if (range.last <= used.first || range.first >= used.second) {
+                    continue;
+                }
+                const size_t expert_first = std::max(range.first, used.first);
+                const size_t expert_last = std::min(range.last, used.second);
+                if (cursor < expert_first) {
+                    drop_range(cursor, expert_first);
+                }
+                cursor = std::max(cursor, expert_last);
+            }
+        }
+
+        if (cursor < used.second) {
+            drop_range(cursor, used.second);
+        }
+    }
+
+    LLAMA_LOG_INFO(
+        "%s: dense mmap dontneed bytes=%.2f MiB ranges=%zu failures=%zu\n",
+        __func__,
+        dense_mmap_dontneed_bytes / 1024.0 / 1024.0,
+        dense_mmap_dontneed_ranges,
+        dense_mmap_dontneed_failures);
+}
+
 std::string llama_model_loader::get_arch_name() const {
     return arch_name;
 }

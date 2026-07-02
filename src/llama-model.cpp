@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cfloat>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <functional>
@@ -656,6 +657,8 @@ struct llama_model::impl {
 
     // model memory mapped files
     llama_mmaps mappings;
+    std::vector<std::vector<llama_file_range>> expert_mmap_ranges;
+    mutable bool expert_mmap_drop_after_prompt_done = false;
 
     // objects representing data potentially being locked in memory
     llama_mlocks mlock_bufs;
@@ -8127,6 +8130,9 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
 
     ml.init_mappings(!defer_expert_mmap, use_mlock ? &pimpl->mlock_mmaps : nullptr);
     pimpl->mappings.reserve(ml.mappings.size());
+    if (defer_expert_mmap) {
+        pimpl->expert_mmap_ranges = ml.expert_tensor_index.file_ranges;
+    }
 
     // create the backend buffers
     std::vector<std::pair<ggml_context *, llama_buf_map>> ctx_buf_maps;
@@ -8262,6 +8268,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                 ml.expert_tensor_index.dense_bytes / 1024.0 / 1024.0 / 1024.0,
                 ml.expert_tensor_index.deferred_bytes / 1024.0 / 1024.0 / 1024.0);
     }
+    ml.drop_mmap_dense_pages();
 
     ml.tensor_buft_overrides = original_tensor_buft_overrides;
 
@@ -8276,6 +8283,41 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
 
 std::string llama_model::arch_name() const {
     return llm_arch_name(arch);
+}
+
+void llama_model::drop_expert_mmap_pages_after_prompt() const {
+    const char * env = std::getenv("LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT");
+    if (!env || !env[0] || env[0] == '0') {
+        return;
+    }
+    if (pimpl->expert_mmap_drop_after_prompt_done) {
+        return;
+    }
+    pimpl->expert_mmap_drop_after_prompt_done = true;
+    if (pimpl->mappings.empty() || pimpl->expert_mmap_ranges.empty()) {
+        return;
+    }
+
+    size_t bytes = 0;
+    size_t ranges = 0;
+    size_t failures = 0;
+    const size_t n = std::min(pimpl->mappings.size(), pimpl->expert_mmap_ranges.size());
+    for (size_t i = 0; i < n; ++i) {
+        if (!pimpl->mappings[i]) {
+            continue;
+        }
+        for (const llama_file_range & range : pimpl->expert_mmap_ranges[i]) {
+            size_t len = 0;
+            const bool ok = pimpl->mappings[i]->dontneed_fragment(range.first, range.last, &len);
+            bytes += len;
+            ++ranges;
+            if (!ok) {
+                ++failures;
+            }
+        }
+    }
+    LLAMA_LOG_INFO("%s: expert mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
+            __func__, bytes / 1024.0 / 1024.0, ranges, failures);
 }
 
 std::string llama_model::type_name() const {

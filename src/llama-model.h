@@ -611,6 +611,8 @@ struct llama_model {
     void load_vocab  (llama_model_loader & ml);
     bool load_tensors(llama_model_loader & ml); // returns false if cancelled by progress_callback
 
+    void drop_expert_mmap_pages_after_prompt() const;
+
     std::string arch_name() const;
     std::string type_name() const;
 

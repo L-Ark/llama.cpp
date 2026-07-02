@@ -207,6 +207,7 @@ struct llama_model_loader {
     void build_expert_tensor_index(const llama_hparams & hparams);
     bool should_defer_expert_mmaps() const;
     void drop_mmap_expert_pages() const;
+    void drop_mmap_dense_pages() const;
 
     void init_mappings(bool prefetch = true, llama_mlocks * mlock_mmaps = nullptr);
 

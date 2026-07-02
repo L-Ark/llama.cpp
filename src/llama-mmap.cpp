@@ -479,13 +479,16 @@ struct llama_mmap::impl {
         }
     }
 
-    void dontneed_fragment(size_t first, size_t last) {
+    bool dontneed_fragment(size_t first, size_t last, size_t * len_out) {
         int page_size = sysconf(_SC_PAGESIZE);
         align_range(&first, &last, page_size);
         size_t len = last - first;
+        if (len_out) {
+            *len_out = len;
+        }
 
         if (len == 0) {
-            return;
+            return true;
         }
 
         GGML_ASSERT(first % page_size == 0);
@@ -495,8 +498,10 @@ struct llama_mmap::impl {
 #ifdef __linux__
         if (madvise((uint8_t *) addr + first, len, MADV_DONTNEED)) {
             LLAMA_LOG_WARN("warning: madvise(..., MADV_DONTNEED) failed: %s\n", strerror(errno));
+            return false;
         }
 #endif
+        return true;
     }
 
     void unmap_fragment(size_t first, size_t last) {
@@ -647,7 +652,7 @@ llama_mmap::~llama_mmap() = default;
 size_t llama_mmap::size() const { return pimpl->size; }
 void * llama_mmap::addr() const { return pimpl->addr; }
 
-void llama_mmap::dontneed_fragment(size_t first, size_t last) { pimpl->dontneed_fragment(first, last); }
+bool llama_mmap::dontneed_fragment(size_t first, size_t last, size_t * len_out) { return pimpl->dontneed_fragment(first, last, len_out); }
 void llama_mmap::unmap_fragment(size_t first, size_t last) { pimpl->unmap_fragment(first, last); }
 
 #if defined(_POSIX_MEMLOCK_RANGE) || defined(_WIN32)
