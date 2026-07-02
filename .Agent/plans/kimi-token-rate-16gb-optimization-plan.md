@@ -10498,3 +10498,152 @@ Rollback:
 - Revert if build fails, CUDA declines mixed layers, output quality regresses,
   TTFT exceeds `106331.72 ms`, host RAM exceeds 16GB, read/launch failures
   appear, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 23:00 UTC / 2026-07-03 07:00 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-015417Z-n4-phase3zt-mixed-smoke-v2`
+
+Validation run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-015644Z-n32-phase3zt-mixed-upgate`
+
+Promotion runs:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-020000Z-phase3zt-n96-promotion`
+
+Implementation:
+
+- Added opt-in mixed-type fused up/gate enablement behind
+  `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`.
+- Scoped mixed support to the observed Kimi pairs:
+  - `up=IQ2_S`, `gate=IQ3_XXS`;
+  - `up=IQ3_XXS`, `gate=IQ2_S`.
+- `ggml_moe_up_gate()` still falls back by default. It only constructs the
+  fused op for mixed pairs when the new env is set.
+- CPU fused fallback now uses independent up/gate vec-dot functions and strides
+  and only allows mixed pairs that share the same vec-dot activation type.
+- CUDA up/gate batch entry now receives independent up/gate:
+  - type;
+  - row stride;
+  - expert stride;
+  - expert bytes.
+- Mixed CUDA path uses the existing compact MMVQ path, not the previously
+  rejected vendor fused MMQ path.
+- Mixed CUDA path stages up/gate into the large VRAM cache pool with independent
+  expert byte sizes and avoid-slot protection.
+
+Debugging note:
+
+- The first n4 attempt
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-014712Z-n4-phase3zt-mixed-upgate-smoke`
+  did not actually use the mixed CUDA path. The gap was caused by incorrectly
+  treating `rows_stride > 1` as prompt mode. Decode also has `rows_stride=8`
+  because it is the top-k route width. Removing that precheck allowed the
+  existing `matrix_row_counts[e] > 1 && !prompt_mode` guard to reject only true
+  multi-row prompt cases.
+
+`-n 4` smoke result:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-015417Z-n4-phase3zt-mixed-smoke-v2`.
+- Strict cgroup host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- TTFT: `71594.07 ms`, inside the `106331.72 ms` gate.
+- Decode: `6809.72 ms / 3 tokens = 2.2699066666666667 s/token`,
+  `0.44054614339540446 tok/s`.
+- Output prefix: `France is a country`.
+- Mixed CUDA compact path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+`-n 32` validation result:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-015644Z-n32-phase3zt-mixed-upgate`.
+- Strict cgroup host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.868263 GiB`.
+- TTFT: `60708.82 ms`, inside the `106331.72 ms` gate.
+- Decode: `53039.93 ms / 31 tokens = 1.7109654838709676 s/token`,
+  `0.5844653264059738 tok/s`.
+- Quality: PASS:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Mixed CUDA compact path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+Three-run `-n 96` promotion result:
+
+- Base directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-020000Z-phase3zt-n96-promotion`.
+- All three runs passed host RAM, cold start, TTFT, France quality,
+  read-failure, launch-failure, and mixed-active gates.
+- Average decode rate: `0.6344732263184047 tok/s`.
+- Average seconds/token: `1.5761561471861472`.
+
+Run 1:
+
+- Decode: `120492.4 ms / 77 tokens = 1.5648363636363636 s/token`,
+  `0.6390444542560362 tok/s`.
+- TTFT: `59249.63 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.871727 GiB`.
+- Quality: PASS, complete France paragraph ending with `<|im_end|> [end of text]`.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Run 2:
+
+- Decode: `121541.32 ms / 77 tokens = 1.5784587012987015 s/token`,
+  `0.633529403827439 tok/s`.
+- TTFT: `61121.97 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.871487 GiB`.
+- Quality: PASS, same complete France paragraph.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Run 3:
+
+- Decode: `122058.35 ms / 77 tokens = 1.5851733766233767 s/token`,
+  `0.6308458208717388 tok/s`.
+- TTFT: `74941.87 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.874313 GiB`.
+- Quality: PASS, same complete France paragraph.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Comparison:
+
+- Previous accepted full `-n 96` Phase 3ZG:
+  - `2.5781063529411763 s/token`;
+  - `0.38788159334822314 tok/s`;
+  - TTFT `74433.41 ms`.
+- Phase 3ZT average:
+  - `1.5761561471861472 s/token`;
+  - `0.6344732263184047 tok/s`;
+  - TTFT range `59249.63-74941.87 ms`.
+- Token-rate improvement versus Phase 3ZG:
+  - about `1.64x`;
+  - `+63.6%`.
+- TTFT gate:
+  - worst promotion TTFT `74941.87 ms`;
+  - below `106331.72 ms`;
+  - comparable to accepted Phase 3ZG.
+
+Decision:
+
+- Accept Phase 3ZT as a reproducible performance improvement.
+- Commit and push immediately.
+- New accepted opt-in runtime adds:
+
+```sh
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+```
+
+to the previous Phase 3ZG strict env.
+
+Next direction:
+
+- Reprofile accepted Phase 3ZT with `-n 96` counters after commit to identify
+  the new dominant bottleneck. Do not assume up/gate remains dominant after
+  mixed fallback removal.
+- Likely next candidates:
+  - Q4_0 down remains rejected unless cache-protected;
+  - profile-guided cache partitioning for the larger mixed up/gate cache
+    footprint;
+  - down path only if the new profile shows it dominates and quality can be
+    protected.

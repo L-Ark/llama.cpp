@@ -3431,7 +3431,15 @@ struct ggml_tensor * ggml_moe_up_gate(
         struct ggml_tensor  * b,
         struct ggml_tensor  * ids,
         enum ggml_unary_op    op) {
-    if (as_gate == NULL || as_up->type != as_gate->type || !ggml_are_same_shape(as_up, as_gate)) {
+    const char * mixed_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES");
+    const bool mixed_enabled = mixed_env && mixed_env[0] && mixed_env[0] != '0';
+    const bool mixed_iq2_iq3 =
+        as_gate != NULL &&
+        ((as_up->type == GGML_TYPE_IQ2_S && as_gate->type == GGML_TYPE_IQ3_XXS) ||
+         (as_up->type == GGML_TYPE_IQ3_XXS && as_gate->type == GGML_TYPE_IQ2_S));
+    const bool same_or_scoped_mixed = as_gate != NULL &&
+        (as_up->type == as_gate->type || (mixed_enabled && mixed_iq2_iq3));
+    if (as_gate == NULL || !same_or_scoped_mixed || !ggml_are_same_shape(as_up, as_gate)) {
         struct ggml_tensor * up   = ggml_mul_mat_id(ctx, as_up, b, ids);
         struct ggml_tensor * gate = as_gate ? ggml_mul_mat_id(ctx, as_gate, b, ids) : up;
 

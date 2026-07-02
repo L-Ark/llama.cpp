@@ -36,6 +36,14 @@ static const char * llama_tensor_type_name_or_null(const ggml_tensor * t) {
     return t ? ggml_type_name(t->type) : "(null)";
 }
 
+static bool llama_kimi_moe_mixed_iq2_iq3_pair(const ggml_tensor * up, const ggml_tensor * gate) {
+    if (!up || !gate) {
+        return false;
+    }
+    return (up->type == GGML_TYPE_IQ2_S && gate->type == GGML_TYPE_IQ3_XXS) ||
+           (up->type == GGML_TYPE_IQ3_XXS && gate->type == GGML_TYPE_IQ2_S);
+}
+
 static ggml_tensor * build_attn_inp_kq_mask(
         ggml_context * ctx,
         const llama_kv_cache_context * mctx,
@@ -1531,6 +1539,9 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     ggml_tensor * experts = nullptr;
     bool fused_up_gate_done = false;
 
+    const bool mixed_fused_up_gate =
+        std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES") != nullptr &&
+        llama_kimi_moe_mixed_iq2_iq3_pair(up_exps, gate_exps);
     const bool use_stream_fused_up_gate =
         std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE") != nullptr &&
         n_tokens == 1 &&
@@ -1542,7 +1553,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         up_exps_s == nullptr &&
         gate_exps_s == nullptr &&
         type_op == LLM_FFN_SILU &&
-        up_exps->type == gate_exps->type &&
+        (up_exps->type == gate_exps->type || mixed_fused_up_gate) &&
         ggml_are_same_shape(up_exps, gate_exps);
     if (llama_kimi_moe_graph_profile_enabled()) {
         const bool env_fused          = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE") != nullptr;
@@ -1562,7 +1573,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
                 "[kimi_moe_graph_profile] il=%d n_tokens=%" PRId64
                 " fused_up_gate=%d env=%d one_token=%d no_gate_up=%d has_up=%d has_gate=%d"
                 " no_up_bias=%d no_gate_bias=%d no_up_scale=%d no_gate_scale=%d"
-                " silu=%d same_type=%d same_shape=%d"
+                " silu=%d same_type=%d mixed_type_allowed=%d same_shape=%d"
                 " up_name=%s up_type=%s gate_name=%s gate_type=%s gate_up_name=%s"
                 " up_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
                 " gate_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
@@ -1583,6 +1594,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
                 no_gate_scale ? 1 : 0,
                 silu_op ? 1 : 0,
                 same_type ? 1 : 0,
+                mixed_fused_up_gate ? 1 : 0,
                 same_shape ? 1 : 0,
                 llama_tensor_name_or_null(up_exps),
                 llama_tensor_type_name_or_null(up_exps),

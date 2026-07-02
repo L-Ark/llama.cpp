@@ -112,7 +112,8 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
-    int src0_type_int,
+    int src0_up_type_int,
+    int src0_gate_type_int,
     const char * src0_up_name,
     const void * src0_up_data,
     const char * src0_gate_name,
@@ -120,8 +121,12 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     int64_t n_as,
     int64_t ne01,
     int64_t ne00,
-    size_t nb01,
-    size_t nb02,
+    size_t up_nb01,
+    size_t up_nb02,
+    size_t up_expert_bytes,
+    size_t gate_nb01,
+    size_t gate_nb02,
+    size_t gate_expert_bytes,
     const float * src1_f32,
     size_t src1_nb1,
     size_t src1_nb2,
@@ -145,8 +150,8 @@ static bool (*ggml_cuda_moe_stream_batch)(
     const float *, size_t, size_t, float *, size_t, size_t, const int64_t *,
     const ggml_moe_stream_row_mapping *, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
-    int, const char *, const void *, const char *, const void *, int64_t,
-    int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, float *,
+    int, int, const char *, const void *, const char *, const void *, int64_t,
+    int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,
     size_t, size_t, int, float, const int64_t *, const ggml_moe_stream_row_mapping *,
     int64_t) = NULL;
 #endif
@@ -155,6 +160,11 @@ static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
     return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
            type == GGML_TYPE_IQ2_S ||
            type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
+}
+
+static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_type gate_type) {
+    return (up_type == GGML_TYPE_IQ2_S && gate_type == GGML_TYPE_IQ3_XXS) ||
+           (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
 }
 
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
@@ -2396,19 +2406,26 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
     const void * wdata,
     enum ggml_unary_op op) {
 
-    const enum ggml_type type = src0_up->type;
+    const enum ggml_type type_up = src0_up->type;
+    const enum ggml_type type_gate = src0_gate->type;
 
-    ggml_vec_dot_t const vec_dot      = type_traits_cpu[type].vec_dot;
-    enum ggml_type const vec_dot_type = type_traits_cpu[type].vec_dot_type;
+    ggml_vec_dot_t const vec_dot_up      = type_traits_cpu[type_up].vec_dot;
+    ggml_vec_dot_t const vec_dot_gate    = type_traits_cpu[type_gate].vec_dot;
+    enum ggml_type const vec_dot_type_up = type_traits_cpu[type_up].vec_dot_type;
+    enum ggml_type const vec_dot_type_gate = type_traits_cpu[type_gate].vec_dot_type;
 
     const int64_t ne00 = src0_up->ne[0];
     const int64_t ne11 = src1->ne[1];
 
-    const size_t nb01 = src0_up->nb[1];
+    const size_t up_nb01 = src0_up->nb[1];
+    const size_t gate_nb01 = src0_gate->nb[1];
     const size_t nb11 = src1->nb[1];
     const size_t nb12 = src1->nb[2];
     const size_t nb1  = dst->nb[1];
     const size_t nb2  = dst->nb[2];
+
+    GGML_ASSERT(vec_dot_type_up == vec_dot_type_gate);
+    const enum ggml_type vec_dot_type = vec_dot_type_up;
 
     const int64_t blck_0 = 16;
     const int64_t blck_1 = 16;
@@ -2434,8 +2451,8 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
                 float * dst_col = (float *) ((char *) dst->data + (id*nb1 + i12*nb2));
 
                 for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
-                    vec_dot(ne00, &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*nb01, 0, src1_col, 0, 1);
-                    vec_dot(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*nb01, 0, src1_col, 0, 1);
+                    vec_dot_up(ne00,   &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*up_nb01,   0, src1_col, 0, 1);
+                    vec_dot_gate(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*gate_nb01, 0, src1_col, 0, 1);
                     fused_tmp[ir0 - iir0] = up_tmp[ir0 - iir0] * ggml_moe_up_gate_activate(gate_tmp[ir0 - iir0], op);
                 }
 
@@ -2459,12 +2476,17 @@ static void ggml_compute_forward_moe_up_gate(
     const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
     const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
 
-    const enum ggml_type type = src0_up->type;
-    enum ggml_type    const vec_dot_type = type_traits_cpu[type].vec_dot_type;
+    const enum ggml_type up_type = src0_up->type;
+    const enum ggml_type gate_type = src0_gate->type;
+    enum ggml_type    const vec_dot_type = type_traits_cpu[up_type].vec_dot_type;
+    enum ggml_type    const gate_vec_dot_type = type_traits_cpu[gate_type].vec_dot_type;
     ggml_from_float_t const from_float   = type_traits_cpu[vec_dot_type].from_float;
+    const bool same_weight_type = up_type == gate_type;
+    const bool scoped_mixed_pair = ggml_kimi_moe_mixed_iq2_iq3_pair(up_type, gate_type);
 
     GGML_ASSERT(src0_gate != NULL);
-    GGML_ASSERT(src0_up->type == src0_gate->type);
+    GGML_ASSERT(same_weight_type || scoped_mixed_pair);
+    GGML_ASSERT(vec_dot_type == gate_vec_dot_type);
     GGML_ASSERT(ggml_are_same_shape(src0_up, src0_gate));
     GGML_ASSERT(src1->type == GGML_TYPE_F32 || src1->type == vec_dot_type);
     GGML_ASSERT(dst->type == GGML_TYPE_F32);
@@ -2481,6 +2503,7 @@ static void ggml_compute_forward_moe_up_gate(
 
     const size_t nb01 = src0_up->nb[1];
     const size_t nb02 = src0_up->nb[2];
+    const size_t gate_nb02 = src0_gate->nb[2];
     const size_t nb11 = src1->nb[1];
     const size_t nb12 = src1->nb[2];
     const size_t nb1  = dst->nb[1];
@@ -2574,7 +2597,8 @@ static void ggml_compute_forward_moe_up_gate(
         ggml_cuda_moe_stream_up_gate_batch &&
         ggml_cuda_moe_stream_available &&
         ggml_cuda_moe_stream_available() &&
-        ggml_cuda_moe_stream_supports_type(src0_up->type) &&
+        ggml_cuda_moe_stream_supports_type(up_type) &&
+        ggml_cuda_moe_stream_supports_type(gate_type) &&
         src1->type == GGML_TYPE_F32 &&
         dst->type == GGML_TYPE_F32;
 
@@ -2582,11 +2606,15 @@ static void ggml_compute_forward_moe_up_gate(
         if (ith == 0) {
             const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
             const bool done = ggml_cuda_moe_stream_up_gate_batch(
-                src0_up->type,
+                up_type,
+                gate_type,
                 src0_up->name, src0_up->data,
                 src0_gate->name, src0_gate->data,
                 n_as,
                 ne01, ne00, nb01, nb02,
+                (size_t) ne01 * nb01,
+                src0_gate->nb[1], src0_gate->nb[2],
+                (size_t) src0_gate->ne[1] * src0_gate->nb[1],
                 (const float *) src1->data,
                 nb11, nb12,
                 (float *) dst->data,
@@ -2628,7 +2656,7 @@ static void ggml_compute_forward_moe_up_gate(
         }
 
         const char * src0_up_cur   = (const char *) src0_up->data   + cur_a * nb02;
-        const char * src0_gate_cur = (const char *) src0_gate->data + cur_a * nb02;
+        const char * src0_gate_cur = (const char *) src0_gate->data + cur_a * gate_nb02;
         const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
 
         const int64_t nr0 = ne01;

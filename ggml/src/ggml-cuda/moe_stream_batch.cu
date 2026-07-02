@@ -13,7 +13,7 @@ bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
-bool ggml_cuda_moe_stream_up_gate_batch(int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 }
 #else
 // Decode-only batched streaming MoE path.
@@ -149,7 +149,8 @@ bool ggml_cuda_moe_stream_cache_contains(
     int expert_idx);
 
 bool ggml_cuda_moe_stream_up_gate_batch(
-    int  src0_type_int,
+    int  src0_up_type_int,
+    int  src0_gate_type_int,
     const char *src0_up_name,
     const void *src0_up_data,
     const char *src0_gate_name,
@@ -157,8 +158,12 @@ bool ggml_cuda_moe_stream_up_gate_batch(
     int64_t n_as,
     int64_t ne01,
     int64_t ne00,
-    size_t nb01,
-    size_t nb02,
+    size_t up_nb01,
+    size_t up_nb02,
+    size_t up_expert_bytes,
+    size_t gate_nb01,
+    size_t gate_nb02,
+    size_t gate_expert_bytes,
     const float *src1_f32,
     size_t src1_nb1, size_t src1_nb2,
     float *dst,
@@ -4500,7 +4505,8 @@ static void moe_stream_dump_f32_rows(const char *tag, const float *buf, int n_ro
 }
 
 extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
-    int  src0_type_int,
+    int  src0_up_type_int,
+    int  src0_gate_type_int,
     const char *src0_up_name,
     const void *src0_up_data,
     const char *src0_gate_name,
@@ -4508,8 +4514,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     int64_t n_as,
     int64_t ne01,
     int64_t ne00,
-    size_t nb01,
-    size_t nb02,
+    size_t up_nb01,
+    size_t up_nb02,
+    size_t up_expert_bytes,
+    size_t gate_nb01,
+    size_t gate_nb02,
+    size_t gate_expert_bytes,
     const float *src1_f32,
     size_t src1_nb1, size_t src1_nb2,
     float *dst,
@@ -4526,14 +4536,21 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     auto decline = [&](const char *reason) -> bool {
         if (decline_debug) {
             std::fprintf(stderr,
-                "[moe_stream] up/gate batch declined: reason=%s tensor=%s rows_stride=%ld type=%d\n",
-                reason, src0_up_name ? src0_up_name : "", (long)rows_stride, src0_type_int);
+                "[moe_stream] up/gate batch declined: reason=%s tensor=%s rows_stride=%ld up_type=%d gate_type=%d\n",
+                reason, src0_up_name ? src0_up_name : "", (long)rows_stride, src0_up_type_int, src0_gate_type_int);
         }
         return false;
     };
     if (!init_batch_once()) return decline("init_batch_once");
-    ggml_type src0_type = (ggml_type)src0_type_int;
-    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
+    ggml_type src0_type = (ggml_type)src0_up_type_int;
+    ggml_type gate_type = (ggml_type)src0_gate_type_int;
+    const bool mixed_types = src0_type != gate_type;
+    const bool scoped_mixed_iq2_iq3 =
+        (src0_type == GGML_TYPE_IQ2_S && gate_type == GGML_TYPE_IQ3_XXS) ||
+        (src0_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
+    if (!moe_stream_type_supported(src0_type) || !moe_stream_type_supported(gate_type)) return decline("unsupported_type");
+    if (mixed_types && !scoped_mixed_iq2_iq3) return decline("unsupported_mixed_type_pair");
+    if (up_expert_bytes == 0 || gate_expert_bytes == 0) return decline("bad_expert_bytes");
     if (!src1_f32 || !src0_up_data || !src0_gate_data) return decline("missing_input");
     if (unary_op != GGML_UNARY_OP_SILU && unary_op != GGML_UNARY_OP_RELU && unary_op != GGML_UNARY_OP_GELU) return decline("unsupported_unary");
     GGML_UNUSED(src1_nb1);
@@ -4579,9 +4596,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         }
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
-
-    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_up_name, src0_up_data, n_as, nb02, (size_t)ne01 * nb01);
-    ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_gate_name, src0_gate_data, n_as, nb02, (size_t)ne01 * nb01);
+    ggml_cuda_moe_stream_register_tensor(src0_up_type_int, src0_up_name, src0_up_data, n_as, up_nb02, up_expert_bytes);
+    ggml_cuda_moe_stream_register_tensor(src0_gate_type_int, src0_gate_name, src0_gate_data, n_as, gate_nb02, gate_expert_bytes);
 
     static std::atomic<int> first_up_gate{0};
     if (first_up_gate.fetch_add(1) == 0) {
@@ -4601,8 +4617,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool profile = g_uprof.enabled && bc.ev_start && bc.ev_stage && bc.ev_quant && bc.ev_kernel && bc.ev_d2h;
     const auto wall_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
-    const size_t src0_bytes = (size_t)ne01 * nb01;
-    batch_ttft_call_scope ttft_scope("call_upgate", src0_up_name, n_active, src0_bytes);
+    const size_t src0_bytes = up_expert_bytes;
+    const size_t nb01 = up_nb01;
+    const size_t nb02 = up_nb02;
+    const size_t cache_slot_bytes = std::max(up_expert_bytes, gate_expert_bytes);
+    batch_ttft_call_scope ttft_scope("call_upgate", src0_up_name, n_active, up_expert_bytes + gate_expert_bytes);
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
     const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);
     const size_t src1_q8_one_bytes = moe_stream_q8_1_row_bytes(ne00);
@@ -4633,7 +4652,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
     if (!ok) return decline("alloc_workspace");
 
-    batch_vram_cache *cache = batch_cache_get(src0_bytes);
+    batch_vram_cache *cache = batch_cache_get(cache_slot_bytes);
     if (!cache) return decline("cache_unavailable");
     preload_registered_down_for_active(src0_up_name, active_experts, n_active);
 
@@ -4647,8 +4666,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
     const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
     if (profile_upgate) {
-        preload_profile_for_tensor(up_key_name, src0_up_data, n_as, nb02, src0_bytes, st);
-        preload_profile_for_tensor(gate_key_name, src0_gate_data, n_as, nb02, src0_bytes, st);
+        preload_profile_for_tensor(up_key_name, src0_up_data, n_as, up_nb02, up_expert_bytes, st);
+        preload_profile_for_tensor(gate_key_name, src0_gate_data, n_as, gate_nb02, gate_expert_bytes, st);
     }
     if (profile) cudaEventRecord(bc.ev_start, st);
 
@@ -4667,6 +4686,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const char *parallel_env = std::getenv("GGML_MOE_STREAM_UP_GATE_PARALLEL");
     const bool parallel_up_gate =
         parallel_env && parallel_env[0] && parallel_env[0] != '0' &&
+        !mixed_types &&
         src0_type == GGML_TYPE_IQ2_S && iq2s_batch_mmvq && !serial_up_gate &&
         !exact_prompt_q8k &&
         bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
@@ -4684,7 +4704,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const char *fused_mmq_env = std::getenv("GGML_MOE_STREAM_UP_GATE_FUSED_MMQ");
     const bool fused_mmq_up_gate =
         fused_mmq_env && fused_mmq_env[0] && fused_mmq_env[0] != '0' &&
-        !prompt_mode && !exact_prompt_q8k && !serial_up_gate &&
+        !mixed_types && !prompt_mode && !exact_prompt_q8k && !serial_up_gate &&
         (src0_type == GGML_TYPE_IQ3_XXS || src0_type == GGML_TYPE_IQ2_S);
     static std::atomic<int> first_fused_mmq_up_gate{0};
     if (fused_mmq_up_gate && first_fused_mmq_up_gate.fetch_add(1) == 0) {
@@ -4760,6 +4780,31 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             h_x_ids[j] = cache_slot;
             if (slots_out) slots_out[j] = cache_slot;
             batch_route_profile_hit(key_name, active_experts[j], src0_bytes);
+        }
+        return cudaMemcpyAsync(d_x_ids, h_x_ids, ids_bytes, cudaMemcpyHostToDevice, run_stream) == cudaSuccess;
+    };
+
+    auto stage_tensor_slots_only_sized = [&](
+            const char *key_name, const void *host_base,
+            size_t expert_stride, size_t expert_bytes,
+            cudaStream_t run_stream, int32_t *d_x_ids,
+            int32_t *h_x_ids, int *slots_out,
+            const int *avoid_slots, int n_avoid_slots) -> bool {
+        for (int j = 0; j < n_active; ++j) {
+            const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * expert_stride;
+            const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
+            int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            if (cache_slot < 0) {
+                cache_slot = batch_cache_insert_slot(
+                    cache, cache_key, expert_host, expert_bytes, run_stream, true, false,
+                    avoid_slots, n_avoid_slots, true, key_name, active_experts[j]);
+            } else {
+                batch_ttft_trace_record("cache_hit", key_name, active_experts[j], expert_bytes, true, false, false, 0.0);
+            }
+            if (cache_slot < 0) return false;
+            h_x_ids[j] = cache_slot;
+            if (slots_out) slots_out[j] = cache_slot;
+            batch_route_profile_hit(key_name, active_experts[j], expert_bytes);
         }
         return cudaMemcpyAsync(d_x_ids, h_x_ids, ids_bytes, cudaMemcpyHostToDevice, run_stream) == cudaSuccess;
     };
@@ -4935,6 +4980,78 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         std::atoi(std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_FLAT")) : -1;
     const int point_col = point_dump && std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_COL") ?
         std::atoi(std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_POINT_COL")) : -1;
+
+    if (mixed_types) {
+        static std::atomic<int> first_mixed_up_gate{0};
+        if (first_mixed_up_gate.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                "[moe_stream] mixed-type up/gate compact path active: up_type=%d gate_type=%d up_bytes=%zu gate_bytes=%zu rows=%d\n",
+                (int)src0_type, (int)gate_type, up_expert_bytes, gate_expert_bytes, n_active);
+        }
+        int up_slots[MOE_STREAM_MAX_ACTIVE] = {};
+        if (!stage_tensor_slots_only_sized(
+                up_key_name, src0_up_data, up_nb02, up_expert_bytes, st,
+                bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
+            return decline("mixed_stage_up");
+        }
+        if (!stage_tensor_slots_only_sized(
+                gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes, st,
+                bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
+            return decline("mixed_stage_gate");
+        }
+        if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
+            return decline("mixed_memset_up");
+        }
+        if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
+            return decline("mixed_memset_gate");
+        }
+        if (!launch_moe_mmvq_compact_batch(
+                src0_type,
+                (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
+                ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                bc.d_src1_q8_up, (float *)bc.d_up, n_active, st)) {
+            return decline("mixed_launch_up");
+        }
+        if (profile) cudaEventRecord(bc.ev_up, st);
+        if (!launch_moe_mmvq_compact_batch(
+                gate_type,
+                (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
+                ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, st)) {
+            return decline("mixed_launch_gate");
+        }
+        if (profile) cudaEventRecord(bc.ev_gate, st);
+        for (int j = 0; j < n_active; ++j) {
+            bc.h_ids_dst[j] = flat_dst_ids[j];
+        }
+        if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            return decline("mixed_copy_dst_ids");
+        }
+        if (cudaMemsetAsync(fused_d, 0, dst_bytes, st) != cudaSuccess) {
+            return decline("mixed_memset_fused");
+        }
+        dim3 block(256);
+        dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
+        moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
+            (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
+            bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
+        if (cudaGetLastError() != cudaSuccess) {
+            return decline("mixed_launch_fuse");
+        }
+        if (profile) cudaEventRecord(bc.ev_kernel, st);
+        if (cudaMemcpyAsync(bc.h_dst, fused_d, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+            return decline("mixed_copy_d2h");
+        }
+        if (cudaStreamSynchronize(st) != cudaSuccess) {
+            return decline("mixed_sync");
+        }
+        const float *tmp = (const float *)bc.h_dst;
+        for (int j = 0; j < n_active; ++j) {
+            float *dst_row = (float *)((char *)dst + (size_t)dst_ids[j] * dst_nb1 + (size_t)token_ids[j] * dst_nb2);
+            std::memcpy(dst_row, tmp + (size_t)flat_dst_ids[j] * ne01, (size_t)ne01 * sizeof(float));
+        }
+        return true;
+    }
 
     if (exact_prompt_q8k && n_active * 2 > cache->n_slots) {
         const bool exact_debug = []() {
