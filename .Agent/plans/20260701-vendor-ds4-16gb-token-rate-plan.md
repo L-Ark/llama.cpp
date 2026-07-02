@@ -3398,3 +3398,20 @@
 - `accepted_sota`: If a new run improves accepted cold-start token rate while meeting RAM, correctness, and TTFT gates, immediately commit source/plan/metadata and push to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from the pushed commit.
 - `rejected_result`: If speed regresses, correctness fails, RAM exceeds limit, or TTFT is too high, record the run as rejected. Commit only plan/diagnostic records when useful, and revert any default-on or risky source change before continuing.
 - `reproducibility`: A SOTA is not considered final until the exact pushed commit can reproduce it with recorded pack/profile hashes and cgroup metrics.
+
+### 当前执行：post-replan-sota-repro-and-kimi-latest-merge-guard
+
+- `attempt_id`: `20260702-post-replan-sota-repro-and-kimi-latest-merge-guard`
+- `status`: accepted_guard_pending_push
+- `time`: `2026-07-02T15:02Z-15:05Z`
+- `pre_merge_source`: `e0df0c26da2f0448726d6343a6cdf94e2eae0a28` (`vendor-ds4: replan from odirect sota`).
+- `kimi_latest`: fetched `ssd/vendor/kimi-moe-stream-on-vendor` at `f6175d8e5`; delta from prior Kimi head `58885e449` is only `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md` (`934` inserted lines). No source files changed, so this merge does not change Kimi runtime functionality or DeepSeek runtime code.
+- `pre_merge_repro_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T150201Z-20260702_odirect_sota_repro_after_replan/france-cpu40-vram0gb`.
+- `pre_merge_repro_result`: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30429.314418ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15105679360`, `pgmajfault=271997`, `workingset_refault_file=1657406`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `merge_action`: merged `ssd/vendor/kimi-moe-stream-on-vendor` into `feat/ds4-moe-stream-on-vendor` with merge commit message `vendor-ds4: merge kimi latest plan update`.
+- `post_merge_guard_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T150335Z-20260702_post_kimi_latest_plan_merge_odirect_sota_guard/france-cpu40-vram0gb`.
+- `post_merge_guard_config`: current O_DIRECT SOTA config: `cpu_moe=40`, `--vram-cache-gb 0`, extra args `-c 256 -b 16 -ub 16 -t 20 -tb 20`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`, strict cold `drop_caches`, 16GB cgroup.
+- `post_merge_guard_result`: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29574.256369ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15101304832`, `pgmajfault=271842`, `workingset_refault_file=1666518`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `post_merge_answer`: France output is semantic and coherent: it identifies France/French Republic in Western Europe, mentions history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and historical/modern vitality.
+- `post_merge_counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `decision`: Merge is safe for the DeepSeek SOTA path. Push this merge plus plan record to `ssd/vendor/deepseek-token-rate-16gb`, then continue with the next design stage: post-O_DIRECT token-level bottleneck trace.
