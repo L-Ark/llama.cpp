@@ -1994,13 +1994,19 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-late15-top4-rest`
 - `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
-- `status`: planned
+- `status`: completed / rejected_tie_not_sota
 - `hypothesis`: Late20 top3 (`blk.20-39`) is the current promoted SOTA and preserves France correctness. Expanding the top3 override to `blk.15-39` prunes five additional CPU-MoE layers while keeping the earliest 15 layers at top4, which may capture more up/down fallback savings without triggering the early-layer quality failures seen in early10/early20 top3.
 - `theoretical_upper_bound`: Late20 covers 20 of 40 CPU-MoE layers and reached `2.4 tok/s`. Expanding to 25 layers adds one eighth of the total top4->top3 pruning region. Using the earlier coarse `12.9s` global top3-vs-top4 bound, the incremental upper bound over late20 is about `12.9s * 5/40 ≈ 1.6s` before overhead and layer imbalance. Expected gain is modest; correctness risk is higher than late20.
 - `test_config`: pushed source with layer-range support, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=15-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
 - `acceptance_gate`: promote only if `eval_tok_s > 2.4`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late20 pushed rerun by more than `20%` (`38355.541393ms * 1.2 = 46026.649672ms`).
 - `rollback`: No source change is required for this config probe. If token rate does not exceed `2.4`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep late20 `2.4 tok/s` SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T003924Z-20260702_expert_keep_top3_late15_top4_rest/france-cpu40-vram0gb`
+- `result`: completed and not promoted. `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=38777.397548ms`, `elapsed_seconds=96.81`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15028047872`, `pgmajfault=318905`, `workingset_refault_file=4609690`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, and complete, with no truncation or repetition.
+- `trace_summary`: `rows=37321`, `cache_hits=31970`, `cache_misses=5351`, `span_ms=76904.096`, `src0_ms=26079.662`, `total_ms=28484.321`.
+- `gap_analysis`: Expanding top3 to `blk.15-39` kept output quality and reduced trace rows versus late20, but rounded token rate only tied current SOTA (`2.4`) and did not exceed the promote gate. It is therefore useful quality evidence for a broader late-layer pruning region, but not a new SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late20 top3 `2.4 tok/s`.
 
 ## 记录与验收
 
