@@ -2184,7 +2184,7 @@
 
 - `attempt_id`: `20260702-late10-last5-top2`
 - `attempt_kind`: `implementation/layer-selective-approximate-pruning`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: Last10 top2 was too aggressive and increased gate stream rows/misses enough to fail correctness and lose elapsed time. The accepted late10 top3 SOTA still leaves broad CPU fallback work in the latest layers, but any further pruning must be narrower than the rejected last10 top2 attempt.
 - `hypothesis`: Keep accepted late10 top3 for layers `10-34` and apply top2 only to the last five CPU-MoE layers: `0-9=>top4`, `10-34=>top3`, `35-39=>top2`. This tests whether the very latest layers tolerate one fewer up/down expert without triggering the trajectory/miss explosion seen at `30-39=>top2`.
 - `theoretical_upper_bound`: The rejected last10 top2 attempt had a coarse incremental bound of `12.9s * 10/40 ≈ 3.2s`. Restricting top2 to five layers halves that optimistic bound to about `12.9s * 5/40 ≈ 1.6s`. Because gate-stream miss count and output trajectory dominate recent failures, the practical expected gain is a small rounding chance above `2.6 tok/s`; any increase in rows/misses can erase the bound.
@@ -2194,6 +2194,12 @@
 - `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace shows increased rows/misses/refaults comparable to last10 top2, revert source and clean rebuild. If accepted, immediately stop all further experiments, write complete reproduction evidence, commit/push source and records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, pushed remote/branch/commit if promoted, binary sha256/build line/stat, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
 - `sota_publish_requirement`: If this run becomes a compliant SOTA, it must be documented and pushed immediately to `ssd-llama` branch `vendor/deepseek-token-rate-16gb`; otherwise the result is only an unpromoted observation even if the printed token rate is higher.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T015049Z-20260702_late10_last5_top2/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=37767.187331ms`, `elapsed_seconds=105.41`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15015936000`, `pgmajfault=335937`, `workingset_refault_file=5909304`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `rows=44749`, `cache_hits=38811`, `cache_misses=5938`, `src0_ms=30363.530`, `dontneed_ms=1424.326`, `total_ms=33140.385`.
+- `gap_analysis`: Narrowing top2 to only `blk.35-39` avoids the truncation/correctness failure from last10 top2, but still changes the generation trajectory enough to increase rows (`35151 -> 44749`), gate misses (`4971 -> 5938`), `src0_ms` (`24305.283 -> 30363.530`), refault pressure (`3545116 -> 5909304`), and elapsed time (`89.48s -> 105.41s`) versus accepted late10. Since token rate only ties `2.6` and does not exceed the SOTA gate, do not promote. Further top2 pruning is deprioritized unless paired with a quality/trajectory-preserving mechanism.
+- `rollback_status`: source change reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
