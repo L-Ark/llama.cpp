@@ -14439,3 +14439,277 @@ Acceptance decision:
 - The accepted improvement is small but reproducible on n96: Phase 7M `0.84 tok/s` becomes Phase 7P `0.85-0.86 tok/s`.
 - Main reason: residual decode CPU fallback can read down expert data from expert-pack mmap instead of faulting scattered GGUF tensor pages. This reduces local `decode,type=2` CPU fallback time, while prompt fallback is intentionally not moved to this path.
 - Commit and push this phase immediately after source diff review.
+
+## Phase 7S - post-7P VRAM cache budget sweep
+
+Design timestamp: 2026-07-02 11:18 UTC.
+
+Current accepted SOTA:
+
+- commit: `b64b467ac80598136167096aaaeda0b30165f856`.
+- accepted n96 confirm: `/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm`.
+- decode: `90610.91 ms / 77`, `0.85 tok/s`.
+- TTFT: `60313.44 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- output quality: pass.
+
+Bottleneck after Phase 7P:
+
+- up/gate profile: `calls=2157`, `kernel=14.182 ms/call`, `total=14.244 ms/call`.
+- CPU wrapper up_gate: `calls=4621`, `cuda_batch=14.907 ms/call`.
+- down profile: `calls=4798`, `total=15.604 ms/call`, `cuda_batch=2.718 ms/call`, `fallback_t0=12.844 ms/call`.
+- VRAM cache down: `slots=806`, `hit_rate=73.4%`.
+- VRAM cache upgate: `slots=1679`, `hit_rate=43.2%`.
+- pinned staging main: `host_stage=61282.701 ms`, `h2d=11400.638 ms`.
+- pinned staging gate: `host_stage=2146.108 ms`, `h2d=1043.319 ms`.
+
+Hypothesis:
+
+- The current run requests `GGML_MOE_VRAM_CACHE_MIB=15000` with split cache and `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`.
+- VRAM cache misses are still high, especially for upgate. A slightly larger VRAM cache may reduce recurring expert loads and staging waits without changing math or routing.
+- This is lower risk than adding a new kernel because it is env-only and should not affect semantics.
+- Prior pre-7P experiments with larger VRAM budgets were rejected or marginal, but Phase 7P changed decode page-cache/fallback behavior enough that the sweep must be remeasured under the current SOTA before moving to more invasive work.
+
+Theoretical upper bound:
+
+- Raising cache budget from `15000` to `15200 MiB` adds about `200 MiB`.
+- With split cache and `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`, the marginal budget is roughly `120 MiB` for upgate and `80 MiB` for down.
+- At current slot sizes (`5.36 MiB` upgate, `7.44 MiB` down), this is roughly `22` extra upgate slots and `10` extra down slots.
+- Raising to `15400 MiB` would roughly double that to `44` upgate slots and `21` down slots.
+- Because the marginal slot count is small relative to total misses (`upgate misses=41969`, `down misses=8690`), expected gain is modest. A valid n96 improvement may be only `0.5-2.0 s` if those slots hit hot experts.
+- If hit rate does not improve, decode time should not improve; reject rather than tuning blindly.
+
+Experiment design:
+
+- No source change.
+- Create a reproducible runner `/tmp/run_phase7s_repro.sh` derived from `/tmp/run_phase7p_repro.sh` with `VRAM_MIB` as an explicit parameter.
+- Keep all accepted Phase 7P env vars, including:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`
+  - `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1`
+  - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`
+- Sweep order:
+  1. n32 cold `VRAM_MIB=15200`.
+  2. If n32 is faster than Phase 7P n32 in raw decode time and all gates pass, run n32 confirm.
+  3. If n32 confirm passes, run n96 and n96 confirm.
+  4. Only test `VRAM_MIB=15400` if `15200` is positive but still leaves stable VRAM headroom and TTFT headroom.
+
+Reproducibility requirements:
+
+- Every run directory must contain `command.txt`, `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and `metrics.txt`.
+- Every run must cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Every run must use `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Result acceptance is based on raw `decode_ms`, not only rounded token/s.
+
+Gates:
+
+- Host RAM strictly below/equal cgroup cap: `memory.peak <= 15899996160`, `oom=0`.
+- TTFT `<= 106331.72 ms`.
+- `read_failures=0`; no CUDA launch/copy failures.
+- France prompt output must be semantically correct and coherent.
+- n32 must beat Phase 7P n32 twice: best accepted comparison is `37379.97 ms / 31`.
+- n96 must beat Phase 7P n96 confirm: `90610.91 ms / 77`, and preferably also first n96 `90013.57 ms / 77`.
+- VRAM/cache counters must explain the gain: higher hit rate, fewer misses, lower host_stage/H2D, or lower upgate/down profile time.
+
+Rollback/commit rule:
+
+- Env-only failures require no source rollback.
+- Do not commit a config-only result unless it passes n32 twice and n96 twice.
+- If accepted, commit and push the plan update with exact env, run paths, and reproduction commands.
+
+Phase 7S result - `VRAM_MIB=15200` rejected:
+
+- exploratory run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-111517Z-n32-phase7s-vram15200`
+  - quality: pass; TTFT `77242.72 ms`; decode `36173.41 ms / 31`, `0.86 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - cache counters improved: down slots `817`, hit_rate `73.7%`; upgate slots `1701`, hit_rate `44.5%`.
+  - runner issue: `git.txt` did not capture branch/head, so this run is useful diagnostic evidence but not acceptable as a reproducible promotion run.
+- exploratory confirmation: `/root/lfz/runs/vendor-kimi-token-rate/20260702-111846Z-n32-phase7s-vram15200-confirm`
+  - quality: pass; TTFT `79957.73 ms`; decode `37209.15 ms / 31`, `0.83 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - runner issue: `git.txt` was blocked by Git `safe.directory`, so this run is also not acceptable as a reproducible promotion run.
+- fixed-run repro1: `/root/lfz/runs/vendor-kimi-token-rate/20260702-112144Z-n32-phase7s-vram15200-repro1`
+  - runner fixed: `git.txt` includes `branch=vendor/kimi-moe-stream-on-vendor`, `head=b64b467ac80598136167096aaaeda0b30165f856`, and dirty status limited to the plan file.
+  - quality: pass; TTFT `70993.96 ms`; decode `38015.46 ms / 31`, `0.82 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - cache counters still improved mechanically: down slots `817`, hit_rate `73.7%`; upgate slots `1701`, hit_rate `44.5%`.
+  - however up/gate kernel slowed to `15.038 ms/call`, down stage rose to `3.254 ms/call`, and pinned staging host_stage rose to `25088.737 ms`.
+
+Decision:
+
+- Reject Phase 7S `VRAM_MIB=15200` for promotion because the first fully reproducible fixed run does not beat Phase 7P n32 (`37379.97 ms / 31`).
+- Do not run n96 for this config.
+- Do not test `VRAM_MIB=15400`: the planned condition was that `15200` must be positive and stable; it is not.
+- Keep accepted SOTA at commit `b64b467ac` with `GGML_MOE_VRAM_CACHE_MIB=15000`.
+
+Post-7S diagnosis:
+
+- Extra cache slots do increase hit rate, but token time does not improve reproducibly.
+- The current limiting factor is no longer just cache capacity. The dominant cost is up/gate compute (`~14-15 ms/call`) plus residual down CPU/fallback work; minor cache expansion changes placement enough to add compute/staging variance and can erase the benefit.
+- Next optimization should target compute scheduling or kernel behavior directly, not a larger VRAM cache budget.
+
+## Phase 7T - CPU thread-count sweep for fallback/staging contention
+
+Design timestamp: 2026-07-02 11:31 UTC.
+
+Current accepted SOTA:
+
+- commit: `b64b467ac80598136167096aaaeda0b30165f856`.
+- env: Phase 7P accepted env with `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`, `GGML_MOE_VRAM_CACHE_MIB=15000`, split cache, current down overlap, pinned staging slots `8`.
+- command uses `-t 32 -tb 32`.
+- accepted n96 confirm: `/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm`, decode `90610.91 ms / 77`, `0.85 tok/s`.
+
+Bottleneck:
+
+- up/gate compute remains large, but prior direct alternatives are already rejected:
+  - vendor MMQ up/gate was much slower in Phase 2K;
+  - mixed up/gate dual-stream contention was slower in Phase 7D.
+- residual down CPU/fallback still costs `fallback_t0=12.844 ms/call` on accepted n96.
+- pinned staging and io_uring are also CPU-active:
+  - pinned main `host_stage=61282.701 ms`;
+  - gate `host_stage=2146.108 ms`;
+  - expert-pack iouring wait/submit remain nontrivial.
+- `-t 32 -tb 32` may overuse CPU threads for residual fallback and interfere with io_uring completion, pinned staging, and CUDA launch scheduling.
+
+Hypothesis:
+
+- Lowering `-t/-tb` may reduce CPU-side contention and improve wall-clock decode, even if each residual CPU fallback call has fewer worker threads.
+- The most likely useful values are `24` and `16`:
+  - `24` preserves most CPU fallback parallelism while freeing cores for IO/staging/scheduler work.
+  - `16` tests whether the current fallback is memory-bandwidth-bound rather than thread-count-bound.
+- This is env/command-only and should not affect model math.
+
+Theoretical upper bound:
+
+- If CPU fallback is purely thread-bound, lowering threads can only regress.
+- If fallback/staging is memory-bandwidth or scheduler-contention-bound, a lower thread count can reduce `fallback_t0`, `host_stage`, or wall gaps.
+- Accepted n96 has `down fallback_t0 ~= 12.844 ms/call` over `4798` down calls and decode `90610.91 ms`; even a 5-10% reduction in the exposed CPU-side contention bucket could save roughly `1-4 s` on n96.
+- A valid gain is expected to be modest but reproducible.
+
+Experiment design:
+
+- Create `/tmp/run_phase7t_repro.sh` from the fixed Phase 7S runner.
+- Add `THREADS` parameter and use `-t "$THREADS" -tb "$THREADS"`.
+- Reset `VRAM_MIB=15000`; keep all accepted Phase 7P env vars.
+- Sweep order:
+  1. n32 cold `THREADS=24`.
+  2. Continue to n32 confirm only if raw decode beats Phase 7P n32 `37379.97 ms / 31` and all gates pass.
+  3. If `24` fails, test n32 cold `THREADS=16` once before moving to source-level changes.
+  4. Only run n96/n96 confirm for a thread count that passes n32 twice.
+
+Reproducibility requirements:
+
+- Every run directory must contain `command.txt`, `env.txt`, `git.txt`, `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and `metrics.txt`.
+- `git.txt` must include branch, exact head, and dirty status.
+- Every run must cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Every run must use `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+
+Gates:
+
+- Host RAM: `memory.peak <= 15899996160`, `oom=0`.
+- TTFT `<= 106331.72 ms`.
+- `read_failures=0`; no CUDA launch/copy failures.
+- France prompt output must be semantically correct and coherent.
+- Acceptance requires n32 twice and n96 twice faster than current Phase 7P SOTA by raw decode time.
+- Counters should explain the gain: lower `fallback_t0`, lower host_stage/H2D, lower upgate/down wall gap, or lower overall profile time.
+
+Rollback/commit rule:
+
+- Env/command-only failures require no source rollback.
+- Do not commit unless the new command config passes n32 twice and n96 twice.
+- If accepted, commit and push the plan update with exact command/env and run paths.
+
+Phase 7T result - CPU thread-count sweep rejected:
+
+- `THREADS=24` run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-112708Z-n32-phase7t-threads24`
+  - command delta: `-t 24 -tb 24`.
+  - quality: pass; TTFT `80889.59 ms`; decode `38437.85 ms / 31`, `0.81 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - up/gate profile regressed: `kernel=15.892 ms/call`, `total=15.955 ms/call`.
+  - down profile regressed: `total=42.421 ms/call`, `fallback_t0=39.491 ms/call`.
+  - pinned main host_stage rose to `26010.717 ms`.
+- `THREADS=16` run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-113004Z-n32-phase7t-threads16`
+  - command delta: `-t 16 -tb 16`.
+  - quality: pass; TTFT `85440.29 ms`; decode `38171.80 ms / 31`, `0.81 tok/s`; RAM peak `15899996160`; `read_failures=0`.
+  - up/gate profile regressed: `kernel=15.167 ms/call`, `total=15.228 ms/call`.
+  - down profile regressed: `total=45.339 ms/call`, `fallback_t0=42.414 ms/call`.
+  - pinned main host_stage `25373.106 ms`.
+
+Decision:
+
+- Reject Phase 7T. Do not run n96.
+- Keep `-t 32 -tb 32` in the accepted SOTA command.
+- The residual CPU fallback remains thread-hungry; lowering threads reduces CPU time consumed but worsens wall-clock decode. It does not free enough CPU for io_uring/pinned staging to compensate.
+
+Next diagnosis:
+
+- Since cache budget and CPU thread count do not produce stable gains, the next useful step is to add or use a finer up/gate breakdown by quant type/path/layer.
+- Existing aggregate profile only gives `up`, `gate`, and total times across all up/gate calls; it does not tell whether same-type IQ2, same-type IQ3, or mixed IQ2/IQ3 layers dominate the `14-15 ms/call` compute bucket.
+- Before changing kernels, collect a type/path/layer cost table under the accepted Phase 7P env and use it to choose the next implementation target.
+
+## Phase 7U - up/gate type/path profile diagnostic
+
+Design timestamp: 2026-07-02 11:38 UTC.
+
+Reason:
+
+- Phase 7S proved small VRAM cache expansion is not a stable gain.
+- Phase 7T proved lowering CPU threads worsens wall-clock decode.
+- Historical records already reject the obvious up/gate alternatives:
+  - vendor MMQ up/gate path was slower;
+  - mixed up/gate dual-stream path was slower due kernel contention.
+- Current aggregate up/gate profile still shows `~14-15 ms/call`, but it does not separate same-type `IQ2_S`, same-type `IQ3_XXS`, and mixed `IQ2_S/IQ3_XXS` costs.
+
+Implementation:
+
+- Add a CUDA-side diagnostic accumulator active only when `GGML_MOE_BATCH_PROFILE=1` is already enabled.
+- Aggregate by `(up_type, gate_type, mixed, prompt)`.
+- For each bucket print:
+  - calls;
+  - avg active experts;
+  - stage/quant/up/gate/fuse/kernel/d2h/scatter;
+  - total/wall/wall_gap.
+- Do not change kernel selection, cache policy, staging, memory allocation, or math.
+
+Expected value:
+
+- This does not directly improve token rate.
+- It should identify whether the next implementation should target:
+  - same-type IQ2 up/gate;
+  - same-type IQ3 up/gate;
+  - mixed IQ2/IQ3 compact path;
+  - prompt-only fallback, which should not be optimized for decode token rate first.
+
+Validation:
+
+- Build `llama-completion`.
+- Run one strict cold n32 diagnostic under accepted Phase 7P env.
+- Hard gates still apply: RAM cap, TTFT, quality, `read_failures=0`.
+- The run must print `[moe_stream_batch] up/gate type profile:` lines.
+- This diagnostic source should not be committed as a performance improvement unless it is needed to support the next accepted optimization; plan/run records are kept.
+
+Phase 7U diagnostic result:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-113608Z-n32-phase7u-upgate-type-profile`
+- source state: diagnostic-only dirty tree on top of `b64b467ac80598136167096aaaeda0b30165f856`.
+- build: passed.
+- hard gates: quality pass, TTFT `73126.12 ms`, RAM peak `15899996160`, `read_failures=0`.
+- decode: `38696.13 ms / 31`, not a performance candidate; diagnostic overhead/variance means this run is only for attribution.
+
+Up/gate type profile:
+
+```text
+up_type=18 gate_type=18 mixed=0 prompt=0 calls=311 avg_active=8.00 up=9.504 ms gate=8.969 ms kernel=18.490 ms total=18.568 ms/call wall=18.607 ms/call
+up_type=22 gate_type=22 mixed=0 prompt=0 calls=558 avg_active=8.00 up=6.931 ms gate=6.700 ms kernel=13.635 ms total=13.706 ms/call wall=13.727 ms/call
+```
+
+Interpretation:
+
+- In the accepted decode path, the expensive visible up/gate buckets are same-type, not mixed-type.
+- `type=18` (`IQ3_XXS`) is the clear slow bucket: about `4.86 ms/call` slower than `type=22` (`IQ2_S`) at the same `avg_active=8`.
+- n32 theoretical upper bound from making `IQ3_XXS` as fast as the observed `IQ2_S` bucket:
+  - `(18.568 - 13.706) ms/call * 311 calls ~= 1.51 s`.
+- n96 scaled upper bound is roughly `3.7-4.0 s`, enough to matter but not enough alone for a large token-rate jump.
+
+Decision:
+
+- Do not keep the diagnostic source as a performance change; revert `ggml/src/ggml-cuda/moe_stream_batch.cu` after recording results.
+- Next implementation target should be IQ3_XXS same-type up/gate MMVQ efficiency, or a replacement that reduces the two serial IQ3 kernels without triggering the previously rejected MMQ or dual-stream contention paths.
