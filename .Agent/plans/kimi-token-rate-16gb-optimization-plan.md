@@ -15070,3 +15070,95 @@ Phase 7Y n32 confirm result - rejected:
 - comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `286.91 ms`.
 - decision: reject Phase 7Y because the n32 improvement did not reproduce. Do not run n96.
 - action: revert `ggml/src/ggml-cpu/ggml-cpu.c`; keep this record as evidence that minimal-profile runs can show favorable variance but are not accepted without confirmation.
+
+## Phase 7Z - small anonymous CPU fallback hot cache for residual Q4_0 down
+
+Design timestamp: 2026-07-02 12:50 UTC.
+
+Reason:
+
+- Current accepted Phase 7P n96 fallback-profile shows decode residual fallback is only `type=2` (`Q4_0`) down in layers `6,7,8,9,10,15,18`.
+- Phase 7P n96 confirm residual decode fallback from fallback-profile:
+  - total decode Q4_0 fallback: `3.878 s`;
+  - top tensors: `blk.6`, `blk.7`, `blk.8`, `blk.9`, `blk.10`, `blk.15`, `blk.18`.
+- Q4_0 GPU one-shot/hot-cache/partial-cache attempts were rejected because staging/GPU scheduling or value perturbation erased gains.
+- A CPU anonymous hot cache keeps the CPU fallback math path unchanged but avoids repeated file-backed mmap reads/page faults for selected hot experts.
+
+Hotset upper bound from Phase 7P n96 confirm fallback-profile:
+
+- `128 MiB`: `16` experts, `0.612 s` fallback coverage, `15.78%`.
+- `256 MiB`: `32` experts, `0.966 s` fallback coverage, `24.91%`.
+- `512 MiB`: `65` experts, `1.377 s` fallback coverage, `35.51%`.
+- `1024 MiB`: `130` experts, `1.910 s` fallback coverage, `49.24%`.
+
+Selected first experiment:
+
+- Start with `256 MiB`; do not use pinned memory.
+- Default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_CACHE_MIB=256
+GGML_MOE_CPU_FALLBACK_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm/fallback-profile.csv
+```
+
+Implementation plan:
+
+1. In `ggml-cpu.c`, add a decode-only anonymous cache for CPU fallback experts.
+2. Parse the fallback-profile CSV once on first use.
+3. Admit only rows where:
+   - `phase=decode`;
+   - `src0_type=2`;
+   - tensor contains `.ffn_down_exps.weight`;
+   - tensor/expert pair appears in the profile hotset sorted by `fallback_us` within the byte budget.
+4. During `ggml_kimi_cpu_fallback_pack_mmap_prepare`, after resolving the existing pack-mmap pointer, check whether the active `(tensor_name, expert_idx, expert_bytes)` is admitted:
+   - on first use, allocate anonymous aligned memory and `memcpy` from the pack-mmap pointer if available, otherwise from GGUF `src0->data` fallback when used by caller;
+   - on hit, return the anonymous pointer in `fallback_pack_mmap_ptrs[cur_a]`.
+5. Count hits, misses, loads, bytes loaded, bytes served, and allocation failures; print an atexit summary.
+6. Do not affect prompt fallback.
+7. Do not change GPU cache, staging, routing, or math.
+
+Theory:
+
+- The n96 upper bound for 256MiB is about `0.97 s` decode reduction before first-load copy cost.
+- First-load copy cost for 252MiB should be modest compared with the prior Q4 GPU one-shot path because it happens once per hot expert and uses CPU memory, not per-call GPU staging.
+- Expected improvement is small; because accepted Phase 7P gain was also sub-second, strict reproducibility is mandatory.
+
+Validation:
+
+- Build.
+- Run n32 strict cold with Phase 7P env plus the two cache envs.
+- Continue only if:
+  - n32 beats Phase 7P n32 confirm `37379.97 ms / 31`;
+  - France output is coherent;
+  - TTFT stays below `106331.72 ms`;
+  - host RAM peak stays below `15899996160`;
+  - `read_failures=0`;
+  - cache summary shows nonzero loads/hits and no allocation failures.
+- If n32 passes, run n32 confirm, then n96/n96 confirm.
+
+Rollback:
+
+- Revert source if n32 does not improve, if RAM/TTFT/quality/read gates fail, or if cache counters do not prove activation.
+
+Phase 7Z n32 result - rejected:
+
+- run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-122406Z-n32-phase7z-cpu-fallback-cache256-candidate`
+- source state: dirty candidate on top of `584108fd267e6779ba60ae3b0556dd9431f2505d`.
+- env delta over Phase 7P:
+  - `GGML_MOE_CPU_FALLBACK_CACHE_MIB=256`;
+  - `GGML_MOE_CPU_FALLBACK_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-110740Z-n96-phase7p-pack-mmap-decode-only-confirm/fallback-profile.csv`.
+- hard gates: quality pass, TTFT `70590.25 ms`, RAM peak `15899996160`, `oom=0`, `read_failures=0`, exit `0`.
+- output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode: `38402.61 ms / 31`, `0.81 tok/s`.
+- comparison: slower than Phase 7P accepted n32 confirm `37379.97 ms / 31` by `1022.64 ms`.
+- cache activation:
+  - parsed `1049` Q4_0 decode entries;
+  - admitted `32` entries, `264241152` bytes;
+  - loaded `264241152` bytes;
+  - hits `461`;
+  - misses `1266`;
+  - loads `32`;
+  - allocation failures `0`;
+  - bytes served `3806724096`.
+- interpretation: the cache mechanically worked and avoided repeated file-backed reads for hot Q4_0 experts, but the first-load memcpy/cache lookup/memory pressure cost outweighed the saved residual fallback at n32. The measured residual Q4_0 bucket is too small for a 256MiB anonymous cache to reliably improve token rate under the 16GB cgroup.
+- decision: reject Phase 7Z. Do not run confirm or n96. Revert source and keep Phase 7P as SOTA.
