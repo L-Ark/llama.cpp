@@ -169,6 +169,7 @@
 - `followup_design`: The aligned one-stream DS4 path used `ggml_cuda_moe_stream_mmvq_rows_dev()` because `GGML_MOE_STREAM_ONE_DS4_NONIDS` was unset. The rejected batch compact path used per-row `ggml_cuda_moe_stream_mmvq_dev()`. Next no-source diagnostic: rerun the same down-only compare with `GGML_MOE_STREAM_ONE_DS4_NONIDS=1` to force the single-row `mmvq_dev` path. If this diverges, fix batch by using the rows/id path or repairing `mmvq_dev`; if it remains aligned, return to batch scatter/mapping analysis.
 - `nonids_result`: completed no-source diagnostic at `/root/lfz/runs/vendor-ds4-16gb/20260702T144745Z-20260702_mxfp4_down_nonids_compare/france-cpu40-vram0gb`, diag dir `/root/lfz/runs/vendor-ds4-16gb/20260702T145500Z-mxfp4-down-nonids-compare`. With `GGML_MOE_STREAM_ONE_DS4_NONIDS=1`, `compare.csv` again had 16 type-39 down rows with `max_abs=3.81469727e-06`, `mean_of_mean_abs=1.05820362e-07`, `max_rel=1.25252972e-06`; same worst row as the rows-dev run. Therefore both `ggml_cuda_moe_stream_mmvq_rows_dev()` and per-row `ggml_cuda_moe_stream_mmvq_dev()` are numerically aligned in the single-stream path.
 - `next_design`: Add a default-off, diagnostic-only batch compare (`GGML_MOE_BATCH_COMPARE_CPU_OUT`) inside `ggml_cuda_moe_stream_batch()` after D2H/scatter for accepted batch calls. It should recompute the accepted batch rows using CPU `vec_dot` with the same `active_experts`, `dst_ids`, `token_ids`, and source rows, and write per-call max/mean error. Only after this localizes the batch error should we change batch behavior for performance.
+- `implementation_adjustment`: Prefer reusing the existing `GGML_MOE_STREAM_COMPARE_CPU_OUT` path in `ggml-cpu.c` immediately after a successful `ggml_cuda_moe_stream_batch()` call and before `matrix_row_counts` is cleared. This compares the actual batch-written `dst` with CPU `vec_dot` using the same row mappings, avoids adding CPU quant logic to CUDA code, and remains default-off.
 
 ### Phase 3：执行和提交规则
 
@@ -3345,3 +3346,55 @@
 - `answer`: Same semantic/coherent France paragraph as the accepted probe; mentions France/French Republic, Western Europe, history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
 - `counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - `decision`: This finalizes the current accepted vendor DeepSeek cold-start SOTA at `3.4 tok/s`, reproducible from pushed commit `0312377cec2b617c64b97f30a14e5d474a3b2893` with the recorded pack file/path/hash. Continue next with either small prompt-set validation for this pack strategy or a more general prompt-independent pack/profile construction before claiming robustness beyond the France SOTA prompt.
+
+### 方案重置：rollback-to-odirect-sota-and-redesign
+
+- `reset_id`: `20260702-rollback-to-odirect-sota-and-redesign`
+- `status`: active_plan
+- `time`: `2026-07-02T15:20Z`
+- `rollback_action`: Reverted the uncommitted MXFP4/down-batch diagnostic changes in `ggml/src/ggml-cpu/ggml-cpu.c` and `ggml/src/ggml-cuda/moe_stream_batch.cu`. The working source is back on pushed commit `c37df4434ecdacdf910506f24209b6ccabed341c` plus this plan-only update.
+- `current_accepted_sota`: vendor DeepSeek strict cold-start O_DIRECT expert-pack SOTA, `eval_tok_s=4.2`, `prompt_tok_s=1.5`, `TTFT=29984.770823ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15080456192`, `ram_ok=true`, `correctness_ok=true`.
+- `current_sota_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun/france-cpu40-vram0gb`.
+- `current_sota_config`: `cpu_moe=40`, `--vram-cache-gb 0`, extra args `-c 256 -b 16 -ub 16 -t 20 -tb 20`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`.
+- `repro_files`: expert pack sha256 `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; admission profile sha256 `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
+- `branch_policy`: All future accepted or rejected checkpoints must be committed and pushed to GitHub remote `ssd`, branch `vendor/deepseek-token-rate-16gb`, using git identity `L-Ark <fliangae@connect.ust.hk>`. Any new accepted SOTA must include exact source commit, run directory, full env/CLI, cgroup limit, page-cache metrics, answer text, pack/profile hashes, and must be rerun from the pushed commit so future rollback can reproduce the metric.
+- `reason_for_reset`: The MXFP4/down-batch direction has not met correctness or speed gates. The latest batch-enabled attempt produced incorrect France output and lower token rate, while single-stream MXFP4 compare showed small numerical error. Therefore it is not a valid optimization path until the batch mapping/scatter bug is proven and fixed. Do not leave rejected batch code enabled on the SOTA branch.
+
+#### 新设计阶段 1：复现并锁定回退后的 SOTA
+
+- `goal`: Rebuild with `GGML_CUDA_MOE_STREAM_BATCH=OFF` and rerun the current O_DIRECT SOTA under strict cold `drop_caches` and 16GB cgroup.
+- `acceptance`: `eval_tok_s` should reproduce near `4.2 tok/s` within normal run variance, France output must be semantic/coherent, `memory_peak_bytes <= 16000000000`, page cache must be inside the same cgroup, and TTFT must remain within the 20% gate.
+- `recording`: Record the fresh run path and metrics in this plan before any new implementation. If reproduction fails, stop optimization and debug reproducibility first.
+
+#### 新设计阶段 2：重新测量 4.2 SOTA 的 token-level bottleneck
+
+- `goal`: Locate the current bottleneck after O_DIRECT, not the old buffered-pack bottleneck.
+- `experiment`: Run the accepted O_DIRECT SOTA with one-stream trace, CPU fallback profile, batch decline debug disabled, and strict cgroup metrics. Measure per-token time split into gate pack read/direct I/O, H2D copy/cache insert, gate GPU compute/sync, up/down CPU fallback, sampler/output, and graph scheduling gaps.
+- `expected_bottleneck`: Prior post-O_DIRECT trace showed gate source load around `5.3s`, one-stream total around `7.1s`, and CPU fallback around `26.1s`, with decode up/down each around `9.3s`. Verify this on the reset source before choosing implementation.
+- `priority_rule`: Rank candidates by measured removable time and theoretical bound. Do not start with a code path unless it can plausibly move wall time more than run noise and has a correctness test plan.
+
+#### 新执行 candidate A：low-risk O_DIRECT/gate-pack I/O tuning
+
+- `hypothesis`: The current pack path still performs many per-expert direct reads (`4623` reads, about `20.6GB`). If direct I/O issue size, alignment, or ordering is suboptimal, batching adjacent reads or using a split reader pool may reduce syscall/device wait without touching math.
+- `bound`: Upper bound is the measured gate pack read time from stage 2. If gate I/O is only about `5s`, this path cannot yield more than about `5s` total wall-time reduction and should not be over-prioritized.
+- `implementation_rule`: Default-off env only. Keep Kimi paths unchanged. Keep France correctness and pack hit counters identical: `hits=4623`, `misses=0`, `failures=0`.
+- `reject_rule`: Reject immediately if RAM exceeds 16GB including page cache, direct read fallback appears, TTFT exceeds the accepted gate for an accepted SOTA, or output correctness changes.
+
+#### 新执行 candidate B：CPU fallback reduction without MXFP4 batch promotion
+
+- `hypothesis`: After O_DIRECT, up/down CPU fallback is likely the largest remaining cost. The next valid compute optimization must first prove numerical equivalence on the exact fallback route before measuring speed.
+- `first_step`: Build a compare-only diagnostic for the actual candidate path, limited to a small number of rows, recording CPU vs GPU output error by tensor/expert/row/col. Do not enable it in SOTA runs.
+- `allowed_candidates`: Investigate up/down cache admission, down-only single-stream for proven-correct MXFP4 paths, or a corrected batch path only after the mapping/scatter issue is isolated. The previously rejected MXFP4 batch switch must stay disabled until it passes compare and full France correctness.
+- `bound`: Use fallback profile totals as the hard upper bound. If decode up/down fallback is about `18-22s`, a perfect elimination sets the maximum possible improvement; expected practical gain must account for H2D, GPU kernel time, and cache pressure.
+
+#### 新执行 candidate C：prompt-robust pack/profile validation
+
+- `goal`: Ensure improvements are not France-only artifacts before claiming general steady behavior.
+- `test_set`: warmup France prompt, then test France again, quantum computing, short Python Fibonacci, Japan introduction, and climate-change summary.
+- `acceptance`: Under strict 16GB cgroup, outputs must be coherent, RAM must remain within limit, and token rate should stay close to the SOTA envelope. If the first-order France pack misses badly on other prompts, design a general pack/profile from multi-prompt traces before optimizing further.
+
+#### Commit and rollback rules
+
+- `accepted_sota`: If a new run improves accepted cold-start token rate while meeting RAM, correctness, and TTFT gates, immediately commit source/plan/metadata and push to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from the pushed commit.
+- `rejected_result`: If speed regresses, correctness fails, RAM exceeds limit, or TTFT is too high, record the run as rejected. Commit only plan/diagnostic records when useful, and revert any default-on or risky source change before continuing.
+- `reproducibility`: A SOTA is not considered final until the exact pushed commit can reproduce it with recorded pack/profile hashes and cgroup metrics.
