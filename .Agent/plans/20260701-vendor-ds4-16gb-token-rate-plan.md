@@ -2060,6 +2060,19 @@
 - `gap_analysis`: Moving the top3 boundary earlier from `blk.10-39` to `blk.5-39` changed the generation trajectory enough to increase streamed gate misses (`4971 -> 6202`), `src0_ms` (`24305.283 -> 30669.545`), refault pressure (`workingset_refault_file=6465998`), and end-to-end elapsed time (`89.48s -> 109.94s`). The additional approximate pruning does not translate to token-rate gain and also causes truncation at the fixed `-n 192` output limit. Keep late10 as the accepted SOTA and do not expand the top3 range before layer 10 without a narrower correctness/trajectory strategy.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：expert-keep-top3-late8-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-late8-top4-rest`
+- `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Late5 showed that pushing top3 too early changes the token trajectory and increases stream misses/refaults, while late10 is currently correct and fastest. The remaining useful question is whether only layers `8-9` can be added to the top3 region without triggering the late5 failure mode.
+- `hypothesis`: Expanding the accepted late10 boundary only slightly to `blk.8-39` may capture a small amount of additional up/down fallback saving while keeping the first eight CPU-MoE layers at top4 for quality stability. Because late5 regressed, this is a boundary-finding probe, not a high-upside code change.
+- `theoretical_upper_bound`: Relative to late10, adding two of forty CPU-MoE layers to the top3 region has a coarse upper bound of `12.9s * 2/40 ≈ 0.65s` wall time before overhead. With late10 elapsed `89.48s`, the expected token-rate gain is at most a small rounding move above `2.6 tok/s`; if cache misses or output length increase, it should be rejected.
+- `test_config`: pushed source with layer-range support, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=8-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change is required. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace shows the late5 miss/refault regression pattern, record rejected and keep late10 as SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
