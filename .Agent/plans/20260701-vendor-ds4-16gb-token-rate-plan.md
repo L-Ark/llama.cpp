@@ -2201,6 +2201,19 @@
 - `gap_analysis`: Narrowing top2 to only `blk.35-39` avoids the truncation/correctness failure from last10 top2, but still changes the generation trajectory enough to increase rows (`35151 -> 44749`), gate misses (`4971 -> 5938`), `src0_ms` (`24305.283 -> 30363.530`), refault pressure (`3545116 -> 5909304`), and elapsed time (`89.48s -> 105.41s`) versus accepted late10. Since token rate only ties `2.6` and does not exceed the SOTA gate, do not promote. Further top2 pruning is deprioritized unless paired with a quality/trajectory-preserving mechanism.
 - `rollback_status`: source change reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-no-trace-production
+
+- `attempt_id`: `20260702-late10-no-trace-production`
+- `attempt_kind`: `config-probe/trace-overhead`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Accepted late10 SOTA still writes per-expert trace for `35151` rows, and recent rejected probes show token-rate ties around `2.6` where sub-second overhead can decide the rounded metric. Earlier top4 no-trace did not improve, but late10 has a different row count and is the current production candidate.
+- `hypothesis`: Removing `GGML_MOE_STREAM_ONE_TRACE_OUT` from the accepted late10 config may reduce file-write/timing overhead without changing model math, RAM behavior, or correctness. If token rate improves, the production SOTA config should run without per-expert trace, while a separate trace diagnostic can remain available for bottleneck analysis.
+- `theoretical_upper_bound`: Accepted trace has `35151` rows; direct trace formatting/write cost is not isolated but is bounded by file output and timing overhead. Expected gain is small, likely below 1s wall time; only a rounded move from `2.6` to `>2.6 tok/s` would justify promotion.
+- `test_config`: accepted late10 config, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected/diagnostic and keep accepted late10 trace-backed SOTA. If accepted, immediately stop further experiments, write full no-trace reproduction package, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command showing trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr including cache hit/miss summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status. If promoted, also run a separate traced diagnostic for bottleneck comparison without using that traced run as the performance number.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
