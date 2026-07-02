@@ -2138,6 +2138,19 @@
 - `gap_analysis`: Skipping `MADV_DONTNEED` on VRAM cache hits reduced direct traced `dontneed_ms` only `1169.862 -> 980.980` rather than the ~1.0s proportional upper bound, and runner `eval_tok_s` still tied `2.6`. `src0_ms` and total trace improved only slightly and did not produce a strict token-rate SOTA. The likely explanation is that most hit-side `madvise` calls were cheap/no-op on already reclaimed pages, while keeping hit pages resident does not reduce future miss cost enough under the 16GB cgroup. This is useful evidence but not accepted.
 - `rollback_status`: source change reverted and clean rebuild completed; worktree clean and binary sha256 returned to `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-vram-cache-hash-lookup
+
+- `attempt_id`: `20260702-late10-vram-cache-hash-lookup`
+- `attempt_kind`: `implementation/cache-lookup-cpu-overhead`
+- `status`: planned_before_execution
+- `bottleneck_basis`: `moe_stream.cu` defines `vram_ht_entry ht[VRAM_CACHE_HT_SIZE]` and comments describe O(1) lookup, but `vram_cache_lookup()` currently linearly scans all `n_slots` (`3192` slots for accepted SOTA). Accepted late10 performs `35151` cache lookups with `30180` hits. This lookup/scanning cost is outside the traced `src0_ms` fields and can affect end-to-end wall time even when IO is unchanged.
+- `hypothesis`: Implement an opt-in `GGML_MOE_STREAM_CACHE_HASH=1` path that maintains the existing hash table on insert/evict and uses it for cache lookup, while leaving the default linear path unchanged. This should preserve model math, cache capacity, and eviction policy, but reduce CPU overhead for cache hits.
+- `theoretical_upper_bound`: Linear lookup does up to `3192` key comparisons per hit. With `30180` hits, worst-case comparisons are tens of millions. Even if each comparison is cheap, the bound can be hundreds of milliseconds to low single-digit seconds depending on cache locality and branch behavior. It cannot reduce `src0_ms` or miss count directly; a valid improvement must show lower elapsed/token-rate without correctness or RAM regression.
+- `test_config`: patched source, accepted late10 config, `GGML_MOE_STREAM_CACHE_HASH=1`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_DONTNEED=1`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache hit/miss counts diverge unexpectedly from accepted late10, revert source and clean rebuild. If accepted, immediately write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, stdout/stderr cache hit/miss counts, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
