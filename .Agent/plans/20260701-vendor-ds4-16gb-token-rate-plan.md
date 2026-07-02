@@ -86,6 +86,19 @@
 - `answer`: France output is semantic and coherent; it identifies France/French Republic in Western Europe and mentions history, culture, global influence, landmarks, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
 - `decision`: historical accepted SOTA remains `4.2 tok/s` from run `20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun`; the current clean rebuild reproduces the same accepted configuration at `4.0-4.1 tok/s`, under the 16GB cgroup with correct output. Proceed to merge latest Kimi changes, then require a post-merge SOTA guard in the same range before continuing optimization.
 
+### Kimi latest merge guard（2026-07-02）
+
+- `attempt_id`: `20260702-post-kimi-latest-merge-odirect-sota-guard`
+- `merge_commit`: `86ac3c0dd` merged `ssd/vendor/kimi-moe-stream-on-vendor` through `58885e449` into `feat/ds4-moe-stream-on-vendor`.
+- `kimi_delta`: from previous merged Kimi base `122b44dc6` to `58885e449`, the branch changed only `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md` (`928` inserted lines). No Kimi source file changed in this merge, so Kimi runtime functionality remains unchanged.
+- `build`: clean rebuild after merge with `GGML_CUDA_MOE_STREAM_BATCH=OFF`; CMake build-info commit `86ac3c0dd`; `llama-cli sha256=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; `libggml-cuda.so sha256=a468b55ae19e7a79914b6b9e05ecf3da7597081de0595fb7d487e045a50e0b89`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T140859Z-20260702_post_kimi_latest_merge_odirect_sota_guard/france-cpu40-vram0gb`.
+- `config`: same accepted O_DIRECT expert-pack SOTA config: `cpu_moe=40`, `--vram-cache-gb 0`, strict cold `drop_caches`, 16GB cgroup, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`, same pack/profile hashes.
+- `result`: `eval_tok_s=4.2`, `prompt_tok_s=1.6`, `TTFT=29080.225912ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099367424`, `pgmajfault=272003`, `workingset_refault_file=1672143`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`.
+- `answer`: France output remains semantic and coherent; it identifies France/French Republic in Western Europe and mentions history, culture, global influence, landmarks, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
+- `decision`: accepted guard. The latest Kimi branch is merged without changing Kimi runtime functionality, and the vendor DeepSeek O_DIRECT cold-start SOTA is maintained at `4.2 tok/s` under the 16GB cgroup. Commit and push this plan record to `ssd/vendor/deepseek-token-rate-16gb`, then continue Phase 1 bottleneck slicing from the merged head.
+
 ### Phase 1：重新定位 4.2 SOTA 的真实瓶颈
 
 - `attempt_id`: `20260702-odirect-sota-bottleneck-slice`
