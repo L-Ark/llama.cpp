@@ -2142,7 +2142,7 @@
 
 - `attempt_id`: `20260702-late10-vram-cache-hash-lookup`
 - `attempt_kind`: `implementation/cache-lookup-cpu-overhead`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: `moe_stream.cu` defines `vram_ht_entry ht[VRAM_CACHE_HT_SIZE]` and comments describe O(1) lookup, but `vram_cache_lookup()` currently linearly scans all `n_slots` (`3192` slots for accepted SOTA). Accepted late10 performs `35151` cache lookups with `30180` hits. This lookup/scanning cost is outside the traced `src0_ms` fields and can affect end-to-end wall time even when IO is unchanged.
 - `hypothesis`: Implement an opt-in `GGML_MOE_STREAM_CACHE_HASH=1` path that maintains the existing hash table on insert/evict and uses it for cache lookup, while leaving the default linear path unchanged. This should preserve model math, cache capacity, and eviction policy, but reduce CPU overhead for cache hits.
 - `theoretical_upper_bound`: Linear lookup does up to `3192` key comparisons per hit. With `30180` hits, worst-case comparisons are tens of millions. Even if each comparison is cheap, the bound can be hundreds of milliseconds to low single-digit seconds depending on cache locality and branch behavior. It cannot reduce `src0_ms` or miss count directly; a valid improvement must show lower elapsed/token-rate without correctness or RAM regression.
@@ -2150,6 +2150,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache hit/miss counts diverge unexpectedly from accepted late10, revert source and clean rebuild. If accepted, immediately write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, stdout/stderr cache hit/miss counts, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T012951Z-20260702_late10_vram_cache_hash_lookup/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=37580.398308ms`, `elapsed_seconds=89.61`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15039725568`, `pgmajfault=280349`, `workingset_refault_file=3483155`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `span_ms=70320.906`, `src0_ms=24481.296`, `dontneed_ms=1173.443`, `total_ms=26758.289`.
+- `gap_analysis`: The hash path preserved cache behavior exactly (`hits=30180`, `misses=4971`) and correctness passed, but it did not improve rounded token rate and elapsed time was slightly worse than the accepted late10 rerun. This indicates linear cache lookup is not a current first-order bottleneck, or the saved CPU comparisons are dominated by IO/page-reclaim variance and CUDA synchronization. Since the strict token-rate gate is not exceeded, do not keep the source change.
+- `rollback_status`: source change reverted and clean rebuild completed; worktree clean and binary sha256 returned to `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
