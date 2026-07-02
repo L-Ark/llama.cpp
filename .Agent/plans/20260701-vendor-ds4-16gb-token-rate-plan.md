@@ -1905,13 +1905,31 @@
 
 - `attempt_id`: `20260702-lost-cpu-fallback-source-binary-search`
 - `attempt_kind`: `forensic-search`
-- `status`: planned
+- `status`: completed / no_exact_binary_found
 - `hypothesis`: Since old `2.6` and current slow old-config reruns have identical gate rows/hits/misses, the missing speed may come from an unrecorded CPU fallback source/binary/shared-library state affecting `ffn_up_exps` / `ffn_down_exps`, or from a system IO/reclaim state not captured by run metadata. The next highest-value check is to search for preserved binaries, build directories, reflog states, patch files, temporary source copies, and shared libraries around the 09:55 UTC old run.
 - `expected_delta`: No direct token-rate improvement. Success means finding an exact candidate binary/source state that can be rerun under the strict 16GB cgroup. If a candidate reproduces a valid rate above current SOTA with correct output and TTFT gate, immediately follow the SOTA record/push/rerun protocol.
 - `search_scope`: repo reflog and branch history; `/root/lfz/vendor` and `/root/lfz` build/source copies; CMake build artifacts with mtimes around `2026-07-01 09:55 UTC`; `llama-cli`, `libggml*.so`, `ggml-cpu.c`, `moe_stream.cu` copies; `.Agent` patch/progress records; run dirs with matching `b9079-7353439ea` build line; shell history if available.
 - `acceptance_gate`: Search only. Do not promote any result unless a candidate is rebuilt/rerun from recorded source or a preserved binary is tied to full source evidence and then converted into a pushed source commit.
 - `rollback`: No source change. Do not delete files or reset branches. Any checkout/build probe must return to current clean HEAD if rejected.
 - `required_evidence`: search commands, candidate file paths, mtimes/sizes/sha256, build lines, git commits/diffs, and a conclusion separating lost binary/source evidence from external IO/page-cache evidence.
+- `finding_reflog`: The old `2.6` run sits between `fcc937d01` (`09:55:13`, vram8 record) and `f7f9cdc48` (`09:59:19`, vram12 record). Earlier key source commits were `c5337b0cc` (`09:42:57`, src1 row mapping fix) and `7353439ea` (`09:10:10`, rejected stream test).
+- `finding_binaries`: Search for `llama-cli` / `libggml*.so` / archives with mtimes around `2026-07-01 09:00-10:30 UTC` found no preserved vendor binary/shared library. The only hit was an `ik_llama_migrated` build, which is not valid for vendor SOTA. Existing vendor build output has been overwritten by later rebuilds.
+- `finding_source_copies`: Search for `ggml-cpu.c`, `moe_stream.cu`, patch and diff files around `08:00-12:30 UTC` found no 09:55 vendor source copy/diff. `.Agent` records around 09:55 do not preserve the exact dirty source state.
+- `finding_build_line`: `build : b9079-7353439ea` appears across many run dirs from `09:16` through later reruns, including incompatible outputs. It is stale/incomplete and cannot identify a unique binary/source state.
+- `finding_sequence_signal`: 09:50 `vram8` was slow (`eval_tok_s=1.4`, `pgmajfault=574410`, `workingset_refault_file=15540325`), then 09:55 `vram12` became fast (`eval_tok_s=2.6`, `pgmajfault=309216`, `workingset_refault_file=3371495`). This points to a possible run-sequence/kernel workingset/device-cache effect despite cold `drop_caches`, not a preserved binary that can be directly rerun.
+- `conclusion`: No exact old vendor binary/source artifact was found. Continue by testing whether the old vram8 -> vram12 sequence itself reduces refaults and recovers the 2.6-like behavior under strict 16GB cgroups.
+
+### 当前执行 attempt：old-sequence-vram8-then-vram12-repro
+
+- `attempt_id`: `20260702-old-sequence-vram8-then-vram12-repro`
+- `attempt_kind`: `forensic-execution/run-sequence`
+- `status`: planned
+- `hypothesis`: The historical 2.6 run may have depended on immediately preceding vram8/vram4 runs creating useful kernel workingset shadow entries, device cache state, or readahead behavior that survives `drop_caches` enough to reduce refault/reclaim cost. Replaying the old sequence (`vram8` cold run followed by `vram12` cold run) with the current clean pushed source can test whether sequence state, rather than source, explains the low `workingset_refault_file` in the 09:55 result.
+- `expected_delta`: If sequence state is the cause, the second vram12 run should show materially lower `pgmajfault`/`workingset_refault_file` than standalone slow reruns and token rate should move toward historical `2.6`. If it remains `1.5-1.6`, the sequence hypothesis is weak and remaining explanation is lost binary/source or unobserved system/storage state.
+- `test_config`: current clean pushed source and rebuilt binary, old command shape, no `GGML_MOE_KEEP_TOPK_UPDOWN`, `cpu_moe=40`, first run `vram_cache=8GB`, second run `vram_cache=12GB`, each with cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled.
+- `acceptance_gate`: forensic only unless second run exceeds current accepted SOTA and also passes RAM, TTFT, correctness, full reproduction, push, and clean pushed-commit rerun gates.
+- `rollback`: No source change. If either run fails or exceeds runtime/memory limits, record failure and keep current top4 `2.3 tok/s` SOTA.
+- `required_evidence`: both run dirs, exact commands/env, cgroup memory files, summaries, gate trace summaries, France outputs, manual correctness, and comparison to the 09:50/09:55 historical pair.
 
 ## 记录与验收
 
