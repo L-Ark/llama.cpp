@@ -16517,6 +16517,102 @@ Rollback:
   SOTA.
 - If n32 passes but confirmation or n96 fails, reject Phase 7AJ.
 
+Phase 7AJ result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ae_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14900
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140950Z-n32-phase7aj-sqpoll-vram14900`.
+- quality: pass.
+- TTFT: `66079.87 ms`.
+- decode: `36341.66 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `345.65 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `43.2%`;
+  - down slots `801`, hit rate `73.6%`;
+  - total hit rate `52.5%`.
+- pinned main: host stage `24353.376 ms`, H2D `4578.966 ms`.
+- up/gate total: `14.666 ms/call`.
+- down total: `34.110 ms/call`, fallback_t0 `31.299 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-141222Z-n32-phase7aj-sqpoll-vram14900-confirm`.
+- quality: pass.
+- TTFT: `59692.49 ms`.
+- decode: `36403.44 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 by `283.87 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `43.2%`;
+  - down slots `801`, hit rate `73.6%`;
+  - total hit rate `52.5%`.
+- pinned main: host stage `24853.746 ms`, H2D `4581.794 ms`.
+- up/gate total: `15.052 ms/call`.
+- down total: `30.676 ms/call`, fallback_t0 `27.906 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-141540Z-n96-phase7aj-sqpoll-vram14900`.
+- quality: pass; full answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `58325.14 ms`.
+- decode: `91176.17 ms / 77`, `0.84 tok/s`.
+- comparison: slower than Phase 7AE best n96 `88889.08 ms / 77` by
+  `2287.09 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `42.9%`;
+  - down slots `801`, hit rate `73.3%`;
+  - total hit rate `52.2%`.
+- expert-pack io_uring:
+  - `iouring_submit_us=105881`;
+  - `iouring_wait_us=19303145`.
+- pinned main: host stage `61912.076 ms`, H2D `11413.414 ms`.
+- up/gate total: `14.475 ms/call`.
+- down total: `15.417 ms/call`, fallback_t0 `12.612 ms`.
+
+Interpretation:
+
+- `14900 MiB` reproducibly improves n32, but it does not generalize to n96.
+- The smaller cache lowers total hit rate at n96 from Phase 7AE confirm
+  `53.4%` to `52.2%`, with upgate hit rate down to `42.9%`.
+- The n96 pinned main host stage rises to `61912.076 ms` versus Phase 7AE
+  confirm `60514.789 ms`, while H2D remains about the same. The reduced cache
+  does not relieve critical-path staging pressure enough to offset extra misses.
+- This matches the risk model: small VRAM reductions may make n32 look better
+  but hurt longer decode where cache-hit loss accumulates.
+
+Decision:
+
+- Reject Phase 7AJ.
+- Do not run n96 confirmation.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
