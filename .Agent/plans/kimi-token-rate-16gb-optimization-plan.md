@@ -12551,3 +12551,255 @@ build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --specia
   --no-display-prompt -no-cnv -t 32 -tb 32 \
   -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
 ```
+
+## Phase 5A - down batch io_uring miss staging
+
+Timestamp: `2026-07-02`.
+
+Goal:
+
+- Reduce the exposed down-batch `host_stage` bucket without changing model math.
+- Keep the accepted split-cache runtime and strict 16GB cold-start gates.
+
+Current bottleneck evidence:
+
+- Accepted split-cache n96 still reports large pinned staging time:
+  - pinned staging copies: `56714`;
+  - host stage: `71092.196 ms`;
+  - H2D: `11754.203 ms`.
+- Down batch still exposes substantial fallback/staging time:
+  - down total: `17.827 ms/call`;
+  - down CUDA batch: `4.193 ms/call`;
+  - down fallback exposed: `13.593 ms/call`.
+- The next high-value target is therefore not math; it is reducing serialized
+  host reads/staging for cache misses that already have expert-pack entries.
+
+Implementation discovery:
+
+- `expert_pack_iouring_copy_jobs(jobs, expert_bytes, stream, ring, trace_op)`
+  already exists and records:
+  - batch histogram;
+  - `iouring_reads`;
+  - `iouring_bytes`;
+  - submit/wait calls;
+  - submit/wait microseconds;
+  - inflight average/max.
+- Down batch already has a guarded miss-job collection path:
+  - env: `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - miss slots are inserted with `do_copy=false`;
+  - miss jobs are split across two vectors;
+  - each vector calls `expert_pack_iouring_copy_jobs()`;
+  - fallback remains `batch_cache_copy_h2d()` if io_uring cannot handle a job.
+- SOTA did not enable `GGML_MOE_DOWN_PARALLEL_STAGE`, so this path must be
+  tested as the minimal experiment before adding source changes.
+
+Theory:
+
+- Per-cache-miss expert reads are independent and come from direct-aligned
+  expert-pack offsets.
+- Batching the miss jobs can reduce per-read syscall/setup overhead and expose
+  multiple disk reads concurrently through io_uring.
+- If the down path has `B` miss jobs per batch call and a storage queue depth
+  `D`, the best-case read portion can approach:
+
+```text
+ceil(B / D) * max(single_read_latency_or_bandwidth_time)
+```
+
+  instead of:
+
+```text
+B * single_read_latency_or_bandwidth_time
+```
+
+- The hard upper bound is the remaining host staging bucket. Even a perfect
+  down read scheduler cannot save more than the measured down/expert-pack
+  staging that is both on the critical path and not already hidden by H2D or
+  compute.
+- A practical success signal is:
+  - `iouring_reads` changes from `0` or near-zero to a large value;
+  - io_uring batch histogram shows batches larger than `1`;
+  - pinned `host_stage` drops materially;
+  - token rate improves while TTFT and quality gates still pass.
+
+Candidate env delta from accepted split-cache runtime:
+
+```sh
+GGML_MOE_DOWN_PARALLEL_STAGE=1
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=4
+GGML_MOE_IO_SORT_OFFSET=1
+GGML_MOE_STAGE_PROFILE=1
+```
+
+The first run may use the default depth/refill if these names differ in code;
+record the exact values printed in stderr.
+
+Execution order:
+
+1. Confirm whether the current source already satisfies the requested minimal
+   experiment. If not, add only default-off code required to collect down miss
+   jobs, call `expert_pack_iouring_copy_jobs()`, and print counters.
+2. Build.
+3. Run strict cold `-n 4` smoke:
+   - host RAM `<16GB` including page cache;
+   - TTFT under gate;
+   - output must start as a coherent France answer;
+   - `read_failures=0`;
+   - no CUDA launch failures.
+4. If n4 passes, run strict cold `-n 32` against accepted split-cache SOTA:
+   - compare token rate to `0.696370 tok/s` n32 split-cache result;
+   - compare `host_stage`, H2D, down total, and io_uring counters;
+   - require `iouring_reads` and batch histogram to prove the path executed.
+5. Promote to strict cold `-n 96` only if n32 improves token rate or shows a
+   clear host-stage reduction without quality/TTFT/RAM regressions.
+
+Acceptance gates:
+
+- Host RAM remains below 16GB including page cache and pinned staging slots.
+- VRAM remains deliberately used with split-cache env enabled.
+- TTFT remains `<= 106331.72 ms`.
+- France prompt output remains semantically correct and coherent.
+- `read_failures=0`.
+- `iouring_reads` must be non-zero and preferably large; otherwise the
+  experiment did not exercise the intended path.
+- Performance must improve before commit/push. If token rate regresses or the
+  quality/TTFT/RAM gates fail, revert source changes and keep only the plan
+  record.
+
+Phase 5A n4 smoke result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-044222Z-n4-phase5a-down-iouring-parallel-stage-cgroupfix`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- TTFT/prompt eval: `74988.44 ms`, under the `106331.72 ms` gate;
+- decode: `5855.30 ms / 3 runs`, `0.51 tok/s`;
+- output: `France is a country`;
+- `read_failures=0`;
+- path proof:
+  - log contains `down parallel CPU staging active`;
+  - `iouring_reads=547`;
+  - `iouring_bytes=3650174976`;
+  - global io_uring histogram: `1:69,2-4:180`;
+  - pinned staging main-ring io_uring: `batches=132`, `jobs=295`;
+  - pinned staging gate-ring io_uring: `batches=117`, `jobs=252`.
+
+Decision after n4:
+
+- The minimal experiment is active and semantically safe at smoke length.
+- Proceed to strict cold `-n 32`.
+
+Phase 5A n32 result:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-044438Z-n32-phase5a-down-iouring-parallel-stage`
+- rc: `0`;
+- host RAM peak: `15899996160` bytes, under the strict 16GB cgroup;
+- TTFT/prompt eval: `69929.16 ms`, under the `106331.72 ms` gate;
+- decode: `43651.44 ms / 31 runs`, about `0.710 tok/s`;
+- accepted split-cache n32 reference: `0.696370 tok/s`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- `read_failures=0`;
+- cache:
+  - global hit rate: `51.8%`;
+  - down hit rate: `70.2%`;
+  - upgate hit rate: `43.7%`.
+- pinned staging:
+  - main ring: `copies=21238`, `host_stage=23225.715 ms`,
+    `h2d=4355.926 ms`;
+  - main-ring io_uring: `batches=1326`, `jobs=2189`,
+    histogram `1:645,2-4:681`;
+  - gate ring: `copies=1506`, `host_stage=11.593 ms`,
+    `h2d=395.281 ms`;
+  - gate-ring io_uring: `batches=1045`, `jobs=1501`,
+    histogram `1:670,2-4:375`.
+- expert pack io_uring:
+  - `iouring_reads=3690`;
+  - `iouring_bytes=24698290176`;
+  - `iouring_fallbacks=0`;
+  - `iouring_submit_us=1341618`;
+  - `iouring_wait_us=5263330`;
+  - global histogram `1:1315,2-4:1056`.
+
+Decision after n32:
+
+- The path executes and meets RAM, TTFT, read-failure, and France quality gates.
+- n32 token rate is slightly above the accepted split-cache n32 reference.
+- Promote to strict cold `-n 96` before accepting or committing this runtime
+  change.
+
+Phase 5A n96 promotion:
+
+| run | token rate | decode | TTFT | RAM | quality | read failures |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-044746Z-n96-phase5a-down-iouring-parallel-stage` | `0.746120 tok/s` | `103200.62 ms / 77` | `73693.77 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-045136Z-n96-phase5a-down-iouring-parallel-stage-r2` | `0.735737 tok/s` | `104656.92 ms / 77` | `77403.84 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-045502Z-n96-phase5a-down-iouring-parallel-stage-r3` | `0.754319 tok/s` | `102078.86 ms / 77` | `80567.25 ms` | `14.808 GiB` | pass | `0` |
+
+Promotion summary:
+
+- average token rate: `0.745392 tok/s`;
+- min token rate: `0.735737 tok/s`;
+- max token rate: `0.754319 tok/s`;
+- average TTFT: `77221.62 ms`;
+- max TTFT: `80567.25 ms`, below the `106331.72 ms` gate;
+- previous accepted split-cache n96 average: `0.714926 tok/s`;
+- previous accepted split-cache n96 min: `0.709216 tok/s`;
+- improvement vs previous accepted average: about `+4.26%`;
+- improvement vs old `0.65 tok/s` SOTA profile: about `+14.68%`.
+
+Exact n96 answer, all three Phase 5A promotion runs:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+Representative n96 counters from the first promotion run:
+
+- path proof:
+  - log contains `down parallel CPU staging active`;
+  - `iouring_reads=9155`;
+  - `iouring_bytes=61292249088`;
+  - `iouring_fallbacks=0`;
+  - global io_uring histogram: `1:3275,2-4:2636`;
+  - `iouring_submit_us=3390752`;
+  - `iouring_wait_us=12377945`.
+- pinned staging:
+  - main ring: `copies=52977`, `host_stage=55859.752 ms`,
+    `h2d=10865.493 ms`;
+  - main-ring io_uring: `batches=3302`, `jobs=5433`,
+    histogram `1:1619,2-4:1683`;
+  - gate ring: `copies=3737`, `host_stage=33.143 ms`,
+    `h2d=980.827 ms`;
+  - gate-ring io_uring: `batches=2609`, `jobs=3722`,
+    histogram `1:1656,2-4:953`.
+- cache:
+  - global hit rate: `51.4%`;
+  - down hit rate: `70.0%`;
+  - upgate hit rate: `43.2%`.
+
+Comparison to previous accepted split-cache n96 representative run:
+
+- token rate improved from average `0.714926 tok/s` to `0.745392 tok/s`;
+- pinned staging copies dropped from `56714` to `52977`;
+- host stage dropped from `71092.196 ms` to `55859.752 ms`;
+- H2D changed from `11754.203 ms` to `10865.493 ms`;
+- read failures remained `0`;
+- output text remained exactly the same for the required France prompt.
+
+Decision:
+
+- Accept the Phase 5A runtime delta:
+
+```sh
+GGML_MOE_DOWN_PARALLEL_STAGE=1
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=4
+GGML_MOE_IO_SORT_OFFSET=1
+```
+
+- No source-code change is required; the existing down miss-job path and
+  `expert_pack_iouring_copy_jobs()` already implement the minimal experiment.
+- Commit and push the plan/runtime record immediately.
