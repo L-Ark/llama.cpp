@@ -16697,6 +16697,69 @@ Rollback:
 - If n32 candidate does not beat the accepted best, reject immediately and keep
   Phase 7AE as SOTA.
 
+Phase 7AP n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-152527Z-n32-phase7ap-pinned16`.
+- git:
+  - head `488f9038963babfd8c873a22070f524e3a302919`;
+  - status clean at run start.
+- env delta:
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`;
+  - all other accepted Phase 7AE runtime settings preserved.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13626` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `71525.46 ms`.
+- decode: `37768.04 ms / 31`, `0.82 tok/s`.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `1080.73 ms`;
+  - slower than Phase 7AE n32 confirm `36973.83 ms / 31` by `794.21 ms`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - final `file=14768238592`, `kernel=239910912`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7788797`.
+- pinned staging:
+  - main slots `16`, slot `7.44 MiB`;
+  - main slot wait `56.829 ms`, not lower than Phase 7AE n32 best
+    `55.161 ms`;
+  - main host stage `24869.897 ms`, higher than Phase 7AE n32 best
+    `24429.536 ms`;
+  - main H2D `4566.344 ms`, similar to Phase 7AE n32 best `4558.687 ms`;
+  - gate slot wait `6.806 ms`, similar to Phase 7AE n32 best `6.729 ms`.
+- cache:
+  - down `806` slots, hit rate `73.6%`;
+  - upgate `1679` slots, hit rate `43.7%`.
+
+Interpretation:
+
+- Increasing pinned slots from `8` to `16` did not reduce the measured slot
+  wait. The accepted runtime is not pinned-ring-capacity limited.
+- The extra pinned memory reduced free VRAM headroom and slightly increased
+  staging overhead without changing cache capacity or hit rate.
+- Because the n32 candidate failed the performance gate, no n32 confirmation or
+  n96 run is allowed.
+
+Decision:
+
+- Reject Phase 7AP.
+- No source rollback required.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
 ## Phase 7AM - SQPOLL io_uring depth 16 retest
 
 Design timestamp: 2026-07-02 18:50 UTC.
