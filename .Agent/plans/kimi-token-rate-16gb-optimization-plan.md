@@ -8,6 +8,9 @@ vendor path while preserving stable, semantically correct output.
 Hard target:
 
 - Maximize token rate.
+- Every reported result must be reproducible from the recorded commit, branch,
+  command, env, cgroup setup, cold-start method, model/expert-pack paths, and
+  exact prompt. Non-reproducible speedups are treated as rejected results.
 - Keep total host RAM below 16 GB, including process RSS, allocator overhead,
   page cache, pinned host buffers, mmap cache, and any helper process memory.
 - Use as much VRAM as possible without causing graph/cache instability, and
@@ -64,6 +67,14 @@ that violates any one gate is rejected even if token rate improves.
      clean machine to rerun it: commit, branch, command, env, model path, expert
      pack path, cgroup/memory setup, cold-start method, GPU model, driver/CUDA
      version, exact prompt, seed, and output.
+   - Results are not considered valid unless they can be reproduced from the
+     run directory alone plus the referenced git commit and model/expert-pack
+     files. This applies to baselines, diagnostics, rejected attempts, and
+     accepted improvements.
+   - A reported improvement must be confirmed by a second cold-start run with
+     the same recorded recipe before it can become the new SOTA. If the repeat
+     does not reproduce the gain within normal run-to-run noise, mark the first
+     run as diagnostic and do not build on it.
    - A single lucky run is not accepted. For small changes, run at least one
      cold-start validation plus one repeat. For large token-rate gains, run the
      three-run `-n 96` semantic gate.
@@ -115,6 +126,7 @@ Each run directory must contain:
 - `README.md`: short reproduction recipe from a clean checkout.
 - `command.txt`: exact command, git commit, branch, model path, expert pack path,
   prompt, seed, and sampling parameters.
+- `script.sh`: executable one-command reproduction script for the exact run.
 - `env.txt`: all `GGML_*`, CUDA, cgroup, and memory-related env vars.
 - `stdout.txt` and `stderr.txt`.
 - `answer.txt`: exact generated answer.
@@ -138,6 +150,9 @@ Each run directory must contain:
   "commit": "",
   "branch": "",
   "reproduction_readme": "",
+  "reproduction_script": "",
+  "reproduction_status": "unverified",
+  "repeat_run_dir": "",
   "cold_start": true,
   "cold_start_method": "",
   "host_ram_peak_gib": 0,
@@ -197,6 +212,13 @@ After every implementation patch:
    cold-start, reproducibility, and quality gates, commit and push immediately.
 7. If any hard gate fails, revert the patch before continuing and record the
    failed run as rejected.
+
+Reproducibility is a hard output requirement, not an optional documentation
+task. Each experiment must leave enough artifacts for the same command to be
+rerun later without relying on shell history, warm page cache, local temporary
+state, or undocumented environment variables. A result that cannot be rerun from
+its `script.sh`, `command.txt`, `env.txt`, git commit, model path, expert-pack
+path, and cgroup/cold-start notes is rejected even if its token rate is higher.
 
 ## Phase 0: cold 16GB baseline
 
