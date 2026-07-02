@@ -15810,3 +15810,60 @@ Rollback:
 
 - Env-only failure needs no source revert.
 - If n32 is slower, reject Phase 7AD and do not continue to n96.
+
+Phase 7AD result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-130140Z-n32-phase7ad-profile-preload-no-protect`.
+- runner: `/tmp/run_phase7ad_repro.sh`.
+- git head: `122b44dc6af05e0b08cd8eeec7b8d28c7a64221f`.
+- env delta over Phase 7P:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-124507Z-n32-phase7ab-sota-route-trace/route-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=0
+```
+
+- profile activity: loaded `13996` entries and preloaded many tensors.
+- quality: pass; answer starts
+  `France is a country in Western Europe known for its rich history, culture...`.
+- TTFT: `74981.37 ms`, within gate.
+- decode: `40579.58 ms / 31`, `0.76 tok/s`.
+- comparison: slower than Phase 7P n32 confirm `37379.97 ms / 31` by
+  `3199.61 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, pass.
+- read path: `read_failures=0`, pass.
+- cache:
+  - global hit rate `53.9%`;
+  - down slots `806`, hit rate `74.1%`, preloads `4184`;
+  - upgate slots `1679`, hit rate `45.0%`, preloads `1336`.
+- pinned staging:
+  - main host stage `27818.158 ms`, H2D `4893.003 ms`;
+  - gate host stage `872.733 ms`, H2D `404.630 ms`.
+- up/gate profile:
+  - event total `14.164 ms/call`, but wall `16.399 ms/call`,
+    wall_gap `2.235 ms/call`.
+- down profile:
+  - total `40.144 ms/call`;
+  - cuda_batch `3.499 ms/call`;
+  - fallback_t0 `36.577 ms/call`.
+
+Interpretation:
+
+- The profile preload mechanically increased hit rate a little, but it injected
+  enough preload/staging/cache-order overhead to make decode much slower.
+- The wall gaps show that event-local kernel/stage counters are not the full
+  story: preload work and cache perturbation increased end-to-end call wall
+  time even while some event totals improved.
+- This reproduces the earlier Phase 2J lesson under the current SOTA: broad
+  route-profile VRAM preload is not a useful decode optimization for this
+  workload.
+
+Decision:
+
+- Reject Phase 7AD.
+- Do not run n32 confirm or n96.
+- Keep Phase 7P as SOTA.
+- Do not continue broad profile preload variants unless the preload is made much
+  narrower and the theoretical upper bound exceeds its measured wall-gap cost.
