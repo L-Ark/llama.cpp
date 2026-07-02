@@ -1960,6 +1960,19 @@
 - `gap_analysis`: The DONTNEED probe lowered traced gate `src0_ms` versus the pushed top4 reference, but end-to-end token rate regressed from `2.3` to `2.0` and file refaults increased versus top4 (`~6.67M -> ~8.86M`). The extra barriers and dropping up/down pages cause more costly refault/reload behavior than they save in reclaim pressure.
 - `rollback_status`: source patch reverted and clean rebuild completed; binary reports `version: 9110 (d42453b2e)`. Current accepted SOTA remains top4 `2.3 tok/s`.
 
+### 当前执行 attempt：expert-keep-top3-late20-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-late20-top4-rest`
+- `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
+- `status`: planned
+- `hypothesis`: Global top3 and early-layer top3 are too aggressive for France output quality, but the failure mode may be layer-location dependent. Keeping layers `0-19` at the accepted top4 policy while pruning only later CPU-MoE layers `20-39` to top3 may save roughly half of the top4->top3 up/down fallback work while preserving enough early-layer representation quality for a coherent short France paragraph.
+- `theoretical_upper_bound`: Global top3 versus top4 has a rough additional bound of about `12.9s` wall reduction before overhead/page effects. Applying top3 to the later half of 40 CPU-MoE layers gives a coarse bound near `6.4s`, so token rate could land in the `2.4-2.6 tok/s` range if correctness holds. Real gain is bounded by gate streaming, non-expert work, output length, and layer imbalance.
+- `implementation`: Reintroduce a default-off layer-selective override in `ggml/src/ggml-cpu/ggml-cpu.c`: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=20-39` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` override `GGML_MOE_KEEP_TOPK_UPDOWN=4` only for matching `blk.<layer>.ffn_up_exps` and `blk.<layer>.ffn_down_exps`. Unset env preserves current top4 SOTA behavior.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=20-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
+- `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected. If accepted, immediately write full reproduction evidence, commit/push source and records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
