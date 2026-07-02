@@ -2313,6 +2313,20 @@
 - `gap_analysis`: Coalescing the allocation lock path preserved correctness and cache behavior but did not improve token rate. The trace total regressed slightly versus the current SOTA reproduction (`26450.962 -> 26744.375`) and `eval_tok_s` tied `2.6`, so the saved mutex path is not a first-order bottleneck under cold 16GB conditions.
 - `rollback_status`: source patch reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-cpu-fallback-chunk32
+
+- `attempt_id`: `20260702-late10-cpu-fallback-chunk32`
+- `attempt_kind`: `implementation/cpu-fallback-scheduling`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Current late10 SOTA has exhausted several gate stream/cache/page-advice/launch-overhead probes. Historical CPU chunk trace showed up/down CPU fallback as a major trace-outside component, and current source still uses `chunk_size=16` for multi-row fallback cases. Earlier chunk32 was only tested on the old `1.6 tok/s` baseline, not on the accepted late10 top3 SOTA.
+- `hypothesis`: Reintroducing default-off `GGML_MOE_CPU_CHUNK_SIZE=32` for multi-row CPU fallback under the accepted late10 top3 config may reduce atomic scheduling and small chunk overhead in remaining `ffn_up_exps` / `ffn_down_exps` CPU fallback without changing arithmetic. The accepted top3 routing has fewer fallback experts than the old baseline, so the tradeoff may differ.
+- `theoretical_upper_bound`: This cannot reduce gate stream `src0_ms≈24.2s` or cache misses. It can only reduce CPU fallback scheduling/compute overhead outside the gate trace. If current up/down fallback still contributes tens of seconds, reducing chunk scheduling overhead could recover low single-digit seconds; if arithmetic or page faults dominate, token rate will tie. Promote only if `eval_tok_s > 2.6`.
+- `implementation`: Add default-off env `GGML_MOE_CPU_CHUNK_SIZE=<N>` in both CPU `mul_mat_id` chunk-size sites, preserving current behavior by default and preserving `chunk_size=64` for `nr0 == 1 || nr1 == 1`. Test with `N=32`.
+- `test_config`: patched source, `GGML_MOE_CPU_CHUNK_SIZE=32`, accepted late10 traced config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, trace enabled, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache hit/miss behavior remains consistent with accepted late10, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache behavior diverges unexpectedly, revert source and clean rebuild. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
