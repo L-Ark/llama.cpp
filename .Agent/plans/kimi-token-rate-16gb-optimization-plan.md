@@ -16068,3 +16068,78 @@ Decision:
 - New accepted n96 range: `0.85-0.87 tok/s`, best confirmed raw decode
   `88889.08 ms / 77`.
 - Commit and push this plan/config record immediately.
+
+## Phase 7AF - post-SQPOLL VRAM 15200 retest
+
+Design timestamp: 2026-07-02 15:25 UTC.
+
+Reason:
+
+- Phase 7S rejected `VRAM_MIB=15200` under Phase 7P because the first fully
+  reproducible fixed n32 run was slower.
+- Phase 7AE changed the accepted runtime by enabling `GGML_MOE_IO_SQPOLL=1`,
+  reducing io_uring submit overhead and improving n32/n96 wall time.
+- Since cache expansion and IO scheduling interact through host_stage/H2D and
+  miss timing, `15200 MiB` should be tested once under the new SOTA before being
+  ruled out.
+
+Current accepted SOTA for comparison:
+
+- env delta: `GGML_MOE_IO_SQPOLL=1`.
+- n32:
+  - first `36687.31 ms / 31`;
+  - confirm `36973.83 ms / 31`.
+- n96:
+  - first `90099.60 ms / 77`;
+  - confirm/best `88889.08 ms / 77`.
+
+Hypothesis:
+
+- Raising `GGML_MOE_VRAM_CACHE_MIB` from `15000` to `15200` adds about `200 MiB`
+  of VRAM cache while keeping host RAM unchanged.
+- With split cache and `UPGATE_PCT=60`, this is roughly `120 MiB` more upgate
+  cache and `80 MiB` more down cache:
+  - about `22` extra upgate slots;
+  - about `10` extra down slots.
+- The expected gain is small. It can only be accepted if it reproduces under the
+  stricter Phase 7AE comparison.
+
+Risk:
+
+- Phase 7S showed that extra slots can improve hit rate while still slowing
+  decode due to changed placement, staging variance, or kernel/profile timing.
+- If `15200` again slows n32, reject immediately and do not test `15400`.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7ae_repro.sh`.
+- Set `VRAM_MIB=15200`.
+- Keep `GGML_MOE_IO_SQPOLL=1` and every accepted Phase 7AE env.
+- Run strict cold n32.
+- Continue only if n32 beats the best accepted Phase 7AE n32
+  `36687.31 ms / 31` and all gates pass.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show the larger cache helps rather than merely changing noise.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower than `36687.31 ms / 31`, reject Phase 7AF and keep
+  Phase 7AE as SOTA.
