@@ -67,6 +67,9 @@ that violates any one gate is rejected even if token rate improves.
      clean machine to rerun it: commit, branch, command, env, model path, expert
      pack path, cgroup/memory setup, cold-start method, GPU model, driver/CUDA
      version, exact prompt, seed, and output.
+   - All reported benchmark conclusions must be reproducible. A run that cannot
+     be reproduced from the recorded artifacts is only a diagnostic observation,
+     not a result that can guide SOTA selection or further optimization.
    - Results are not considered valid unless they can be reproduced from the
      run directory alone plus the referenced git commit and model/expert-pack
      files. This applies to baselines, diagnostics, rejected attempts, and
@@ -16420,6 +16423,811 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AM - SQPOLL io_uring depth 16 retest
+
+Design timestamp: 2026-07-02 18:50 UTC.
+
+Reason:
+
+- Phase 7E rejected `GGML_MOE_IO_DEPTH=16` before the accepted SQPOLL runtime.
+- Phase 7AE later enabled `GGML_MOE_IO_SQPOLL=1`, which changes the submit/wait
+  cost model and made `IO_DEPTH=8`, `REFILL_BATCH=4` the current accepted SOTA.
+- Phase 7AG tested larger refill batch under SQPOLL but kept `IO_DEPTH=8`; it
+  improved n32 but failed n96 because pinned host stage rose.
+- The remaining accepted Phase 7AE n96 bottleneck still includes:
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`.
+
+Bottleneck:
+
+- With `IO_DEPTH=8`, Phase 7AE n96 reports `inflight_avg` only around `2.6`,
+  which means the queue is not full on average.
+- However, a deeper queue may still help short bursts where refills are blocked
+  by completions or route ordering.
+- It may also hurt by increasing resident staging pressure, completion latency,
+  or host scheduling contention. The expected gain is therefore small and must
+  reproduce.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+```
+
+- Keep every other accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- If depth 16 only removes wait gaps, the maximum possible visible saving is
+  bounded by the accepted n96 `iouring_wait_us=19.19 s`.
+- Because `inflight_avg` is only about `2.6`, depth 16 cannot remove the whole
+  wait bucket. A realistic upper bound is `0.5-1.5 s` on n96 from fewer
+  transient queue-empty gaps or smoother refill timing.
+- If deeper queueing increases contention or makes host-stage wait longer, it
+  should fail at n32 or n96 and be rejected.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7am_repro.sh` from the Phase 7AL runner.
+- Parameterize `IO_DEPTH`, defaulting to `16`, and restore
+  `IO_BYTES=8388608`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 IO_DEPTH=16 IO_BYTES=8388608
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AM cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show lower wait/host-stage or a clear overlap explanation. If
+  n96 is slower even after n32 improves, reject.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AM.
+
+Phase 7AM result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7am_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_BYTES=8388608
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-144643Z-n32-phase7am-sqpoll-depth16`.
+- env validation:
+  - `env.txt` has `GGML_MOE_IO_DEPTH=16`;
+  - `env.txt` has `GGML_MOE_IO_BYTES=8388608`;
+  - `git.txt` records clean HEAD `9c92fbcc7`.
+- quality: pass; output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- TTFT: `59502.04 ms`.
+- decode: `37944.53 ms / 31`, `0.82 tok/s`.
+- comparison: slower than Phase 7AE best n32 `36687.31 ms / 31` by
+  `1257.22 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- fallback artifact:
+  - `fallback-profile.csv`, `840 KiB`;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- expert-pack io_uring:
+  - `iouring_reads=6620`;
+  - `iouring_bytes=44250759168`;
+  - `iouring_submit_us=47588`;
+  - `iouring_wait_us=7653473`;
+  - `inflight_avg=2.56`, `inflight_max=8`;
+  - `batch_hist=1:284,2-4:1592,5-8:314,9-16:0,17-32:0,gt32:0`.
+- pinned main:
+  - host stage `25388.116 ms`;
+  - H2D `4569.484 ms`;
+  - iouring `inflight_avg=2.80`, `inflight_max=8`.
+- up/gate total: `15.160 ms/call`.
+- down total: `31.264 ms/call`, fallback_t0 `28.494 ms`.
+
+Interpretation:
+
+- The run passed correctness, TTFT, RAM, and read-path gates, but wall decode
+  regressed on the first cold n32 run.
+- Although `GGML_MOE_IO_DEPTH=16` was present in the env, observed
+  `inflight_max` stayed at `8` and the batch histogram had no `9-16` bucket.
+  Under the current scheduler, queue depth is effectively limited by staging
+  slots / batch shape rather than the io_uring depth env alone.
+- Therefore this experiment does not reduce the visible wait/host-stage
+  bottleneck and should not continue to n32 confirmation or n96.
+
+Decision:
+
+- Reject Phase 7AM.
+- No source rollback is required because the experiment was env-only.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AN - enable Q4_0 down compact GPU batch path
+
+Design timestamp: 2026-07-02 19:05 UTC.
+
+Reason:
+
+- Current fallback profiles repeatedly show `decode,type=2`, where type `2` is
+  `GGML_TYPE_Q4_0`.
+- Example rejected Phase 7AM n32:
+  - down total `31.264 ms/call`;
+  - down `fallback_t0=28.494 ms/call`;
+  - top fallback names include multiple `src0_type=2` down tensors with
+    `eligible=0` and `unsupported=31`.
+- Earlier n96 SOTA records showed `decode,type=2` around `8.067 GiB` and
+  `6.754 s`. This is one of the remaining real decode buckets after expert-pack
+  streaming, SQPOLL, split VRAM cache, and mmap drops.
+
+Current code finding:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` excludes `GGML_TYPE_Q4_0` from
+  `moe_stream_type_supported()`.
+- The compact MMVQ launch wrapper also excludes Q4_0, even though the generic
+  CUDA MMQ/MMVQ implementation already has Q4_0 vecdot and `mul_mat_q` cases.
+- The Q8_K reference down path currently handles `Q3_K` and `IQ4_XS` only. Do
+  not route Q4_0 through that path in this phase because its custom kernel does
+  not implement a Q4_0 block-sum branch.
+
+Hypothesis:
+
+- Add Q4_0 only to the regular MoE stream compact MMVQ support path:
+  - `moe_stream_type_supported()`;
+  - `launch_moe_mmvq_compact_batch()` type switch.
+- Keep Q4_0 out of `down_q8k_candidate`.
+- Do not change routing, cache sizing, expert-pack IO, quantization, prompt
+  template, generation args, or env.
+- If the generic MMVQ helper handles Q4_0 correctly, residual Q4_0 down experts
+  can move from CPU fallback to GPU batch/cache. This should reduce fallback
+  time and may improve token rate.
+
+Theoretical upper bound:
+
+- Maximum visible n96 saving is bounded by the prior measured Q4_0 decode
+  fallback bucket, about `6-7 s`.
+- Phase 7AE n96 confirm decode is `88889.08 ms / 77`. Removing all Q4_0
+  fallback wait would give about `82.1 s / 77`, or roughly `0.94 tok/s`.
+- Realistic upper bound is lower because:
+  - Q4_0 GPU work still costs kernel time;
+  - some Q4_0 experts may miss VRAM cache and still require staging;
+  - moving work to GPU may interfere with up/gate/down overlap.
+- A useful target is `1-4 s` n96 reduction if Q4_0 fallback is material and GPU
+  compact MMVQ is fast enough.
+
+Implementation:
+
+1. Update `moe_stream_type_supported()` to include `GGML_TYPE_Q4_0`.
+2. Update `launch_moe_mmvq_compact_batch()` to allow `GGML_TYPE_Q4_0`.
+3. Do not add Q4_0 to `launch_moe_iq3_xxs_q8k_batch()` or the
+   `down_q8k_candidate` allowed types.
+4. Build `build-cuda-batch/bin/llama-completion`.
+5. Run a strict cold n4 smoke first to catch CUDA launch errors and output
+   corruption before a full n32.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Source diff must be recorded in `git.txt`; accepted source must be committed
+  and pushed immediately after n96 confirmation.
+
+Acceptance:
+
+- n4 smoke must pass quality, TTFT, RAM, read path, and no CUDA errors.
+- n32 must beat accepted Phase 7AE best `36687.31 ms / 31` twice.
+- n96 must beat accepted Phase 7AE best `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Fallback profile should show reduced or eliminated `decode,type=2` Q4_0
+  fallback. If decode gets faster without that evidence, inspect before
+  accepting.
+
+Rollback:
+
+- If build fails, CUDA launch fails, n4 output is wrong, n32 regresses, n32
+  improvement does not reproduce, n96 fails, RAM/TTFT gates fail, or
+  `decode,type=2` is not reduced, revert the source change and keep only the
+  plan/run record.
+
+## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
+
+Design timestamp: 2026-07-02 17:35 UTC.
+
+Reason:
+
+- Phase 7AF showed that increasing VRAM cache from `15000` to `15200` under
+  SQPOLL was not reproducible.
+- Several accepted/rejected runs sit exactly at the 16GB cgroup memory peak:
+  `memory.peak=15899996160`. File cache and reclaim variance remain visible.
+- A slightly smaller VRAM cache may reduce staging/page-cache pressure or
+  allocation side effects enough to improve cold-run stability, even though it
+  will also reduce cache hit rate.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm still spends:
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - upgate/down cache hit rates `43.2%` / `73.4%`.
+- This experiment does not target fixed compute. It tests whether a small
+  reduction in cache pressure improves exposed staging/reclaim enough to
+  offset the extra misses.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14900
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- Reducing cache by `100 MiB` removes about:
+  - `60 MiB / 5.36 MiB ~= 11` upgate slots;
+  - `40 MiB / 7.44 MiB ~= 5` down slots.
+- The cache-hit loss should be very small but nonzero.
+- A win is only possible if the smaller cache reduces exposed host-stage,
+  iouring wait, page-cache reclaim, or allocation variance by more than the
+  extra miss cost.
+- Expected gain is at most sub-second on n32 and `0-2 s` on n96. Any larger
+  gain must be explained by counters or treated as variance until confirmed.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7ae_repro.sh`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=14900 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AJ cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters should show either lower exposed staging/reclaim symptoms or no
+  meaningful cache-miss penalty.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately and keep Phase 7AE as
+  SOTA.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AJ.
+
+Phase 7AJ result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ae_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14900
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140950Z-n32-phase7aj-sqpoll-vram14900`.
+- quality: pass.
+- TTFT: `66079.87 ms`.
+- decode: `36341.66 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `345.65 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `43.2%`;
+  - down slots `801`, hit rate `73.6%`;
+  - total hit rate `52.5%`.
+- pinned main: host stage `24353.376 ms`, H2D `4578.966 ms`.
+- up/gate total: `14.666 ms/call`.
+- down total: `34.110 ms/call`, fallback_t0 `31.299 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-141222Z-n32-phase7aj-sqpoll-vram14900-confirm`.
+- quality: pass.
+- TTFT: `59692.49 ms`.
+- decode: `36403.44 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 by `283.87 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `43.2%`;
+  - down slots `801`, hit rate `73.6%`;
+  - total hit rate `52.5%`.
+- pinned main: host stage `24853.746 ms`, H2D `4581.794 ms`.
+- up/gate total: `15.052 ms/call`.
+- down total: `30.676 ms/call`, fallback_t0 `27.906 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-141540Z-n96-phase7aj-sqpoll-vram14900`.
+- quality: pass; full answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `58325.14 ms`.
+- decode: `91176.17 ms / 77`, `0.84 tok/s`.
+- comparison: slower than Phase 7AE best n96 `88889.08 ms / 77` by
+  `2287.09 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- cache:
+  - upgate slots `1668`, hit rate `42.9%`;
+  - down slots `801`, hit rate `73.3%`;
+  - total hit rate `52.2%`.
+- expert-pack io_uring:
+  - `iouring_submit_us=105881`;
+  - `iouring_wait_us=19303145`.
+- pinned main: host stage `61912.076 ms`, H2D `11413.414 ms`.
+- up/gate total: `14.475 ms/call`.
+- down total: `15.417 ms/call`, fallback_t0 `12.612 ms`.
+
+Interpretation:
+
+- `14900 MiB` reproducibly improves n32, but it does not generalize to n96.
+- The smaller cache lowers total hit rate at n96 from Phase 7AE confirm
+  `53.4%` to `52.2%`, with upgate hit rate down to `42.9%`.
+- The n96 pinned main host stage rises to `61912.076 ms` versus Phase 7AE
+  confirm `60514.789 ms`, while H2D remains about the same. The reduced cache
+  does not relieve critical-path staging pressure enough to offset extra misses.
+- This matches the risk model: small VRAM reductions may make n32 look better
+  but hurt longer decode where cache-hit loss accumulates.
+
+Decision:
+
+- Reject Phase 7AJ.
+- Do not run n96 confirmation.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AK - SQPOLL read-order sort-off retest
+
+Design timestamp: 2026-07-02 17:55 UTC.
+
+Reason:
+
+- The accepted Phase 7AE runtime inherits `GGML_MOE_IO_SORT_OFFSET=1` from the
+  earlier down parallel staging work.
+- Offset sorting can improve physical read locality, but it can also reorder
+  miss jobs relative to route/staging order and change overlap with CUDA H2D,
+  current-down overlap, and SQPOLL completion timing.
+- Phase 7AE changed io_uring behavior with `GGML_MOE_IO_SQPOLL=1`; there is no
+  current-SOTA A/B record for sort-on versus sort-off under SQPOLL.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm:
+  - decode `88889.08 ms / 77`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack batch histogram remains mostly `2-4`.
+- Sort-off can only help if preserving route/submission order improves overlap
+  more than offset sorting improves storage locality.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+# remove from env.txt
+GGML_MOE_IO_SORT_OFFSET=1
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- The visible n96 expert-pack io_uring wait bucket is about `19.2 s`, but most
+  of that is real read/H2D dependency and cannot be removed by reordering.
+- If sort-off improves overlap or reduces head-of-line blocking by `2-5%` of
+  the visible wait/host-stage path, the possible n96 gain is roughly
+  `0.4-1.5 s`.
+- If offset sorting is actually providing locality, sort-off will increase wait
+  or host-stage time and should be rejected after n32 or n96.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ak_repro.sh` from the Phase 7AE runner.
+- Add a `SORT_OFFSET` switch defaulting to `0`.
+- When `SORT_OFFSET=0`, remove `GGML_MOE_IO_SORT_OFFSET=1` from `env.txt`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 SORT_OFFSET=0
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AK cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show either lower expert-pack wait/host-stage or another
+  plausible overlap improvement. If n96 is slower, reject even if n32 improves.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AK.
+
+Phase 7AK result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ak_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+# removed from env.txt
+GGML_MOE_IO_SORT_OFFSET=1
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-142331Z-n32-phase7ak-sqpoll-sortoff`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass.
+- TTFT: `81766.67 ms`.
+- decode: `36590.53 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `96.78 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=46422`;
+  - `iouring_wait_us=7479901`;
+  - `inflight_avg=2.60`, `inflight_max=8`.
+- pinned main: host stage `23946.446 ms`, H2D `4560.043 ms`.
+- up/gate total: `14.329 ms/call`.
+- down total: `37.544 ms/call`, fallback_t0 `34.896 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-142658Z-n32-phase7ak-sqpoll-sortoff-confirm`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass.
+- TTFT: `68413.60 ms`.
+- decode: `36639.29 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 by `48.02 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=39446`;
+  - `iouring_wait_us=7910600`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- pinned main: host stage `24771.533 ms`, H2D `4551.955 ms`.
+- up/gate total: `15.131 ms/call`.
+- down total: `35.359 ms/call`, fallback_t0 `32.609 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-143001Z-n96-phase7ak-sqpoll-sortoff`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass; full answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `65429.18 ms`.
+- decode: `90520.15 ms / 77`, `0.85 tok/s`.
+- comparison: slower than Phase 7AE best n96 `88889.08 ms / 77` by
+  `1631.07 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=119128`;
+  - `iouring_wait_us=19334392`;
+  - `inflight_avg=2.62`, `inflight_max=8`.
+- pinned main: host stage `61295.767 ms`, H2D `11421.991 ms`.
+- up/gate total: `14.109 ms/call`.
+- down total: `16.802 ms/call`, fallback_t0 `13.872 ms`.
+
+Interpretation:
+
+- Sort-off gives a small n32 benefit, but the n32 gain is only `48-97 ms` and
+  does not scale to n96.
+- n96 expert-pack wait is not lower than Phase 7AE confirm, and pinned host
+  stage is higher than Phase 7AE confirm (`61295.767 ms` vs `60514.789 ms`).
+- Keeping offset sorting remains better for the longer decode target.
+
+Decision:
+
+- Reject Phase 7AK.
+- Do not run n96 confirmation.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AL - SQPOLL io_uring chunk size 4MiB retest
+
+Design timestamp: 2026-07-02 18:15 UTC.
+
+Reason:
+
+- Accepted Phase 7AE uses `GGML_MOE_IO_BYTES=8388608`.
+- Kimi hot expert sizes are around `5.36 MiB` for up/gate and `7.44 MiB` for
+  down. With `8 MiB`, most miss loads are one io_uring read per expert.
+- Smaller `IO_BYTES` may split larger down experts into multiple completions,
+  potentially improving overlap and queue utilization under SQPOLL. It may also
+  simply double read count and overhead.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm:
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack batch histogram mostly `2-4`.
+- This experiment targets read/completion granularity only. It does not change
+  cache capacity, routing, tensor values, CUDA kernels, or math.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_IO_BYTES=4194304
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache, current down overlap, down parallel staging, pack mmap
+    fallback, dense/expert mmap drops, pinned slots `8`, and `THREADS=32`.
+
+Theoretical upper bound:
+
+- If 4MiB chunks allow earlier partial completions to feed H2D overlap, n96
+  might save a fraction of the visible `~19 s` io_uring wait bucket.
+- Realistic upside is small, about `0.5-2 s` on n96.
+- If read count doubles without better overlap, submit/wait calls and staging
+  overhead will rise and decode will regress. This is the expected failure mode.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7al_repro.sh` from the Phase 7AE runner.
+- Parameterize `IO_BYTES`, defaulting to `4194304`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 IO_BYTES=4194304
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AL cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show lower wait/host-stage or better overlap; if read count
+  rises without wall-clock gain, reject.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AL.
+
+Phase 7AL result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7al_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_IO_BYTES=4194304
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-143748Z-n32-phase7al-sqpoll-iobytes4m`.
+- env validation:
+  - `command.txt` records `IO_BYTES=4194304`;
+  - `env.txt` has `GGML_MOE_IO_BYTES=4194304`.
+- quality: pass; output prefix:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- TTFT: `70676.12 ms`.
+- decode: `37476.10 ms / 31`, `0.83 tok/s`.
+- comparison: slower than Phase 7AE best n32 `36687.31 ms / 31` by
+  `788.79 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_reads=6620`;
+  - `iouring_bytes=44250759168`;
+  - `iouring_submit_us=48644`;
+  - `iouring_wait_us=7737131`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- pinned main: host stage `24724.039 ms`, H2D `4558.309 ms`.
+- up/gate total: `14.778 ms/call`.
+- down total: `35.684 ms/call`, fallback_t0 `32.845 ms`.
+
+Interpretation:
+
+- The 4MiB setting did not change the observed read count or total expert-pack
+  bytes for this n32 run (`6620` reads, `44.25 GB`), so this path is not
+  actually gaining useful finer-grained completion behavior.
+- Wall decode regressed on the first cold n32 run while all correctness/RAM/read
+  gates passed. Under the reproducibility rule, a slower first candidate stops
+  the phase immediately; no n32 confirmation or n96 run is warranted.
+
+Decision:
+
+- Reject Phase 7AL.
+- No source rollback is required because the experiment was env-only.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
@@ -16738,3 +17546,129 @@ Rollback:
 - If fallback CSV is missing or empty, reject the run as invalid.
 - If n32 does not reproducibly beat Phase 7AE best, reject Phase 7AI.
 - If n32 passes but n96 fails, reject Phase 7AI and keep Phase 7AE as SOTA.
+
+Phase 7AI initial n32 result - invalid, source adjustment required:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-135545Z-n32-phase7ai-min-profile-sqpoll`.
+- env validation:
+  - `env.txt` kept only
+    `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv` from
+    the Kimi CPU profile family;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`, name/eligibility profile,
+    `GGML_MOE_BATCH_PROFILE=1`, and `GGML_MOE_STREAM_DECLINE_DEBUG=1` were
+    absent.
+- hard gates:
+  - quality pass;
+  - TTFT `64045.31 ms`;
+  - decode `35235.59 ms / 31`, `0.88 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- invalid artifact:
+  - `fallback-profile.csv` was missing.
+- root cause:
+  - `ggml_kimi_cpu_moe_fallback_profile_record()` and the fallback profile data
+    structure are independent of aggregate CPU profile;
+  - however the down fallback timing/recording block is still wrapped by
+    `if (kimi_cpu_moe_profile && ith == 0)`;
+  - therefore setting only `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` does not
+    actually record fallback rows.
+
+Implementation adjustment before any promotion:
+
+1. In `ggml/src/ggml-cpu/ggml-cpu.c`, introduce a local
+   `kimi_cpu_moe_fallback_profile` boolean in the down MoE path, using
+   `ggml_kimi_cpu_moe_fallback_profile_enabled()`.
+2. Start the fallback timer when either aggregate CPU profile or fallback CSV
+   profile is enabled.
+3. After the down CPU fallback loop, if `ith == 0` and either profile mode is
+   enabled:
+   - compute `kimi_cpu_moe_fallback_us`;
+   - record fallback CSV rows when fallback CSV profile is enabled;
+   - update aggregate CPU profile counters only when
+     `GGML_KIMI_CPU_MOE_PROFILE=1`.
+4. Preserve default behavior when neither env is set:
+   - no timestamp;
+   - no fallback CSV;
+   - no aggregate profile.
+5. Rebuild and rerun n32. The previous `35235.59 ms / 31` run remains invalid
+   and cannot be used as acceptance evidence.
+
+Phase 7AI result after fallback CSV fix - rejected:
+
+- source delta tested:
+  - `ggml/src/ggml-cpu/ggml-cpu.c` down fallback CSV timing/recording was
+    decoupled from aggregate `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - no math, routing, cache, IO, CUDA, or generation-setting changes.
+- build: `cmake --build build-cuda-batch -j 32 --target llama-completion`,
+  success.
+
+n32 candidate after source adjustment:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140059Z-n32-phase7ai-min-profile-sqpoll-fallback-fix`.
+- env validation:
+  - only `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` remains from the Kimi CPU
+    profile family;
+  - aggregate CPU profile, name/eligibility profile, batch profile, and decline
+    debug are absent.
+- fallback artifact:
+  - `fallback-profile.csv`, `859752` bytes;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- quality: pass.
+- TTFT: `59917.94 ms`.
+- decode: `36395.18 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `292.13 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=25037`;
+  - `iouring_wait_us=7978130`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- cache:
+  - down `806` slots, hit rate `73.6%`;
+  - upgate `1679` slots, hit rate `43.7%`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-140327Z-n32-phase7ai-min-profile-sqpoll-fallback-fix-confirm`.
+- fallback artifact:
+  - `fallback-profile.csv`, `860136` bytes;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- quality: pass.
+- TTFT: `71719.66 ms`.
+- decode: `37064.53 ms / 31`, `0.84 tok/s`.
+- comparison:
+  - slower than Phase 7AE best n32 `36687.31 ms / 31` by `377.22 ms`;
+  - slower than the 7AI candidate by `669.35 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=25556`;
+  - `iouring_wait_us=7816890`;
+  - `inflight_avg=2.58`, `inflight_max=8`.
+
+Interpretation:
+
+- The fallback CSV fix worked and preserved the required artifact in
+  minimal-profile mode.
+- The token-rate improvement did not reproduce. This matches earlier Phase 7Y:
+  minimal-profile can produce a favorable single n32 run, but the effect is
+  within cold-run variance and does not satisfy the promotion gate.
+- Because n32 confirmation failed, do not run n96.
+
+Decision:
+
+- Reject Phase 7AI.
+- Revert the tested `ggml/src/ggml-cpu/ggml-cpu.c` source change before
+  continuing.
+- Keep Phase 7AE as the current accepted SOTA:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
