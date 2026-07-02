@@ -2045,7 +2045,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-late5-top4-rest`
 - `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
-- `status`: planned_before_execution
+- `status`: completed_rejected_not_sota
 - `bottleneck_basis`: Current accepted late10 SOTA trace still spends `src0_ms=24305.283ms` out of `total_ms=26552.328ms` in streamed gate expert source loading, while the late20->late10 expansion reduced trace rows, cache misses, major faults, and end-to-end wall time without harming France correctness. The next highest-leverage low-risk probe is therefore a small additional layer-range expansion before changing IO/prefetch code.
 - `hypothesis`: Expanding the top3 override from `blk.10-39` to `blk.5-39` prunes five additional CPU-MoE layers while keeping the first five layers at top4. This may reduce up/down fallback work and indirectly reduce page/refault pressure enough to move beyond the current rounded `2.6 tok/s`; correctness risk is higher because this enters earlier representation layers.
 - `theoretical_upper_bound`: Using the previous coarse global top4->top3 bound of about `12.9s`, the incremental bound for five more layers is `12.9s * 5/40 ≈ 1.6s` before overhead and layer imbalance. Since current pushed late10 elapsed time is `89.48s`, the optimistic wall-time floor for this isolated change is around `87.9s`; if output length stays similar this could only modestly improve token rate, likely toward `2.7 tok/s` rather than a large jump. The hard correctness gate dominates this probe.
@@ -2053,6 +2053,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change is required for this config probe. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep late10 `2.6 tok/s` SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T005829Z-20260702_expert_keep_top3_late5_top4_rest/france-cpu40-vram0gb`.
+- `result`: rejected. `eval_tok_s=2.5`, `prompt_tok_s=1.0`, `TTFT=37436.903163ms`, `elapsed_seconds=109.94`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14977576960`, `pgmajfault=342607`, `workingset_refault_file=6465998`, `ram_ok=true`, `ram_limit_killed=false`.
+- `correctness_manual_review`: fail. The answer is broadly about France, but it is cut off mid-word at `unitary semi-pres`, so it is not a complete coherent short paragraph.
+- `trace_summary`: `rows=47876`, `cache_hits=41674`, `cache_misses=6202`, `span_ms=91059.789`, `src0_ms=30669.545`, `total_ms=33640.899`.
+- `gap_analysis`: Moving the top3 boundary earlier from `blk.10-39` to `blk.5-39` changed the generation trajectory enough to increase streamed gate misses (`4971 -> 6202`), `src0_ms` (`24305.283 -> 30669.545`), refault pressure (`workingset_refault_file=6465998`), and end-to-end elapsed time (`89.48s -> 109.94s`). The additional approximate pruning does not translate to token-rate gain and also causes truncation at the fixed `-n 192` output limit. Keep late10 as the accepted SOTA and do not expand the top3 range before layer 10 without a narrower correctness/trajectory strategy.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
