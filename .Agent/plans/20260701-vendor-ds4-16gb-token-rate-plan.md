@@ -90,6 +90,9 @@
 
 ### SOTA 记录与发布红线
 
+- **2026-07-02 用户新增硬性要求（最高优先级）：出现符合要求的新 SOTA 时，必须详细记录足以未来完全复现的所有信息，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支。该动作不能延后到后续实验之后；若没有完整复现信息、源码 commit、指定分支 push、pushed commit clean rebuild/rerun 证据，则该指标一律无效，不得称为当前 SOTA。**
+- **新 SOTA 暂停线：任何实验一旦得到更高 token rate 且同时满足 RAM（含 page cache）`<=16GB`、France 正确率和 TTFT gate，必须立即暂停继续探索，先完成 run 目录复现包、源码 commit/push、pushed commit clean rebuild/rerun。只有这些完成后，才允许恢复下一轮优化。**
+- **复现包最低粒度：未来操作者必须能只依赖 pushed source + run 记录复现指标；记录必须包含 exact source commit、remote/branch、dirty diff 为空或已纳入 commit、build command、run command、全部 env、模型文件指纹、binary/shared-library 指纹、cgroup 配置与 memory evidence、stdout/stderr、trace、summary、correctness 原文输出、人工判定、TTFT/token-rate/RAM 指标和开始/结束时间。**
 - **最高优先级硬规则：出现符合要求的新 SOTA 时，必须当场详细记录完整复现信息，并立刻 push 对应源码到 `https://github.com/wici-ai/ssd-llama.git` 的 `vendor/deepseek-token-rate-16gb` 分支，确保未来一定可以从 pushed source + run 记录完全复现；没有完成这件事的高指标一律无效。**
 - **新 SOTA 处理流程必须原子化执行：一旦某次 run 同时满足更高 token rate、16GB RAM（含 page cache）、France 正确率和 TTFT gate，必须立刻停止继续试新参数，先补齐 run 目录内的复现包、把源码和 plan/progress 记录 commit，并 push 到 `ssd` remote 的 `vendor/deepseek-token-rate-16gb` 分支；随后必须从该 pushed commit 干净重建并 rerun 通过，才允许把它写成“当前有效 SOTA”。**
 - **任何新 SOTA 都不能只停留在临时服务器、临时二进制、未提交 diff、口头汇报或单次 run 目录中；必须有 pushed source commit、clean rebuild 命令、pushed-commit rerun 结果和完整指标证据。**
@@ -2176,6 +2179,21 @@
 - `trace_summary`: `rows=47872`, `cache_hits=41515`, `cache_misses=6357`, `span_ms=90850.725`, `src0_ms=32004.770`, `dontneed_ms=1531.861`, `total_ms=34990.887`.
 - `gap_analysis`: Last10 top2 did reduce configured up/down routed experts in the latest layers, but it changed the generation trajectory enough to increase gate stream rows and misses (`35151/4971 -> 47872/6357`), widen trace span (`69920.848 -> 90850.725`), increase refault pressure (`workingset_refault_file=6462646`), and truncate the answer. Like late5/late8, this shows more aggressive pruning beyond the accepted late10 boundary can backfire by generating longer/different trajectories and more gate cache traffic. Do not pursue top2 late-layer pruning without a stronger quality-preserving strategy.
 - `rollback_status`: source change reverted and clean rebuild completed; worktree clean and binary sha256 returned to `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
+
+### 当前执行 attempt：late10-last5-top2
+
+- `attempt_id`: `20260702-late10-last5-top2`
+- `attempt_kind`: `implementation/layer-selective-approximate-pruning`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Last10 top2 was too aggressive and increased gate stream rows/misses enough to fail correctness and lose elapsed time. The accepted late10 top3 SOTA still leaves broad CPU fallback work in the latest layers, but any further pruning must be narrower than the rejected last10 top2 attempt.
+- `hypothesis`: Keep accepted late10 top3 for layers `10-34` and apply top2 only to the last five CPU-MoE layers: `0-9=>top4`, `10-34=>top3`, `35-39=>top2`. This tests whether the very latest layers tolerate one fewer up/down expert without triggering the trajectory/miss explosion seen at `30-39=>top2`.
+- `theoretical_upper_bound`: The rejected last10 top2 attempt had a coarse incremental bound of `12.9s * 10/40 ≈ 3.2s`. Restricting top2 to five layers halves that optimistic bound to about `12.9s * 5/40 ≈ 1.6s`. Because gate-stream miss count and output trajectory dominate recent failures, the practical expected gain is a small rounding chance above `2.6 tok/s`; any increase in rows/misses can erase the bound.
+- `implementation`: Reintroduce default-off second layer range support in `ggml_moe_keep_topk_for_tensor()` using `GGML_MOE_KEEP_TOPK_LAYER_RANGE2=<start>-<end>` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE2=<K>`. Existing env behavior must remain unchanged when range2 is unset.
+- `test_config`: patched source, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-34`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE2=35-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE2=2`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace shows increased rows/misses/refaults comparable to last10 top2, revert source and clean rebuild. If accepted, immediately stop all further experiments, write complete reproduction evidence, commit/push source and records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, pushed remote/branch/commit if promoted, binary sha256/build line/stat, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+- `sota_publish_requirement`: If this run becomes a compliant SOTA, it must be documented and pushed immediately to `ssd-llama` branch `vendor/deepseek-token-rate-16gb`; otherwise the result is only an unpromoted observation even if the printed token rate is higher.
 
 ## 记录与验收
 
