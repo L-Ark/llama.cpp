@@ -2008,6 +2008,18 @@
 - `gap_analysis`: Expanding top3 to `blk.15-39` kept output quality and reduced trace rows versus late20, but rounded token rate only tied current SOTA (`2.4`) and did not exceed the promote gate. It is therefore useful quality evidence for a broader late-layer pruning region, but not a new SOTA.
 - `rollback_status`: no source change. Current accepted SOTA remains late20 top3 `2.4 tok/s`.
 
+### 当前执行 attempt：expert-keep-top3-late10-top4-rest
+
+- `attempt_id`: `20260702-expert-keep-top3-late10-top4-rest`
+- `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
+- `status`: planned
+- `hypothesis`: Late15 top3 tied the current `2.4 tok/s` SOTA while preserving France output quality. Expanding the top3 override to `blk.10-39` prunes ten more layers than the promoted late20 run and five more than late15, while still preserving the first ten CPU-MoE layers at top4. This may cross the rounded token-rate boundary above `2.4`, but correctness risk increases because prior broad early-layer pruning caused truncation/repetition.
+- `theoretical_upper_bound`: Relative to late20, late10 adds ten of forty CPU-MoE layers to the top3 region. Using the coarse `12.9s` global top3-vs-top4 bound, the incremental upper bound over late20 is about `12.9s * 10/40 ≈ 3.2s` before overhead and layer imbalance. If output length remains similar, measured rate could move toward `2.5`, but only manual correctness can validate the approximation.
+- `test_config`: pushed source with layer-range support, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.4`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late20 pushed rerun by more than `20%` (`38355.541393ms * 1.2 = 46026.649672ms`).
+- `rollback`: No source change is required for this config probe. If token rate does not exceed `2.4`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep late20 `2.4 tok/s` SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
