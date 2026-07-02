@@ -1943,7 +1943,7 @@
 
 - `attempt_id`: `20260702-cpu-fallback-dontneed-top4`
 - `attempt_kind`: `source-probe/cgroup-file-cache-pressure`
-- `status`: planned
+- `status`: completed / rejected_perf_regression
 - `hypothesis`: Gate stream is not the remaining bottleneck for the historical `2.6` gap; diagnostics point to unstreamed `ffn_up_exps` / `ffn_down_exps` CPU fallback and cgroup file-page reclaim. Adding a default-off `MADV_DONTNEED` after each unstreamed CPU fallback expert finishes may reduce file-cache pressure, lower `memory.max` reclaim churn, and avoid the low-refault-but-over-RAM state observed in the sequence run.
 - `theoretical_upper_bound`: CPU fallback trace distribution captured `up+down` as the dominant non-gate work. If reclaim stalls around up/down account for tens of seconds of the old-config span gap, the hard upside could approach part of that gap. Direct advice overhead is one syscall per nonzero unstreamed expert; if the same expert is reused soon, the optimization can regress by forcing refaults. Promote only on measured token-rate improvement over current top4 `2.3 tok/s` with RAM/correctness/TTFT gates passing.
 - `implementation`: Add default-off env `GGML_MOE_CPU_DONTNEED_AFTER_EXPERT=1` in `ggml/src/ggml-cpu/ggml-cpu.c`. For tensors whose name contains `ffn_up_exps` or `ffn_down_exps`, after all CPU chunks for one `cur_a` expert finish, thread `ith==0` calls a page-aligned `madvise(..., MADV_DONTNEED)` for that expert's `src0` page range. Unset env preserves current behavior.
@@ -1951,6 +1951,14 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000` with no runner kill/OOM, France output passes manual semantic/coherence review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build fails, token rate does not improve, correctness fails, RAM gate fails, or TTFT gate fails, revert source and clean rebuild; record rejected. If accepted, immediately write complete reproduction info, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup memory files, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir_initial`: `/root/lfz/runs/vendor-ds4-16gb/20260702T001516Z-20260702_cpu_fallback_dontneed_top4/france-cpu40-vram0gb`
+- `result_initial`: rejected. `eval_tok_s=2.0`, `prompt_tok_s=0.8`, `TTFT=39546.664313ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14987567104`, `pgmajfault=381983`, `workingset_refault_file=8768343`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `run_dir_traced`: `/root/lfz/runs/vendor-ds4-16gb/20260702T001818Z-20260702_cpu_fallback_dontneed_top4_trace/france-cpu40-vram0gb`
+- `result_traced`: rejected. `eval_tok_s=2.0`, `prompt_tok_s=0.8`, `TTFT=40724.90508ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14995689472`, `pgmajfault=392356`, `workingset_refault_file=8862317`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass for both runs. France answer is semantically correct and coherent, matching the accepted top4 content pattern.
+- `trace_summary`: traced confirmation produced `rows=41400`, `cache_hits=35750`, `cache_misses=5650`, `span_ms=98958.873`, `src0_ms=25024.439`, `total_ms=27518.138`.
+- `gap_analysis`: The DONTNEED probe lowered traced gate `src0_ms` versus the pushed top4 reference, but end-to-end token rate regressed from `2.3` to `2.0` and file refaults increased versus top4 (`~6.67M -> ~8.86M`). The extra barriers and dropping up/down pages cause more costly refault/reload behavior than they save in reclaim pressure.
+- `rollback_status`: source patch reverted and clean rebuild completed; binary reports `version: 9110 (d42453b2e)`. Current accepted SOTA remains top4 `2.3 tok/s`.
 
 ## 记录与验收
 
