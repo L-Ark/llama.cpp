@@ -10647,3 +10647,334 @@ Next direction:
     footprint;
   - down path only if the new profile shows it dominates and quality can be
     protected.
+
+## Next candidate: Phase 3ZU accepted mixed-upgate runtime reprofile
+
+Design timestamp: 2026-07-03 07:10 CST.
+
+Current bottleneck:
+
+- Phase 3ZT removed the decode mixed up/gate graph fallback and improved full
+  strict `-n 96` from `0.3879 tok/s` to `0.6345 tok/s`.
+- The old bottleneck attribution is no longer valid. Up/gate generic fallback
+  should be much smaller, while down fallback, cache misses, staging, H2D, or
+  cache partition pressure may now dominate.
+
+Hypothesis:
+
+A strict cold profile of the accepted Phase 3ZT runtime will show the next
+largest compressible per-token bucket. Because the mixed path increases
+up/gate VRAM-cache footprint, the profile must explicitly compare:
+
+- up/gate CUDA batch time;
+- down CUDA batch versus down fallback time;
+- cache hit/miss and preloads;
+- pinned staging host time and H2D time;
+- declined batch reasons;
+- TTFT and quality.
+
+Execution:
+
+1. Run current committed `325b7b973` with the accepted Phase 3ZG env plus:
+   - `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`;
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - `GGML_MOE_BATCH_PROFILE=1`;
+   - graph profile enabled only if log size remains manageable.
+2. Use strict cold `-n 96`, cgroup `memory.max=15900000000`,
+   `memory.swap.max=0`, and `sync; echo 3 > /proc/sys/vm/drop_caches`.
+3. Record full run directory, metrics, exact answer, stderr counters, memory,
+   and VRAM snapshots.
+
+Theoretical bound:
+
+- Current accepted Phase 3ZT average is `1.576 s/token`.
+- Maximum possible next-stage gain is bounded by the largest measured
+  remaining per-token bucket. No implementation is allowed before this bucket
+  is measured.
+- If down fallback remains around the pre-Phase-3ZT level, it is an upper bound
+  but Q4_0 down is still rejected unless cache contention can be prevented.
+- If cache/staging dominates, a cache policy change must estimate bytes saved
+  from the measured hit/miss and expert byte sizes before implementation.
+
+Acceptance:
+
+- Build already passed at `325b7b973`.
+- Strict cold `-n 96` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Profile has enough counters to rank the next bottleneck.
+
+Rollback:
+
+- No code change in this phase. If the reprofile fails a hard gate, record it
+  as rejected evidence and rerun once to distinguish runtime noise from a
+  real regression. Do not implement another optimization until the accepted
+  runtime profile is trustworthy.
+
+Result timestamp: 2026-07-03 07:22 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile`
+
+Measured result:
+
+- Commit: `325b7b973`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.874409 GiB`.
+- TTFT: `79576.26 ms`, inside the `106331.72 ms` gate.
+- Decode: `121626.53 ms / 77 tokens = 1.5795653246753247 s/token`,
+  `0.6330855611847185 tok/s`.
+- Quality: PASS, complete coherent France paragraph ending with
+  `<|im_end|> [end of text]`.
+- Mixed up/gate path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+Profile result:
+
+- Up/gate:
+  - calls: `4621`;
+  - total: `18.387 ms/call`;
+  - CUDA batch: `18.196 ms/call`;
+  - fallback: `0.001 ms/call`;
+  - batch accepted: `4621`;
+  - batch declined: `0`.
+- Down:
+  - calls: `4798`;
+  - total: `22.753 ms/call`;
+  - CUDA batch: `5.132 ms/call`;
+  - fallback: `17.563 ms/call`;
+  - batch accepted: `4082`;
+  - batch declined: `52` prompt/multirow declines.
+- CUDA down batch profile:
+  - calls: `4082`;
+  - stage: `5.840 ms/call`;
+  - kernel: `0.110 ms/call`;
+  - D2H: `0.016 ms/call`;
+  - total: `5.992 ms/call`.
+- VRAM cache:
+  - hits: `47059`;
+  - misses: `59437`;
+  - preloads: `8095`;
+  - hit rate: `44.2%`.
+- Down prefetch:
+  - loads: `8095`;
+  - hits: `8095`;
+  - evicted_unused: `0`;
+  - useful rate: `100.0%`.
+- Pinned staging:
+  - copies: `64145`;
+  - waits: `64121`;
+  - slots: `8`;
+  - slot size: `7.44 MiB`;
+  - host_stage: `81296.308 ms`;
+  - H2D: `13334.103 ms`.
+
+Decode fallback by type from name/eligibility profile:
+
+- `src0_type=2` (`Q4_0` down):
+  - decode calls: `539`;
+  - decode total: `8.417 s`;
+  - decode fallback: `8.408 s`;
+  - decode unsupported: `539`.
+- `src0_type=11` (`Q3_K` down):
+  - decode calls: `1617`;
+  - decode total: `12.013 s`;
+  - decode fallback: `0.002 s`;
+  - decode unsupported: `0`.
+- `src0_type=23` (`IQ4_XS` down):
+  - decode calls: `924`;
+  - decode total: `5.929 s`;
+  - decode fallback: `0.001 s`;
+  - decode unsupported: `0`.
+
+Top Q4_0 down fallback layers:
+
+- `blk.6.ffn_down_exps.weight`: `1.777 s` decode fallback.
+- `blk.7.ffn_down_exps.weight`: `1.207 s`.
+- `blk.18.ffn_down_exps.weight`: `1.186 s`.
+- `blk.10.ffn_down_exps.weight`: `1.179 s`.
+- `blk.8.ffn_down_exps.weight`: `1.052 s`.
+- `blk.9.ffn_down_exps.weight`: `1.023 s`.
+- `blk.15.ffn_down_exps.weight`: `0.983 s`.
+
+Decision:
+
+- Accepted Phase 3ZT runtime remains valid.
+- The old up/gate bottleneck is resolved; up/gate fallback is effectively zero.
+- The next largest measured compressible bucket is Q4_0 down fallback,
+  totaling about `8.408 s` over the full `-n 96` decode.
+- Previous full Q4_0 down coverage was rejected in Phase 3ZO because it reduced
+  cache hit rate and increased staging/H2D/upgate contention. Do not repeat
+  broad Q4_0 enablement.
+
+## Next candidate: Phase 3ZV cache-protected Q4_0 down allowlist
+
+Design timestamp: 2026-07-03 07:28 CST.
+
+Current bottleneck:
+
+- Phase 3ZU shows all material remaining decode fallback is Q4_0 down.
+- The Q4_0 fallback appears in only seven down layers for this prompt:
+  `6,7,8,9,10,15,18`.
+- Broad Q4_0 down enablement was rejected earlier because it increased cache
+  contention and slowed decode.
+
+Hypothesis:
+
+An opt-in, down-only, layer-allowlisted Q4_0 CUDA batch path can remove the
+`8.408 s` Q4_0 decode fallback without repeating the broad Phase 3ZO
+regression. The path must be disabled by default and require an explicit
+allowlist such as:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0_LAYERS=6,7,8,9,10,15,18
+```
+
+Theoretical upper bound:
+
+- Phase 3ZU decode wall time: `121.62653 s`.
+- Measured Q4_0 decode fallback: `8.408 s`.
+- Absolute upper bound if Q4_0 fallback disappears with no added cache/staging
+  cost:
+
+```text
+121.62653 / (121.62653 - 8.408) = 1.074x
+```
+
+- Expected upper token rate from this isolated bucket:
+
+```text
+0.6331 tok/s * 1.074 = 0.680 tok/s
+```
+
+- Any increase in cache misses, staging, H2D, or up/gate CUDA time must be
+  subtracted from this bound.
+
+Execution:
+
+1. Add Q4_0 down CUDA eligibility only when all are true:
+   - tensor name contains `.ffn_down_exps.`;
+   - env allowlist is set;
+   - layer id is in the allowlist;
+   - tensor type is `GGML_TYPE_Q4_0`.
+2. Add Q4_0 to the CUDA compact down batch launcher only for this gated path.
+3. Keep Q4_0 disabled for up/gate and for non-allowlisted down tensors.
+4. Run strict cold `-n 32` first with the accepted Phase 3ZT env plus the
+   allowlist.
+5. Compare against Phase 3ZU/3ZT:
+   - token rate;
+   - Q4_0 fallback removed;
+   - cache hit rate;
+   - staging/H2D;
+   - up/gate CUDA time;
+   - TTFT;
+   - France quality.
+6. Promote to strict cold `-n 96` only if `-n 32` improves and all gates pass.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Q4_0 down unsupported decode count drops for the allowlisted layers.
+- Token rate improves versus comparable Phase 3ZT/3ZU `-n 32`.
+- Cache/staging/H2D/upgate regressions do not erase the theoretical gain.
+- Full strict cold `-n 96` is required before committing as a performance
+  improvement.
+
+Rollback:
+
+- Revert if quality regresses, if token rate regresses, if TTFT exceeds
+  `106331.72 ms`, if host RAM exceeds 16GB, if read/launch failures appear, or
+  if cache/staging contention repeats the Phase 3ZO failure pattern.
+
+Result timestamp: 2026-07-03 07:36 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-022408Z-n32-phase3zv-q4down-allowlist`
+
+Measured result:
+
+- Source state: `325b7b973-dirty-phase3zv`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.909363 GiB`.
+- TTFT: `76420.98 ms`, inside the `106331.72 ms` gate.
+- Decode: `61715.58 ms / 31 tokens = 1.9908251612903227 s/token`,
+  `0.5023042803778235 tok/s`.
+- Quality: PASS for the `-n 32` answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Unsupported type declines: `0`, so the Q4_0 allowlist did activate.
+
+Profile comparison:
+
+- Phase 3ZT n32 validation:
+  - `1.7109654838709676 s/token`;
+  - `0.5844653264059738 tok/s`.
+- Phase 3ZV n32:
+  - `1.9908251612903227 s/token`;
+  - `0.5023042803778235 tok/s`.
+- Down profile:
+  - calls: `2038`;
+  - total: `45.003 ms/call`;
+  - CUDA batch: `8.054 ms/call`;
+  - fallback: `36.857 ms/call`;
+  - accepted: `1861`;
+  - declined: `59`.
+- CUDA batch profile:
+  - calls: `1861`;
+  - stage: `8.596 ms/call`;
+  - kernel: `0.107 ms/call`;
+  - wall: `8.806 ms/call`.
+- Cache:
+  - hits: `18056`;
+  - misses: `26448`;
+  - preloads: `3259`;
+  - hit rate: `40.6%`.
+- Pinned staging:
+  - copies: `27713`;
+  - host_stage: `37335.446 ms`;
+  - H2D: `5870.726 ms`;
+  - slot size increased to `7.88 MiB`.
+- Up/gate profile also regressed:
+  - calls: `1861`;
+  - total: `23.851 ms/call`;
+  - CUDA batch: `23.660 ms/call`.
+
+Decision:
+
+- Reject Phase 3ZV.
+- Do not run `-n 96`; the comparable `-n 32` validation clearly regressed.
+- Revert all Q4_0 down allowlist source changes.
+- Keep only this plan record.
+
+Gap analysis:
+
+- The theory correctly identified Q4_0 down fallback, but the implementation
+  increased cache slot size and staging cost enough to erase the saved CPU
+  fallback.
+- This repeats the Phase 3ZO failure pattern even with a layer allowlist:
+  Q4_0 down GPU coverage reduces unsupported declines, but worsens cache
+  pressure, staging, H2D, and up/gate timing.
+- The next attempt must avoid increasing the shared cache slot size for the
+  hot mixed up/gate/down cache. A separate small Q4_0 cache pool or non-cache
+  one-shot path would need a new theory and byte-level bound before coding.
+
+Next direction:
+
+- Do not retry Q4_0 down in the shared cache.
+- Reprofile or simulate cache partition pressure before any further down work.
+- Candidate: separate cache pool for Q4_0 down with a hard MiB cap, but only
+  after computing whether the extra VRAM pool can fit without reducing mixed
+  up/gate hit rate.
