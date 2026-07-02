@@ -15565,3 +15565,103 @@ Decision:
      down slowdown/quality risk and has a hard upper-bound larger than its
      current `2.4 s/n32` local fallback bucket;
   3. prompt fallback only if TTFT becomes the limiting gate.
+
+## Phase 7AC - same-type IQ3_XXS up/gate parallel-stream probe
+
+Design timestamp: 2026-07-02 14:05 UTC.
+
+Reason:
+
+- Phase 7AB shows the largest remaining repeatable decode-side bucket is
+  up/gate compute/scheduling:
+  `869 * 15.491 ms ~= 13.46 s` in n32.
+- Phase 7U attributes the slowest same-type bucket to `type=18` (`IQ3_XXS`):
+  `311` n32 calls, `18.568 ms/call`, versus `type=22` (`IQ2_S`) at
+  `13.706 ms/call`.
+- Phase 7V true compact-batch MMVQ for IQ3 was slower, so the next narrow
+  scheduling probe should reuse the existing per-expert MMVQ kernels rather
+  than switch to the ids-aware batch kernel.
+- Existing `GGML_MOE_STREAM_UP_GATE_PARALLEL` only applies to same-type
+  `IQ2_S`. It does not test same-type `IQ3_XXS`, which is the slower bucket.
+
+Hypothesis:
+
+- Add a default-off env:
+
+```sh
+GGML_MOE_STREAM_IQ3_UP_GATE_PARALLEL=1
+```
+
+- When this env and `GGML_MOE_STREAM_UP_GATE_PARALLEL=1` are both set, allow the
+  existing non-mixed parallel up/gate stream path for same-type `IQ3_XXS`.
+- Do not change math, quant format, cache keys, routing, output layout, down
+  overlap, or prompt handling.
+- If up and gate IQ3 kernels can overlap, the IQ3 same-type bucket may shrink.
+- If the kernels are SM or memory-bandwidth saturated, parallel streams may
+  contend and regress, as Phase 7D did for the mixed path.
+
+Theoretical upper bound:
+
+- Phase 7U IQ3 same-type profile:
+  - up `9.504 ms/call`;
+  - gate `8.969 ms/call`;
+  - kernel `18.490 ms/call`;
+  - total `18.568 ms/call`;
+  - n32 calls `311`.
+- Perfect overlap upper bound:
+  - per-call lower bound about `max(9.504, 8.969) + fuse/d2h/scatter`, roughly
+    `9.6-10.0 ms/call`;
+  - n32 saving roughly `(18.568 - 10.0) * 311 ~= 2.7 s`;
+  - n96 scaled saving roughly `6-7 s`.
+- Expected result may be negative if the two kernels contend. If profile shows
+  up/gate total increasing, reject immediately.
+
+Implementation:
+
+1. Modify only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+2. Keep current `IQ2_S` parallel behavior unchanged.
+3. Extend `parallel_up_gate` eligibility so same-type `IQ3_XXS` can use the
+   existing parallel path only when `GGML_MOE_STREAM_IQ3_UP_GATE_PARALLEL=1`.
+4. Update the first-activation log to include the type so the run proves which
+   path activated.
+5. Keep the feature disabled by default.
+
+Validation:
+
+1. Build `llama-completion`.
+2. Run strict cold n4 smoke with Phase 7P env plus:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_IQ3_UP_GATE_PARALLEL=1
+```
+
+3. Continue to n32 only if:
+   - exit `0`;
+   - France prefix is coherent;
+   - TTFT is within gate;
+   - RAM and `read_failures=0` pass;
+   - logs show same-type IQ3 parallel activation;
+   - up/gate total does not obviously regress versus the current `~15 ms/call`
+     aggregate.
+4. Continue to n32 confirmation and n96 only if n32 beats Phase 7P n32 confirm
+   `37379.97 ms / 31` while passing all hard gates.
+
+Reproducibility:
+
+- Use a new runner `/tmp/run_phase7ac_repro.sh`.
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Because this changes source, no result is accepted as SOTA until n32 and n96
+  confirmation runs pass from a clean committed source.
+
+Rollback:
+
+- Revert source immediately if:
+  - build fails;
+  - n4 shows CUDA/read failures or bad output;
+  - n32 is slower than Phase 7P;
+  - up/gate profile increases materially;
+  - TTFT/RAM/quality gates fail.
+- Keep plan/run records for rejected evidence.
