@@ -11134,3 +11134,142 @@ Rollback:
 - Do not implement a separate Q4_0 cache pool until the diagnostic proves the
   expected saved CPU fallback time is larger than added host staging, H2D, and
   cache-pressure cost.
+
+Result timestamp: 2026-07-03 08:52 CST.
+
+Implementation:
+
+- Added an opt-in CPU MoE fallback profile CSV controlled by:
+
+```sh
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv
+```
+
+- The diagnostic records only rows that remain on CPU fallback after the CUDA
+  batch path has had a chance to consume eligible experts.
+- CSV fields:
+  `rank,count,calls,fallback_us,expert_bytes,src0_type,phase,expert_idx,tensor`.
+- Default behavior is unchanged when the env var is absent.
+
+Build:
+
+- Remote CUDA build succeeded:
+
+```sh
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+```
+
+Smoke:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-023909Z-n4-phase3zw-fallback-profile-smoke`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Output: `France is a country`.
+- TTFT: `65488.25 ms`.
+- Decode: `6639.28 ms / 3 runs = 0.45 tok/s`.
+- `read_failures=0`.
+- Fallback profile:
+  - `fallback-profile.csv` size: `813 KiB`;
+  - entries: `13175`;
+  - dropped: `0`.
+
+Strict `-n 96` diagnostic:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+- Source state: `6766f7c71-dirty-phase3zw`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak:
+  - `15899996160` bytes;
+  - `14.808025 GiB`;
+  - gate passed.
+- TTFT:
+  - `63209.39 ms`;
+  - gate passed.
+- Decode:
+  - `117578.26 ms / 77 runs`;
+  - `1.52699 s/token`;
+  - `0.65 tok/s`.
+- Quality: PASS.
+- Exact answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- `read_failures=0`.
+- Fallback profile:
+  - entries: `14102`;
+  - dropped: `0`.
+
+Fallback profile summary:
+
+- `type2_decode` Q4_0 down:
+  - count: `4312`;
+  - fallback: `7942.040 ms`;
+  - routed bytes: `33.161 GiB`.
+- `type2_prompt` Q4_0 down:
+  - count: `952`;
+  - fallback: `3520.060 ms`;
+  - routed bytes: `7.321 GiB`.
+- prompt fallback from non-Q4 types is still large, but it affects TTFT rather
+  than decode token rate and must be handled separately.
+
+Q4_0 decode layer breakdown:
+
+- `blk.6`: count `616`, fallback `1854.496 ms`, routed `4.737 GiB`.
+- `blk.7`: count `616`, fallback `1153.368 ms`, routed `4.737 GiB`.
+- `blk.8`: count `616`, fallback `988.680 ms`, routed `4.737 GiB`.
+- `blk.9`: count `616`, fallback `1050.752 ms`, routed `4.737 GiB`.
+- `blk.10`: count `616`, fallback `1142.320 ms`, routed `4.737 GiB`.
+- `blk.15`: count `616`, fallback `895.080 ms`, routed `4.737 GiB`.
+- `blk.18`: count `616`, fallback `857.344 ms`, routed `4.737 GiB`.
+
+Q4_0 decode hotset curve sorted by measured fallback time:
+
+- `128 MiB`: `16` slots, `16.52%` fallback coverage, `1.312 s` saved upper bound.
+- `256 MiB`: `32` slots, `26.43%` fallback coverage, `2.099 s` saved upper bound.
+- `512 MiB`: `65` slots, `38.60%` fallback coverage, `3.065 s` saved upper bound.
+- `1024 MiB`: `130` slots, `52.74%` fallback coverage, `4.189 s` saved upper bound.
+- `2048 MiB`: `260` slots, `69.77%` fallback coverage, `5.541 s` saved upper bound.
+- `4096 MiB`: `520` slots, `88.73%` fallback coverage, `7.047 s` saved upper bound.
+- `6144 MiB`: `780` slots, `97.03%` fallback coverage, `7.706 s` saved upper bound.
+
+Decision:
+
+- Accept the diagnostic patch as behavior-preserving instrumentation.
+- It is not a performance improvement and should not be counted as a token-rate
+  gain, even though this run measured `0.65 tok/s`.
+- Commit and push the diagnostic because it is required to make the next
+  optimization reproducible and avoid another shared-cache regression.
+
+Next candidate: Phase 3ZX Q4_0 decode one-shot GPU path
+
+- Do not use the shared expert cache for Q4_0.
+- First candidate should be a no-admission Q4_0 one-shot staging path for decode
+  only, gated by env and layer allowlist.
+- Theory:
+  - Full Q4_0 decode fallback upper bound is `7.942 s`.
+  - One-shot GPU staging must beat CPU fallback after adding host staging, H2D,
+    and Q4_0 kernel time.
+  - Since Q4_0 routed bytes are `33.161 GiB`, pure H2D at the measured
+    `34.95 GiB/s` would cost about `0.949 s`; host staging at measured
+    `5.73 GiB/s` would cost about `5.79 s`.
+  - Therefore a naive one-shot copy path has only about
+    `7.94 - 0.95 - 5.79 = 1.20 s` theoretical headroom before kernel and
+    synchronization overhead. This is a small, risky gain.
+- Better candidate after that:
+  - isolated Q4_0 cache with a hard `1024-2048 MiB` cap;
+  - no impact on shared slot size;
+  - only top hot experts admitted from the fallback profile;
+  - expected saved CPU fallback upper bound: `4.19-5.54 s`;
+  - expected net gain must subtract Q4_0 cache fill staging/H2D and kernel time.
+- Acceptance requires strict cold `-n 32` first, then strict cold three-run
+  `-n 96` only if the `-n 32` result improves token rate without violating any
+  hard gate.

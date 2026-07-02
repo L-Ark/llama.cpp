@@ -194,6 +194,7 @@ struct ggml_kimi_cpu_moe_profile_op {
 
 #define GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX 512
 #define GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN 96
+#define GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_MAX 32768
 
 enum ggml_kimi_cpu_moe_eligibility_reason {
     GGML_KIMI_CPU_MOE_ELIGIBLE = 0,
@@ -240,6 +241,29 @@ struct ggml_kimi_cpu_moe_profile_state {
 
 static struct ggml_kimi_cpu_moe_profile_state ggml_kimi_cpu_moe_profile;
 
+struct ggml_kimi_cpu_moe_fallback_profile_entry {
+    char name[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
+    int expert_idx;
+    int src0_type;
+    bool prompt_phase;
+    uint64_t count;
+    uint64_t calls;
+    uint64_t fallback_us;
+    size_t expert_bytes;
+};
+
+struct ggml_kimi_cpu_moe_fallback_profile_state {
+    bool initialized;
+    bool registered;
+    bool enabled;
+    const char * out;
+    struct ggml_kimi_cpu_moe_fallback_profile_entry entries[GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_MAX];
+    int n_entries;
+    uint64_t dropped;
+};
+
+static struct ggml_kimi_cpu_moe_fallback_profile_state ggml_kimi_cpu_moe_fallback_profile;
+
 static bool ggml_kimi_cpu_moe_eligibility_profile_enabled(void) {
     static int initialized = 0;
     static bool enabled = false;
@@ -250,6 +274,113 @@ static bool ggml_kimi_cpu_moe_eligibility_profile_enabled(void) {
     }
 
     return enabled;
+}
+
+static void ggml_kimi_cpu_moe_fallback_profile_report(void) {
+    if (!ggml_kimi_cpu_moe_fallback_profile.enabled ||
+            !ggml_kimi_cpu_moe_fallback_profile.out ||
+            !ggml_kimi_cpu_moe_fallback_profile.out[0]) {
+        return;
+    }
+
+    FILE * f = fopen(ggml_kimi_cpu_moe_fallback_profile.out, "w");
+    if (!f) {
+        fprintf(stderr,
+                "[kimi_cpu_moe_fallback_profile] open failed: %s\n",
+                ggml_kimi_cpu_moe_fallback_profile.out);
+        return;
+    }
+
+    fprintf(f, "rank,count,calls,fallback_us,expert_bytes,src0_type,phase,expert_idx,tensor\n");
+    for (int i = 0; i < ggml_kimi_cpu_moe_fallback_profile.n_entries; ++i) {
+        const struct ggml_kimi_cpu_moe_fallback_profile_entry * e =
+            &ggml_kimi_cpu_moe_fallback_profile.entries[i];
+        fprintf(f, "%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%zu,%d,%s,%d,%s\n",
+                i + 1,
+                e->count,
+                e->calls,
+                e->fallback_us,
+                e->expert_bytes,
+                e->src0_type,
+                e->prompt_phase ? "prompt" : "decode",
+                e->expert_idx,
+                e->name);
+    }
+    fclose(f);
+
+    fprintf(stderr,
+            "[kimi_cpu_moe_fallback_profile] written: %s entries=%d dropped=%" PRIu64 "\n",
+            ggml_kimi_cpu_moe_fallback_profile.out,
+            ggml_kimi_cpu_moe_fallback_profile.n_entries,
+            ggml_kimi_cpu_moe_fallback_profile.dropped);
+}
+
+static bool ggml_kimi_cpu_moe_fallback_profile_enabled(void) {
+    if (!ggml_kimi_cpu_moe_fallback_profile.initialized) {
+        ggml_kimi_cpu_moe_fallback_profile.initialized = true;
+        ggml_kimi_cpu_moe_fallback_profile.out = getenv("GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT");
+        ggml_kimi_cpu_moe_fallback_profile.enabled =
+            ggml_kimi_cpu_moe_fallback_profile.out &&
+            ggml_kimi_cpu_moe_fallback_profile.out[0];
+        if (ggml_kimi_cpu_moe_fallback_profile.enabled &&
+                !ggml_kimi_cpu_moe_fallback_profile.registered) {
+            ggml_kimi_cpu_moe_fallback_profile.registered = true;
+            atexit(ggml_kimi_cpu_moe_fallback_profile_report);
+        }
+    }
+
+    return ggml_kimi_cpu_moe_fallback_profile.enabled;
+}
+
+static void ggml_kimi_cpu_moe_fallback_profile_record(
+        const char * name,
+        int src0_type,
+        bool prompt_phase,
+        int expert_idx,
+        int64_t count,
+        size_t expert_bytes,
+        uint64_t fallback_us) {
+    if (!ggml_kimi_cpu_moe_fallback_profile_enabled() || count <= 0) {
+        return;
+    }
+
+    const char * safe_name = name ? name : "<unnamed>";
+    int idx = -1;
+
+    for (int i = 0; i < ggml_kimi_cpu_moe_fallback_profile.n_entries; ++i) {
+        struct ggml_kimi_cpu_moe_fallback_profile_entry * e =
+            &ggml_kimi_cpu_moe_fallback_profile.entries[i];
+        if (e->expert_idx == expert_idx &&
+                e->src0_type == src0_type &&
+                e->prompt_phase == prompt_phase &&
+                strncmp(e->name, safe_name, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_kimi_cpu_moe_fallback_profile.n_entries >= GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_MAX) {
+            ggml_kimi_cpu_moe_fallback_profile.dropped++;
+            return;
+        }
+
+        idx = ggml_kimi_cpu_moe_fallback_profile.n_entries++;
+        struct ggml_kimi_cpu_moe_fallback_profile_entry * e =
+            &ggml_kimi_cpu_moe_fallback_profile.entries[idx];
+        snprintf(e->name, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN, "%s", safe_name);
+        e->expert_idx = expert_idx;
+        e->src0_type = src0_type;
+        e->prompt_phase = prompt_phase;
+        e->expert_bytes = expert_bytes;
+    }
+
+    struct ggml_kimi_cpu_moe_fallback_profile_entry * e =
+        &ggml_kimi_cpu_moe_fallback_profile.entries[idx];
+    e->count += (uint64_t) count;
+    e->calls++;
+    e->fallback_us += fallback_us;
+    e->expert_bytes = expert_bytes;
 }
 
 static void ggml_kimi_cpu_moe_profile_report_op(const char * name, const struct ggml_kimi_cpu_moe_profile_op * op) {
@@ -2365,6 +2496,30 @@ static void ggml_compute_forward_mul_mat_id(
     if (kimi_cpu_moe_profile && ith == 0) {
         const uint64_t kimi_cpu_moe_fallback_us = ggml_time_us() - kimi_cpu_moe_fallback_start;
         const uint64_t kimi_cpu_moe_total_us = ggml_time_us() - kimi_cpu_moe_total_start;
+        if (ggml_kimi_cpu_moe_fallback_profile_enabled()) {
+            int64_t fallback_rows = 0;
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                fallback_rows += matrix_row_counts[cur_a];
+            }
+            if (fallback_rows > 0) {
+                for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                    const int64_t cne1 = matrix_row_counts[cur_a];
+                    if (cne1 == 0) {
+                        continue;
+                    }
+                    const uint64_t expert_fallback_us =
+                        (uint64_t) (((double) kimi_cpu_moe_fallback_us * (double) cne1) / (double) fallback_rows);
+                    ggml_kimi_cpu_moe_fallback_profile_record(
+                            src0->name,
+                            src0->type,
+                            ids->ne[1] > 1,
+                            cur_a,
+                            cne1,
+                            (size_t) nb02,
+                            expert_fallback_us);
+                }
+            }
+        }
         ggml_kimi_cpu_moe_profile.down.fallback_us += kimi_cpu_moe_fallback_us;
         ggml_kimi_cpu_moe_profile.down.total_us += kimi_cpu_moe_total_us;
         ggml_kimi_cpu_moe_profile.down.calls++;
