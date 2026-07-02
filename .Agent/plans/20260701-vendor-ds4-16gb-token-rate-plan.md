@@ -2,7 +2,7 @@
 
 ## 目标
 
-- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，当前 source-backed 可回退 SOTA 为 `2.4 tok/s`；旧 `2.6 tok/s` 作为历史观测值继续排查，只有找回 exact source/binary 并通过 pushed-commit rerun 后才能重新作为 SOTA。
+- 继续在 `vendor` 实现上优化 DS4 cold-start 解码速度，当前 source-backed 可回退 SOTA 为 `2.6 tok/s`；旧 2026-07-01 `2.6 tok/s` 仍作为 historical/forensic observation 保留，但当前 SOTA 来自 2026-07-02 late10 top3 配置，已经通过 pushed-commit clean rebuild rerun。
 - 严格保持：
   - Host RAM（含 page cache）`<= 16 GB`；
   - TTFT 不得高于当前 baseline 的 `20%` 阈值；
@@ -15,7 +15,7 @@
   - `vendor` 框架
   - `cpu_moe=40`
   - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
-  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=20-39`
+  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`
   - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
   - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
   - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
@@ -23,17 +23,23 @@
   - cold drop_caches
   - 16GB cgroup
 - 当前记录：
-  - `eval_tok_s=2.4`（pushed-commit clean rebuild rerun）
+  - `eval_tok_s=2.6`（pushed-commit clean rebuild rerun）
   - `prompt_tok_s=0.9`
-  - `TTFT=38355.541393ms`
+  - `TTFT=37874.580124ms`
   - `memory_peak_bytes=16000000000`
-  - `memory_file_bytes=15014518784`
+  - `memory_file_bytes=15002906624`
+  - `pgmajfault=288661`
+  - `workingset_refault_file=3545116`
   - `ram_ok=true`
   - `correctness_ok=true`
-  - pushed rerun commit: `63caf68ba05b65120516ed03d4cd2c7b8dbc97d1`
+  - pushed rerun commit: `19a0d36cd081feb0bfb90e26380005c74abe0151`
   - source-bearing code commit: `63caf68ba05b65120516ed03d4cd2c7b8dbc97d1`
+  - binary version: `9118 (19a0d36cd)`
+  - binary sha256: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
   - pushed remote/branch: `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`
-  - pushed rerun dir: `/root/lfz/runs/vendor-ds4-16gb/20260702T003114Z-20260702_expert_keep_top3_late20_top4_rest_pushed_rerun/france-cpu40-vram0gb`
+  - pushed rerun dir: `/root/lfz/runs/vendor-ds4-16gb/20260702T005156Z-20260702_expert_keep_top3_late10_top4_rest_pushed_rerun/france-cpu40-vram0gb`
+  - pushed rerun trace summary: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24305.283`, `total_ms=26552.328`
+  - correctness manual review: pass; France answer is semantically correct, coherent, complete, and not repetitive/truncated.
 - 旧 `2.6 tok/s` run 仍作为 forensic 排查对象，不作为当前可回退 SOTA：
   - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260701T095526Z-cold-ds4-gate-stream-src1-rowmod-vram12-trace/france-cpu40-vram12gb`
   - 原记录 `eval_tok_s=2.6`, `TTFT=40836ms`, `memory_peak_bytes=16000000000`, `correctness_ok=true`
@@ -2012,7 +2018,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-late10-top4-rest`
 - `attempt_kind`: `config-probe/layer-selective-approximate-pruning`
-- `status`: accepted_candidate_pending_pushed_commit_rerun
+- `status`: promoted_after_pushed_commit_clean_rebuild_rerun
 - `hypothesis`: Late15 top3 tied the current `2.4 tok/s` SOTA while preserving France output quality. Expanding the top3 override to `blk.10-39` prunes ten more layers than the promoted late20 run and five more than late15, while still preserving the first ten CPU-MoE layers at top4. This may cross the rounded token-rate boundary above `2.4`, but correctness risk increases because prior broad early-layer pruning caused truncation/repetition.
 - `theoretical_upper_bound`: Relative to late20, late10 adds ten of forty CPU-MoE layers to the top3 region. Using the coarse `12.9s` global top3-vs-top4 bound, the incremental upper bound over late20 is about `12.9s * 10/40 ≈ 3.2s` before overhead and layer imbalance. If output length remains similar, measured rate could move toward `2.5`, but only manual correctness can validate the approximation.
 - `test_config`: pushed source with layer-range support, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
@@ -2025,7 +2031,15 @@
 - `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `span_ms=70038.773`, `src0_ms=25154.153`, `total_ms=27416.769`.
 - `sota_gate`: candidate passes initial gates. Token rate improves current pushed late20 SOTA `2.4 -> 2.6`; TTFT `38024.422319ms` is below the `46026.649672ms` limit; RAM including page cache is capped at `16000000000`; France correctness passes manual review.
 - `reproduction_record`: candidate run directory contains precommit source state/diff, binary sha256/stat/version, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, trace summary, plan snapshot, push target, manual correctness review, and candidate status.
-- `publish_status`: pending. Must commit/push plan records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit before promotion.
+- `candidate_publish_commit`: `19a0d36cd081feb0bfb90e26380005c74abe0151` (`vendor-ds4: record late10 top3 pruning candidate`), pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- `pushed_clean_rebuild`: completed from commit `19a0d36cd081feb0bfb90e26380005c74abe0151`; `llama-cli --version` reports `version: 9118 (19a0d36cd)`, binary sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- `pushed_rerun_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T005156Z-20260702_expert_keep_top3_late10_top4_rest_pushed_rerun/france-cpu40-vram0gb`.
+- `pushed_rerun_result`: `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=37874.580124ms`, `elapsed_seconds=89.48`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15002906624`, `pgmajfault=288661`, `workingset_refault_file=3545116`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `pushed_rerun_trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `span_ms=69920.848`, `src0_ms=24305.283`, `total_ms=26552.328`.
+- `pushed_rerun_correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `promotion_decision`: promoted as current accepted cold-start SOTA because pushed-commit clean rebuild rerun improved the previous late20 `2.4 tok/s` SOTA to `2.6 tok/s`, kept host RAM including page cache at the 16GB cgroup limit, and kept TTFT below the prior SOTA `+20%` gate (`38355.541393ms * 1.2 = 46026.649672ms`).
+- `reproduction_guardrail`: this promotion is only valid because the run directory now contains source state, pushed remote/branch, binary version/stat/sha256, runner sha256, model stat, exact command/env, stdout/stderr, summary.json, cgroup memory files, `one_trace.csv`, `trace_summary.json`, and manual correctness review. Any future new SOTA must repeat this full record + immediate source push + pushed-commit clean rebuild rerun sequence before being called accepted.
+- `publish_status`: promoted; this plan update itself must be committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` as the promotion record.
 
 ## 记录与验收
 
