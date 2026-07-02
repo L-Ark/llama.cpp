@@ -63,6 +63,9 @@
 - `expected_delta`: 无提升预期；目标是确认回退点仍可作为后续优化基线。
 - `rollback`: 不改源码；如果复现低于 SOTA，先排查 binary/pack/profile/cgroup 差异，不进入新优化。
 - `required_evidence`: pushed commit、dirty status、build command、binary sha256、model/pack sha256、exact env/run command、cgroup `memory.peak`/`memory.stat`/`memory.events`、stdout/stderr、summary、trace、France 原文输出。
+- `result`: completed on 2026-07-02. First strict cold rerun produced `3.3 tok/s` with matching pack/cache counters and correct output; second strict cold rerun reproduced accepted SOTA `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=33000.871093ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15053250560`, `pgmajfault=258814`, `workingset_refault_file=2076392`, `ram_ok=true`, `correctness_ok=true`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T131016Z-20260702_rollback_sota_freeze_rerun2/france-cpu40-vram0gb`.
+- `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
 
 ### Phase 1：重新定位 SOTA bottleneck
 
