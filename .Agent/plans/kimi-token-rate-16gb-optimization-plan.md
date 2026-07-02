@@ -16420,6 +16420,103 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
+
+Design timestamp: 2026-07-02 17:35 UTC.
+
+Reason:
+
+- Phase 7AF showed that increasing VRAM cache from `15000` to `15200` under
+  SQPOLL was not reproducible.
+- Several accepted/rejected runs sit exactly at the 16GB cgroup memory peak:
+  `memory.peak=15899996160`. File cache and reclaim variance remain visible.
+- A slightly smaller VRAM cache may reduce staging/page-cache pressure or
+  allocation side effects enough to improve cold-run stability, even though it
+  will also reduce cache hit rate.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm still spends:
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - upgate/down cache hit rates `43.2%` / `73.4%`.
+- This experiment does not target fixed compute. It tests whether a small
+  reduction in cache pressure improves exposed staging/reclaim enough to
+  offset the extra misses.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14900
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- Reducing cache by `100 MiB` removes about:
+  - `60 MiB / 5.36 MiB ~= 11` upgate slots;
+  - `40 MiB / 7.44 MiB ~= 5` down slots.
+- The cache-hit loss should be very small but nonzero.
+- A win is only possible if the smaller cache reduces exposed host-stage,
+  iouring wait, page-cache reclaim, or allocation variance by more than the
+  extra miss cost.
+- Expected gain is at most sub-second on n32 and `0-2 s` on n96. Any larger
+  gain must be explained by counters or treated as variance until confirmed.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7ae_repro.sh`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=14900 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AJ cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters should show either lower exposed staging/reclaim symptoms or no
+  meaningful cache-miss penalty.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately and keep Phase 7AE as
+  SOTA.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AJ.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
