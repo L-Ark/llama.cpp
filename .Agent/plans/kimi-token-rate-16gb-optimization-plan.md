@@ -16613,6 +16613,104 @@ Decision:
   - `GGML_MOE_IO_REFILL_BATCH=4`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AK - SQPOLL read-order sort-off retest
+
+Design timestamp: 2026-07-02 17:55 UTC.
+
+Reason:
+
+- The accepted Phase 7AE runtime inherits `GGML_MOE_IO_SORT_OFFSET=1` from the
+  earlier down parallel staging work.
+- Offset sorting can improve physical read locality, but it can also reorder
+  miss jobs relative to route/staging order and change overlap with CUDA H2D,
+  current-down overlap, and SQPOLL completion timing.
+- Phase 7AE changed io_uring behavior with `GGML_MOE_IO_SQPOLL=1`; there is no
+  current-SOTA A/B record for sort-on versus sort-off under SQPOLL.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm:
+  - decode `88889.08 ms / 77`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - expert-pack batch histogram remains mostly `2-4`.
+- Sort-off can only help if preserving route/submission order improves overlap
+  more than offset sorting improves storage locality.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+# remove from env.txt
+GGML_MOE_IO_SORT_OFFSET=1
+```
+
+- Keep every accepted Phase 7AE setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- The visible n96 expert-pack io_uring wait bucket is about `19.2 s`, but most
+  of that is real read/H2D dependency and cannot be removed by reordering.
+- If sort-off improves overlap or reduces head-of-line blocking by `2-5%` of
+  the visible wait/host-stage path, the possible n96 gain is roughly
+  `0.4-1.5 s`.
+- If offset sorting is actually providing locality, sort-off will increase wait
+  or host-stage time and should be rejected after n32 or n96.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ak_repro.sh` from the Phase 7AE runner.
+- Add a `SORT_OFFSET` switch defaulting to `0`.
+- When `SORT_OFFSET=0`, remove `GGML_MOE_IO_SORT_OFFSET=1` from `env.txt`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 SORT_OFFSET=0
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AK cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show either lower expert-pack wait/host-stage or another
+  plausible overlap improvement. If n96 is slower, reject even if n32 improves.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AE best, reject immediately.
+- If n32 passes but confirmation or n96 fails, reject Phase 7AK.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
