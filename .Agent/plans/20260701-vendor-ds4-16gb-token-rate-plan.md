@@ -67,6 +67,16 @@
 - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T131016Z-20260702_rollback_sota_freeze_rerun2/france-cpu40-vram0gb`.
 - `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`; `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
 
+### Kimi merge guard（2026-07-02）
+
+- `attempt_id`: `20260702-post-kimi-merge-sota-guard`
+- `merge_commit`: `52ccb0877` (`vendor-ds4: merge kimi vendor stream updates`) merged `ssd/vendor/kimi-moe-stream-on-vendor` through `122b44dc6`.
+- `conflict_resolution`: kept both DeepSeek CPU fallback willneed path and Kimi `GGML_MOE_CPU_FALLBACK_PACK_MMAP` path; Kimi feature remains default-off and uses expert-pack mmap pointers for residual CPU fallback when enabled.
+- `build`: clean build from merge commit; `llama-cli` sha256 remained `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T131409Z-20260702_post_kimi_merge_sota_guard/france-cpu40-vram0gb`.
+- `result`: DeepSeek France strict cold SOTA maintained after Kimi merge: `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=33852.388253ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043092480`, `pgmajfault=268426`, `workingset_refault_file=2023181`, `ram_ok=true`, `correctness_ok=true`.
+- `decision`: accepted guard. Push merged source and plan to `https://github.com/wici-ai/ssd-llama.git` / `vendor/deepseek-token-rate-16gb`, then continue Phase 1 bottleneck slicing from this merged commit.
+
 ### Phase 1：重新定位 SOTA bottleneck
 
 - `attempt_id`: `20260702-sota-bottleneck-slice`
