@@ -350,28 +350,6 @@ struct batch_profile {
 static batch_profile g_bprof;
 static batch_profile g_uprof;
 
-struct current_down_overlap_profile {
-    std::atomic<uint64_t> calls{0};
-    std::atomic<uint64_t> planned_jobs{0};
-    std::atomic<uint64_t> cache_hits{0};
-    std::atomic<uint64_t> missing_tensor{0};
-    std::atomic<uint64_t> missing_pack{0};
-    std::atomic<uint64_t> submitted_batches{0};
-    std::atomic<uint64_t> completed_jobs{0};
-    std::atomic<uint64_t> failed_batches{0};
-    std::atomic<uint64_t> mark_failed{0};
-    std::atomic<uint64_t> max_jobs{0};
-    std::atomic<uint64_t> batch_hist_1{0};
-    std::atomic<uint64_t> batch_hist_2_4{0};
-    std::atomic<uint64_t> batch_hist_5_8{0};
-    std::atomic<uint64_t> batch_hist_9_16{0};
-    std::atomic<uint64_t> batch_hist_17_32{0};
-    std::atomic<uint64_t> batch_hist_gt32{0};
-    std::atomic<uint64_t> worker_us{0};
-};
-
-static current_down_overlap_profile g_current_down_overlap;
-
 struct expert_pack_entry {
     char tensor[128] = {};
     int32_t expert_idx = -1;
@@ -1583,60 +1561,6 @@ static void expert_pack_record_iouring_batch(size_t jobs) {
         case 4: ++g_expert_pack.iouring_batch_hist_17_32; break;
         default: ++g_expert_pack.iouring_batch_hist_gt32; break;
     }
-}
-
-static void current_down_overlap_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
-    uint64_t current = target.load(std::memory_order_relaxed);
-    while (current < value &&
-            !target.compare_exchange_weak(current, value, std::memory_order_relaxed, std::memory_order_relaxed)) {
-    }
-}
-
-static void current_down_overlap_record_batch(size_t jobs) {
-    if (jobs == 0) return;
-    ++g_current_down_overlap.submitted_batches;
-    g_current_down_overlap.planned_jobs.fetch_add(jobs);
-    current_down_overlap_atomic_max(g_current_down_overlap.max_jobs, jobs);
-    switch (expert_pack_iouring_batch_bucket(jobs)) {
-        case 0: ++g_current_down_overlap.batch_hist_1; break;
-        case 1: ++g_current_down_overlap.batch_hist_2_4; break;
-        case 2: ++g_current_down_overlap.batch_hist_5_8; break;
-        case 3: ++g_current_down_overlap.batch_hist_9_16; break;
-        case 4: ++g_current_down_overlap.batch_hist_17_32; break;
-        default: ++g_current_down_overlap.batch_hist_gt32; break;
-    }
-}
-
-static bool current_down_overlap_enabled() {
-    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP");
-    return env && env[0] && env[0] != '0';
-}
-
-static void current_down_overlap_report_atexit() {
-    const uint64_t calls = g_current_down_overlap.calls.load();
-    const uint64_t submitted = g_current_down_overlap.submitted_batches.load();
-    if (calls == 0 && submitted == 0) return;
-    std::fprintf(stderr,
-        "[moe_stream_batch] current down overlap: calls=%lu planned_jobs=%lu completed_jobs=%lu "
-        "cache_hits=%lu missing_tensor=%lu missing_pack=%lu submitted_batches=%lu failed_batches=%lu "
-        "mark_failed=%lu max_jobs=%lu worker_us=%lu batch_hist=1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
-        calls,
-        g_current_down_overlap.planned_jobs.load(),
-        g_current_down_overlap.completed_jobs.load(),
-        g_current_down_overlap.cache_hits.load(),
-        g_current_down_overlap.missing_tensor.load(),
-        g_current_down_overlap.missing_pack.load(),
-        submitted,
-        g_current_down_overlap.failed_batches.load(),
-        g_current_down_overlap.mark_failed.load(),
-        g_current_down_overlap.max_jobs.load(),
-        g_current_down_overlap.worker_us.load(),
-        g_current_down_overlap.batch_hist_1.load(),
-        g_current_down_overlap.batch_hist_2_4.load(),
-        g_current_down_overlap.batch_hist_5_8.load(),
-        g_current_down_overlap.batch_hist_9_16.load(),
-        g_current_down_overlap.batch_hist_17_32.load(),
-        g_current_down_overlap.batch_hist_gt32.load());
 }
 
 static void expert_pack_report_atexit() {
@@ -4046,7 +3970,7 @@ static bool prompt_up_gate_stream_enabled() {
 
 static bool moe_stream_type_supported(ggml_type type) {
     return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S ||
-        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS || type == GGML_TYPE_MXFP4;
+        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
 static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
@@ -4130,7 +4054,6 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_gate);
             std::atexit(batch_profile_report_atexit);
             std::atexit(up_gate_profile_report_atexit);
-            std::atexit(current_down_overlap_report_atexit);
         }
     }
     g_batch_inited.store(true, std::memory_order_release);
@@ -4359,7 +4282,7 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t slot_stride,
         int64_t ne00,
         int64_t ne01,
-        size_t nb01,
+        int64_t nb01,
         const float * d_src1_f32,
         int64_t src1_row_stride,
         const int32_t * h_src1_rows,
@@ -4373,7 +4296,6 @@ static bool launch_moe_mmvq_compact_batch(
         case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:
         case GGML_TYPE_IQ4_XS:
-        case GGML_TYPE_MXFP4:
             break;
         default: return false;
     }
@@ -4470,9 +4392,9 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
             if (limit < 1e-6f) {
                 r = u * moe_stream_silu(g);
             } else {
-                float gate_v = fminf(g, limit);
+                float gate_v = fminf(moe_stream_silu(g), limit);
                 float up_v = fmaxf(-limit, fminf(limit, u));
-                r = up_v * moe_stream_silu(gate_v);
+                r = up_v * gate_v;
             }
             break;
         case GGML_UNARY_OP_RELU:
@@ -4734,9 +4656,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     batch_vram_cache *cache = batch_cache_get(cache_slot_bytes);
     if (!cache) return decline("cache_unavailable");
-    if (!current_down_overlap_enabled()) {
-        preload_registered_down_for_active(src0_up_name, active_experts, n_active);
-    }
+    preload_registered_down_for_active(src0_up_name, active_experts, n_active);
 
     char up_key_name[128] = {};
     char gate_key_name[128] = {};
@@ -5013,141 +4933,6 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         return true;
     };
 
-    auto clear_stage_jobs_for_cache = [&](batch_vram_cache *job_cache, const std::vector<stage_copy_job> &jobs) {
-        if (!job_cache) return;
-        for (const stage_copy_job &job : jobs) {
-            batch_cache_clear_slot(job_cache, job.slot);
-        }
-    };
-
-    std::thread current_down_overlap_thread;
-    bool current_down_overlap_ok = true;
-    auto join_current_down_overlap = [&]() -> bool {
-        if (current_down_overlap_thread.joinable()) {
-            current_down_overlap_thread.join();
-        }
-        return current_down_overlap_ok;
-    };
-
-    auto start_current_down_overlap = [&]() {
-        if (!current_down_overlap_enabled() || prompt_mode || !bc.prefetch_stream) return;
-        ++g_current_down_overlap.calls;
-
-        char down_name[128] = {};
-        if (!down_name_for_up_gate(src0_up_name, down_name, sizeof(down_name))) {
-            ++g_current_down_overlap.missing_tensor;
-            return;
-        }
-
-        registered_tensor rt;
-        bool found = false;
-        {
-            std::lock_guard<std::mutex> rlk(g_registered_mu);
-            for (const registered_tensor &t : g_registered_tensors) {
-                if (std::strcmp(t.name, down_name) == 0) {
-                    rt = t;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found || !rt.data || rt.expert_bytes == 0) {
-            ++g_current_down_overlap.missing_tensor;
-            return;
-        }
-
-        batch_vram_cache *down_cache = batch_cache_get(rt.expert_bytes);
-        if (!down_cache) {
-            ++g_current_down_overlap.missing_tensor;
-            return;
-        }
-
-        std::vector<stage_copy_job> down_jobs;
-        down_jobs.reserve((size_t)n_active);
-        for (int j = 0; j < n_active; ++j) {
-            const int expert = active_experts[j];
-            if (expert < 0 || expert >= rt.n_as) continue;
-            const uintptr_t key = batch_key_hash(rt.name, expert);
-            if (batch_cache_find_slot(down_cache, key) >= 0) {
-                ++g_current_down_overlap.cache_hits;
-                continue;
-            }
-            const char *expert_host = (const char *)rt.data + (size_t)expert * rt.nb02;
-            const int slot = batch_cache_insert_slot(
-                down_cache, key, expert_host, rt.expert_bytes, bc.prefetch_stream,
-                true, true, nullptr, 0, false, rt.name, expert, true);
-            if (slot < 0) continue;
-
-            stage_copy_job job;
-            job.slot = slot;
-            job.dst = (char *)down_cache->pool + (size_t)slot * down_cache->slot_sz;
-            job.host_data = expert_host;
-            job.pack_entry = expert_pack_lookup(rt.name, expert, rt.expert_bytes);
-            if (!job.pack_entry) {
-                ++g_current_down_overlap.missing_pack;
-            }
-            job.expert_idx = expert;
-            std::snprintf(job.tensor, sizeof(job.tensor), "%s", rt.name);
-            down_jobs.push_back(job);
-        }
-        if (down_jobs.empty()) return;
-
-        current_down_overlap_record_batch(down_jobs.size());
-        static std::atomic<int> first_current_down_overlap{0};
-        if (first_current_down_overlap.fetch_add(1) == 0) {
-            std::fprintf(stderr,
-                "[moe_stream_batch] current down overlap active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
-                rt.name, down_jobs.size(), rt.expert_bytes / (1024.0 * 1024.0));
-        }
-
-        current_down_overlap_thread = std::thread([&, down_cache, down_jobs = std::move(down_jobs), expert_bytes = rt.expert_bytes]() {
-            const auto worker_start = std::chrono::steady_clock::now();
-            bool copied = expert_pack_iouring_copy_jobs(down_jobs, expert_bytes, bc.prefetch_stream,
-                    bc.stage_ring, "current_down_overlap");
-            if (!copied) {
-                copied = true;
-                for (const stage_copy_job &job : down_jobs) {
-                    batch_copy_trace copy_trace;
-                    if (!batch_cache_copy_h2d(bc.stage_ring, job.dst, job.host_data, expert_bytes,
-                            bc.prefetch_stream, job.pack_entry, &copy_trace)) {
-                        copied = false;
-                        break;
-                    }
-                }
-            }
-
-            if (copied) {
-                for (const stage_copy_job &job : down_jobs) {
-                    if (!down_cache->slot_ready[job.slot] &&
-                            cudaEventCreateWithFlags(&down_cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
-                        copied = false;
-                        ++g_current_down_overlap.mark_failed;
-                        break;
-                    }
-                    if (cudaEventRecord(down_cache->slot_ready[job.slot], bc.prefetch_stream) != cudaSuccess) {
-                        copied = false;
-                        ++g_current_down_overlap.mark_failed;
-                        break;
-                    }
-                    down_cache->slot_pending[job.slot] = true;
-                }
-            }
-
-            if (!copied) {
-                cudaStreamSynchronize(bc.prefetch_stream);
-                clear_stage_jobs_for_cache(down_cache, down_jobs);
-                ++g_current_down_overlap.failed_batches;
-                current_down_overlap_ok = false;
-            } else {
-                g_current_down_overlap.completed_jobs.fetch_add(down_jobs.size());
-            }
-
-            const auto worker_end = std::chrono::steady_clock::now();
-            g_current_down_overlap.worker_us.fetch_add(
-                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(worker_end - worker_start).count());
-        });
-    };
-
     auto split_stage_jobs = [&](const std::vector<stage_copy_job> &jobs,
             std::vector<stage_copy_job> &a, std::vector<stage_copy_job> &b) {
         a.clear();
@@ -5264,7 +5049,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (!launch_moe_mmvq_compact_batch(
                 src0_type,
                 (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
-                ne00, ne01, nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                ne00, ne01, up_nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
                 bc.d_src1_q8_up, (float *)bc.d_up, n_active, st)) {
             return decline("mixed_launch_up");
         }
@@ -5272,24 +5057,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (!launch_moe_mmvq_compact_batch(
                 gate_type,
                 (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
-                ne00, ne01, nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                ne00, ne01, gate_nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
                 bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, st)) {
             return decline("mixed_launch_gate");
         }
         if (profile) cudaEventRecord(bc.ev_gate, st);
-        start_current_down_overlap();
-        auto mixed_overlap_fail = [&](const char *reason) -> bool {
-            (void)join_current_down_overlap();
-            return decline(reason);
-        };
         for (int j = 0; j < n_active; ++j) {
             bc.h_ids_dst[j] = flat_dst_ids[j];
         }
         if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
-            return mixed_overlap_fail("mixed_copy_dst_ids");
+            return decline("mixed_copy_dst_ids");
         }
         if (cudaMemsetAsync(fused_d, 0, dst_bytes, st) != cudaSuccess) {
-            return mixed_overlap_fail("mixed_memset_fused");
+            return decline("mixed_memset_fused");
         }
         dim3 block(256);
         dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
@@ -5297,16 +5077,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
             bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
         if (cudaGetLastError() != cudaSuccess) {
-            return mixed_overlap_fail("mixed_launch_fuse");
+            return decline("mixed_launch_fuse");
         }
         if (profile) cudaEventRecord(bc.ev_kernel, st);
         if (cudaMemcpyAsync(bc.h_dst, fused_d, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
-            return mixed_overlap_fail("mixed_copy_d2h");
+            return decline("mixed_copy_d2h");
         }
         if (cudaStreamSynchronize(st) != cudaSuccess) {
-            return mixed_overlap_fail("mixed_sync");
+            return decline("mixed_sync");
         }
-        (void)join_current_down_overlap();
         const float *tmp = (const float *)bc.h_dst;
         for (int j = 0; j < n_active; ++j) {
             float *dst_row = (float *)((char *)dst + (size_t)dst_ids[j] * dst_nb1 + (size_t)token_ids[j] * dst_nb2);
@@ -5497,7 +5276,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             if (!launch_moe_mmvq_compact_batch(
                     src0_type,
                     (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
-                    ne00, ne01, nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    ne00, ne01, up_nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
                     bc.d_src1_q8_up, (float *)compare_buf, n_active, st)) {
                 return false;
             }
@@ -5510,7 +5289,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             if (!launch_moe_mmvq_compact_batch(
                     src0_type,
                     (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
-                    ne00, ne01, nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    ne00, ne01, gate_nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
                     bc.d_src1_q8_gate, (float *)compare_buf, n_active, st)) {
                 return false;
             }

@@ -171,39 +171,6 @@ static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_t
            (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
 }
 
-
-static bool ggml_moe_stream_one_gpu_only_for_tensor(const char * name) {
-    const char * filter = getenv("GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER");
-    if (!filter || !filter[0] || !name || !name[0]) {
-        return false;
-    }
-    if (strcmp(filter, "1") == 0 || strcmp(filter, "all") == 0) {
-        return true;
-    }
-    const char * p = filter;
-    while (*p) {
-        while (*p == ',' || *p == ' ' || *p == '\t' || *p == ':') {
-            ++p;
-        }
-        const char * start = p;
-        while (*p && *p != ',' && *p != ':' && *p != ' ' && *p != '\t') {
-            ++p;
-        }
-        if (p > start) {
-            const size_t len = (size_t)(p - start);
-            char token[128];
-            if (len < sizeof(token)) {
-                memcpy(token, start, len);
-                token[len] = '\0';
-                if (strstr(name, token) != NULL) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
     if (!name || !strstr(name, "ffn_down_exps")) {
         return false;
@@ -2877,10 +2844,6 @@ static void ggml_compute_forward_mul_mat_id(
                     }
                 }
 
-                if (!done && ggml_moe_stream_one_gpu_only_for_tensor(src0->name)) {
-                    GGML_ASSERT(!"GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER requested but CUDA one-stream declined");
-                }
-
                 if (done) {
                     if (ggml_moe_stream_compare_cpu_enabled()) {
                         ggml_moe_stream_compare_cpu_result(
@@ -3066,8 +3029,7 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
     const size_t row_size,
     const bool src1_cont,
     const void * wdata,
-    enum ggml_unary_op op,
-    float limit) {
+    enum ggml_unary_op op) {
 
     const enum ggml_type type_up = src0_up->type;
     const enum ggml_type type_gate = src0_gate->type;
@@ -3116,13 +3078,7 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
                 for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
                     vec_dot_up(ne00,   &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*up_nb01,   0, src1_col, 0, 1);
                     vec_dot_gate(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*gate_nb01, 0, src1_col, 0, 1);
-                    float up_v = up_tmp[ir0 - iir0];
-                    float gate_v = gate_tmp[ir0 - iir0];
-                    if (limit > 1e-6f) {
-                        up_v = MAX(-limit, MIN(limit, up_v));
-                        gate_v = MIN(limit, gate_v);
-                    }
-                    fused_tmp[ir0 - iir0] = up_v * ggml_moe_up_gate_activate(gate_v, op);
+                    fused_tmp[ir0 - iir0] = up_tmp[ir0 - iir0] * ggml_moe_up_gate_activate(gate_tmp[ir0 - iir0], op);
                 }
 
                 memcpy(&dst_col[iir0], fused_tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
@@ -3270,7 +3226,6 @@ static void ggml_compute_forward_moe_up_gate(
         ggml_cuda_moe_stream_supports_type(gate_type) &&
         src1->type == GGML_TYPE_F32 &&
         dst->type == GGML_TYPE_F32;
-    const bool gpu_only = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_GPU_ONLY") != NULL;
 
     if (use_gpu_stream) {
         if (ith == 0) {
@@ -3290,7 +3245,7 @@ static void ggml_compute_forward_moe_up_gate(
                 (float *) dst->data,
                 nb1, nb2,
                 ggml_get_op_params_i32(dst, 0),
-                ggml_get_op_params_f32(dst, 1),
+                0.0f,
                 matrix_row_counts,
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
@@ -3304,8 +3259,6 @@ static void ggml_compute_forward_moe_up_gate(
             }
             if (done) {
                 memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
-            } else if (gpu_only) {
-                GGML_ASSERT(!"GGML_MOE_STREAM_FUSED_UP_GATE_GPU_ONLY requested but CUDA up/gate batch declined");
             }
         }
 
@@ -3316,13 +3269,8 @@ static void ggml_compute_forward_moe_up_gate(
         }
     }
 
-    if (gpu_only && !use_gpu_stream) {
-        GGML_ASSERT(!"GGML_MOE_STREAM_FUSED_UP_GATE_GPU_ONLY requested but CUDA up/gate batch is unavailable");
-    }
-
     const size_t row_size = ggml_row_size(vec_dot_type, ne10);
     const enum ggml_unary_op op = (enum ggml_unary_op) ggml_get_op_params_i32(dst, 0);
-    const float limit = ggml_get_op_params_f32(dst, 1);
 
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
@@ -3373,7 +3321,7 @@ static void ggml_compute_forward_moe_up_gate(
             ggml_compute_forward_moe_up_gate_one_chunk(
                 dst, src0_up, src0_gate, src1, ids, cur_a,
                 ir0_start, ir0_end, ir1_start, ir1_end,
-                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op, limit);
+                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op);
 
             if (nth >= nchunk0 * nchunk1) {
                 break;

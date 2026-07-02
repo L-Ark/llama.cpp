@@ -3430,8 +3430,7 @@ struct ggml_tensor * ggml_moe_up_gate(
         struct ggml_tensor  * as_gate,
         struct ggml_tensor  * b,
         struct ggml_tensor  * ids,
-        enum ggml_unary_op    op,
-        float                 limit) {
+        enum ggml_unary_op    op) {
     const char * mixed_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES");
     const bool mixed_enabled = mixed_env && mixed_env[0] && mixed_env[0] != '0';
     const bool mixed_iq2_iq3 =
@@ -3446,10 +3445,6 @@ struct ggml_tensor * ggml_moe_up_gate(
 
         switch (op) {
             case GGML_UNARY_OP_SILU:
-                if (as_gate && limit > 1e-6f) {
-                    gate = ggml_clamp(ctx, gate, -INFINITY, limit);
-                    up   = ggml_clamp(ctx, up,   -limit, limit);
-                }
                 return as_gate ? ggml_swiglu_split(ctx, gate, up) : ggml_swiglu(ctx, up);
             case GGML_UNARY_OP_GELU:
                 return as_gate ? ggml_geglu_split(ctx, gate, up) : ggml_geglu(ctx, up);
@@ -3478,7 +3473,6 @@ struct ggml_tensor * ggml_moe_up_gate(
     struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
 
     ggml_set_op_params_i32(result, 0, (int32_t) op);
-    ggml_set_op_params_f32(result, 1, limit);
 
     result->op     = GGML_OP_MOE_FUSED_UP_GATE;
     result->src[0] = as_up;

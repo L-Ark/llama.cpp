@@ -472,31 +472,7 @@ static bool moe_stream_one_name_filter_allows(const char * name) {
     if (!filter || !filter[0]) {
         return true;
     }
-    if (!name || !name[0]) {
-        return false;
-    }
-    const char * p = filter;
-    while (*p) {
-        while (*p == ',' || *p == ':' || *p == ' ' || *p == '\t') {
-            ++p;
-        }
-        const char * start = p;
-        while (*p && *p != ',' && *p != ':' && *p != ' ' && *p != '\t') {
-            ++p;
-        }
-        if (p > start) {
-            const size_t len = (size_t)(p - start);
-            char token[128];
-            if (len < sizeof(token)) {
-                std::memcpy(token, start, len);
-                token[len] = '\0';
-                if (std::strstr(name, token) != nullptr) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
+    return name && std::strstr(name, filter) != nullptr;
 }
 
 static const int8_t moe_stream_mxfp4_values[16] = {

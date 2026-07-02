@@ -1476,8 +1476,7 @@ extern "C" {
             struct ggml_tensor  * as_gate,
             struct ggml_tensor  * b,
             struct ggml_tensor  * ids,
-            enum ggml_unary_op    op,
-            float                 limit);
+            enum ggml_unary_op    op);
 
     // A: m columns, n rows,
     // B: p columns, n rows,
