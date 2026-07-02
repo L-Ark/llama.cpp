@@ -2497,7 +2497,7 @@
 
 - `attempt_id`: `20260702-late10-plus-layer0-top3`
 - `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
-- `status`: planned_before_execution
+- `status`: completed_rejected_regression_and_correctness_fail_rolled_back
 - `bottleneck_basis`: `0-2=>top3` failed manual correctness, but it also showed that early pruning can move the rounded speed metric. To close the boundary carefully, test only the single largest early layer `blk.0`: the CPU chunk diagnostic measured `ffn_up_exps:L0=1102.408ms` and `ffn_down_exps:L0=774.254ms` parallel-normalized, about `1876.662ms` before pruning.
 - `hypothesis`: Keeping accepted `10-39=>top3` and additionally applying `0=>top3` may recover a small portion of early CPU fallback while avoiding the severe trajectory/output damage from `0-2=>top3` and prior `0-9=>top3`.
 - `theoretical_upper_bound`: Layer 0 up/down cost is about `1.88s` parallel-normalized. Reducing one retained expert out of top4 gives a rough upper bound around `0.47s` if cost scales linearly; this is only a rounding-boundary chance. If token rate ties, regresses, or correctness changes, close this early-layer pruning direction.
@@ -2506,6 +2506,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, gate rows/misses stay close to accepted SOTA and do not approach rejected `0-2` behavior, and TTFT does not exceed `45449.496149ms`.
 - `rollback`: If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or rows/misses/refaults grow materially, revert source and clean rebuild. If accepted, immediately stop exploration, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, build hash/version, summary.json, gate trace summary, cgroup memory evidence, full France answer text, manual correctness note, rollback/promoted status, and if promoted the full pushed-rerun SOTA package.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T032634Z-20260702_late10_plus_layer0_top3/france-cpu40-vram0gb`.
+- `result`: rejected. `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=36773.398547ms`, `elapsed_seconds=112.25`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15012184064`, `pgmajfault=368924`, `workingset_refault_file=7251272`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic only.
+- `correctness_manual_review`: fail. The answer is semantically plausible but too long for the short-paragraph prompt and ends incomplete after `France is known for its high standard of living and its role as a global leader`. This fails the required coherent/complete output gate.
+- `trace_summary`: `/root/lfz/runs/vendor-ds4-16gb/20260702T032634Z-20260702_late10_plus_layer0_top3/france-cpu40-vram0gb/trace_summary.json` recorded `rows=47865`, `cache_hits=41465`, `cache_misses=6400`, `cache_inserts=6400`, `src0_ms=30934.877`, `dontneed_ms=1534.023`, `total_ms=33933.876`.
+- `gap_analysis`: Even pruning only layer 0 perturbs the generation trajectory enough to increase rows from accepted `35151` to `47865`, misses from `4971` to `6400`, and refaults to `7.25M`, while token rate regresses to `2.5` and output truncates. This closes early-layer top3 pruning under the current prompt/quality gate; do not continue layer1/layer2 variants without a different quality-preserving mechanism.
+- `rollback_status`: the RANGE2 source patch was reverted, clean rebuild completed, and `build-ds4-moe-stream/bin/llama-cli` returned to sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` with version `9164 (9600b5e1b)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`; no source push as SOTA.
 
 ## 记录与验收
 
