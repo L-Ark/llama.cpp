@@ -12263,3 +12263,126 @@ Auto mode must derive:
 
 from the route profile and replay simulation, without Kimi-specific hardcoded
 sizes.
+
+## Phase 4A result - split-pool simulation gate failed
+
+Timestamp: `2026-07-02 04:20 UTC`.
+
+Code state:
+
+- `de9567093`;
+- source tree clean before simulation;
+- no inference code changed.
+
+Reproducibility:
+
+- Added simulation-only helper:
+  `scripts/moe-size-class-cache-sim.py`.
+- SOTA profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+
+Main command:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic
+python3 scripts/moe-size-class-cache-sim.py \
+  --profile $RUN/route-profile.csv \
+  --trace $RUN/route-trace.csv \
+  --fallback $RUN/fallback-profile.csv \
+  --stderr $RUN/stderr.txt \
+  --policy lfu_lru \
+  --preload protected \
+  --admit-after 2
+```
+
+Primary output saved on the remote host:
+
+- `/tmp/phase4a-size-class-sim.txt`;
+- `/tmp/phase4a-size-class-sweep.txt`;
+- `/tmp/phase4a-size-class-extra.txt`.
+
+Size distribution from SOTA trace/fallback:
+
+| expert size | trace routes | trace routed GiB | fallback count | fallback ms |
+| ---: | ---: | ---: | ---: | ---: |
+| `4.484 MiB` | `41888` | `183.439` | `9248` | `16540.607` |
+| `5.359 MiB` | `32048` | `167.732` | `6800` | `14304.612` |
+| `6.016 MiB` | `25264` | `148.417` | `5440` | `17995.584` |
+| `7.438 MiB` | `7392` | `53.689` | `1632` | `6822.806` |
+| `7.875 MiB` Q4_0 | `0` | `0.000` | `5264` | `11462.100` |
+
+Important observation:
+
+- Q4_0 does not appear in the SOTA route trace, only in fallback profile.
+- Split-pool simulation therefore applies only to the value-preserving GPU
+  cache path for existing up/gate and normal down experts.
+- This avoids the Phase 3ZZ value-trajectory risk, but the remaining
+  critical-path gain is smaller than hoped.
+
+Default candidate results using `15000 MiB` total budget:
+
+| candidate | pools | hit rate | miss GiB | delta miss GiB | exposed saving | decode upper |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `single-15000` | `7.5:15000` | `42.64%` | `316.97` | `0.00` | `0 ms` | `0.655 tok/s` |
+| `two-pool-A` | `5.5:7000, 7.5:8000` | `45.39%` | `297.46` | `19.51` | `1031 ms` | `0.661 tok/s` |
+| `two-pool-B` | `5.5:8000, 7.5:7000` | `46.35%` | `294.01` | `22.96` | `1213 ms` | `0.662 tok/s` |
+| `two-pool-C` | `5.5:9000, 7.5:6000` | `47.08%` | `291.82` | `25.14` | `1329 ms` | `0.662 tok/s` |
+
+Broader budget sweep:
+
+| candidate | hit rate | miss GiB | delta miss GiB vs single | exposed saving | decode upper |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `two-pool-4000/11000` | `40.71%` | `317.62` | `-0.65` | `0 ms` | `0.655 tok/s` |
+| `two-pool-7000/8000` | `45.39%` | `297.46` | `19.51` | `1066 ms` | `0.661 tok/s` |
+| `two-pool-9000/6000` | `47.08%` | `291.82` | `25.15` | `1363 ms` | `0.663 tok/s` |
+| `two-pool-10000/5000` | `47.46%` | `291.95` | `25.02` | `1357 ms` | `0.663 tok/s` |
+| `three-5000/5000/5000` | `48.80%` | `285.01` | `31.96` | `1723 ms` | `0.665 tok/s` |
+| `three-6000/5000/4000` | `49.05%` | `286.58` | `30.39` | `1640 ms` | `0.664 tok/s` |
+
+Extra "use more VRAM" diagnostics:
+
+| candidate | total cache | hit rate | miss GiB | delta miss GiB | exposed saving | decode upper |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `two-9500/6000` | `15500 MiB` | `47.93%` | `287.83` | `29.14` | `1540 ms` | `0.664 tok/s` |
+| `two-10000/6000` | `16000 MiB` | `48.69%` | `283.81` | `33.16` | `1752 ms` | `0.665 tok/s` |
+| `three-5500/5000/5000` | `15500 MiB` | `49.67%` | `280.92` | `36.05` | `1905 ms` | `0.666 tok/s` |
+| `three-6000/5000/5000` | `16000 MiB` | `50.44%` | `277.32` | `39.65` | `2095 ms` | `0.667 tok/s` |
+| `three-6000/5000/5500` | `16500 MiB` | `51.07%` | `273.14` | `43.83` | `2316 ms` | `0.668 tok/s` |
+
+Calibration used:
+
+- pinned-stage host bandwidth from SOTA stderr:
+  - `host_stage_gib_s ~= 5.89`;
+  - `h2d_gib_s ~= 35.01`;
+- exposed down critical-path lower bound:
+  - `52.84 ms/GiB`.
+
+Interpretation:
+
+- Split pools clearly improve simulated cache hit rate and reduce miss GiB.
+- The raw host_stage + H2D upper bound can exceed `5 s` for some three-pool or
+  larger-VRAM candidates.
+- However the plan's implementation gate is decode critical-path saving
+  `>5 s/n96`. The calibrated exposed saving is only:
+  - about `1.0-1.4 s` for the requested two-pool 15GB candidates;
+  - about `1.7 s` for best 15GB three-pool;
+  - about `2.3 s` even with `16.5GB` total cache.
+- Expected token-rate upper bound stays around `0.661-0.668 tok/s`, not the
+  target `0.70-0.75 tok/s`.
+
+Decision:
+
+- Do not enter Phase 4B implementation from the current SOTA trace.
+- The `>5 s/n96` theoretical gate is not met.
+- Keep `scripts/moe-size-class-cache-sim.py` as the reproducible Phase 4A
+  simulator.
+- Current SOTA runtime remains unchanged.
+
+Next direction:
+
+- To get a meaningful token-rate jump, do not spend implementation time on
+  size-class split pools yet.
+- The next design step should target a larger exposed bucket than cache slot
+  waste, or first gather a more precise per-stage critical-path profile that
+  proves raw host_stage savings are actually exposed on the decode path.
