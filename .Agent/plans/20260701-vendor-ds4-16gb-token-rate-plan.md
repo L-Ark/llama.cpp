@@ -3159,3 +3159,15 @@
 - `pack_counters`: `[moe_stream] one expert pack: hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - `gap_vs_bound`: no-source readbench predicted at most `~8.85s` gate miss I/O savings. Accepted run reduced elapsed from about `85.81s` clean baseline to `72.19s`, and TTFT from `37346.733086ms` to `32260.354472ms`; this is directionally consistent with the I/O bound plus lower refault pressure (`workingset_refault_file 2.90M -> 1.95M`).
 - `decision`: This is a new accepted vendor DeepSeek cold-start SOTA if the pushed rerun reproduces. Commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from the pushed commit with the same pack path and sha to finalize reproducibility.
+
+### 当前执行：pushed-one-stream-pack-buffered-firstorder-sota-rerun
+
+- `attempt_id`: `20260702-pushed-one-stream-pack-buffered-firstorder-sota-rerun`
+- `status`: accepted_new_cold_sota_reproduced_from_pushed_commit
+- `pushed_commit`: `0312377cec2b617c64b97f30a14e5d474a3b2893` (`vendor-ds4: add one-stream expert pack sota`), pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T112702Z-20260702_pushed_one_pack_buffered_firstorder_sota_rerun/france-cpu40-vram0gb`.
+- `config`: same accepted pack config, strict cold `drop_caches`, 16GB cgroup, France prompt, same pack path and `pack_sha256=7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`.
+- `result`: `eval_tok_s=3.4`, `prompt_tok_s=1.2`, `TTFT=33395.660286ms`, `elapsed_seconds=73.46`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15040389120`, `pgmajfault=270675`, `workingset_refault_file=2207042`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `answer`: Same semantic/coherent France paragraph as the accepted probe; mentions France/French Republic, Western Europe, history/culture/global influence, Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
+- `counters`: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- `decision`: This finalizes the current accepted vendor DeepSeek cold-start SOTA at `3.4 tok/s`, reproducible from pushed commit `0312377cec2b617c64b97f30a14e5d474a3b2893` with the recorded pack file/path/hash. Continue next with either small prompt-set validation for this pack strategy or a more general prompt-independent pack/profile construction before claiming robustness beyond the France SOTA prompt.
