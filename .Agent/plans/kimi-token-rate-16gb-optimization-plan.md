@@ -1,0 +1,12553 @@
+# Kimi token-rate optimization plan under 16GB host RAM
+
+## Goal
+
+Continue optimizing Kimi IQ3_S decode throughput in the ik_llama-compatible
+vendor path while preserving stable, semantically correct output.
+
+Hard target:
+
+- Maximize token rate.
+- Keep total host RAM below 16 GB, including process RSS, allocator overhead,
+  page cache, pinned host buffers, mmap cache, and any helper process memory.
+- Use as much VRAM as possible without causing graph/cache instability, and
+  prefer GPU compute/cache over host RAM tiers whenever both are viable.
+- Keep TTFT increase within 20% of the current cold-start baseline.
+- Every accepted step must pass the fixed semantic quality gate:
+
+```text
+Please introduce France in a short paragraph.
+```
+
+The answer must be coherent, about France, and semantically correct.
+
+## Current correctness base
+
+The correctness base is the vendor Kimi path after the DeepSeek2 YaRN kq-scale
+fix documented in `.Agent/plans/kimi-vendor-port-plan.md`.
+
+Known accepted quality output shape:
+
+```text
+France is a country in Western Europe known for its rich history, art, and culture...
+```
+
+The previous quality target, stable `-n 96` output, has been met. Future speed
+work must not regress this.
+
+Recent vendor-side DeepSeek optimization branch
+`wici/vendor/deepseek-token-rate-16gb` has been merged by ancestry into
+`vendor/kimi-moe-stream-on-vendor`. The current tree keeps the Kimi/vendor code
+as the source of truth and imports the missing route cache simulator:
+
+```text
+scripts/moe-route-cache-sim.py
+```
+
+Use that tool for profile/cache planning, but do not assume DeepSeek-specific
+heuristics are correct for Kimi until measured.
+
+## Non-negotiable acceptance gates
+
+Every optimization, benchmark, and commit must satisfy all gates below. A result
+that violates any one gate is rejected even if token rate improves.
+
+1. Commit/push or rollback gate.
+   - When a change produces a reproducible token-rate improvement and satisfies
+     all gates below, commit and push it immediately.
+   - When a change reduces token rate, lowers answer quality, increases TTFT by
+     more than 20%, exceeds the host RAM limit, depends on warm cache, or cannot
+     be reproduced, revert to the previous accepted version before continuing.
+   - Do not stack another optimization on top of a rejected change.
+2. Reproducibility gate.
+   - Every accepted improvement must include enough reproduction detail for a
+     clean machine to rerun it: commit, branch, command, env, model path, expert
+     pack path, cgroup/memory setup, cold-start method, GPU model, driver/CUDA
+     version, exact prompt, seed, and output.
+   - A single lucky run is not accepted. For small changes, run at least one
+     cold-start validation plus one repeat. For large token-rate gains, run the
+     three-run `-n 96` semantic gate.
+3. Host RAM gate.
+   - Host RAM must stay below 16 GB.
+   - Include page cache, process RSS, pinned memory, mmap-resident pages, helper
+     process memory, and cgroup/accounted kernel memory where visible.
+   - Do not accept a run that only passes because the page cache was already
+     warmed. All promotion runs must be cold start.
+   - If previous measurements did not include page cache or non-process memory,
+     Phase 0 baseline must be rerun before any speed patch.
+4. VRAM/GPU-first gate.
+   - VRAM should be filled deliberately.
+   - Prefer VRAM expert cache, route-profile preload, and graph sizing changes
+     over host hot tiers when both are viable.
+   - Prefer GPU compute paths over CPU/host staging paths unless profiling proves
+     the GPU path is slower or unsafe.
+   - Leave explicit graph reserve and safety margins in the run record.
+5. Output quality gate.
+   - Output quality is checked at every step.
+   - The France prompt must produce a coherent short paragraph.
+   - The answer must be semantically correct, about France, and free of repeated
+     malformed clauses, tokenizer artifacts, role/template leakage, and unrelated
+     drift.
+   - Large token-rate jumps require the same three-run `-n 96` gate as the
+     correctness plan.
+6. TTFT gate.
+   - TTFT may not increase by more than 20%.
+   - Compare against the current cold-start baseline collected in Phase 0.
+   - If token rate improves but TTFT exceeds the limit, the patch is rejected
+     unless the next patch in the same experiment restores TTFT before commit.
+7. Cold-start gate.
+   - Every benchmark must be cold start.
+   - Restart the process.
+   - Drop filesystem cache where permitted, or run in a fresh cgroup/VM state
+     that proves cache is cold.
+   - Record the method used to prove cold start.
+
+## Required run record
+
+Every experiment must create a run directory under:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/YYYYMMDD-HHMMSSZ-<short-name>
+```
+
+Each run directory must contain:
+
+- `README.md`: short reproduction recipe from a clean checkout.
+- `command.txt`: exact command, git commit, branch, model path, expert pack path,
+  prompt, seed, and sampling parameters.
+- `env.txt`: all `GGML_*`, CUDA, cgroup, and memory-related env vars.
+- `stdout.txt` and `stderr.txt`.
+- `answer.txt`: exact generated answer.
+- `metrics.json`: structured measurements.
+- `memory.txt`: RSS, cgroup `memory.current`, `memory.peak`, page cache, swap,
+  pinned memory if observable, and OOM status.
+- `vram.txt`: `nvidia-smi` before load, after load, first token, mid-decode, and
+  after exit.
+- `system.txt`: GPU model, driver version, CUDA runtime, CPU, kernel, disk model,
+  filesystem, and effective cgroup limits.
+- `cold-start.txt`: exact cold-start procedure and evidence that the run did not
+  reuse warm page cache.
+- `moe.txt`: MoE counters, read counts, bytes, cache hit/miss, prefetch timing,
+  staging timing, H2D timing, compute timing, and `read_failures`.
+- `quality.txt`: pass/fail decision for the France prompt with the exact reason.
+
+`metrics.json` must include at least:
+
+```json
+{
+  "commit": "",
+  "branch": "",
+  "reproduction_readme": "",
+  "cold_start": true,
+  "cold_start_method": "",
+  "host_ram_peak_gib": 0,
+  "page_cache_peak_gib": 0,
+  "process_rss_peak_gib": 0,
+  "cgroup_memory_peak_gib": 0,
+  "host_ram_gate_pass": false,
+  "vram_peak_mib": 0,
+  "vram_unused_min_mib": 0,
+  "gpu_compute_path": "",
+  "ttft_ms": 0,
+  "ttft_baseline_delta_pct": 0,
+  "ttft_gate_pass": false,
+  "decode_tokens": 0,
+  "decode_seconds": 0,
+  "token_rate_tps": 0,
+  "token_rate_baseline_delta_pct": 0,
+  "seconds_per_token": 0,
+  "prompt_eval_ms": 0,
+  "moe_read_bytes": 0,
+  "moe_h2d_ms_per_token": 0,
+  "moe_compute_ms_per_token": 0,
+  "moe_wait_ms_per_token": 0,
+  "moe_cache_hit_pct": 0,
+  "read_failures": 0,
+  "quality_pass": false,
+  "accepted": false,
+  "commit_pushed": false,
+  "rollback_required": false
+}
+```
+
+## Development loop
+
+Optimization must alternate between design and execution.
+
+Before every implementation patch:
+
+1. Update this plan with the current bottleneck and the selected next change.
+2. Run one profiling experiment to break down per-token time.
+3. Rank candidate optimizations by expected token-rate gain.
+4. Theorize why the top candidate should help.
+5. Compute an upper bound from hard limits such as SSD bandwidth, PCIe/H2D
+   bandwidth, expert tensor size, active expert count, CUDA kernel occupancy, or
+   measured up/down compute time.
+6. Define the acceptance and rollback criteria.
+
+After every implementation patch:
+
+1. Build and run the exact benchmark.
+2. Compare measured gain with the theoretical bound.
+3. If the result diverges, explain the gap with evidence before trying another
+   patch.
+4. Run the quality gate.
+5. Write the reproduction method and full metrics into the run directory.
+6. If the run improves token rate and satisfies host RAM, VRAM/GPU-first, TTFT,
+   cold-start, reproducibility, and quality gates, commit and push immediately.
+7. If any hard gate fails, revert the patch before continuing and record the
+   failed run as rejected.
+
+## Phase 0: cold 16GB baseline
+
+Goal: establish the real baseline under the final deployment constraint.
+
+This must be redone because earlier measurements did not strictly prove total
+host RAM below 16 GB including page cache.
+
+Baseline command rules:
+
+- Use the accepted Kimi IQ3_S correctness config.
+- Use `-n 96`.
+- Use the fixed France prompt.
+- Use cold start.
+- Run inside a cgroup or equivalent host-memory guard with an effective limit
+  below 16 GB. If this guard cannot be enabled, the run is diagnostic only and
+  cannot be accepted as baseline.
+- Disable or bound host hot tiers initially:
+  - `GGML_MOE_RAM_TIER_MIB=0` unless explicitly testing RAM tier.
+  - Avoid settings that intentionally keep large expert pages in host page cache.
+- Use current best VRAM cache settings, but record exact graph reserve and cache
+  budget.
+
+Required baseline measurements:
+
+- End-to-end TTFT.
+- Decode token rate.
+- Per-token wall time.
+- Per-token breakdown:
+  - routing/top-k
+  - up/gate read
+  - up/gate H2D
+  - up/gate compute
+  - activation/SwiGLU
+  - down read
+  - down H2D
+  - down compute
+  - synchronization/wait
+  - sampling
+- Host RAM peak including page cache.
+- VRAM peak and unused VRAM.
+- Cache hit rate by layer and expert tensor kind.
+- Top recurring experts from the route trace.
+
+Acceptance:
+
+- `host_ram_peak_gib < 16`.
+- The recorded host RAM includes page cache and non-process memory.
+- The run is cold start and the cold-start proof is recorded.
+- France `-n 96` output passes.
+- TTFT becomes the baseline for the 20% gate.
+- `read_failures = 0`.
+- Baseline is recorded in this plan with timestamp, run directory, and
+  reproduction method.
+
+## Phase 1: bottleneck classification
+
+Goal: decide whether the next gain should come from IO, H2D transfer, up/gate
+compute, down compute, cache policy, graph memory, or scheduling overlap.
+
+Run one instrumented decode and classify each token into:
+
+- IO-bound: read wait dominates and cache hit rate is low.
+- H2D-bound: transfer time dominates after reads are available.
+- Compute-bound: up/gate or down CUDA kernels dominate.
+- Sync-bound: large gaps exist between IO completion, H2D, and kernel launch.
+- Cache-capacity-bound: recurring experts miss because VRAM cache budget is too
+  small or incorrectly partitioned.
+- Quality-sensitive: faster math path changes logits enough to harm output.
+
+Prioritization rule:
+
+1. Fix any correctness-sensitive path before speed.
+2. Optimize the largest measured per-token bucket first.
+3. Prefer changes that increase VRAM reuse and reduce host RAM pressure.
+4. Avoid large math rewrites until IO/cache/scheduling evidence shows compute is
+   the bottleneck.
+
+## Phase 2: VRAM-first cache and profile preload
+
+Hypothesis:
+
+Kimi token rate should improve if recurring routed experts are already in VRAM
+at decode time, reducing SSD reads and H2D stalls while keeping host RAM below
+16 GB.
+
+Design work:
+
+- Export or collect route profile for the fixed prompt and representative Kimi
+  prompts.
+- Use `scripts/moe-route-cache-sim.py` to compare cache policies.
+- Compute theoretical token-rate ceiling from:
+  - active experts per token
+  - expert tensor bytes by type
+  - measured SSD bandwidth
+  - measured H2D bandwidth
+  - available VRAM after graph reserve
+- Decide VRAM partition by tensor kind:
+  - up/gate
+  - down
+  - late-layer vs full-layer
+  - CID/profile-preloaded cache
+
+Candidate env/features:
+
+- `GGML_MOE_VRAM_CACHE_MIB`
+- `GGML_MOE_VRAM_CACHE_GRAPH_RESERVE_MIB`
+- `GGML_MOE_VRAM_CACHE_AUTO_CLAMP`
+- profile-guided preload from the merged DeepSeek work where compatible
+- `GGML_MOE_TRACE_PREFETCH`
+- route cache simulator output
+
+Acceptance:
+
+- Token rate improves.
+- Host RAM remains below 16 GB cold.
+- VRAM usage increases or unused VRAM is justified by graph reserve/safety.
+- GPU-side cache/compute is preferred over host RAM growth.
+- TTFT increase <= 20%.
+- France `-n 96` passes three times if gain is large.
+- Reproduction method is complete.
+- Commit and push immediately after passing.
+
+Rollback:
+
+- Revert if cache preload increases TTFT over 20%, causes host RAM/page cache
+  growth above 16 GB, or changes output quality.
+
+## Phase 3: reduce up/gate compute time
+
+Hypothesis:
+
+Earlier Kimi work showed up/gate path is likely a major speed lever. A true
+fused/id-MMQ up-gate path for the observed Kimi IQ3_S tensor types can reduce
+per-token compute and launch overhead without changing routing.
+
+Required theory before coding:
+
+- Identify exact Kimi up/gate tensor quant types in the loaded model.
+- Document the math:
+  - gate projection
+  - up projection
+  - SwiGLU activation
+  - elementwise multiply
+- Show why the proposed kernel is numerically equivalent or bounded relative to
+  the accepted path.
+- Estimate upper-bound token rate from current measured up/gate ms/token.
+
+Implementation candidates:
+
+- Vendor-native pruned id-MMQ path for Kimi observed types only.
+- Keep opt-in behind an env var.
+- Do not reuse a broad ik whole-file port that pulls unrelated quant kernels.
+
+Acceptance:
+
+- Compare output against baseline for short deterministic runs.
+- France `-n 96` passes.
+- For any large token-rate gain, run three `-n 96` passes.
+- Host RAM including page cache remains below 16 GB.
+- The accepted path uses GPU compute; any CPU fallback must be justified by
+  measured speed and memory evidence.
+- TTFT increase <= 20%.
+- Reproduction method is complete.
+- Commit and push only after acceptance.
+
+Rollback:
+
+- Revert if semantic quality changes, if logits drift causes unstable tails, or
+  if measured speed does not match the theoretical model and the gap cannot be
+  explained.
+
+## Phase 4: down path and Q8_K/reference-cache probes
+
+Hypothesis:
+
+Down projection can be accelerated by a scoped reference path or late-layer cache
+if it is currently a material per-token bucket.
+
+Current caution:
+
+Earlier down Q8_K probes were semantically unsafe when enabled broadly. Late-layer
+range gating improved output but still failed `-n 96`. Treat down changes as
+quality-sensitive.
+
+Design requirements:
+
+- Re-measure down ms/token after Phase 2 and Phase 3.
+- Only proceed if down remains a top bottleneck.
+- Compute expected gain from down ms/token, not from intuition.
+- Restrict first tests to narrow layer ranges.
+
+Acceptance:
+
+- No semantic regression.
+- Three `-n 96` runs for any accepted down math/cache change.
+- Host RAM including page cache remains below 16 GB.
+- TTFT increase <= 20%.
+- Clear explanation of any numeric approximation.
+- Reproduction method is complete.
+- Commit and push only after acceptance.
+
+Rollback:
+
+- Revert immediately on repeated malformed clauses, grammar collapse, or
+  unrelated tail drift.
+
+## Phase 5: overlap IO, H2D, and compute
+
+Hypothesis:
+
+If profiling shows idle gaps between expert read, H2D transfer, and CUDA compute,
+stream scheduling can improve token rate without changing math.
+
+Design requirements:
+
+- Timeline one decode token with CUDA events and MoE trace logs.
+- Identify which stage waits on which dependency.
+- Prove whether the current implementation actually overlaps work.
+- Estimate upper bound from the max of overlapped stage times:
+
+```text
+ideal_token_ms = max(read_ms, h2d_ms, compute_ms) + unavoidable_sync_ms
+```
+
+Candidate work:
+
+- staged pinned slots tuning
+- split up/gate staging
+- prefetch distance tuning
+- async H2D stream separation
+- route-aware next-token prefetch where correctness permits
+
+Acceptance:
+
+- Token rate approaches the overlap bound or the gap is explained.
+- Host RAM remains below 16 GB; pinned memory counts against the limit.
+- VRAM remains deliberately used; do not trade VRAM reuse for host RAM pressure.
+- TTFT increase <= 20%.
+- Quality gate passes.
+- Reproduction method is complete.
+- Commit and push only after acceptance.
+
+## Phase 6: host RAM pressure audit
+
+Goal: make sure the accepted fast config will run on real 16GB RAM machines.
+
+For every accepted configuration:
+
+- Run cold with a 16GB cgroup.
+- Record page cache before and after.
+- Verify no large mmap pages remain resident beyond the intended working set.
+- Verify pinned slots and RAM tier do not silently push total memory above limit.
+- Prefer `madvise`/`dontneed` style page release only after confirming it does
+  not destroy token rate.
+
+Acceptance:
+
+- `memory.peak < 16GB` with margin.
+- Page cache and pinned memory are included in the accounting.
+- No swap/OOM.
+- Token rate and TTFT still meet accepted numbers.
+- The reproduction method shows how to enforce the same memory limit.
+
+## Commit and push policy
+
+Commit and push immediately only when all are true:
+
+- Build passes.
+- Cold-start benchmark passes under a strict host RAM guard below 16GB.
+- Host RAM accounting includes page cache, RSS, pinned memory, mmap-resident
+  pages, and helper processes.
+- VRAM is used as fully as the graph/cache reserve allows, or the unused VRAM is
+  explicitly justified.
+- The accepted path maximizes GPU compute/cache and does not rely on an
+  unbounded host RAM tier.
+- France quality gate passes.
+- `read_failures = 0`.
+- TTFT increase <= 20%.
+- Token rate improves or the patch is required instrumentation.
+- The run directory, metrics, and reproduction method are recorded in this plan.
+
+Do not commit:
+
+- speculative speed patches that fail quality,
+- patches that only work with warm page cache,
+- patches that require more than 16GB host RAM,
+- patches that improve average token rate but increase TTFT above the limit,
+- patches that are not reproducible from the recorded command/env/model/cgroup
+  setup,
+- patches that shift work to host RAM when VRAM/GPU capacity is available.
+
+## Baseline table
+
+Fill this before the next code optimization.
+
+| Time UTC | Commit | Run dir | Host RAM peak incl. page cache | VRAM peak / unused | TTFT | Token rate | Quality | Cold proof | Repro method | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-01 12:50:35 | `2c69cf836` | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline` | 14.901 GiB cgroup peak, includes page cache by cgroup accounting; `memory.events max=245278`, OOM=0 | 16224 MiB peak / 15886 MiB minimum free | 88609.77 ms | 0.20 tok/s, 5.01989 s/token | PASS: coherent France paragraph ending with `<|im_end|>` | `sync; echo 3 > /proc/sys/vm/drop_caches`; child shell moved into dedicated cgroup before `exec`; `cgroup.procs` sampled with timeout and model PID | `README.md` and `command.txt` in run dir | Accepted as the first cold 16GB correctness/token-rate baseline. Missing explicit anon/file page-cache split and MoE per-stage timing; collect in the next profiling run before any code optimization. |
+
+## Experiment log
+
+Every implementation step must append one row before and after execution.
+
+| Time UTC | Step | Hypothesis | Theoretical upper bound | Result | Gates | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-01 12:47:29 | Phase 0 cgroup smoke v2 | Verify the actual inference process can run inside a strict 16GB host-memory cgroup after fixing the runner to move `$BASHPID`, not the outer shell. | N/A | `/root/lfz/runs/vendor-kimi-token-rate/20260701-124729Z-n2-cgroup-smoke-v2`: `rc=0`, output `France is`, cgroup peak 14.901 GiB. | 16GB/cold/smoke quality pass; not a baseline because `-n 2`. | Proceed to full `-n 96` baseline. |
+| 2026-07-01 12:50:35 | Phase 0 full baseline | The current accepted Kimi correctness config should produce stable `-n 96` output under a 16GB host-memory guard, but token rate may drop because page cache is constrained. | Previous unconstrained reference was about 0.51-0.52 tok/s; under strict 16GB, lower bound unknown before measurement. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-125035Z-n96-cold-16gb-baseline`: `rc=0`, prompt eval/TTFT 88.61s, eval 401.59s / 80 decode runs, 0.20 tok/s, total 490.26s. | 16GB pass by cgroup peak 14.901 GiB; cold pass; quality pass; `read_failures` not reported; TTFT becomes baseline; reproducibility recorded. VRAM/GPU-first not optimized: 15.9 GiB VRAM unused. | Baseline established. Next required step is profiling with `memory.stat` anon/file sampling and MoE per-stage timing, then prioritize VRAM expert cache/profile preload. |
+| 2026-07-01 13:03:05 | Phase 2A n32 expert pack + VRAM cache profile | Move repeated routed expert tensors into VRAM cache to reduce 16GB page-cache/reclaim stalls without changing model math. | Removing strict-cgroup reclaim stalls could recover the old unconstrained 0.51-0.52 tok/s ceiling; route replay with 15GB cache estimated up to 70.46% trace hit rate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`: VRAM peak 31278 MiB, minimum free 832 MiB, cache hit 60.0%, route replay hit estimate 70.46%, but TTFT 110.33s (+24.5%), decode 0.16 tok/s, output started `The user asks: ...`. | Host RAM/cold/read failures pass; VRAM/GPU-first pass; TTFT gate fail; token-rate fail; quality fail. | Rejected. Do not promote and do not stack optimizations on this env. The gap is that enabling `GGML_MOE_STREAM`/batched up-gate changes output semantics and is slower under the 16GB cap. |
+| 2026-07-01 13:11:49 | Phase 2B-1 stream-only isolation | If `GGML_MOE_STREAM=1` alone preserves quality, the Phase 2A regression is likely in expert pack/cache/fused up-gate. If it fails, stream path itself is the minimum bad switch. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`: cgroup peak 14.901 GiB, TTFT 109.13s, decode 0.26 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. Log shows `[moe_stream] enabled` and `VRAM cache: cudaMalloc 16.0 GiB FAILED`. | Host RAM/cold pass; TTFT fail; quality fail. | Rejected. Minimum semantic regression switch is `GGML_MOE_STREAM=1`; stop env sweep and debug stream one-path correctness before any VRAM cache promotion. |
+| 2026-07-01 13:17:22 | Phase 2C stream cache disabled isolation | Check whether stream-only corruption was caused by the default one-cache 16GiB cudaMalloc failure. | N/A diagnostic. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-131722Z-n16-phase2c-stream-cache0`: `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, cgroup peak 14.901 GiB, TTFT 99.18s, decode 0.25 tok/s, output `The:ayt老爷 grave!!!!!!!!!!!`. | Host RAM/cold pass; quality fail. | Rejected. one-cache allocation failure is not the root cause; stream compute/copy/scatter remains unsafe. |
+| 2026-07-01 13:23:17 | Phase 1A n32 `-t 40 -tb 40` | Increasing CPU threads on the accepted non-stream path may improve token rate without changing math. | Perfect CPU scaling from 24 to 40 would be 1.67x on the CPU portion, but IO/reclaim can dominate. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-132317Z-n32-phase1a-threads40`: cgroup peak 14.901 GiB, quality pass, TTFT 65.28s, decode 155.51s / 31 runs, 0.20 tok/s. | Host RAM/cold/quality/TTFT pass; token-rate improvement absent. | Rejected for token-rate promotion. Useful observation: `-tb 40` may reduce prompt/TTFT, but decode remains page-cache/IO bound. |
+| 2026-07-01 13:34:48 | Phase 2C src1 row fix compare | Stream one-path likely reads the wrong `src1` row. Compare stream output against CPU reference and then fix row selection. | Correctness-only. A fixed stream path should reduce compare max_abs from O(1e-1) to quantization-level O(1e-3), then restore `France is` prefix. | Before fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133121Z-n2-phase2c-stream-compare` showed `max_abs` up to 0.527928 and no output yet. After fix, `/root/lfz/runs/vendor-kimi-token-rate/20260701-133448Z-n2-phase2c-stream-src1fix-compare` showed `max_abs <= 0.00151799` and output `France is`. | Host RAM/cold pass; compare pass; n2 prefix pass. | Keep the src1 row-selection fix. It is required before any VRAM/cache stream work. |
+| 2026-07-01 13:37:39 | Phase 2C src1 fix stream-only n16 | Verify stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`: output `France is a country in Western Europe known for its rich history, culture, and`, TTFT 101.88s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT pass; token-rate fail. | Accept as stream correctness progress only. Do not promote as performance. |
+| 2026-07-01 13:42:33 | Phase 2C src1 fix stream-only n32 | Verify longer stream-only semantic smoke after fixing `src1` row selection. | Correctness-only; not a performance promotion. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`: output remained coherent about France, TTFT 111.49s, decode 0.14 tok/s. | Host RAM/cold/quality pass; TTFT fail; token-rate fail. | Commit the opt-in stream correctness fix because it restores semantic output and is default-off. Next work must address TTFT/decode speed before any stream/cache promotion. |
+| 2026-07-01 13:51:07 | Phase 2A rerun after src1 fix | Re-test expert pack + 15GB VRAM cache after fixing stream `src1` row selection. | If quality is restored, token rate should improve over 0.20 tok/s; TTFT may still fail because stream prompt eval was slow. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-135107Z-n32-phase2a-src1fix-vram-cache-profile`: quality pass, VRAM peak 31278 MiB / 832 MiB free, read_failures=0, TTFT 114.29s, decode 0.22 tok/s, cache hit 62.3%, up/gate total 13.046 ms/call. | Host RAM/cold/VRAM/read/quality pass; token-rate pass for n32; TTFT fail. | Rejected for promotion due TTFT. Next candidate combines this path with `-t 40 -tb 40`, which previously reduced prompt/TTFT on non-stream baseline. |
+| 2026-07-01 13:57:47 | Phase 2D src1 fix + VRAM cache + `-t 40 -tb 40` | Keep Phase 2A decode gains while reducing TTFT with more CPU threads. | Applying half of the earlier TTFT reduction should bring 114.29s near 99.4s; decode should ideally stay above 0.20 tok/s. | `/root/lfz/runs/vendor-kimi-token-rate/20260701-135747Z-n32-phase2d-src1fix-vram-cache-t40`: quality pass, VRAM peak 31278 MiB, read_failures=0, TTFT 102.37s, decode 0.20 tok/s. | Host RAM/cold/VRAM/read/quality/TTFT pass; token-rate improvement absent. | Rejected for promotion. Need a thread-count balance between `t24` (0.22 tok/s, TTFT fail) and `t40` (TTFT pass, 0.20 tok/s). |
+
+## Current bottleneck after Phase 0
+
+The first strict 16GB cold baseline shows the current path is not using the
+available GPU memory effectively:
+
+- Decode token rate is only 0.20 tok/s.
+- TTFT/prompt eval is 88.61s.
+- VRAM peak is 16224 MiB, with at least 15886 MiB still free.
+- The cgroup is constantly at its 16,000,000,000 byte memory limit during
+  decode and reports `memory.events max=245278`, with no OOM. This means the
+  kernel is reclaiming aggressively inside the memory cap.
+- The observed process state reached `D` during decode, consistent with IO wait
+  or reclaim stalls.
+
+Priority order before code changes:
+
+1. Rerun one profiling baseline with cgroup `memory.stat` sampling to split
+   anon/file/kernel memory and with MoE timing/counter envs enabled if available.
+2. Use the route cache simulator and MoE trace data to estimate the maximum gain
+   from filling the unused ~15.9 GiB VRAM with expert cache/profile preload.
+3. Only after the IO/cache bound is quantified, consider math/kernel changes
+   such as up/gate id-MMQ.
+
+## Next candidate: Phase 2A expert pack plus VRAM cache
+
+Design timestamp: 2026-07-01 13:02 UTC.
+
+Current bottleneck:
+
+- The accepted strict 16GB baseline decodes at 0.20 tok/s.
+- cgroup memory is continuously capped at 16,000,000,000 bytes and reports
+  `memory.events max=245278`.
+- VRAM has about 15.9 GiB unused.
+- The process entered `D` state during decode, consistent with IO wait or memory
+  reclaim stalls.
+
+Hypothesis:
+
+Using the existing Kimi IQ3_S expert pack with MoE streaming and allocating a
+large VRAM expert cache should reduce page-cache pressure, reduce mmap-backed
+expert faults, and move repeated routed expert tensors into GPU memory. This
+matches the GPU/VRAM-first gate and should improve token rate without changing
+model math.
+
+Candidate configuration:
+
+```sh
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_STREAM=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_BATCH_PROFILE_OUT=<run>/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=<run>/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=<run>/ttft-trace.csv
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000
+```
+
+The first execution is a cold `-n 32` profiling run, not an accepted performance
+promotion. It must still pass the France semantic smoke. If it improves speed
+and quality holds, rerun the same config as full `-n 96` under the strict 16GB
+gate before committing any code changes.
+
+Theoretical upper bound:
+
+- Strict 16GB baseline decode time is 5.01989 s/token.
+- Previous same-correctness unconstrained reference was about 1.92-1.96 s/token.
+  Removing cgroup page-cache/reclaim stalls alone therefore gives an expected
+  ceiling around 0.51-0.52 tok/s.
+- Additional VRAM cache hits can only improve beyond that if repeated expert
+  tensors avoid SSD read and H2D transfer. The profiling run must report route
+  frequency and cache counters before claiming a higher bound.
+
+Acceptance for this candidate:
+
+- `-n 32` profiling run: host RAM including page cache below 16GB, cold start,
+  quality pass, and no read failures.
+- Promotion run: full `-n 96`, same gates, TTFT <= Phase 0 TTFT * 1.20
+  (<= 106331.72 ms), reproducible output, and token rate > 0.20 tok/s.
+- If promoted, record exact reproduction and commit/push immediately.
+
+Rollback:
+
+- If output quality regresses, read failures appear, TTFT exceeds the limit, or
+  host RAM exceeds the cap, reject the candidate and return to the Phase 0
+  baseline config.
+
+Result:
+
+- Rejected by the `-n 32` profiling run at
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-130305Z-n32-phase2a-vram-cache-profile`.
+- It did use VRAM as intended: peak 31278 MiB, minimum free 832 MiB.
+- It enabled the stream/batched path:
+  `[moe_stream] batched up/gate decode path active`.
+- It produced route/profile artifacts:
+  `route-profile.csv`, `route-trace.csv`, `ttft-trace.csv`, and `cache-sim.txt`.
+- Runtime counters:
+  - expert pack hits=3406, misses=2158, read_failures=0
+  - VRAM cache hits=8340, misses=5564, hit_rate=60.0%
+  - pinned staging copies=3406, host_stage=4623.159 ms, H2D=645.748 ms
+  - up/gate profile total=31.246 ms/call
+- Route simulator:
+  - 15GB single cache estimated hit 85.8% from profile counts.
+  - Trace replay with protected preload recommended upgate_pct=75, estimated
+    hit 70.46%, miss 19.44 GiB.
+- Failure:
+  - TTFT was 110325.85 ms, exceeding the 106331.72 ms gate.
+  - Decode was 0.16 tok/s, slower than the 0.20 tok/s baseline.
+  - Output quality failed: `The user asks: "Please introduce France ...`.
+
+Conclusion:
+
+The limiting issue is not just cache capacity. The available VRAM can be filled,
+but the current `GGML_MOE_STREAM` / batched up-gate path is not semantically
+equivalent to the accepted non-stream path for Kimi. No code or env promotion is
+allowed from Phase 2A.
+
+## Next candidate: Phase 2B stream switch isolation
+
+Design timestamp: 2026-07-01 13:12 UTC.
+
+Current bottleneck:
+
+- The correctness baseline is slow because it leaves about 15.9 GiB VRAM unused
+  and runs at the cgroup memory limit.
+- The first VRAM/cache attempt filled VRAM but failed quality and TTFT after
+  activating the stream/batched up-gate path.
+
+Hypothesis:
+
+The quality regression is caused by one of the stream math switches, not by the
+VRAM cache allocation itself. Before any cache optimization can be accepted, the
+minimum stream switch that changes Kimi output must be isolated.
+
+Isolation order:
+
+1. `GGML_MOE_STREAM=1` only, no expert pack, no VRAM cache, no fused up/gate.
+2. `GGML_MOE_STREAM=1` + expert pack, no VRAM cache, no fused up/gate.
+3. `GGML_MOE_STREAM=1` + expert pack + VRAM cache, no fused up/gate.
+4. Only if the above pass, add `GGML_MOE_STREAM_FUSED_UP_GATE=1`.
+
+Use cold `-n 16` or `-n 32` smoke runs under the same 16GB cgroup. Stop the
+isolation sweep as soon as the output starts with meta text, malformed grammar,
+or any semantic drift. These are diagnostic runs only; promotion still requires
+full `-n 96`.
+
+Theoretical upper bound:
+
+- If `GGML_MOE_STREAM=1` alone already fails quality, cache work cannot be
+  accepted until the stream path is fixed.
+- If stream-only passes and cache-only fails, the bug is in cache copy/staging.
+- If cache-only passes and fused up/gate fails, the bug is in the batched/fused
+  up-gate math path.
+
+Acceptance for isolation:
+
+- Host RAM below 16GB, cold start, `read_failures=0`.
+- France output must start as a direct answer, not prompt analysis.
+- TTFT should be recorded but does not promote the candidate.
+
+Rollback:
+
+- No code changes are made during isolation. Failed env combinations are recorded
+  and not reused for promotion.
+
+Result:
+
+- `GGML_MOE_STREAM=1` alone failed the cold `-n 16` smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-131149Z-n16-phase2b-stream-only`.
+- Output was corrupted:
+  `The:ayt老爷 grave!!!!!!!!!!!`.
+- Disabling the default stream one-cache with `GGML_MOE_STREAM_ONE_CACHE_MIB=0`
+  produced the same corrupted output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-131722Z-n16-phase2c-stream-cache0`.
+- Because the first isolation switch failed, later combinations with expert
+  pack, VRAM cache, or fused up/gate are invalid until the base stream path is
+  corrected.
+
+Conclusion:
+
+The next real implementation work is correctness debugging in the stream path,
+not cache tuning. The stream path must become numerically equivalent enough to
+the accepted non-stream path before any VRAM/cache optimization can be accepted.
+
+## Next candidate: Phase 2C stream correctness debug
+
+Design timestamp: 2026-07-01 13:16 UTC.
+
+Current bottleneck:
+
+- Non-stream path is semantically correct but slow under 16GB because it leaves
+  VRAM unused and relies on mmap/page-cache behavior.
+- Stream path is required to use existing GPU expert cache machinery, but
+  `GGML_MOE_STREAM=1` alone corrupts output.
+
+Hypothesis:
+
+The stream one-path has a tensor layout, row mapping, quant type, or
+copy/scatter mismatch for Kimi's observed expert types. Fixing the stream path
+should unlock the VRAM-cache candidate. The upper bound is not accepted token
+rate yet; the first target is matching the non-stream prefix and then recovering
+at least the baseline 0.20 tok/s under 16GB.
+
+Debug order:
+
+1. Identify the first expert tensor type and route where stream output diverges.
+2. Compare stream one-path output against the normal non-stream reference for a
+   single routed expert and a single token.
+3. Verify:
+   - source weight pointer and byte count,
+   - quant type dispatch,
+   - `src1` row stride and token selection,
+   - destination scatter offset,
+   - synchronization before graph consumers read the output,
+   - whether the unexpected default 16GiB stream VRAM cache allocation changes
+     behavior or just logs a failed allocation.
+4. Add the smallest debug instrumentation needed to prove the mismatch.
+5. Only after the mismatch is fixed, rerun Phase 2B-1 stream-only smoke.
+
+Theoretical upper bound:
+
+- Correct stream-only decode measured 0.26 tok/s in the failed run, but this
+  number is not acceptable because quality failed and TTFT exceeded the gate.
+- If correctness is fixed without adding overhead, stream-only could at least
+  exceed the 0.20 tok/s baseline. The useful upper bound still comes from
+  Phase 2A cache replay: a corrected stream+cache path could approach the
+  0.51-0.52 tok/s reclaim-free reference, with further gains only if cache hits
+  reduce SSD/H2D waits.
+
+Acceptance:
+
+- `GGML_MOE_STREAM=1` only, cold `-n 16`, starts with a coherent France answer.
+- Then cold `-n 32` passes the same quality check.
+- Host RAM remains below 16GB, `read_failures=0`, and TTFT is recorded.
+- Commit/push only if a code fix is made and these diagnostics pass.
+
+Rollback:
+
+- Revert any debug/fix patch that does not restore stream-only semantic quality
+  or that worsens the accepted non-stream baseline.
+
+Result:
+
+- Root cause found: stream one-path used `rows[k].i1` directly as the `src1`
+  row index. For the Kimi decode shape, `src1_nb2 == src1_nb1`, so the effective
+  `src1.ne[1]` is 1 and the CPU reference uses `i11 = id % ne11 = 0`. Directly
+  using route slot values read the wrong activation rows.
+- Added default-off CPU compare instrumentation under
+  `GGML_MOE_STREAM_COMPARE_CPU`.
+- Before fix:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133121Z-n2-phase2c-stream-compare`
+  showed stream-vs-CPU `max_abs` up to 0.527928 on
+  `blk.2.ffn_gate_exps.weight`.
+- Fix: stream one-path now derives `src1_ne1` from `src1_nb2 / src1_nb1` and
+  uses `rows[k].i1 % src1_ne1`, matching the CPU `mul_mat_id` row selection.
+- After fix:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133448Z-n2-phase2c-stream-src1fix-compare`
+  showed `max_abs <= 0.00151799` and output `France is`.
+- `n16` stream-only semantic smoke passed:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-133739Z-n16-phase2c-src1fix-stream-only`.
+- `n32` stream-only semantic smoke passed:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-134233Z-n32-phase2c-src1fix-stream-only`.
+- Not a performance promotion:
+  n32 stream-only TTFT was 111.49s and decode was 0.14 tok/s, both worse than
+  the Phase 0 performance baseline. The fix is accepted only as default-off
+  correctness progress needed before future VRAM/cache work.
+
+Next:
+
+Re-test Phase 2A-style expert pack + VRAM cache with the src1 fix, starting with
+cold `-n 32`. Promotion still requires full `-n 96`, host RAM <16GB, quality
+pass, TTFT <=106331.72 ms, and token rate >0.20 tok/s.
+
+Result:
+
+- Rerun completed at
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-135107Z-n32-phase2a-src1fix-vram-cache-profile`.
+- Quality recovered and VRAM was used as intended.
+- Decode improved to 0.22 tok/s versus 0.20 tok/s baseline.
+- TTFT failed at 114285.53 ms, above the 106331.72 ms gate.
+- Not promoted.
+
+## Next candidate: Phase 2D src1 fix + VRAM cache + 40 CPU threads
+
+Design timestamp: 2026-07-01 13:58 UTC.
+
+Current bottleneck:
+
+- Phase 2A after src1 fix restored quality and improved decode rate to
+  0.22 tok/s, but TTFT failed.
+- Phase 1A showed `-t 40 -tb 40` reduced TTFT on the accepted non-stream path
+  from 88.61s to 65.28s while preserving quality.
+
+Hypothesis:
+
+Combining the corrected VRAM cache path with `-t 40 -tb 40` may keep the
+0.22 tok/s decode improvement while reducing prompt eval/TTFT below the
+106331.72 ms gate. This changes scheduling only; model math remains the same
+as the src1-fixed stream/cache path.
+
+Theoretical upper bound:
+
+- Decode upper bound is the measured Phase 2A+src1fix value, about 0.22 tok/s,
+  unless extra CPU threads also reduce staging/reclaim overhead.
+- TTFT could improve by up to the Phase 1A observed prompt reduction
+  (88.61s -> 65.28s, about 26%). Applying even half of that to the 114.29s
+  Phase 2A+src1fix TTFT would bring TTFT near 99.4s, under the gate.
+
+Acceptance:
+
+- Cold `-n 32`: host RAM <16GB, VRAM near full, quality pass, read_failures=0,
+  TTFT <=106331.72 ms, token rate >0.20 tok/s.
+- If `-n 32` passes, run full cold `-n 96` with the same config.
+- Commit/push only after full `-n 96` passes the complete gate.
+
+Rollback:
+
+- If TTFT still fails, quality regresses, or token rate falls to <=0.20 tok/s,
+  reject the candidate and do not stack further env changes on it.
+
+Result:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-135747Z-n32-phase2d-src1fix-vram-cache-t40`
+  passed quality, host RAM, VRAM, read failure, and TTFT gates.
+- TTFT recovered to 102374.15 ms.
+- Decode token rate was 0.20 tok/s, so this is not a performance improvement
+  over the Phase 0 baseline and cannot be promoted.
+
+## Next candidate: Phase 2E thread balance sweep
+
+Design timestamp: 2026-07-01 14:03 UTC.
+
+Current bottleneck:
+
+- `-t 24 -tb 24` with src1fix+VRAM cache improves decode to 0.22 tok/s but
+  fails TTFT at 114.29s.
+- `-t 40 -tb 40` passes TTFT at 102.37s but decode drops to 0.20 tok/s.
+
+Hypothesis:
+
+An intermediate thread count may keep enough CPU parallelism to satisfy TTFT
+while avoiding the decode contention/regression seen at 40 threads.
+
+Sweep order:
+
+1. `-t 32 -tb 32`
+2. If needed, `-t 28 -tb 28`
+3. If needed, `-t 36 -tb 36`
+
+Theoretical upper bound:
+
+- The best observed decode from this path is 0.22 tok/s.
+- The required TTFT is <=106331.72 ms.
+- A successful intermediate setting only needs to keep decode >0.20 tok/s while
+  keeping TTFT below the gate; the expected gain is modest, about 10% on n32.
+
+Acceptance:
+
+- Cold `-n 32`, host RAM <16GB, VRAM near full, quality pass, read_failures=0.
+- TTFT <=106331.72 ms.
+- Token rate >0.20 tok/s.
+- If a sweep point passes, run full cold `-n 96` with that exact setting before
+  promotion.
+
+Rollback:
+
+- Reject any sweep point that fails quality, TTFT, or token-rate gate. Do not
+  commit performance config until full `-n 96` passes.
+
+Result for `-t 32 -tb 32` smoke:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-140437Z-n32-phase2e-src1fix-vram-cache-t32`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous`
+- TTFT: 104061.14 ms, within the 106331.72 ms gate.
+- Decode: 31 runs, 4.53227 s/token, 0.22 tok/s.
+- MoE cache/read status: read_failures=0, VRAM cache hit_rate=62.3%.
+- Decision: pass smoke gate. Next practice is a full cold `-n 96` with the exact
+  same configuration before any performance promotion.
+
+Full `-n 96` validation result:
+
+- Result timestamp: 2026-07-01 14:18 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-141053Z-n96-phase2e-src1fix-vram-cache-t32`
+- Commit/config baseline: `051956009` plan state, code includes
+  `9b12713e2 cuda: fix Kimi MoE stream src1 row selection`.
+- Cold start: `sync; echo 3 > /proc/sys/vm/drop_caches` before launch.
+- Host RAM cgroup: `memory.max=16000000000`, `memory.swap.max=0`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- Page cache final: 13.783 GiB.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also recognized for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- TTFT: 105685.10 ms, within the 106331.72 ms gate.
+- Decode: 362575.94 ms / 77 runs, 4.70878 s/token, 0.21 tok/s.
+- MoE cache/read status: read_failures=0, VRAM cache hit_rate=63.1%.
+- Up/gate profile: calls=2157, avg_active=8.00, total=13.489 ms/call.
+- Decision: accept Phase 2E as a valid constrained improvement over the Phase 0
+  `-n 96` baseline of 0.20 tok/s / 5.01989 s/token. The gain is modest but
+  satisfies host RAM, VRAM use, quality, TTFT, and cold-start requirements.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase2e-src1fix-vram-cache-t32
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2e_n96_t32_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=300000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
+
+## Parallel low-risk candidate: Phase 1A non-stream CPU thread tuning
+
+Design timestamp: 2026-07-01 13:24 UTC.
+
+Current bottleneck:
+
+- GPU stream path is unsafe for Kimi, so the accepted path remains non-stream
+  CPU fallback for deferred experts.
+- The baseline uses `-t 24 -tb 24` on a 40-thread host.
+- The baseline spends 401.59s in decode for 80 runs under the 16GB cgroup.
+
+Hypothesis:
+
+Increasing CPU worker threads to match the available 40 logical CPUs may improve
+the accepted non-stream fallback token rate without changing model math, output
+semantics, VRAM allocation, or page-cache policy. This does not satisfy the
+long-term GPU/VRAM-first goal, but it is allowed as a low-risk tuning step while
+the GPU stream path is known unsafe.
+
+Candidate configuration:
+
+```sh
+# Same as Phase 0 baseline, only changing:
+-t 40 -tb 40
+```
+
+Theoretical upper bound:
+
+- If CPU vec-dot work scales perfectly from 24 to 40 threads, the CPU portion
+  could improve by up to 1.67x.
+- Because the run is also constrained by page-cache reclaim and IO wait, the
+  realistic upper bound is lower. A cold `-n 32` smoke should first estimate
+  whether the gain is material before spending a full `-n 96` run.
+
+Acceptance:
+
+- Cold `-n 32` smoke must pass quality, host RAM < 16GB, and TTFT <= 106331.72 ms.
+- If token rate improves over the baseline trend, run full cold `-n 96`.
+- Promote only if full `-n 96` improves over 0.20 tok/s, keeps the France output
+  correct, keeps TTFT within +20%, and records exact reproduction.
+
+Rollback:
+
+- If token rate is flat/slower, TTFT fails, or quality changes, reject the
+  tuning and keep `-t 24 -tb 24`.
+
+Result:
+
+- Rejected for token-rate promotion.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-132317Z-n32-phase1a-threads40`
+  passed quality and host RAM gates.
+- TTFT improved to 65280.14 ms, but decode remained 0.20 tok/s
+  (5016.38 ms/token), effectively the same as the Phase 0 baseline.
+- Conclusion: decode is not materially improved by more CPU threads; the
+  limiting bucket is page-cache/IO/reclaim and the unsafe stream path must be
+  fixed for VRAM/cache gains.
+
+## Immediate next action
+
+Implement Phase 2H: make GPU down batch Kimi-correct on a tiny decode-only
+validation before any performance run.
+
+## Next candidate: Phase 2F parallel up/gate streams
+
+Design timestamp: 2026-07-01 14:29 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2E full `-n 96` spends 362575.94 ms in decode for 77 runs:
+  4.70878 s/token, 0.21 tok/s.
+- Up/gate profile: 2157 calls, total=13.489 ms/call, with up=6.581 ms and
+  gate=6.828 ms.
+- This is about 28.0 up/gate calls per decoded token, or about 378 ms/token in
+  the measured up/gate bucket.
+- VRAM cache is near full but not complete: 31278 MiB used, 832 MiB free,
+  hit_rate=63.1%, misses=12734.
+- Miss staging/H2D is smaller than compute but still measurable:
+  host_stage=13760.938 ms and h2d=2143.731 ms across the `-n 96` run.
+
+Hypothesis:
+
+Enable the existing parallel up/gate path:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+This should keep the same numerical path but launch up and gate work on separate
+CUDA streams, while staging up/gate misses from separate CPU threads/rings. The
+change targets the largest directly compressible bucket that remains after the
+VRAM cache improvement.
+
+Theoretical upper bound:
+
+- If only the up/gate kernels parallelize, the per-call bucket can drop from
+  about `6.581 + 6.828 = 13.409 ms` to `max(6.581, 6.828) = 6.828 ms`.
+- With 28.0 calls/token, the hard compute-only saving is about
+  `(13.409 - 6.828) * 28.0 = 184 ms/token`.
+- Starting from 4.70878 s/token, the compute-only upper-bound token rate is
+  `1 / (4.70878 - 0.184) = 0.221 tok/s`.
+- If parallel staging also halves the measured staging/H2D miss bucket, the
+  additional upper-bound saving is about
+  `(13760.938 + 2143.731) ms / 77 / 2 = 103 ms/token`, giving a best case near
+  `1 / (4.70878 - 0.184 - 0.103) = 0.226 tok/s`.
+- Therefore this candidate is expected to be modest, roughly 5-8%, but it is
+  mathematically safe and aligned with the measured bottleneck.
+
+Acceptance:
+
+- Cold `-n 32` smoke under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches`.
+- Host RAM must remain below the 16GB cgroup cap, including page cache.
+- VRAM should remain near full without OOM; expected free VRAM may be slightly
+  lower due additional stream/ring buffers.
+- France answer must be semantically correct and coherent.
+- TTFT <= 106331.72 ms.
+- Decode token rate must exceed the accepted Phase 2E smoke trend of 0.22 tok/s
+  or at minimum show a clear per-token reduction without TTFT/quality risk.
+- If smoke passes, run full cold `-n 96` before promotion.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, read_failures become
+  nonzero, cgroup OOM occurs, or full `-n 96` does not improve over accepted
+  Phase 2E `0.21 tok/s / 4.70878 s/token`.
+
+Result:
+
+- Result timestamp: 2026-07-01 14:28 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-142246Z-n32-phase2f-parallel-upgate`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31278 MiB used, 832 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, philosophy, and cuisine. Its capital, Paris, is famous`
+- TTFT: 103570.58 ms, within the 106331.72 ms gate.
+- Decode: 141731.47 ms / 31 runs, 4.57198 s/token, 0.22 tok/s.
+- Comparison: accepted Phase 2E smoke was 4.53227 s/token, so this is slower.
+- Read/cache status: read_failures=0, VRAM cache hit_rate=62.3%.
+- Parallel path did activate:
+  `IQ2_S parallel up/gate streams active` and
+  `up/gate parallel CPU staging active`.
+- Gap analysis:
+  - Phase 2E smoke up/gate total was 13.652 ms/call.
+  - Phase 2F parallel up/gate total was 13.642 ms/call, effectively unchanged.
+  - The split profile shows `up=8.390 ms`, `gate=3.745 ms`,
+    `up_wait=5.158 ms`, and `gate_wait=7.112 ms`; stream/event wait and
+    staging synchronization consume the expected overlap.
+  - iouring became active (`iouring_reads=2766`) but did not improve end-to-end
+    decode because average inflight was only about 2.72 jobs and the up/gate
+    bucket remained flat.
+- Decision: reject Phase 2F; do not run full `-n 96` and do not promote these
+  env variables.
+
+## Next candidate: Phase 2G GPU down batch + GPU handoff
+
+Design timestamp: 2026-07-01 14:36 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2E full `-n 96` decode is 362575.94 ms / 77 runs:
+  4.70878 s/token, 0.21 tok/s.
+- TTFT trace accounts for only about 57.0s of the run:
+  - `runtime_load`: 12734 events, 27839.388 ms.
+  - `call_upgate`: 2157 events, 29143.436 ms.
+- The remaining about 305.6s over 77 decoded tokens is about 3.97 s/token and
+  is not explained by up/gate or expert-pack staging.
+- Code inspection shows the CPU bridge only calls `ggml_cuda_moe_stream_batch`
+  for down tensors when `GGML_MOE_STREAM_DOWN_BATCH` is set. Phase 2E did not
+  set it, so down expert matmul remained on the CPU fallback path.
+
+Hypothesis:
+
+Enable:
+
+```sh
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_GPU_HANDOFF=1
+```
+
+`GGML_MOE_STREAM_DOWN_BATCH=1` sends `ffn_down_exps` MoE matmuls through the CUDA
+batch path. `GGML_MOE_GPU_HANDOFF=1` allows the up/gate fused activation already
+on GPU to be consumed by the down batch path without an unnecessary host round
+trip when the graph adjacency matches.
+
+Theoretical upper bound:
+
+- If down batch only removes half of the unexplained 3.97 s/token CPU bucket,
+  token time could drop from 4.70878 s/token to about 2.72 s/token, or
+  0.37 tok/s.
+- If it removes most of that bucket and the remaining cost is the traced
+  up/gate+load bucket of about `57.0s / 77 = 0.74 s/token` plus graph overhead,
+  the optimistic bound is around 1 tok/s.
+- It cannot be assumed correct or fast without measurement because down batch
+  changes the largest numerical path and relies on route indexing, handoff
+  shape matching, cache slot lifetime, and output scatter semantics.
+
+Acceptance:
+
+- Cold `-n 32` smoke under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches`.
+- Host RAM must remain below the 16GB cgroup cap, including page cache.
+- VRAM should remain near full without OOM.
+- France answer must be semantically correct and coherent.
+- TTFT <= 106331.72 ms.
+- `read_failures=0`.
+- Logs must show the down CUDA path was actually active, either via
+  `GPU handoff consumed`, `profile: calls=...`, or down batch route/cache events.
+- If smoke passes and improves decode materially, run full cold `-n 96` before
+  promotion.
+
+Rollback:
+
+- Reject if quality changes, TTFT exceeds the gate, down batch silently declines,
+  cgroup OOM occurs, or decode does not improve over accepted Phase 2E.
+
+Result:
+
+- Result timestamp: 2026-07-01 14:36 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-143039Z-n32-phase2g-down-batch-handoff`
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Run was terminated intentionally after quality failure; exit code 143.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- Quality: FAIL.
+- Partial answer before termination:
+  `France the. with myol:,ing andn of of`
+- TTFT/decode: no valid final `common_perf_print` because the run was aborted
+  after quality corruption.
+- Read status before abort: read_failures=0.
+- Down path diagnostics:
+  - `down batch declined` occurred 727 times.
+  - Prompt/multi-token phase declined with `reason=multirow_not_supported`,
+    e.g. active routes larger than one row for the same expert.
+  - Decode phase declined with `reason=launch_moe_mmvq_compact_batch` for many
+    `ffn_down_exps` tensors.
+- Decision: reject Phase 2G. Do not promote
+  `GGML_MOE_STREAM_DOWN_BATCH=1` or `GGML_MOE_GPU_HANDOFF=1`.
+- Gap analysis:
+  - The high-level bottleneck finding remains valid: accepted Phase 2E leaves
+    most decode time outside traced up/gate/load buckets.
+  - The existing vendor down batch implementation is not Kimi-safe yet because
+    prompt multirow routing is unsupported and the decode launch path fails for
+    active=8 Kimi down tensors.
+  - A future down optimization must first fix down batch correctness on a tiny
+    comparison run before any performance measurement.
+
+## Next candidate: Phase 2H decode-only down batch correctness
+
+Design timestamp: 2026-07-01 15:02 UTC.
+
+Current bottleneck:
+
+- Phase 2G showed that down batch is the right target, but the existing path is
+  not correct for Kimi.
+- Failure modes from the aborted smoke:
+  - Prompt/multi-token phase: `reason=multirow_not_supported`.
+  - Decode phase: `reason=launch_moe_mmvq_compact_batch` with active=8 on many
+    `ffn_down_exps` tensors.
+  - Output corrupted to `France the. with myol:,ing andn of of`.
+- Code inspection:
+  - CPU bridge calls down batch whenever `GGML_MOE_STREAM_DOWN_BATCH` is set.
+  - `ggml_cuda_moe_stream_batch` rejects any expert with more than one routed
+    row, so prompt-phase down must be excluded until a true multirow GPU down
+    implementation exists.
+  - `launch_moe_mmvq_compact_batch` only allows `IQ3_XXS` and `IQ2_S`, while
+    Kimi down tensors include `IQ3_S` (`type=23`) as well as `IQ2_S`
+    (`type=11`).
+
+Hypothesis:
+
+First make the down batch path decode-only and type-complete:
+
+1. In `ggml_cuda_moe_stream_batch`, if any expert has `matrix_row_counts[e] > 1`,
+   decline without changing output. This keeps prompt/multi-token phase on the
+   known-correct CPU fallback.
+2. Add `IQ3_S` to `launch_moe_mmvq_compact_batch`, matching CUDA MMVQ support
+   already present in `ggml/src/ggml-cuda/mmvq.cu`.
+3. Run a tiny cold correctness smoke with `-n 2` or `-n 4`,
+   `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_GPU_HANDOFF=0` initially, and
+   `GGML_MOE_STREAM_DECLINE_DEBUG=1`. The expected behavior is prompt down
+   declines cleanly for multirow, decode down activates for single-token rows,
+   and the answer prefix remains semantically correct.
+4. Only after non-handoff down correctness is demonstrated should handoff be
+   reintroduced. Handoff can change src1 row addressing and must be verified
+   separately.
+
+Theoretical upper bound:
+
+- This phase is a correctness gate, not a performance promotion.
+- If decode-only down batch becomes correct, the later performance bound remains
+  the Phase 2G estimate: removing half of the unexplained 3.97 s/token CPU
+  bucket would reach about 0.37 tok/s; removing most of it could approach
+  about 1 tok/s before other graph overhead dominates.
+
+Acceptance:
+
+- Build succeeds on the remote CUDA build.
+- Tiny cold smoke under the 16GB cgroup starts from dropped page cache.
+- Host RAM remains below the 16GB cap.
+- Output for the France prompt is not corrupted; for a short smoke it must at
+  least start coherently, e.g. `France is...`.
+- Prompt-phase down declines may occur only because of multirow routing; decode
+  phase must show either down profile calls or no `launch_moe_mmvq_compact_batch`
+  failures.
+- No performance promotion, commit, or full `n96` run until correctness is
+  stable.
+
+Rollback:
+
+- If the tiny smoke corrupts output, fails to build, or still reports decode
+  `launch_moe_mmvq_compact_batch` failures, revert the code changes before
+  trying new performance settings.
+
+Intermediate result:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-144022Z-n4-phase2h-down-decode-iq3s`
+  built and ran with an initial `IQ3_S` whitelist expansion.
+- Output prefix was coherent: `France is a country`.
+- The attempt is not acceptable: decode still reported
+  `launch_moe_mmvq_compact_batch` failures and no down profile calls.
+- Follow-up diagnostics:
+  - Entry logging showed up/gate compact calls use `type=18` (`IQ3_XXS`).
+  - Down compact calls use `type=11` and `type=23`, which map to `Q3_K` and
+    `IQ4_XS`, not `IQ2_S`/`IQ3_S`.
+  - `ggml/src/ggml-cuda/mmvq.cu` already has CUDA MMVQ switch cases for both
+    `Q3_K` and `IQ4_XS`.
+- Revised implementation target:
+  - Keep prompt multirow declines on CPU fallback.
+  - Extend `launch_moe_mmvq_compact_batch` to accept `Q3_K` and `IQ4_XS`.
+  - Remove temporary unconditional debug before committing.
+  - Re-run tiny cold `-n 4`; acceptance requires coherent output and zero
+    decode `launch_moe_mmvq_compact_batch` failures.
+
+Correctness result:
+
+- Result timestamp: 2026-07-01 15:09 UTC.
+- Code change: `launch_moe_mmvq_compact_batch` now accepts `Q3_K` and
+  `IQ4_XS` in addition to the existing compact MMVQ types.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-150614Z-n4-phase2h-down-q3-iq4`
+- Cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France prefix: `France is a country`.
+- TTFT: 101830.07 ms, within the 106331.72 ms gate.
+- Decode: 14378.79 ms / 3 runs, 4.79293 s/token, 0.21 tok/s.
+- Diagnostics:
+  - `launch_moe_mmvq_compact_batch` failures: 0.
+  - `multirow_not_supported` declines: 52, all from prompt/multi-token routing
+    that intentionally remains on CPU fallback.
+  - Down profile active: true.
+- Decision: accept Phase 2H as a correctness fix only. Next practice is a cold
+  `-n 32` performance smoke with `GGML_MOE_STREAM_DOWN_BATCH=1` but still
+  without `GGML_MOE_GPU_HANDOFF`; handoff remains a separate correctness risk.
+
+Performance smoke result:
+
+- Result timestamp: 2026-07-01 15:15 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-151003Z-n32-phase2h-down-batch-nohandoff`
+- Commit: `a1702641b`.
+- Cold `-n 32` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Enabled `GGML_MOE_STREAM_DOWN_BATCH=1`; did not enable
+  `GGML_MOE_GPU_HANDOFF`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: 102309.52 ms, within the 106331.72 ms gate.
+- Decode: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Read/correctness status: read_failures=0, launch_failures=0, down_profile=true.
+- Down profile: calls=1644, avg_active=8.00, total=9.228 ms/call.
+- Up/gate profile: calls=869, total=18.938 ms/call.
+- Decision: pass smoke gate. Next practice is full cold `-n 96` with the exact
+  same config before performance promotion.
+
+Full `-n 96` validation result:
+
+- Result timestamp: 2026-07-01 15:23 UTC.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260701-151516Z-n96-phase2h-down-batch-nohandoff`
+- Commit/config: `83ab7ce63`, code includes
+  `a1702641b cuda: allow Kimi down batch compact quant types`.
+- Cold `-n 96` under `memory.max=16000000000`, `memory.swap.max=0`, and
+  `drop_caches` before launch.
+- Enabled `GGML_MOE_STREAM_DOWN_BATCH=1`; did not enable
+  `GGML_MOE_GPU_HANDOFF`.
+- Host RAM peak: 14.901 GiB, including page cache inside the cgroup.
+- Page cache final: 13.815 GiB.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- Quality: PASS.
+- France answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- TTFT: 98846.25 ms, within the 106331.72 ms gate.
+- Decode: 295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s.
+- Read/correctness status: read_failures=0, launch_failures=0, down_profile=true.
+- Down profile: calls=4506, avg_active=8.00, stage=11.616 ms,
+  kernel=0.115 ms, d2h=0.015 ms, scatter=0.034 ms, total=11.781 ms/call.
+- Up/gate profile: calls=2381, total=22.785 ms/call.
+- Cache/staging: VRAM cache hit_rate=45.5%, pinned staging
+  host_stage=50153.894 ms and h2d=7758.831 ms.
+- Decision: accept Phase 2H as a valid constrained performance improvement.
+  Compared with accepted Phase 2E full `-n 96` (0.21 tok/s, 4.70878 s/token),
+  this improves to 0.29 tok/s, 3.47192 s/token while satisfying host RAM, VRAM,
+  quality, TTFT, read failure, launch failure, and cold-start gates.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase2h-down-batch-nohandoff
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2h_n96_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_STREAM_DOWN_BATCH=1
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=300000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
+
+Next bottleneck:
+
+- Down compute is no longer the bottleneck: kernel is only 0.115 ms/call.
+- The next largest directly visible bucket is down/upgate staging and cache
+  misses: VRAM cache hit_rate=45.5%, host_stage=50153.894 ms,
+  h2d=7758.831 ms, plus up/gate total=22.785 ms/call.
+- The next candidate should target cache partitioning/policy or safe handoff
+  only after a separate handoff correctness test.
+
+## Next candidate: Phase 2I GPU handoff correctness after down fix
+
+Design timestamp: 2026-07-01 15:27 UTC.
+
+Current bottleneck:
+
+- Phase 2H made down batch correct and improved full `-n 96` to 0.29 tok/s.
+- Down kernel itself is tiny: 0.115 ms/call.
+- Remaining visible costs are staging/cache misses and up/gate work:
+  host_stage=50153.894 ms, h2d=7758.831 ms, VRAM cache hit_rate=45.5%,
+  up/gate total=22.785 ms/call.
+- `GGML_MOE_GPU_HANDOFF=1` previously corrupted output in Phase 2G, but that
+  experiment also had broken down batch. It must be re-tested after the down
+  compact type fix.
+
+Hypothesis:
+
+Enable `GGML_MOE_GPU_HANDOFF=1` together with the accepted Phase 2H down batch.
+This should let the up/gate fused GPU buffer feed down batch directly when
+shape and pointer matching work, avoiding a host round trip for that adjacency.
+
+Theoretical upper bound:
+
+- Handoff does not address the large expert weight staging bucket, so it cannot
+  plausibly get near the larger cache-policy gains.
+- It can only save small activation transfers and synchronization around the
+  up/gate to down handoff. The expected gain is modest, likely below 5%, unless
+  it also removes hidden graph synchronization.
+- Because Phase 2G showed severe corruption with handoff, this phase is first a
+  correctness gate, not a performance promotion.
+
+Acceptance:
+
+- Tiny cold `-n 4` smoke under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM remains below the 16GB cap; VRAM remains near full without OOM.
+- France output starts coherently, e.g. `France is...`.
+- `launch_failures=0`, `read_failures=0`, and `down_profile=true`.
+- Logs should show `GPU handoff consumed`.
+- If and only if tiny smoke passes, run cold `-n 32` smoke with the same config.
+- Full `-n 96` promotion requires quality pass, TTFT <=106331.72 ms, and decode
+  faster than accepted Phase 2H 0.29 tok/s / 3.47192 s/token.
+
+Rollback:
+
+- Reject immediately if output corruption returns, handoff does not activate,
+  launch failures appear, TTFT fails, or token rate is not better than Phase 2H.
+
+Result timestamp: 2026-07-01 15:24 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-152433Z-n4-phase2i-handoff-correctness`
+
+Measured result:
+
+- Commit/config: `9498d1452`, accepted Phase 2H config plus
+  `GGML_MOE_GPU_HANDOFF=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103601.35 ms, inside the 106331.72 ms gate.
+- Decode: 26878.70 ms / 3 runs, 8.95957 s/token, 0.11 tok/s.
+- `launch_failures=0`, `down_profile=true`.
+- Handoff activated: log contains
+  `GPU handoff consumed: ne00=2048 dst_cols=8`.
+- Automated quality script printed PASS, but the actual France answer was:
+  `France isneedator`
+
+Decision:
+
+- Reject Phase 2I immediately on semantic quality.
+- Do not run the planned `-n 32` or `-n 96` handoff tests.
+- This fails the hard correctness gate because the answer is not a coherent
+  short paragraph and is clearly corrupted, despite the prefix-based quality
+  script returning PASS.
+- Future gates must treat the automated quality flag as a first filter only.
+  The recorded answer text itself must be checked for semantic correctness and
+  coherence before accepting any speedup.
+
+## Next candidate: Phase 2J profile-guided VRAM cache protection
+
+Design timestamp: 2026-07-01 15:39 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` spends most remaining visible time in two
+  buckets:
+  - Down batch staging: 4506 calls, 11.616 ms average stage time, about 52.3s
+    total visible stage time.
+  - Up/gate compute: 2381 calls, 22.785 ms average total, about 54.2s total.
+- Down batch kernel itself is only 0.115 ms/call, so optimizing down math is no
+  longer the next highest-return path.
+- VRAM cache hit rate is only 45.5% under a 15000 MiB cache:
+  hits=33716, misses=40316.
+- Route profile size distribution from the accepted Phase 2H run:
+  - 4702208-byte entries: 24480 uses, 5040 unique, 107.20 GiB logical traffic.
+  - 5619712-byte entries: 13616 uses, 3256 unique, 71.26 GiB logical traffic.
+  - 6307840-byte entries: 27888 uses, 5827 unique, 163.83 GiB logical traffic.
+  - 7798784-byte entries: 8160 uses, 1716 unique, 59.27 GiB logical traffic.
+- The down cache slot size is 7.44 MiB with 2016 slots, while the observed down
+  unique set is much larger than the cache. Plain LRU is likely evicting hot
+  experts during the long decode sequence.
+
+Hypothesis:
+
+Use the accepted Phase 2H route profile as a cold-start profile input and enable
+profile-aware cache protection/eviction:
+
+- `GGML_MOE_VRAM_PROFILE=<Phase 2H route-profile.csv>`
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+- `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`
+- `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`
+
+This should pin the highest-frequency experts while reserving 20% of slots for
+new traffic, and should prevent the hottest cached experts from being evicted by
+one-off experts. This is a low-code-risk config experiment because it uses
+existing cache policy code.
+
+Theoretical upper bound:
+
+- Phase 2H down visible stage time is about 52.3s inside a 295.1s decode.
+- If profile protection improves down cache hit rate from 45.5% to 70%, misses
+  drop by about 45% and the visible down stage bucket could shrink by about
+  23.5s.
+- The full `-n 96` decode lower bound would then be roughly
+  295.1s - 23.5s = 271.6s for 85 decode runs, or 3.20 s/token / 0.31 tok/s.
+- This cannot reach 5 tok/s by itself; it is a cache/staging step before the
+  larger up/gate compute work.
+
+Acceptance:
+
+- First run a cold `-n 4` smoke under `memory.max=16000000000`,
+  `memory.swap.max=0`, and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual France answer text must be semantically correct and coherent; the
+  automated quality flag alone is not sufficient after Phase 2I.
+- Logs must show profile preload/cache policy activity and no read failures or
+  launch failures.
+- If `-n 4` passes, run cold `-n 32`; promote to `-n 96` only if token rate is
+  better than accepted Phase 2H while satisfying all gates.
+
+Rollback:
+
+- Reject if profile preload increases TTFT above the gate, output quality fails,
+  host RAM exceeds the cgroup cap, VRAM OOMs, launch/read failures appear, or
+  token rate is not better than Phase 2H at the same token count.
+
+Result timestamp: 2026-07-01 15:31 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-153115Z-n4-phase2j-profile-cache`
+
+Measured result:
+
+- Commit/config: `7941c8d40`, accepted Phase 2H config plus profile-guided
+  cache:
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-151516Z-n96-phase2h-down-batch-nohandoff/route-profile.csv`
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+  - `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`
+  - `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103969.80 ms, inside the 106331.72 ms gate but close to the limit.
+- Decode: 16782.27 ms / 3 runs, 5.59409 s/token, 0.18 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Profile activity: enabled.
+- Cache policy diag: enabled.
+- Cache result: hits=1338, misses=1190, preloads=1430, pinned=1430,
+  hit_rate=52.9%.
+- Pinned staging: copies=2673, host_stage=4087.613 ms, h2d=582.502 ms.
+- Cache policy diag:
+  profile_count_lookups=1275, hits=1263, inserted_nonzero=2917,
+  inserted_avg=14.55, evictions=604, victim_nonzero=592,
+  victim_avg=2.34.
+
+Decision:
+
+- The `-n 4` smoke satisfies the hard gates and proves the profile policy is
+  active.
+- Continue to cold `-n 32` with the same config before any promotion.
+- Watch TTFT carefully because profile preload has only about 2.36s headroom
+  under the gate.
+
+Result timestamp: 2026-07-01 15:35 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-153506Z-n32-phase2j-profile-cache`
+
+Measured result:
+
+- Commit/config: `a96d7d0b0`, same profile-guided cache config as the passing
+  `-n 4` smoke.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102740.62 ms, inside the 106331.72 ms gate.
+- Decode: 131577.12 ms / 31 runs, 4.24442 s/token, 0.23560 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is the largest nation in the EU by area and power, with`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=13487, misses=13457, preloads=1430, pinned=1430,
+  hit_rate=50.1%.
+- Pinned staging: copies=11887, host_stage=17641.260 ms, h2d=2583.955 ms.
+- Cache policy diag:
+  profile_count_lookups=13542, hits=10716, inserted_nonzero=12370,
+  inserted_avg=6.35, evictions=12871, victim_nonzero=10045,
+  victim_avg=3.46.
+- Up/gate profile: calls=869, total=26.286 ms/call.
+- Down profile: calls=1644, stage=14.475 ms/call, total=14.645 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2J `-n 32`: 131577.12 ms / 31 runs, 4.24442 s/token, 0.23560 tok/s.
+- Profile-guided cache is slower despite a modest hit-rate increase.
+- The extra preload/protection overhead and slower per-call stage/upgate timings
+  outweigh the reduced miss rate.
+
+Decision:
+
+- Reject Phase 2J.
+- Do not run `-n 96` for this config.
+- Keep accepted Phase 2H as the current best valid configuration.
+- Next design should target a direct per-call overhead reduction instead of
+  broad profile preload. The top visible candidates after this rejection are:
+  reducing cache lookup/eviction overhead in the 2016-slot linear scans, or
+  reducing up/gate compute cost, since up/gate remains about 54s of the Phase 2H
+  full `-n 96` decode.
+
+## Next candidate: Phase 2K vendor MMQ up/gate path
+
+Design timestamp: 2026-07-01 15:46 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96`:
+  - Up/gate profile: 2381 calls, 22.785 ms/call, about 54.2s total.
+  - Down profile: 4506 calls, 11.781 ms/call, about 53.1s total, but the down
+    kernel itself is only 0.115 ms/call and most of this bucket is staging.
+- Phase 2J showed that broad profile preloading increased per-call overhead and
+  was slower at `-n 32`, so the next attempt should not add more preload work.
+- Existing code already has an up/gate vendor MMQ path guarded by
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1` for `IQ2_S` / `IQ3_XXS`. Phase 2H logs
+  show the current up/gate path is `IQ2_S batched MMVQ up/gate path active`,
+  so this is applicable to Kimi's up/gate tensors.
+
+Hypothesis:
+
+Enable `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1` on top of the accepted Phase 2H
+config. This changes only the up/gate compute path while keeping the accepted
+down batch, 16GB host-RAM cap, expert pack, and VRAM cache settings.
+
+Theoretical upper bound:
+
+- If vendor MMQ halves the up/gate compute bucket, the full `-n 96` decode could
+  save about 27s from the 295.1s Phase 2H decode, reaching roughly
+  268.1s / 85 runs = 3.15 s/token, or 0.32 tok/s.
+- If vendor MMQ is 3x faster for up/gate, the up/gate bucket drops from about
+  54.2s to 18.1s, saving 36.1s and reaching about 259.0s / 85 runs =
+  3.05 s/token, or 0.33 tok/s.
+- This still cannot reach 5 tok/s alone; it is one of the visible high-cost
+  buckets that must be reduced before larger architecture changes.
+
+Correctness risk:
+
+- This path changes quantized matmul implementation for up/gate. If it selects
+  the wrong row, stride, slot, or quantized source layout, it can silently
+  corrupt generation like the rejected handoff path.
+- Therefore start with a cold `-n 4` smoke and require actual semantic output,
+  not just a prefix match.
+
+Acceptance:
+
+- First run cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual answer for `Please introduce France in a short paragraph.` must be
+  semantically correct and coherent.
+- Logs must show `vendor MMQ up/gate path active`.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`; promote to `-n 96` only if token rate is
+  better than accepted Phase 2H at the same token count while all gates pass.
+
+Rollback:
+
+- Reject immediately if output corruption appears, vendor MMQ does not activate,
+  TTFT exceeds the gate, RAM/VRAM gates fail, launch/read failures appear, or
+  the `-n 32` rate is not better than accepted Phase 2H.
+
+Result timestamp: 2026-07-01 15:41 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-154139Z-n4-phase2k-vendor-mmq-upgate`
+
+Measured result:
+
+- Commit/config: `6280c4f6d`, accepted Phase 2H config plus
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103384.78 ms, inside the 106331.72 ms gate.
+- Decode: 18614.36 ms / 3 runs, 6.20479 s/token, 0.16117 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Vendor MMQ activated: log contains `vendor MMQ up/gate path active: type=18`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=733, misses=1795, hit_rate=29.0%.
+- Pinned staging: copies=1782, host_stage=2636.471 ms, h2d=388.503 ms.
+- Up/gate profile: calls=1, total=121.721 ms/call.
+- Down profile: calls=160, stage=13.286 ms/call, total=13.465 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes the hard correctness/TTFT/memory gates and proves
+  vendor MMQ activation.
+- The single sampled up/gate call is much slower than Phase 2H, but `-n 4` has
+  only one up/gate profile call, so run the planned cold `-n 32` before final
+  rejection.
+
+Result timestamp: 2026-07-01 15:45 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-154553Z-n32-phase2k-vendor-mmq-upgate`
+
+Measured result:
+
+- Commit/config: `a03085b02`, accepted Phase 2H config plus
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101097.26 ms, inside the 106331.72 ms gate.
+- Decode: 157639.97 ms / 31 runs, 5.08516 s/token, 0.19665 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Vendor MMQ activated: true.
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=12126, misses=14818, hit_rate=45.0%.
+- Pinned staging: copies=13458, host_stage=17950.601 ms, h2d=2973.772 ms.
+- Up/gate profile: calls=1, total=128.587 ms/call.
+- Down profile: calls=1644, stage=10.642 ms/call, total=10.808 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2K `-n 32`: 157639.97 ms / 31 runs, 5.08516 s/token, 0.19665 tok/s.
+- Vendor MMQ is substantially slower at the same token count, even though
+  correctness, RAM, VRAM, and TTFT gates pass.
+
+Decision:
+
+- Reject Phase 2K.
+- Do not run `-n 96` for this config.
+- Keep accepted Phase 2H as the current best valid configuration.
+- The next design should inspect why up/gate profile only reports one call under
+  vendor MMQ and where the missing decode time is spent before trying another
+  up/gate kernel change.
+
+## Next candidate: Phase 2L VRAM cache key index
+
+Design timestamp: 2026-07-01 16:03 UTC.
+
+Current bottleneck:
+
+- Phase 2K explains the vendor MMQ gap enough for prioritization: CUDA graph
+  replay hides most per-call profiling, but total `-n 32` eval is still much
+  slower, so vendor MMQ is not a useful next path.
+- Accepted Phase 2H `-n 32` visible costs:
+  - Eval: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+  - Up/gate profile: 869 calls, 18.938 ms/call, about 16.5s.
+  - Down profile: 1644 calls, 9.228 ms/call, about 15.2s.
+  - Pinned staging: 13135 copies, host_stage=18199.846 ms,
+    h2d=2844.363 ms.
+  - VRAM cache: hits=12892, misses=14052, hit_rate=47.8%.
+- The cache lookup path currently linearly scans up to the cache slot count:
+  2798 slots for 5.36 MiB up, 2493 slots for 6.02 MiB gate, and 2016 slots for
+  7.44 MiB down. This scan happens in `batch_cache_lookup_slot`,
+  `batch_cache_find_slot`, and `batch_cache_contains_slot`.
+- Phase 2J proved that broad profile preloading/protection increases overhead.
+  A key index targets fixed per-call CPU overhead without changing math,
+  routing, cache size, or eviction policy.
+
+Hypothesis:
+
+Add an in-memory `key -> slot` index to each `batch_vram_cache` and keep it in
+sync on insert, clear, and cache reinitialization. Use it for lookup/find/
+contains while preserving the existing LRU/LFU victim scan for misses and
+evictions.
+
+Theoretical upper bound:
+
+- Phase 2H `-n 32` has 26944 cache events (hits+misses) and thousands of
+  additional find/contains checks. A linear scan over about 2000-2800 slots can
+  easily add millions of key comparisons per short run.
+- If this removes 5-10 ms from each down batch call, the upper bound on
+  `-n 32` is roughly 8-16s saved from the 95.6s decode, or 2.57-2.83 s/token
+  (0.35-0.39 tok/s).
+- If lookup overhead is mostly hidden by IO/kernel time, expected gain may be
+  only a few percent. This still has low correctness risk because it should not
+  change selected experts, math kernels, or cache capacity.
+
+Correctness risk:
+
+- A stale key index could return the wrong slot after eviction or failed copy,
+  causing silent semantic corruption.
+- The implementation must erase the previous key before overwriting a slot,
+  erase on clear/failure, and clear the index on cache reset.
+
+Acceptance:
+
+- First run cold `-n 4` under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- The actual France answer must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`.
+- Accept and push the code only if `-n 32` is faster than accepted Phase 2H
+  `-n 32` (0.32 tok/s / 3.08431 s/token) with all gates passing; otherwise
+  revert the code and record rejection.
+
+Rollback:
+
+- Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
+  gates fail, launch/read failures appear, or `-n 32` does not improve over
+  Phase 2H.
+
+Result timestamp: 2026-07-01 15:56 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-155605Z-n4-phase2l-cache-index`
+
+Measured result:
+
+- Commit/config: `a8eb2778-dirty-cache-index`, accepted Phase 2H config plus a
+  local dirty `batch_vram_cache` key-index implementation.
+- Build: remote `build-cuda-batch` compiled successfully.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 100320.04 ms, inside the 106331.72 ms gate.
+- Decode: 14031.68 ms / 3 runs, 4.67723 s/token, 0.21380 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=731, misses=1797, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2704.985 ms, h2d=386.983 ms.
+- Up/gate profile: calls=85, total=27.173 ms/call.
+- Down profile: calls=160, stage=13.295 ms/call, total=13.461 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, and launch/read gates.
+- Continue to cold `-n 32` before deciding whether to keep or revert the code.
+- Watch up/gate timing: the tiny smoke has a faster overall decode than recent
+  rejected configs, but up/gate is slower than Phase 2H n32, so this may still
+  fail at longer length.
+
+Result timestamp: 2026-07-01 15:59 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-155938Z-n32-phase2l-cache-index`
+
+Measured result:
+
+- Commit/config: `ff2ec840-dirty-cache-index`, accepted Phase 2H config plus
+  the local dirty cache key-index implementation.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102493.78 ms, inside the 106331.72 ms gate.
+- Decode: 97355.97 ms / 31 runs, 3.14052 s/token, 0.31842 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: hits=12892, misses=14052, hit_rate=47.8%.
+- Pinned staging: copies=13135, host_stage=17689.156 ms, h2d=2846.699 ms.
+- Up/gate profile: calls=869, total=18.410 ms/call.
+- Down profile: calls=1644, stage=9.078 ms/call, total=9.247 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2L `-n 32`: 97355.97 ms / 31 runs, 3.14052 s/token, 0.31842 tok/s.
+- The key index slightly reduced pinned staging host time
+  (18199.846 ms -> 17689.156 ms) and up/gate total
+  (18.938 ms/call -> 18.410 ms/call), but down total was slightly slower
+  (9.228 ms/call -> 9.247 ms/call) and the full decode was slower.
+
+Decision:
+
+- Reject Phase 2L.
+- Reverted the local cache key-index code and did not commit it.
+- Keep accepted Phase 2H as the current best valid configuration.
+- Next design should target a larger bucket than cache lookup overhead. The
+  remaining visible Phase 2H costs are still up/gate compute and expert staging;
+  a useful next step should either reduce actual up/gate graph replay time or
+  reduce the number/size of expert loads rather than just lookup overhead.
+
+## Next candidate: Phase 2M split VRAM cache by expert size
+
+Design timestamp: 2026-07-01 16:17 UTC.
+
+Current bottleneck:
+
+- Accepted Phase 2H `-n 32` still spends a large visible bucket in expert
+  staging:
+  - Pinned staging: 13135 copies, host_stage=18199.846 ms,
+    h2d=2844.363 ms.
+  - VRAM cache hit_rate=47.8%.
+- Phase 2L showed lookup overhead is not the main limiter: a key index slightly
+  reduced host_stage but did not improve end-to-end token rate.
+- Current cache initialization logs show one final 7.44 MiB slot size:
+  2016 slots. All smaller experts can fit in that pool, but 4.48/5.36/6.02 MiB
+  experts waste space when stored in 7.44 MiB slots.
+- Phase 2H `-n 32` route profile by tensor kind:
+  - up: 4.48/5.36 MiB experts, 6952 uses, 2356 unique, 32.57 GiB traffic.
+  - gate: 4.48/5.36 MiB experts, 6952 uses, 2356 unique, 32.57 GiB traffic.
+  - down: 6.02/7.44 MiB experts, 13152 uses, 4294 unique, 81.40 GiB traffic.
+- Existing split-cache code only sends `expert_sz <= 4 MiB` to the second cache,
+  which is ineffective for Kimi. Kimi's up/gate experts are larger than 4 MiB.
+
+Hypothesis:
+
+Add a default-off environment threshold,
+`GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB`, used only when
+`GGML_MOE_VRAM_CACHE_SPLIT=1`. Test with:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+
+This should create a small-expert pool for 4.48/5.36 MiB up/gate experts and a
+large-expert pool for 6.02/7.44 MiB down experts. It reduces slot waste and
+prevents up/gate and down experts from evicting each other.
+
+Theoretical upper bound:
+
+- With a 15000 MiB cache and `UPGATE_PCT=45`, the small pool gets about
+  6750 MiB and can store about 1259 5.36 MiB slots. The large pool gets about
+  8250 MiB and can store about 1108 7.44 MiB slots.
+- Total resident expert entries can rise from 2016 unified slots to about 2367
+  split slots, a roughly 17% increase in resident entries.
+- If staging misses fall proportionally, host_stage could drop by up to about
+  3.1s on Phase 2H `-n 32`, improving from 95.6s to about 92.5s
+  (2.98 s/token, 0.34 tok/s). If partitioning hurts locality, it may be slower.
+
+Correctness risk:
+
+- Low math risk: selected experts and kernels do not change.
+- Cache-policy risk: wrong cache ID or budget could OOM or reduce hit rate.
+- The code change must be default-off unless `GGML_MOE_VRAM_CACHE_SPLIT=1`, so
+  accepted Phase 2H behavior remains unchanged without the new env.
+
+Acceptance:
+
+- First run cold `-n 4` with split cache under `memory.max=16000000000`,
+  `memory.swap.max=0`, and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32`.
+- Accept and push the code/config only if `-n 32` is faster than accepted Phase
+  2H `-n 32` (0.32 tok/s / 3.08431 s/token) with all gates passing; otherwise
+  revert the code and record rejection.
+
+Rollback:
+
+- Revert the code if output quality fails, TTFT exceeds the gate, RAM/VRAM
+  gates fail, cache allocation fails, launch/read failures appear, or `-n 32`
+  does not improve over Phase 2H.
+
+Result timestamp: 2026-07-01 16:08 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-160808Z-n4-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `1a635914-dirty-split-cache`, accepted Phase 2H config plus
+  local default-off split threshold code and:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+- Build: remote `build-cuda-batch` compiled successfully.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 103089.41 ms, inside the 106331.72 ms gate.
+- Decode: 13886.92 ms / 3 runs, 4.62897 s/token, 0.21603 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1109 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+- Pinned staging: copies=1759, host_stage=2668.331 ms, h2d=381.974 ms.
+- Up/gate profile: calls=85, total=26.065 ms/call.
+- Down profile: calls=160, stage=13.649 ms/call, total=13.818 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue to cold `-n 32` before deciding whether to keep or revert the code.
+
+Result timestamp: 2026-07-01 16:11 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-161150Z-n32-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `d7d0fa42-dirty-split-cache`, accepted Phase 2H config plus
+  local default-off split threshold code and:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 97293.10 ms, inside the 106331.72 ms gate.
+- Decode: 92447.06 ms / 31 runs, 2.98216 s/token, 0.33533 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1109 slots, 7.44 MiB slot, hits=6809, misses=6311,
+    hit_rate=51.9%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=6836, misses=7068,
+    hit_rate=49.2%.
+- Pinned staging: copies=12466, host_stage=16966.087 ms, h2d=2701.115 ms.
+- Up/gate profile: calls=869, total=16.697 ms/call.
+- Down profile: calls=1644, stage=8.608 ms/call, total=8.770 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2M `-n 32`: 92447.06 ms / 31 runs, 2.98216 s/token, 0.33533 tok/s.
+- Improvement: about 3.3% lower seconds/token at the same token count while
+  passing host RAM, VRAM, TTFT, quality, launch, and read gates.
+- The improvement matches the hypothesis: split pools reduce staging copies
+  (13135 -> 12466), host_stage (18199.846 ms -> 16966.087 ms), up/gate total
+  (18.938 ms/call -> 16.697 ms/call), and down total
+  (9.228 ms/call -> 8.770 ms/call).
+
+Decision:
+
+- Accept Phase 2M as a valid constrained `-n 32` improvement.
+- Commit and push the default-off code plus this plan record immediately.
+- Next practice: run cold `-n 96` with the same split-cache config before
+  promoting it as the new full-length best configuration.
+
+Reproduction:
+
+```sh
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase2m-split-cache
+mkdir -p "$RUN"
+CG=/sys/fs/cgroup/kimi_phase2m_n32_$$
+mkdir "$CG"
+echo 16000000000 > "$CG/memory.max"
+echo 0 > "$CG/memory.swap.max"
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+export GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+export GGML_MOE_IO_BACKEND=iouring
+export GGML_MOE_STREAM=1
+export GGML_MOE_PARALLEL_EXPERTS=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
+export GGML_MOE_STREAM_FUSED_UP_GATE=1
+export GGML_MOE_STREAM_BATCH_ONLY=1
+export GGML_MOE_STREAM_DOWN_BATCH=1
+export GGML_MOE_VRAM_CACHE_SPLIT=1
+export GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+export GGML_MOE_VRAM_CACHE_UPGATE_PCT=45
+export GGML_MOE_VRAM_CACHE_MIB=15000
+export GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+export GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+export GGML_MOE_MMAP_DONTNEED=1
+export GGML_MOE_IO_BYTES=8388608
+export GGML_MOE_BATCH_PROFILE=1
+export GGML_MOE_BATCH_PROFILE_OUT="$RUN/route-profile.csv"
+export GGML_MOE_ROUTE_TRACE_OUT="$RUN/route-trace.csv"
+export GGML_MOE_TTFT_TRACE_OUT="$RUN/ttft-trace.csv"
+export GGML_MOE_TTFT_TRACE_MAX_EVENTS=180000
+
+PROMPT='<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+( echo $BASHPID > "$CG/cgroup.procs"
+  /root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-completion \
+    --defer-experts --fit off -ngl 99 --special \
+    -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+    --no-display-prompt -no-cnv -t 32 -tb 32 -p "$PROMPT" \
+    > "$RUN/stdout.txt" 2> "$RUN/stderr.txt" )
+```
+
+Full-length result timestamp: 2026-07-01 16:18 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-161815Z-n96-phase2m-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, same split-cache config as the accepted `-n 32`
+  run.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 104536.59 ms, inside the 106331.72 ms gate.
+- Decode: 299594.70 ms / 85 runs, 3.52464 s/token, 0.28372 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1109 slots, 7.44 MiB slot, hits=18230, misses=17786,
+    hit_rate=50.6%.
+  - upgate: 1259 slots, 5.36 MiB slot, hits=17991, misses=20105,
+    hit_rate=47.2%.
+- Pinned staging: copies=33497, host_stage=45305.989 ms, h2d=7268.052 ms.
+- Up/gate profile: calls=2381, total=22.493 ms/call.
+- Down profile: calls=4506, stage=11.130 ms/call, total=11.300 ms/call.
+
+Comparison against accepted Phase 2H `-n 96`:
+
+- Phase 2H `-n 96`: 295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s.
+- Phase 2M `-n 96`: 299594.70 ms / 85 runs, 3.52464 s/token, 0.28372 tok/s.
+- Phase 2M improves some visible buckets but does not improve full-length
+  end-to-end decode.
+
+Decision:
+
+- Do not promote Phase 2M as the full-length `-n 96` best.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Keep the default-off `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB` code because Phase
+  2M is a valid `-n 32` constrained improvement and does not change default
+  behavior.
+- Next design should target the gap between `-n 32` and `-n 96`: split-cache
+  helps shorter runs but loses at longer output. The next experiment should
+  tune split budget for `-n 96` specifically, or target graph replay/upgate
+  cost rather than fixed cache partitioning.
+
+## Next candidate: Phase 2N n96 split-cache budget sweep
+
+Design timestamp: 2026-07-01 16:31 UTC.
+
+Current bottleneck:
+
+- Phase 2M split cache improved `-n 32` but missed the full `-n 96` target.
+- Phase 2M `-n 96` still passed correctness, TTFT, RAM, and VRAM gates, so the
+  split-cache mechanism is safe enough for config tuning.
+- Phase 2H/2M `-n 96` route profile by tensor kind:
+  - down: 223.10 GiB logical traffic, 7543 unique experts.
+  - up+gate: 178.46 GiB logical traffic, 8296 unique experts.
+- Phase 2M used `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`, producing:
+  - down pool: 1109 slots, hit_rate=50.6%.
+  - upgate pool: 1259 slots, hit_rate=47.2%.
+- Since down traffic is larger and down misses feed the visible staging bucket,
+  45% may over-allocate the upgate pool for full-length n96.
+
+Hypothesis:
+
+Keep the accepted default-off split threshold code and test a more down-heavy
+budget:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`
+
+This should reduce the small upgate pool from about 1259 slots to about 979
+slots and increase the large down pool from about 1109 slots to about 1310
+slots. If the full-length regression is caused by down pool pressure, the
+larger down pool should reduce down misses and staging enough to beat Phase 2H
+`-n 96`.
+
+Theoretical upper bound:
+
+- Phase 2M n96 down misses were 17786 and down stage was 11.130 ms/call.
+- A 18% larger down pool could plausibly save 5-10% of down misses if locality
+  is pool-capacity limited. That would save roughly 2-5s from full decode.
+- The maximum practical target for this budget-only step is therefore modest:
+  improve from Phase 2M's 3.52464 s/token to below Phase 2H's 3.47192 s/token,
+  likely around 3.43-3.47 s/token if successful.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 96` directly because this is a full-length
+  budget tuning step.
+- Promote only if `-n 96` is faster than accepted Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token) with all gates passing.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, cache allocation fails, launch/read failures appear, or `-n 96` does
+  not improve over Phase 2H.
+
+## Next candidate: Phase 3S profile-guided 512MiB RAM tier
+
+Design timestamp: 2026-07-02 23:10 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM: 14.901 GiB under strict 16GB cgroup.
+  - VRAM: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E still spends 47796.399 ms in pinned staging host work and performs
+  35734 expert-pack reads on the critical path.
+- Phase 3R proved trace host-prefetch consumption can work but the trace worker
+  hit rate is too low and the eviction/submission overhead dominates.
+
+Hypothesis:
+
+- Use the existing RAM tier instead of a trace worker:
+  - `GGML_MOE_RAM_TIER_MIB=512`
+  - `GGML_MOE_RAM_TIER_PIN=1`
+  - `GGML_MOE_RAM_TIER_PIN_MIB=512`
+  - `GGML_MOE_RAM_TIER_PROFILE=<Phase 3E route-profile.csv>`
+  - `GGML_MOE_RAM_TIER_SKIP=0`
+- RAM tier loads a fixed hot expert set from the Phase 3E route profile into an
+  anonymous mmap and registers it for H2D. This removes repeated expert-pack
+  file reads for the hottest misses without a background scanner, route cursor,
+  or eviction churn.
+- This is an env-only candidate using existing code; it does not change
+  routing, quantization, CUDA kernels, cache keys, or output math.
+
+Theoretical upper bound:
+
+- A 512MiB tier can hold roughly 68-95 experts depending on 5.36-7.44MiB entry
+  size.
+- If the top profile entries cover 10-20% of critical-path staging reads, the
+  best possible full-run savings is roughly 4.8-9.6s from the 47.8s host_stage
+  bucket, before accounting for H2D and startup load overhead.
+- RAM risk is high but measurable:
+  - Phase 3E peak is 14.901 GiB.
+  - Adding a 512MiB resident tier gives a rough expected peak around 15.4GiB,
+    leaving about 0.6GiB headroom under the strict 16GB cap.
+  - Cold-start loading may also create page-cache pressure, so cgroup peak must
+    be treated as authoritative.
+- TTFT risk is also high because RAM tier loading happens during first expert
+  pack access. The TTFT gate remains 106331.72 ms.
+
+Execution:
+
+- No code change.
+- Reuse Phase 3E best runtime env, add the RAM tier env above, and keep
+  diagnostic profile output enabled.
+- Run cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- Continue to cold `-n 32` only if:
+  - host RAM stays below 16GB,
+  - TTFT stays under 106331.72 ms,
+  - RAM tier loads successfully and reports hits,
+  - quality and failure gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and RAM-tier resident/pinned
+  memory.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs must show RAM tier loaded entries and report nonzero RAM-tier hits.
+- `-n 32` must not be slower than Phase 3E `-n 32`:
+  2.24573 s/token, 0.44529 tok/s.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if RAM exceeds 16GB, TTFT exceeds the gate, RAM-tier load or pin fails,
+  RAM-tier hits remain zero, quality/failure gates fail, or matching token-count
+  performance does not improve over Phase 3E.
+
+## Next candidate: Phase 3T retest VRAM cache key index after Phase 3E
+
+Design timestamp: 2026-07-02 23:35 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - TTFT: 79721.89 ms.
+  - Host RAM: 14.901 GiB.
+  - VRAM: 31286 MiB used, 824 MiB free.
+- Phase 3E full cache traffic remains high:
+  - hits=33844, misses=40188, hit_rate=45.7%.
+  - down cache slots=2016, slot=7.44MiB.
+  - pinned staging host_stage=47796.399 ms, H2D=7736.929 ms.
+- `batch_cache_lookup_slot`, `batch_cache_find_slot`, and
+  `batch_cache_contains_slot` still linearly scan up to the active cache slot
+  count for every lookup.
+- Phase 2L tried a key index before Phase 3E and was rejected:
+  - Phase 2H n32: 3.08431 s/token.
+  - Phase 2L n32: 3.14052 s/token.
+  - It reduced some local host/upgate counters but not end-to-end time.
+- Since Phase 3E changed graph behavior and current n32 best is much faster
+  (2.24573 s/token), a scoped retest can determine whether lookup overhead is
+  still irrelevant or has become visible.
+
+Hypothesis:
+
+- Add a `key -> slot` index to `batch_vram_cache`.
+- Use it in lookup/find/contains while keeping eviction victim selection
+  unchanged.
+- Maintain the index on insert, clear, failed copy rollback, and cache reset.
+- This should reduce CPU key comparisons without changing routing, CUDA math,
+  expert bytes, cache size, or eviction policy.
+
+Theoretical upper bound:
+
+- On Phase 3E n32, cache events are about 27044 and each linear lookup may scan
+  up to about 2016 slots.
+- If key scans are now a few seconds of CPU overhead after Phase 3E, an index
+  might save 1-3s on n32 and a few seconds on n96.
+- The upper bound is modest; promotion requires measured improvement, not just
+  cleaner local counters.
+
+Correctness risk:
+
+- A stale index can silently return an evicted slot for a different expert and
+  corrupt output.
+- The implementation must erase any previous key before slot reuse and erase on
+  clear/failure rollback.
+
+Execution:
+
+- Implement a minimal `std::unordered_map<uintptr_t, int>` per
+  `batch_vram_cache`.
+- Build remote CUDA batch binary.
+- Run cold `-n 4` first under strict 16GB cgroup and Phase 3E best env.
+- If quality/RAM/VRAM/TTFT/failure gates pass, run cold `-n 32`.
+- Do not run full `-n 96` unless `-n 32` beats Phase 3E n32.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- `-n 32` must beat Phase 3E n32:
+  2.24573 s/token, 0.44529 tok/s.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert if output quality fails, TTFT/RAM/VRAM gates fail, failures appear, or
+  `-n 32` does not beat Phase 3E.
+
+## Next candidate: Phase 3U reprofile Phase 3E split/CPU-MoE bottleneck
+
+Design timestamp: 2026-07-02 23:58 CST.
+
+Current bottleneck:
+
+- Phase 3E is current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- Several post-Phase-3E candidates failed:
+  - no-profile production run did not improve n32.
+  - trace host prefetch had too-low useful hit rate.
+  - RAM tier had too-low useful hit rate.
+  - cache key index did not improve n32.
+- Phase 3C previously showed CPU backend MoE split dominance, but that
+  attribution was collected on the older Phase 2H runtime, before Phase 3E's
+  batch-only stream placement fix.
+- We need a fresh Phase 3E attribution before attempting backend placement or
+  CPU MoE op restructuring.
+
+Hypothesis:
+
+- Re-run existing default-off diagnostics on the current Phase 3E best env:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=40`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- This should identify whether the remaining Phase 3E decode time is still
+  dominated by CPU backend MoE splits, specific fallback tensor names, or
+  another graph split family.
+
+Theoretical value:
+
+- If Phase 3E still spends most time in CPU backend MoE splits, the next code
+  candidate should target backend placement or CPU op family scheduling.
+- If a small set of tensor names dominates fallback, the next candidate should
+  target those quant types or prompt/decode split.
+- If split profile shows overhead outside MoE, continuing MoE cache/host
+  experiments is the wrong direction.
+
+Execution:
+
+- No code change.
+- Use Phase 3E best runtime env with the profiling env vars above.
+- Run cold `-n 4` under strict 16GB cgroup.
+- If gates pass and profiles print, run cold `-n 32`.
+- This is diagnostic; do not promote performance from this phase.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs include graph profile, split profile, CPU MoE profile, and CPU MoE name
+  profile summaries.
+
+Rollback:
+
+- No code rollback expected because this is env-only.
+- Reject the diagnostic if profiling breaks quality, exceeds TTFT/RAM/VRAM
+  gates, or fails to print the required attribution.
+
+Result timestamp: 2026-07-02 23:52 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-212817Z-n4-phase3u-phase3e-reprofile`
+
+Measured result:
+
+- Commit/config: `97d230ced`, Phase 3E runtime env plus graph/split/CPU-MoE
+  profile env vars.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80993.39 ms, inside the 106331.72 ms gate.
+- Decode: 10549.18 ms / 3 runs, 3.51639 s/token, 0.28438 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=724, misses=1804,
+  hit_rate=28.6%.
+- Pinned staging: copies=1790, host_stage=2757.663 ms,
+  H2D=388.256 ms.
+- Up/gate profile: 85 calls, total=29.134 ms/call.
+- Down batch profile: 160 calls, stage=13.384 ms/call,
+  total=13.536 ms/call.
+- CPU MoE profile:
+  - up_gate: 85 calls, 29.480 ms/call, `cuda_batch=29.296 ms/call`,
+    `fallback_t0=0.001 ms/call`, `batch_accept=85`.
+  - down: 550 calls, 154.241 ms/call, `cuda_batch=4.138 ms/call`,
+    `fallback_t0=149.994 ms/call`, `batch_accept=160`,
+    `batch_decline=52`.
+- CPU MoE name top offenders:
+  - `blk.39.ffn_gate_exps.weight`: 811.640 ms/call,
+    `fallback_t0=811.606 ms/call`, not batch eligible.
+  - Q4_0/non-eligible down layers remain prominent:
+    `blk.9`, `blk.7`, `blk.6`, `blk.18`, `blk.10`, `blk.8`,
+    `blk.15` `ffn_down_exps.weight`, all with fallback-dominated wall time.
+  - Batch-eligible down names still decline once per 4 calls in the n4 run,
+    usually `batch_accept=3`, `batch_decline=1`.
+- Split profile:
+  - total: 242 signatures, 488 calls, 91510.307 ms wall.
+  - top split signatures are CPU backend MoE layer groups such as
+    `ffn_moe_gate-39` to `ffn_moe_down-39`, 3922.195 ms; layer 13,
+    3313.730 ms; layer 4, 1870.915 ms.
+- Graph profile:
+  - submit: 4 calls, 91519.578 ms total, 22879.894 ms/call.
+  - sync: 24 calls, 2.327 ms total; decode sync is only 2.294 ms.
+
+Decision:
+
+- Reject Phase 3U as a gate-passing diagnostic because `launch_failures=44`
+  violates the hard failure rule.
+- Do not run `-n 32` from this diagnostic configuration.
+- No code rollback is needed because Phase 3U was env-only.
+- The attribution is still directionally useful: after Phase 3E, the remaining
+  wall time is not CUDA sync but CPU backend MoE submit/split execution. The
+  next optimization should stop spending time on cache-key/prefetch micro
+  changes and instead target the down/fallback path:
+  1. make the remaining non-eligible Q4_0 down tensors batch-eligible or provide
+     a correct GPU path for them;
+  2. reduce one-call-per-token batch declines for otherwise eligible down names;
+  3. isolate prompt-only `ffn_gate_exps` fallback such as layer 39 so it does
+     not distort TTFT or decode profiling.
+
+## Next candidate: Phase 3V down batch-decline reason attribution
+
+Design timestamp: 2026-07-03 00:15 CST.
+
+Current bottleneck:
+
+- Phase 3U confirmed CPU backend MoE split dominance on the current Phase 3E
+  runtime, but the diagnostic itself failed the hard `launch_failures=0` gate.
+- Existing code inspection shows the down batch path declines when an expert has
+  more than one row in the current `MUL_MAT_ID` call:
+  `matrix_row_counts[e] > 1 -> multirow_not_supported`.
+- Phase 3H/3U per-name profiles show eligible down names usually have
+  `batch_accept=N-1`, `batch_decline=1`. That pattern is consistent with the
+  prompt call declining once because prompt has multiple tokens, while decode
+  token calls accept.
+- If the decline is prompt-only, optimizing it can improve TTFT but cannot move
+  decode token rate much. The next token-rate optimization should instead
+  target non-eligible fallback tensors or the accepted down path's staging cost.
+- If declines also happen during decode, then adding multi-row down batch support
+  can improve token rate and should be prioritized.
+
+Hypothesis:
+
+- Use the existing default-off decline logger:
+  `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+- Run the accepted Phase 3E runtime without graph/split profiling, so the run is
+  closer to promotion conditions and should not reproduce the Phase 3U profiling
+  launch failures.
+- Inspect decline reasons and tensor names:
+  - `multirow_not_supported` during the first prompt call only means the decline
+    path is mostly TTFT work.
+  - any repeated decline during decode on eligible down names means multi-row or
+    shape support still affects token rate.
+  - `unsupported_type` on Q4_0 down tensors confirms the already-tested Q4_0
+    path remains unattractive unless a new approach avoids the previous cache
+    pressure regression.
+
+Theoretical value:
+
+- This diagnostic does not itself improve token rate.
+- It decides whether the next implementation should target prompt-only TTFT or
+  decode token-rate work.
+- Because the accepted full `-n 96` decode is 2.72551 s/token, a prompt-only
+  fix cannot get us toward 5 tok/s. A decode decline fix would have an upper
+  bound equal to the observed decline fallback time removed from each token.
+
+Execution:
+
+- No code change.
+- Use Phase 3E best runtime env and add:
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+  - keep `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - keep `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- Do not enable graph/split profiling in this phase.
+- Run cold `-n 4` under strict 16GB cgroup.
+- If the run passes quality, RAM, VRAM, TTFT, and failure gates, run cold
+  `-n 32` only if the n4 logs show decode-relevant declines that require longer
+  attribution.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Logs include decline reasons and CPU MoE per-name summary.
+- The result must identify whether `batch_decline=1` is prompt-only or decode
+  relevant before any implementation is attempted.
+
+Rollback:
+
+- No code rollback expected because this is env-only.
+- Reject the diagnostic if the decline logger causes quality regression, TTFT
+  failure, resource failure, launch/read failures, or excessive logging that
+  distorts the run.
+
+Result timestamp: 2026-07-03 00:22 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-213313Z-n4-phase3v-decline-debug`
+
+Measured result:
+
+- Commit/config: `1bc97b7ec`, Phase 3E runtime env plus:
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80493.87 ms, inside the 106331.72 ms gate.
+- Decode: 10916.57 ms / 3 runs, 3.63886 s/token, 0.27481 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=99`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=724, misses=1804,
+  hit_rate=28.6%.
+- Pinned staging: copies=1790, host_stage=2595.035 ms,
+  H2D=387.210 ms.
+- Up/gate profile: 85 calls, total=26.477 ms/call.
+- Down batch profile: 160 calls, stage=13.377 ms/call,
+  total=13.546 ms/call.
+- Decline reasons:
+  - 52 total down batch declines.
+  - All 52 were `multirow_not_supported`.
+  - All showed `rows_stride=136`, matching the prompt shape
+    (`17 prompt tokens * 8 selected experts`).
+  - The decline log appears before the decode batch active messages.
+- CPU MoE profile:
+  - up_gate: 85 calls, 26.944 ms/call, `batch_accept=85`,
+    `batch_decline=0`.
+  - down: 550 calls, 152.296 ms/call, `cuda_batch=4.128 ms/call`,
+    `fallback_t0=148.061 ms/call`, `batch_accept=160`,
+    `batch_decline=52`.
+- Per-name profile still shows decode-relevant fallback from non-eligible down
+  tensors:
+  - `blk.9.ffn_down_exps.weight`, `blk.7.ffn_down_exps.weight`,
+    `blk.6.ffn_down_exps.weight`, `blk.15.ffn_down_exps.weight`,
+    `blk.18.ffn_down_exps.weight`, `blk.10.ffn_down_exps.weight`,
+    `blk.8.ffn_down_exps.weight` all have `batch_eligible=0` and
+    fallback-dominated wall time.
+
+Decision:
+
+- Reject Phase 3V as a gate-passing diagnostic because `launch_failures=99`
+  violates the hard failure rule.
+- Do not run `-n 32` from this diagnostic configuration.
+- No code rollback is needed because Phase 3V was env-only.
+- The decline evidence indicates that `batch_decline=1` for otherwise eligible
+  down names is a prompt/TTFT issue, not the decode token-rate priority.
+- The next implementation candidate should target decode-relevant non-eligible
+  down fallback without repeating Phase 3I's rejected Q4_0 compact-batch cache
+  expansion, which increased staging pressure and slowed `-n32`.
+
+## Next candidate: Phase 3W Q4_0 down compact batch with separate small cache
+
+Design timestamp: 2026-07-03 00:31 CST.
+
+Current bottleneck:
+
+- Phase 3H/3V show decode-relevant non-eligible down fallback from Q4_0 layers
+  such as `blk.6`, `blk.7`, `blk.8`, `blk.9`, `blk.10`, `blk.15`, and
+  `blk.18` `ffn_down_exps.weight`.
+- Phase 3I enabled Q4_0 in the normal down compact-batch path, but it was
+  rejected because Q4_0's larger expert slot increased the shared down cache
+  slot size, reduced cache capacity, increased staging pressure, and slowed
+  `-n32`.
+- Current code has only two cache buckets selected by expert size and split
+  settings. In the accepted Phase 3E env, large down experts use the main bucket;
+  enabling Q4_0 there would again grow the main down slot size.
+
+Hypothesis:
+
+- Add a default-off Q4_0-only separate-cache mode:
+  `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=<MiB>`.
+- When enabled, Q4_0 down expert sizes above the accepted IQ3 down slot size use
+  the secondary cache bucket with a small explicit budget, while existing IQ3/IQ2
+  down cache remains unchanged.
+- Add Q4_0 to compact MMVQ batch support only under this mode.
+- This should move Q4_0 down layers from CPU fallback to GPU without reducing
+  the accepted main down cache capacity.
+
+Theoretical upper bound:
+
+- Phase 3H `-n32` showed several Q4_0 down names around 40-54 ms/call of CPU
+  fallback. With roughly 7 Q4_0 down layers, the absolute upper bound is on the
+  order of hundreds of milliseconds per decode token if all of that fallback is
+  removed.
+- A separate 512MiB Q4 cache can hold about 60 Q4_0 experts if Q4_0 slot size is
+  about 8.25MiB. It cannot cover all routed Q4 experts, so the practical gain is
+  bounded by its hit rate and H2D/read overhead.
+- The experiment should beat Phase 3E `-n32` 2.24573 s/token to justify a full
+  `-n96` run. If Q4 cache misses dominate, it will fail like Phase 3I.
+
+Execution:
+
+- Implement default-off routing for Q4_0 down compact batch to a separate cache
+  budget controlled by `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB`.
+- Build remotely.
+- Run cold `-n4` with accepted Phase 3E env plus:
+  - `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512`
+  - CPU MoE name profile enabled.
+- If n4 passes all gates and Q4_0 names become batch eligible, run cold `-n32`.
+- Promote only if `-n32` beats Phase 3E `-n32` and then full `-n96` beats
+  Phase 3E full `-n96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- `launch_failures=0`, expert-pack `read_failures=0`.
+- Main down cache must keep the accepted 7.44MiB slot / 2016-slot shape.
+- Logs must show a separate Q4 cache allocation and Q4_0 down names with
+  `batch_eligible>0`.
+- `-n32` must be faster than Phase 3E `-n32` before any full run.
+
+Rollback:
+
+- Revert the code if build fails, Q4_0 output quality regresses, cache shape is
+  not isolated, TTFT/RAM/VRAM gates fail, launch/read failures appear, or n32
+  token rate does not beat Phase 3E.
+
+Implementation/result timestamp: 2026-07-03 00:47 CST.
+
+Code attempted:
+
+- Added default-off `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB`.
+- First implementation changed CUDA-side support only. It built, but CPU
+  down-batch eligibility still rejected Q4_0, so Q4_0 never entered the GPU
+  batch path.
+- Second implementation added CPU-side Q4_0 down eligibility under the same env.
+  It built, but the initial separate-cache threshold was too high:
+  Q4_0 slot size was 7.88MiB, not >=8MiB, so it polluted the main down cache.
+- Third implementation moved the threshold to 7.5MiB, which finally isolated
+  Q4_0 into the secondary cache bucket.
+
+Run 1:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214009Z-n4-phase3w-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 75835.42 ms.
+- Decode: 10844.40 ms / 3 runs, 3.61480 s/token, 0.27664 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Main down cache stayed at 2016 slots / 7.44MiB, but Q4_0 names remained
+  `batch_eligible=0`; the CUDA-only gate was insufficient.
+
+Run 2:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214309Z-n4-phase3w2-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 75511.92 ms.
+- Decode: 10093.00 ms / 3 runs, 3.36433 s/token, 0.29724 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Q4_0 became batch-eligible, but the main down cache changed to
+  1904 slots / 7.88MiB. This violates the Phase 3W acceptance condition that
+  main down cache must keep the accepted 2016 slots / 7.44MiB shape.
+
+Run 3:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-214619Z-n4-phase3w3-q4-separate-cache`
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 74626.23 ms.
+- Decode: 9744.96 ms / 3 runs, 3.24832 s/token, 0.30785 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- `launch_failures=44`, `read_failures=0`.
+- Main down cache stayed isolated:
+  - down: 2016 slots, 7.44MiB, hits=728, misses=1800.
+  - q4_down secondary bucket: 65 slots, 7.88MiB, hits=38, misses=130.
+- Q4_0 down names became batch eligible; examples:
+  - `blk.6.ffn_down_exps.weight`: `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+  - `blk.9.ffn_down_exps.weight`: `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+  - `blk.18`, `blk.7`, `blk.10`, `blk.15` also became eligible.
+- No actual `failed/error/FAILED` lines were found in stderr, but the metrics
+  still reported `launch_failures=44`. Under the user's hard rule, the metrics
+  field is treated as failing evidence.
+
+Decision:
+
+- Reject Phase 3W.
+- Do not run `-n32`.
+- Revert all Phase 3W source changes locally and remotely.
+- Rebuild the remote binary from the clean source after rollback.
+- Keep Phase 3E / commit `9b64e4c8` as the accepted full `-n96` best.
+
+Analysis:
+
+- The separate-cache design did isolate Q4_0 and used VRAM more fully, but it
+  still failed the hard `launch_failures=0` gate.
+- The Q4 bucket had only 22.6% hit rate on n4, and pinned staging increased
+  copies from 1790 to 1915, host_stage to 2860.061 ms, and H2D to 425.998 ms.
+- Even though smoke decode improved versus the failed W1/W2 attempts, the run is
+  not valid for promotion and should not be stacked.
+- If Q4_0 is revisited, first fix the metrics/failure accounting or identify why
+  a non-empty `launch_failures` field appears with no corresponding stderr
+  failure lines, then use a profile-guided Q4 cache rather than pure LRU.
+
+## Next candidate: Phase 3X strict launch-failure accounting
+
+Design timestamp: 2026-07-03 01:02 CST.
+
+Current bottleneck:
+
+- Several recent diagnostics and implementation attempts were rejected because
+  `metrics.json` reported non-zero `launch_failures`.
+- Direct log inspection for Phase 3W-3 found no matching real failure lines:
+  no `failed`, `error`, `FAILED`, or CUDA failure line appeared in stderr.
+- The run script computes:
+  `len(re.findall(r'launch_.*fail|decline', stderr, re.I))`.
+- This incorrectly counts normal and expected `batch_decline`/`decline(...)`
+  control-flow logs as launch failures.
+- Example: Phase 3V intentionally enabled decline debug and therefore reported
+  `launch_failures=99`; Phase 3W reported `44` due to per-name
+  `batch_decline=1` summaries even when no true launch failure existed.
+
+Hypothesis:
+
+- Split failure accounting into:
+  - `launch_failures`: true CUDA/kernel/launch failure lines only.
+  - `decline_count`: normal declined optional fast-path attempts.
+- Keep the hard gate on `launch_failures=0`; do not gate on `decline_count`
+  unless the phase specifically requires a fast path to activate.
+- This does not improve token rate directly, but it restores reliable gate
+  evidence so valid optimization attempts are not falsely rejected.
+
+Theoretical value:
+
+- No token-rate upper bound because this is measurement correctness only.
+- It unblocks future decisions by preventing normal prompt/decode decline logs
+  from invalidating otherwise correct runs.
+- It may also reclassify Phase 3W-3 as failing only because it was not run under
+  the strict metric rule; the code was reverted, so any re-evaluation must be a
+  fresh cold run.
+
+Execution:
+
+- Do not change inference code.
+- Patch the remote run script template used for future Kimi experiments:
+  - remove bare `decline` from `launch_failures`.
+  - add `decline_count` as a separate metric.
+  - count launch failures only from explicit failure phrases such as
+    `launch_.*fail`, `launch.*failed`, `cuda.*failed`, `cuda.*error`,
+    `cudaGetLastError`, and `CUDA error`.
+- Run cold `-n4` on the clean accepted Phase 3E runtime with strict accounting.
+- If strict `launch_failures=0`, quality/RAM/VRAM/TTFT/read gates pass, this
+  phase is accepted as measurement repair.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Strict `launch_failures=0`, `read_failures=0`.
+- `decline_count` is recorded separately.
+- No inference source code changes remain.
+
+Rollback:
+
+- Revert the script/plan direction if the strict regex misses an actual CUDA
+  error present in stderr, or if the rerun shows real CUDA failure lines.
+
+Result timestamp: 2026-07-03 01:08 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-215308Z-n4-phase3x-strict-launch-accounting`
+
+Measured result:
+
+- Commit/config: `4858db2d8`, clean accepted Phase 3E runtime env, no inference
+  source change; metrics script only changed failure accounting.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77438.61 ms, inside the 106331.72 ms gate.
+- Decode: 9946.78 ms / 3 runs, 3.31559 s/token, 0.30161 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- Strict `launch_failures=0`.
+- `decline_count=0` for this run because decline debug/name profile was not
+  enabled.
+- `read_failures=0`.
+- Strict stderr grep for real launch/CUDA failure lines was empty.
+- Main down cache shape remains the accepted one:
+  2016 slots, 7.44MiB slot, hits=724, misses=1804, hit_rate=28.6%.
+- Pinned staging: copies=1790, host_stage=2633.163 ms,
+  H2D=389.144 ms.
+- Up/gate profile: 85 calls, total=26.037 ms/call.
+- Down profile: 160 calls, stage=13.120 ms/call,
+  total=13.285 ms/call.
+
+Decision:
+
+- Accept Phase 3X as measurement repair.
+- Future Kimi optimization runs must use strict failure accounting:
+  - `launch_failures` counts only true CUDA/kernel/launch failure lines.
+  - `decline_count` records optional fast-path decline logs separately.
+- Previous `launch_failures` values generated by
+  `re.findall(r'launch_.*fail|decline', ...)` are not valid proof of a real
+  launch failure when stderr has no matching CUDA/launch failure line.
+- This does not change the accepted best runtime; Phase 3E full `-n96` remains
+  the current promoted best until a new strict-accounted optimization beats it.
+
+## Next candidate: Phase 3Y strict re-test Q4_0 separate down cache
+
+Design timestamp: 2026-07-03 01:13 CST.
+
+Current bottleneck:
+
+- Phase 3X proved the old metrics regex falsely counted `decline` text as
+  `launch_failures`.
+- Phase 3W-3 had been rejected only because the old metrics field showed
+  `launch_failures=44`, while strict stderr grep found no true CUDA/launch
+  failure lines.
+- Phase 3W-3 also showed the intended mechanism finally worked:
+  - main down cache stayed at 2016 slots / 7.44MiB.
+  - secondary Q4 cache had 65 slots / 7.88MiB.
+  - Q4_0 down names became batch eligible.
+  - n4 smoke decode was 3.24832 s/token, slightly better than the strict clean
+    Phase 3X n4 at 3.31559 s/token.
+- This is not enough to promote because n4 is too short and the code was
+  reverted.
+
+Hypothesis:
+
+- Re-apply the default-off Q4_0 separate-cache implementation, with the corrected
+  7.5MiB threshold, and run under strict launch-failure accounting.
+- If the prior rejection was purely measurement error, the n4 run should pass
+  all hard gates and show:
+  - strict `launch_failures=0`,
+  - Q4 cache allocation,
+  - Q4_0 down names with `batch_eligible>0`,
+  - main down cache unchanged.
+- The real decision point is n32. Q4 cache may still lose because it increases
+  staging copies/H2D and has low hit rate.
+
+Theoretical upper bound:
+
+- Removing Q4_0 down CPU fallback could save tens to hundreds of milliseconds
+  per token, but only if the secondary cache hit rate is high enough.
+- Phase 3W-3 n4 Q4 cache hit rate was only 22.6% and staging copies rose from
+  1790 to 1915, so the realistic upside may be small or negative on n32.
+- Promotion requires beating Phase 3E n32:
+  2.24573 s/token, 0.44529 tok/s.
+
+Execution:
+
+- Re-apply default-off source changes:
+  - CPU down-batch Q4_0 eligibility only when
+    `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB` is set.
+  - CUDA Q4_0 compact MMVQ batch support only under the same env.
+  - Q4_0 down expert sizes >=7.5MiB use cache bucket 1 with explicit budget.
+  - up/gate batch rejects Q4_0 to keep the experiment down-only.
+- Build remotely.
+- Run strict cold `-n4` with:
+  - `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB=512`
+  - strict metrics accounting from Phase 3X.
+  - CPU MoE name profile enabled.
+- If n4 passes, run strict cold `-n32`.
+- Only if n32 beats Phase 3E n32, run full `-n96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Strict `launch_failures=0`, `read_failures=0`.
+- Main down cache remains 2016 slots / 7.44MiB.
+- Logs show Q4 separate cache and Q4_0 down `batch_eligible>0`.
+- n32 must beat Phase 3E n32 before any full run.
+
+Rollback:
+
+- Revert the code if build fails, strict failures appear, quality/TTFT/RAM/VRAM
+  gates fail, Q4 cache isolation fails, or n32 does not beat Phase 3E n32.
+
+Implementation/result timestamp: 2026-07-03 01:23 CST.
+
+Code attempted:
+
+- Re-applied the Phase 3W default-off Q4_0 separate-cache code with strict
+  accounting:
+  - CPU down-batch Q4_0 eligibility only when
+    `GGML_MOE_Q4_DOWN_SEPARATE_CACHE_MIB` is set.
+  - CUDA compact MMVQ Q4_0 support only under the same env.
+  - Q4_0 down experts with size >=7.5MiB route to cache bucket 1.
+  - up/gate batch explicitly rejects Q4_0, keeping this down-only.
+- Remote build: PASS.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-215859Z-n4-phase3y-q4-separate-cache-strict`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 76116.51 ms.
+- Decode: 10206.57 ms / 3 runs, 3.40219 s/token, 0.29393 tok/s.
+- Quality: smoke PASS; output was `France is a country`.
+- Strict `launch_failures=0`, `decline_count=44`, `read_failures=0`.
+- Main down cache remained isolated:
+  2016 slots, 7.44MiB, hits=728, misses=1800.
+- Q4 cache was active:
+  65 slots, 7.88MiB, hits=38, misses=130, hit_rate=22.6%.
+- Q4_0 down names became batch eligible, for example `blk.6`, `blk.7`,
+  `blk.9`, `blk.18`, `blk.10`, and `blk.15`.
+
+Decision after smoke:
+
+- n4 passed correctness, strict failure accounting, RAM, VRAM, TTFT, read, and
+  cache-isolation gates.
+- Continue to strict cold n32.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-220143Z-n32-phase3y-q4-separate-cache-strict`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB.
+- VRAM peak: 31802 MiB used, 308 MiB free.
+- TTFT: 74685.95 ms.
+- Decode: 77463.13 ms / 31 runs, 2.49881 s/token, 0.40019 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Strict `launch_failures=0`, `decline_count=44`, `read_failures=0`.
+- Main down cache:
+  2016 slots, 7.44MiB, hits=12054, misses=14890, hit_rate=44.7%.
+- Q4 cache:
+  65 slots, 7.88MiB, hits=516, misses=1220, hit_rate=29.7%.
+- Pinned staging: copies=14714, host_stage=20873.250 ms,
+  H2D=3292.123 ms.
+- Up/gate profile: 869 calls, total=23.299 ms/call.
+- Down profile: 1861 calls, stage=10.942 ms/call, total=11.090 ms/call.
+- CPU profile:
+  - up_gate total=23.512 ms/call.
+  - down total=30.795 ms/call, `cuda_batch=5.172 ms/call`,
+    `fallback_t0=25.556 ms/call`, `batch_accept=1861`,
+    `batch_decline=59`.
+
+Comparison:
+
+- Phase 3E n32: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3Y n32: 2.49881 s/token, 0.40019 tok/s.
+- Phase 3Y is slower by 7.84635 s total over 31 decode runs.
+
+Analysis:
+
+- Strict accounting confirms Phase 3Y has no real launch/read failure and
+  preserves semantic output.
+- The implementation does move Q4_0 down tensors into the batch path, but the
+  Q4 cache hit rate is only 29.7%.
+- The extra Q4 path increases staging pressure:
+  - copies rise to 14714 versus Phase 3E n32's 13149.
+  - host_stage rises to 20873.250 ms versus Phase 3E n32's 17455.237 ms-class
+    staging bucket.
+  - H2D rises to 3292.123 ms versus Phase 3E n32's about 2844 ms.
+- The added staging and larger slot cost outweigh the Q4_0 fallback reduction.
+
+Decision:
+
+- Reject Phase 3Y.
+- Do not run full n96.
+- Revert all Phase 3Y source changes locally and remotely.
+- Rebuild the remote binary from clean source after rollback.
+- Keep Phase 3E as current accepted best.
+- If Q4_0 is revisited, it needs profile-guided Q4 admission/pinning or a
+  no-cache/scratch path that does not add broad staging pressure; pure LRU
+  separate-cache is not enough.
+
+Result timestamp: 2026-07-02 23:47 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-211930Z-n4-phase3t-cache-index`
+
+Measured result:
+
+- Commit/config: `c00f0a72b-dirty-phase3t`, Phase 3E env plus local
+  `batch_vram_cache` key-index implementation.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80366.41 ms, inside the 106331.72 ms gate.
+- Decode: 11252.90 ms / 3 runs, 3.75097 s/token, 0.26660 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Pinned staging: copies=1790, host_stage=2714.495 ms,
+  H2D=388.408 ms.
+- Up/gate: 85 calls, total=32.202 ms/call.
+- Down batch: 160 calls, stage=13.440 ms/call, total=13.595 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-212145Z-n32-phase3t-cache-index`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77377.36 ms, inside the 106331.72 ms gate.
+- Decode: 71242.37 ms / 31 runs, 2.29814 s/token, 0.43513 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: hits=12906, misses=14038, hit_rate=47.9%.
+- Pinned staging: copies=13149, host_stage=17427.528 ms,
+  H2D=2846.623 ms.
+- Up/gate: 869 calls, total=18.920 ms/call.
+- Down batch: 1644 calls, stage=8.875 ms/call, total=9.036 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3T `-n 32`: 2.29814 s/token, 0.43513 tok/s.
+
+Analysis:
+
+- The key index preserves output correctness and passes all resource gates.
+- It does not improve end-to-end decode. Even though some local counters are
+  similar or slightly better, total eval regresses by about 1.64s on `-n 32`.
+- This confirms the Phase 2L conclusion after the Phase 3E change: linear cache
+  lookup is not a dominant enough bottleneck, and the unordered_map/index
+  maintenance does not pay for itself.
+
+Decision:
+
+- Reject Phase 3T.
+- Do not run full `-n 96`.
+- Revert the key-index code.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+Result timestamp: 2026-07-02 23:19 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-210604Z-n4-phase3s-ram-tier-512`
+
+Measured result:
+
+- Commit/config: `07e068e4e`, Phase 3E env plus:
+  - `GGML_MOE_RAM_TIER_MIB=512`
+  - `GGML_MOE_RAM_TIER_PIN=1`
+  - `GGML_MOE_RAM_TIER_PIN_MIB=512`
+  - `GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off/route-profile.csv`
+  - `GGML_MOE_RAM_TIER_SKIP=0`
+- RAM tier loaded 90 entries, 510.56MiB resident, 510.56MiB pinned.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 81586.64 ms, inside the 106331.72 ms gate.
+- Decode: 10385.95 ms / 3 runs, 3.46198 s/token, 0.28885 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- RAM tier: hits=86, total=1790, hit_rate=4.8%.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1704, host_stage=2529.102 ms,
+  H2D=370.173 ms.
+- Up/gate: 85 calls, total=53.486 ms/call.
+- Down batch: 160 calls, stage=13.022 ms/call, total=13.191 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-210847Z-n32-phase3s-ram-tier-512`
+
+Measured result:
+
+- RAM tier loaded 90 entries, 510.56MiB resident, 510.56MiB pinned.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79706.47 ms, inside the 106331.72 ms gate.
+- Decode: 70176.25 ms / 31 runs, 2.26375 s/token, 0.44174 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- RAM tier: hits=135, total=13149, hit_rate=1.0%.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=13014, host_stage=17546.082 ms,
+  H2D=2813.961 ms.
+- Up/gate: 869 calls, total=19.378 ms/call.
+- Down batch: 1644 calls, stage=8.664 ms/call, total=8.812 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3S `-n 32`: 2.26375 s/token, 0.44174 tok/s.
+
+Analysis:
+
+- The 512MiB RAM tier satisfies cold-start RAM, TTFT, VRAM, failure, and quality
+  gates, and it successfully serves some H2D reads from RAM.
+- The useful hit rate is too low at attribution length:
+  135 hits / 13149 tier lookups = 1.0%.
+- The top route-profile entries are mostly already captured by the VRAM cache
+  or do not represent the later miss set, so resident host RAM does not remove
+  enough critical-path staging.
+- A smaller tier would likely reduce the already-low hit count. A larger tier
+  would increase TTFT/RAM risk under the strict 16GB cap and is not justified by
+  this hit curve.
+
+Decision:
+
+- Reject Phase 3S.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+## Next candidate: Phase 3R consume host-prefetch in actual cache miss copy
+
+Design timestamp: 2026-07-02 22:31 CST.
+
+Current bottleneck:
+
+- Current accepted full `-n 96` best remains Phase 3E:
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM: 14.901 GiB under the strict 16GB cgroup cap.
+  - VRAM: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E visible remaining staging cost:
+  - pinned staging host_stage=47796.399 ms.
+  - H2D=7736.929 ms.
+  - copies=35734.
+- Phase 3O-3Q found that trace host-prefetch can load the Phase 3E route trace,
+  but the actual hit counter stayed at zero:
+  - Phase 3Q host prefetch: submitted=4287, hits=0, evicted=4223.
+- Code inspection explains this:
+  - The accepted Phase 3E fused-MMQ up/gate path stages cache misses through
+    `stage_tensor_slots_only -> batch_cache_insert_slot`.
+  - `batch_cache_insert_slot` calls `batch_cache_copy_h2d`.
+  - `batch_cache_copy_h2d` currently checks RAM tier, then reads from expert
+    pack into the pinned staging slot.
+  - It does not call `host_prefetch_copy_h2d`, so host-prefetch buffers are
+    never consumed by the actual fused-MMQ miss path.
+
+Hypothesis:
+
+- Extend `batch_cache_copy_h2d` with optional `tensor_name` and `expert_idx`
+  arguments.
+- When `pack_entry` exists, try:
+  `host_prefetch_copy_h2d(pack_entry, tensor_name, expert_idx, dst, sz, st)`
+  before falling back to the synchronous expert-pack read.
+- Keep the bounded host-prefetch producer behavior from Phase 3Q:
+  - `window_start=max(cursor, skip_events)`
+  - `start=max(window_start, produce_cursor)`
+  - `end=min(trace.size(), window_start + lead_events)`
+- This connects background prefetch production to the real cache-miss
+  consumption point while preventing the producer from running far beyond the
+  current route window.
+- The change should not alter routing, quantization, CUDA kernels, cache keys,
+  or expert bytes; it only changes the source of the host buffer used for H2D
+  on a miss.
+
+Theoretical upper bound:
+
+- The hard upper bound is still the Phase 3E host_stage bucket:
+  47.8s out of 231.7s decode.
+- If host-prefetch hits cover 25% of current host_stage and are overlapped, full
+  decode could improve by about 12s:
+  219.7s / 85 = 2.58 s/token, 0.387 tok/s.
+- If hits remain low or evictions dominate, expected performance is worse than
+  Phase 3E due to extra worker I/O and pinned-memory pressure.
+
+Execution:
+
+- Code changes:
+  - Add optional `tensor_name` and `expert_idx` parameters to the pinned
+    `batch_cache_copy_h2d` helper.
+  - Try `host_prefetch_copy_h2d` before synchronous expert-pack staging when
+    a matching `pack_entry` and tensor metadata are available.
+  - Pass `tensor_name` and `expert_idx` from `batch_cache_insert_slot`.
+  - Reapply the bounded host-prefetch producer window from Phase 3Q.
+- Build the remote CUDA batch binary.
+- Run cold `-n 4` with:
+  - Phase 3E best runtime env.
+  - `GGML_MOE_HOST_PREFETCH` pointing to the Phase 3E full `route-trace.csv`.
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`.
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`.
+  - `GGML_MOE_HOST_PREFETCH_LEAD_EVENTS=2048`.
+  - strict `memory.max=16000000000`, `memory.swap.max=0`, and drop caches.
+- Continue to cold `-n 32` only if `-n 4` shows real host-prefetch hits,
+  bounded failures, quality/RAM/VRAM/TTFT gates passing, and no decode slowdown
+  severe enough to invalidate the mechanism.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned host-prefetch
+  buffers.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack direct path has `read_failures=0`.
+- Host-prefetch has `alloc_failures=0`.
+- Host-prefetch `hits>0` on the smoke run; otherwise the mechanism is still not
+  connected and the candidate is rejected.
+- Host-prefetch read failures and scan passes must remain bounded, not millions
+  of repeated misses.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if output quality changes, TTFT exceeds the gate, host RAM
+  exceeds 16GB, VRAM gates fail, host-prefetch remains unused, failures appear,
+  or matching token-count performance does not improve over Phase 3E.
+
+Result timestamp: 2026-07-02 22:59 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-205636Z-n4-phase3r-host-prefetch-consume`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty-phase3r`, Phase 3E env plus bounded
+  route-trace host prefetch consumed by `batch_cache_copy_h2d`.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache and pinned prefetch buffers.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76840.16 ms, inside the 106331.72 ms gate.
+- Decode: 11401.05 ms / 3 runs, 3.80035 s/token, 0.26313 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=4321, hits=88, misses=1702.
+  - evicted=4169, read_failures=305, alloc_failures=0, reserved_skips=47.
+  - scan_passes=8711, cursor=2640, produce_cursor=4688/74144.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1702, host_stage=2717.871 ms,
+  H2D=434.685 ms.
+- Up/gate: 85 calls, total=36.554 ms/call.
+- Down batch: 160 calls, stage=14.102 ms/call, total=14.267 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-205901Z-n32-phase3r-host-prefetch-consume`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80247.52 ms, inside the 106331.72 ms gate.
+- Decode: 75219.66 ms / 31 runs, 2.42644 s/token, 0.41213 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Host prefetch:
+  - calls=27056, matched=27056, submitted=26896, hits=209,
+    misses=12940.
+  - evicted=26623, read_failures=1757, alloc_failures=0,
+    reserved_skips=43.
+  - scan_passes=60148, cursor=27056, produce_cursor=29104/74144.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=12940, host_stage=19686.484 ms,
+  H2D=3136.170 ms.
+- Up/gate: 869 calls, total=20.567 ms/call.
+- Down batch: 1644 calls, stage=9.479 ms/call, total=9.632 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3R `-n 32`: 2.42644 s/token, 0.41213 tok/s.
+
+Analysis:
+
+- Phase 3R proves that the consumer hook works: host-prefetch hits are no
+  longer zero.
+- The hit rate is too low to be useful:
+  - `-n 4`: 88 hits / 1790 miss-consumption attempts, about 4.9%.
+  - `-n 32`: 209 hits / 13149 attempts, about 1.6%.
+- The prefetch worker submits and evicts far more entries than it successfully
+  serves: 26896 submissions and 26623 evictions for only 209 hits on `-n 32`.
+- The extra worker reads, pinned-memory traffic, lock work, and H2D contention
+  outweigh the small number of avoided synchronous reads.
+- This direction would need a different scheduler, likely planned prefetch at
+  actual `stage_copy_job` creation or a much tighter future-miss predictor, not
+  a route-trace scan worker.
+
+Decision:
+
+- Reject Phase 3R.
+- Do not run full `-n 96`.
+- Revert the host-prefetch consumer and bounded producer code changes.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+## Next candidate: Phase 3O route-trace host prefetch
+
+Design timestamp: 2026-07-02 21:50 CST.
+
+Current bottleneck:
+
+- Current accepted full `-n 96` best is Phase 3E:
+  - Run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`
+  - Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+  - Host RAM peak: 14.901 GiB under strict 16GB cgroup.
+  - VRAM peak: 31286 MiB used, 824 MiB free.
+  - TTFT: 79721.89 ms.
+- Phase 3E remaining measured decode components:
+  - down cache misses: 40188, hit_rate=45.7%.
+  - pinned staging: copies=35734, slot_wait=84.220 ms,
+    host_stage=47796.399 ms, H2D=7736.929 ms.
+  - up/gate: 2381 calls, 24.079 ms/call.
+  - down batch: 4506 calls, stage=12.205 ms/call,
+    total=12.363 ms/call.
+- The largest directly compressible wall component is `host_stage`: it is the
+  synchronous path that reads missed experts from the expert pack into staging
+  host memory before H2D.
+
+Hypothesis:
+
+- Enable existing route-trace host prefetch:
+  - `GGML_MOE_HOST_PREFETCH=<Phase 3E route-trace.csv>`
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`
+  - `GGML_MOE_HOST_PREFETCH_LEAD_EVENTS=2048`
+- The prefetch worker should read upcoming expert-pack entries into pinned host
+  buffers before the main staging path needs them.
+- On a host-prefetch hit, the critical path should skip the expert-pack read and
+  only enqueue H2D from the prefetched pinned host buffer.
+- This should not change math or cache keys; it only changes where the same
+  expert bytes are staged from.
+
+Theoretical upper bound:
+
+- Phase 3E host_stage is 47796.399 ms over the full `-n 96` run.
+- H2D is 7736.929 ms and cannot be removed by host prefetch.
+- If host prefetch hit rate were 100% and worker I/O were perfectly overlapped,
+  the hard upper bound would remove nearly the host read/stage portion:
+  about 47.8s from 231.7s decode, giving roughly 183.9s / 85 =
+  2.16 s/token, 0.46 tok/s.
+- A realistic first-pass target is smaller because the worker is single-threaded
+  and trace alignment may miss; 25-50% useful hit rate would save about
+  12-24s, enough to beat Phase 3E if other overhead does not rise.
+- Host RAM risk: default 512MiB pinned host budget plus the Phase 3E
+  14.901GiB cgroup peak should remain below 16GB, but this must be measured
+  cold because cgroup memory includes page cache and pinned allocations.
+
+Execution:
+
+- No code change.
+- Reuse Phase 3E best runtime env and enable host prefetch from:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off/route-trace.csv`
+- Keep diagnostic batch/profile output enabled for this experiment so host
+  prefetch counters, host_stage, H2D, and cache rates are recorded.
+- Run cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If smoke passes resource/TTFT/failure gates and logs show host prefetch
+  enabled without read/allocation failures, run cold `-n 32`.
+- If `-n 32` is not slower than Phase 3E `-n 32` and all gates pass, run full
+  cold `-n 96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned host prefetch
+  buffers.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent; full `-n 96` answer
+  must be a coherent paragraph for:
+  `Please introduce France in a short paragraph.`
+- `launch_failures=0`, expert-pack `read_failures=0`, host-prefetch
+  `read_failures=0`, and host-prefetch `alloc_failures=0`.
+- Logs must show host prefetch loaded the trace and report useful hits.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+- If accepted, commit and push immediately with the exact env and run paths
+  recorded for reproducibility.
+
+Rollback:
+
+- Reject if quality fails, TTFT exceeds the gate, host RAM exceeds 16GB, VRAM
+  gates fail, host prefetch cannot load the trace, read/allocation failures
+  appear, or `-n 32`/full `-n 96` does not improve over the matching Phase 3E
+  reference.
+
+Result timestamp: 2026-07-02 21:56 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204049Z-n4-phase3o-host-prefetch`
+
+Measured result:
+
+- Commit/config: `32b0d67c8`, Phase 3E best env plus route-trace host prefetch
+  from the Phase 3E full trace.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache and pinned host prefetch buffers.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78651.55 ms, inside the 106331.72 ms gate.
+- Decode: 11371.71 ms / 3 runs, 3.79057 s/token, 0.26381 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch loaded the trace:
+  - events=74144, lead_events=2048, slots=64, max=512MiB.
+  - calls=2640, matched=2640, submitted=6146, hits=0, evicted=6082.
+  - read_failures=11151428, alloc_failures=0, scan_passes=11157574.
+- Expert-pack direct read path itself had `read_failures=0`.
+- Pinned staging: copies=1790, host_stage=3109.692 ms,
+  H2D=422.394 ms.
+- Up/gate: 85 calls, total=36.206 ms/call.
+- Down batch: 160 calls, stage=15.859 ms/call, total=16.028 ms/call.
+
+Analysis:
+
+- Reject the env-only host prefetch attempt before `-n 32`.
+- The prefetch worker does not produce useful hits in this configuration.
+- The key failure is implementation-level: worker scan passes and read failures
+  explode while `produce_cursor` remains at 2641, so the worker repeatedly
+  revisits entries around the current route cursor instead of advancing across
+  the trace after a missing/unusable candidate.
+- This also explains the slowdown: the prefetch thread burns CPU/I/O lookup
+  work and competes with the real decode path, while `hits=0` means no critical
+  path staging is removed.
+
+Decision:
+
+- Reject Phase 3O.
+- Do not run `-n 32`.
+- Next candidate should first fix host-prefetch trace advancement with a
+  minimal cursor change, then rerun the same cold smoke gate.
+
+## Next candidate: Phase 3P fix host-prefetch worker advancement
+
+Design timestamp: 2026-07-02 21:58 CST.
+
+Current bottleneck:
+
+- Phase 3O identified a concrete prefetch-worker bug before any useful
+  performance conclusion:
+  - `scan_passes=11157574`
+  - `read_failures=11151428`
+  - `hits=0`
+  - `produce_cursor=2641/74144`
+- In `host_prefetch_worker`, the trace scan starts from:
+  `max(cursor, skip_events)`.
+- `produce_cursor` is updated after selecting an event, but it is not used as
+  the next scan start. If a selected event is not usable or the current route
+  cursor does not advance far enough, the worker can repeatedly examine the
+  same trace region and retry missing entries.
+
+Hypothesis:
+
+- Change the worker scan start to include `produce_cursor`:
+  `max(max(cursor, produce_cursor), skip_events)`.
+- This makes the prefetch producer move forward through the trace even when the
+  consumer cursor is still near the current route.
+- The change is metadata/control-flow only; it does not alter expert bytes,
+  quantization, routing, CUDA kernels, or output math.
+
+Theoretical upper bound:
+
+- The fix itself only removes wasted prefetch-loop work and enables the actual
+  Phase 3O mechanism to be measured.
+- If it produces no host-prefetch hits, the best expected result is close to
+  Phase 3E with a small overhead.
+- If it produces useful hits, the same upper bound as Phase 3O applies:
+  removing up to the 47.8s Phase 3E host_stage component, with realistic first
+  target 12-24s saved at 25-50% useful hit rate.
+
+Execution:
+
+- Apply the minimal cursor-start fix in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Build CUDA batch binary on the remote.
+- Run cold `-n 4` with the exact Phase 3O host-prefetch env and strict 16GB
+  cgroup.
+- Continue to `-n 32` only if:
+  - host-prefetch read failures no longer explode,
+  - host-prefetch has useful hits or negligible overhead,
+  - quality/RAM/VRAM/TTFT/failure gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned buffers.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack `read_failures=0`.
+- Host-prefetch `alloc_failures=0`; host-prefetch `read_failures` must be
+  bounded and explainable, not millions of repeated misses.
+- `scan_passes` should be proportional to trace/prefetch work, not millions for
+  an `-n 4` run.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if the cursor fix changes output quality, exceeds RAM/TTFT
+  gates, introduces read/allocation failures, or fails to improve the matching
+  Phase 3E token-count gate.
+
+Result timestamp: 2026-07-02 22:04 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204523Z-n4-phase3p-host-prefetch-cursor`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty`, Phase 3O env plus the first
+  host-prefetch cursor-start fix.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76666.17 ms, inside the 106331.72 ms gate.
+- Decode: 11220.96 ms / 3 runs, 3.74032 s/token, 0.26736 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=7230, hits=0, evicted=7166.
+  - read_failures=458, alloc_failures=0, scan_passes=7688.
+  - cursor=2640, produce_cursor=7815/74144, used=365.97MiB.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1790, host_stage=2833.511 ms,
+  H2D=411.515 ms.
+- Up/gate: 85 calls, total=34.312 ms/call.
+- Down batch: 160 calls, stage=14.577 ms/call, total=14.734 ms/call.
+
+Analysis:
+
+- The first cursor fix eliminated the catastrophic repeated scan:
+  read_failures fell from 11151428 to 458 and scan_passes fell from 11157574
+  to 7688.
+- It still fails the performance/usefulness gate: `hits=0`, decode is slower
+  than the Phase 3E smoke, and host prefetch evicts nearly every submitted
+  entry before use.
+- Root cause: the updated start uses `produce_cursor`, but the end of the scan
+  window is still computed from the new start. That lets `produce_cursor` run
+  thousands of events ahead of the actual route cursor, defeating
+  `lead_events`.
+
+Decision:
+
+- Do not promote Phase 3P and do not run `-n 32`.
+- Keep the first cursor insight, but add a second fix that bounds producer
+  advancement to `cursor + lead_events`.
+
+## Next candidate: Phase 3Q bounded host-prefetch lead window
+
+Design timestamp: 2026-07-02 22:07 CST.
+
+Current bottleneck:
+
+- Phase 3P fixed repeated retries but prefetch still has zero useful hits:
+  - cursor=2640
+  - produce_cursor=7815
+  - lead_events=2048
+  - submitted=7230, evicted=7166, hits=0
+- The worker is allowed to scan from `produce_cursor` and also set
+  `end=start+lead_events`, so it keeps walking forward indefinitely instead of
+  staying within a bounded window ahead of the consumer cursor.
+
+Hypothesis:
+
+- Compute a stable window from the route consumer cursor:
+  - `window_start=max(cursor, skip_events)`
+  - `start=max(window_start, produce_cursor)`
+  - `end=min(trace.size(), window_start + lead_events)`
+- If `start >= end`, the worker should wait briefly instead of prefetching
+  farther ahead.
+- This keeps prefetched entries near future route use, reduces eviction before
+  use, and should allow host-prefetch hits to appear.
+
+Theoretical upper bound:
+
+- The bounded-window fix still does not change math; it only changes background
+  prefetch scheduling.
+- If hits remain zero, expected performance is no better than Phase 3E and the
+  fix should be rejected.
+- If bounded prefetch converts even 25% of Phase 3E critical host_stage to
+  overlapped work, the full `-n 96` ceiling improves by about 12s, enough to
+  move from 2.72551 s/token to roughly 2.58 s/token.
+
+Execution:
+
+- Update `host_prefetch_worker` to bound scan `end` by
+  `window_start + lead_events`.
+- Rebuild remote CUDA batch binary.
+- Run cold `-n 4` with the same Phase 3O/3P host-prefetch env.
+- Continue to `-n 32` only if host-prefetch hits become nonzero or overhead is
+  clearly negligible, with quality/RAM/VRAM/TTFT/failure gates passing.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache and pinned buffers.
+- VRAM remains near full without OOM.
+- TTFT remains <=106331.72 ms.
+- France output remains semantically correct and coherent.
+- Expert-pack `read_failures=0`.
+- Host-prefetch `alloc_failures=0`.
+- Host-prefetch read failures and scan passes remain bounded.
+- Host-prefetch must report useful hits or at least avoid the Phase 3P
+  submitted/evicted/hits=0 pattern.
+- Full promotion still requires cold full `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Revert/reject if bounded prefetch changes output quality, exceeds RAM/TTFT
+  gates, introduces failures, keeps zero useful hits with decode slowdown, or
+  fails the matching Phase 3E token-count gate.
+
+Result timestamp: 2026-07-02 22:13 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-204922Z-n4-phase3q-host-prefetch-bounded`
+
+Measured result:
+
+- Commit/config: `32b0d67c8-dirty`, Phase 3Q bounded host-prefetch window.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80421.80 ms, inside the 106331.72 ms gate.
+- Decode: 9593.22 ms / 3 runs, 3.19774 s/token, 0.31272 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- Host prefetch:
+  - calls=2640, matched=2640, submitted=4287, hits=0, evicted=4223.
+  - read_failures=305, alloc_failures=0, scan_passes=7730.
+  - cursor=2640, produce_cursor=4688/74144, used=365.31MiB.
+- Expert-pack direct path: read_failures=0.
+- Pinned staging: copies=1790, host_stage=2889.523 ms,
+  H2D=402.364 ms.
+- Up/gate: 85 calls, total=30.694 ms/call.
+- Down batch: 160 calls, stage=14.197 ms/call, total=14.367 ms/call.
+
+Analysis:
+
+- The bounded-window fix reduced overrun versus Phase 3P:
+  - submitted fell from 7230 to 4287.
+  - evicted fell from 7166 to 4223.
+  - produce_cursor stayed closer to cursor+lead.
+- It still fails the mechanism gate: `hits=0`.
+- Without host-prefetch hits, the run does not remove critical-path staging.
+  The remaining speed movement is noise/secondary scheduling and is not enough
+  to justify `-n 32` or a code commit.
+- This indicates the existing trace-driven host-prefetch hook is still not
+  aligned with the actual miss-consumption point. A future attempt needs to
+  submit planned host prefetch close to `stage_copy_job` creation for the
+  tensors that will miss, or wire host prefetch into the down batch path
+  explicitly.
+
+Decision:
+
+- Reject Phase 3Q.
+- Do not run `-n 32`.
+- Revert the host-prefetch worker code changes.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+## Next candidate: Phase 3D CPU MoE op path wall profile
+
+Design timestamp: 2026-07-02 19:14 CST.
+
+Hard gates for all remaining optimization work:
+
+- Cold start only: every evidence run must clear page cache before execution.
+- Host RAM must stay below 16GB including process RSS, pinned memory, mmap
+  residency, and page cache. Evidence runs must use the 16GB cgroup guard:
+  `memory.max=16000000000`, `memory.swap.max=0`.
+- VRAM should remain as full as practical without OOM or allocation retries.
+- TTFT must stay <=106331.72 ms, the Phase 0 cold baseline plus 20%.
+- The prompt must remain exactly:
+  `Please introduce France in a short paragraph.`
+- The generated answer must be semantically correct and coherent.
+- Every experiment must record token rate, seconds/token, TTFT, exact output,
+  host RAM, VRAM, launch/read failures, cold-start proof, command/env, and log
+  path.
+- Before each practice step, update this plan with the bottleneck hypothesis,
+  theoretical speed bound, acceptance gates, and rollback rule.
+- If a code/config change improves full-gate performance, commit and push
+  immediately with a reproducible run method.
+- If performance drops, output quality fails, TTFT exceeds the gate, or RAM/VRAM
+  gates fail, reject that candidate and revert any promoted code/config.
+
+Current bottleneck:
+
+- Phase 3A shows the CUDA MoE stream functions account for only part of decode:
+  about 31.3s of the `-n 32` decode path.
+- Phase 3B shows almost all time is inside `graph_compute_async` submit, not
+  final synchronization.
+- Phase 3C shows the submit time is dominated by CPU backend split execution for
+  MoE node groups such as `ffn_moe_gate-*`/`ffn_moe_swiglu-*` through
+  `ffn_moe_down-*`.
+- Therefore the next unknown is the CPU MoE op wrapper time around route setup,
+  barriers, CUDA stream calls, and fallback CPU work in:
+  - `ggml_compute_forward_moe_up_gate`
+  - `ggml_compute_forward_mul_mat_id`
+
+Hypothesis:
+
+Add default-off CPU MoE op wall profiling controlled by:
+
+- `GGML_KIMI_CPU_MOE_PROFILE=1`
+
+For up/gate and down ops, measure:
+
+- total op wall time on thread 0.
+- `src1` conversion time.
+- row routing/setup time.
+- first barrier time after routing.
+- CUDA batch call time.
+- post-CUDA barrier time.
+- fallback CPU loop time from thread 0's wall-clock view.
+- call counts and CUDA accepted/declined counts.
+
+The instrumentation must not change behavior when the env var is unset.
+
+Theoretical value and upper bound:
+
+- Phase 3C `-n 32` split wall was 201827.779 ms, while MoE stream function wall
+  was much smaller. The top CPU MoE split signatures averaged about 90-161
+  ms/call.
+- If the CPU wrapper profile shows large barrier or fallback time, the upper
+  bound is the measured non-CUDA wrapper time in those ops.
+- If the wrapper profile accounts for most of the CPU split wall, the next
+  optimization should remove or reduce that component directly.
+- If wrapper time still does not explain split wall, the bottleneck is likely
+  scheduler split overhead or adjacent CPU nodes, and the next plan must move to
+  split fusion/backend placement rather than cache tuning.
+
+Execution:
+
+- Implement default-off profiling in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Commit and push the diagnostic code if it builds and remains default-off.
+- Build remotely.
+- Run cold `-n 4` with the accepted Phase 2H env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+- Do not run a performance-promotion `-n 96` until Phase 3D identifies a
+  concrete optimization target.
+
+Acceptance:
+
+- Code builds.
+- Default behavior is unchanged when `GGML_KIMI_CPU_MOE_PROFILE` is unset.
+- `-n 4` and `-n 32` attribution runs keep host RAM under 16GB, TTFT within the
+  gate, VRAM near full, `launch_failures=0`, `read_failures=0`, and semantic
+  France output correct.
+- Logs include `[kimi_cpu_moe_profile]` summaries for up/gate and down.
+
+Rollback:
+
+- Revert diagnostic code if it changes default behavior, fails to build, causes
+  quality regression, materially increases profiling-run TTFT beyond the gate,
+  or produces incomplete/ambiguous timing records.
+
+Implementation result timestamp: 2026-07-02 19:30 CST.
+
+Code:
+
+- Commit: `d08eb4081 ggml: add Kimi CPU MoE wall profiling`
+- Remote build: PASS; `llama-completion` linked successfully.
+- The profiler is default-off and enabled only with
+  `GGML_KIMI_CPU_MOE_PROFILE=1`.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-185529Z-n4-phase3d-cpu-moe-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105959.74 ms, inside the 106331.72 ms gate.
+- Decode: 14130.52 ms / 3 runs, 4.71017 s/token, 0.21231 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=85, total=27.902 ms/call, cuda_batch=27.720,
+    post_cuda_barrier=0.153, fallback_t0=0.001.
+  - mul_mat_id/down path: calls=550, total=209.020 ms/call,
+    cuda_batch=4.276, cuda_single=92.676, fallback_t0=111.730.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-185844Z-n32-phase3d-cpu-moe-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105364.52 ms, inside the 106331.72 ms gate.
+- Decode: 94641.27 ms / 31 runs, 3.05294 s/token, 0.32755 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- MoE stream profile:
+  - up/gate: calls=869, total=18.325 ms/call, wall=18.351 ms/call.
+  - down batch: calls=1644, total=9.101 ms/call, wall=9.181 ms/call.
+- CPU MoE profile:
+  - up_gate: calls=869, total=18.517 ms/call, cuda_batch=18.362,
+    fallback_t0=0.001.
+  - mul_mat_id/down path: calls=4021, total=43.276 ms/call,
+    cuda_batch=3.758, cuda_single=20.010, fallback_t0=19.334.
+  - Totals: up_gate about 16.1s, mul_mat_id/down path about 174.0s.
+- Split/graph profile:
+  - split total: 199938.156 ms.
+  - graph submit total: 199960.617 ms.
+
+Analysis:
+
+- Phase 3D explains almost all of Phase 3C split wall time through CPU MoE op
+  wrappers. The problem is not final graph synchronization.
+- `up_gate` is already almost entirely the intended CUDA batch path.
+- The main remaining bottleneck inside the MoE CPU split is the
+  `MUL_MAT_ID` path outside down batch: `cuda_single` and fallback consume
+  about 158s combined on `-n 32`.
+- The accepted runtime sets `GGML_MOE_STREAM_BATCH_ONLY=1`, but the
+  `ggml_compute_forward_mul_mat_id` single-expert stream fallback is still
+  reachable when the down-batch path is not used.
+
+Decision:
+
+- Phase 3D diagnostic code is accepted.
+- Do not claim a performance improvement from Phase 3D.
+- Next candidate should make `GGML_MOE_STREAM_BATCH_ONLY=1` actually disable
+  the single-expert `ggml_cuda_moe_stream_one` path in `MUL_MAT_ID`, then test
+  whether CPU fallback plus down batch is faster and still correct.
+
+## Next candidate: Phase 3E honor batch-only by disabling single stream path
+
+Design timestamp: 2026-07-02 19:33 CST.
+
+Current bottleneck:
+
+- In Phase 3D `-n 32`, the `MUL_MAT_ID` CPU op path spent about:
+  - 15.1s in down `cuda_batch`.
+  - 80.5s in `cuda_single`.
+  - 77.7s in fallback CPU loop from thread 0's view.
+- This dominates the split wall and is the largest actionable component found
+  so far.
+
+Hypothesis:
+
+- `GGML_MOE_STREAM_BATCH_ONLY=1` should prevent the old single-expert stream
+  handoff path from running.
+- The single path launches many small expert calls and then synchronizes, which
+  can be slower than staying in the CPU fallback for those non-batched cases.
+- Disabling it may reduce wrapper wall time and eliminate many small CUDA
+  launches without changing the accepted down-batch path.
+
+Theoretical upper bound:
+
+- The hard upper bound is removing the measured `cuda_single` time:
+  about 80.5s on the Phase 3D `-n 32` run.
+- The practical bound is lower because CPU fallback must compute work that the
+  single path currently handles. If CPU fallback replaces all single work at the
+  same cost, this patch is neutral. If the single path overhead dominates, token
+  rate can improve.
+- A useful smoke signal is lower `mul_mat_id/down path total` without a large
+  increase in `fallback_t0`.
+
+Execution:
+
+- Change `ggml_compute_forward_mul_mat_id` so `use_gpu_stream` is false when
+  `GGML_MOE_STREAM_BATCH_ONLY` is set.
+- Keep down batch behavior unchanged.
+- Build remotely.
+- Run cold `-n 4` with Phase 3D profiling env.
+- If `-n 4` passes, run cold `-n 32`.
+- Promote to full `-n 96` only if `-n 32` improves and the France output,
+  RAM, VRAM, TTFT, launch/read gates all pass.
+
+Acceptance:
+
+- Build passes.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- CPU MoE profile shows `cuda_single` near zero when
+  `GGML_MOE_STREAM_BATCH_ONLY=1`.
+- `-n 32` must improve over the Phase 3D attribution run and remain plausible
+  against accepted Phase 2H before any `-n 96` run.
+- Full promotion still requires `-n 96` faster than Phase 2H
+  (3.47192 s/token, 0.29 tok/s) with all gates passing.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  `cuda_single` still runs under batch-only, fallback grows more than the
+  removed single time, or token rate regresses.
+
+Implementation result timestamp: 2026-07-02 19:44 CST.
+
+Code:
+
+- Change: `ggml_compute_forward_mul_mat_id` now disables the single-expert
+  `ggml_cuda_moe_stream_one` path when `GGML_MOE_STREAM_BATCH_ONLY=1`.
+- Remote build: PASS.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-190433Z-n4-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78321.61 ms, inside the 106331.72 ms gate.
+- Decode: 11124.44 ms / 3 runs, 3.70815 s/token, 0.26968 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=85, total=31.354 ms/call.
+  - mul_mat_id/down path: calls=550, total=150.769 ms/call,
+    cuda_batch=4.136, cuda_single=0.000, fallback_t0=146.511.
+- Split wall: 89418.640 ms, down from 120063.875 ms in Phase 3D smoke.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-190656Z-n32-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78000.71 ms, inside the 106331.72 ms gate.
+- Decode: 69617.76 ms / 31 runs, 2.24573 s/token, 0.44529 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU MoE profile:
+  - up_gate: calls=869, total=17.942 ms/call, cuda_batch=17.793.
+  - mul_mat_id/down path: calls=4022, total=28.657 ms/call,
+    cuda_batch=3.685, cuda_single=0.000, fallback_t0=24.920.
+- MoE stream profile:
+  - up/gate: 17.757 ms/call.
+  - down batch: 8.922 ms/call.
+- Split wall: 147559.707 ms, down from 199938.156 ms in Phase 3D.
+- Graph submit: 147577.128 ms.
+
+Analysis:
+
+- Phase 3E validates the bottleneck hypothesis. The batch-only env previously
+  did not prevent the single-expert CUDA path, and that path was expensive.
+- Disabling it removes `cuda_single` entirely and improves `-n 32` decode from
+  3.05294 s/token to 2.24573 s/token while preserving RAM, VRAM, TTFT, and
+  France-answer quality gates.
+- The remaining large cost is fallback_t0 at 24.920 ms/call in the
+  `MUL_MAT_ID` path.
+
+Decision:
+
+- Phase 3E is a valid gated improvement at `-n 32`; commit and push
+  immediately.
+- Continue to full cold `-n 96` promotion test. Accept as the new best only if
+  full `-n 96` beats Phase 2H 3.47192 s/token / 0.29 tok/s and all hard gates
+  pass.
+
+Full promotion run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`
+
+Measured result:
+
+- Commit/config: `9b64e4c8`, accepted Phase 2H runtime env plus the Phase 3E
+  code change; Phase 3 graph/split/CPU diagnostic profilers disabled.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79721.89 ms, inside the 106331.72 ms gate.
+- Decode: 231668.17 ms / 85 runs, 2.72551 s/token, 0.36690 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/staging:
+  - down cache: slots=2016, slot=7.44 MiB, hits=33844, misses=40188,
+    hit_rate=45.7%.
+  - pinned staging: copies=35734, host_stage=47796.399 ms,
+    h2d=7736.929 ms.
+- MoE profile:
+  - up/gate: calls=2381, total=24.079 ms/call, wall=24.101 ms/call.
+  - down batch: calls=4506, stage=12.205 ms/call,
+    total=12.363 ms/call, wall=12.407 ms/call.
+
+Comparison:
+
+- Previous accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, about 0.29 tok/s.
+- Phase 3E `-n 96`: 231668.17 ms / 85 runs,
+  2.72551 s/token, 0.36690 tok/s.
+- Improvement: 63.45s less decode time over 85 tokens, about 21.5% lower
+  seconds/token and about 27% higher token/sec.
+
+Decision:
+
+- Accept Phase 3E as the new full `-n 96` best configuration.
+- Current best: `9b64e4c8`, 2.72551 s/token, 0.36690 tok/s under strict
+  16GB cold-start gates.
+- Next bottleneck after Phase 3E is fallback/staging in `MUL_MAT_ID` and down
+  expert staging: host_stage remains 47.8s and down batch stage is
+  12.205 ms/call.
+
+## Next candidate: Phase 3F retest larger VRAM cache after TTFT headroom
+
+Design timestamp: 2026-07-02 19:58 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` is the current best, but down expert staging remains
+  large:
+  - down cache hit_rate=45.7%.
+  - pinned staging host_stage=47796.399 ms.
+  - down batch stage=12.205 ms/call.
+- VRAM is still not completely full: 31286 MiB used, 824 MiB free.
+- Earlier Phase 2R with `GGML_MOE_VRAM_CACHE_MIB=15400` was rejected because
+  smoke TTFT exceeded the gate by 237.02 ms, but Phase 3E now has about
+  26.6s TTFT headroom on full `-n 96`.
+
+Hypothesis:
+
+- Increasing `GGML_MOE_VRAM_CACHE_MIB` from 15000 to 15400 should use more
+  VRAM and reduce down expert cache misses.
+- Because Phase 3E removed the expensive single stream path, the prior TTFT
+  rejection may no longer apply.
+
+Theoretical upper bound:
+
+- The extra 400 MiB is about 53 more 7.44 MiB down-cache slots.
+- If those slots reduce misses proportionally, the maximum direct gain is a
+  small fraction of the 47.8s host_stage cost. A realistic full `-n 96` gain is
+  likely a few seconds unless routing locality is highly concentrated.
+- This is still worth testing because it also better satisfies the "use VRAM"
+  constraint and has low code risk.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best code/config but
+  `GGML_MOE_VRAM_CACHE_MIB=15400`.
+- If smoke passes RAM, VRAM, TTFT, and quality gates, run cold `-n 32`.
+- If `-n 32` improves over Phase 3E `-n 32` or materially improves cache/stage
+  metrics without TTFT risk, run cold `-n 96`.
+- Commit/push only the plan/result record if this config is accepted. No code
+  commit is needed for an env-only candidate.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM or allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E current best:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM allocation becomes unstable, output
+  quality changes, read/launch failures appear, or token rate does not improve
+  on the required full run.
+
+Result timestamp: 2026-07-02 20:23 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-191826Z-n4-phase3f-vram-cache15400`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 78540.52 ms, inside the 106331.72 ms gate.
+- Decode: 10631.97 ms / 3 runs, 3.54399 s/token, 0.28217 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: slots=2067, hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2725.427 ms,
+    h2d=389.254 ms.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192038Z-n32-phase3f-vram-cache15400`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 76281.51 ms, inside the 106331.72 ms gate.
+- Decode: 70572.68 ms / 31 runs, 2.27654 s/token, 0.43926 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: slots=2067, hits=13035, misses=13909, hit_rate=48.4%.
+  - pinned staging: copies=13045, host_stage=17634.678 ms,
+    h2d=2824.389 ms.
+- MoE profile:
+  - up/gate: calls=869, total=17.713 ms/call.
+  - down batch: calls=1644, stage=8.966 ms/call,
+    total=9.121 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3F `-n 32`: 2.27654 s/token, 0.43926 tok/s.
+- Extra VRAM improved down-cache hit rate only from 47.9% to 48.4% and did not
+  reduce total token time.
+
+Decision:
+
+- Reject `GGML_MOE_VRAM_CACHE_MIB=15400` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3G retest down prefetch depth 2 after Phase 3E
+
+Design timestamp: 2026-07-02 20:25 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` remains current best, but down staging remains large:
+  - pinned staging host_stage=47796.399 ms.
+  - down batch stage=12.205 ms/call.
+  - down cache hit_rate=45.7%.
+- Phase 3F showed adding cache capacity does not reduce token time enough.
+- Earlier down prefetch tests were run before Phase 3E removed the expensive
+  single-expert stream path, so the interaction must be remeasured.
+
+Hypothesis:
+
+- `GGML_MOE_PREFETCH_DOWN=1` with `GGML_MOE_PREFETCH_DOWN_DEPTH=2` may overlap
+  down expert staging with adjacent CPU/GPU work now that the single path is
+  disabled.
+- If prefetch is effective, host_stage or down stage should fall without
+  increasing TTFT or hurting output quality.
+
+Theoretical upper bound:
+
+- The hard upper bound is the full 47.8s host_stage on Phase 3E full `-n 96`.
+- The realistic bound is much lower because staging may be serialized by route
+  availability and cache misses. A useful `-n 32` signal is at least several
+  seconds less eval time or a clear reduction in down stage.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best code/config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- If smoke passes all gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E `-n 32`
+  (2.24573 s/token) or shows a large stage reduction with no TTFT/quality risk.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, quality changes, RAM/VRAM gates fail,
+  prefetch is inactive/useless, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 20:30 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192442Z-n4-phase3g-prefetch-depth2`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76922.49 ms, inside the 106331.72 ms gate.
+- Decode: 11325.24 ms / 3 runs, 3.77508 s/token, 0.26490 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=137, hits=137, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=871, misses=1673, preloads=137, hit_rate=34.2%.
+  - pinned staging: copies=1780, host_stage=2644.232 ms,
+    h2d=386.512 ms.
+  - down batch: stage=12.722 ms/call, total=12.900 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-192653Z-n32-phase3g-prefetch-depth2`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77520.17 ms, inside the 106331.72 ms gate.
+- Decode: 69924.90 ms / 31 runs, 2.25564 s/token, 0.44333 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=1446, hits=1446, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=14363, misses=12597, preloads=1446,
+    hit_rate=53.3%.
+  - pinned staging: copies=13136, host_stage=18245.027 ms,
+    h2d=2846.778 ms.
+  - up/gate: total=19.503 ms/call.
+  - down batch: stage=6.465 ms/call, total=6.620 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3G `-n 32`: 2.25564 s/token, 0.44333 tok/s.
+- Prefetch materially improves down stage and cache hit rate, but total eval
+  time still regresses slightly. The up/gate total also increases from
+  17.757 ms/call to 19.503 ms/call.
+
+Decision:
+
+- Reject down prefetch depth 2 for promotion because the `-n 32` token rate
+  regresses.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3H per-name CPU `MUL_MAT_ID` attribution
+
+Design timestamp: 2026-07-02 20:36 CST.
+
+Current bottleneck:
+
+- Phase 3E full `-n 96` is current best, but the next actionable bucket is still
+  inside the CPU `MUL_MAT_ID` path:
+  - full `-n 96` pinned staging host_stage=47796.399 ms.
+  - full `-n 96` down batch stage=12.205 ms/call.
+  - Phase 3E `-n 32` CPU profile still showed `MUL_MAT_ID` fallback_t0
+    24.920 ms/call after `cuda_single` was removed.
+- The aggregate profile does not identify which tensor names/layers produce the
+  remaining fallback and total wall time.
+
+Hypothesis:
+
+- Add default-off per-name attribution under `GGML_KIMI_CPU_MOE_PROFILE=1`.
+- Record top `MUL_MAT_ID` source tensor names by:
+  - call count.
+  - thread-0 total wall time.
+  - fallback thread-0 wall time.
+  - down-batch accepted/declined counts.
+- This will distinguish whether the remaining cost is concentrated in
+  `ffn_down_exps` batch declines, non-down `MUL_MAT_ID` tensors, or specific
+  layers.
+
+Theoretical value:
+
+- If most fallback time is from non-down tensors, the next optimization is to
+  extend the GPU batch path or specialize those tensors.
+- If most fallback time is from down batch declines, the next optimization is to
+  fix the decline condition.
+- If time is spread across many tiny names, the next optimization target is
+  scheduler/fusion overhead, not another cache tuning pass.
+
+Execution:
+
+- Implement default-off per-name attribution in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Build remotely.
+- Run cold `-n 4` with current best env plus:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+- If smoke passes, run cold `-n 32` with the same profile env.
+- Do not claim performance improvement from this diagnostic phase.
+
+Acceptance:
+
+- Code builds and remains default-off.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Logs include `[kimi_cpu_moe_name_profile]` top entries.
+
+Rollback:
+
+- Revert if the diagnostic code changes default behavior, fails to build,
+  produces ambiguous names/timings, or profiling overhead breaks the cold-start
+  gates.
+
+Implementation result timestamp: 2026-07-02 20:40 CST.
+
+Code:
+
+- Commit: `35bfc0281 ggml: add Kimi CPU MoE name profiling`
+- Remote build: PASS.
+- The per-name profiler is default-off and requires both:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-193343Z-n4-phase3h-name-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 72593.11 ms, inside the 106331.72 ms gate.
+- Decode: 9674.63 ms / 3 runs, 3.22488 s/token, 0.31009 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU profile:
+  - up_gate: calls=85, total=30.488 ms/call.
+  - mul_mat_id/down path: calls=550, total=141.381 ms/call,
+    cuda_batch=4.241, cuda_single=0.000, fallback_t0=137.025.
+- Per-name profile top entries are mostly `blk.*.ffn_down_exps.weight`; some
+  down tensors are not batch eligible, and many eligible tensors have one
+  decline out of four calls on the smoke.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-193559Z-n32-phase3h-name-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78437.92 ms, inside the 106331.72 ms gate.
+- Decode: 70075.53 ms / 31 runs, 2.26050 s/token, 0.44238 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- CPU profile:
+  - up_gate: calls=869, total=18.511 ms/call.
+  - mul_mat_id/down path: calls=4022, total=29.342 ms/call,
+    cuda_batch=3.718, cuda_single=0.000, fallback_t0=25.573.
+- Per-name top findings:
+  - `blk.1.ffn_down_exps.weight`: total=80.543 ms/call,
+    fallback_t0=14.345, batch_eligible=32, batch_accept=31,
+    batch_decline=1.
+  - `blk.2.ffn_down_exps.weight`: total=77.097 ms/call,
+    fallback_t0=12.137, batch_eligible=32, batch_accept=31,
+    batch_decline=1.
+  - `blk.6.ffn_down_exps.weight`: total=53.820 ms/call,
+    fallback_t0=53.763, batch_eligible=0.
+  - `blk.9.ffn_down_exps.weight`: total=45.323 ms/call,
+    fallback_t0=45.302, batch_eligible=0.
+  - Several `ffn_gate_exps` and `ffn_up_exps` tensors also appear in the top 40
+    as CPU fallback, for example `blk.30.ffn_gate_exps.weight` at
+    30.160 ms/call and `blk.7.ffn_up_exps.weight` at 27.113 ms/call.
+
+Analysis:
+
+- Phase 3H proves the remaining fallback is not caused only by cache misses.
+- There are two actionable groups:
+  - `ffn_down_exps` tensors that are not considered batch eligible.
+  - `ffn_gate_exps`/`ffn_up_exps` tensors still using the generic
+    `MUL_MAT_ID` fallback rather than the fused up/gate path.
+- Before changing kernels, identify the tensor types and shape/condition that
+  make those names ineligible.
+
+Decision:
+
+- Phase 3H diagnostic code is accepted.
+- Do not claim token-rate improvement from Phase 3H.
+- Next candidate should add type/condition attribution or inspect GGUF tensor
+  metadata for the non-eligible top names, then target the largest safe group.
+
+## Next candidate: Phase 3I enable Q4_0 down compact batch
+
+Design timestamp: 2026-07-02 20:51 CST.
+
+Current bottleneck:
+
+- Phase 3H showed several top fallback `ffn_down_exps` layers are not batch
+  eligible.
+- GGUF metadata inspection found those non-eligible down tensors are Q4_0:
+  - `blk.6.ffn_down_exps.weight`: Q4_0.
+  - `blk.7.ffn_down_exps.weight`: Q4_0.
+  - `blk.8.ffn_down_exps.weight`: Q4_0.
+  - `blk.9.ffn_down_exps.weight`: Q4_0.
+  - `blk.10.ffn_down_exps.weight`: Q4_0.
+- Existing CUDA code has Q4_0 MMVQ support, but the Kimi MoE stream compact
+  down-batch path excludes Q4_0 in:
+  - CPU eligibility: `ggml_cuda_moe_stream_supports_down_batch`.
+  - CUDA support gate: `moe_stream_type_supported`.
+  - compact batch switch: `launch_moe_mmvq_compact_batch`.
+
+Hypothesis:
+
+- Add Q4_0 to the standard down compact batch path, not to the Q8_K special
+  path.
+- Q4_0 down layers should move from CPU fallback to CUDA MMVQ compact batch.
+- This should reduce the per-name fallback time for Q4_0 down layers and lower
+  total `MUL_MAT_ID` fallback.
+
+Theoretical upper bound:
+
+- In Phase 3H `-n 32`, top Q4_0 down fallback examples were:
+  - `blk.6.ffn_down_exps.weight`: 53.763 ms/call fallback.
+  - `blk.9.ffn_down_exps.weight`: 45.302 ms/call fallback.
+  - `blk.7.ffn_down_exps.weight`: 41.985 ms/call fallback.
+  - `blk.8.ffn_down_exps.weight`: 40.220 ms/call fallback.
+  - `blk.10.ffn_down_exps.weight`: 39.972 ms/call fallback.
+- These are 32 calls each in `-n 32`; the upper bound is large enough to test.
+- Practical gain may be lower or negative because Q4_0 expert slots are larger
+  and may increase VRAM-cache pressure/staging.
+
+Execution:
+
+- Add Q4_0 to CPU down-batch eligibility and CUDA compact batch support.
+- Build remotely.
+- Run cold `-n 4` with current best env and CPU/name profiling enabled.
+- If smoke passes quality/RAM/VRAM/TTFT and Q4_0 names become batch eligible,
+  run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E or clearly reduces
+  fallback without TTFT/quality/cache risk.
+
+Acceptance:
+
+- Build passes.
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Per-name profile shows Q4_0 down tensors with `batch_eligible>0` and
+  `batch_accept>0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if Q4_0 compact batch fails to launch, output quality changes, cache
+  pressure makes token rate worse, TTFT exceeds the gate, or resource/failure
+  gates fail.
+
+Result timestamp: 2026-07-02 20:58 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-194706Z-n4-phase3i-q4_0-down-batch`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 80173.60 ms, inside the 106331.72 ms gate.
+- Decode: 9128.79 ms / 3 runs, 3.04293 s/token, 0.32863 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- Q4_0 down batch became active:
+  - down batch calls increased from 160 in Phase 3H smoke to 181.
+  - `blk.6.ffn_down_exps.weight` became `batch_eligible=4`,
+    `batch_accept=3`, `batch_decline=1`.
+- Cache/stage:
+  - down cache slot increased to 7.88 MiB, slots=1904.
+  - down cache hit_rate=28.3%.
+  - pinned staging host_stage=2995.265 ms.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-194940Z-n32-phase3i-q4_0-down-batch`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 81492.43 ms, inside the 106331.72 ms gate.
+- Decode: 79699.78 ms / 31 runs, 2.57096 s/token, 0.38896 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- `read_failures=0`; no real CUDA launch failure was found in stderr.
+- Q4_0 down batch became active:
+  - down batch calls increased from 1644 in Phase 3H to 1861.
+  - Q4_0 down names such as `blk.6`, `blk.7`, `blk.8`, `blk.9` are now
+    `batch_eligible=32`, `batch_accept=31`, `batch_decline=1`.
+- Cache/stage:
+  - down cache slot increased from 7.44 MiB to 7.88 MiB.
+  - cache slots decreased from 2016 to 1904.
+  - hit_rate decreased from 47.9% to 40.7%.
+  - pinned staging copies increased to 15529, host_stage=21985.906 ms,
+    h2d=3448.346 ms.
+- MoE profile:
+  - up/gate regressed to 22.859 ms/call.
+  - down batch regressed to stage=11.489 ms/call, total=11.634 ms/call.
+
+Comparison:
+
+- Phase 3E current best `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3H diagnostic `-n 32`: 2.26050 s/token, 0.44238 tok/s.
+- Phase 3I `-n 32`: 2.57096 s/token, 0.38896 tok/s.
+
+Analysis:
+
+- Q4_0 compact batch launches and preserves semantic quality, but it is slower.
+- The larger Q4_0 down expert slots reduce cache capacity and increase staging
+  pressure enough to outweigh the reduction in per-name fallback for Q4_0
+  layers.
+
+Decision:
+
+- Reject Q4_0 down compact batch for promotion.
+- Revert the Q4_0 support-list changes.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3J down prefetch depth 1 retest
+
+Design timestamp: 2026-07-02 21:05 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current best.
+- Phase 3G depth 2 proved down prefetch is mechanically useful:
+  - down stage improved from 8.767 ms/call to 6.465 ms/call on `-n 32`.
+  - down cache hit rate improved from 47.9% to 53.3%.
+- But Phase 3G regressed total `-n 32` from 2.24573 s/token to
+  2.25564 s/token, partly because up/gate total increased from
+  17.757 ms/call to 19.503 ms/call.
+
+Hypothesis:
+
+- A shallower prefetch depth may keep some down-stage overlap while reducing
+  cache/stream pressure and up/gate interference.
+- Test:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`
+
+Theoretical upper bound:
+
+- Depth 2 reduced down stage by about 2.302 ms/call over 1644 down calls on
+  `-n 32`, about 3.8s of visible down-stage improvement.
+- If depth 1 keeps half of that benefit and avoids the up/gate regression, it
+  could beat Phase 3E by about 1-2s on `-n 32`.
+- Full `-n 96` upper bound scales roughly to a few seconds, so full promotion
+  requires clear `-n 32` evidence.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best code/config plus depth 1 down prefetch.
+- If smoke passes all gates and prefetch is active, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token and all gates pass.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch must be active and useful.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if prefetch is inactive/useless, output quality changes, TTFT exceeds
+  the gate, RAM/VRAM gates fail, or `-n 32` token rate regresses.
+
+Interim result timestamp: 2026-07-02 21:22 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201720Z-n4-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 74687.68 ms, inside the 106331.72 ms gate.
+- Decode: 10645.22 ms / 3 runs, 3.54841 s/token, 0.28182 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=69, hits=69, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=803, misses=1741, preloads=69, hit_rate=31.6%.
+  - pinned staging: copies=1780, host_stage=2721.677 ms,
+    h2d=387.109 ms.
+  - up/gate: total=27.665 ms/call.
+  - down batch: stage=11.462 ms/call, total=11.636 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201930Z-n32-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 71086.16 ms, inside the 106331.72 ms gate.
+- Decode: 67232.53 ms / 31 runs, 2.16879 s/token, 0.46109 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=738, hits=738, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+  - pinned staging: copies=13136, host_stage=17294.231 ms,
+    h2d=2842.521 ms.
+  - up/gate: total=18.269 ms/call.
+  - down batch: stage=7.107 ms/call, total=7.259 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3J depth 1 only `-n 32`: 2.24900 s/token, 0.44464 tok/s.
+- Phase 3L `-t 28 -tb 32` only `-n 32`: 2.28465 s/token,
+  0.43770 tok/s.
+- Phase 3M combined `-n 32`: 2.16879 s/token, 0.46109 tok/s.
+
+Analysis:
+
+- The interaction is beneficial even though both individual changes missed the
+  Phase 3E threshold.
+- Depth 1 prefetch reduces down stage, and lowering decode threads reduces the
+  total contention enough to improve `-n 32`.
+
+Decision:
+
+- Phase 3M is a valid gated improvement at `-n 32`; record and push
+  immediately.
+- Continue to full cold `-n 96` promotion. Accept only if full `-n 96` beats
+  Phase 3E 2.72551 s/token / 0.36690 tok/s with all hard gates passing.
+
+Full promotion run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-202300Z-n96-phase3m-prefetch-depth1-t28`
+
+Measured result:
+
+- Commit/config: `9cae62f42`, current best code plus depth 1 down prefetch and
+  `-t 28 -tb 32`.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78027.47 ms, inside the 106331.72 ms gate.
+- Decode: 231844.76 ms / 85 runs, 2.72759 s/token, 0.36662 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=2032, hits=2032, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=35885, misses=38163, preloads=2032,
+    hit_rate=48.5%.
+  - pinned staging: copies=35725, host_stage=49231.409 ms,
+    h2d=7735.211 ms.
+  - up/gate: calls=2381, total=24.634 ms/call, wall=27.651 ms/call,
+    wall_gap=3.017 ms/call.
+  - down batch: calls=4506, stage=10.177 ms/call,
+    total=10.331 ms/call.
+
+Comparison:
+
+- Phase 3E current best full `-n 96`: 2.72551 s/token, 0.36690 tok/s.
+- Phase 3M full `-n 96`: 2.72759 s/token, 0.36662 tok/s.
+
+Analysis:
+
+- The `-n 32` improvement does not generalize to full `-n 96`.
+- Depth 1 prefetch improves down stage and cache hit rate, but full-run
+  host_stage and up/gate wall gap increase enough to offset the benefit.
+
+Decision:
+
+- Reject Phase 3M for full promotion.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+## Next candidate: Phase 3N production run without diagnostic trace overhead
+
+Design timestamp: 2026-07-02 21:31 CST.
+
+Current bottleneck:
+
+- Phase 3E remains current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- The accepted scripts still enable diagnostic MoE tracing/profiling:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `GGML_MOE_BATCH_PROFILE_OUT`
+  - `GGML_MOE_ROUTE_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_OUT`
+- These are useful for attribution, but they add CUDA event timing, counters,
+  route/TTFT trace bookkeeping, and atexit file writes.
+
+Hypothesis:
+
+- Disabling diagnostic profile/trace env vars while keeping the same compute
+  path may reduce decode overhead without changing output semantics.
+- Required metrics can still be recorded from:
+  - `common_perf_print` for TTFT and token rate.
+  - stdout answer for quality.
+  - cgroup memory samples for host RAM.
+  - `nvidia-smi` samples for VRAM.
+  - stderr failure counters such as `read_failures`.
+
+Theoretical upper bound:
+
+- The potential gain is bounded by profiling overhead, likely small but relevant
+  because Phase 3M missed full promotion by only about 0.18s total.
+- Even a 0.5-1.0% improvement on the Phase 3E full decode would save about
+  1.2-2.3s over 85 tokens.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` using the Phase 3E best runtime env, but unset/remove:
+  - `GGML_MOE_BATCH_PROFILE`
+  - `GGML_MOE_BATCH_PROFILE_OUT`
+  - `GGML_MOE_ROUTE_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_OUT`
+  - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`
+- If smoke passes quality/RAM/VRAM/TTFT gates, run cold `-n 32`.
+- If `-n 32` is not slower than Phase 3E and all gates pass, run full cold
+  `-n 96`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+- Repro method must explicitly state that diagnostic tracing is disabled.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  failure counters appear, or full `-n 96` does not improve over Phase 3E.
+
+Result timestamp: 2026-07-02 21:38 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-203130Z-n4-phase3n-production-no-profile`
+
+Measured result:
+
+- Commit/config: `32b0d67c8`, Phase 3E best runtime env with diagnostic
+  route/TTFT/batch profile env vars disabled.
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 75060.91 ms, inside the 106331.72 ms gate.
+- Decode: 10618.78 ms / 3 runs, 3.53959 s/token, 0.28252 tok/s.
+- Quality: smoke PASS only; output was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Diagnostic down/up profile fields are intentionally absent because this phase
+  disables profiling.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-203404Z-n32-phase3n-production-no-profile`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78105.45 ms, inside the 106331.72 ms gate.
+- Decode: 71018.94 ms / 31 runs, 2.29093 s/token, 0.43650 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12906, misses=14038,
+  hit_rate=47.9%.
+
+Comparison:
+
+- Phase 3E `-n 32` reference: 2.24573 s/token.
+- Phase 3N `-n 32`: 2.29093 s/token.
+
+Analysis:
+
+- Disabling diagnostic trace/profile does not produce a measurable decode win in
+  the cold `-n 32` gate.
+- The measured result is about 2.0% slower than the Phase 3E `-n 32`
+  reference, so the expected instrumentation overhead is not the current
+  bottleneck.
+- Because the gate failed before full `-n 96`, this phase does not justify a
+  full cold run.
+
+Decision:
+
+- Reject Phase 3N.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current full `-n 96` best.
+
+Result timestamp: 2026-07-02 21:00 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-195549Z-n4-phase3j-prefetch-depth1`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76121.62 ms, inside the 106331.72 ms gate.
+- Decode: 10821.17 ms / 3 runs, 3.60706 s/token, 0.27723 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=69, hits=69, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=803, misses=1741, preloads=69, hit_rate=31.6%.
+  - pinned staging: copies=1780, host_stage=2695.331 ms,
+    h2d=385.241 ms.
+  - up/gate: total=29.085 ms/call.
+  - down batch: stage=11.887 ms/call, total=12.045 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-195759Z-n32-phase3j-prefetch-depth1`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78477.11 ms, inside the 106331.72 ms gate.
+- Decode: 69719.05 ms / 31 runs, 2.24900 s/token, 0.44464 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch: loads=738, hits=738, useful_rate=100.0%.
+- Cache/stage:
+  - down cache: hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+  - pinned staging: copies=13136, host_stage=17623.663 ms,
+    h2d=2839.630 ms.
+  - up/gate: total=17.652 ms/call.
+  - down batch: stage=7.562 ms/call, total=7.712 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3G depth 2 `-n 32`: 2.25564 s/token, 0.44333 tok/s.
+- Phase 3J depth 1 `-n 32`: 2.24900 s/token, 0.44464 tok/s.
+
+Analysis:
+
+- Depth 1 avoids the large up/gate regression seen with depth 2 and improves
+  down stage, but total eval still does not beat Phase 3E.
+- The result is close, but the plan requires an improvement before full
+  promotion.
+
+Decision:
+
+- Reject down prefetch depth 1 for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3K thread-count retest after Phase 3E
+
+Design timestamp: 2026-07-02 21:12 CST.
+
+Current bottleneck:
+
+- Phase 3E remains the current full `-n 96` best:
+  2.72551 s/token, 0.36690 tok/s.
+- Phase 3H showed the remaining CPU `MUL_MAT_ID` fallback is still meaningful
+  after removing the single-stream path.
+- Earlier thread-count tests were run before Phase 3E; those results no longer
+  prove the best thread count for the current bottleneck mix.
+
+Hypothesis:
+
+- Increasing CPU compute threads from `-t 32 -tb 32` to `-t 40 -tb 40` may
+  reduce remaining CPU fallback and prompt work now that the single CUDA stream
+  path is gone.
+- The risk is that more CPU threads can increase scheduling contention and slow
+  decode or MoE staging.
+
+Theoretical upper bound:
+
+- If remaining CPU fallback is the dominant scalable component, the maximum
+  thread scaling from 32 to 40 is 1.25x on that component.
+- Phase 3H `-n 32` measured `MUL_MAT_ID` fallback_t0 at about
+  25.573 ms/call; thread-0 timing is not full thread-sum, so the practical
+  upper bound is uncertain.
+- A useful `-n 32` signal is either lower eval time than Phase 3E
+  2.24573 s/token, or materially lower fallback/profile buckets without TTFT
+  risk.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` on current best env with `-t 40 -tb 40`.
+- If smoke passes RAM, VRAM, TTFT, and quality gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E `-n 32`.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 21:16 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201055Z-n4-phase3l-t28-tb32`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 77980.00 ms, inside the 106331.72 ms gate.
+- Decode: 10487.76 ms / 3 runs, 3.49592 s/token, 0.28605 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2686.912 ms,
+    h2d=388.994 ms.
+  - up/gate: total=27.854 ms/call.
+  - down batch: stage=13.581 ms/call, total=13.733 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-201303Z-n32-phase3l-t28-tb32`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 76861.17 ms, inside the 106331.72 ms gate.
+- Decode: 70824.04 ms / 31 runs, 2.28465 s/token, 0.43770 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=12906, misses=14038, hit_rate=47.9%.
+  - pinned staging: copies=13149, host_stage=17682.462 ms,
+    h2d=2846.123 ms.
+  - up/gate: total=18.889 ms/call.
+  - down batch: stage=9.028 ms/call, total=9.184 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32` with `-t 32 -tb 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3L `-n 32` with `-t 28 -tb 32`: 2.28465 s/token,
+  0.43770 tok/s.
+
+Analysis:
+
+- Lowering decode threads to 28 preserves quality and TTFT but regresses decode.
+- Thread count remains best at the Phase 3E accepted `-t 32 -tb 32` among
+  tested points.
+
+Decision:
+
+- Reject `-t 28 -tb 32` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3M combine depth 1 prefetch with lower decode threads
+
+Design timestamp: 2026-07-02 21:20 CST.
+
+Current bottleneck:
+
+- Phase 3J depth 1 prefetch improved down stage but missed the Phase 3E token
+  rate by a small margin:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3J `-n 32`: 2.24900 s/token.
+- Phase 3L `-t 28 -tb 32` regressed alone, but its smoke showed lower short-run
+  host_stage and up/gate than `-t 40`.
+
+Hypothesis:
+
+- Combining shallow prefetch with fewer decode threads may retain down-stage
+  improvement while reducing CPU contention from prefetch work.
+- Test:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`
+  - `-t 28 -tb 32`
+
+Theoretical upper bound:
+
+- The maximum plausible gain is small because both individual candidates missed
+  Phase 3E on `-n 32`.
+- If the interaction removes only 0.2-0.5s of contention over `-n 32`, it could
+  cross the Phase 3E line and justify a full run.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best env plus depth 1 prefetch and
+  `-t 28 -tb 32`.
+- If smoke passes all gates and prefetch is active, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Prefetch must be active and useful.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if prefetch is inactive/useless, output quality changes, TTFT exceeds
+  the gate, RAM/VRAM gates fail, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 21:09 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-200417Z-n4-phase3k-threads40`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 59131.24 ms, inside the 106331.72 ms gate.
+- Decode: 11111.12 ms / 3 runs, 3.70371 s/token, 0.27000 tok/s.
+- Quality: PASS for the smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=724, misses=1804, hit_rate=28.6%.
+  - pinned staging: copies=1790, host_stage=2849.639 ms,
+    h2d=388.597 ms.
+  - up/gate: total=30.924 ms/call.
+  - down batch: stage=13.852 ms/call, total=14.010 ms/call.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-200643Z-n32-phase3k-threads40`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 70803.34 ms, inside the 106331.72 ms gate.
+- Decode: 77704.60 ms / 31 runs, 2.50660 s/token, 0.39895 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`.
+- Cache/stage:
+  - down cache: hits=12906, misses=14038, hit_rate=47.9%.
+  - pinned staging: copies=13149, host_stage=18477.189 ms,
+    h2d=2849.390 ms.
+  - up/gate: total=18.488 ms/call.
+  - down batch: stage=9.020 ms/call, total=9.178 ms/call.
+
+Comparison:
+
+- Phase 3E `-n 32` with `-t 32 -tb 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3K `-n 32` with `-t 40 -tb 40`: 2.50660 s/token,
+  0.39895 tok/s.
+
+Analysis:
+
+- More CPU threads significantly improve TTFT but regress decode token rate.
+- The host-stage and down-batch timings also regress, so this is not a useful
+  token-rate optimization under the current goal.
+
+Decision:
+
+- Reject `-t 40 -tb 40` for promotion.
+- Do not run full `-n 96`.
+- Keep Phase 3E / commit `9b64e4c8` as current best.
+
+## Next candidate: Phase 3L lower decode threads with prompt threads unchanged
+
+Design timestamp: 2026-07-02 21:15 CST.
+
+Current bottleneck:
+
+- Phase 3K showed increasing both decode and prompt threads to 40 improves TTFT
+  but regresses decode from 2.24573 s/token to 2.50660 s/token.
+- This suggests decode is sensitive to CPU contention/scheduling, not simply
+  CPU-thread starved.
+
+Hypothesis:
+
+- Lowering decode threads while keeping prompt threads at 32 may reduce decode
+  contention in CPU fallback/staging without giving up the accepted TTFT path.
+- Test:
+  - `-t 28 -tb 32`
+
+Theoretical upper bound:
+
+- The upper bound is modest: if thread contention accounts for a few percent of
+  decode wall time, reducing decode threads could recover 1-3 seconds on
+  `-n 32`.
+- If CPU fallback is actually thread-starved, this will regress and should be
+  rejected after `-n 32`.
+
+Execution:
+
+- No code change.
+- Run cold `-n 4` with current best env and `-t 28 -tb 32`.
+- If smoke passes all gates, run cold `-n 32`.
+- Run full `-n 96` only if `-n 32` improves over Phase 3E
+  2.24573 s/token.
+
+Acceptance:
+
+- Host RAM remains below 16GB including page cache.
+- VRAM remains near full without OOM/allocation retry.
+- TTFT remains <=106331.72 ms.
+- France answer remains semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`.
+- Full promotion requires `-n 96` faster than Phase 3E:
+  2.72551 s/token, 0.36690 tok/s.
+
+Rollback:
+
+- Reject if output quality changes, TTFT exceeds the gate, RAM/VRAM gates fail,
+  or `-n 32` token rate regresses.
+
+## Phase 2P full result: reject down prefetch depth 8 for n96
+
+Result timestamp: 2026-07-02 17:01 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-170118Z-n96-phase2p-down-prefetch`
+
+Reproduction:
+
+- Commit: `adf621b20`.
+- Start from accepted Phase 2H full configuration:
+  - expert pack enabled.
+  - VRAM cache budget: 15000 MiB.
+  - down batch enabled.
+  - GPU handoff disabled.
+  - no split cache.
+  - `-t 32 -tb 32`.
+- Add:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+- Run as a cold start:
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+  - cgroup `memory.max=16000000000`
+  - cgroup `memory.swap.max=0`
+- Prompt:
+  `Please introduce France in a short paragraph.`
+
+Measured result:
+
+- Host RAM peak: 14.901 GiB, inside the strict 16GB cgroup cap including page
+  cache pressure.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 92848.35 ms, inside the 106331.72 ms gate.
+- Decode: 301072.16 ms / 85 runs, 3.54203 s/token, 0.28232 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=9157, hits=9157, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=42866, misses=31182,
+  preloads=9157, hit_rate=57.9%.
+- Pinned staging: copies=35790, host_stage=51604.703 ms, h2d=7772.206 ms.
+- Up/gate profile: calls=2381, total=24.696 ms/call.
+- Down profile: calls=4506, stage=4.771 ms/call, total=4.939 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2P depth 8 `-n 96`: 301072.16 ms / 85 runs,
+  3.54203 s/token, 0.28232 tok/s.
+- The prefetch mechanism behaves correctly and is useful for every recorded
+  prefetched down load, and it cuts down visible down stage time from
+  11.616 ms/call to 4.771 ms/call.
+- The full decode still regresses because host staging and up/gate compute both
+  get worse:
+  - host_stage rises from 50153.894 ms to 51604.703 ms.
+  - up/gate total rises from 22.785 ms/call to 24.696 ms/call.
+- The likely bottleneck is H2D/cache contention from prefetching too far ahead:
+  depth 8 helps the down layer but steals bandwidth/cache locality from
+  up/gate at full output length.
+
+Decision:
+
+- Reject Phase 2P depth 8 for full `-n 96` promotion.
+- No code rollback is needed because this path is fully default-off and was
+  enabled only by env vars.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Keep Phase 2M as an accepted short-run `-n 32` improvement only.
+- Next candidate should reduce down prefetch pressure instead of abandoning the
+  mechanism: test shallower depths, starting with depth 2, because Phase 2P
+  proves the mechanism can remove down stage time but depth 8 over-contends at
+  full length.
+
+## Next candidate: Phase 2Q shallow down prefetch depth 2
+
+Design timestamp: 2026-07-02 17:18 CST.
+
+Current bottleneck:
+
+- Phase 2P depth 8 cut down visible staging from 11.616 ms/call to
+  4.771 ms/call at full `-n 96`, and down prefetch useful_rate was 100.0%.
+- Full decode still regressed from 295113.58 ms to 301072.16 ms because:
+  - host_stage rose from 50153.894 ms to 51604.703 ms.
+  - up/gate total rose from 22.785 ms/call to 24.696 ms/call.
+- This points to prefetch pressure rather than a correctness issue: depth 8
+  starts too much down H2D/cache activity ahead of demand and interferes with
+  the up/gate path.
+
+Hypothesis:
+
+Run the same accepted Phase 2H configuration with shallower prefetch:
+
+- `GGML_MOE_PREFETCH_DOWN=1`
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+
+Depth 2 should preserve some down-stage overlap while reducing the amount of
+early H2D/cache traffic. If contention was the reason depth 8 lost at full
+length, depth 2 should show lower up/gate regression and lower host_stage than
+Phase 2P, while still improving down profile against Phase 2H.
+
+Theoretical upper bound:
+
+- Phase 2H down visible stage is about 52.3s total.
+- Phase 2P depth 8 reduced this bucket by about 30.8s, but added enough
+  contention to lose about 6.0s overall.
+- Depth 2 cannot hide as much down stage as depth 8. A realistic target is
+  hiding 10-18s while limiting contention to under 5s, producing a possible
+  full decode of 282-290s.
+- Promotion requires beating Phase 2H full `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s, with TTFT <=106331.72 ms and quality intact.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Promote to cold `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  and logs show prefetch useful activity without high evicted-unused count.
+
+Acceptance:
+
+- Host RAM must remain under 16GB including page cache.
+- VRAM should remain close to full without OOM.
+- TTFT must remain <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Logs must include down prefetch activity and its useful-rate counters.
+- Any full `-n 96` improvement that passes all gates must be committed and
+  pushed immediately with reproduction details.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, prefetch does not activate, evicted-unused is high, launch/read
+  failures appear, or full `-n 96` does not beat Phase 2H.
+- No code rollback should be needed because the experiment is env-only and the
+  prefetch path is default-off.
+
+Result timestamp: 2026-07-02 17:11 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171134Z-n4-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102188.15 ms, inside the 106331.72 ms gate.
+- Decode: 14379.67 ms / 3 runs, 4.79322 s/token, 0.20863 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=137, hits=137, evicted_unused=0, useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=878, misses=1666,
+  preloads=137, hit_rate=34.5%.
+- Pinned staging: copies=1773, host_stage=2778.373 ms, h2d=384.665 ms.
+- Up/gate profile: calls=85, total=28.221 ms/call.
+- Down profile: calls=160, stage=10.585 ms/call, total=10.750 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes the hard gates: strict RAM, VRAM, TTFT, launch/read,
+  prefetch activation, and semantic quality.
+- Depth 2 does not yet show the intended down-stage benefit on the tiny sample:
+  it has far fewer preloads than depth 8 and down stage remains near the
+  non-prefetch path.
+- Continue to `-n 32` because the plan requires the medium-length check after
+  a passing smoke, but promotion to `-n 96` will require `-n 32` to beat Phase
+  2H `-n 32` or show a clear bottleneck reason worth retuning.
+
+Result timestamp: 2026-07-02 17:14 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171437Z-n32-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus depth 2 down
+  prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101161.66 ms, inside the 106331.72 ms gate.
+- Decode: 93449.43 ms / 31 runs, 3.01450 s/token, 0.33173 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=1442, hits=1442, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=14345, misses=12615,
+  preloads=1442, hit_rate=53.2%.
+- Pinned staging: copies=13122, host_stage=18176.985 ms, h2d=2844.610 ms.
+- Up/gate profile: calls=869, total=17.730 ms/call.
+- Down profile: calls=1644, stage=6.558 ms/call, total=6.717 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2P depth 8 `-n 32`: 94356.18 ms / 31 runs, 3.04375 s/token,
+  0.32854 tok/s.
+- Phase 2Q depth 2 `-n 32`: 93449.43 ms / 31 runs, 3.01450 s/token,
+  0.33173 tok/s.
+
+Decision:
+
+- The `-n 32` run passes all gates and beats both Phase 2H and Phase 2P on the
+  matching token count.
+- The mechanism now has a better balance: down stage improves over Phase 2H,
+  while up/gate total is also lower than the Phase 2H `-n 32` profile.
+- Continue to cold full `-n 96`.
+- Full promotion still requires beating accepted Phase 2H full `-n 96`
+  (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with strict RAM,
+  VRAM, TTFT, launch/read, and semantic quality gates passing.
+
+Full result timestamp: 2026-07-02 17:18 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-171854Z-n96-phase2q-down-prefetch-depth2`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus depth 2 down
+  prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103081.24 ms, inside the 106331.72 ms gate.
+- Decode: 304478.65 ms / 85 runs, 3.58210 s/token, 0.27917 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=3992, hits=3992, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=37713, misses=36335,
+  preloads=3992, hit_rate=50.9%.
+- Pinned staging: copies=35780, host_stage=49805.170 ms, h2d=7758.946 ms.
+- Up/gate profile: calls=2381, total=23.671 ms/call.
+- Down profile: calls=4506, stage=8.748 ms/call, total=8.915 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2P depth 8 `-n 96`: 301072.16 ms / 85 runs,
+  3.54203 s/token, 0.28232 tok/s.
+- Phase 2Q depth 2 `-n 96`: 304478.65 ms / 85 runs,
+  3.58210 s/token, 0.27917 tok/s.
+
+Analysis:
+
+- Depth 2 reduced prefetch pressure compared with depth 8:
+  - host_stage improved from 51604.703 ms to 49805.170 ms.
+  - up/gate total improved from 24.696 ms/call to 23.671 ms/call.
+- It still regressed versus Phase 2H:
+  - up/gate total is worse than 22.785 ms/call.
+  - cache hit_rate falls to 50.9%, worse than depth 8 and only modestly useful
+    for down.
+  - down total improves from 11.781 ms/call to 8.915 ms/call, but the measured
+    full decode does not realize that apparent local saving. The prefetch path
+    likely shifts work into hidden synchronization/cache refill points outside
+    the down-profile bucket.
+- The `-n 32` win does not generalize to full length, so this cannot be used as
+  a stable optimization under the current cold-start acceptance rule.
+
+Decision:
+
+- Reject Phase 2Q for full `-n 96` promotion.
+- No code rollback is needed because this path is env-only and default-off.
+- Stop pursuing blind prefetch-depth sweeps as the next main path. The next
+  optimization should instrument where the missing full-length time moves
+  before changing prefetch policy again.
+
+## Next candidate: Phase 2R raise VRAM cache budget to 15400 MiB
+
+Design timestamp: 2026-07-02 17:29 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` leaves 772 MiB VRAM free while the down-cache
+  path still has 40316 misses and 50153.894 ms host staging time.
+- The strict host RAM limit is already the main model-size gate, but VRAM is
+  not completely filled. The requirement says to use VRAM as much as possible,
+  so the next low-risk test is to convert part of the remaining VRAM headroom
+  into additional expert cache capacity.
+- Phase 2H cache:
+  - budget=15000 MiB.
+  - down cache slot=7.44 MiB.
+  - slots=2016.
+  - hit_rate=45.5%.
+- Increasing to 15400 MiB should add about 400 MiB / 7.44 MiB = 53 additional
+  down-cache slots, while leaving roughly 300-400 MiB free if memory behavior
+  stays close to Phase 2H.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_MIB=15400`
+- no split cache.
+- no down prefetch.
+
+This should not affect model math or routing. It can only change which expert
+weights remain resident in VRAM. If the extra 53 slots catch frequently reused
+experts, host staging and misses should fall with no quality change.
+
+Theoretical upper bound:
+
+- The absolute upper bound is limited because 400 MiB is only about 2.6% more
+  cache than 15000 MiB.
+- If the marginal slots are high-value, avoiding 1000-2000 misses could save
+  roughly 1-3s of host staging/H2D work on the full run.
+- A realistic successful result is therefore modest: full `-n 96` must drop
+  below 295113.58 ms, but a 1-2s improvement is still valid if all gates pass
+  and is worth committing because it uses more VRAM without code risk.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes without OOM and leaves nonzero VRAM headroom, run cold
+  `-n 32`.
+- Promote to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  or if the cache-hit/staging metrics clearly improve without TTFT pressure.
+
+Acceptance:
+
+- Host RAM must remain under 16GB including page cache.
+- VRAM should be fuller than Phase 2H without CUDA OOM or allocation retries.
+- TTFT must remain <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96` to be promoted.
+- If promoted, commit and push immediately with the exact env vars and run
+  paths.
+
+Rollback:
+
+- Reject if VRAM OOMs, free VRAM becomes unstable, TTFT exceeds the gate,
+  host RAM exceeds the 16GB cap, output quality fails, launch/read failures
+  appear, or full `-n 96` does not beat Phase 2H.
+- No code rollback should be needed because this is env-only.
+
+Result timestamp: 2026-07-02 17:28 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-172837Z-n4-phase2r-vram-cache15400`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15400`, down prefetch disabled.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31666 MiB used, 444 MiB free.
+- TTFT: 106568.74 ms, which exceeds the 106331.72 ms gate.
+- Decode: 14927.76 ms / 3 runs, 4.97592 s/token, 0.20097 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2060, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2838.856 ms, h2d=387.078 ms.
+- Up/gate profile: calls=85, total=28.555 ms/call.
+- Down profile: calls=160, stage=14.235 ms/call, total=14.407 ms/call.
+
+Decision:
+
+- Reject Phase 2R immediately at `-n 4`.
+- It uses VRAM more fully, but violates the TTFT rule by 237.02 ms.
+- Do not run `-n 32` or `-n 96`.
+- No code rollback is needed because the experiment is env-only.
+- Larger cache budgets near 15400 MiB are too close to the TTFT/VRAM margin for
+  the current cold-start acceptance rule. If cache budget is revisited, test a
+  smaller step such as 15200 MiB and require TTFT headroom on smoke before
+  continuing.
+
+## Next candidate: Phase 2S raise VRAM cache budget to 15200 MiB
+
+Design timestamp: 2026-07-02 17:43 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H uses `GGML_MOE_VRAM_CACHE_MIB=15000` and leaves 772 MiB
+  VRAM free at full `-n 96`.
+- Phase 2R with 15400 MiB used VRAM more fully, leaving 444 MiB free, but its
+  `-n 4` TTFT was 106568.74 ms, which exceeded the 106331.72 ms gate by
+  237.02 ms.
+- The failure was a tight TTFT margin rather than OOM, quality failure, or RAM
+  violation. A smaller cache increase may still satisfy the "use VRAM as much
+  as possible" requirement while keeping cold-start TTFT inside the gate.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_MIB=15200`
+- no split cache.
+- no down prefetch.
+
+This should add about 200 MiB / 7.44 MiB = 26 additional down-cache slots over
+Phase 2H, while preserving roughly 550-600 MiB free VRAM if memory behavior
+tracks linearly. The extra slots may reduce misses and host staging without the
+TTFT violation seen at 15400 MiB.
+
+Theoretical upper bound:
+
+- A 200 MiB cache increase is only about 1.3% over the accepted 15000 MiB cache.
+- The best realistic gain is modest: if the marginal 26 slots avoid a few
+  hundred to roughly 1000 full-run misses, expected full `-n 96` improvement is
+  likely 0.5-2.0s.
+- Promotion still requires full `-n 96` decode below 295113.58 ms / 85 runs
+  with all gates passing.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- Continue to cold `-n 32` only if:
+  - TTFT <=106331.72 ms.
+  - VRAM has nonzero stable headroom.
+  - semantic quality passes.
+  - launch/read failures remain zero.
+- Continue to cold `-n 96` only if `-n 32` is not slower than Phase 2H or shows
+  better cache/staging metrics with enough TTFT headroom to justify full run.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should be fuller than Phase 2H without OOM or allocation retries.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM/RAM gates fail, output quality fails,
+  launch/read failures appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
+Result timestamp: 2026-07-02 17:41 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-174105Z-n4-phase2t-lfu-cache-policy`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`, no profile preload/protect, no split
+  cache, no down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 106329.47 ms, inside the 106331.72 ms gate by only 2.25 ms.
+- Decode: 14340.15 ms / 3 runs, 4.78005 s/token, 0.20920 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2746.339 ms, h2d=387.230 ms.
+- Up/gate profile: calls=85, total=28.919 ms/call.
+- Down profile: calls=160, stage=14.094 ms/call, total=14.275 ms/call.
+
+Decision:
+
+- The smoke technically passes all hard gates, but TTFT headroom is only
+  2.25 ms, which is too narrow to call robust at this stage.
+- Continue to `-n 32` only as a diagnostic gate because the config is env-only
+  and quality/RAM/VRAM are valid.
+- Require a clear `-n 32` speed or cache/staging improvement before considering
+  full `-n 96`; otherwise reject without full run because the TTFT margin is
+  not reproducibility-friendly.
+
+Result timestamp: 2026-07-02 17:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-174416Z-n32-phase2t-lfu-cache-policy`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 99912.80 ms, inside the 106331.72 ms gate.
+- Decode: 95284.36 ms / 31 runs, 3.07369 s/token, 0.32534 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=10785, misses=16159,
+  preloads=0, hit_rate=40.0%.
+- Pinned staging: copies=15211, host_stage=21256.248 ms, h2d=3303.428 ms.
+- Up/gate profile: calls=869, total=18.744 ms/call.
+- Down profile: calls=1644, stage=9.910 ms/call, total=10.068 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2T `-n 32`: 95284.36 ms / 31 runs, 3.07369 s/token,
+  0.32534 tok/s.
+
+Decision:
+
+- The medium run passes all gates and is slightly faster than Phase 2H on the
+  matching token count.
+- Continue to full cold `-n 96`, but treat this as a marginal candidate:
+  cache hit-rate and staging metrics are not clearly better than Phase 2H, so
+  full promotion requires the actual `-n 96` decode to beat Phase 2H with
+  semantic quality and TTFT gates intact.
+
+Full result timestamp: 2026-07-02 17:48 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-174833Z-n96-phase2t-lfu-cache-policy`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104074.28 ms, inside the 106331.72 ms gate.
+- Decode: 310487.68 ms / 85 runs, 3.65280 s/token, 0.27376 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=26154, misses=47878,
+  preloads=0, hit_rate=35.3%.
+- Pinned staging: copies=42984, host_stage=59313.938 ms, h2d=9334.894 ms.
+- Up/gate profile: calls=2381, total=24.455 ms/call.
+- Down profile: calls=4506, stage=12.445 ms/call, total=12.610 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2T `-n 96`: 310487.68 ms / 85 runs,
+  3.65280 s/token, 0.27376 tok/s.
+
+Analysis:
+
+- LFU/LRU does not generalize from the small `-n 32` win to full length.
+- It actively worsens the full cache behavior:
+  - misses increase from 40316 to 47878.
+  - hit_rate falls from 45.5% to 35.3%.
+  - host_stage rises from 50153.894 ms to 59313.938 ms.
+  - up/gate and down profiles both regress.
+- The likely cause is that per-slot lifetime hit count over-protects experts
+  that were hot early, then evicts experts needed later in the long decode.
+  For this prompt, recency remains more important than raw hit count.
+
+Decision:
+
+- Reject Phase 2T for full `-n 96`.
+- Do not use `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru` for the accepted config.
+- No code rollback is needed because this was env-only.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+
+## Next candidate: Phase 2U down-only parallel CPU staging
+
+Design timestamp: 2026-07-02 18:00 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` down profile:
+  - calls=4506.
+  - stage=11.616 ms/call.
+  - total=11.781 ms/call.
+  - visible down staging bucket is about 52.3s.
+- Down prefetch reduced down stage but hurt full decode through cache/H2D
+  contention.
+- Up/gate parallel staging was already rejected in Phase 2F because stream waits
+  consumed the expected overlap.
+- The code has a separate down-only staging path:
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`. It splits down miss copy jobs across two
+  CPU threads and two CUDA streams, then joins before launching the down batch
+  kernel. This targets only the down staging bucket and does not prefetch ahead
+  or change cache policy.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_DOWN_PARALLEL_STAGE=1`
+- no up/gate parallel mode.
+- no down prefetch.
+- no split cache.
+- no cache policy override.
+- cache budget remains 15000 MiB.
+
+The path should preserve semantics because it only changes how missing down
+experts are copied into the same cache slots before the same down batch kernel
+uses them.
+
+Theoretical upper bound:
+
+- If copy jobs split evenly and H2D/host reads can overlap, down stage could
+  approach roughly half of 11.616 ms/call, similar to the best local effect
+  seen from prefetch but without loading future experts early.
+- Full-run upper bound: saving up to about 26s from Phase 2H, giving
+  269s / 85 runs = 3.16 s/token.
+- More realistic: if only host-side staging overlaps and H2D bandwidth remains
+  serialized, saving may be 3-8s full run, still enough to beat Phase 2H if it
+  does not add synchronization overhead.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Continue to full `-n 96` only if:
+  - `-n 32` is not slower than Phase 2H `-n 32`, or
+  - down stage is materially lower without TTFT/quality/RAM/VRAM risk.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should remain close to Phase 2H utilization without OOM.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- Logs must show `down parallel CPU staging active`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, RAM/VRAM gates fail, output quality fails,
+  `down parallel CPU staging active` does not appear, launch/read failures
+  appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
+Result timestamp: 2026-07-02 17:57 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-175735Z-n4-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 103118.25 ms, inside the 106331.72 ms gate.
+- Decode: 14280.11 ms / 3 runs, 4.76004 s/token, 0.21008 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Activation: log contains `down parallel CPU staging active`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1382, host_stage=1416.480 ms, h2d=297.596 ms.
+- Up/gate profile: calls=85, total=29.033 ms/call.
+- Down profile: calls=160, stage=12.211 ms/call, total=12.388 ms/call.
+
+Decision:
+
+- The smoke passes correctness, RAM, VRAM, TTFT, activation, and launch/read
+  gates.
+- It does not show the intended local down-stage improvement on the tiny run:
+  down stage is 12.211 ms/call, which is not better than the accepted full
+  Phase 2H down stage of 11.616 ms/call.
+- Continue to `-n 32` only to rule out tiny-sample noise. If `-n 32` does not
+  beat Phase 2H or materially reduce down stage, reject without full `-n 96`.
+
+Result timestamp: 2026-07-02 18:00 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-180052Z-n32-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 99103.46 ms, inside the 106331.72 ms gate.
+- Decode: 94223.24 ms / 31 runs, 3.03946 s/token, 0.32901 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12892, misses=14052,
+  preloads=0, hit_rate=47.8%.
+- Pinned staging: copies=10390, host_stage=9152.341 ms, h2d=2213.267 ms.
+- Up/gate profile: calls=869, total=20.299 ms/call.
+- Down profile: calls=1644, stage=8.366 ms/call, total=8.528 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2U `-n 32`: 94223.24 ms / 31 runs, 3.03946 s/token,
+  0.32901 tok/s.
+
+Decision:
+
+- The medium run passes all gates and shows the intended local effect:
+  down stage is materially lower than the Phase 2H `-n 32` down profile
+  while the total decode is faster.
+- Continue to full cold `-n 96`.
+- Full promotion still requires beating accepted Phase 2H full `-n 96`
+  (295113.58 ms / 85 runs, 3.47192 s/token, 0.29 tok/s) with full semantic
+  quality and all hard gates passing.
+
+Full result timestamp: 2026-07-02 18:05 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-180510Z-n96-phase2u-down-parallel-stage`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102802.72 ms, inside the 106331.72 ms gate.
+- Decode: 304623.67 ms / 85 runs, 3.58381 s/token, 0.27903 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=33716, misses=40316,
+  preloads=0, hit_rate=45.5%.
+- Pinned staging: copies=28304, host_stage=27237.971 ms, h2d=5985.814 ms.
+- Up/gate profile: calls=2381, total=25.491 ms/call.
+- Down profile: calls=4506, stage=10.890 ms/call, total=11.056 ms/call.
+
+Comparison:
+
+- Accepted Phase 2H `-n 96`: 295113.58 ms / 85 runs,
+  3.47192 s/token, 0.29 tok/s.
+- Phase 2U `-n 96`: 304623.67 ms / 85 runs,
+  3.58381 s/token, 0.27903 tok/s.
+
+Analysis:
+
+- The full run does not reproduce the `-n 32` benefit.
+- Down parallel staging lowers the pinned staging counters, but the end-to-end
+  decode regresses:
+  - up/gate total worsens from 22.785 ms/call to 25.491 ms/call.
+  - down total only improves slightly from 11.781 ms/call to 11.056 ms/call.
+  - full decode is 9510.09 ms slower than Phase 2H.
+- This suggests the parallel copy threads/streams are shifting work into
+  synchronization or GPU scheduling contention that is not represented by the
+  local down-stage event timing.
+
+Decision:
+
+- Reject Phase 2U for full `-n 96`.
+- Do not use `GGML_MOE_DOWN_PARALLEL_STAGE=1` in the accepted config.
+- No code rollback is needed because this was env-only.
+- Keep accepted Phase 2H as the current best full `-n 96` configuration.
+- Next work should add wall-time instrumentation around up/gate, down, cache
+  insert/copy, and stream synchronization because repeated env-only attempts
+  improve local CUDA-event buckets without improving end-to-end decode.
+
+## Next candidate: Phase 3A wall-time MoE profile instrumentation
+
+Design timestamp: 2026-07-02 18:11 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` eval time is 295113.58 ms, but the visible
+  MoE CUDA-event buckets account for far less:
+  - up/gate: 2381 calls * 22.785 ms/call = about 54.2s.
+  - down: 4506 calls * 11.781 ms/call = about 53.1s.
+  - pinned host staging: 50153.894 ms, partly included in stage buckets.
+- Env-only optimizations repeatedly improved one local bucket but worsened full
+  eval:
+  - down prefetch improved down stage but slowed n96.
+  - down parallel staging reduced staging counters but slowed n96.
+  - LFU/LRU improved n32 slightly but worsened n96 cache behavior.
+- Therefore the next bottleneck is not sufficiently visible in current logs.
+
+Hypothesis:
+
+Add default-off instrumentation under the existing `GGML_MOE_BATCH_PROFILE=1`
+path:
+
+- `wall_ms` for each up/gate call from function entry after buffer setup to
+  return.
+- `wall_ms` for each down batch call over the same scope.
+- Report per-call `wall` and `wall_gap`, where:
+  - up/gate `wall_gap = wall - stage - quant - kernel - d2h - scatter`.
+  - down `wall_gap = wall - stage - quant - kernel - d2h - scatter`.
+
+This does not change math, cache policy, allocation, or scheduling. It only
+adds `std::chrono::steady_clock` timing when profiling is already enabled.
+
+Theoretical value:
+
+- If wall time closely matches CUDA buckets, then the unexplained decode time
+  is outside these MoE stream functions and the next target should move upward
+  in the graph/runtime.
+- If wall_gap is large in up/gate or down, then hidden CPU work, lock waits,
+  cache insertion, stream synchronization, or staging thread joins are the real
+  bottleneck. That gives a concrete next optimization target instead of
+  continuing env sweeps.
+
+Execution:
+
+- Implement the instrumentation locally.
+- Build on the remote CUDA build directory.
+- Run a cold `-n 4` Phase 3A baseline with accepted Phase 2H runtime env and
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM, VRAM, TTFT, and quality gates still apply even though this is an
+  instrumentation run.
+- If `-n 4` passes and output is unchanged, run `-n 32` to get stable wall-gap
+  attribution. Full `-n 96` is optional for attribution and should be run only
+  if n32 still leaves ambiguity.
+
+Acceptance:
+
+- Instrumentation code is acceptable only if it is default-off outside
+  `GGML_MOE_BATCH_PROFILE`.
+- France output must remain semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- TTFT must remain <=106331.72 ms for any cold run used as evidence.
+- The run must report `wall` and `wall_gap` for both up/gate and down profile
+  lines.
+
+Rollback:
+
+- If instrumentation changes output quality, causes launch/read failures,
+  breaks build, or adds overhead outside profiling mode, revert the code.
+- This phase is diagnostic; do not promote token-rate changes from it unless a
+  separate optimized run without extra instrumentation passes all Phase 2H
+  acceptance gates and improves full `-n 96`.
+
+Implementation result timestamp: 2026-07-02 18:17 CST.
+
+Code:
+
+- Commit: `6536b772f cuda: add Kimi MoE wall-time profiling`.
+- Remote build: `/root/lfz/llama.cpp-vendor-kimi/build-cuda-batch`.
+- Build result: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-181709Z-n4-phase3a-wall-profile`
+
+Measured result:
+
+- Commit/config: `6536b772f`, accepted Phase 2H runtime env, with
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104723.63 ms, inside the 106331.72 ms gate.
+- Decode: 14167.59 ms / 3 runs, 4.72253 s/token, 0.21175 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Wall profile printed correctly:
+  - up/gate: total=27.290 ms/call, wall=27.420 ms/call,
+    wall_gap=0.130 ms/call.
+  - down: total=13.593 ms/call, wall=14.300 ms/call,
+    wall_gap=0.707 ms/call.
+
+Decision:
+
+- Instrumentation builds and the `-n 4` smoke passes quality, RAM, VRAM, TTFT,
+  launch/read, and profile-output gates.
+- Continue to cold `-n 32` to get stable wall-gap attribution. The `-n 4`
+  sample suggests that the hidden gap is small inside the MoE functions, but
+  `-n 32` is needed before moving the bottleneck search up the graph.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-182027Z-n32-phase3a-wall-profile`
+
+Measured result:
+
+- Commit/config: `6536b772f`, accepted Phase 2H runtime env, with
+  `GGML_MOE_BATCH_PROFILE=1`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105745.41 ms, inside the 106331.72 ms gate.
+- Decode: 97526.35 ms / 31 runs, 3.14601 s/token, 0.31786 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2016, slot=7.44 MiB, hits=12892, misses=14052,
+  preloads=0, hit_rate=47.8%.
+- Pinned staging: copies=13135, host_stage=17934.216 ms, h2d=2843.707 ms.
+- Wall profile:
+  - up/gate: calls=869, total=18.848 ms/call, wall=18.876 ms/call,
+    wall_gap=0.028 ms/call.
+  - down: calls=1644, total=9.186 ms/call, wall=9.271 ms/call,
+    wall_gap=0.084 ms/call.
+
+Analysis:
+
+- The MoE function wall gaps are tiny:
+  - up/gate hidden gap is about 24 ms total.
+  - down hidden gap is about 138 ms total.
+- MoE function wall time accounts for about:
+  - up/gate: 869 * 18.876 ms = 16.4s.
+  - down: 1644 * 9.271 ms = 15.2s.
+  - combined: about 31.6s of the 97.5s `-n 32` eval time.
+- Therefore the remaining bottleneck is mostly outside the MoE stream functions
+  themselves. Continuing to tune cache/preload/down-stage policy is unlikely to
+  reach large gains without first profiling graph-level or non-MoE CUDA work.
+
+Decision:
+
+- Phase 3A instrumentation is accepted as diagnostic code: it is default-off
+  outside `GGML_MOE_BATCH_PROFILE`, builds successfully, and preserves output
+  quality under the cold-start gates.
+- Do not claim a token-rate improvement from Phase 3A.
+- Next candidate should add or use graph-level per-op/per-split timing to find
+  the non-MoE decode bucket before making another optimization attempt.
+
+## Next candidate: Phase 3B graph submit/synchronize wall-time profile
+
+Design timestamp: 2026-07-02 18:29 CST.
+
+Current bottleneck:
+
+- Phase 3A shows MoE function wall gaps are tiny:
+  - up/gate wall_gap=0.028 ms/call on `-n 32`.
+  - down wall_gap=0.084 ms/call on `-n 32`.
+- MoE wall time accounts for about 31.6s of the 97.5s `-n 32` eval time.
+- `llama_context::graph_compute()` submits the graph asynchronously via
+  `ggml_backend_sched_graph_compute_async`, while `llama_context::synchronize()`
+  waits for completion and updates the perf counters. Current logs do not split
+  graph submit time from synchronize/wait time.
+
+Hypothesis:
+
+Add default-off graph wall profiling controlled by:
+
+- `LLAMA_KIMI_GRAPH_PROFILE=1`
+
+Record aggregate wall time for:
+
+- `graph_compute_async` submit calls.
+- `ggml_backend_sched_synchronize` wait calls.
+- queued-token class at synchronization time: prompt (`n_queued_tokens > 1`) vs
+  decode (`n_queued_tokens == 1`).
+
+This will determine whether the remaining time is mostly backend graph
+execution/synchronization, CPU submission overhead, or outside the graph path.
+
+Theoretical value:
+
+- If synchronize decode wall time roughly matches eval time, the next
+  optimization target is the scheduled graph/non-MoE CUDA kernels.
+- If graph submit time is large, the target is graph scheduling/reuse or graph
+  construction.
+- If neither is large, the target is outside context graph execution, such as
+  sampling/output transfer or application loop overhead.
+
+Execution:
+
+- Implement the instrumentation in `src/llama-context.cpp` with no effect
+  unless `LLAMA_KIMI_GRAPH_PROFILE=1`.
+- Build remotely.
+- Run cold `-n 4` with accepted Phase 2H runtime env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+
+Acceptance:
+
+- Code must build.
+- Default path must not change when `LLAMA_KIMI_GRAPH_PROFILE` is unset.
+- Runs must keep host RAM under 16GB, TTFT <=106331.72 ms, and semantically
+  correct France output.
+- Logs must print graph profile totals for submit and synchronize.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+
+Rollback:
+
+- Revert if build fails, default execution path changes, output quality fails,
+  or graph profile adds unacceptable overhead to the attribution runs.
+
+Implementation result timestamp: 2026-07-02 18:28 CST.
+
+Code:
+
+- Commit: `a2b7f6161 llama: add Kimi graph wall profiling`.
+- Remote build: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-182810Z-n4-phase3b-graph-profile`
+
+Measured result:
+
+- Commit/config: `a2b7f6161`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105156.37 ms, inside the 106331.72 ms gate.
+- Decode: 13617.57 ms / 3 runs, 4.53919 s/token, 0.22030 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Graph profile:
+  - submit: calls=4, total=118750.987 ms, avg=29687.747 ms/call.
+  - sync: calls=24, total=2.359 ms, avg=0.098 ms/call.
+  - decode sync: calls=3, total=2.313 ms.
+- MoE wall profile:
+  - up/gate total=26.528 ms/call, wall=26.619 ms/call,
+    wall_gap=0.091 ms/call.
+  - down total=13.042 ms/call, wall=13.703 ms/call,
+    wall_gap=0.661 ms/call.
+
+Analysis:
+
+- The graph profile confirms that the backend work is effectively happening in
+  `graph_compute_async` submit, not in the later `synchronize()` call.
+- This explains why prior local stream/copy optimizations did not map cleanly
+  to eval time: the next bottleneck has to be attributed inside the scheduler
+  graph compute path or backend graph splits, not at context-level sync.
+
+Decision:
+
+- The `-n 4` graph profile passes all gates and prints the required data.
+- Continue to cold `-n 32` for stable attribution.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-183122Z-n32-phase3b-graph-profile`
+
+Measured result:
+
+- Commit/config: `a2b7f6161`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 106040.00 ms, inside the 106331.72 ms gate.
+- Decode: 95575.69 ms / 31 runs, 3.08309 s/token, 0.32435 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Graph profile:
+  - submit: calls=32, total=201569.300 ms, avg=6299.041 ms/call.
+  - sync: calls=192, total=23.870 ms, avg=0.124 ms/call.
+  - decode sync: calls=31, total=23.710 ms.
+- MoE wall profile:
+  - up/gate: calls=869, total=18.568 ms/call, wall=18.595 ms/call,
+    wall_gap=0.027 ms/call.
+  - down: calls=1644, total=9.116 ms/call, wall=9.202 ms/call,
+    wall_gap=0.086 ms/call.
+
+Analysis:
+
+- `graph_compute_async` submit time accounts for almost all prompt+decode time:
+  201.57s submit vs about 201.62s common prompt+eval.
+- `synchronize()` is not the bottleneck: total sync time is only 23.870 ms.
+- MoE wall time accounts for about:
+  - up/gate: 869 * 18.595 ms = 16.16s.
+  - down: 1644 * 9.202 ms = 15.13s.
+  - combined: about 31.29s.
+- Therefore, for `-n 32`, roughly 64s of decode time is in graph submit but
+  outside the currently instrumented MoE stream functions. The next optimization
+  must identify which scheduled non-MoE ops or graph splits consume that time.
+
+Decision:
+
+- Phase 3B graph submit/sync instrumentation is accepted as diagnostic code:
+  default-off, builds, and preserves quality under the cold-start gates.
+- Do not claim token-rate improvement from Phase 3B.
+- Next candidate should split graph submit time by prompt/decode and then by
+  backend graph split or op family, because context-level submit vs sync is now
+  resolved.
+
+## Next candidate: Phase 3C scheduler split wall-time profile
+
+Design timestamp: 2026-07-02 18:41 CST.
+
+Current bottleneck:
+
+- Phase 3B proves almost all prompt+decode time is spent inside
+  `graph_compute_async` submit, not in `synchronize()`.
+- Phase 3A proves the currently instrumented MoE stream functions account for
+  only about 31.3s of a 95.6s `-n 32` decode.
+- The remaining time must be inside backend scheduler split execution or
+  non-MoE backend work.
+
+Hypothesis:
+
+Add default-off scheduler split wall profiling controlled by:
+
+- `GGML_KIMI_SPLIT_PROFILE=1`
+
+For each split in `ggml_backend_sched_compute_splits`, record:
+
+- split id.
+- backend name.
+- node range.
+- node count.
+- first and last node names.
+- total wall time for the split, including input copy handling and backend
+  graph compute for that split.
+
+Emit a capped per-process summary at exit:
+
+- aggregate total split wall time.
+- top N slowest split signatures by total wall time.
+- use `GGML_KIMI_SPLIT_PROFILE_TOP` to control N, default 40.
+
+This is lower risk than per-op timing because split count is already around the
+existing graph split count and does not require touching individual backend
+kernels.
+
+Theoretical value:
+
+- If a small number of non-MoE split signatures dominate, the next optimization
+  can target their op family or backend placement.
+- If time is evenly spread across many splits, the next target is graph split
+  count, scheduler overhead, or CUDA graph capture/reuse.
+- If MoE split signatures dominate despite Phase 3A low wall gaps, then MoE is
+  being split in a way that adds scheduler overhead outside the stream functions.
+
+Execution:
+
+- Implement default-off split profiling in `ggml/src/ggml-backend.cpp`.
+- Build remotely.
+- Run cold `-n 4` with accepted Phase 2H env plus:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+- If `-n 4` passes, run cold `-n 32`.
+
+Acceptance:
+
+- Code must build.
+- Default path must not change when `GGML_KIMI_SPLIT_PROFILE` is unset.
+- Runs must keep host RAM under 16GB, TTFT <=106331.72 ms, and semantically
+  correct France output.
+- Logs must print split profile totals and top slow split signatures.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+
+Rollback:
+
+- Revert if build fails, output quality fails, default execution changes, or
+  split profile overhead is too high for attribution runs.
+
+Implementation result timestamp: 2026-07-02 18:40 CST.
+
+Code:
+
+- Commits:
+  - `a45dac508 ggml: add Kimi split wall profiling`
+  - `8040754e0 ggml: fix Kimi split profile build`
+- Remote build: PASS; `llama-completion` linked successfully.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-184011Z-n4-phase3c-split-profile`
+
+Measured result:
+
+- Commit/config: `8040754e0`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 102691.53 ms, inside the 106331.72 ms gate.
+- Decode: 12777.07 ms / 3 runs, 4.25902 s/token, 0.23480 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Split profile:
+  - total: signatures=242, calls=488, wall=115448.850 ms.
+  - top split signatures are all `backend=CPU`, range of four nodes,
+    `first=ffn_moe_gate-*`, `last=ffn_moe_down-*`.
+  - top examples:
+    - layer 5: 3139.762 ms.
+    - layer 4: 2886.276 ms.
+    - layer 56: 2791.976 ms.
+    - layer 30: 2590.569 ms.
+- Graph profile:
+  - submit: calls=4, total=115453.523 ms.
+  - sync: calls=24, total=2.032 ms.
+
+Analysis:
+
+- Phase 3C identifies the dominant graph submit splits: Kimi MoE layer groups
+  are scheduled as CPU backend splits (`ffn_moe_gate-*` through
+  `ffn_moe_down-*`), even though those CPU ops launch the custom CUDA MoE stream
+  implementation internally.
+- This explains why context-level graph submit time is large and sync is tiny:
+  the CPU backend split is executing synchronously and doing the CUDA stream
+  work inside the CPU op path.
+- The next real optimization target is no longer blind cache tuning; it is
+  reducing CPU-backend split overhead around the MoE fused gate/down group, or
+  changing placement/scheduling so these MoE ops are treated as CUDA backend
+  work directly.
+
+Decision:
+
+- The split profiler builds, passes the `-n 4` cold-start gates, and provides
+  actionable attribution.
+- Continue to cold `-n 32` to confirm the same CPU MoE split dominance in the
+  decode phase, not just prompt/smoke.
+
+Attribution run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-184335Z-n32-phase3c-split-profile`
+
+Measured result:
+
+- Commit/config: `8040754e0`, accepted Phase 2H runtime env, with:
+  - `GGML_MOE_BATCH_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=30`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 104527.53 ms, inside the 106331.72 ms gate.
+- Decode: 97363.60 ms / 31 runs, 3.14076 s/token, 0.31839 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Split profile:
+  - total: signatures=242, calls=3904, wall=201827.779 ms.
+  - top split signatures are CPU backend MoE layer groups.
+  - examples:
+    - `ffn_moe_swiglu-1` to `ffn_moe_down-1`: calls=31,
+      wall=5000.364 ms, avg=161.302 ms/call.
+    - `ffn_moe_swiglu-2` to `ffn_moe_down-2`: calls=31,
+      wall=4979.801 ms, avg=160.639 ms/call.
+    - `ffn_moe_gate-9` to `ffn_moe_down-9`: calls=31,
+      wall=3022.938 ms, avg=97.514 ms/call.
+    - `ffn_moe_gate-51` to `ffn_moe_down-51`: calls=31,
+      wall=2770.623 ms, avg=89.375 ms/call.
+- Graph profile:
+  - submit: calls=32, total=201850.355 ms.
+  - sync: calls=192, total=24.157 ms.
+- MoE wall profile:
+  - up/gate: calls=869, wall=18.028 ms/call.
+  - down: calls=1644, wall=9.609 ms/call.
+
+Analysis:
+
+- Phase 3C confirms the decode bottleneck is dominated by CPU backend MoE
+  splits, not context synchronization and not the measured MoE stream function
+  wall gaps.
+- The split total almost exactly matches graph submit time:
+  201827.779 ms split wall vs 201850.355 ms submit wall.
+- The top decode splits call CPU backend groups that include MoE swiglu/gate/
+  down nodes. The custom CUDA MoE stream functions run inside this CPU backend
+  path but account for only part of the split wall time.
+- The next bottleneck to isolate is inside the CPU MoE op implementation around
+  swiglu/gate/down orchestration, especially time outside
+  `ggml_cuda_moe_stream_up_gate_batch` and `ggml_cuda_moe_stream_batch`.
+
+Decision:
+
+- Phase 3C split profiling is accepted as diagnostic code.
+- Do not claim token-rate improvement from Phase 3C.
+- Next candidate should instrument the CPU MoE op path by node/op family, or
+  move the MoE fused ops to a real CUDA backend path so scheduler split
+  execution no longer appears as CPU backend work.
+
+Result timestamp: 2026-07-02 17:32 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-173240Z-n4-phase2s-vram-cache15200`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15200`, no split cache, no down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31540 MiB used, 570 MiB free.
+- TTFT: 106300.84 ms, inside the 106331.72 ms gate by only 30.88 ms.
+- Decode: 14654.49 ms / 3 runs, 4.88483 s/token, 0.20472 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2043, slot=7.44 MiB, hits=731, misses=1797,
+  preloads=0, hit_rate=28.9%.
+- Pinned staging: copies=1783, host_stage=2748.542 ms, h2d=387.967 ms.
+- Up/gate profile: calls=85, total=29.518 ms/call.
+- Down profile: calls=160, stage=14.049 ms/call, total=14.227 ms/call.
+
+Decision:
+
+- The smoke passes all hard gates, but TTFT headroom is only 30.88 ms. This is
+  a very narrow margin for cold-start reproducibility.
+- Continue to `-n 32` because the plan allows it after a passing smoke, but
+  Phase 2S should be promoted only if the speed/cache gain is clear and the
+  longer run still leaves TTFT below the gate.
+- If `-n 32` is slower than Phase 2H or has similarly tight TTFT without clear
+  cache/staging improvement, reject without running `-n 96`.
+
+Result timestamp: 2026-07-02 17:35 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-173544Z-n32-phase2s-vram-cache15200`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config with
+  `GGML_MOE_VRAM_CACHE_MIB=15200`, no split cache, no down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31540 MiB used, 570 MiB free.
+- TTFT: 100855.49 ms, inside the 106331.72 ms gate.
+- Decode: 98327.66 ms / 31 runs, 3.17186 s/token, 0.31527 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache: slots=2043, slot=7.44 MiB, hits=12961, misses=13983,
+  preloads=0, hit_rate=48.1%.
+- Pinned staging: copies=13077, host_stage=18034.264 ms, h2d=2835.196 ms.
+- Up/gate profile: calls=869, total=18.110 ms/call.
+- Down profile: calls=1644, stage=8.915 ms/call, total=9.082 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token,
+  about 0.32 tok/s.
+- Phase 2S `-n 32`: 98327.66 ms / 31 runs, 3.17186 s/token,
+  0.31527 tok/s.
+
+Decision:
+
+- Reject Phase 2S without running full `-n 96`.
+- Although this config uses more VRAM and passes RAM/TTFT/quality at `-n 32`,
+  it is slower than Phase 2H on the matching medium-length run.
+- The 15200 MiB and 15400 MiB results together show that simply enlarging the
+  single down-cache budget does not improve the current full-run bottleneck:
+  15400 MiB violates TTFT at smoke, and 15200 MiB slows `-n 32`.
+- No code rollback is needed because this was env-only.
+
+## Next candidate: Phase 2T LFU/LRU VRAM cache eviction policy
+
+Design timestamp: 2026-07-02 17:51 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` still has 40316 cache misses and
+  50153.894 ms host staging time.
+- Larger single-cache budgets did not help:
+  - 15400 MiB violated TTFT at `-n 4`.
+  - 15200 MiB passed `-n 32` gates but slowed decode versus Phase 2H.
+- Down prefetch reduced local down-stage time but did not improve full `-n 96`.
+- Phase 2J rejected broad profile preload/protection because it added large
+  overhead. That does not rule out a policy-only eviction change without
+  preload/protect.
+
+Hypothesis:
+
+Run the accepted Phase 2H config with:
+
+- `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`
+- no `GGML_MOE_VRAM_PROFILE`.
+- no `GGML_MOE_VRAM_PROFILE_PROTECT`.
+- no split cache.
+- no down prefetch.
+- cache budget remains 15000 MiB.
+
+Default policy is effectively LRU. The LFU/LRU policy evicts the slot with the
+lowest observed hit count, using LRU only as a tie-break. Kimi routing reuses a
+small subset of experts repeatedly in the France prompt, so preserving high-hit
+experts may reduce misses and host staging without increasing VRAM or changing
+model math.
+
+Theoretical upper bound:
+
+- Full Phase 2H host staging is about 50.15s over 35787 staged copies.
+- If LFU/LRU avoids even 2-5% of misses after warmup, expected full-run savings
+  could be about 1-3s.
+- The policy scan cost is similar to current eviction scanning because both
+  inspect cache slots. Extra `slot_hits` comparisons should be much smaller
+  than the staging bucket.
+- Promotion requires full `-n 96` below 295113.58 ms / 85 runs while preserving
+  all hard gates.
+
+Execution:
+
+- Cold `-n 4` first under:
+  - `memory.max=16000000000`
+  - `memory.swap.max=0`
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`
+- If `-n 4` passes, run cold `-n 32`.
+- Continue to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  or shows a clear hit-rate/staging improvement with acceptable TTFT.
+
+Acceptance:
+
+- Host RAM must stay under 16GB including page cache.
+- VRAM should remain close to Phase 2H utilization without OOM.
+- TTFT must stay <=106331.72 ms.
+- Prompt must be:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Full `-n 96` must beat accepted Phase 2H full `-n 96`.
+- If accepted, commit and push immediately with reproduction details.
+
+Rollback:
+
+- Reject if TTFT exceeds the gate, VRAM/RAM gates fail, output quality fails,
+  launch/read failures appear, or full `-n 96` does not improve over Phase 2H.
+- No code rollback should be needed because this is env-only.
+
+Result timestamp: 2026-07-02 16:40 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-164058Z-n4-phase2o-split-cache`
+
+Measured result:
+
+- Config: Phase 2M split cache with `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 102663.93 ms, inside the 106331.72 ms gate.
+- Decode: 14358.45 ms / 3 runs, 4.78615 s/token, 0.20894 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1210 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 1119 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue to cold `-n 96`.
+
+Full-length result timestamp: 2026-07-02 16:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-164405Z-n96-phase2o-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, Phase 2M split-cache code with
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31342 MiB used, 768 MiB free.
+- TTFT: 103968.03 ms, inside the 106331.72 ms gate.
+- Decode: 302382.85 ms / 85 runs, 3.55745 s/token, 0.28110 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1210 slots, 7.44 MiB slot, hits=18825, misses=17191,
+    hit_rate=52.3%.
+  - upgate: 1119 slots, 5.36 MiB slot, hits=17370, misses=20726,
+    hit_rate=45.6%.
+- Pinned staging: copies=33515, host_stage=46970.468 ms, h2d=7236.745 ms.
+- Up/gate profile: calls=2381, total=23.427 ms/call.
+- Down profile: calls=4506, stage=10.954 ms/call, total=11.121 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 96`: 3.47192 s/token, 0.29 tok/s.
+- Phase 2M pct45 `-n 96`: 3.52464 s/token, 0.28372 tok/s.
+- Phase 2N pct35 `-n 96`: 3.49838 s/token, 0.28585 tok/s.
+- Phase 2O pct40 `-n 96`: 3.55745 s/token, 0.28110 tok/s.
+- pct40 balances hit rates but does not improve end-to-end decode; up/gate
+  remains slower than Phase 2H and total staging stays high.
+
+Decision:
+
+- Reject pct40 for full-length promotion.
+- Keep Phase 2H as the current best full `-n 96` configuration.
+- Keep Phase 2M split-cache code only as default-off functionality and as the
+  current best `-n 32` constrained config.
+- Do not continue fixed split-budget sweeps for `-n 96` without a new
+  bottleneck explanation. The next n96-focused design should target a different
+  mechanism: reducing graph replay/upgate cost, reducing the number of expert
+  loads, or making cache partitioning adaptive rather than fixed.
+
+## Next candidate: Phase 2P down prefetch overlap
+
+Design timestamp: 2026-07-02 17:02 CST.
+
+Current bottleneck:
+
+- Accepted Phase 2H full `-n 96` visible buckets:
+  - Up/gate profile: 2381 calls, 22.785 ms/call, about 54.2s total.
+  - Down profile: 4506 calls, stage=11.616 ms/call, about 52.3s visible down
+    staging time.
+  - Pinned staging: host_stage=50153.894 ms, h2d=7758.831 ms.
+- Split-cache budget tuning improved some cache hit-rate buckets, but all
+  tested fixed budgets missed Phase 2H at full `-n 96`.
+- The code already has a default-off down prefetch hook:
+  `GGML_MOE_PREFETCH_DOWN=1`, called from the up/gate path via
+  `preload_registered_down_for_active`. It can enqueue down expert loads on the
+  prefetch stream before the down layer uses them.
+
+Hypothesis:
+
+Enable down prefetch on top of the accepted Phase 2H full configuration:
+
+- `GGML_MOE_PREFETCH_DOWN=1`
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+
+Do not combine with split cache initially. This isolates whether overlapping
+down expert staging with up/gate compute reduces full-length decode. The
+mechanism should not change math or routing; it only changes when down experts
+enter the VRAM cache.
+
+Theoretical upper bound:
+
+- If down prefetch can hide half of the Phase 2H down staging bucket, it could
+  save about 26s on the 295.1s decode, improving to about 269s / 85 runs =
+  3.16 s/token.
+- A more realistic bound is lower because prefetch can evict useful cache lines
+  and still contends for H2D bandwidth. If it hides 10-20% of down staging, the
+  expected gain is about 5-10s, enough to beat Phase 2H if quality and TTFT hold.
+
+Correctness and performance risks:
+
+- Correctness risk is low if cache keys remain correct, but stale or wrongly
+  prefetched down weights could corrupt output.
+- Performance risk is moderate: prefetch may evict useful up/gate or down
+  entries, increasing misses. The logs must show `down prefetch` useful rate,
+  evicted-unused count, and cache hit rates.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show down prefetch activity.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 32` to check miss/eviction behavior.
+- Promote to full `-n 96` only if `-n 32` is not slower than Phase 2H `-n 32`
+  and all gates pass.
+- Full `-n 96` promotion requires beating Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token).
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, prefetch does not activate, down prefetch useful rate is poor with high
+  evicted-unused count, launch/read failures appear, or token rate does not
+  improve over the matching Phase 2H token count.
+
+Result timestamp: 2026-07-02 17:03 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-165331Z-n4-phase2p-down-prefetch`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus:
+  - `GGML_MOE_PREFETCH_DOWN=1`
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 105222.66 ms, inside the 106331.72 ms gate but with only about
+  1.1s headroom.
+- Decode: 14183.67 ms / 3 runs, 4.72789 s/token, 0.21151 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=404, hits=404, evicted_unused=0, useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=1145, misses=1399, preloads=404,
+  hit_rate=45.0%.
+- Pinned staging: copies=1773, host_stage=2759.033 ms, h2d=386.877 ms.
+- Up/gate profile: calls=85, total=27.275 ms/call.
+- Down profile: calls=160, stage=5.341 ms/call, total=5.518 ms/call.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, prefetch activation,
+  useful-rate, and launch/read gates.
+- Continue to cold `-n 32`.
+- Watch TTFT closely because this path has less headroom than Phase 2H.
+
+Result timestamp: 2026-07-02 17:06 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-165639Z-n32-phase2p-down-prefetch`
+
+Measured result:
+
+- Commit/config: `adf621b20`, accepted Phase 2H config plus down prefetch.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31338 MiB used, 772 MiB free.
+- TTFT: 101970.04 ms, inside the 106331.72 ms gate.
+- Decode: 94356.18 ms / 31 runs, 3.04375 s/token, 0.32854 tok/s.
+- Quality flag: PASS; answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Down prefetch: loads=3196, hits=3196, evicted_unused=0,
+  useful_rate=100.0%.
+- Cache: slots=2016, slot=7.44 MiB, hits=16096, misses=10864,
+  preloads=3196, hit_rate=59.7%.
+- Pinned staging: copies=13123, host_stage=17959.990 ms, h2d=2848.131 ms.
+- Up/gate profile: calls=869, total=18.573 ms/call.
+- Down profile: calls=1644, stage=3.609 ms/call, total=3.776 ms/call.
+
+Comparison against accepted Phase 2H `-n 32`:
+
+- Phase 2H `-n 32`: 95613.73 ms / 31 runs, 3.08431 s/token, 0.32 tok/s.
+- Phase 2P `-n 32`: 94356.18 ms / 31 runs, 3.04375 s/token, 0.32854 tok/s.
+- Down prefetch works as intended for `-n 32`: down stage falls from
+  9.065 ms/call to 3.609 ms/call with 100% useful prefetch hits.
+
+Decision:
+
+- Continue to cold full `-n 96`.
+- Full promotion still requires beating Phase 2H `-n 96` while preserving
+  quality, TTFT, RAM, VRAM, prefetch usefulness, and launch/read gates.
+
+Result timestamp: 2026-07-01 16:28 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-162848Z-n4-phase2n-split-cache`
+
+Measured result:
+
+- Config: Phase 2M split cache with `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- TTFT: 99467.20 ms, inside the 106331.72 ms gate.
+- Decode: 14323.00 ms / 3 runs, 4.77433 s/token, 0.20945 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools confirmed:
+  - down: 1310 slots, 7.44 MiB slot, hits=383, misses=865,
+    hit_rate=30.7%.
+  - upgate: 979 slots, 5.36 MiB slot, hits=380, misses=980,
+    hit_rate=27.9%.
+
+Decision:
+
+- The `-n 4` smoke passes correctness, memory, VRAM, TTFT, cache allocation, and
+  launch/read gates.
+- Continue directly to cold `-n 96` because Phase 2N is a full-length budget
+  tuning step.
+
+Full-length result timestamp: 2026-07-01 16:31 UTC.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-163150Z-n96-phase2n-split-cache`
+
+Measured result:
+
+- Commit/config: `adf621b20`, Phase 2M split-cache code with
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=35`.
+- Host RAM peak: 14.901 GiB, inside the 16GB cgroup cap.
+- VRAM peak: 31336 MiB used, 774 MiB free.
+- TTFT: 103692.99 ms, inside the 106331.72 ms gate.
+- Decode: 297362.72 ms / 85 runs, 3.49838 s/token, 0.28585 tok/s.
+- Quality flag: PASS; full answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `launch_failures=0`, `read_failures=0`, `down_profile=true`.
+- Cache pools:
+  - down: 1310 slots, 7.44 MiB slot, hits=19429, misses=16587,
+    hit_rate=53.9%.
+  - upgate: 979 slots, 5.36 MiB slot, hits=15631, misses=22465,
+    hit_rate=41.0%.
+- Pinned staging: copies=34488, host_stage=47046.256 ms, h2d=7380.708 ms.
+- Up/gate profile: calls=2381, total=23.552 ms/call.
+- Down profile: calls=4506, stage=10.415 ms/call, total=10.582 ms/call.
+
+Comparison:
+
+- Phase 2H `-n 96`: 3.47192 s/token, 0.29 tok/s.
+- Phase 2M pct45 `-n 96`: 3.52464 s/token, 0.28372 tok/s.
+- Phase 2N pct35 `-n 96`: 3.49838 s/token, 0.28585 tok/s.
+- Moving from pct45 to pct35 improves down hit rate and total speed, but it
+  over-constrains the upgate pool: upgate hit_rate drops from 47.2% to 41.0%,
+  and up/gate total regresses from 22.493 ms/call to 23.552 ms/call.
+
+Decision:
+
+- Reject pct35 for full-length promotion.
+- Keep Phase 2H as the current best full `-n 96` configuration.
+- Next split-cache budget attempt, if pursued, should test an intermediate
+  upgate pct around 40 rather than moving further toward down.
+
+## Next candidate: Phase 2O intermediate split-cache budget
+
+Design timestamp: 2026-07-02 16:41 CST.
+
+Current bottleneck:
+
+- Phase 2M pct45 and Phase 2N pct35 both passed quality, TTFT, host RAM, and
+  VRAM gates, but neither beat Phase 2H at full `-n 96`.
+- pct45 over-allocated upgate relative to down:
+  - down hit_rate=50.6%, upgate hit_rate=47.2%.
+  - Decode: 3.52464 s/token.
+- pct35 over-corrected toward down:
+  - down hit_rate=53.9%, upgate hit_rate=41.0%.
+  - Decode: 3.49838 s/token.
+- Phase 2H full target remains 3.47192 s/token / 0.29 tok/s.
+
+Hypothesis:
+
+Test the midpoint:
+
+- `GGML_MOE_VRAM_CACHE_SPLIT=1`
+- `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`
+- `GGML_MOE_VRAM_CACHE_UPGATE_PCT=40`
+
+This should give the upgate pool more capacity than pct35 while preserving more
+down capacity than pct45. If the optimal balance is between the prior two
+points, pct40 should improve both total staging pressure and up/gate regression.
+
+Theoretical upper bound:
+
+- pct35 improved decode over pct45 by 2.23198s total but stayed 2.24914s slower
+  than Phase 2H.
+- pct40 can at best recover the upgate regression from pct35 while retaining
+  some down-hit improvement. The likely gain range is small, about 1-4s on full
+  `-n 96`.
+- Promotion requires crossing below 295113.58 ms / 85 runs.
+
+Acceptance:
+
+- Run cold `-n 4` first under `memory.max=16000000000`, `memory.swap.max=0`,
+  and `drop_caches`.
+- Host RAM must remain under the 16GB cgroup cap including page cache.
+- VRAM should remain near full without OOM.
+- TTFT must remain <=106331.72 ms.
+- France answer must be semantically correct and coherent.
+- Logs must show two active cache pools and no allocation retry/failure.
+- `launch_failures=0`, `read_failures=0`, and down batch profile remains active.
+- If `-n 4` passes, run cold `-n 96`.
+- Promote only if `-n 96` is faster than accepted Phase 2H `-n 96`
+  (0.29 tok/s / 3.47192 s/token) with all gates passing.
+
+Rollback:
+
+- Reject this config if quality fails, TTFT exceeds the gate, RAM/VRAM gates
+  fail, cache allocation fails, launch/read failures appear, or `-n 96` does
+  not improve over Phase 2H.
+
+## Current execution pointer: Phase 3Z up/gate fallback attribution
+
+Design timestamp: 2026-07-02 17:31 CST.
+
+The older `Phase 2O` candidate above is superseded by later Phase 3 results.
+The current accepted runtime remains Phase 3E:
+
+- Commit: `9b64e4c8`.
+- Branch: `vendor/kimi-moe-stream-on-vendor`.
+- Full cold `-n 96` run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-191111Z-n96-phase3e-batch-only-single-off`.
+- Host RAM peak: 14.901 GiB under `memory.max=16000000000` and
+  `memory.swap.max=0`.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 79721.89 ms. The hard 20% TTFT ceiling remains 106331.72 ms.
+- Decode: 231668.17 ms / 85 decode tokens, 2.72551 s/token,
+  0.36690 tok/s.
+- Quality: PASS on `Please introduce France in a short paragraph.`
+- Strict failure accounting: future runs must use strict launch failure regex
+  and record `decline_count` separately. `decline` log lines are not launch
+  failures.
+
+Latest rejected optimization:
+
+- Phase 3Y Q4_0 separate down cache passed strict launch/read/quality/RAM/TTFT
+  gates but was slower at `-n 32`.
+- Phase 3Y `-n 32`: 2.49881 s/token, 0.40019 tok/s.
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- The extra Q4 cache increased pinned staging and H2D pressure, so pure LRU Q4
+  separate caching is not a valid next step.
+
+Current bottleneck to locate before the next implementation:
+
+- Phase 3Y strict `-n 32` per-name profile still shows many
+  `ffn_gate_exps.weight` and `ffn_up_exps.weight` entries in the generic
+  `MUL_MAT_ID` fallback path, for example:
+  - `blk.28.ffn_gate_exps.weight`: 35.255 ms/call.
+  - `blk.7.ffn_gate_exps.weight`: 32.771 ms/call.
+  - `blk.7.ffn_up_exps.weight`: 32.352 ms/call.
+  - `blk.52.ffn_gate_exps.weight`: 31.467 ms/call.
+  - `blk.9.ffn_gate_exps.weight`: 31.244 ms/call.
+- The graph only builds the vendor fused up/gate op when
+  `GGML_MOE_STREAM_FUSED_UP_GATE` is set, `n_tokens == 1`, the up/gate tensors
+  are separate and shape-compatible, no bias/scale tensors are present, and the
+  FFN activation is SILU.
+- The CUDA up/gate batch path declines multi-row expert routes unless prompt
+  mode is enabled. Therefore the first question is whether the profiled
+  `ffn_gate_exps` / `ffn_up_exps` fallback time is decode-critical, prompt-only,
+  or caused by unsupported tensor type/shape conditions.
+
+Strict constraints for every Phase 3Z run:
+
+- Host RAM must remain below 16 GB including page cache, process RSS, pinned
+  memory, mmap-resident pages, helper processes, and cgroup-accounted kernel
+  memory. Run under `memory.max=16000000000` and `memory.swap.max=0`.
+- Every run must be cold start: restart the process and run
+  `sync; echo 3 > /proc/sys/vm/drop_caches` before launch. Record the proof in
+  `cold-start.txt`.
+- Use VRAM deliberately and prefer GPU compute/cache. Keep the Phase 3E
+  15000 MiB cache budget unless the experiment explicitly changes graph/cache
+  placement, and record unused VRAM minimum.
+- The France prompt must pass quality. Any answer that is not coherent,
+  semantically correct, and about France rejects the experiment immediately.
+- TTFT must be `<= 106331.72 ms`.
+- `read_failures` must be 0.
+- Strict `launch_failures` must be 0. `decline_count` must be recorded
+  separately and explained.
+- No implementation optimization may be stacked on top of a rejected change.
+- If a change improves token rate and satisfies all gates, commit and push it
+  immediately with reproduction details. If it fails any gate or is slower,
+  revert code before continuing and record the rejected result.
+
+Phase 3Z diagnostic method:
+
+1. Update this plan before each run with the exact hypothesis and rollback
+   condition.
+2. Run a cold strict `-n 4` diagnostic on the clean Phase 3E runtime with:
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+   - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+   - Phase 3E accepted runtime env otherwise unchanged.
+3. Parse the run into:
+   - total per-token time,
+   - up/gate fused accepts,
+   - up/gate CUDA batch declines by reason,
+   - generic `MUL_MAT_ID` fallback calls by tensor name,
+   - prompt vs decode call attribution if available from `rows_stride`,
+   - cache hit/miss, pinned staging, H2D, and down batch time.
+4. If the diagnostic proves top `ffn_gate_exps` / `ffn_up_exps` fallback entries
+   are decode-critical, rank implementation candidates by expected gain:
+   - first: make the graph take `ggml_moe_up_gate` for all eligible decode tokens
+     and eliminate accidental separate `build_lora_mm_id` up/gate construction,
+   - second: add missing CUDA support for the tensor type that is causing
+     `unsupported_type`, if the type is one of Kimi IQ3_S expert formats,
+   - third: enable a safe prompt-mode up/gate stream only if TTFT headroom and
+     exactness are proven.
+5. If the diagnostic shows the fallback is prompt-only, do not optimize it for
+   decode token rate unless TTFT is near the gate. Return to the largest measured
+   decode bucket instead.
+
+Theoretical upper bound for a decode-critical up/gate fallback fix:
+
+- Phase 3E full `-n 96` decode time is 231.668s over 85 tokens.
+- A top fallback entry costs roughly 30-35 ms/call. If 10-20 such up/gate
+  fallback calls are on every decode token and can be moved to the existing
+  fused GPU path, the hard visible upper bound is about 300-700 ms/token.
+- That would move the full-run ceiling from 2.72551 s/token toward roughly
+  2.0-2.4 s/token before accounting for cache misses and synchronization.
+- Realistic first-patch expectation is lower: 3-8% token-rate gain if only a
+  subset of fallback calls are decode-critical, or 0% if the fallback is
+  prompt-only.
+
+Acceptance for a later Phase 3Z implementation patch:
+
+- First run cold strict `-n 4`; then run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E `-n 32`:
+  - target faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all gates passing.
+- Only then run cold strict `-n 96`.
+- Full promotion requires beating Phase 3E full `-n 96`:
+  - faster than 2.72551 s/token,
+  - token rate above 0.36690 tok/s,
+  - RAM below 16 GB including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France answer quality PASS,
+  - `read_failures=0`,
+  - strict `launch_failures=0`,
+  - reproduction files complete.
+
+Required reproduction record for Phase 3Z:
+
+- Run directory under
+  `/root/lfz/runs/vendor-kimi-token-rate/YYYYMMDD-HHMMSSZ-<short-name>`.
+- Include `README.md`, `command.txt`, `env.txt`, `stdout.txt`, `stderr.txt`,
+  `answer.txt`, `metrics.json`, `memory.txt`, `vram.txt`, `system.txt`,
+  `cold-start.txt`, `moe.txt`, and `quality.txt`.
+- `metrics.json` must contain the exact commit, branch, cold-start proof,
+  cgroup memory peak, page cache peak, process RSS peak, VRAM peak and minimum
+  unused VRAM, TTFT, decode seconds, decode tokens, seconds/token, token rate,
+  token-rate delta vs Phase 3E, exact answer, strict launch failure count,
+  decline count, read failure count, and accept/reject decision.
+
+Rollback:
+
+- Reject and revert any source change if output quality fails, TTFT exceeds
+  106331.72 ms, host RAM exceeds the 16 GB cgroup cap, VRAM allocation becomes
+  unstable, strict launch/read failures appear, the result is not cold-start
+  reproducible, or matching-token-count token rate does not improve over
+  Phase 3E.
+
+### Phase 3Z run 1: strict cold `-n 4` fallback attribution
+
+Design timestamp: 2026-07-02 17:39 CST.
+
+Hypothesis:
+
+- The current top `ffn_gate_exps` / `ffn_up_exps` `MUL_MAT_ID` fallback names
+  may be either:
+  - decode-critical, meaning the graph is still constructing separate up/gate
+    matmuls for some decode path despite the fused up/gate env, or
+  - prompt-only / multi-row, meaning they should not be prioritized for decode
+    token-rate improvement.
+- A strict cold `-n 4` run with name profiling and decline debug is enough to
+  classify this before touching implementation code.
+
+Run configuration:
+
+- Base runtime: accepted Phase 3E env.
+- Token count: `-n 4`.
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- Required extra env:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_MOE_STREAM_DECLINE_DEBUG=1`
+- Strict launch failure accounting:
+  - count only launch/CUDA failure patterns,
+  - record `decline_count` separately.
+- Cold start:
+  - restart process,
+  - run `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  - run inside `memory.max=16000000000`, `memory.swap.max=0`.
+
+Acceptance for this diagnostic:
+
+- This is not a performance promotion run.
+- It passes only if RAM, TTFT, cold-start, quality, strict launch failure, and
+  read failure gates pass.
+- It must produce enough evidence to decide whether the next implementation
+  target should be up/gate graph/fused support or a different decode bucket.
+
+Rollback:
+
+- No source code change is planned for this run.
+- If runtime flags cause quality, TTFT, RAM, or launch/read failures, reject the
+  diagnostic and rerun with narrower attribution flags.
+
+Result timestamp: 2026-07-02 18:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-221241Z-n4-phase3z-upgate-fallback-attribution`
+
+Measured result:
+
+- Commit/config: remote clean `32b0d67c804abaa1acfd74a087e201c6bbaed171`,
+  Phase 3E runtime env plus name profile and decline debug.
+- Cgroup: `memory.max=16000000000`, `memory.swap.max=0`.
+- Cold-start method: process restart plus `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host memory: `memory.peak=16000000000` bytes, final page cache
+  15078416384 bytes.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 78485.42 ms, inside the 106331.72 ms gate.
+- Decode: 10881.99 ms / 3 runs, 3.62733 s/token, 0.27568 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Decline debug:
+  - down batch declines: 52, all `multirow_not_supported` on prompt
+    `rows_stride=136`.
+  - up/gate prompt disabled lines: 85.
+- Up/gate profile:
+  - calls=85, batch_accept=85, batch_decline=0.
+  - total=30.195 ms/call in CPU wrapper, CUDA batch total=29.829 ms/call.
+- Down profile:
+  - calls=550, batch_accept=160, batch_decline=52.
+  - fallback_t0=147.668 ms/call in CPU wrapper.
+  - CUDA down batch total=14.054 ms/call.
+- Name profile top entries are dominated by down fallback. The first up/gate
+  entry appears only at top28:
+  - `blk.52.ffn_up_exps.weight`, calls=4, batch_eligible=0,
+    fallback_t0=155.958 ms/call.
+
+Decision:
+
+- Reject this diagnostic as an accepted gate result because `memory.peak`
+  reached the exact `16000000000` byte cap. The user's constraint is strictly
+  below 16 GB including page cache, so a run that hits the cap is not acceptable
+  proof even though it completed.
+- The diagnostic evidence is still useful but must be reproduced under a lower
+  cgroup limit before it can guide implementation.
+- Next run uses `memory.max=15900000000` and the same Phase 3E runtime/env.
+
+### Phase 3Z run 2: strict cold `-n 4` fallback attribution under 15.9GB cap
+
+Design timestamp: 2026-07-02 18:18 CST.
+
+Hypothesis:
+
+- The Phase 3Z run 1 profile can be reproduced under a lower cgroup cap.
+- If it passes, the current bottleneck classification becomes:
+  - decode up/gate already uses fused CUDA batch for the measured calls,
+  - remaining large fallback is mostly down/prompt or down unsupported-type
+    fallback,
+  - next implementation should focus on down fallback eligibility/support
+    rather than graph-level up/gate decode fusion.
+
+Run configuration:
+
+- Same as Phase 3Z run 1, except:
+  - `memory.max=15900000000`.
+- Keep cold-start, strict launch failure accounting, quality, TTFT, and
+  read-failure gates unchanged.
+
+Acceptance:
+
+- `memory.peak < 16000000000` bytes.
+- TTFT `<= 106331.72 ms`.
+- France prompt quality PASS.
+- `strict_launch_failures=0`.
+- `read_failures=0`.
+- The run must reproduce enough profile evidence to classify up/gate vs down
+  bottleneck.
+
+Rollback:
+
+- No source code change is planned.
+- If lower cgroup cap causes failure/OOM or unreadable output, keep run 1 as
+  rejected diagnostic evidence and reduce VRAM/page-cache pressure only after a
+  new plan update.
+
+Result timestamp: 2026-07-02 18:24 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-221654Z-n4-phase3z-upgate-fallback-attribution-15900mb`
+
+Measured result:
+
+- Commit/config: remote clean `32b0d67c804abaa1acfd74a087e201c6bbaed171`,
+  Phase 3E runtime env plus name profile and decline debug.
+- Cgroup: `memory.max=15900000000`, `memory.swap.max=0`.
+- Cold-start method: process restart plus `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host memory: `memory.peak=15899996160` bytes, 14.808 GiB. This is below
+  16,000,000,000 bytes and satisfies the strict 16 GB gate.
+- Final page cache: 13.944 GiB.
+- VRAM peak: 31286 MiB used, 824 MiB free.
+- TTFT: 80958.75 ms, inside the 106331.72 ms gate.
+- Decode: 10994.93 ms / 3 runs, 3.66498 s/token, 0.27285 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Decline debug:
+  - down batch declines: 52, all `multirow_not_supported` on prompt
+    `rows_stride=136`.
+  - up/gate prompt disabled lines: 85.
+- Up/gate:
+  - CUDA profile calls=85, total=33.279 ms/call.
+  - CPU wrapper calls=85, batch_accept=85, batch_decline=0,
+    fallback_t0=0.001 ms/call.
+  - Conclusion: decode up/gate is already on the fused CUDA batch path in this
+    run. The profiled up/gate fallback entries are not the current decode
+    priority.
+- Down:
+  - CPU wrapper calls=550, batch_accept=160, batch_decline=52,
+    fallback_t0=146.174 ms/call.
+  - CUDA down batch calls=160, total=13.939 ms/call.
+  - Name profile top entries are dominated by down fallback. Examples:
+    - `blk.4.ffn_down_exps.weight`: calls=4, batch_accept=3,
+      batch_decline=1, fallback_t0=369.286 ms/call.
+    - `blk.7.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=228.155 ms/call.
+    - `blk.6.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=203.400 ms/call.
+    - `blk.9.ffn_down_exps.weight`: calls=4, batch_eligible=0,
+      fallback_t0=196.205 ms/call.
+  - The `batch_accept=3, batch_decline=1` pattern means these eligible down
+    tensors run CUDA batch for the three decode tokens and decline only the
+    prompt multi-row call.
+  - The `batch_eligible=0` down tensors remain on CPU fallback for both prompt
+    and decode and are now the largest actionable decode bucket.
+
+Decision:
+
+- Accept Phase 3Z run 2 as a valid diagnostic under the strict RAM, cold-start,
+  TTFT, VRAM, quality, read, and strict launch-failure gates.
+- Do not implement graph-level up/gate fusion next; the diagnostic disproves it
+  as the current decode bottleneck.
+- Next design step: identify why high-cost down tensors have `batch_eligible=0`
+  and whether a GPU down batch path can safely support their quant type without
+  repeating Phase 3Y's Q4 cache-pressure regression.
+
+## Next candidate: Phase 3ZA Q4_0 down scratch GPU batch
+
+Design timestamp: 2026-07-02 18:43 CST.
+
+Current bottleneck:
+
+- Phase 3Z run 2 proves decode up/gate is not the current priority:
+  - up/gate CPU wrapper calls=85,
+  - batch_accept=85,
+  - batch_decline=0,
+  - fallback_t0=0.001 ms/call.
+- The remaining large decode bucket is down fallback:
+  - down CPU wrapper calls=550,
+  - batch_accept=160,
+  - batch_decline=52,
+  - fallback_t0=146.174 ms/call.
+- GGUF metadata sampled from split 00002 identifies:
+  - `blk.4.ffn_down_exps.weight`: `iq4_xs`, eligible and decode batch accepted.
+  - `blk.6.ffn_down_exps.weight`: `q4_0`, `batch_eligible=0`.
+  - `blk.7.ffn_down_exps.weight`: `q4_0`, `batch_eligible=0`.
+- Therefore the next actionable target is Q4_0 down decode fallback.
+
+Rejected prior approach:
+
+- Phase 3Y Q4_0 separate down cache was functionally correct but slower at
+  `-n 32`:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3Y `-n 32`: 2.49881 s/token.
+- The gap was extra cache/staging/H2D pressure, not correctness:
+  - strict launch failures=0,
+  - read failures=0,
+  - quality PASS.
+- Therefore do not reintroduce Q4_0 into an LRU VRAM cache as the first retry.
+
+Hypothesis:
+
+- Add a default-off Q4_0 down scratch path:
+  - env: `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`,
+  - allow Q4_0 down tensors into `ggml_cuda_moe_stream_batch`,
+  - copy only the active Q4_0 experts for the current call into the existing
+    scratch device buffer,
+  - use slot ids `0..n_active-1` and `slot_stride=src0_bytes`,
+  - launch the compact MMVQ batch kernel from scratch memory,
+  - do not insert Q4_0 experts into the VRAM LRU cache.
+- This should reduce CPU fallback compute without stealing cache capacity from
+  IQ3/IQ4/Q3 down tensors that already benefit from the current Phase 3E cache.
+
+Theoretical upper bound:
+
+- Q4_0 down expert size is approximately:
+  - `ne00=2048`, `ne01=7168`,
+  - Q4_0 row size = 64 blocks * 18 bytes = 1152 bytes,
+  - expert size = 7168 * 1152 = 8.25 MiB.
+- A decode down call with 8 active experts copies about 66 MiB.
+- Even at a conservative 20-24 GB/s effective H2D bandwidth, the scratch copy
+  lower bound is about 2.8-3.3 ms before pack/read overhead and kernel time.
+- Current Q4_0 CPU fallback examples cost roughly 166-228 ms/call in the
+  strict diagnostic. If three decode calls per layer are converted, the visible
+  per-layer decode bound is tens to hundreds of milliseconds saved across the
+  short run.
+- The realistic first bound is lower because scratch copies are not cached and
+  may add H2D pressure. A useful `-n 32` result should still beat Phase 3E if it
+  converts enough Q4_0 down calls without disrupting existing cached down paths.
+
+Implementation plan:
+
+1. Add default-off env gate `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH`.
+2. CPU side: let `ggml_cuda_moe_stream_supports_down_batch` return true for
+   Q4_0 down tensors only when the env is enabled.
+3. CUDA side:
+   - allow Q4_0 through the down batch type gate only when scratch env is on,
+   - skip `batch_cache_get`, profile preload, lookup, and insert for Q4_0
+     scratch calls,
+   - copy each active expert to `bc.d_src0 + j * src0_bytes`,
+   - set `bc.h_x_ids[j] = j`,
+   - call `launch_moe_mmvq_compact_batch` with scratch base and
+     `slot_stride=src0_bytes`,
+   - add `GGML_TYPE_Q4_0` to the compact MMVQ launch switch.
+4. Keep the feature default-off so accepted Phase 3E behavior is unchanged when
+   env is absent.
+
+Acceptance:
+
+- Build must pass on the CUDA remote.
+- First run cold strict `-n 4` under `memory.max=15900000000`,
+  `memory.swap.max=0`.
+- Required env delta:
+  - `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Hard gates:
+  - host memory peak `< 16000000000` bytes,
+  - TTFT `<= 106331.72 ms`,
+  - VRAM remains stable and deliberately near full,
+  - France prompt quality PASS,
+  - strict launch failures=0,
+  - read failures=0.
+- Diagnostic success:
+  - Q4_0 down entries become batch eligible,
+  - no `unsupported_type` or launch failure for Q4_0,
+  - Q4_0 down fallback decreases materially.
+- If `-n 4` passes, run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E `-n 32`:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all hard gates passing.
+- Only if `-n 32` passes, run full cold strict `-n 96`.
+
+Rollback:
+
+- If build fails, quality fails, strict launch/read failures appear, TTFT exceeds
+  the gate, RAM exceeds the strict cap, or matching-token-count performance does
+  not improve, revert this source change before trying another optimization.
+
+Result timestamp: 2026-07-02 18:59 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-222715Z-n4-phase3za-q4-down-scratch`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za`,
+  Q4_0 scratch code enabled with `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Build: PASS.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 74333.82 ms, TTFT gate PASS.
+- Decode: 11902.85 ms / 3 runs, 3.96762 s/token, 0.25204 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- Declines:
+  - `multirow_not_supported`: 59 prompt declines.
+  - `launch_moe_mmvq_compact_batch`: 21 decode declines, all Q4_0 down tensors.
+- Name profile:
+  - Q4_0 down tensors became `batch_eligible=4`, proving CPU-side eligibility
+    worked.
+  - But Q4_0 down tensors had `batch_accept=0`, `batch_decline=4`, so decode
+    still fell back to CPU.
+
+Gap analysis:
+
+- The implementation added Q4_0 to `launch_moe_mmq_slot_batch`, but the active
+  down path calls `launch_moe_mmvq_compact_batch`.
+- `launch_moe_mmvq_compact_batch` still rejects Q4_0 in its type allowlist
+  before it reaches `ggml_cuda_moe_stream_mmvq_dev`.
+- This explains the 21 decode declines and the slower decode: the run paid
+  scratch copy overhead and then still executed CPU fallback.
+
+Decision:
+
+- Do not run `-n 32`.
+- Keep this run as a failed implementation smoke.
+- Patch the correct `launch_moe_mmvq_compact_batch` allowlist and rerun cold
+  strict `-n 4` before making any promotion decision.
+
+Result timestamp: 2026-07-02 19:08 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223212Z-n4-phase3za-q4-down-scratch-v2`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za-v2`,
+  Q4_0 scratch code with corrected compact MMVQ allowlist.
+- Build: PASS.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 76572.46 ms, TTFT gate PASS.
+- Decode: 9762.09 ms / 3 runs, 3.25403 s/token, 0.30731 tok/s.
+- Quality: PASS for the tiny smoke; answer was `France is a country`.
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- Unsupported-type declines: 0.
+- `launch_moe_mmvq_compact_batch` declines: 0.
+- Down CPU wrapper:
+  - calls=550,
+  - batch_accept=181,
+  - batch_decline=59,
+  - fallback_t0=142.226 ms/call.
+- Down CUDA profile:
+  - calls=181,
+  - stage=13.551 ms/call,
+  - kernel=0.112 ms/call,
+  - total=13.711 ms/call.
+- Q4_0 tensors now accept decode batch:
+  - `blk.6.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.7.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.8.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.9.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.15.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+  - `blk.18.ffn_down_exps.weight`: batch_accept=3, batch_decline=1.
+
+Comparison:
+
+- Phase 3Z diagnostic run 2 with same 15.9GB cap and debug env:
+  - 3.66498 s/token, 0.27285 tok/s.
+- Phase 3ZA v2 diagnostic:
+  - 3.25403 s/token, 0.30731 tok/s.
+- This proves the Q4_0 scratch path can execute and reduces the short-run
+  fallback burden, but it is still a diagnostic run with name/decline debug.
+
+Decision:
+
+- Continue to cold strict `-n 32`.
+- Use production-like Phase 3E env plus `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`,
+  but remove `GGML_KIMI_CPU_MOE_NAME_PROFILE` and
+  `GGML_MOE_STREAM_DECLINE_DEBUG` to avoid diagnostic overhead.
+- Promotion still requires beating Phase 3E `-n 32`:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s,
+  - all hard gates passing.
+
+Result timestamp: 2026-07-02 19:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2`
+
+Measured result:
+
+- Commit/config: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3za-v2`,
+  production-like Phase 3E env plus `GGML_MOE_STREAM_DOWN_Q4_0_SCRATCH=1`.
+- Host memory: `memory.peak=15899996160` bytes, strict RAM gate PASS.
+- VRAM peak: 31290 MiB used, 820 MiB free.
+- TTFT: 76460.99 ms, TTFT gate PASS.
+- Decode: 80398.54 ms / 31 runs, 2.59350 s/token, 0.38558 tok/s.
+- Quality: PASS; answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Strict launch failures: 0.
+- Read failures: 0.
+- Q4_0 scratch path active: yes.
+- `launch_moe_mmvq_compact_batch` declines: 0.
+- Unsupported-type declines: 0.
+- Down CPU wrapper:
+  - calls=4022,
+  - batch_accept=1861,
+  - batch_decline=59,
+  - fallback_t0=25.473 ms/call.
+- Down CUDA profile:
+  - calls=1861,
+  - stage=11.615 ms/call,
+  - kernel=0.108 ms/call,
+  - total=11.766 ms/call.
+- Pinned staging:
+  - copies=15226,
+  - host_stage=21743.566 ms,
+  - h2d=3450.111 ms.
+
+Comparison:
+
+- Phase 3E `-n 32`: 2.24573 s/token, 0.44529 tok/s.
+- Phase 3ZA `-n 32`: 2.59350 s/token, 0.38558 tok/s.
+- Phase 3ZA is slower by 10.78008s over 31 decode tokens.
+
+Gap analysis:
+
+- The Q4_0 scratch implementation works functionally and removes the Q4_0
+  launch declines, but no-cache scratch adds too much staging/H2D pressure.
+- The expected compute saving does not translate into end-to-end speed because
+  every Q4_0 decode call reloads all active Q4_0 experts instead of reusing a
+  cache slot.
+- This reproduces the general Phase 3Y lesson: Q4_0 down can be made correct,
+  but naive admission/copy policy is slower than Phase 3E. A future Q4_0 retry
+  needs profile-guided admission or a small pinned hot set, not unconditional
+  scratch reloads.
+
+Decision:
+
+- Reject Phase 3ZA.
+- Do not run full `-n 96`.
+- Revert all Phase 3ZA source changes locally and remotely.
+- Keep Phase 3E as current accepted best.
+
+## Next candidate: Phase 3ZB profile-guided Q4_0 down hot set
+
+Design timestamp: 2026-07-02 19:23 CST.
+
+Current bottleneck and lesson from Phase 3ZA:
+
+- Q4_0 down GPU compute can be made correct:
+  - Phase 3ZA v2 Q4_0 decode launch declines: 0.
+  - Q4_0 tensors changed from `batch_eligible=0` to `batch_accept=3`.
+- But unconditional scratch reload is slower:
+  - Phase 3E `-n 32`: 2.24573 s/token.
+  - Phase 3ZA `-n 32`: 2.59350 s/token.
+- The gap is copy policy, not math or launch support:
+  - no-cache scratch reloads active Q4_0 experts every decode call,
+  - copies rise to 15226 and host_stage rises to 21743.566 ms,
+  - H2D rises to 3450.111 ms.
+
+New profile finding:
+
+Using Phase 3ZA `-n 32` route profile:
+`/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2/route-profile.csv`
+
+Q4_0 down profile:
+
+- Q4_0 down expert size: 8257536 bytes, 7.875 MiB.
+- Q4_0 down rows: 613 tensor/expert pairs.
+- Q4_0 down total route count: 1736.
+- Static hot-set coverage by top route-profile entries:
+  - 16 slots, 126 MiB: 307 / 1736, 17.7%.
+  - 32 slots, 252 MiB: 500 / 1736, 28.8%.
+  - 48 slots, 378 MiB: 642 / 1736, 37.0%.
+  - 64 slots, 504 MiB: 744 / 1736, 42.9%.
+  - 80 slots, 630 MiB: 828 / 1736, 47.7%.
+  - 96 slots, 756 MiB: 902 / 1736, 52.0%.
+  - 128 slots, 1008 MiB: 1030 / 1736, 59.3%.
+
+Hypothesis:
+
+- Replace unconditional Q4_0 scratch reload with a profile-guided static hot
+  Q4_0 down set:
+  - env-gated and default-off,
+  - preload only the top Q4_0 down tensor/expert pairs from a route profile,
+  - for Q4_0 down calls, use GPU batch only when all active experts for that
+    call are present in the static Q4 hot set,
+  - otherwise decline immediately to the existing CPU fallback without scratch
+    copy.
+- This keeps Q4_0 out of the main LRU cache and avoids Phase 3ZA's repeated
+  miss-copy overhead.
+- Start with 64 slots because it fits within current free VRAM better than 96+
+  slots:
+  - Phase 3E free VRAM was about 824 MiB,
+  - 64 Q4_0 slots consume about 504 MiB,
+  - projected remaining free VRAM is about 320 MiB.
+
+Theoretical upper bound:
+
+- 64 slots cover 42.9% of Q4_0 down route count in the `-n 32` route profile.
+- Q4_0 scratch proved the GPU call path can execute with about 11-14 ms down
+  batch total, but unconditional scratch made staging too expensive.
+- Static hot hits should avoid per-hit H2D expert copy and pay only src1/id/dst
+  overhead plus kernel.
+- Misses should fall back to CPU without extra copy.
+- If the 64-slot hot set converts 40% of Q4_0 decode fallback and does not
+  perturb the existing 7.44 MiB down cache, the expected `-n 32` gain could be
+  several seconds. Promotion still requires beating Phase 3E by at least one
+  cold `-n 32` run before any full `-n 96` run.
+
+Implementation sketch:
+
+1. Add default-off env:
+   - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_PROFILE=<route-profile.csv>`
+   - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_SLOTS=64`
+2. At CUDA batch init, parse the profile and select top Q4_0 down entries by
+   count. Key by tensor name plus expert index.
+3. Allocate a dedicated Q4_0 hot device pool sized
+   `hot_slots * 8257536` bytes.
+4. Preload selected Q4_0 experts from the expert pack into that pool once.
+5. For Q4_0 down decode calls:
+   - if every active expert is in the hot pool, set `h_x_ids` to hot-pool slots
+     and launch compact MMVQ from the hot pool,
+   - if any active expert is missing, decline before any copy and use CPU
+     fallback.
+6. Do not admit Q4_0 into the existing main LRU cache.
+
+Acceptance:
+
+- Build must pass.
+- First run cold strict `-n 4` under `memory.max=15900000000`.
+- Then run cold strict `-n 32`.
+- Hard gates:
+  - host RAM `< 16000000000` bytes including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France quality PASS,
+  - strict launch failures=0,
+  - read failures=0,
+  - VRAM remains stable with a visible reserve.
+- `-n 32` must beat Phase 3E:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s.
+- If `-n 32` does not beat Phase 3E, reject and revert before another
+  implementation attempt.
+
+Rollback:
+
+- Reject and revert if hot preload causes TTFT regression beyond the gate, OOM,
+  RAM cap failure, output quality failure, launch/read failures, or `-n 32`
+  performance below Phase 3E.
+
+Result timestamp: 2026-07-02 22:49 UTC / 2026-07-03 06:49 CST.
+
+Implementation smoke run:
+
+- Commit under test: `32b0d67c804abaa1acfd74a087e201c6bbaed171-dirty-phase3zb`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-224849Z-n4-phase3zb-q4-hot64`
+- Repro command shape:
+  - cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  - cgroup `memory.max=15900000000`, `memory.swap.max=0`,
+  - `-n 4`,
+  - Phase 2H/3E env,
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`,
+  - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-223535Z-n32-phase3za-q4-down-scratch-v2/route-profile.csv`,
+  - `GGML_MOE_STREAM_DOWN_Q4_0_HOT_SLOTS=64`.
+
+Metrics:
+
+- Host RAM strict peak: 15899996160 bytes, 14.808025 GiB.
+- Page cache final: 13.936584 GiB.
+- VRAM peak: 31794 MiB, minimum reserve 316 MiB.
+- TTFT: 75567.24 ms, gate PASS.
+- Decode: 10.27285 s / 3 tokens = 3.42428 s/token, 0.29203 tok/s.
+- France quality: PASS.
+- Exact answer: `France is a country`
+- Strict launch failures: 0.
+- Read failures: 0.
+- Declines: 85 total:
+  - `multirow_not_supported`: 59,
+  - `q4_hot_miss`: 21.
+- Q4 hot init: PASS.
+- Q4 hot path active: FAIL.
+- Q4 hot counters:
+  - calls=21,
+  - accepted=0,
+  - declined_miss=21,
+  - loaded=0,
+  - slots=64.
+
+Decision:
+
+- Reject Phase 3ZB before `-n 32`.
+- The hard gates passed for smoke, but the optimization path never executed:
+  every Q4_0 down candidate missed the static hot set because requiring all
+  active experts in a call to be hot is too strict.
+- The route-count coverage estimate was misleading for this launch shape:
+  per-entry coverage of 42.9% does not imply full-call coverage when a down
+  batch call requires multiple active experts to be present simultaneously.
+- Since `accepted=0`, a longer `-n 32` run would only benchmark the fallback
+  path and would not be a valid performance trial.
+- Revert all Phase 3ZB source changes locally and remotely, keep this plan
+  record as the reproducible rejection.
+
+## Next candidate: Phase 3ZC down multirow flattening
+
+Design timestamp: 2026-07-02 23:10 UTC / 2026-07-03 07:10 CST.
+
+Current bottleneck:
+
+- Under the strict 15.9 GB cold-start baseline, down batch still declines a
+  large number of calls because one expert can receive more than one route in
+  the same call:
+  - Phase 3Z `-n 4`: `multirow_not_supported=52`.
+  - Phase 3ZB `-n 4`: `multirow_not_supported=59`.
+- These declines fall back to CPU down compute:
+  - Phase 3ZB down profile: 550 down calls, 160 batch accepts, 80 batch
+    declines, fallback_t0=143.108 ms, cuda_batch=3.986 ms.
+- Q4 hot-set failed because call-level full coverage was zero. Multirow
+  flattening attacks an independent and higher-confidence decline reason that
+  is visible in the current accepted fallback path.
+
+Implementation hypothesis:
+
+- `ggml_cuda_moe_stream_batch` currently rejects when
+  `matrix_row_counts[e] > 1`.
+- The existing down GPU path already operates on a flattened route list:
+  - `active_experts[j]` selects the expert/cache slot,
+  - `src1` is copied per route,
+  - `launch_moe_mmvq_compact_batch` loops over `j` independently,
+  - final scatter writes each route to `(dst_id, token_id)`.
+- Therefore a multirow expert can be represented by repeated `active_experts`
+  entries with different `dst_ids` and `token_ids`.
+- No math kernel change is required for this first attempt.
+
+Theoretical upper bound:
+
+- In Phase 3ZB n4, 59 multirow declines are potentially convertible to GPU
+  batch calls.
+- The upper bound is bounded by replacing their CPU fallback work with the
+  existing GPU down batch path plus additional route staging.
+- Since the accepted down GPU path reports about 3.986 ms in cuda_batch for
+  the smoke run while fallback_t0 dominates the down profile, a successful
+  conversion should reduce decode time measurably if most multirow routes stay
+  under `MOE_STREAM_MAX_ACTIVE`.
+- The implementation may increase per-call `n_active`, src1 staging, D2H, and
+  scatter bytes; the `-n 4` smoke must verify that the converted calls do not
+  regress TTFT, RAM, or correctness before any longer run.
+
+Implementation sketch:
+
+1. In `ggml_cuda_moe_stream_batch`, replace the single-row-only route gather
+   with a flattening loop:
+   - skip experts with `matrix_row_counts[e] <= 0`,
+   - for each `ir < matrix_row_counts[e]`, append one active route,
+   - repeat the same expert id for multiple rows,
+   - store `dst_ids[j]=matrix_rows[e*rows_stride + ir].i1`,
+   - store `token_ids[j]=matrix_rows[e*rows_stride + ir].i2`.
+2. Keep the existing `n_active >= 128` guard as the first safety bound.
+3. Keep all existing type support and cache policy unchanged.
+4. Add no default-on Q4_0 behavior in this phase.
+
+Acceptance:
+
+- Build must pass.
+- First run cold strict `-n 4` under `memory.max=15900000000`,
+  `memory.swap.max=0`.
+- Hard gates:
+  - host RAM `< 16000000000` bytes including page cache,
+  - TTFT `<= 106331.72 ms`,
+  - France quality PASS,
+  - strict launch failures=0,
+  - read failures=0,
+  - `multirow_not_supported` should fall to zero or near zero.
+- If smoke passes and decode does not regress badly, run cold strict `-n 32`.
+- `-n 32` must beat Phase 3E:
+  - faster than 2.24573 s/token,
+  - token rate above 0.44529 tok/s.
+- If `-n 32` fails performance, quality, TTFT, RAM, launch, or read gates,
+  reject and revert before the next implementation.
+- If `-n 32` beats Phase 3E, run cold strict `-n 96` and require a full
+  France paragraph with correct, coherent semantics before commit/push of the
+  source change.
+
+Repro notes:
+
+- Use the same strict cold-start harness as Phase 3Z/3ZB:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`,
+  cgroup `memory.max=15900000000`, `memory.swap.max=0`,
+  prompt `Please introduce France in a short paragraph.`
+- Record exact answer text, TTFT, decode seconds/token, token rate, host RAM,
+  page cache, VRAM peak/reserve, decline reasons, down/up profiles, expert-pack
+  read failures, and strict launch failures for every run.
+
+Implementation note timestamp: 2026-07-02 22:57 UTC / 2026-07-03 06:57 CST.
+
+First implementation smoke attempt:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-225735Z-n4-phase3zc-down-multirow-flatten`
+- This run is not an accepted strict result because the cgroup wrapper wrote
+  `$$` instead of `BASHPID`, so `memory.peak` did not capture the model
+  process.
+- It is still useful as implementation diagnosis:
+  - process exit code: 0,
+  - output: `France is a country`,
+  - read failures: 0,
+  - strict launch failures: 0,
+  - `multirow_not_supported` disappeared,
+  - new decline reason: `too_many_active_routes=52`.
+- Root cause:
+  - the down path still used local arrays sized 128 and a hard `128` guard,
+    while the shared batch context already defines `MOE_STREAM_MAX_ACTIVE=512`.
+- Next adjustment before repeating strict smoke:
+  - change down route arrays and the guard to `MOE_STREAM_MAX_ACTIVE`,
+  - rerun cold strict n4 with the corrected cgroup wrapper using `BASHPID`.
+
+Rejection timestamp: 2026-07-02 23:01 UTC / 2026-07-03 07:01 CST.
+
+Second implementation smoke attempt:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-230115Z-n4-phase3zc-down-multirow-flatten-v2`
+- Cgroup wrapper was corrected with `BASHPID`, so this is a valid strict
+  failure:
+  - process exit code: 139,
+  - host RAM peak: 13613936640 bytes, 12.678967 GiB,
+  - page cache final: 12.205647 GiB,
+  - VRAM peak: 31598 MiB, minimum reserve 512 MiB,
+  - no answer produced,
+  - no timing metrics because the process segfaulted before completion.
+- Crash context:
+  - stderr reached
+    `[moe_stream] batched decode path active: experts=136 ne01=7168 ne00=2048`,
+  - then segfaulted in `libc.so.6` during CPU memory copy.
+- Root cause:
+  - the rejected multirow calls are prompt-layout calls, not simple decode
+    calls,
+  - the down path copied `src1` with the decode interpretation of
+    `(dst_id, token_id)`,
+  - after flattening prompt multirow mappings, that address calculation can
+    point outside the valid `src1` layout.
+- Decision:
+  - Reject Phase 3ZC.
+  - Revert all Phase 3ZC source changes locally and remotely.
+- Do not retry down multirow without first deriving the prompt down tensor
+  layout and adding an isolated correctness test; the simple flattening
+  approach is unsafe.
+
+## Next measurement: Phase 3ZD strict n96 baseline refresh
+
+Design timestamp: 2026-07-02 23:04 UTC / 2026-07-03 07:04 CST.
+
+Reason:
+
+- The accepted Phase 3E full `-n 96` result is still the best known stable
+  output, but it was collected under the older 16 GB cgroup setup.
+- The current hard requirement is strictly below 16 GB including page cache,
+  and the corrected cgroup wrapper must write `BASHPID` to `cgroup.procs`.
+- Before attempting another optimization, refresh the full-length baseline
+  under `memory.max=15900000000`, `memory.swap.max=0`, and cold start.
+
+Run configuration:
+
+- Use the current reverted source at commit `c4f956e5b` plus a clean remote
+  rebuild.
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- `-n 96`, `-t 32`, `-tb 32`.
+- Production-like Phase 3E env:
+  - expert pack enabled,
+  - stream enabled,
+  - fused up/gate enabled,
+  - batch-only down path enabled,
+  - down prefetch disabled,
+  - VRAM cache 15000 MiB with auto clamp and 512 MiB safety,
+  - no experimental Q4 hot or multirow code.
+- Keep profiling outputs enabled only to record required metrics and bottleneck
+  attribution for the next design step.
+
+Acceptance:
+
+- This is a measurement, not a new optimization.
+- It must produce a full coherent France paragraph.
+- It must pass:
+  - host RAM `< 16000000000`,
+  - TTFT `<= 106331.72 ms`,
+  - read failures=0,
+  - strict launch failures=0.
+- Record exact answer, TTFT, decode seconds/token, token rate, host RAM, page
+  cache, VRAM peak/reserve, profiles, decline reasons, and reproducibility
+  files.
+- If the strict n96 baseline fails, do not optimize further; first investigate
+  why the accepted Phase 3E result no longer reproduces under the corrected
+  strict harness.
+
+Result timestamp: 2026-07-02 23:09 UTC / 2026-07-03 07:09 CST.
+
+Strict n96 baseline result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-230430Z-n96-phase3zd-strict-baseline-refresh`
+- Commit:
+  `32b0d67c804abaa1acfd74a087e201c6bbaed171`
+- Branch:
+  `vendor/kimi-moe-stream-on-vendor`
+- Cold-start proof:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`, cgroup
+  `memory.max=15900000000`, `memory.swap.max=0`, process entered cgroup via
+  `BASHPID`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.718571 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  74550.06 ms, gate PASS.
+- Decode:
+  228.77195 s / 85 tokens = 2.69143 s/token, 0.37155 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Pinned staging:
+  copies=35734, host_stage=47257.080 ms, h2d=7731.993 ms.
+- Up/gate CPU profile:
+  calls=2381, total=23.352 ms/call, cuda_batch=23.194,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=20.476 ms/call, cuda_batch=5.140,
+  fallback_t0=15.279, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=12.023 ms/call, kernel=0.111 ms/call,
+  wall=12.220 ms/call.
+- VRAM cache:
+  hits=33844, misses=40188, preloads=0, hit_rate=45.7%.
+
+Decision:
+
+- Accept this as the refreshed strict n96 baseline.
+- This supersedes Phase 3E for the current hard constraints:
+  - Phase 3E old n96: 2.72551 s/token, 0.36690 tok/s.
+  - Phase 3ZD strict n96: 2.69143 s/token, 0.37155 tok/s.
+- Next optimization must beat 2.69143 s/token under the same strict cold-start
+  harness and quality gates.
+
+## Next candidate: Phase 3ZE strict down prefetch refresh
+
+Design timestamp: 2026-07-02 23:18 UTC / 2026-07-03 07:18 CST.
+
+Current bottleneck from Phase 3ZD:
+
+- Strict n96 decode is 228.77195 s / 85 tokens =
+  2.69143 s/token, 0.37155 tok/s.
+- The GPU down kernel is not the bottleneck:
+  - down CUDA kernel: 0.111 ms/call,
+  - down CUDA wall: 12.220 ms/call,
+  - down stage: 12.023 ms/call.
+- The dominant compressible bucket is expert staging/cache misses:
+  - pinned staging: 35734 copies,
+  - host_stage=47257.080 ms,
+  - h2d=7731.993 ms,
+  - VRAM cache hits=33844, misses=40188, hit_rate=45.7%.
+- Up/gate is already fully batched with no fallback:
+  - calls=2381,
+  - batch_accept=2381,
+  - batch_decline=0.
+- The remaining 52 `multirow_not_supported` declines are prompt-layout related;
+  Phase 3ZC proved simple flattening is unsafe.
+
+Hypothesis:
+
+- Re-enable the existing default-off down prefetch hook:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- This hook is called from the up/gate path and preloads the corresponding
+  down experts into the same VRAM cache before the down layer uses them.
+- It does not change routing or math, only timing of cache insertion/copy.
+- Old Phase 2P data showed down prefetch reduced n32 down stage
+  9.065 -> 3.609 ms/call with 100% useful hits, but that run predates the
+  strict 15.9GB baseline refresh and later Phase 3 changes. Retest under the
+  current strict harness before making any claim.
+
+Theoretical upper bound:
+
+- Phase 3ZD has 47.257 s host staging and 7.732 s H2D staging recorded.
+- If down prefetch hides half of the down staging component without increasing
+  up/gate misses, upper-bound full decode could improve by about 20-25 s:
+  `(228.77 - 20) / 85 = 2.456 s/token`.
+- A realistic target is smaller because prefetch competes for H2D bandwidth and
+  cache capacity. Even a 5-10 s decode reduction would beat the strict baseline
+  if TTFT and quality remain stable.
+
+Risks:
+
+- Prefetch can evict useful up/gate or down cache entries and increase misses.
+- TTFT can rise because prefetch starts during early generation.
+- Extra VRAM pressure can reduce reserve; current reserve is 824 MiB, so the
+  experiment must keep auto clamp and the 512 MiB safety margin.
+
+Execution:
+
+1. Run cold strict `-n 4` with Phase 3ZD env plus down prefetch.
+2. If hard gates pass and logs show useful prefetch activity, run cold strict
+   `-n 32`.
+3. Promote to cold strict `-n 96` only if `-n 32` is not slower than the best
+   current n32 reference and all hard gates pass.
+
+Hard gates for every run:
+
+- cgroup `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM `< 16000000000` including page cache.
+- TTFT `<= 106331.72 ms`.
+- France output semantically correct and coherent.
+- Strict launch failures=0.
+- Read failures=0.
+- VRAM reserve must remain visible with no OOM.
+- Logs must include down prefetch activity:
+  `down prefetch: loads=..., hits=..., evicted_unused=..., useful_rate=...`.
+
+Promotion target:
+
+- Full `-n 96` must beat Phase 3ZD strict baseline:
+  - faster than 2.69143 s/token,
+  - above 0.37155 tok/s,
+  - full France paragraph must remain correct and coherent.
+
+Rollback/rejection:
+
+- Since this is a config-only experiment, no source rollback is expected.
+- Reject the config if any hard gate fails, if prefetch does not activate, if
+  useful-rate is poor with significant evictions, or if the promoted n96 run
+  does not beat Phase 3ZD.
+
+Result timestamp: 2026-07-02 23:15 UTC / 2026-07-03 07:15 CST.
+
+Strict n4 smoke:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-231251Z-n4-phase3ze-down-prefetch`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  12.494991 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  80135.18 ms, gate PASS.
+- Decode:
+  11.77365 s / 3 tokens = 3.92455 s/token, 0.25481 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=406, hits=406, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=1780, host_stage=2832.727 ms, h2d=386.130 ms.
+- Up/gate CPU profile:
+  calls=85, total=45.620 ms/call, cuda_batch=45.411,
+  fallback_t0=0.001, batch_accept=85, batch_decline=0.
+- Down CPU profile:
+  calls=550, total=148.648 ms/call, cuda_batch=1.663,
+  fallback_t0=146.860, batch_accept=160, batch_decline=52.
+- Down CUDA profile:
+  calls=160, stage=5.168 ms/call, kernel=0.119 ms/call,
+  wall=5.641 ms/call.
+- VRAM cache:
+  hits=1140, misses=1404, preloads=406, hit_rate=44.8%.
+
+Decision:
+
+- Continue to strict `-n 32` because hard gates passed and prefetch usefulness
+  is 100%.
+- Risk to watch:
+  up/gate time rose sharply versus Phase 3ZD/3Z smoke, so n32 must prove that
+  lower down staging offsets this contention before any n96 promotion.
+
+Result timestamp: 2026-07-02 23:19 UTC / 2026-07-03 07:19 CST.
+
+Strict n32 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-231617Z-n32-phase3ze-down-prefetch`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=8`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.839531 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  78625.00 ms, gate PASS.
+- Decode:
+  71.11917 s / 31 tokens = 2.29417 s/token, 0.43589 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3192, hits=3192, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13137, host_stage=17714.689 ms, h2d=2843.010 ms.
+- Up/gate CPU profile:
+  calls=869, total=29.081 ms/call, cuda_batch=28.903,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=28.305 ms/call, cuda_batch=1.413,
+  fallback_t0=26.841, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=3.245 ms/call, kernel=0.113 ms/call,
+  wall=3.441 ms/call.
+- VRAM cache:
+  hits=16105, misses=10855, preloads=3192, hit_rate=59.7%.
+
+Decision:
+
+- Do not promote to n96 yet.
+- Phase 3ZE n32 passes hard gates and proves down prefetch hides down staging,
+  but it also increases up/gate wall time.
+- The old Phase 3E n32 reference was 2.24573 s/token, faster than this
+  2.29417 s/token. However, it predates the corrected 15.9GB `BASHPID`
+  harness.
+- Before rejecting or promoting Phase 3ZE, run a strict no-prefetch n32 baseline
+  with the corrected harness. Use that apples-to-apples result as the n32
+  promotion decision.
+
+## Next measurement: Phase 3ZF strict n32 no-prefetch baseline
+
+Design timestamp: 2026-07-02 23:20 UTC / 2026-07-03 07:20 CST.
+
+Reason:
+
+- Phase 3ZE n32 is slower than the old Phase 3E n32 reference, but the old
+  reference was not collected with the corrected strict cgroup wrapper.
+- A current strict n32 no-prefetch baseline is required to avoid rejecting a
+  possibly useful config based on a mismatched harness.
+
+Run configuration:
+
+- Same source and strict harness as Phase 3ZD.
+- `-n 32`, `-t 32`, `-tb 32`.
+- Same env as Phase 3ZD:
+  - `GGML_MOE_PREFETCH_DOWN=0`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=0`,
+  - no trace/Q4/multirow experiments.
+
+Acceptance:
+
+- This is a measurement, not an optimization.
+- Must pass the same hard gates:
+  host RAM `< 16000000000`, TTFT `<= 106331.72 ms`, France quality PASS,
+  strict launch failures=0, read failures=0.
+- Use the result as the apples-to-apples n32 comparator:
+  - if Phase 3ZE n32 is slower, reject down prefetch without n96,
+  - if Phase 3ZE n32 is faster, continue to strict n96 promotion.
+
+Result timestamp: 2026-07-02 23:24 UTC / 2026-07-03 07:24 CST.
+
+Strict n32 no-prefetch baseline result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-232053Z-n32-phase3zf-no-prefetch-baseline`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.830254 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  81097.79 ms, gate PASS.
+- Decode:
+  71.62278 s / 31 tokens = 2.31041 s/token, 0.43282 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Pinned staging:
+  copies=13149, host_stage=17701.828 ms, h2d=2844.782 ms.
+- Up/gate CPU profile:
+  calls=869, total=18.898 ms/call, cuda_batch=18.744,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=30.734 ms/call, cuda_batch=3.791,
+  fallback_t0=26.891, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=9.035 ms/call, kernel=0.110 ms/call,
+  wall=9.265 ms/call.
+- VRAM cache:
+  hits=12906, misses=14038, preloads=0, hit_rate=47.9%.
+
+Comparison:
+
+- Phase 3ZE strict n32 down prefetch:
+  2.29417 s/token, 0.43589 tok/s.
+- Phase 3ZF strict n32 no-prefetch baseline:
+  2.31041 s/token, 0.43282 tok/s.
+- Prefetch improves the strict n32 decode by 0.01625 s/token, about 0.7%.
+- Mechanism:
+  - down stage improves 9.035 -> 3.245 ms/call,
+  - cache hit-rate improves 47.9% -> 59.7%,
+  - prefetch useful-rate is 100%,
+  - but up/gate regresses 18.898 -> 29.081 ms/call.
+
+Decision:
+
+- Continue to strict n96 promotion because the apples-to-apples n32 comparison
+  is positive and all hard gates passed.
+- Promotion threshold remains strict:
+  Phase 3ZE n96 must beat Phase 3ZD n96 2.69143 s/token and preserve full
+  France paragraph quality.
+
+Full promotion result timestamp: 2026-07-02 23:31 UTC / 2026-07-03 07:31 CST.
+
+Strict n96 down prefetch result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-232523Z-n96-phase3ze-down-prefetch`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.722328 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  77565.28 ms, gate PASS.
+- Decode:
+  230.51220 s / 85 tokens = 2.71191 s/token, 0.36874 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=9132, hits=9132, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35739, host_stage=49103.088 ms, h2d=7744.678 ms.
+- Up/gate CPU profile:
+  calls=2381, total=38.009 ms/call, cuda_batch=37.814,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=17.941 ms/call, cuda_batch=1.904,
+  fallback_t0=15.981, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=4.327 ms/call, kernel=0.114 ms/call,
+  wall=4.514 ms/call.
+- VRAM cache:
+  hits=42966, misses=31082, preloads=9132, hit_rate=58.0%.
+
+Comparison against strict baseline:
+
+- Phase 3ZD strict n96 no-prefetch:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZE strict n96 down prefetch:
+  2.71191 s/token, 0.36874 tok/s.
+- Down prefetch improves down stage substantially:
+  12.023 -> 4.327 ms/call.
+- But it regresses up/gate substantially:
+  23.352 -> 38.009 ms/call.
+- Host staging also rises:
+  47257.080 -> 49103.088 ms.
+
+Decision:
+
+- Reject Phase 3ZE.
+- The mechanism is correct and useful for down cache hits, but full-length
+  contention with up/gate makes total token rate worse under the strict n96
+  gate.
+- Do not use `GGML_MOE_PREFETCH_DOWN=1` in the accepted runtime unless a future
+  implementation isolates prefetch bandwidth/stream contention or throttles it
+  adaptively.
+
+## Next candidate: Phase 3ZG throttled down prefetch sweep
+
+Design timestamp: 2026-07-02 23:34 UTC / 2026-07-03 07:34 CST.
+
+Current bottleneck and gap:
+
+- Phase 3ZE depth=8 proved the prefetch mechanism is functionally correct:
+  - n96 prefetch useful-rate=100.0%,
+  - read failures=0,
+  - strict launch failures=0,
+  - quality PASS.
+- It also proved the implementation is too aggressive at full length:
+  - down stage improved 12.023 -> 4.327 ms/call,
+  - down hit-rate improved 45.7% -> 58.0%,
+  - but up/gate regressed 23.352 -> 38.009 ms/call,
+  - total n96 slowed 2.69143 -> 2.71191 s/token.
+- Therefore the bottleneck is no longer "can prefetch help"; it is "how much
+  prefetch can run without contending with up/gate compute/copy".
+
+Hypothesis:
+
+- Lower `GGML_MOE_PREFETCH_DOWN_DEPTH` should reduce prefetch stream pressure
+  and preserve more of the up/gate baseline while still improving down cache
+  misses.
+- Start with depth=2:
+  - expected prefetch load count roughly one quarter of depth=8,
+  - expected down stage improvement smaller than 3ZE,
+  - expected up/gate regression much smaller.
+- If depth=2 is still too aggressive, try depth=1.
+- If depth=2 is clearly better than strict no-prefetch n32 and has low up/gate
+  regression, promote depth=2 to n96.
+
+Theoretical bound:
+
+- Phase 3ZE n96 saved about 7.696 ms/call on 4506 down CUDA calls, a visible
+  down-stage reduction of roughly 34.7 s, but lost about 14.657 ms/call on
+  2381 up/gate calls, roughly 34.9 s, plus extra staging overhead.
+- A useful throttle must keep enough down-stage savings while reducing the
+  up/gate penalty below the savings.
+- If depth=2 keeps one quarter of the down-stage savings (~8.7 s) and reduces
+  the up/gate penalty below ~4 s, full n96 could improve by several seconds.
+
+Execution:
+
+1. Run strict cold `-n 32` with:
+   - `GGML_MOE_PREFETCH_DOWN=1`,
+   - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+2. Compare against Phase 3ZF strict n32 no-prefetch:
+   2.31041 s/token.
+3. If depth=2 passes all gates and beats 2.31041 s/token with up/gate total
+   much closer to baseline than depth=8, promote to strict n96.
+4. If depth=2 fails or is slower, reject depth=2 and try depth=1 only if the
+   profile shows up/gate contention remains the cause.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000` including page cache.
+- TTFT `<= 106331.72 ms`.
+- France output semantically correct and coherent.
+- Strict launch failures=0.
+- Read failures=0.
+- VRAM reserve visible, no OOM.
+- Down prefetch must activate and report useful-rate.
+
+Promotion:
+
+- n96 promotion must beat Phase 3ZD strict baseline:
+  2.69143 s/token, 0.37155 tok/s.
+- If n96 is slower, reject the config and keep Phase 3ZD as accepted runtime.
+
+Result timestamp: 2026-07-02 23:37 UTC / 2026-07-03 07:37 CST.
+
+Strict n32 depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-233303Z-n32-phase3zg-down-prefetch-depth2`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.849724 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  70547.30 ms, gate PASS.
+- Decode:
+  69.38871 s / 31 tokens = 2.23835 s/token, 0.44676 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=1446, hits=1446, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13136, host_stage=17221.128 ms, h2d=2842.400 ms.
+- Up/gate CPU profile:
+  calls=869, total=23.313 ms/call, cuda_batch=23.147,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=27.670 ms/call, cuda_batch=2.747,
+  fallback_t0=24.876, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=6.504 ms/call, kernel=0.112 ms/call,
+  wall=6.706 ms/call.
+- VRAM cache:
+  hits=14363, misses=12597, preloads=1446, hit_rate=53.3%.
+
+Comparison:
+
+- Phase 3ZF no-prefetch n32:
+  2.31041 s/token, 0.43282 tok/s.
+- Phase 3ZE depth=8 n32:
+  2.29417 s/token, 0.43589 tok/s.
+- Phase 3ZG depth=2 n32:
+  2.23835 s/token, 0.44676 tok/s.
+- Depth=2 is the best strict n32 result so far.
+- Mechanism:
+  - retains useful down staging reduction:
+    down stage 9.035 -> 6.504 ms/call vs no-prefetch,
+  - avoids depth=8's severe up/gate contention:
+    up/gate 29.081 -> 23.313 ms/call,
+  - improves host staging:
+    17701.828 -> 17221.128 ms.
+
+Decision:
+
+- Promote depth=2 to strict n96.
+- Full acceptance still requires beating Phase 3ZD strict n96:
+  2.69143 s/token, 0.37155 tok/s, with full France paragraph quality PASS.
+
+Full promotion result timestamp: 2026-07-02 23:42 UTC / 2026-07-03 07:42 CST.
+
+Strict n96 depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.719044 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  74433.41 ms, gate PASS.
+- Decode:
+  219.13904 s / 85 tokens = 2.57811 s/token, 0.38788 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3994, hits=3994, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35733, host_stage=50722.324 ms, h2d=7746.187 ms.
+- Up/gate CPU profile:
+  calls=2381, total=29.981 ms/call, cuda_batch=29.790,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=18.436 ms/call, cuda_batch=3.771,
+  fallback_t0=14.612, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=8.779 ms/call, kernel=0.111 ms/call,
+  wall=8.955 ms/call.
+- VRAM cache:
+  hits=37837, misses=36211, preloads=3994, hit_rate=51.1%.
+
+Comparison against accepted strict baseline:
+
+- Phase 3ZD strict n96 no-prefetch:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZG strict n96 depth=2:
+  2.57811 s/token, 0.38788 tok/s.
+- Improvement:
+  - 0.11333 s/token faster,
+  - about 4.2% lower seconds/token,
+  - about 4.4% higher token rate.
+
+Decision:
+
+- Accept Phase 3ZG depth=2 as the current best strict n96 runtime.
+- This is a config-level improvement; no source change is required.
+- Accepted runtime delta from Phase 3ZD:
+  - set `GGML_MOE_PREFETCH_DOWN=1`,
+  - set `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- Reproduction:
+  use `command.txt` and `env.txt` in the run directory after cold-start cache
+  drop inside a cgroup with `memory.max=15900000000` and `memory.swap.max=0`.
+- Future optimization target:
+  beat 2.57811 s/token under the same strict cold-start n96 gates.
+
+## Next candidate: Phase 3ZH down prefetch depth=1 check
+
+Design timestamp: 2026-07-02 23:45 UTC / 2026-07-03 07:45 CST.
+
+Current accepted best:
+
+- Phase 3ZG depth=2 strict n96:
+  2.57811 s/token, 0.38788 tok/s.
+- It improves over no-prefetch by throttling depth enough to avoid most of the
+  depth=8 up/gate contention while still improving down cache behavior.
+
+Remaining question:
+
+- Depth=2 still regresses up/gate versus no-prefetch:
+  - no-prefetch n32 up/gate: 18.898 ms/call,
+  - depth=2 n32 up/gate: 23.313 ms/call.
+- Depth=2 improves down stage:
+  - no-prefetch n32 down stage: 9.035 ms/call,
+  - depth=2 n32 down stage: 6.504 ms/call.
+- Depth=1 may reduce up/gate contention further, but may lose too much down
+  prefetch benefit.
+
+Hypothesis:
+
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=1` is a lower-bandwidth point on the same
+  tradeoff curve.
+- It could beat depth=2 if the up/gate penalty falls faster than the down
+  staging benefit disappears.
+- It should be tested at strict n32 first before spending a full n96 run.
+
+Execution:
+
+1. Run strict cold `-n 32` with:
+   - `GGML_MOE_PREFETCH_DOWN=1`,
+   - `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+2. Compare against:
+   - Phase 3ZF no-prefetch n32: 2.31041 s/token,
+   - Phase 3ZG depth=2 n32: 2.23835 s/token.
+3. Promote depth=1 to strict n96 only if it beats depth=2 n32 or provides a
+   clearly better projected full-length balance.
+
+Hard gates:
+
+- Same strict cgroup and cold-start gates as Phase 3ZG.
+- France quality PASS.
+- TTFT `<= 106331.72 ms`.
+- strict launch failures=0.
+- read failures=0.
+- prefetch must activate and report useful-rate.
+
+Decision rule:
+
+- If depth=1 is slower than depth=2 at n32, reject depth=1 and keep depth=2 as
+  current accepted runtime.
+- If depth=1 wins at n32, run strict n96 and require beating 2.57811 s/token.
+
+Result timestamp: 2026-07-02 23:48 UTC / 2026-07-03 07:48 CST.
+
+Strict n32 depth=1 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-234437Z-n32-phase3zh-down-prefetch-depth1`
+- Config:
+  Phase 3ZD env plus `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.846878 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  65625.23 ms, gate PASS.
+- Decode:
+  68.49730 s / 31 tokens = 2.20959 s/token, 0.45257 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=738, hits=738, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=13136, host_stage=17603.383 ms, h2d=2839.753 ms.
+- Up/gate CPU profile:
+  calls=869, total=20.613 ms/call, cuda_batch=20.452,
+  fallback_t0=0.001, batch_accept=869, batch_decline=0.
+- Down CPU profile:
+  calls=4022, total=26.340 ms/call, cuda_batch=3.047,
+  fallback_t0=23.249, batch_accept=1644, batch_decline=52.
+- Down CUDA profile:
+  calls=1644, stage=7.248 ms/call, kernel=0.110 ms/call,
+  wall=7.439 ms/call.
+- VRAM cache:
+  hits=13657, misses=13303, preloads=738, hit_rate=50.7%.
+
+Comparison:
+
+- Phase 3ZF no-prefetch n32:
+  2.31041 s/token, 0.43282 tok/s.
+- Phase 3ZG depth=2 n32:
+  2.23835 s/token, 0.44676 tok/s.
+- Phase 3ZH depth=1 n32:
+  2.20959 s/token, 0.45257 tok/s.
+- Depth=1 is now the best strict n32 result.
+- Mechanism:
+  - lowers up/gate contention versus depth=2:
+    23.313 -> 20.613 ms/call,
+  - retains some down improvement versus no-prefetch:
+    down stage 9.035 -> 7.248 ms/call,
+  - preserves 100% useful prefetch with no evicted-unused entries.
+
+Decision:
+
+- Promote depth=1 to strict n96.
+- It must beat the current accepted Phase 3ZG depth=2 n96:
+  2.57811 s/token, 0.38788 tok/s.
+
+Full promotion result timestamp: 2026-07-02 23:54 UTC / 2026-07-03 07:54 CST.
+
+Strict n96 depth=1 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-234846Z-n96-phase3zh-down-prefetch-depth1`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.710186 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 824 MiB.
+- TTFT:
+  75642.16 ms, gate PASS.
+- Decode:
+  227.63000 s / 85 tokens = 2.67800 s/token, 0.37341 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=2032, hits=2032, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35725, host_stage=47254.519 ms, h2d=7737.595 ms.
+- Up/gate CPU profile:
+  calls=2381, total=26.621 ms/call, cuda_batch=26.445,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=19.999 ms/call, cuda_batch=4.189,
+  fallback_t0=15.755, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=9.769 ms/call, kernel=0.111 ms/call,
+  wall=9.952 ms/call.
+- VRAM cache:
+  hits=35885, misses=38163, preloads=2032, hit_rate=48.5%.
+
+Comparison:
+
+- Phase 3ZD no-prefetch strict n96:
+  2.69143 s/token, 0.37155 tok/s.
+- Phase 3ZG depth=2 strict n96:
+  2.57811 s/token, 0.38788 tok/s.
+- Phase 3ZH depth=1 strict n96:
+  2.67800 s/token, 0.37341 tok/s.
+- Depth=1 beats no-prefetch slightly but is much slower than depth=2.
+- The n32 result over-predicted depth=1; at full length it under-prefetches:
+  up/gate contention is lower than depth=2, but down stage rises
+  8.779 -> 9.769 ms/call and cache hit-rate falls 51.1% -> 48.5%.
+
+Decision:
+
+- Reject depth=1 promotion.
+- Keep Phase 3ZG depth=2 as the current accepted strict n96 runtime:
+  `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+
+## Next candidate: Phase 3ZI down prefetch depth=3 full sweep
+
+Design timestamp: 2026-07-02 23:57 UTC / 2026-07-03 07:57 CST.
+
+Reason:
+
+- Full n96 is the only reliable comparator for this prefetch depth sweep:
+  - depth=1 had the best n32 result but lost to depth=2 at n96,
+  - depth=8 passed n32 but lost at n96 due to up/gate contention.
+- The current n96 curve:
+  - depth=0: 2.69143 s/token,
+  - depth=1: 2.67800 s/token,
+  - depth=2: 2.57811 s/token,
+  - depth=8: 2.71191 s/token.
+- The optimum may be near depth=2. Depth=3 is the next direct full-length check
+  around the accepted point.
+
+Hypothesis:
+
+- Depth=3 may keep more down-stage/cache benefit than depth=2 while adding only
+  modest up/gate contention.
+- If depth=3 crosses the contention knee, it will be slower than depth=2 and
+  should be rejected.
+
+Execution:
+
+- Run strict cold `-n 96` directly with:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=3`.
+- Direct n96 is justified because n32 has proven misleading for this parameter;
+  all tested depths in this bounded range have already passed quality, TTFT,
+  RAM, launch, and read gates.
+
+Hard gates:
+
+- Same strict cold-start gates as Phase 3ZG.
+- Full France paragraph quality PASS.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Strict launch failures=0.
+- Read failures=0.
+- Down prefetch active with useful-rate reported.
+
+Decision rule:
+
+- Accept depth=3 only if it beats the current accepted depth=2 result:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject depth=3 and keep depth=2 as the accepted runtime.
+
+Result timestamp: 2026-07-03 00:02 UTC / 2026-07-03 08:02 CST.
+
+Strict n96 depth=3 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260701-235652Z-n96-phase3zi-down-prefetch-depth3`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.729706 GiB.
+- VRAM:
+  peak 31288 MiB, minimum reserve 823 MiB.
+- TTFT:
+  74271.51 ms, gate PASS.
+- Decode:
+  227.11458 s / 85 tokens = 2.67194 s/token, 0.37426 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=5748, hits=5748, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=35738, host_stage=48510.158 ms, h2d=7740.982 ms.
+- Up/gate CPU profile:
+  calls=2381, total=32.341 ms/call, cuda_batch=32.154,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=18.837 ms/call, cuda_batch=3.193,
+  fallback_t0=15.584, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=7.396 ms/call, kernel=0.112 ms/call,
+  wall=7.582 ms/call.
+- VRAM cache:
+  hits=39586, misses=34462, preloads=5748, hit_rate=53.5%.
+
+Comparison:
+
+- depth=0: 2.69143 s/token.
+- depth=1: 2.67800 s/token.
+- depth=2: 2.57811 s/token.
+- depth=3: 2.67194 s/token.
+- depth=8: 2.71191 s/token.
+
+Decision:
+
+- Reject depth=3.
+- Keep Phase 3ZG depth=2 as the current accepted strict n96 runtime.
+- The full-length sweep shows depth=2 is the best tested throttle point:
+  - depth=1 under-prefetches,
+  - depth=3 and depth=8 add too much up/gate contention,
+  - depth=2 has the best total decode time despite non-minimal individual
+    down/up buckets.
+
+## Next candidate: Phase 3ZJ split cache plus depth=2 prefetch
+
+Design timestamp: 2026-07-03 00:08 UTC / 2026-07-03 08:08 CST.
+
+Current accepted best:
+
+- Phase 3ZG strict n96:
+  `GGML_MOE_PREFETCH_DOWN=1`,
+  `GGML_MOE_PREFETCH_DOWN_DEPTH=2`,
+  2.57811 s/token, 0.38788 tok/s.
+
+Current bottleneck/gap:
+
+- Depth=2 improves total decode but raises up/gate time:
+  - Phase 3ZD no-prefetch up/gate: 23.352 ms/call,
+  - Phase 3ZG depth=2 up/gate: 29.981 ms/call.
+- The old split-cache experiments failed as standalone full n96 improvements,
+  but they reduced up/gate time:
+  - Phase 2M split pct45 no-prefetch up/gate: 22.493 ms/call,
+  - Phase 2M split pct45 decode still lost because down cache became too small.
+- Combining split-cache with depth=2 may be complementary:
+  - split cache isolates up/gate from down/prefetch pressure,
+  - depth=2 offsets the smaller down pool by preloading upcoming down experts.
+
+Hypothesis:
+
+- Test:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`,
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`,
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=45`,
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`.
+- `SPLIT_MAX_MIB=6` routes Kimi up/gate experts into the upgate pool while
+  leaving larger down experts in the down pool.
+- `UPGATE_PCT=45` was the prior split setting that protected up/gate best,
+  and it is a conservative first combination with prefetch.
+
+Theoretical upper bound:
+
+- If split restores most of the up/gate regression from depth=2
+  (29.981 -> about 22-24 ms/call), it could save 14-19s over 2381 calls.
+- If the smaller down pool adds misses not covered by depth=2 prefetch, it can
+  lose those savings. The visible bound depends on down hit-rate and prefetch
+  useful-rate.
+- A useful result must keep down prefetch useful-rate high and avoid the old
+  split-only down-cache regression.
+
+Execution:
+
+- Run strict cold full `-n 96` directly.
+- Direct n96 is justified because previous split-cache and prefetch sweeps show
+  n32 can mis-rank full-length behavior.
+- This is a config-only experiment; no source change is expected.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Full France paragraph quality PASS.
+- Strict launch failures=0.
+- Read failures=0.
+- Logs must show two cache pools and down prefetch useful-rate.
+
+Decision rule:
+
+- Accept only if strict n96 beats current Phase 3ZG:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject and keep Phase 3ZG depth=2 unified cache as accepted runtime.
+
+Result timestamp: 2026-07-03 00:12 UTC / 2026-07-03 08:12 CST.
+
+Strict n96 split pct45 plus depth=2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-000532Z-n96-phase3zj-split-pct45-prefetch-depth2`
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.728348 GiB.
+- VRAM:
+  peak 31290 MiB, minimum reserve 821 MiB.
+- TTFT:
+  80087.73 ms, gate PASS.
+- Decode:
+  223.86929 s / 85 tokens = 2.63376 s/token, 0.37969 tok/s.
+- Quality:
+  PASS.
+- Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=3963, hits=3963, evicted_unused=0, useful_rate=100.0%.
+- Pinned staging:
+  copies=33492, host_stage=45611.884 ms, h2d=7256.822 ms.
+- Up/gate CPU profile:
+  calls=2381, total=28.267 ms/call, cuda_batch=28.081,
+  fallback_t0=0.001, batch_accept=2381, batch_decline=0.
+- Down CPU profile:
+  calls=10718, total=19.673 ms/call, cuda_batch=3.623,
+  fallback_t0=15.991, batch_accept=4506, batch_decline=52.
+- Down CUDA profile:
+  calls=4506, stage=8.430 ms/call, kernel=0.111 ms/call,
+  wall=8.604 ms/call.
+- Aggregate VRAM cache:
+  hits=40232, misses=33880, preloads=3963, hit_rate=54.3%.
+- Split pools:
+  - down: slots=1109, slot=7.44 MiB, hits=22199, misses=13817,
+    preloads=3963, hit_rate=61.6%.
+  - upgate: slots=1259, slot=5.36 MiB, hits=18033, misses=20063,
+    preloads=0, hit_rate=47.3%.
+
+Comparison:
+
+- Phase 3ZG unified depth=2:
+  2.57811 s/token, 0.38788 tok/s.
+- Phase 3ZJ split pct45 + depth=2:
+  2.63376 s/token, 0.37969 tok/s.
+- Split improves visible staging and down hit-rate:
+  - host_stage 50722.324 -> 45611.884 ms,
+  - down hit-rate 51.1% aggregate/unified -> 61.6% down-pool.
+- But upgate pool hit-rate is only 47.3%, and the total decode is still
+  slower than the unified depth=2 accepted runtime.
+
+Decision:
+
+- Reject Phase 3ZJ split pct45 + depth=2.
+- Keep Phase 3ZG unified cache depth=2 as the current accepted runtime.
+- A future split retry would need a larger upgate pool or different split
+  threshold, but fixed split-cache has repeatedly failed to beat unified cache
+  at full n96.
+
+## Next candidate: Phase 3ZK hybrid profile eviction plus depth=2 prefetch
+
+Design timestamp: 2026-07-03 00:16 UTC / 2026-07-03 08:16 CST.
+
+Current accepted best:
+
+- Phase 3ZG strict n96 unified cache + depth=2 prefetch:
+  2.57811 s/token, 0.38788 tok/s.
+
+Current bottleneck:
+
+- Even with depth=2 prefetch, unified cache still has many misses:
+  - hits=37837,
+  - misses=36211,
+  - hit_rate=51.1%,
+  - preloads=3994.
+- Full depth sweep shows fixed prefetch depth alone is saturated:
+  - depth=1 under-prefetches,
+  - depth=3/depth=8 add up/gate contention,
+  - depth=2 is best among tested depths.
+- Split cache improved down hit-rate but hurt total performance, so the next
+  cache attempt should not statically partition the cache.
+
+Hypothesis:
+
+- Use existing `hybrid_profile_lfu_lru` eviction with the accepted Phase 3ZG
+  route profile:
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2/route-profile.csv`
+  - `GGML_MOE_VRAM_CACHE_POLICY=hybrid_profile_lfu_lru`
+  - `GGML_MOE_VRAM_CACHE_PROFILE_AFTER=20000`
+  - keep `GGML_MOE_PREFETCH_DOWN=1`
+  - keep `GGML_MOE_PREFETCH_DOWN_DEPTH=2`
+- Do not enable `GGML_MOE_VRAM_PROFILE_PROTECT` and do not enable profile
+  preload. This avoids the Phase 2J preload/pinning overhead.
+- The hybrid policy stays LRU early and only switches to profile-weighted
+  victim selection after the cache has warmed up, avoiding the Phase 2T problem
+  where pure LFU/LRU over-protected early-hot experts.
+
+Theoretical upper bound:
+
+- If hybrid eviction reduces only 5% of the remaining 36211 misses without
+  increasing up/gate contention, it could avoid around 1800 loads. At observed
+  staging costs, that could save a few seconds on n96.
+- The realistic target is modest: beat 2.57811 s/token by any reproducible
+  amount while preserving quality and hard gates.
+
+Risks:
+
+- A bad profile policy can worsen long-run recency behavior, as Phase 2T did.
+- Profile lookup overhead can add CPU time.
+- The accepted depth=2 run's route profile is from the same prompt, so this is
+  prompt-specific. It is acceptable for this controlled optimization loop, but
+  must be documented as profile-guided.
+
+Execution:
+
+- Run strict cold full `-n 96` directly.
+- Direct n96 is justified because earlier cache policies and prefetch depths
+  repeatedly mis-ranked at n32.
+- This is config-only; no source rollback is expected.
+
+Hard gates:
+
+- `memory.max=15900000000`, `memory.swap.max=0`, entered via `BASHPID`.
+- Cold start with dropped page cache.
+- Host RAM `< 16000000000`.
+- TTFT `<= 106331.72 ms`.
+- Full France paragraph quality PASS.
+- Strict launch failures=0.
+- Read failures=0.
+- Down prefetch active with useful-rate reported.
+- Cache policy diag must show profile lookups/evictions.
+
+Decision rule:
+
+- Accept only if strict n96 beats Phase 3ZG:
+  2.57811 s/token, 0.38788 tok/s.
+- Otherwise reject and keep Phase 3ZG as accepted runtime.
+
+Result timestamp: 2026-07-03 00:19 UTC / 2026-07-03 08:19 CST.
+
+Strict n96 hybrid profile policy result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-001404Z-n96-phase3zk-hybrid-profile-prefetch-depth2`
+- Config:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`,
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2/route-profile.csv`,
+  - `GGML_MOE_VRAM_CACHE_POLICY=hybrid_profile_lfu_lru`,
+  - `GGML_MOE_VRAM_CACHE_PROFILE_AFTER=20000`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.683464 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 825 MiB.
+- TTFT:
+  74910.96 ms, gate PASS.
+- Decode:
+  313.31291 s / 95 tokens = 3.29803 s/token, 0.30321 tok/s.
+- Quality:
+  reject manually despite the simple flag returning true. The answer repeats
+  and contains awkward/corrupted phrasing:
+  `... Alpine mountains, and and charming countryside villages. It plays a major role in act European politics ... France is a country ...`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=4489, hits=1150, evicted_unused=3339, useful_rate=25.6%.
+- Pinned staging:
+  copies=40791, host_stage=60323.152 ms, h2d=8969.023 ms.
+- Up/gate CPU profile:
+  calls=2661, total=39.746 ms/call, cuda_batch=39.539,
+  fallback_t0=0.001, batch_accept=2661, batch_decline=0.
+- Down CPU profile:
+  calls=11958, total=21.466 ms/call, cuda_batch=5.918,
+  fallback_t0=15.471, batch_accept=5036, batch_decline=52.
+- Down CUDA profile:
+  calls=5036, stage=13.387 ms/call, kernel=0.111 ms/call,
+  wall=14.039 ms/call.
+- VRAM cache:
+  hits=37634, misses=45134, preloads=6188, hit_rate=45.5%.
+- Cache policy diag:
+  profile_count_lookups=49698, hits=39936, inserted_nonzero=41901,
+  inserted_avg=5.59, evictions=49306, victim_nonzero=39545,
+  victim_avg=4.81.
+
+Comparison:
+
+- Phase 3ZG accepted depth=2:
+  2.57811 s/token, down prefetch useful-rate=100.0%.
+- Phase 3ZK hybrid profile:
+  3.29803 s/token, down prefetch useful-rate=25.6%.
+
+Decision:
+
+- Reject Phase 3ZK.
+- The hybrid profile eviction policy destroys the useful prefetch behavior:
+  3339 prefetched down entries are evicted before use, increasing misses,
+  staging, and up/gate contention.
+- Do not combine `hybrid_profile_lfu_lru` with the accepted depth=2 prefetch
+  runtime without a new policy that explicitly protects pending/useful
+  prefetch entries.
+- Keep Phase 3ZG unified cache + depth=2 prefetch as accepted runtime.
+
+## Current execution pointer: Phase 3ZL strict accepted-runtime reprofile
+
+Design timestamp: 2026-07-02 20:22 CST.
+
+Reason for updating the plan now:
+
+- The next optimization cycle must restart from the strict constraints the user
+  restated:
+  - host RAM below 16 GB including page cache, process RSS, pinned memory,
+    helper process memory, and cgroup-accounted kernel memory;
+  - cold start only, with `sync; echo 3 > /proc/sys/vm/drop_caches` recorded;
+  - use VRAM deliberately and keep GPU compute/cache preferred over host tiers;
+  - France prompt quality must pass at every step;
+  - TTFT must stay `<= 106331.72 ms`;
+  - a performance improvement is accepted only if it is reproducible and then
+    committed and pushed immediately;
+  - a failed performance/quality/TTFT/RAM change is rejected, not stacked.
+- Phase 3ZG is the current accepted strict `-n 96` runtime:
+  - run directory:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2`
+  - host RAM peak: `15899996160` bytes, `14.808025 GiB`;
+  - VRAM peak: `31286 MiB`, minimum free/reserve `824 MiB`;
+  - TTFT: `74433.41 ms`;
+  - decode: `219.13904 s / 85 tokens = 2.5781063529411763 s/token`,
+    `0.38788159334822314 tok/s`;
+  - quality: PASS for `Please introduce France in a short paragraph.`;
+  - cache: `hits=37837`, `misses=36211`, `preloads=3994`,
+    `hit_rate=51.1%`;
+  - up/gate profile: `2381` calls, `29.981 ms/call`;
+  - down profile: `10718` calls, `18.436 ms/call`, with CUDA batch
+    `3.771 ms/call`, fallback `14.612 ms/call`;
+  - pinned staging: `host_stage=50722.324 ms`, `h2d=7746.187 ms`.
+
+Current bottleneck:
+
+- The accepted runtime is no longer dominated by the original full expert-pack
+  cold-read cost; down prefetch depth=2 already hides some down staging.
+- The remaining visible cost is split across:
+  - up/gate wall time: about `2381 * 29.981 ms = 71.39 s`;
+  - down wall time: about `10718 * 18.436 ms = 197.60 s`;
+  - pinned host staging: `50.72 s`;
+  - H2D staging: `7.75 s`.
+- `GGML_MOE_DOWN_PARALLEL_STAGE=1` was already tested in Phase 2U and rejected
+  for full `-n 96`: it improved local down stage at `-n 32` but regressed full
+  decode by shifting cost into up/gate/synchronization contention. Do not retest
+  it blindly on top of Phase 3ZG unless a new profile proves the contention
+  mechanism has changed.
+- Phase 3ZK showed that a profile-guided hybrid eviction policy can damage both
+  performance and quality when it evicts useful prefetch entries. Any cache
+  policy optimization must preserve pending/useful down-prefetch entries first.
+
+Next design/execution step:
+
+Run a strict cold `-n 96` reprofile of the accepted Phase 3ZG runtime before
+editing performance code. This is not a new optimization; it is the required
+bottleneck-location step before the next optimization method.
+
+The reprofile must use:
+
+- branch: `vendor/kimi-moe-stream-on-vendor`;
+- source commit: current pushed source commit, recorded in `command.txt`;
+- model:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`;
+- expert pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack`;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - move the executing child shell with `$BASHPID` before launching inference;
+- cold start:
+  - `sync; echo 3 > /proc/sys/vm/drop_caches`;
+  - record `memory.stat` before and after launch;
+- accepted Phase 3ZG env:
+  - `GGML_MOE_PREFETCH_DOWN=1`;
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`;
+  - same VRAM cache, graph reserve, expert-pack, and debug/profile env as the
+    accepted run.
+
+Measurements required for Phase 3ZL:
+
+- exact answer text and quality decision;
+- TTFT, decode seconds, decode tokens, seconds/token, token rate;
+- cgroup `memory.peak`, `memory.current`, page cache/file, anon/RSS proxy,
+  swap, OOM/max events;
+- VRAM before load, after load, first token, mid-decode, and after exit;
+- MoE counters:
+  - up/gate calls and wall/event time;
+  - down calls and wall/event time;
+  - fallback reasons, especially `multirow_not_supported`;
+  - cache hits/misses/preloads/evictions;
+  - down prefetch loads/hits/unused evictions/useful rate;
+  - pinned staging copies, host-stage time, H2D time;
+  - `direct_reads`, `iouring_reads`, `read_failures`;
+  - CUDA launch failures.
+
+Prioritization rule after Phase 3ZL:
+
+1. If down fallback time is still dominant and `multirow_not_supported` remains
+   the main decline reason, design a correctness-first down multirow solution
+   with a small proof case before touching full `-n 96`. Phase 3ZC's segfault
+   means this must start from tensor-shape/math proof, not from another quick
+   flattening attempt.
+2. If up/gate time regresses or dominates, investigate whether depth=2 down
+   prefetch is contending with up/gate cache/stream scheduling before adding
+   more prefetch.
+3. If host staging remains the largest removable bucket, analyze whether a
+   batched `io_uring` runtime-load path can replace per-copy direct reads
+   without increasing host RAM or TTFT. The theoretical bound must be computed
+   from expert tensor bytes, observed read bandwidth, H2D bandwidth, and number
+   of runtime misses.
+4. If no single bucket has at least a plausible 5% full-run gain, do not write a
+   speculative patch. Record the profile and choose the smallest diagnostic
+   change that disambiguates the bottleneck.
+
+Acceptance for the Phase 3ZL profile:
+
+- This profile is accepted as evidence only if all hard gates pass:
+  - host RAM `< 16 GB` under the strict cgroup;
+  - cold-start proof recorded;
+  - TTFT `<= 106331.72 ms`;
+  - France answer semantically correct and coherent;
+  - `read_failures=0` and CUDA launch failures `=0`;
+  - VRAM remains intentionally near full with explicit reserve recorded.
+- Phase 3ZL does not become a performance promotion unless it also
+  reproducibly beats Phase 3ZG. If it does beat Phase 3ZG, repeat once under the
+  same cold-start/cgroup rules before accepting, then commit and push the
+  updated plan/runtime config immediately.
+
+Rollback/rejection:
+
+- Any source change made after Phase 3ZL must be reverted if it worsens token
+  rate, fails quality, raises TTFT above the gate, exceeds strict host RAM, or
+  cannot be reproduced.
+- Env-only failed runs are recorded as rejected and must not be stacked into the
+  next candidate.
+
+Result timestamp: 2026-07-02 20:32 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-002710Z-n96-phase3zl-accepted-runtime-reprofile`
+
+Measured result:
+
+- Commit/config: `536c4715785f920ad16e700b86b41adbd4582845`, accepted Phase
+  3ZG runtime env.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID` before inference launch.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches` recorded in
+  `cold-start.txt`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`, below 16GB.
+- Page cache final: `13.726364 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `77413.38 ms`, inside the `106331.72 ms` gate.
+- Decode: `226.68758 s / 85 tokens = 2.666912705882353 s/token`,
+  `0.3749654039272906 tok/s`.
+- Quality: PASS. Exact answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.<|im_end|> [end of text]`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Declines: `multirow_not_supported=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=37837`, `misses=36211`, `preloads=3994`,
+    `hit_rate=51.1%`;
+  - down prefetch `loads=3994`, `hits=3994`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=35733`, `host_stage=49522.536 ms`,
+  `h2d=7740.443 ms`.
+- Expert pack: `direct_reads=35733`, `iouring_reads=0`, `read_failures=0`.
+- Up/gate profile:
+  - CPU profile: `2381` calls, `29.988 ms/call`,
+    `cuda_batch=29.798 ms/call`, `fallback_t0=0.001 ms/call`;
+  - CUDA wall profile: `29.772 ms/call`, `wall_gap=5.466 ms/call`.
+- Down profile:
+  - CPU profile: `10718` calls, `19.389 ms/call`,
+    `cuda_batch=3.831 ms/call`, `fallback_t0=15.500 ms/call`,
+    `batch_accept=4506`, `batch_decline=52`;
+  - CUDA batch profile: `4506` calls, `stage=8.915 ms/call`,
+    `kernel=0.111 ms/call`, `wall=9.100 ms/call`.
+
+Comparison:
+
+- Current accepted Phase 3ZG:
+  - `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`,
+    TTFT `74433.41 ms`.
+- Phase 3ZL reprofile:
+  - `2.666912705882353 s/token`, `0.3749654039272906 tok/s`,
+    TTFT `77413.38 ms`.
+
+Decision:
+
+- Accept Phase 3ZL as strict profiling evidence because every hard gate passed:
+  host RAM, cold start, VRAM, TTFT, semantic quality, read failures, and launch
+  failures.
+- Do not promote it as a new runtime because it is slower than Phase 3ZG.
+- Keep Phase 3ZG unified cache + depth=2 prefetch as the accepted runtime.
+
+Updated bottleneck:
+
+- Up/gate remains stable at about `71.4 s` visible aggregate time
+  (`2381 * 29.988 ms`), with essentially no fallback.
+- Down remains the highest priority:
+  - aggregate visible down profile is about `207.8 s`
+    (`10718 * 19.389 ms`);
+  - fallback is about `166.1 s` (`10718 * 15.500 ms`);
+  - accepted CUDA down kernel work itself is only about `0.111 ms/call`;
+  - only `52` calls explicitly decline as `multirow_not_supported`.
+- The name profile shows many expensive entries with `batch_eligible=0`, not
+  only accepted/declined down batch calls. The current profile does not explain
+  which eligibility predicate fails for those layers.
+- `GGML_MOE_GPU_HANDOFF=1` is not a safe shortcut: Phase 2I already showed
+  handoff activation with corrupt output (`France isneedator`).
+
+## Next candidate: Phase 3ZM down batch eligibility reason profile
+
+Design timestamp: 2026-07-02 20:44 CST.
+
+Current bottleneck:
+
+- Phase 3ZL proves the largest visible removable bucket is down fallback:
+  `15.500 ms/call` across `10718` calls, about `166 s` of the full run.
+- Only `52` down batch calls are known declines with reason
+  `multirow_not_supported`.
+- Many high-cost layer entries report `batch_eligible=0`, but the current CPU
+  name profile only records the final boolean `use_gpu_stream_batch`; it does
+  not say whether the failure is:
+  - env missing;
+  - CUDA function pointer unavailable;
+  - stream runtime unavailable;
+  - unsupported quant type/name;
+  - `src1` not F32;
+  - `ne13 != 1`;
+  - `dst` not F32.
+
+Hypothesis:
+
+Add a default-off diagnostic profile controlled by
+`GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`. It must not change math, routing,
+cache policy, launch conditions, or accepted runtime behavior unless the env is
+set. With the env set, it should aggregate per-name eligibility failure counts
+and print them next to `kimi_cpu_moe_name_profile`.
+
+Theoretical value and bound:
+
+- This diagnostic does not directly improve token rate, so it has no
+  performance promotion bound.
+- It bounds the next implementation choice:
+  - if `ne13 != 1` dominates, the next mathematical target is a decode/prompt
+    shape split or multirow-safe down batch;
+  - if unsupported type/name dominates, the next target is quant/type coverage;
+  - if `src1` or `dst` layout dominates, the next target is a layout-preserving
+    GPU path;
+  - if runtime availability dominates, the issue is scheduling/config rather
+    than kernel math.
+- The optimization ceiling remains the Phase 3ZL fallback bucket: a perfect
+  removal of down fallback would bound the run near
+  `(226.68758 - 166.1) / 85 = 0.713 s/token` before new GPU/cache overhead.
+  A realistic first target is removing 10-20% of that fallback bucket, which
+  would improve full decode by about `16-33 s`, enough to exceed Phase 3ZG if
+  quality and TTFT hold.
+
+Execution:
+
+1. Implement only default-off counters and reporting in `ggml/src/ggml-cpu`.
+2. Build the remote CUDA target.
+3. Run a strict cold `-n 32` diagnostic with:
+   - accepted Phase 3ZG runtime env;
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - strict `memory.max=15900000000`, `memory.swap.max=0`;
+   - cold `sync; echo 3 > /proc/sys/vm/drop_caches`;
+   - France prompt quality gate.
+4. Promote to `-n 96` diagnostic only if `-n 32` passes quality/RAM/TTFT and
+   produces actionable eligibility reason counts.
+
+Acceptance:
+
+- Source change is accepted only as diagnostic/default-off code.
+- With diagnostic env enabled:
+  - build succeeds;
+  - host RAM remains below 16GB including page cache;
+  - TTFT remains `<= 106331.72 ms`;
+  - answer is semantically correct for the France prompt;
+  - `read_failures=0`, launch failures `=0`;
+  - logs show per-name or aggregate eligibility reason counts.
+- It is not a performance promotion and must not replace Phase 3ZG.
+
+Rollback:
+
+- Revert the source change if it affects default runtime behavior, breaks the
+  build, changes output quality, introduces launch/read failures, or causes
+  unacceptable profiling overhead under the diagnostic env.
+
+Result timestamp: 2026-07-02 20:44 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-003738Z-n32-phase3zm-down-eligibility-profile`
+
+Measured result:
+
+- Source state: `536c4715785f920ad16e700b86b41adbd4582845-dirty-phase3zm`,
+  default-off diagnostic counters added to `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.832169 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `74933.04 ms`, inside the `106331.72 ms` gate.
+- Decode: `71.21795 s / 31 tokens = 2.2973532258064515 s/token`,
+  `0.4352835205169483 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `23.836 ms/call`,
+  `cuda_batch=23.643 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.985 ms/call`, `cuda_batch=2.746 ms/call`,
+  `fallback_t0=26.191 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17836.630 ms`,
+  `h2d=2843.779 ms`.
+
+Eligibility result:
+
+- The diagnostic profile printed 40 ranked eligibility lines.
+- High-cost ineligible entries are dominated by `unsupported`, not by
+  `ne13_not1`, `src1_not_f32`, `dst_not_f32`, runtime availability, or env
+  gating.
+- Examples:
+  - `blk.9.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.6.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.7.ffn_down_exps.weight`: `unsupported=32`;
+  - `blk.18.ffn_down_exps.weight`: `unsupported=32`;
+  - many `ffn_gate_exps` / `ffn_up_exps` entries also show
+    `unsupported=32`.
+- This changes the bottleneck interpretation: the large fallback bucket is not
+  mainly from the 52 multirow declines. It is mostly unsupported tensor
+  type/name combinations in the generic `mul_mat_id` path.
+
+Decision:
+
+- Accept Phase 3ZM as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, and launch failure gates
+  passed.
+- Do not promote it as a runtime improvement.
+- The diagnostic is still incomplete for implementation planning because it
+  prints the reason but not the numeric `src0->type`. The next step must add
+  tensor type to the eligibility profile before changing kernel support.
+
+## Next candidate: Phase 3ZN eligibility profile with tensor type
+
+Design timestamp: 2026-07-02 20:53 CST.
+
+Current bottleneck:
+
+- Phase 3ZM proves that `unsupported` dominates the high-cost ineligible
+  entries, but it does not tell which quant type is unsupported.
+- Without `src0->type`, extending support would be guessing. That is unsafe
+  because previous direct mathematical changes, such as Phase 3ZC flattening
+  and Phase 2I handoff, produced crashes or semantic corruption.
+
+Hypothesis:
+
+Extend the default-off eligibility diagnostic to print the numeric `src0->type`
+for each profiled tensor name. This still must not alter math or runtime
+selection. With type information, the next real optimization can rank:
+
+- adding missing type coverage to the up/gate batch path;
+- adding missing type coverage to the down batch path;
+- rejecting a type if no matching CUDA kernel exists;
+- or leaving it on CPU if the theoretical gain is smaller than the risk.
+
+Theoretical value and bound:
+
+- This step is still diagnostic-only and has no direct token-rate promotion
+  bound.
+- It enables a hard upper bound for the next implementation by summing fallback
+  time for names of the same unsupported type and comparing it with the
+  existing accepted CUDA batch cost for supported types.
+
+Execution:
+
+1. Add `src0_type` to the default-off
+   `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1` output.
+2. Rebuild remote CUDA `llama-completion`.
+3. Run strict cold `-n 32` with the same Phase 3ZM env and gates.
+4. Record the type-ranked unsupported entries and decide the next actual
+   optimization target.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, TTFT, semantic quality, VRAM, read
+  failure, and launch failure gates.
+- Logs contain `src0_type` for the eligibility lines.
+
+Rollback:
+
+- Revert if the default-off diagnostic affects runtime behavior, build fails,
+  quality fails, TTFT fails, or the profile no longer prints actionable
+  eligibility lines.
+
+Result timestamp: 2026-07-02 21:03 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-004324Z-n32-phase3zn-eligibility-type-profile`
+
+Measured result:
+
+- Source state: `536c4715785f920ad16e700b86b41adbd4582845-dirty-phase3zn`,
+  Phase 3ZM diagnostic plus `src0_type` in eligibility output.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.824005 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `75189.51 ms`, inside the `106331.72 ms` gate.
+- Decode: `71.38612 s / 31 tokens = 2.302778064516129 s/token`,
+  `0.4342580882670189 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `23.036 ms/call`,
+  `cuda_batch=22.852 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.647 ms/call`, `cuda_batch=2.771 ms/call`,
+  `fallback_t0=25.833 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17685.176 ms`,
+  `h2d=2845.054 ms`.
+
+Eligibility/type result:
+
+- The diagnostic profile printed 40 ranked lines with `src0_type`.
+- Type mapping from `ggml/include/ggml.h`:
+  - `2 = GGML_TYPE_Q4_0`;
+  - `11 = GGML_TYPE_Q3_K`;
+  - `18 = GGML_TYPE_IQ3_XXS`;
+  - `22 = GGML_TYPE_IQ2_S`;
+  - `23 = GGML_TYPE_IQ4_XS`.
+- Top visible unsupported counts by `src0_type`:
+  - `18`: `640` top-line unsupported counts, mostly `ffn_gate_exps` and
+    `ffn_up_exps` entries in the generic `mul_mat_id` path;
+  - `2`: `224` top-line unsupported counts, all visible examples are
+    `ffn_down_exps` Q4_0 layers (`blk.6`, `blk.7`, `blk.8`, `blk.9`,
+    `blk.10`, `blk.15`, `blk.18`);
+  - `22`: `96` top-line unsupported counts, visible as `ffn_up_exps`;
+  - `11` and `23`: visible down entries are eligible.
+
+Decision:
+
+- Accept Phase 3ZN as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, launch failure, and
+  profile-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record before attempting a real
+  optimization patch.
+
+Next bottleneck conclusion:
+
+- The safest first implementation target is Q4_0 down batch coverage:
+  - it is specifically a down tensor path, unlike the IQ3_XXS/IQ2_S up/gate
+    entries that may reflect prompt/generic fallback interactions;
+  - Q4_0 is already supported by CUDA MMVQ (`mmvq.cu` has Q4_0 switch cases);
+  - the current `launch_moe_mmvq_compact_batch` whitelist excludes Q4_0, so the
+    initial code change is narrow and testable.
+
+## Next candidate: Phase 3ZO Q4_0 down batch coverage
+
+Design timestamp: 2026-07-02 21:08 CST.
+
+Current bottleneck:
+
+- Phase 3ZN shows Q4_0 down layers are currently rejected before CUDA down
+  batch because `ggml_cuda_moe_stream_supports_down_batch()` does not include
+  `GGML_TYPE_Q4_0`, and `launch_moe_mmvq_compact_batch()` also excludes it.
+- Visible examples in the `-n 32` top profile:
+  - `blk.6.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.7.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.8.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.9.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.10.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.15.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`;
+  - `blk.18.ffn_down_exps.weight`, `src0_type=2`, `unsupported=32`.
+- Existing CUDA support evidence:
+  - `ggml/src/ggml-cuda/mmvq.cu` includes Q4_0 in
+    `mul_mat_vec_q_switch_type`;
+  - `ggml_cuda_moe_stream_mmvq_dev()` routes through that switch;
+  - therefore the minimal testable change is to admit Q4_0 through the Kimi
+    MoE down-batch eligibility/launch whitelist.
+
+Hypothesis:
+
+Add `GGML_TYPE_Q4_0` to:
+
+- `ggml_cuda_moe_stream_supports_down_batch()` in `ggml/src/ggml-cpu`;
+- `launch_moe_mmvq_compact_batch()` in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+
+This should move Q4_0 `ffn_down_exps` layers from CPU fallback to the same CUDA
+MMVQ down batch path used by Q3_K/IQ4_XS down layers, without changing routing,
+cache policy, prompt multirow handling, or up/gate behavior.
+
+Theoretical upper bound:
+
+- Phase 3ZN `-n 32` top-line Q4_0 unsupported counts cover `224` calls across
+  the top 40 names. Each Q4_0 down layer appears once per token in the generic
+  fallback path.
+- If these calls move to the accepted down CUDA profile, their compute part
+  should be near the existing CUDA down kernel scale (`~0.111 ms/call`) plus
+  staging/cache cost, not the CPU fallback cost.
+- The realistic upper bound for this narrow patch is a fraction of Phase 3ZN's
+  generic fallback bucket:
+  - Phase 3ZN fallback bucket: `4022 * 25.833 ms = 103.9 s`;
+  - visible Q4_0 unsupported calls: `224 / 4022 = 5.6%` of calls;
+  - if their average fallback cost is similar to the generic average, maximum
+    `-n 32` savings is about `5.8 s`, or `0.19 s/token`;
+  - full `-n 96` bound scales to roughly `16 s`, enough to beat Phase 3ZG if
+    the staging overhead does not erase the gain.
+- If measured speedup is much smaller, inspect whether Q4_0 staging/cache
+  misses or new CUDA launch overhead consumes the removed CPU fallback time.
+
+Execution:
+
+1. Implement only Q4_0 down eligibility/launch whitelist expansion.
+2. Build remote CUDA `llama-completion`.
+3. Run strict cold `-n 4` with accepted Phase 3ZG env plus eligibility profile:
+   - quality must at least produce coherent `France is...`;
+   - Q4_0 down entries should become eligible/accepted, not unsupported;
+   - `launch_moe_mmvq_compact_batch` failures must remain zero.
+4. If `-n 4` passes, run strict cold `-n 32`.
+5. Promote to strict cold `-n 96` only if `-n 32` improves seconds/token versus
+   the comparable Phase 3ZN diagnostic and preserves all hard gates.
+
+Acceptance:
+
+- Host RAM `< 16 GB` including page cache.
+- Cold-start proof recorded.
+- VRAM remains near full with reserve recorded.
+- TTFT `<= 106331.72 ms`.
+- France prompt output is semantically correct and coherent.
+- `read_failures=0`; CUDA launch failures `=0`.
+- Q4_0 down entries no longer show `unsupported` in eligibility profile.
+- `-n 96` promotion must beat current accepted Phase 3ZG:
+  `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`.
+
+Rollback:
+
+- Revert Q4_0 source changes if build fails, output quality fails, TTFT exceeds
+  the gate, RAM/VRAM gates fail, Q4_0 launch errors appear, or `-n 32` does
+  not show a credible improvement.
+
+Smoke result timestamp: 2026-07-02 21:16 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-005027Z-n4-phase3zo-q4down-smoke`
+
+Measured result:
+
+- Initial Q4_0 patch:
+  - added `GGML_TYPE_Q4_0` to CPU-side
+    `ggml_cuda_moe_stream_supports_down_batch()`;
+  - added `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()`.
+- Build: passed.
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- TTFT: `74328.88 ms`, pass.
+- Decode: `10.26055 s / 3 tokens = 3.42018 s/token`.
+- Quality: PASS for smoke answer `France is a country`.
+- `read_failures=0`; launch failures `=0`.
+- Q4_0 eligibility top lines changed from unsupported to eligible:
+  - `q4_down_unsupported_top=0`;
+  - `q4_down_eligible_top=28`.
+- Down profile: `550` calls, `145.418 ms/call`,
+  `cuda_batch=3.469 ms/call`, `fallback_t0=141.841 ms/call`,
+  `batch_accept=160`, `batch_decline=80`.
+
+Gap:
+
+- `-n 32` with the initial patch showed the Q4_0 entries as CPU-eligible, but
+  `ggml_cuda_moe_stream_batch()` still declined them internally with
+  `reason=unsupported_type`.
+- Root cause: CUDA-side `moe_stream_type_supported()` did not include
+  `GGML_TYPE_Q4_0`.
+- Fix for v2: also add `GGML_TYPE_Q4_0` to `moe_stream_type_supported()`.
+
+V2 smoke result timestamp: 2026-07-02 21:20 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-005814Z-n4-phase3zo-q4down-v2-smoke`
+
+Measured result:
+
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- TTFT: `76862.57 ms`, pass.
+- Decode: `10.33272 s / 3 tokens = 3.44424 s/token`.
+- Quality: PASS for smoke answer `France is a country`.
+- `read_failures=0`; launch failures `=0`.
+- Declines: only `multirow_not_supported=59`; `unsupported_type=0`.
+- Down profile: `549` calls, `147.811 ms/call`,
+  `cuda_batch=4.410 ms/call`, `fallback_t0=143.294 ms/call`,
+  `batch_accept=181`, `batch_decline=59`.
+
+V2 `-n 32` result timestamp: 2026-07-02 21:25 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-010103Z-n32-phase3zo-q4down-v2`
+
+Measured result:
+
+- Host RAM peak: `14.808025 GiB`, under strict cgroup.
+- VRAM peak: `31290 MiB`; minimum free/reserve: `821 MiB`.
+- TTFT: `78104.04 ms`, pass.
+- Decode: `78.15089 s / 31 tokens = 2.5209964516129033 s/token`,
+  `0.3966685472168007 tok/s`.
+- Answer text:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- The answer is semantically plausible as a prefix, but the run is rejected on
+  performance before any promotion decision.
+- `read_failures=0`; launch failures `=0`.
+- Declines: only `multirow_not_supported=59`; `unsupported_type=0`.
+- Down profile: `4022` calls, `30.735 ms/call`,
+  `cuda_batch=4.222 ms/call`, `fallback_t0=26.444 ms/call`,
+  `batch_accept=1861`, `batch_decline=59`.
+- Up/gate profile regressed: `28.608 ms/call` versus Phase 3ZN
+  `23.036 ms/call`.
+- Cache/staging regressed:
+  - VRAM cache `hits=13372`, `misses=15276`, `preloads=1706`,
+    `hit_rate=46.7%`;
+  - Phase 3ZN cache hit rate was `53.3%`;
+  - pinned staging `host_stage=21237.318 ms`, `h2d=3451.761 ms`;
+  - Phase 3ZN staging was `host_stage=17685.176 ms`, `h2d=2845.054 ms`.
+
+Comparison:
+
+- Phase 3ZN diagnostic baseline:
+  - `2.302778064516129 s/token`, `0.4342580882670189 tok/s`.
+- Phase 3ZO v2:
+  - `2.5209964516129033 s/token`, `0.3966685472168007 tok/s`.
+- Current accepted Phase 3ZG full `-n 96`:
+  - `2.5781063529411763 s/token`, `0.38788159334822314 tok/s`.
+
+Decision:
+
+- Reject Phase 3ZO.
+- Revert all Q4_0 source changes locally and remotely.
+- Do not run full `-n 96`; the `-n 32` diagnostic clearly regressed against the
+  comparable Phase 3ZN run.
+- Keep only the accepted default-off eligibility diagnostic code from
+  `7d2dcd47a`.
+
+Gap analysis:
+
+- The original theory was incomplete. Q4_0 down batch did remove the
+  `unsupported_type` decline and increased down batch accepts, but the extra
+  Q4_0 GPU path increased CUDA/staging/cache pressure more than it removed CPU
+  fallback.
+- The evidence points to cache/stream contention:
+  - cache hit rate dropped from `53.3%` to `46.7%`;
+  - host staging increased by about `3.55 s`;
+  - H2D increased by about `0.61 s`;
+  - up/gate time worsened by about `5.57 ms/call`.
+- Future type-coverage work must include cache impact in the theoretical bound,
+  not only CPU fallback removal.
+
+Next direction:
+
+- Do not reattempt Q4_0 down batch without a cache-protected policy or a
+  per-type/layer allowlist that proves it does not evict useful Q3_K/IQ4_XS
+  entries.
+- Use the eligibility diagnostic to rank unsupported up/gate `IQ3_XXS`/`IQ2_S`
+  generic fallback, but first distinguish prompt-only generic calls from decode
+  calls so the implementation target is not inflated by prompt behavior.
+
+## Next candidate: Phase 3ZP eligibility phase split
+
+Design timestamp: 2026-07-02 21:38 CST.
+
+Current bottleneck:
+
+- Phase 3ZN shows many unsupported `ffn_gate_exps`/`ffn_up_exps` entries in the
+  generic `mul_mat_id` path, mostly `src0_type=18` (`IQ3_XXS`) and
+  `src0_type=22` (`IQ2_S`).
+- The current eligibility diagnostic does not say whether these unsupported
+  entries happen during prompt/multi-token evaluation or during decode.
+- Treating prompt-only generic fallback as decode optimization opportunity
+  would violate the planning rule: the next implementation target must be
+  based on the current token-rate bottleneck, not an inflated mixed-phase
+  profile.
+
+Hypothesis:
+
+Add a default-off phase split to the existing eligibility profile:
+
+- `decode_*` counters when `ids->ne[1] == 1`;
+- `prompt_*` counters when `ids->ne[1] > 1`.
+
+This uses the same shape value already used to build `matrix_rows`; it should
+not alter math, routing, cache policy, or launch decisions.
+
+Theoretical value and bound:
+
+- This is diagnostic-only and has no direct token-rate promotion bound.
+- It enables the next real optimization to compute a hard upper bound from
+  decode-only unsupported fallback, rather than mixed prompt+decode fallback.
+- If the unsupported `IQ3_XXS`/`IQ2_S` entries are prompt-only, skip them for
+  token-rate work and return to cache/prefetch policy. If they are decode-heavy,
+  rank by decode fallback time and type before designing a kernel/type change.
+
+Execution:
+
+1. Extend `ggml_kimi_cpu_moe_name_profile_entry` with prompt/decode
+   eligibility reason counters.
+2. Pass `ids->ne[1] > 1` as the prompt flag when recording eligibility in
+   `ggml_compute_forward_mul_mat_id`.
+3. Print per-name phase counts only when
+   `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`.
+4. Build remote CUDA `llama-completion`.
+5. Run strict cold `-n 32` using the accepted Phase 3ZG env plus:
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`.
+
+Acceptance:
+
+- Source change is accepted only as default-off diagnostic code.
+- Build succeeds.
+- Strict cold `-n 32` passes:
+  - host RAM `< 16 GB` including page cache;
+  - TTFT `<= 106331.72 ms`;
+  - France prompt semantic quality;
+  - `read_failures=0`;
+  - CUDA launch failures `=0`;
+  - VRAM near the accepted runtime reserve.
+- Logs contain decode/prompt split counters for eligibility lines.
+
+Rollback:
+
+- Revert if the default-off diagnostic changes runtime behavior, breaks the
+  build, causes quality/TTFT/RAM failures, or fails to print actionable phase
+  counters.
+
+Result timestamp: 2026-07-02 21:48 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-010911Z-n32-phase3zp-eligibility-phase-split`
+
+Measured result:
+
+- Source state: `541bd512d-dirty-phase3zp`, default-off phase split added to
+  eligibility profile.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.831226 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `76040.36 ms`, inside the `106331.72 ms` gate.
+- Decode: `70.93261 s / 31 tokens = 2.288148709677419 s/token`,
+  `0.4370345317901033 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `22.596 ms/call`,
+  `cuda_batch=22.430 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `29.455 ms/call`, `cuda_batch=2.737 ms/call`,
+  `fallback_t0=26.668 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17315.407 ms`,
+  `h2d=2840.795 ms`.
+
+Phase split result:
+
+- Top visible unsupported counts by `src0_type` and phase:
+  - `2 = Q4_0`: `decode_unsupported=217`,
+    `prompt_unsupported=7`;
+  - `18 = IQ3_XXS`: `decode_unsupported=620`,
+    `prompt_unsupported=20`;
+  - `22 = IQ2_S`: `decode_unsupported=93`,
+    `prompt_unsupported=3`.
+- Supported down types remain decode-eligible:
+  - `11 = Q3_K`: `decode_eligible=186`, `prompt_eligible=6`;
+  - `23 = IQ4_XS`: `decode_eligible=124`, `prompt_eligible=4`.
+
+Decision:
+
+- Accept Phase 3ZP as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, launch failure, VRAM, and
+  phase-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- Unsupported entries are not prompt-only; the top visible unsupported counts
+  are overwhelmingly decode-phase.
+- Q4_0 down coverage remains rejected because Phase 3ZO showed that moving Q4_0
+  down to GPU increases cache/staging/up-gate contention and slows `-n 32`.
+- The largest remaining visible unsupported class is `IQ3_XXS` (`src0_type=18`)
+  in `ffn_gate_exps`/`ffn_up_exps`, followed by `IQ2_S` (`src0_type=22`).
+- However, the current diagnostic still only gives phase counts, not phase/type
+  time. Before implementing another type/kernel change, measure fallback time
+  by prompt/decode phase and tensor type/name.
+
+## Next candidate: Phase 3ZQ fallback time phase/type split
+
+Design timestamp: 2026-07-02 21:53 CST.
+
+Current bottleneck:
+
+- Phase 3ZP identifies decode-heavy unsupported entries, especially
+  `IQ3_XXS` up/gate names.
+- The current top-name profile reports total time and fallback time per name,
+  but not whether that time is prompt or decode.
+- Counts alone are not enough to compute a defensible upper bound. The next
+  optimization must be ranked by decode fallback time, not just number of
+  unsupported calls.
+
+Hypothesis:
+
+Extend the default-off name profile with prompt/decode time split:
+
+- `decode_total_us`, `decode_fallback_us`, `decode_calls`;
+- `prompt_total_us`, `prompt_fallback_us`, `prompt_calls`.
+
+Use the same phase flag from Phase 3ZP (`ids->ne[1] > 1`). This is diagnostic
+only and should not alter runtime decisions.
+
+Theoretical value and bound:
+
+- This diagnostic has no direct token-rate promotion bound.
+- It enables the next actual optimization to compute:
+  - total decode fallback time for `IQ3_XXS` up/gate names;
+  - total decode fallback time for `IQ2_S` up names;
+  - whether the possible gain is large enough to justify a CUDA path despite
+    the Phase 3ZO cache-staging regression lesson.
+
+Execution:
+
+1. Add phase time counters to `ggml_kimi_cpu_moe_name_profile_entry`.
+2. Record total/fallback time into prompt or decode buckets when recording a
+   name profile entry.
+3. Print per-name phase time when `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`.
+4. Build remote CUDA `llama-completion`.
+5. Run strict cold `-n 32` with the same accepted Phase 3ZG env and profile
+   env used in Phase 3ZP.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Logs contain per-name decode/prompt total and fallback timings.
+
+Rollback:
+
+- Revert if the default-off diagnostic changes runtime behavior, breaks build,
+  fails hard gates, or does not produce actionable timing split.
+
+Result timestamp: 2026-07-02 22:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-011555Z-n32-phase3zq-fallback-time-split`
+
+Measured result:
+
+- Source state: `e6f19f131-dirty-phase3zq`, default-off phase time split added
+  to the Kimi CPU MoE name profile.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.850849 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `77894.97 ms`, inside the `106331.72 ms` gate.
+- Decode: `70.36203 s / 31 tokens = 2.2697429032258067 s/token`,
+  `0.4405783063256717 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `22.785 ms/call`,
+  `cuda_batch=22.600 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.698 ms/call`, `cuda_batch=2.678 ms/call`,
+  `fallback_t0=25.972 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - pinned staging `copies=13136`, `host_stage=18034.632 ms`,
+    `h2d=2844.721 ms`.
+
+Decode fallback time by `src0_type`:
+
+- `2 = Q4_0`: `decode_fallback_s=5.35246`,
+  `prompt_fallback_s=4.22665`, `decode_unsupported=217`,
+  `prompt_unsupported=7`.
+- `18 = IQ3_XXS`: `decode_fallback_s=5.643922`,
+  `prompt_fallback_s=5.320042`, `decode_unsupported=403`,
+  `prompt_unsupported=13`.
+- `22 = IQ2_S`: `decode_fallback_s=4.609576`,
+  `prompt_fallback_s=3.267975`, `decode_unsupported=279`,
+  `prompt_unsupported=9`.
+- `11 = Q3_K`: `decode_fallback_s=0.000279`,
+  `prompt_fallback_s=3.990211`.
+- `23 = IQ4_XS`: `decode_fallback_s=0.000248`,
+  `prompt_fallback_s=3.446672`.
+
+Decision:
+
+- Accept Phase 3ZQ as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, VRAM, and actionable
+  timing-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- Decode fallback time is real and material: the top unsupported type buckets
+  account for about `15.61 s` of the `70.36 s` n32 decode wall time.
+- Q4_0 remains excluded from the next speed patch because Phase 3ZO showed that
+  adding Q4_0 GPU down coverage regresses cache hit rate, staging, H2D, and
+  up/gate time.
+- `IQ3_XXS` and `IQ2_S` are the next visible fallback buckets by decode time,
+  but a direct type-support patch may repeat the Phase 3ZO cache contention
+  failure unless the exact graph path is understood.
+
+## Next candidate: Phase 3ZR fused up/gate graph attribution
+
+Design timestamp: 2026-07-02 22:24 CST.
+
+Current bottleneck:
+
+- Phase 3ZQ shows decode fallback time in `IQ3_XXS` and `IQ2_S` generic
+  `mul_mat_id` entries.
+- The graph builder only selects `ggml_moe_up_gate` when all fused up/gate
+  conditions are true:
+  - `GGML_MOE_STREAM_FUSED_UP_GATE` is enabled;
+  - `n_tokens == 1`;
+  - `gate_up_exps == nullptr`;
+  - `up_exps != nullptr`;
+  - `gate_exps != nullptr`;
+  - `up_exps_b == nullptr`;
+  - `gate_exps_b == nullptr`;
+  - `up_exps_s == nullptr`;
+  - `gate_exps_s == nullptr`;
+  - `type_op == LLM_FFN_SILU`;
+  - `up_exps->type == gate_exps->type`;
+  - `ggml_are_same_shape(up_exps, gate_exps)`.
+- Before changing math or adding a new type path, determine exactly which of
+  these conditions fails for the decode fallback names.
+
+Hypothesis:
+
+The remaining decode fallback may come from graph construction not choosing the
+vendor fused up/gate op for some Kimi FFN blocks, possibly because scale
+tensors, tensor type mismatch, or shape checks disable the fused path. A
+default-off graph attribution log can identify the blocker without changing
+runtime behavior.
+
+Theoretical upper bound:
+
+- Phase 3ZQ n32 decode wall time: `70.36203 s`.
+- Top unsupported decode fallback time by type:
+  - `IQ3_XXS`: `5.643922 s`;
+  - `IQ2_S`: `4.609576 s`.
+- If the graph attribution proves these are accidental separate up/gate paths
+  that can use the existing fused op with no new staging/cache pressure, the
+  absolute upper bound is roughly `10.25 s` saved over 31 decode tokens:
+  `70.36 / (70.36 - 10.25) = 1.17x`, or about `0.516 tok/s`.
+- If the blockers require new GPU type coverage or extra staging, use the
+  Phase 3ZO lesson and subtract added cache/staging/H2D cost from this bound
+  before coding.
+
+Execution:
+
+1. Add a default-off graph build diagnostic, e.g.
+   `GGML_KIMI_MOE_GRAPH_PROFILE=1`, around `build_moe_ffn`.
+2. For each Kimi MoE FFN block, log the fused up/gate decision and every
+   condition listed above, including tensor names, types, shape equality, and
+   whether scale/bias tensors are present.
+3. Build remote CUDA `llama-completion`.
+4. Run strict cold `-n 4` first to keep diagnostics small, then `-n 32` only if
+   the log is actionable and hard gates pass.
+5. Do not change the fused-path decision in this phase.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold run passes host RAM, cold start, TTFT, France semantic quality,
+  read failure, launch failure, and VRAM gates.
+- Logs explain why each decode MoE block did or did not use fused up/gate.
+- The next implementation candidate is chosen from measured blockers only.
+
+Rollback:
+
+- Revert if the diagnostic changes graph behavior, breaks build, fails hard
+  gates, or cannot attribute the fused up/gate decision.
+
+Result timestamp: 2026-07-02 22:44 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-012536Z-n4-phase3zr-graph-profile`
+
+Validation run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-012842Z-n32-phase3zr-graph-profile`
+
+Measured result:
+
+- Source state: `62b77028f-dirty-phase3zr`, default-off graph attribution
+  diagnostic added behind `GGML_KIMI_MOE_GRAPH_PROFILE=1`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.851818 GiB`.
+- TTFT: `75789.67 ms`, inside the `106331.72 ms` gate.
+- Decode: `68.49431 s / 31 tokens = 2.209493870967742 s/token`,
+  `0.45259233942206295 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Graph attribution lines: `480` total, `113` fused, `367` non-fused.
+
+Decode-only graph attribution:
+
+- Decode graph decisions: `241`.
+- Fused decode decisions: `113`.
+- Non-fused decode decisions: `128`.
+- Non-fused decode blockers:
+  - `same_type=0`: `128`;
+  - all other conditions pass for decode (`env`, `one_token`, no bias/scale,
+    `silu`, and shape all pass).
+- Decode non-fused type pairs:
+  - `up=iq2_s`, `gate=iq3_xxs`: `116`;
+  - `up=iq3_xxs`, `gate=iq2_s`: `12`.
+
+Prompt graph attribution:
+
+- Prompt graph decisions: `239`.
+- Prompt non-fused blocker is `one_token=0` by design.
+- Prompt mixed-type layers also have `same_type=0`, but prompt is not the
+  current token-rate target.
+
+Decision:
+
+- Accept Phase 3ZR as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, and attribution
+  gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- The remaining decode up/gate graph fallback is not caused by bias tensors,
+  scale tensors, shape mismatch, activation mismatch, or the fused env being
+  absent.
+- The blocker is mixed quantization across up/gate expert tensors. Most missed
+  fused opportunities are `up=iq2_s` with `gate=iq3_xxs`.
+- The next implementation must either:
+  - teach the fused up/gate path to handle mixed quant types without changing
+    math; or
+  - prove that mixed-type fusion would introduce more staging/cache/H2D cost
+    than it saves and return to another bottleneck.
+
+## Next candidate: Phase 3ZS mixed-type fused up/gate feasibility
+
+Design timestamp: 2026-07-02 22:50 CST.
+
+Current bottleneck:
+
+- Phase 3ZR attributes all decode fused-upgate misses to mixed up/gate tensor
+  types.
+- Phase 3ZQ shows top unsupported decode fallback buckets for `IQ3_XXS` and
+  `IQ2_S`, matching the mixed pairs from Phase 3ZR.
+- The existing graph condition requires `up_exps->type == gate_exps->type`.
+  Removing that condition is unsafe unless the CUDA/CPU fused op and expert
+  pack staging can read two independent quant formats correctly.
+
+Math requirement:
+
+For each selected expert `e` and token vector `x`, the fused path must compute:
+
+```text
+up   = x * W_up[e]
+gate = x * W_gate[e]
+out  = up * silu(gate)
+```
+
+The mixed-type version is mathematically identical to the current separate
+path if each matrix multiply uses the same dequantization and accumulation
+logic as the accepted separate `mul_mat_id` fallback for its own tensor type.
+The only allowed change is scheduling/fusion, not quant math.
+
+Theoretical upper bound:
+
+- Phase 3ZR n32 decode wall time: `68.49431 s`.
+- Phase 3ZQ measured decode fallback time by type:
+  - `IQ3_XXS`: `5.643922 s`;
+  - `IQ2_S`: `4.609576 s`.
+- The mixed-type fused path can only target the subset of those buckets caused
+  by up/gate mixed pairs, not Q4_0 down fallback.
+- Absolute upper bound if all mixed up/gate fallback disappears with no added
+  staging/cache cost: about `10.25 s` saved over 31 decode tokens, or
+  `68.49 / (68.49 - 10.25) = 1.18x`, around `0.534 tok/s`.
+- A realistic bound must subtract extra H2D/staging and cache pressure. Phase
+  3ZO showed that adding a GPU path can regress if it evicts hot cache entries
+  or increases pinned staging, so the first implementation must measure these
+  buckets explicitly.
+
+Execution plan:
+
+1. Inspect `ggml_moe_up_gate` graph op and CUDA implementation to determine
+   whether it assumes one shared quant type for up/gate.
+2. If the implementation already handles independent source tensor types, run
+   a guarded experiment that relaxes only the graph `same_type` condition for
+   decode, behind a new env such as
+   `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`.
+3. If the implementation assumes one shared type, do not relax the graph
+   condition. Instead add a smaller diagnostic around the fused CUDA op to
+   identify the exact single-type assumptions before writing kernels.
+4. For any mixed-type execution attempt:
+   - run `-n 4` compare/quality first;
+   - then run strict cold `-n 32`;
+   - promote only after strict full `-n 96` if token-rate improves and the
+     France paragraph remains semantically correct.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold run passes host RAM, cold start, TTFT, France semantic quality,
+  read failure, launch failure, and VRAM gates.
+- `GGML_KIMI_MOE_GRAPH_PROFILE=1` shows mixed-type decode layers entering the
+  fused path when the experiment is enabled.
+- Token rate improves versus the comparable strict Phase 3ZR/3ZQ baseline.
+- Cache hit rate, pinned staging, and H2D time do not regress enough to erase
+  the theoretical gain.
+- Full `-n 96` promotion is required before committing an enabled performance
+  change.
+
+Rollback:
+
+- Revert if output changes semantically, if malformed text appears, if TTFT
+  exceeds `106331.72 ms`, if host RAM exceeds 16GB, if `read_failures` or CUDA
+  launch failures appear, or if token rate regresses.
+
+Static inspection result timestamp: 2026-07-02 23:04 CST.
+
+Finding:
+
+- `ggml_moe_up_gate()` currently falls back to separate
+  `ggml_mul_mat_id + swiglu_split` when `as_up->type != as_gate->type`. Merely
+  relaxing the graph-builder `same_type` condition would therefore not change
+  execution.
+- The CPU fused op asserts `src0_up->type == src0_gate->type` and uses the up
+  tensor type, row stride, and expert stride for both up and gate.
+- The CUDA fused entry currently receives one `src0_type_int`, one `nb01`, one
+  `nb02`, and one computed `src0_bytes`; it registers, stages, caches, and
+  launches both up and gate using that single type/size.
+- The CUDA MMVQ/MMQ launch helpers can dispatch by type, but the fused wrapper
+  does not yet pass independent up/gate types or independent expert byte
+  sizes.
+- `IQ2_S` and `IQ3_XXS` share `Q8_K` as the CPU vec-dot activation type, so
+  CPU fallback mixed support is possible without two different activation
+  conversions for the observed Kimi pair. The weight stride/cache side still
+  needs independent handling.
+
+Decision:
+
+- Do not directly enable mixed-type fused up/gate yet.
+- First extend the default-off graph attribution to print `nb01`, `nb02`, and
+  expert bytes for up and gate. This is required to compute the cache-capacity
+  and H2D/staging cost of a mixed-type fused implementation.
+
+## Next candidate: Phase 3ZS-A mixed-type stride/bytes attribution
+
+Design timestamp: 2026-07-02 23:07 CST.
+
+Current bottleneck:
+
+- Phase 3ZR proves all decode fused-upgate misses are mixed-type pairs.
+- Phase 3ZS static inspection proves the current fused wrapper assumes one
+  shared type and one shared expert byte size.
+- Before implementing independent up/gate cache paths, measure whether
+  `IQ2_S`/`IQ3_XXS` expert byte sizes differ and by how much.
+
+Hypothesis:
+
+Adding stride/bytes fields to `GGML_KIMI_MOE_GRAPH_PROFILE=1` is default-off
+and should not change runtime behavior. It will provide the hard inputs for the
+next upper-bound calculation:
+
+```text
+mixed_pair_bytes = up_expert_bytes + gate_expert_bytes
+cache_slots_needed_per_token = 2 * active_expert_count
+added_or_saved_h2d = mixed_pair_bytes - separate_path_current_bytes
+```
+
+Execution:
+
+1. Extend graph profile output with:
+   - `up_nb01`, `up_nb02`, `up_expert_bytes`;
+   - `gate_nb01`, `gate_nb02`, `gate_expert_bytes`;
+   - `expert_count`.
+2. Build remote CUDA `llama-completion`.
+3. Run strict cold `-n 32` with Phase 3ZG env plus graph/profile diagnostics.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Logs contain independent up/gate expert byte sizes for the mixed layers.
+- The next implementation bound is updated from measured byte sizes.
+
+Rollback:
+
+- Revert if the diagnostic changes graph behavior, breaks build, fails hard
+  gates, or does not produce byte-size attribution.
+
+Result timestamp: 2026-07-02 23:19 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-013634Z-n32-phase3zsa-graph-bytes`
+
+Measured result:
+
+- Source state: `3fd9914d0-dirty-phase3zsa`, default-off graph attribution
+  extended with up/gate stride and expert byte fields.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.832073 GiB`.
+- TTFT: `74850.51 ms`, inside the `106331.72 ms` gate.
+- Decode: `69.29622 s / 31 tokens = 2.235361935483871 s/token`,
+  `0.44735484850400203 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Graph attribution lines: `480` total, `113` fused, `367` non-fused.
+
+Mixed decode byte attribution:
+
+- `up=iq2_s`, `gate=iq3_xxs`: `116` decode decisions,
+  `4702208 + 5619712 = 10321920` bytes per active expert pair.
+- `up=iq3_xxs`, `gate=iq2_s`: `12` decode decisions,
+  `5619712 + 4702208 = 10321920` bytes per active expert pair.
+- `IQ2_S` expert bytes: `4702208`.
+- `IQ3_XXS` expert bytes: `5619712`.
+
+Cache/staging interpretation:
+
+- Both observed mixed sizes are larger than the current small-cache split
+  threshold and use the large cache id (`0`).
+- A mixed-type fused implementation can reuse the existing large cache pool,
+  but must stage up and gate with independent:
+  - type;
+  - row stride (`nb01`);
+  - expert stride (`nb02`);
+  - expert byte size;
+  - cache lookup/insert key.
+- The implementation must also protect same-call up/gate slots from evicting
+  each other, as the current same-type path already does with avoid-slot lists.
+
+Decision:
+
+- Accept Phase 3ZS-A as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, and byte-attribution
+  gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+## Next candidate: Phase 3ZT scoped mixed-type fused up/gate implementation
+
+Design timestamp: 2026-07-02 23:25 CST.
+
+Current bottleneck:
+
+- Phase 3ZR: all decode missed fused-upgate graph opportunities are mixed
+  `IQ2_S`/`IQ3_XXS` pairs.
+- Phase 3ZS static inspection: current op and CUDA wrapper assume one shared
+  type/stride/size.
+- Phase 3ZS-A: both mixed pair orientations are exactly `10321920` bytes per
+  active expert pair and can use the large VRAM cache pool.
+
+Hypothesis:
+
+A scoped mixed-type fused up/gate path for only `IQ2_S <-> IQ3_XXS` decode
+can remove separate generic up/gate fallback for mixed Kimi layers while
+preserving math:
+
+```text
+up   = MMVQ(type_up,   W_up[e],   x)
+gate = MMVQ(type_gate, W_gate[e], x)
+out  = up * silu(gate)
+```
+
+The path must remain opt-in behind
+`GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1` until it passes strict
+promotion gates.
+
+Implementation plan:
+
+1. Change `ggml_moe_up_gate()` so mixed `IQ2_S/IQ3_XXS` decode can construct
+   `GGML_OP_MOE_FUSED_UP_GATE` only when the new env is set; otherwise keep
+   the current fallback.
+2. Update CPU fused-op validation to allow the scoped mixed pair, but prefer
+   CUDA completion. CPU fallback must use independent up/gate type traits and
+   strides if CUDA declines.
+3. Update the weak CUDA function pointer/signature to pass:
+   - `src0_up_type`;
+   - `src0_gate_type`;
+   - `up_nb01`, `up_nb02`, `up_expert_bytes`;
+   - `gate_nb01`, `gate_nb02`, `gate_expert_bytes`.
+4. In CUDA staging:
+   - use `batch_cache_get(up_expert_bytes)` and
+     `batch_cache_get(gate_expert_bytes)`;
+   - require both cache ids to be compatible for the first scoped attempt;
+   - stage up and gate with independent expert byte sizes;
+   - keep avoid-slot protection between up and gate.
+5. In CUDA compute:
+   - launch up MMVQ with `up_type`;
+   - launch gate MMVQ with `gate_type`;
+   - fuse with the existing `moe_stream_up_gate_fuse_kernel`.
+6. Start with the existing non-MMQ compact path. Do not enable vendor fused
+   MMQ for mixed types in the first attempt.
+
+Theoretical upper bound:
+
+- Phase 3ZS-A n32 decode wall time: `69.29622 s`.
+- Prior decode fallback type buckets give an absolute upper bound near
+  `10.25 s`, or about `1.17x`.
+- Because mixed fusion still stages both up and gate tensors, expected gain is
+  lower than the absolute bound. The measured target is to reduce generic
+  fallback time without increasing:
+  - cache misses;
+  - pinned host staging;
+  - H2D time;
+  - up/gate CUDA batch time enough to erase the win.
+
+Acceptance:
+
+- Build succeeds.
+- `-n 4` strict cold smoke passes and graph profile shows mixed decode layers
+  entering fused up/gate.
+- `-n 32` strict cold validation passes host RAM, cold start, TTFT, France
+  semantic quality, read failure, launch failure, and VRAM gates.
+- Token rate improves over comparable Phase 3ZS-A/3ZR diagnostics.
+- If `-n 32` improves, run full strict cold `-n 96` before committing as a
+  performance improvement.
+- Commit and push immediately only after the full accepted promotion run.
+
+Rollback:
+
+- Revert if build fails, CUDA declines mixed layers, output quality regresses,
+  TTFT exceeds `106331.72 ms`, host RAM exceeds 16GB, read/launch failures
+  appear, or `-n 32` token rate regresses.
+
+Result timestamp: 2026-07-02 23:00 UTC / 2026-07-03 07:00 CST.
+
+Smoke run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-015417Z-n4-phase3zt-mixed-smoke-v2`
+
+Validation run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-015644Z-n32-phase3zt-mixed-upgate`
+
+Promotion runs:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-020000Z-phase3zt-n96-promotion`
+
+Implementation:
+
+- Added opt-in mixed-type fused up/gate enablement behind
+  `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`.
+- Scoped mixed support to the observed Kimi pairs:
+  - `up=IQ2_S`, `gate=IQ3_XXS`;
+  - `up=IQ3_XXS`, `gate=IQ2_S`.
+- `ggml_moe_up_gate()` still falls back by default. It only constructs the
+  fused op for mixed pairs when the new env is set.
+- CPU fused fallback now uses independent up/gate vec-dot functions and strides
+  and only allows mixed pairs that share the same vec-dot activation type.
+- CUDA up/gate batch entry now receives independent up/gate:
+  - type;
+  - row stride;
+  - expert stride;
+  - expert bytes.
+- Mixed CUDA path uses the existing compact MMVQ path, not the previously
+  rejected vendor fused MMQ path.
+- Mixed CUDA path stages up/gate into the large VRAM cache pool with independent
+  expert byte sizes and avoid-slot protection.
+
+Debugging note:
+
+- The first n4 attempt
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-014712Z-n4-phase3zt-mixed-upgate-smoke`
+  did not actually use the mixed CUDA path. The gap was caused by incorrectly
+  treating `rows_stride > 1` as prompt mode. Decode also has `rows_stride=8`
+  because it is the top-k route width. Removing that precheck allowed the
+  existing `matrix_row_counts[e] > 1 && !prompt_mode` guard to reject only true
+  multi-row prompt cases.
+
+`-n 4` smoke result:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-015417Z-n4-phase3zt-mixed-smoke-v2`.
+- Strict cgroup host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- TTFT: `71594.07 ms`, inside the `106331.72 ms` gate.
+- Decode: `6809.72 ms / 3 tokens = 2.2699066666666667 s/token`,
+  `0.44054614339540446 tok/s`.
+- Output prefix: `France is a country`.
+- Mixed CUDA compact path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+`-n 32` validation result:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260702-015644Z-n32-phase3zt-mixed-upgate`.
+- Strict cgroup host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.868263 GiB`.
+- TTFT: `60708.82 ms`, inside the `106331.72 ms` gate.
+- Decode: `53039.93 ms / 31 tokens = 1.7109654838709676 s/token`,
+  `0.5844653264059738 tok/s`.
+- Quality: PASS:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Mixed CUDA compact path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+Three-run `-n 96` promotion result:
+
+- Base directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-020000Z-phase3zt-n96-promotion`.
+- All three runs passed host RAM, cold start, TTFT, France quality,
+  read-failure, launch-failure, and mixed-active gates.
+- Average decode rate: `0.6344732263184047 tok/s`.
+- Average seconds/token: `1.5761561471861472`.
+
+Run 1:
+
+- Decode: `120492.4 ms / 77 tokens = 1.5648363636363636 s/token`,
+  `0.6390444542560362 tok/s`.
+- TTFT: `59249.63 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.871727 GiB`.
+- Quality: PASS, complete France paragraph ending with `<|im_end|> [end of text]`.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Run 2:
+
+- Decode: `121541.32 ms / 77 tokens = 1.5784587012987015 s/token`,
+  `0.633529403827439 tok/s`.
+- TTFT: `61121.97 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.871487 GiB`.
+- Quality: PASS, same complete France paragraph.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Run 3:
+
+- Decode: `122058.35 ms / 77 tokens = 1.5851733766233767 s/token`,
+  `0.6308458208717388 tok/s`.
+- TTFT: `74941.87 ms`.
+- Host RAM peak: `14.808025 GiB`.
+- Page cache final: `13.874313 GiB`.
+- Quality: PASS, same complete France paragraph.
+- Declines/read failures/launch failures: `0/0/0`.
+
+Comparison:
+
+- Previous accepted full `-n 96` Phase 3ZG:
+  - `2.5781063529411763 s/token`;
+  - `0.38788159334822314 tok/s`;
+  - TTFT `74433.41 ms`.
+- Phase 3ZT average:
+  - `1.5761561471861472 s/token`;
+  - `0.6344732263184047 tok/s`;
+  - TTFT range `59249.63-74941.87 ms`.
+- Token-rate improvement versus Phase 3ZG:
+  - about `1.64x`;
+  - `+63.6%`.
+- TTFT gate:
+  - worst promotion TTFT `74941.87 ms`;
+  - below `106331.72 ms`;
+  - comparable to accepted Phase 3ZG.
+
+Decision:
+
+- Accept Phase 3ZT as a reproducible performance improvement.
+- Commit and push immediately.
+- New accepted opt-in runtime adds:
+
+```sh
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+```
+
+to the previous Phase 3ZG strict env.
+
+Next direction:
+
+- Reprofile accepted Phase 3ZT with `-n 96` counters after commit to identify
+  the new dominant bottleneck. Do not assume up/gate remains dominant after
+  mixed fallback removal.
+- Likely next candidates:
+  - Q4_0 down remains rejected unless cache-protected;
+  - profile-guided cache partitioning for the larger mixed up/gate cache
+    footprint;
+  - down path only if the new profile shows it dominates and quality can be
+    protected.
+
+## Next candidate: Phase 3ZU accepted mixed-upgate runtime reprofile
+
+Design timestamp: 2026-07-03 07:10 CST.
+
+Current bottleneck:
+
+- Phase 3ZT removed the decode mixed up/gate graph fallback and improved full
+  strict `-n 96` from `0.3879 tok/s` to `0.6345 tok/s`.
+- The old bottleneck attribution is no longer valid. Up/gate generic fallback
+  should be much smaller, while down fallback, cache misses, staging, H2D, or
+  cache partition pressure may now dominate.
+
+Hypothesis:
+
+A strict cold profile of the accepted Phase 3ZT runtime will show the next
+largest compressible per-token bucket. Because the mixed path increases
+up/gate VRAM-cache footprint, the profile must explicitly compare:
+
+- up/gate CUDA batch time;
+- down CUDA batch versus down fallback time;
+- cache hit/miss and preloads;
+- pinned staging host time and H2D time;
+- declined batch reasons;
+- TTFT and quality.
+
+Execution:
+
+1. Run current committed `325b7b973` with the accepted Phase 3ZG env plus:
+   - `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`;
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`;
+   - `GGML_MOE_BATCH_PROFILE=1`;
+   - graph profile enabled only if log size remains manageable.
+2. Use strict cold `-n 96`, cgroup `memory.max=15900000000`,
+   `memory.swap.max=0`, and `sync; echo 3 > /proc/sys/vm/drop_caches`.
+3. Record full run directory, metrics, exact answer, stderr counters, memory,
+   and VRAM snapshots.
+
+Theoretical bound:
+
+- Current accepted Phase 3ZT average is `1.576 s/token`.
+- Maximum possible next-stage gain is bounded by the largest measured
+  remaining per-token bucket. No implementation is allowed before this bucket
+  is measured.
+- If down fallback remains around the pre-Phase-3ZT level, it is an upper bound
+  but Q4_0 down is still rejected unless cache contention can be prevented.
+- If cache/staging dominates, a cache policy change must estimate bytes saved
+  from the measured hit/miss and expert byte sizes before implementation.
+
+Acceptance:
+
+- Build already passed at `325b7b973`.
+- Strict cold `-n 96` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Profile has enough counters to rank the next bottleneck.
+
+Rollback:
+
+- No code change in this phase. If the reprofile fails a hard gate, record it
+  as rejected evidence and rerun once to distinguish runtime noise from a
+  real regression. Do not implement another optimization until the accepted
+  runtime profile is trustworthy.
+
+Result timestamp: 2026-07-03 07:22 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile`
+
+Measured result:
+
+- Commit: `325b7b973`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.874409 GiB`.
+- TTFT: `79576.26 ms`, inside the `106331.72 ms` gate.
+- Decode: `121626.53 ms / 77 tokens = 1.5795653246753247 s/token`,
+  `0.6330855611847185 tok/s`.
+- Quality: PASS, complete coherent France paragraph ending with
+  `<|im_end|> [end of text]`.
+- Mixed up/gate path active: yes.
+- Declines: `0`.
+- `read_failures=0`; strict CUDA launch failures `=0`.
+
+Profile result:
+
+- Up/gate:
+  - calls: `4621`;
+  - total: `18.387 ms/call`;
+  - CUDA batch: `18.196 ms/call`;
+  - fallback: `0.001 ms/call`;
+  - batch accepted: `4621`;
+  - batch declined: `0`.
+- Down:
+  - calls: `4798`;
+  - total: `22.753 ms/call`;
+  - CUDA batch: `5.132 ms/call`;
+  - fallback: `17.563 ms/call`;
+  - batch accepted: `4082`;
+  - batch declined: `52` prompt/multirow declines.
+- CUDA down batch profile:
+  - calls: `4082`;
+  - stage: `5.840 ms/call`;
+  - kernel: `0.110 ms/call`;
+  - D2H: `0.016 ms/call`;
+  - total: `5.992 ms/call`.
+- VRAM cache:
+  - hits: `47059`;
+  - misses: `59437`;
+  - preloads: `8095`;
+  - hit rate: `44.2%`.
+- Down prefetch:
+  - loads: `8095`;
+  - hits: `8095`;
+  - evicted_unused: `0`;
+  - useful rate: `100.0%`.
+- Pinned staging:
+  - copies: `64145`;
+  - waits: `64121`;
+  - slots: `8`;
+  - slot size: `7.44 MiB`;
+  - host_stage: `81296.308 ms`;
+  - H2D: `13334.103 ms`.
+
+Decode fallback by type from name/eligibility profile:
+
+- `src0_type=2` (`Q4_0` down):
+  - decode calls: `539`;
+  - decode total: `8.417 s`;
+  - decode fallback: `8.408 s`;
+  - decode unsupported: `539`.
+- `src0_type=11` (`Q3_K` down):
+  - decode calls: `1617`;
+  - decode total: `12.013 s`;
+  - decode fallback: `0.002 s`;
+  - decode unsupported: `0`.
+- `src0_type=23` (`IQ4_XS` down):
+  - decode calls: `924`;
+  - decode total: `5.929 s`;
+  - decode fallback: `0.001 s`;
+  - decode unsupported: `0`.
+
+Top Q4_0 down fallback layers:
+
+- `blk.6.ffn_down_exps.weight`: `1.777 s` decode fallback.
+- `blk.7.ffn_down_exps.weight`: `1.207 s`.
+- `blk.18.ffn_down_exps.weight`: `1.186 s`.
+- `blk.10.ffn_down_exps.weight`: `1.179 s`.
+- `blk.8.ffn_down_exps.weight`: `1.052 s`.
+- `blk.9.ffn_down_exps.weight`: `1.023 s`.
+- `blk.15.ffn_down_exps.weight`: `0.983 s`.
+
+Decision:
+
+- Accepted Phase 3ZT runtime remains valid.
+- The old up/gate bottleneck is resolved; up/gate fallback is effectively zero.
+- The next largest measured compressible bucket is Q4_0 down fallback,
+  totaling about `8.408 s` over the full `-n 96` decode.
+- Previous full Q4_0 down coverage was rejected in Phase 3ZO because it reduced
+  cache hit rate and increased staging/H2D/upgate contention. Do not repeat
+  broad Q4_0 enablement.
+
+## Next candidate: Phase 3ZV cache-protected Q4_0 down allowlist
+
+Design timestamp: 2026-07-03 07:28 CST.
+
+Current bottleneck:
+
+- Phase 3ZU shows all material remaining decode fallback is Q4_0 down.
+- The Q4_0 fallback appears in only seven down layers for this prompt:
+  `6,7,8,9,10,15,18`.
+- Broad Q4_0 down enablement was rejected earlier because it increased cache
+  contention and slowed decode.
+
+Hypothesis:
+
+An opt-in, down-only, layer-allowlisted Q4_0 CUDA batch path can remove the
+`8.408 s` Q4_0 decode fallback without repeating the broad Phase 3ZO
+regression. The path must be disabled by default and require an explicit
+allowlist such as:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0_LAYERS=6,7,8,9,10,15,18
+```
+
+Theoretical upper bound:
+
+- Phase 3ZU decode wall time: `121.62653 s`.
+- Measured Q4_0 decode fallback: `8.408 s`.
+- Absolute upper bound if Q4_0 fallback disappears with no added cache/staging
+  cost:
+
+```text
+121.62653 / (121.62653 - 8.408) = 1.074x
+```
+
+- Expected upper token rate from this isolated bucket:
+
+```text
+0.6331 tok/s * 1.074 = 0.680 tok/s
+```
+
+- Any increase in cache misses, staging, H2D, or up/gate CUDA time must be
+  subtracted from this bound.
+
+Execution:
+
+1. Add Q4_0 down CUDA eligibility only when all are true:
+   - tensor name contains `.ffn_down_exps.`;
+   - env allowlist is set;
+   - layer id is in the allowlist;
+   - tensor type is `GGML_TYPE_Q4_0`.
+2. Add Q4_0 to the CUDA compact down batch launcher only for this gated path.
+3. Keep Q4_0 disabled for up/gate and for non-allowlisted down tensors.
+4. Run strict cold `-n 32` first with the accepted Phase 3ZT env plus the
+   allowlist.
+5. Compare against Phase 3ZU/3ZT:
+   - token rate;
+   - Q4_0 fallback removed;
+   - cache hit rate;
+   - staging/H2D;
+   - up/gate CUDA time;
+   - TTFT;
+   - France quality.
+6. Promote to strict cold `-n 96` only if `-n 32` improves and all gates pass.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Q4_0 down unsupported decode count drops for the allowlisted layers.
+- Token rate improves versus comparable Phase 3ZT/3ZU `-n 32`.
+- Cache/staging/H2D/upgate regressions do not erase the theoretical gain.
+- Full strict cold `-n 96` is required before committing as a performance
+  improvement.
+
+Rollback:
+
+- Revert if quality regresses, if token rate regresses, if TTFT exceeds
+  `106331.72 ms`, if host RAM exceeds 16GB, if read/launch failures appear, or
+  if cache/staging contention repeats the Phase 3ZO failure pattern.
+
+Result timestamp: 2026-07-03 07:36 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-022408Z-n32-phase3zv-q4down-allowlist`
+
+Measured result:
+
+- Source state: `325b7b973-dirty-phase3zv`.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.909363 GiB`.
+- TTFT: `76420.98 ms`, inside the `106331.72 ms` gate.
+- Decode: `61715.58 ms / 31 tokens = 1.9908251612903227 s/token`,
+  `0.5023042803778235 tok/s`.
+- Quality: PASS for the `-n 32` answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Unsupported type declines: `0`, so the Q4_0 allowlist did activate.
+
+Profile comparison:
+
+- Phase 3ZT n32 validation:
+  - `1.7109654838709676 s/token`;
+  - `0.5844653264059738 tok/s`.
+- Phase 3ZV n32:
+  - `1.9908251612903227 s/token`;
+  - `0.5023042803778235 tok/s`.
+- Down profile:
+  - calls: `2038`;
+  - total: `45.003 ms/call`;
+  - CUDA batch: `8.054 ms/call`;
+  - fallback: `36.857 ms/call`;
+  - accepted: `1861`;
+  - declined: `59`.
+- CUDA batch profile:
+  - calls: `1861`;
+  - stage: `8.596 ms/call`;
+  - kernel: `0.107 ms/call`;
+  - wall: `8.806 ms/call`.
+- Cache:
+  - hits: `18056`;
+  - misses: `26448`;
+  - preloads: `3259`;
+  - hit rate: `40.6%`.
+- Pinned staging:
+  - copies: `27713`;
+  - host_stage: `37335.446 ms`;
+  - H2D: `5870.726 ms`;
+  - slot size increased to `7.88 MiB`.
+- Up/gate profile also regressed:
+  - calls: `1861`;
+  - total: `23.851 ms/call`;
+  - CUDA batch: `23.660 ms/call`.
+
+Decision:
+
+- Reject Phase 3ZV.
+- Do not run `-n 96`; the comparable `-n 32` validation clearly regressed.
+- Revert all Q4_0 down allowlist source changes.
+- Keep only this plan record.
+
+Gap analysis:
+
+- The theory correctly identified Q4_0 down fallback, but the implementation
+  increased cache slot size and staging cost enough to erase the saved CPU
+  fallback.
+- This repeats the Phase 3ZO failure pattern even with a layer allowlist:
+  Q4_0 down GPU coverage reduces unsupported declines, but worsens cache
+  pressure, staging, H2D, and up/gate timing.
+- The next attempt must avoid increasing the shared cache slot size for the
+  hot mixed up/gate/down cache. A separate small Q4_0 cache pool or non-cache
+  one-shot path would need a new theory and byte-level bound before coding.
+
+Next direction:
+
+- Do not retry Q4_0 down in the shared cache.
+- Reprofile or simulate cache partition pressure before any further down work.
+- Candidate: separate cache pool for Q4_0 down with a hard MiB cap, but only
+  after computing whether the extra VRAM pool can fit without reducing mixed
+  up/gate hit rate.
+
+## Phase 3ZW: cache pressure re-analysis before any new Q4_0 work
+
+Design timestamp: 2026-07-03 08:15 CST.
+
+Purpose:
+
+- Re-align the next optimization step with the hard gates before writing more
+  code.
+- Explain why Phase 3ZV regressed.
+- Decide whether the next implementation should be cache policy, Q4_0 isolated
+  cache, Q4_0 one-shot GPU staging, or more instrumentation.
+
+Required constraints for this phase:
+
+- No implementation patch before this plan section is written.
+- No accepted result without strict cold start, cgroup memory limit
+  `memory.max=15900000000`, `memory.swap.max=0`, and page-cache-inclusive host
+  RAM below 16 GB.
+- Every benchmark must use the fixed France prompt and pass semantic quality.
+- TTFT must remain below `106331.72 ms`.
+- Any accepted performance improvement must be committed and pushed
+  immediately with the exact reproduction method.
+- Any regression must be reverted before another optimization is attempted.
+
+Inputs:
+
+- Accepted runtime: commit `325b7b973`, recorded again at plan commit
+  `cbcd00547`.
+- Accepted `-n 96` reprofile run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile`.
+- Rejected Q4_0 shared-cache run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-022408Z-n32-phase3zv-q4down-allowlist`.
+
+Observed bottleneck after accepted Phase 3ZT/3ZU:
+
+- Up/gate fallback is effectively eliminated by the mixed IQ2/IQ3 fused path.
+- Remaining material decode fallback is Q4_0 down:
+  - layers: `6,7,8,9,10,15,18`;
+  - decode fallback: about `8.408 s` over the accepted `-n 96` decode;
+  - theoretical maximum if removed with zero new overhead:
+    `121.62653 / (121.62653 - 8.408) = 1.074x`;
+  - upper token-rate estimate:
+    `0.6331 tok/s * 1.074 = 0.680 tok/s`.
+
+Cache replay findings:
+
+Command:
+
+```sh
+python3 scripts/moe-route-cache-sim.py \
+  /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/route-profile.csv \
+  --budget-mib 15000 \
+  --trace /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/route-trace.csv \
+  --profile-stderr /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/stderr.txt \
+  --sweep --sweep-min 45 --sweep-max 80 --sweep-step 5 \
+  --objective protected --policy lfu_lru --preload protected
+```
+
+`admit_after=1` result:
+
+- static split recommend: `upgate_pct=65`;
+- trace replay recommend: `upgate_pct=70`;
+- best replay miss estimate: `306.76 GiB`;
+- best replay hit estimate: `44.98%`.
+
+Same command with `--admit-after 2`:
+
+- trace replay recommend: `upgate_pct=65`;
+- best replay miss estimate: `298.93 GiB`;
+- best replay hit estimate: `46.08%`;
+- bypassed events: `21337`.
+
+Runtime calibration from Phase 3ZU:
+
+- down CUDA batch:
+  - calls: `4082`;
+  - average active: `8`;
+  - misses per call: `14.56`;
+  - stage: `5.840 ms/call`;
+  - stage per miss: `0.401 ms`;
+  - stage per GiB: `55.20 ms/GiB`;
+  - kernel: `0.110 ms/call`;
+  - total: `5.992 ms/call`.
+- pinned staging:
+  - copies: `64145`;
+  - waits: `64121`;
+  - slot: `7.44 MiB`;
+  - host_stage: `81296.308 ms`;
+  - H2D: `13334.103 ms`;
+  - host staging bandwidth estimate: `5.73 GiB/s`;
+  - H2D bandwidth estimate: `34.95 GiB/s`.
+
+Interpretation:
+
+- Cache split/policy tuning alone is a small lever. The best replay variants
+  differ by only a few GiB of estimated misses over the full run.
+- Phase 3ZV failed because enabling Q4_0 in the shared cache increased shared
+  slot size to `7.88 MiB`, reduced hit rate to `40.6%`, and increased staging
+  enough to erase the Q4_0 CPU fallback savings.
+- The route trace/profile currently records CUDA/cache-routed tensors but does
+  not include the Q4_0 CPU fallback down layers. Direct searches for
+  `blk.{6,7,8,9,10,15,18}.ffn_down_exps.weight` in `route-profile.csv` and
+  `route-trace.csv` returned no rows. Therefore route replay alone cannot size
+  or rank the Q4_0 fallback hotset.
+
+Next implementation priority:
+
+1. First add instrumentation, not a speed patch:
+   - emit a Q4_0 fallback route/profile CSV for CPU fallback MoE tensors;
+   - include tensor name, layer id, expert index, tensor type, expert bytes,
+     decode/prompt phase, count, and fallback time;
+   - keep this disabled unless a diagnostic env var is set;
+   - ensure no runtime behavior change when the env var is absent.
+2. Run a strict cold diagnostic `-n 96` under the accepted Phase 3ZT env plus
+   the new diagnostic output.
+3. Use the diagnostic data to choose between:
+   - separate hard-capped Q4_0 cache pool;
+   - Q4_0 one-shot GPU staging with no persistent cache admission;
+   - rejecting Q4_0 GPU work if the measured Q4 hotset cannot pay for staging.
+
+Theory for the diagnostic step:
+
+- The current `8.408 s` Q4_0 fallback number is enough to define an upper bound,
+  but not enough to design a safe cache. It lacks per-expert byte/hotness data.
+- A diagnostic CSV has near-zero theoretical speed upside and should not be
+  accepted as a performance improvement by itself.
+- The diagnostic is necessary because the previous implementation guessed the
+  Q4_0 cache shape and caused a measurable regression.
+
+Diagnostic acceptance:
+
+- Build succeeds.
+- No performance commit is made unless the diagnostic is completely behavior
+  neutral or improves performance accidentally while satisfying all gates.
+- Strict cold `-n 96` run passes:
+  - host RAM below 16 GB including page cache;
+  - TTFT below `106331.72 ms`;
+  - France output semantically correct and coherent;
+  - `read_failures=0`;
+  - no CUDA launch failures.
+- Diagnostic files record the Q4_0 fallback rows needed to compute:
+  - unique Q4_0 fallback expert bytes;
+  - routed Q4_0 fallback bytes;
+  - hotset hit curve for hard caps such as `256`, `512`, `1024`, and
+    `2048 MiB`;
+  - fallback time covered by each hotset.
+
+Rollback:
+
+- Revert the diagnostic patch if it changes token output, slows token rate
+  materially, increases TTFT beyond gate, increases host RAM above 16 GB, or
+  destabilizes CUDA/cache counters.
+- Do not implement a separate Q4_0 cache pool until the diagnostic proves the
+  expected saved CPU fallback time is larger than added host staging, H2D, and
+  cache-pressure cost.
+
+Result timestamp: 2026-07-03 08:52 CST.
+
+Implementation:
+
+- Added an opt-in CPU MoE fallback profile CSV controlled by:
+
+```sh
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv
+```
+
+- The diagnostic records only rows that remain on CPU fallback after the CUDA
+  batch path has had a chance to consume eligible experts.
+- CSV fields:
+  `rank,count,calls,fallback_us,expert_bytes,src0_type,phase,expert_idx,tensor`.
+- Default behavior is unchanged when the env var is absent.
+
+Build:
+
+- Remote CUDA build succeeded:
+
+```sh
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+```
+
+Smoke:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-023909Z-n4-phase3zw-fallback-profile-smoke`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Output: `France is a country`.
+- TTFT: `65488.25 ms`.
+- Decode: `6639.28 ms / 3 runs = 0.45 tok/s`.
+- `read_failures=0`.
+- Fallback profile:
+  - `fallback-profile.csv` size: `813 KiB`;
+  - entries: `13175`;
+  - dropped: `0`.
+
+Strict `-n 96` diagnostic:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+- Source state: `6766f7c71-dirty-phase3zw`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak:
+  - `15899996160` bytes;
+  - `14.808025 GiB`;
+  - gate passed.
+- TTFT:
+  - `63209.39 ms`;
+  - gate passed.
+- Decode:
+  - `117578.26 ms / 77 runs`;
+  - `1.52699 s/token`;
+  - `0.65 tok/s`.
+- Quality: PASS.
+- Exact answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- `read_failures=0`.
+- Fallback profile:
+  - entries: `14102`;
+  - dropped: `0`.
+
+Fallback profile summary:
+
+- `type2_decode` Q4_0 down:
+  - count: `4312`;
+  - fallback: `7942.040 ms`;
+  - routed bytes: `33.161 GiB`.
+- `type2_prompt` Q4_0 down:
+  - count: `952`;
+  - fallback: `3520.060 ms`;
+  - routed bytes: `7.321 GiB`.
+- prompt fallback from non-Q4 types is still large, but it affects TTFT rather
+  than decode token rate and must be handled separately.
+
+Q4_0 decode layer breakdown:
+
+- `blk.6`: count `616`, fallback `1854.496 ms`, routed `4.737 GiB`.
+- `blk.7`: count `616`, fallback `1153.368 ms`, routed `4.737 GiB`.
+- `blk.8`: count `616`, fallback `988.680 ms`, routed `4.737 GiB`.
+- `blk.9`: count `616`, fallback `1050.752 ms`, routed `4.737 GiB`.
+- `blk.10`: count `616`, fallback `1142.320 ms`, routed `4.737 GiB`.
+- `blk.15`: count `616`, fallback `895.080 ms`, routed `4.737 GiB`.
+- `blk.18`: count `616`, fallback `857.344 ms`, routed `4.737 GiB`.
+
+Q4_0 decode hotset curve sorted by measured fallback time:
+
+- `128 MiB`: `16` slots, `16.52%` fallback coverage, `1.312 s` saved upper bound.
+- `256 MiB`: `32` slots, `26.43%` fallback coverage, `2.099 s` saved upper bound.
+- `512 MiB`: `65` slots, `38.60%` fallback coverage, `3.065 s` saved upper bound.
+- `1024 MiB`: `130` slots, `52.74%` fallback coverage, `4.189 s` saved upper bound.
+- `2048 MiB`: `260` slots, `69.77%` fallback coverage, `5.541 s` saved upper bound.
+- `4096 MiB`: `520` slots, `88.73%` fallback coverage, `7.047 s` saved upper bound.
+- `6144 MiB`: `780` slots, `97.03%` fallback coverage, `7.706 s` saved upper bound.
+
+Decision:
+
+- Accept the diagnostic patch as behavior-preserving instrumentation.
+- It is not a performance improvement and should not be counted as a token-rate
+  gain, even though this run measured `0.65 tok/s`.
+- Commit and push the diagnostic because it is required to make the next
+  optimization reproducible and avoid another shared-cache regression.
+
+Next candidate: Phase 3ZX Q4_0 decode one-shot GPU path
+
+- Do not use the shared expert cache for Q4_0.
+- First candidate should be a no-admission Q4_0 one-shot staging path for decode
+  only, gated by env and layer allowlist.
+- Theory:
+  - Full Q4_0 decode fallback upper bound is `7.942 s`.
+  - One-shot GPU staging must beat CPU fallback after adding host staging, H2D,
+    and Q4_0 kernel time.
+  - Since Q4_0 routed bytes are `33.161 GiB`, pure H2D at the measured
+    `34.95 GiB/s` would cost about `0.949 s`; host staging at measured
+    `5.73 GiB/s` would cost about `5.79 s`.
+  - Therefore a naive one-shot copy path has only about
+    `7.94 - 0.95 - 5.79 = 1.20 s` theoretical headroom before kernel and
+    synchronization overhead. This is a small, risky gain.
+- Better candidate after that:
+  - isolated Q4_0 cache with a hard `1024-2048 MiB` cap;
+  - no impact on shared slot size;
+  - only top hot experts admitted from the fallback profile;
+  - expected saved CPU fallback upper bound: `4.19-5.54 s`;
+  - expected net gain must subtract Q4_0 cache fill staging/H2D and kernel time.
+- Acceptance requires strict cold `-n 32` first, then strict cold three-run
+  `-n 96` only if the `-n 32` result improves token rate without violating any
+  hard gate.
+
+## Phase 3ZX: Q4_0 decode one-shot GPU probe
+
+Design timestamp: 2026-07-03 09:18 CST.
+
+Current bottleneck:
+
+- The accepted Phase 3ZW diagnostic proves decode Q4_0 down fallback is the
+  largest remaining isolated decode fallback bucket:
+  - `4312` routed Q4_0 decode rows;
+  - `33.161 GiB` routed Q4_0 decode bytes;
+  - `7942.040 ms` measured CPU fallback time.
+- The seven layers are stable for the fixed France prompt:
+  `6,7,8,9,10,15,18`.
+- Shared-cache Q4_0 was rejected because it changed the global slot size and
+  hurt existing up/gate/down cache behavior. Phase 3ZX must not use the shared
+  expert cache for Q4_0.
+
+Selected next experiment:
+
+- Add a Q4_0 down CUDA probe that is:
+  - disabled by default;
+  - decode-only (`ids->ne[1] == 1`);
+  - down-only (`.ffn_down_exps.`);
+  - `GGML_TYPE_Q4_0` only;
+  - layer-allowlisted by env;
+  - no persistent shared-cache admission.
+- The first implementation may use one-shot staging into per-call scratch GPU
+  buffers. It is allowed to be slower than the final design because this phase
+  measures whether the Q4_0 CUDA kernel path is numerically and structurally
+  viable without touching shared cache behavior.
+
+Environment gate:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0_ONESHOT_LAYERS=6,7,8,9,10,15,18
+```
+
+Theory and upper bound:
+
+- Phase 3ZW decode wall time: `117.578 s`.
+- Full Q4_0 decode CPU fallback time: `7.942 s`.
+- Absolute best possible token-rate multiplier if Q4_0 decode fallback
+  disappears with no overhead:
+
+```text
+117.578 / (117.578 - 7.942) = 1.072x
+```
+
+- Upper token rate from the full bucket:
+
+```text
+0.65 tok/s * 1.072 = 0.697 tok/s
+```
+
+- One-shot copy bound:
+  - Q4_0 decode routed bytes: `33.161 GiB`.
+  - H2D at measured `34.95 GiB/s`: about `0.949 s`.
+  - host staging at measured `5.73 GiB/s`: about `5.79 s`.
+  - before kernel/sync cost, naive one-shot headroom is about
+    `7.94 - 0.95 - 5.79 = 1.20 s`.
+- Therefore this is not expected to be a large final speedup. Its value is to
+  prove correctness and quantify kernel/staging cost without poisoning shared
+  cache. If the one-shot path cannot beat CPU fallback in `-n 32`, move to an
+  isolated hot Q4_0 cache instead of trying to tune one-shot.
+
+Implementation plan:
+
+1. Add a CPU-side eligibility reason for env-gated Q4_0 one-shot down, separate
+   from the existing shared-cache down batch support.
+2. Add a CUDA entry point or extend the existing down batch entry with a
+   no-cache Q4_0 mode:
+   - allocate/reuse scratch slots sized to Q4_0 expert bytes;
+   - copy only active experts for the current tensor/call;
+   - run existing compact down MMVQ for Q4_0 if present, otherwise add the
+     minimal Q4_0 compact launcher;
+   - return false on any unsupported shape or launch error so CPU fallback
+     remains the safety net.
+3. Record counters that separate:
+   - one-shot accepted/declined calls;
+   - staged bytes;
+   - host staging time;
+   - H2D time;
+   - kernel time;
+   - fallback time remaining.
+4. Do not alter the shared cache slot size or admission policy.
+
+Execution:
+
+1. Build remote CUDA `llama-completion`.
+2. Run a strict cold `-n 4` smoke with the env gate enabled:
+   - must generate a France prefix;
+   - no read/launch failures;
+   - no malformed output;
+   - one-shot counters must show whether the Q4_0 path activated.
+3. Run strict cold `-n 32` only if smoke passes.
+4. Promote to strict cold `-n 96` only if `-n 32` improves token rate versus
+   the comparable accepted n32 baseline and satisfies all gates.
+
+Acceptance:
+
+- Build succeeds.
+- Host RAM remains below 16 GB including page cache.
+- TTFT remains below `106331.72 ms`.
+- France answer remains semantically correct and coherent.
+- `read_failures=0` and CUDA launch failures are zero.
+- Shared cache slot size must remain at the accepted non-Q4 value; any increase
+  toward the rejected `7.88 MiB` shared slot pattern is a failure.
+- Strict cold `-n 32` token rate must improve versus the comparable accepted
+  `0.584465 tok/s` n32 run before any `-n 96` promotion.
+
+Rollback:
+
+- Revert the source patch if:
+  - Q4_0 one-shot output is wrong;
+  - token rate regresses in strict cold `-n 32`;
+  - TTFT exceeds the gate;
+  - host RAM exceeds 16 GB;
+  - shared cache slot size changes;
+  - CUDA launch/read failures appear;
+  - fallback counters show that the path does not activate.
+
+Result timestamp: 2026-07-03 09:59 CST.
+
+Implementation attempted:
+
+- CPU eligibility allowed `GGML_TYPE_Q4_0` down batch only when
+  `GGML_MOE_STREAM_DOWN_Q4_0_ONESHOT_LAYERS` matched the tensor layer.
+- CUDA added a no-cache one-shot branch for Q4_0 down:
+  - copied active experts into `bc.d_src0` scratch;
+  - used compact MMVQ with `GGML_TYPE_Q4_0`;
+  - skipped `batch_cache_get()` and did not admit Q4_0 into the shared cache;
+  - emitted a `q4_0 oneshot profile` counter line.
+
+Build:
+
+- Remote CUDA build succeeded:
+
+```sh
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+```
+
+Smoke run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-025425Z-n4-phase3zx-q4-oneshot-smoke`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Output: `France is a country`.
+- TTFT: `76609.18 ms`, inside gate.
+- Decode: `8754.58 ms / 3 runs = 0.34 tok/s`.
+- Q4_0 one-shot activated:
+  - calls: `21`;
+  - accepted: `21`;
+  - declined: `0`;
+  - average active: `8`;
+  - staged: `1.292 GiB`;
+  - stage: `105.832 ms/call`;
+  - kernel: `0.109 ms/call`;
+  - D2H: `0.014 ms/call`;
+  - wall: `106.005 ms/call`.
+- `read_failures=0`.
+- Shared cache slot sizes stayed on the accepted non-Q4 path:
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`.
+
+Formal `-n 32` run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-025706Z-n32-phase3zx-q4-oneshot`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- The SSH wrapper disconnected before post-processing, so no `exit.txt`,
+  `metrics.json`, or timing summary was written.
+- The `llama-completion` process later exited, but stderr had no final
+  `llama_print_timings` and stdout contained only an incomplete answer fragment.
+- cgroup evidence:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - `oom_kill=0`.
+- This run is invalid for acceptance and fails the quality/completeness gate.
+
+Decision:
+
+- Reject Phase 3ZX one-shot.
+- Do not promote to `-n 96`.
+- Revert Q4_0 one-shot source changes.
+- Keep this plan record.
+
+Gap analysis:
+
+- The Q4_0 CUDA kernel itself was cheap: `0.109 ms/call`.
+- The one-shot staging path was the bottleneck: `105.832 ms/call`.
+- Phase 3ZW measured CPU Q4_0 decode fallback at about
+  `7942 ms / 539 calls = 14.7 ms/call`.
+- Therefore the naive one-shot path is roughly `7x` slower than CPU fallback
+  per Q4_0 down call before considering end-to-end scheduling effects.
+- This matches the theoretical warning: one-shot copies cannot win unless
+  staging avoids slow pageable/mmap host copies or reuses copied experts.
+
+Next direction:
+
+- Do not retry Q4_0 one-shot from mmap host pointers.
+- The next Q4 attempt must reuse copied experts:
+  - isolated Q4_0 cache with hard cap, likely `1024-2048 MiB`;
+  - admit only hot experts from `fallback-profile.csv`;
+  - no shared cache slot-size changes;
+  - no prompt-phase Q4_0 path until TTFT is addressed separately.
+- Before implementing, update this plan with an isolated-cache design and a
+  hard bound using:
+  - hotset saved fallback upper bound (`4.19-5.54 s` for `1-2 GiB`);
+  - expected one-time fill cost;
+  - expected per-token cache hit rate;
+  - VRAM budget impact on the existing `15000 MiB` shared cache.
+
+## Phase 3ZY: isolated Q4_0 hot-cache design
+
+Design timestamp: 2026-07-03 10:16 CST.
+
+Reason to continue after Phase 3ZX:
+
+- Q4_0 one-shot failed because every decode call recopied active experts from
+  mmap host memory.
+- The Q4_0 CUDA kernel cost was small (`0.109 ms/call`), so the compute path is
+  viable if expert copies can be reused.
+- Therefore the next experiment must reuse copied Q4_0 experts without touching
+  the shared cache.
+
+Current data:
+
+- Phase 3ZW Q4_0 decode fallback:
+  - routed bytes: `33.161 GiB`;
+  - fallback time: `7.942 s`;
+  - calls: about `539`;
+  - average CPU fallback: about `14.7 ms/call`.
+- Phase 3ZX Q4_0 one-shot:
+  - stage: `105.832 ms/call`;
+  - staged bytes: `1.292 GiB / 21 calls`;
+  - implied stage bandwidth: about `1.72 s/GiB`;
+  - kernel: `0.109 ms/call`.
+
+Shared cache budget pressure:
+
+The accepted runtime uses:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+Phase 3ZX showed the shared cache still uses accepted slot sizes when Q4_0 is
+kept out:
+
+- `5.36 MiB`;
+- `6.02 MiB`;
+- `7.44 MiB`.
+
+Route replay with `admit_after=2`, accepted Phase 3ZU trace, and best
+`upgate_pct=65`:
+
+- `15000 MiB` shared cache:
+  - miss: `298.93 GiB`;
+  - hit: `46.08%`.
+- `14000 MiB` shared cache:
+  - miss: `307.35 GiB`;
+  - hit: `44.60%`;
+  - extra miss: `8.42 GiB`.
+- `13000 MiB` shared cache:
+  - miss: `315.95 GiB`;
+  - hit: `43.07%`;
+  - extra miss: `17.02 GiB`.
+
+Using the Phase 3ZU down exposed calibration (`55.20 ms/GiB`) as a lower-bound
+critical-path estimate:
+
+- giving up `1 GiB` shared cache costs at least about `0.46 s`;
+- giving up `2 GiB` shared cache costs at least about `0.94 s`;
+- additional up/gate wait leakage is possible and must be measured.
+
+Q4_0 hot-cache options:
+
+- `1024 MiB` isolated Q4_0 cache:
+  - hot slots: `130`;
+  - Q4_0 fallback coverage: `52.74%`;
+  - saved fallback upper bound: `4.189 s`;
+  - one-time fill cost at Phase 3ZX measured staging rate: about `1.72 s`;
+  - shared-cache lower-bound cost if reducing shared cache from `15000` to
+    `14000 MiB`: about `0.46 s`;
+  - rough net upper bound: `4.19 - 1.72 - 0.46 = 2.01 s`.
+- `2048 MiB` isolated Q4_0 cache:
+  - hot slots: `260`;
+  - Q4_0 fallback coverage: `69.77%`;
+  - saved fallback upper bound: `5.541 s`;
+  - one-time fill cost: about `3.44 s`;
+  - shared-cache lower-bound cost if reducing shared cache to `13000 MiB`:
+    about `0.94 s`;
+  - rough net upper bound: `5.54 - 3.44 - 0.94 = 1.16 s`.
+- `4096 MiB` isolated Q4_0 cache:
+  - hot slots: `520`;
+  - Q4_0 fallback coverage: `88.73%`;
+  - saved fallback upper bound: `7.047 s`;
+  - one-time fill cost: about `6.88 s`;
+  - rough net is too small before measuring shared-cache loss; reject for now.
+
+Selected next experiment:
+
+- Implement a `1024 MiB` isolated Q4_0 hot cache first.
+- Reduce shared cache to `14000 MiB` only for this experiment:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14000
+GGML_MOE_Q4_0_HOT_CACHE_MIB=1024
+GGML_MOE_Q4_0_HOT_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv
+GGML_MOE_Q4_0_HOT_CACHE_LAYERS=6,7,8,9,10,15,18
+```
+
+Implementation rules:
+
+1. Disabled by default.
+2. Decode-only Q4_0 down only.
+3. Use a separate device pool and metadata; never call `batch_cache_get()` for
+   Q4_0 and never change shared cache slot size.
+4. Admit only experts present in the Q4_0 hot-cache profile, sorted by measured
+   `fallback_us`, up to the slot budget.
+5. If an active expert is not admitted or cannot be loaded into the isolated
+   cache, decline the whole Q4_0 batch and let CPU fallback handle it. Do not
+   mix partial Q4 GPU rows in the first version.
+6. Record counters:
+   - calls;
+   - accepted;
+   - declined;
+   - hit/miss/admit/load counts;
+   - staged GiB;
+   - stage/kernel/D2H/wall ms per call;
+   - number of profile slots loaded.
+
+Theory:
+
+- Best possible `1024 MiB` cache net speedup is small:
+  - about `2.0 s` over the full `-n 96` decode in the optimistic estimate;
+  - token-rate upper movement from `117.578 s` decode is about `1.7%`.
+- This will not get close to `5 tok/s`, but it can remove a proven fallback
+  bucket without breaking the shared cache.
+- If the isolated cache does not improve strict cold `-n 32`, stop Q4_0 cache
+  work and move to larger bottlenecks such as prompt TTFT or up/gate scheduling.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 4` smoke:
+  - France prefix correct;
+  - Q4_0 hot-cache counters activate;
+  - shared cache slot size remains non-Q4;
+  - `read_failures=0`.
+- Strict cold `-n 32`:
+  - host RAM below 16 GB;
+  - TTFT below `106331.72 ms`;
+  - France output semantically correct and coherent;
+  - token rate improves over accepted comparable `0.584465 tok/s`;
+  - no launch/read failures.
+- Only if `-n 32` improves, run strict cold three-run `-n 96`.
+
+Rollback:
+
+- Revert source changes if strict cold `-n 32` does not improve, if quality
+  fails, if TTFT/RAM gates fail, if shared cache slot size changes, or if Q4_0
+  cache counters do not prove activation.
+
+## Phase 3ZY result - isolated Q4_0 hot cache rejected
+
+Timestamp: `2026-07-02 03:27 UTC`.
+
+Code state tested: `fb60dbcbd-dirty-phase3zy`.
+
+Reproduction:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+
+GGML_MOE_VRAM_CACHE_MIB=14000 \
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512 \
+GGML_MOE_Q4_0_HOT_CACHE_MIB=1024 \
+GGML_MOE_Q4_0_HOT_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv \
+GGML_MOE_Q4_0_HOT_CACHE_LAYERS=6,7,8,9,10,15,18 \
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special \
+  -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+  --no-display-prompt -no-cnv -t 32 -tb 32 \
+  -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+```
+
+Strict run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260702-031333Z-n32-phase3zy-q4-hotcache`
+
+Result:
+
+- accepted: `false`;
+- rollback required: `true`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`, pass;
+- cold start: `true`;
+- TTFT: `66999.95 ms`, pass against `106331.72 ms`;
+- decode: `57443.19 ms / 31 runs`;
+- token rate: `0.54 tok/s`, fail against comparable accepted n32 baseline
+  `0.584465 tok/s`;
+- quality: pass;
+- answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. Its capital, Paris, is famous for landmarks like the Eiffel Tower`;
+- `read_failures=0`;
+- shared cache stayed at non-Q4 slot sizes:
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`.
+
+Q4_0 hot-cache counters:
+
+- enabled: `1`;
+- slots: `130`;
+- slot size: `7.88 MiB`;
+- profile slots: `130`;
+- calls: `217`;
+- accepted: `3`;
+- declined: `214`;
+- average active experts per call: `8.00`;
+- hits: `310`;
+- misses: `214`;
+- loads: `74`;
+- load failures: `0`;
+- staged: `0.569 GiB`;
+- stage: `0.167 ms/call`;
+- kernel: `0.001 ms/call`;
+- D2H: `0.000 ms/call`;
+- wall: `0.168 ms/call`.
+
+Gap analysis:
+
+- The isolated cache mechanics worked and did not alter shared-cache slot size.
+- The first implementation required every active Q4_0 expert in a batch to be
+  present in the 1 GiB hot set before launching GPU compute.
+- The profile-level hot-row coverage estimate of `52.74%` did not translate to
+  useful batch acceptance. With eight active experts per Q4_0 call, a full-batch
+  acceptance policy has very low probability unless the admitted hot set covers
+  nearly all routed experts for those layers.
+- The measured acceptance was only `3 / 217 = 1.38%`, so almost all Q4_0 work
+  still fell back to CPU while shared cache was reduced from `15000 MiB` to
+  `14000 MiB`. The shared-cache loss dominated the tiny accepted Q4_0 gain.
+
+Decision:
+
+- Reject this implementation.
+- Revert the source changes and keep this result as a plan-only record.
+- Do not commit or push Q4_0 hot-cache source code.
+
+Next design direction:
+
+- Do not continue full-batch-only Q4_0 hot caching.
+- If revisiting Q4_0, design partial-row handling: GPU rows for admitted hot
+  experts and CPU fallback only for missed experts, with explicit scatter/merge
+  correctness checks. Before coding, compute the upper bound using measured
+  per-row fallback time, hot-row coverage, extra scatter/merge cost, and any
+  shared-cache VRAM opportunity cost.
+
+## Phase 3ZZ design - partial-row Q4_0 hot cache
+
+Timestamp: `2026-07-02 03:50 UTC`.
+
+Current accepted code state:
+
+- commit: `3e99cc578`;
+- accepted runtime remains Phase 3ZT/3ZU/3ZW code path with plan-only commits
+  after it;
+- strict profile source:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+
+Current bottleneck from strict cold n96 profile:
+
+- decode wall: `117578.26 ms / 77 = 0.65 tok/s`;
+- TTFT: `63209.39 ms`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`;
+- quality: pass;
+- `read_failures=0`;
+- accepted answer for the required France prompt is coherent and semantic.
+
+Decode fallback by type:
+
+- Q4_0 down decode fallback:
+  - entries: `1049`;
+  - routed: `33.161 GiB`;
+  - fallback: `7942.040 ms`.
+- Up/gate generic fallback is effectively gone after Phase 3ZT.
+- All material remaining decode fallback is Q4_0 down, but its absolute ceiling
+  is only `7.942 s`.
+
+Q4_0 decode fallback concentration:
+
+- `blk.6.ffn_down_exps.weight`: `1854.496 ms`;
+- `blk.7.ffn_down_exps.weight`: `1153.368 ms`;
+- `blk.10.ffn_down_exps.weight`: `1142.320 ms`;
+- `blk.9.ffn_down_exps.weight`: `1050.752 ms`;
+- `blk.8.ffn_down_exps.weight`: `988.680 ms`;
+- `blk.15.ffn_down_exps.weight`: `895.080 ms`;
+- `blk.18.ffn_down_exps.weight`: `857.344 ms`.
+
+These seven Q4_0 down layers account for the entire Q4_0 decode fallback bucket.
+
+Partial-row hot-cache upper bounds from `fallback-profile.csv`, sorted by
+measured `fallback_us`:
+
+| isolated Q4 cache | slots | covered fallback | coverage | routed |
+| --- | ---: | ---: | ---: | ---: |
+| `256 MiB` | `32` | `2098.859 ms` | `26.43%` | `8.090 GiB` |
+| `512 MiB` | `65` | `3065.283 ms` | `38.60%` | `11.674 GiB` |
+| `768 MiB` | `97` | `3698.292 ms` | `46.57%` | `14.112 GiB` |
+| `1024 MiB` | `130` | `4188.665 ms` | `52.74%` | `15.996 GiB` |
+| `2048 MiB` | `260` | `5540.778 ms` | `69.77%` | `21.087 GiB` |
+| `4096 MiB` | `520` | `7046.978 ms` | `88.73%` | `26.517 GiB` |
+| `8192 MiB` | `1040` | `7940.121 ms` | `99.98%` | `33.084 GiB` |
+
+Shared-cache opportunity cost, replaying accepted route trace with
+`upgate_pct=65`, `policy=lfu_lru`, `preload=protected`, `admit_after=2`:
+
+| shared cache | miss | extra miss vs 15000 MiB | lower-bound cost at `52.84 ms/GiB` |
+| --- | ---: | ---: | ---: |
+| `15000 MiB` | `298.93 GiB` | `0.00 GiB` | `0.000 s` |
+| `14750 MiB` | `301.18 GiB` | `2.25 GiB` | `0.119 s` |
+| `14500 MiB` | `303.46 GiB` | `4.53 GiB` | `0.239 s` |
+| `14250 MiB` | `305.44 GiB` | `6.51 GiB` | `0.344 s` |
+| `14000 MiB` | `307.35 GiB` | `8.42 GiB` | `0.445 s` |
+| `13750 MiB` | `309.34 GiB` | `10.41 GiB` | `0.550 s` |
+| `13500 MiB` | `311.22 GiB` | `12.29 GiB` | `0.649 s` |
+
+Theory:
+
+- A full Q4_0 elimination upper bound is:
+  - `77 / ((117.578 - 7.942) s) = 0.702 tok/s`.
+- Therefore Q4_0 work cannot get close to `5 tok/s`; it is a small,
+  correctness-preserving decode cleanup step.
+- Partial-row caching avoids the Phase 3ZY failure mode because each hot row can
+  be accelerated independently; it does not need all eight experts in the batch
+  to be present.
+- The first practical target is `512 MiB` isolated Q4 cache with shared cache
+  reduced to `14500 MiB`:
+  - theoretical covered fallback: `3.065 s`;
+  - shared-cache lower-bound cost: `0.239 s`;
+  - copy/fill cost should be paid once per admitted expert and must be measured;
+  - optimistic net before scatter/merge overhead: about `2.8 s`;
+  - decode upper movement: `77 / (117.578 - 2.8) = 0.671 tok/s`.
+- A `1024 MiB` version has a better upper bound:
+  - `4.189 s - 0.445 s = 3.744 s` before fill/scatter overhead;
+  - decode upper movement: `77 / (117.578 - 3.744) = 0.676 tok/s`.
+- Because measured improvement is expected to be small, the implementation must
+  first pass `-n 32`; no n96 promotion unless n32 beats `0.584465 tok/s`.
+
+Implementation options:
+
+1. Preferred small-step protocol change:
+   - add a new CUDA entry point or extend the existing one to report a per-row
+     completion mask for Q4_0 down;
+   - GPU computes admitted hot rows;
+   - CPU fallback computes only rows not marked complete;
+   - CPU `matrix_row_counts` or an equivalent skip mask must ensure completed
+     rows are not recomputed.
+2. Fallback implementation if the protocol change is too invasive:
+   - keep the existing whole-batch API returning `true`;
+   - inside the CUDA batch function, compute admitted rows on GPU and compute
+     missed rows with a local Q4_0 CPU fallback before scattering into `dst`;
+   - this requires exact Q4_0 CPU math validation against the existing fallback
+     before performance testing.
+
+Correctness gates before performance promotion:
+
+- Add debug-only compare mode for the first few Q4_0 partial calls:
+  - run the partial path;
+  - also compute the existing CPU fallback result for the same rows;
+  - print max absolute error / RMSE;
+  - reject if values are not numerically equivalent for Q4_0.
+- Strict cold `-n 4` smoke:
+  - France prefix semantic;
+  - Q4 partial counters active;
+  - no `read_failures`;
+  - host RAM below 16 GB;
+  - TTFT below `106331.72 ms`.
+- Strict cold `-n 32` validation:
+  - France output semantic and coherent;
+  - host RAM below 16 GB including page cache;
+  - TTFT below `106331.72 ms`;
+  - token rate above comparable accepted n32 `0.584465 tok/s`;
+  - if failed, revert all source changes and keep a plan-only rejection record.
+- Strict cold n96 promotion only after n32 passes:
+  - run at least one n96 with exact reproduction command;
+  - if the gain is material, repeat to confirm stability before commit.
+
+Required counters:
+
+- partial calls;
+- GPU rows;
+- CPU fallback rows;
+- admitted slots;
+- cache hits/misses;
+- loads/load failures;
+- staged GiB;
+- GPU stage/kernel/D2H/scatter ms;
+- CPU fallback ms for missed rows;
+- compare max error / RMSE when compare mode is enabled.
+
+Initial runtime for implementation test:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=14500
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_Q4_0_PARTIAL_CACHE_MIB=512
+GGML_MOE_Q4_0_PARTIAL_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv
+GGML_MOE_Q4_0_PARTIAL_LAYERS=6,7,8,9,10,15,18
+GGML_MOE_Q4_0_PARTIAL_COMPARE=1
+```
+
+Rollback:
+
+- Revert immediately if correctness compare fails, if France quality fails, if
+  TTFT rises above the gate, if RAM exceeds the 16 GB cgroup, if shared cache
+  slot sizes change unexpectedly, or if strict cold n32 does not improve.
+
+## Phase 3ZZ result - partial-row Q4_0 hot cache rejected
+
+Timestamp: `2026-07-02 03:58 UTC`.
+
+Code state tested: `8c8a5882d-dirty-phase3zz`.
+
+Strict runs:
+
+- n4 smoke, accepted env plus partial Q4:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-034532Z-n4-phase3zz-q4-partial-accepted-env`
+- n32 validation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-034713Z-n32-phase3zz-q4-partial-accepted-env`
+- n96 promotion:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-035208Z-n96-phase3zz-q4-partial-accepted-env`
+
+n32 result:
+
+- token rate: `0.584649 tok/s`, effectively tied with accepted comparable
+  `0.584465 tok/s`;
+- TTFT: `71921.70 ms`, pass;
+- host RAM: `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- partial counters:
+  - calls: `224`;
+  - active rows: `2030`;
+  - GPU rows: `690`;
+  - CPU rows: `1340`;
+  - loads: `65`;
+  - wall: `1.522 ms/call`.
+
+n96 result:
+
+- token rate: `0.532629 tok/s`, fail against current SOTA `0.634-0.65 tok/s`;
+- TTFT: `72796.28 ms`, pass;
+- host RAM: `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- partial counters:
+  - calls: `623`;
+  - active rows: `5222`;
+  - GPU rows: `1699`;
+  - CPU rows: `3523`;
+  - loads: `65`;
+  - staged: `0.500 GiB`;
+  - wall: `0.521 ms/call`.
+
+Gap analysis:
+
+- The partial path was mechanically active and cheap per call, but it changed
+  the runtime balance without improving end-to-end decode.
+- n96 decode length changed from the accepted profile's `77` decode runs to
+  `88` decode runs for the same prompt, which means value-level or scheduling
+  perturbation affected generation trajectory despite the France answer still
+  being semantic.
+- Down profile regressed:
+  - accepted Phase 3ZW diagnostic down total: `18.954 ms/call`;
+  - partial Q4 n96 down total: `21.024 ms/call`.
+- This violates the plan requirement that each step preserve correctness and
+  improve token rate.
+
+Decision:
+
+- Reject dirty Phase 3ZZ source changes.
+- Revert source code on local and remote worktrees.
+- Keep this result as a plan-only record.
+- Do not continue Q4 partial-cache work before a value-equivalence compare
+  explains the generation-length change.
+
+## Phase 4A - SOTA-based split-pool simulation plan
+
+Timestamp: `2026-07-02 04:05 UTC`.
+
+Source of this plan:
+
+- user-provided split-pool plan:
+  `/Users/spark/.codex/attachments/639b3f87-838d-46f2-a863-5e81763ce48f/pasted-text-1.txt`.
+
+Current SOTA baseline:
+
+- Source code state: `8c8a5882d` with plan-only commits after the accepted
+  runtime; no unaccepted source changes.
+- Accepted runtime env is the Phase 3ZW/3ZT env:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+Authoritative SOTA profile:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`
+
+Key metrics:
+
+- token rate: `0.65 tok/s`;
+- decode: `117578.26 ms / 77 runs`;
+- TTFT: `63209.39 ms`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`;
+- quality: pass;
+- `read_failures=0`;
+- shared cache:
+  - `15000 MiB`;
+  - slot sizes initialized by class of current request:
+    - `5.36 MiB`;
+    - `6.02 MiB`;
+    - `7.44 MiB`;
+  - down cache final: `2016` slots of `7.44 MiB`;
+  - hit rate: `44.2%`;
+- pinned staging:
+  - copies: `64145`;
+  - host stage: `79083.729 ms`;
+  - H2D: `13310.781 ms`;
+- down profile:
+  - calls: `4798`;
+  - total: `18.954 ms/call`;
+  - cuda batch: `4.908 ms/call`;
+  - fallback exposed: `13.993 ms/call`;
+- up/gate profile:
+  - calls: `4621`;
+  - total: `17.903 ms/call`;
+  - fallback exposed: effectively zero.
+
+Problem statement:
+
+- Current shared cache is keyed by expert byte size, but the operational cache
+  still wastes VRAM when a pool's slot size is pulled toward larger tensors.
+- The split-pool hypothesis is that separating up/gate and down experts by size
+  class increases resident expert count, reduces miss GiB, reduces host_stage
+  and H2D, and improves decode token rate without touching math.
+- This is safer than Q4 partial paths because it does not change operator
+  values; it changes only cache placement and eviction.
+
+Strict constraints:
+
+- Host RAM must remain below `16 GB` including page cache under cgroup
+  `memory.max=15900000000`, `memory.swap.max=0`.
+- Runs must be strict cold start:
+
+```sh
+sync
+echo 3 > /proc/sys/vm/drop_caches
+```
+
+- TTFT must remain below `106331.72 ms`.
+- France prompt must be semantic and coherent:
+  `Please introduce France in a short paragraph.`
+- `read_failures=0` and no CUDA launch failures.
+- Any accepted improvement must be committed and pushed immediately.
+- Any regression, quality failure, TTFT failure, RAM failure, launch/read
+  failure, or n32 token-rate failure requires immediate source revert and a
+  plan-only rejection record.
+
+Phase 4A.1: size distribution audit only, no inference changes.
+
+Input files:
+
+- `route-profile.csv`;
+- `route-trace.csv`;
+- `fallback-profile.csv`;
+- `stderr.txt`;
+- all from the SOTA profile directory above.
+
+Required output:
+
+- expert size classes and route counts for:
+  - `4.48 MiB`;
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`;
+  - `7.88 MiB Q4_0`.
+- per class:
+  - route count;
+  - routed GiB;
+  - fallback exposed ms;
+  - cache hit/miss estimate under current shared-cache replay;
+  - observed host_stage and H2D contribution where measurable.
+
+Phase 4A.2: split-pool simulator.
+
+Extend or wrap `scripts/moe-route-cache-sim.py` to model independent pools.
+The simulator must replay the actual `route-trace.csv`; profile-only estimates
+are not enough.
+
+Candidate pools:
+
+1. SOTA single/shared baseline:
+   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+   - current behavior.
+2. two-pool candidate A:
+   - small up/gate pool:
+     - max slot: `5.5 MiB`;
+     - budget: `7000 MiB`;
+   - large down pool:
+     - max slot: `7.5 MiB`;
+     - budget: `8000 MiB`;
+   - Q4_0 excluded.
+3. two-pool candidate B:
+   - small: `8000 MiB`;
+   - large: `7000 MiB`;
+   - Q4_0 excluded.
+4. two-pool candidate C:
+   - small: `9000 MiB`;
+   - large: `6000 MiB`;
+   - Q4_0 excluded.
+5. three-pool diagnostic only:
+   - up/gate small;
+   - normal down;
+   - Q4_0 hot/diagnostic;
+   - no implementation unless simulation shows more than `5 s/n96` net gain
+     and avoids the Phase 3ZZ value-change issue.
+
+Simulator output for every candidate:
+
+- per pool:
+  - slot size;
+  - budget MiB;
+  - slot count;
+  - hits;
+  - misses;
+  - hit rate;
+  - miss GiB;
+  - evictions;
+  - preload hits/misses;
+- global:
+  - total miss GiB;
+  - expected host_stage ms using measured `host_stage_gib_s`;
+  - expected H2D ms using measured `h2d_gib_s`;
+  - expected exposed down-stage saving using calibrated
+    `52.84 ms/GiB` lower bound;
+  - expected decode wall saving;
+  - expected token rate upper bound.
+
+Gate to enter implementation:
+
+- Do not implement unless simulation predicts more than `5.0 s` decode saving
+  on SOTA n96 after subtracting:
+  - any reduced down-pool capacity cost;
+  - any up/gate miss increase;
+  - expected extra bookkeeping cost.
+- If no candidate crosses `5.0 s/n96`, stop at plan-only simulation result and
+  choose a different bottleneck.
+
+## Phase 4B - env-gated two-pool implementation plan
+
+Implement only after Phase 4A passes the `>5 s/n96` theoretical gate.
+
+Feature gate:
+
+```sh
+GGML_MOE_VRAM_CACHE_SIZE_CLASSES=1
+GGML_MOE_VRAM_CACHE_CLASS_MIB=5.5,7.5
+GGML_MOE_VRAM_CACHE_CLASS_BUDGET_MIB=7000,8000
+```
+
+Design:
+
+- Disabled by default.
+- Q4_0 must not enter these shared pools.
+- Each pool owns independent:
+  - device allocation;
+  - slot size;
+  - slot count;
+  - hash table;
+  - LRU/LFU state;
+  - preload profile;
+  - hit/miss/preload/eviction counters.
+- Expert insertion chooses the smallest pool that fits the expert byte size.
+- If no class fits, if env parsing fails, if allocation fails, or if pool
+  metadata is inconsistent, fall back to current SOTA single-cache behavior.
+- Down prefetch must target only the pool selected for the registered down
+  tensor. It must not pollute the up/gate pool.
+- Existing mixed up/gate fused path must keep the same semantics and output.
+
+Required counters:
+
+```text
+[moe_stream_batch] VRAM size-class cache: enabled=1 pools=N total=...
+[moe_stream_batch] pool0: max=5.50 MiB budget=... slots=... hits=... misses=... hit_rate=... preloads=... evictions=...
+[moe_stream_batch] pool1: max=7.50 MiB budget=... slots=... hits=... misses=... hit_rate=... preloads=... evictions=...
+```
+
+Acceptance flow:
+
+1. Build:
+   - `cmake --build build-cuda-batch --target llama-completion -j$(nproc)`.
+2. Strict cold n4 smoke:
+   - France prefix semantic;
+   - no CUDA launch failure;
+   - `read_failures=0`;
+   - host RAM below 16 GB;
+   - TTFT below `106331.72 ms`;
+   - per-pool counters printed;
+   - current large tensor must not force all pools to `7.44 MiB` slots.
+3. Strict cold n32:
+   - compare against accepted `0.584465 tok/s`;
+   - token rate must improve;
+   - up/gate timing must not regress materially;
+   - down stage must drop;
+   - quality/RAM/TTFT/read gates must pass.
+4. Strict cold n96 promotion:
+   - run three times if n32 passes;
+   - average token rate must beat accepted `0.634-0.65 tok/s`;
+   - TTFT below `106331.72 ms`;
+   - host RAM below 16 GB;
+   - quality pass;
+   - `read_failures=0`;
+   - no launch failures;
+   - record exact France answers.
+5. Commit and push immediately only after n96 promotion passes.
+
+Rollback:
+
+- If n32 token rate does not improve, immediately revert source changes.
+- If n96 average does not beat SOTA, revert source changes.
+- If any quality/RAM/TTFT/read/launch gate fails, revert source changes.
+- Keep all failed metrics and reproduction commands as plan-only records.
+
+## Phase 4F - auto size-class follow-up
+
+Only after two-pool passes strict n96 promotion.
+
+Target env:
+
+```sh
+GGML_MOE_VRAM_CACHE_SIZE_CLASSES=auto
+GGML_MOE_VRAM_CACHE_MAX_POOLS=4
+GGML_MOE_VRAM_CACHE_CLASS_ALIGN_MIB=0.25
+```
+
+Auto mode must derive:
+
+- class sizes;
+- budgets;
+- preload entries;
+- admission policy;
+- per-pool protected profile reserve;
+
+from the route profile and replay simulation, without Kimi-specific hardcoded
+sizes.
+
+## Phase 4A result - split-pool simulation gate failed
+
+Timestamp: `2026-07-02 04:20 UTC`.
+
+Code state:
+
+- `de9567093`;
+- source tree clean before simulation;
+- no inference code changed.
+
+Reproducibility:
+
+- Added simulation-only helper:
+  `scripts/moe-size-class-cache-sim.py`.
+- SOTA profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic`.
+
+Main command:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic
+python3 scripts/moe-size-class-cache-sim.py \
+  --profile $RUN/route-profile.csv \
+  --trace $RUN/route-trace.csv \
+  --fallback $RUN/fallback-profile.csv \
+  --stderr $RUN/stderr.txt \
+  --policy lfu_lru \
+  --preload protected \
+  --admit-after 2
+```
+
+Primary output saved on the remote host:
+
+- `/tmp/phase4a-size-class-sim.txt`;
+- `/tmp/phase4a-size-class-sweep.txt`;
+- `/tmp/phase4a-size-class-extra.txt`.
+
+Size distribution from SOTA trace/fallback:
+
+| expert size | trace routes | trace routed GiB | fallback count | fallback ms |
+| ---: | ---: | ---: | ---: | ---: |
+| `4.484 MiB` | `41888` | `183.439` | `9248` | `16540.607` |
+| `5.359 MiB` | `32048` | `167.732` | `6800` | `14304.612` |
+| `6.016 MiB` | `25264` | `148.417` | `5440` | `17995.584` |
+| `7.438 MiB` | `7392` | `53.689` | `1632` | `6822.806` |
+| `7.875 MiB` Q4_0 | `0` | `0.000` | `5264` | `11462.100` |
+
+Important observation:
+
+- Q4_0 does not appear in the SOTA route trace, only in fallback profile.
+- Split-pool simulation therefore applies only to the value-preserving GPU
+  cache path for existing up/gate and normal down experts.
+- This avoids the Phase 3ZZ value-trajectory risk, but the remaining
+  critical-path gain is smaller than hoped.
+
+Default candidate results using `15000 MiB` total budget:
+
+| candidate | pools | hit rate | miss GiB | delta miss GiB | exposed saving | decode upper |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `single-15000` | `7.5:15000` | `42.64%` | `316.97` | `0.00` | `0 ms` | `0.655 tok/s` |
+| `two-pool-A` | `5.5:7000, 7.5:8000` | `45.39%` | `297.46` | `19.51` | `1031 ms` | `0.661 tok/s` |
+| `two-pool-B` | `5.5:8000, 7.5:7000` | `46.35%` | `294.01` | `22.96` | `1213 ms` | `0.662 tok/s` |
+| `two-pool-C` | `5.5:9000, 7.5:6000` | `47.08%` | `291.82` | `25.14` | `1329 ms` | `0.662 tok/s` |
+
+Broader budget sweep:
+
+| candidate | hit rate | miss GiB | delta miss GiB vs single | exposed saving | decode upper |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `two-pool-4000/11000` | `40.71%` | `317.62` | `-0.65` | `0 ms` | `0.655 tok/s` |
+| `two-pool-7000/8000` | `45.39%` | `297.46` | `19.51` | `1066 ms` | `0.661 tok/s` |
+| `two-pool-9000/6000` | `47.08%` | `291.82` | `25.15` | `1363 ms` | `0.663 tok/s` |
+| `two-pool-10000/5000` | `47.46%` | `291.95` | `25.02` | `1357 ms` | `0.663 tok/s` |
+| `three-5000/5000/5000` | `48.80%` | `285.01` | `31.96` | `1723 ms` | `0.665 tok/s` |
+| `three-6000/5000/4000` | `49.05%` | `286.58` | `30.39` | `1640 ms` | `0.664 tok/s` |
+
+Extra "use more VRAM" diagnostics:
+
+| candidate | total cache | hit rate | miss GiB | delta miss GiB | exposed saving | decode upper |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `two-9500/6000` | `15500 MiB` | `47.93%` | `287.83` | `29.14` | `1540 ms` | `0.664 tok/s` |
+| `two-10000/6000` | `16000 MiB` | `48.69%` | `283.81` | `33.16` | `1752 ms` | `0.665 tok/s` |
+| `three-5500/5000/5000` | `15500 MiB` | `49.67%` | `280.92` | `36.05` | `1905 ms` | `0.666 tok/s` |
+| `three-6000/5000/5000` | `16000 MiB` | `50.44%` | `277.32` | `39.65` | `2095 ms` | `0.667 tok/s` |
+| `three-6000/5000/5500` | `16500 MiB` | `51.07%` | `273.14` | `43.83` | `2316 ms` | `0.668 tok/s` |
+
+Calibration used:
+
+- pinned-stage host bandwidth from SOTA stderr:
+  - `host_stage_gib_s ~= 5.89`;
+  - `h2d_gib_s ~= 35.01`;
+- exposed down critical-path lower bound:
+  - `52.84 ms/GiB`.
+
+Interpretation:
+
+- Split pools clearly improve simulated cache hit rate and reduce miss GiB.
+- The raw host_stage + H2D upper bound can exceed `5 s` for some three-pool or
+  larger-VRAM candidates.
+- However the plan's implementation gate is decode critical-path saving
+  `>5 s/n96`. The calibrated exposed saving is only:
+  - about `1.0-1.4 s` for the requested two-pool 15GB candidates;
+  - about `1.7 s` for best 15GB three-pool;
+  - about `2.3 s` even with `16.5GB` total cache.
+- Expected token-rate upper bound stays around `0.661-0.668 tok/s`, not the
+  target `0.70-0.75 tok/s`.
+
+Baseline modeling note:
+
+- The current SOTA env does not set `GGML_MOE_VRAM_CACHE_SPLIT`, so Kimi
+  expert tensors use the default shared cache path rather than an explicit
+  upgate/down budget split.
+- The plan's stated baseline, `15000 MiB / 7.44 MiB = 2016 slots`, is therefore
+  the relevant baseline for this split-pool proposal.
+- Existing `scripts/moe-route-cache-sim.py --upgate-pct=65` remains useful for
+  split-budget sensitivity analysis, but it models an explicit upgate/down
+  allocation that is not enabled in the SOTA env. It should not replace the
+  current shared-slot baseline when deciding whether the new size-class feature
+  is worth implementing.
+
+Decision:
+
+- Do not enter Phase 4B implementation from the current SOTA trace.
+- The `>5 s/n96` theoretical gate is not met.
+- Keep `scripts/moe-size-class-cache-sim.py` as the reproducible Phase 4A
+  simulator.
+- Current SOTA runtime remains unchanged.
+
+Next direction:
+
+- To get a meaningful token-rate jump, do not spend implementation time on
+  size-class split pools yet.
+- The next design step should target a larger exposed bucket than cache slot
+  waste, or first gather a more precise per-stage critical-path profile that
+  proves raw host_stage savings are actually exposed on the decode path.
+
+## Phase 4B/E result - existing env-gated split cache accepted
+
+Timestamp: `2026-07-02 04:35 UTC`.
+
+Correction to Phase 4A decision:
+
+- A new source implementation is still unnecessary.
+- Current code already contains an env-gated two-pool cache mechanism:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT`.
+- `SPLIT_MAX_MIB=6` places Kimi `4.484/5.359 MiB` up/gate experts into the
+  small pool while leaving `6.016/7.438 MiB` down experts in the large pool.
+- This directly implements the split-pool idea without changing inference
+  math or source code.
+
+Accepted runtime delta from SOTA env:
+
+```sh
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=60
+```
+
+All other accepted SOTA env variables remain unchanged:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+n32 validation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-041341Z-n32-phase4b-existing-split-pct60`
+- token rate: `0.696370 tok/s`;
+- accepted comparable n32 baseline: `0.584465 tok/s`;
+- TTFT: `67636.18 ms`, pass;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+
+n96 promotion:
+
+| run | token rate | decode | TTFT | RAM | quality | read failures |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-041625Z-n96-phase4b-existing-split-pct60` | `0.709216 tok/s` | `108570.66 ms / 77` | `59461.95 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-042207Z-n96-phase4b-existing-split-pct60` | `0.723042 tok/s` | `106494.48 ms / 77` | `69972.05 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-042537Z-n96-phase4b-existing-split-pct60` | `0.712519 tok/s` | `108067.25 ms / 77` | `63857.75 ms` | `14.808 GiB` | pass | `0` |
+
+Promotion summary:
+
+- average token rate: `0.714926 tok/s`;
+- min token rate: `0.709216 tok/s`;
+- max token rate: `0.723042 tok/s`;
+- average TTFT: `64430.58 ms`;
+- max TTFT: `69972.05 ms`;
+- SOTA accepted token rate: `0.634-0.65 tok/s`;
+- improvement vs `0.65 tok/s`: about `+10.0%`.
+
+Exact n96 answer, all three runs:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+Representative cache/profile counters from first n96 promotion run:
+
+- cache initialization:
+  - upgate/small pool: `8.8 GiB`, `1679` slots, `5.36 MiB` each;
+  - down pool first stage: `5.9 GiB`, `997` slots, `6.02 MiB` each;
+  - down pool final stage: `5.9 GiB`, `806` slots, `7.44 MiB` each.
+- final cache counters:
+  - global hit rate: `51.4%`;
+  - down: `22822` hits, `9802` misses, `70.0%` hit rate;
+  - upgate: `31967` hits, `41969` misses, `43.2%` hit rate.
+- pinned staging:
+  - copies: `56714`;
+  - host stage: `71092.196 ms`;
+  - H2D: `11754.203 ms`.
+- expert pack:
+  - hits: `56714`;
+  - misses: `3076`;
+  - `read_failures=0`.
+- up/gate profile:
+  - calls: `4621`;
+  - total: `16.896 ms/call`;
+  - fallback exposed: `0.001 ms/call`;
+  - batch accept: `4621`.
+- down profile:
+  - calls: `4798`;
+  - total: `17.827 ms/call`;
+  - cuda batch: `4.193 ms/call`;
+  - fallback exposed: `13.593 ms/call`;
+  - batch accept: `4082`.
+
+Comparison to previous SOTA profile:
+
+- SOTA token rate: `0.65 tok/s`; split-cache average: `0.714926 tok/s`.
+- SOTA pinned staging copies: `64145`; split-cache: `56714`.
+- SOTA host stage: `79083.729 ms`; split-cache first n96:
+  `71092.196 ms`.
+- SOTA H2D: `13310.781 ms`; split-cache first n96: `11754.203 ms`.
+- SOTA down total: `18.954 ms/call`; split-cache first n96:
+  `17.827 ms/call`.
+- SOTA up/gate total: `17.903 ms/call`; split-cache first n96:
+  `16.896 ms/call`.
+
+Decision:
+
+- Accept the env-gated split-cache runtime.
+- No source-code change is required; the implementation already exists.
+- This satisfies the split-pool goal under strict cold start and 16GB host RAM.
+- Commit and push this plan/runtime record immediately.
+
+Reproduction command shape:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+env $(cat <accepted env above plus split delta>) \
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special \
+  -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+  --no-display-prompt -no-cnv -t 32 -tb 32 \
+  -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+```

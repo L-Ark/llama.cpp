@@ -2742,3 +2742,72 @@
 - `deepseek_split_pool_design_gate`: before running DeepSeek split-pool performance tests, inspect expert sizes and cache traces. If DeepSeek gate-only stream has one effective expert size, split-pool has no theoretical benefit for the current SOTA path and should not be promoted. If adapting split-pool to one-stream path, define explicit envs, cache budgets, expected miss reduction, and rollback conditions before executing.
 - `acceptance_gate`: any post-merge DeepSeek improvement must exceed current `2.7 tok/s`, keep RAM including page cache `<=16000000000`, preserve France correctness under manual review, keep TTFT `<=45449.496149ms`, and be committed/pushed to `ssd/vendor/deepseek-token-rate-16gb` with a clean pushed-commit rerun before promotion.
 - `rollback`: if the merged code breaks Kimi or DeepSeek build paths, resolve rather than dropping features. If a split-pool DeepSeek experiment fails performance/correctness/RAM/TTFT gates, keep the merge only if it preserves functionality; revert only the failing DeepSeek-specific experiment source/config and record rejection.
+
+#### 2026-07-02 merge regression investigation
+
+- `merge_status`: conflicts were resolved and the merged tree built, but it is not yet committed or pushed because DeepSeek SOTA reproduction regressed.
+- `post_merge_control_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T045119Z-20260702_merge_kimi_ds_sota_repro_045119/france-cpu40-vram0gb`.
+- `post_merge_control_result`: rejected. `eval_tok_s=2.1`, `prompt_tok_s=0.8`, `TTFT=29437.507562ms`, `elapsed_seconds=119.25`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15018037248`, `pgmajfault=421828`, `workingset_refault_file=9671728`, `ram_ok=true`, but manual correctness failed because the France answer was overlong/truncated.
+- `post_merge_trace_gap`: gate trace changed from accepted SOTA `rows=35151`, `cache_misses=4623`, `src0_ms=22756.581` to `rows=51464`, `cache_misses=10866`, `src0_ms=38964.404`. This is a model trajectory/routing regression, not a small cache-policy variance.
+- `current_hypothesis`: the highest-priority suspect is the Kimi graph change that switches `LLM_ARCH_DEEPSEEK2` MoE expert selection from `ggml_argsort_top_k()` to `ggml_top_k()`. This can change expert order/selection semantics and explains the row-count/output trajectory jump. The Kimi functionality should be preserved for `LLM_ARCH_KIMI_LINEAR`; DeepSeek V4 should keep the previously promoted selection behavior unless a dedicated DeepSeek correctness/performance test proves the new path is safe.
+- `next_experiment`: patch `src/llama-graph.cpp` so only `LLM_ARCH_KIMI_LINEAR` and the Kimi-intended path use `ggml_top_k`, while `LLM_ARCH_DEEPSEEK2` returns to `ggml_argsort_top_k`. Rebuild and rerun the exact pushed SOTA config under cold `drop_caches` and 16GB cgroup. Acceptance for this repair is not a new SOTA; it must restore merge compatibility with `eval_tok_s` near `2.7`, `rows≈35151`, RAM ok, TTFT ok, and complete France output.
+
+#### 2026-07-02 top-k repair result and bias-name hypothesis
+
+- `topk_repair_patch`: `src/llama-graph.cpp` was patched to remove `LLM_ARCH_DEEPSEEK2` from the Kimi `ggml_top_k` condition while preserving `LLM_ARCH_KIMI_LINEAR` and `LLM_ARCH_MISTRAL4`.
+- `topk_repair_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T051410Z-20260702_merge_kimi_ds_topk_repair_control/france-cpu40-vram0gb`.
+- `topk_repair_result`: rejected as insufficient. `eval_tok_s=2.1`, `prompt_tok_s=0.8`, `TTFT=29944.17521ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15005294592`, `ram_ok=true`; output still ended incomplete at `Overall, France is a country with a` and gate rows stayed `51464`.
+- `updated_hypothesis`: the next suspect is the Kimi merge change in `src/llama-model.cpp` that loads `ffn_exp_probs_b.bias` before the legacy `ffn_exp_probs_b` name in the `LLM_ARCH_DEEPSEEK2/MISTRAL4` tensor-loading case. DeepSeek routing bias directly affects expert selection and generated length; selecting a different optional bias tensor can explain the 35k -> 51k row jump and truncated output.
+- `next_experiment_bias_order`: restore DeepSeek-compatible legacy bias-name priority: first load `tn(LLM_TENSOR_FFN_EXP_PROBS_B, i)`, then fall back to `tn(..., "bias", i)` only if legacy is absent. This preserves Kimi compatibility when only the `.bias` tensor exists, while keeping current DeepSeek V4 behavior. Rebuild and rerun the same cold 16GB SOTA control.
+
+#### 2026-07-02 coarse frontend isolation plan
+
+- `bias_order_result`: rejected as insufficient. `/root/lfz/runs/vendor-ds4-16gb/20260702T051938Z-20260702_merge_kimi_ds_bias_order_repair_control/france-cpu40-vram0gb` produced `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=28665.399538ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15017811968`, `ram_ok=true`, but output remained truncated and gate rows stayed `51464`.
+- `updated_debug_strategy`: save the staged Kimi frontend/core patch for `src/llama-context.cpp`, `src/llama-graph.cpp`, `src/llama-model.cpp`, `src/models/deepseek2.cpp`, `ggml/include/ggml.h`, `ggml/src/ggml-backend*.cpp`, and `ggml/src/ggml.c`, then temporarily reverse it while leaving CUDA merge files intact. If DeepSeek rows/output recover, the regression is in this frontend/core set; if not, inspect CUDA/CPU MoE merge changes next.
+- `coarse_frontend_acceptance`: diagnostic only. It does not preserve Kimi functionality and must not be committed as final. It is acceptable only as a narrowing experiment before reapplying the saved patch and adding targeted guards.
+
+#### 2026-07-02 coarse frontend isolation result
+
+- `coarse_frontend_saved_patch`: `/root/lfz/tmp/kimi_frontend_core_patch_20260702T0526.diff`.
+- `coarse_frontend_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T053000Z-20260702_merge_kimi_frontend_reverted_control/france-cpu40-vram0gb`.
+- `coarse_frontend_result`: diagnostic pass. With CUDA/Kimi split-pool files kept but `src/llama-context.cpp`, `src/llama-graph.cpp`, `src/llama-model.cpp`, and `src/models/deepseek2.cpp` temporarily restored to DeepSeek SOTA behavior, the control produced `eval_tok_s=2.8`, `prompt_tok_s=1.0`, `TTFT=36811.193769ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15002050560`, `ram_ok=true`, and complete France output.
+- `coarse_frontend_trace`: `rows=35151`, `cache_hits=30528`, `cache_misses=4623`, `cache_inserts=3337`, `src0_ms=21908.727`, `dontneed_ms=1100.233`, `total_ms=24086.296`. This matches the promoted SOTA trajectory.
+- `next_experiment_frontend_split`: reapply only `src/llama-model.cpp` and `src/models/deepseek2.cpp` from the saved Kimi patch and rerun the same control. If the 51k-row long-output regression returns, split those two files; otherwise test `src/llama-graph.cpp` next.
+
+#### 2026-07-02 model/deepseek2 split result
+
+- `model_deepseek2_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T053340Z-20260702_merge_kimi_model_deepseek2_only_control/france-cpu40-vram0gb`.
+- `model_deepseek2_result`: rejected/regression reproduced. Reapplying only `src/llama-model.cpp` and `src/models/deepseek2.cpp` produced `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=28783.135053ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15024054272`, `ram_ok=true`, but the output/trajectory remained the long truncated France response.
+- `next_experiment_model_vs_deepseek2`: reverse only `src/models/deepseek2.cpp` back to DeepSeek SOTA behavior while keeping the Kimi `src/llama-model.cpp` changes. If the SOTA trajectory returns, the regression is the DeepSeek2 YaRN formula change; otherwise the regression is in model loading/hparams behavior.
+- `guard_strategy_if_deepseek2`: preserve Kimi branch behavior by making the new formula apply only where it is actually needed, while DeepSeek V4/Flash keeps the already validated old formula. Any such guard must be explicit and documented before merge commit.
+
+#### 2026-07-02 hparams split plan
+
+- `model_only_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T053649Z-20260702_merge_kimi_model_only_control/france-cpu40-vram0gb`.
+- `model_only_result`: rejected/regression persists. Keeping only `src/llama-model.cpp` Kimi changes while `src/models/deepseek2.cpp` is back to SOTA behavior still produced `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=29095.128722ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15022125056`, `ram_ok=true`, with the same long truncated France output.
+- `hparams_culprit_hypothesis`: the decisive hunk is the `LLM_ARCH_DEEPSEEK2/MISTRAL4` change that removed the historical `hparams.rope_yarn_log_mul /= 0.1f`. DeepSeek V4/Flash uses this architecture path and empirically requires the old scaled value to reproduce the accepted output trajectory.
+- `next_experiment_hparams_restore`: restore the old `if (ml.get_key(...)) { hparams.rope_yarn_log_mul /= 0.1f; }` behavior while keeping the other Kimi `src/llama-model.cpp` changes. Rebuild and rerun the strict SOTA control. If rows/output recover, final merge must keep this DeepSeek-compatible hparams behavior and not adopt the Kimi branch hparams interpretation for DeepSeek V4.
+
+#### 2026-07-02 hparams restore result
+
+- `hparams_restore_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T054216Z-20260702_merge_kimi_hparams_restore_control/france-cpu40-vram0gb`.
+- `hparams_restore_result`: rejected. Restoring the historical `/=0.1` hparams scaling while keeping the other `src/llama-model.cpp` Kimi changes still produced `eval_tok_s=2.1`, `prompt_tok_s=0.9`, `TTFT=29413.482979ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15015927808`, `ram_ok=true`, and the long truncated France trajectory.
+- `updated_culprit`: the likely culprit is no longer hparams scaling; it is the early `defer_expert_mmap` tensor buffer override moved before tensor creation, or less likely the optional `.bias` fallback for `ffn_exp_probs_b`.
+- `next_experiment_model_revert_then_minimal`: temporarily reverse all saved `src/llama-model.cpp` Kimi changes back to SOTA behavior, rebuild/rerun to reconfirm recovery, then add back only small compatible pieces. This is diagnostic and not the final merge state.
+
+#### 2026-07-02 guarded model result
+
+- `model_reverted_confirm_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T054628Z-20260702_merge_kimi_model_reverted_confirm/france-cpu40-vram0gb`, `eval_tok_s=2.7`, `TTFT=36888.895417ms`, `memory_peak_bytes=16000000000`, complete France output. This reconfirmed `src/llama-model.cpp` was the regression source.
+- `model_guard_patch`: re-applied Kimi `src/llama-model.cpp` changes but kept DeepSeek-compatible YaRN hparams scaling and changed early deferred expert tensor CPU override from `defer_expert_mmap && !devices.empty()` to `defer_expert_mmap && arch == LLM_ARCH_KIMI_LINEAR && !devices.empty()`. This preserves the Kimi Linear deferred-expert path while preventing DeepSeek V4 from changing tensor placement/output trajectory.
+- `model_guard_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T055131Z-20260702_merge_kimi_model_guarded_control/france-cpu40-vram0gb`.
+- `model_guard_result`: accepted as merge repair, not new SOTA. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=36771.871689ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14996398080`, `ram_ok=true`, France output complete/coherent.
+- `next_experiment_reapply_graph_context`: reapply Kimi `src/llama-graph.cpp` and `src/llama-context.cpp` changes. Keep the prior DeepSeek guard that removes `LLM_ARCH_DEEPSEEK2` from the `ggml_top_k` condition. Do not reapply `src/models/deepseek2.cpp` formula change unless a Kimi-specific requirement proves it is needed; DeepSeek V4 SOTA requires the old formula/hparams pairing.
+
+#### 2026-07-02 full guarded merge control result
+
+- `full_guarded_patch`: Kimi CUDA/core/batch split-pool/docs/scripts plus Kimi graph/context/model changes are merged. DeepSeek guards kept: `LLM_ARCH_DEEPSEEK2` remains on `ggml_argsort_top_k`, DeepSeek YaRN hparams keeps historical `/=0.1`, `src/models/deepseek2.cpp` formula remains SOTA-compatible, and early deferred expert CPU override is limited to `arch == LLM_ARCH_KIMI_LINEAR`.
+- `full_guarded_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T055445Z-20260702_merge_kimi_full_guarded_control/france-cpu40-vram0gb`.
+- `full_guarded_result`: accepted as merge repair, not a new SOTA. `eval_tok_s=2.7`, `prompt_tok_s=1.0`, `TTFT=37205.423753ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15027433472`, `pgmajfault=289957`, `workingset_refault_file=2875841`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `full_guarded_trace`: `rows=35151`, `cache_hits=30528`, `cache_misses=4623`, `cache_inserts=3337`, `src0_ms=23479.610`, `dontneed_ms=1114.308`, `total_ms=25683.730`. The trajectory matches the promoted SOTA shape.
+- `full_guarded_correctness_manual_review`: pass. France output is complete/coherent and matches the accepted answer shape.
+- `merge_decision`: commit/push this guarded merge to `ssd/vendor/deepseek-token-rate-16gb` before continuing split-pool migration experiments. This checkpoint preserves current DeepSeek SOTA after merging Kimi changes; it does not yet claim a new DeepSeek token-rate improvement beyond `2.7 tok/s`.

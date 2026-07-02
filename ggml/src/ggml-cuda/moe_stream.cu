@@ -792,8 +792,9 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (ctx.h_bounce && ctx.h_bounce_sz >= src1_f32_bytes) {
         char *bounce = (char *)ctx.h_bounce;
         const char *src1_base = (const char *)src1_f32;
+        const size_t src1_ne1 = (src1_nb1 > 0 && src1_nb2 >= src1_nb1) ? src1_nb2 / src1_nb1 : 1;
         for (int64_t k = 0; k < cne1; ++k) {
-            const int32_t i1 = rows[k].i1 % src1_ne1;
+            const int32_t i1 = src1_ne1 > 0 ? rows[k].i1 % (int32_t) src1_ne1 : 0;
             const int32_t i2 = rows[k].i2;
             const char *src_row = src1_base + (size_t)i1 * src1_nb1 + (size_t)i2 * src1_nb2;
             std::memcpy(bounce + (size_t)k * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
