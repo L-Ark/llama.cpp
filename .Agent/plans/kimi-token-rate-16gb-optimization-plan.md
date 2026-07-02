@@ -11273,3 +11273,222 @@ Next candidate: Phase 3ZX Q4_0 decode one-shot GPU path
 - Acceptance requires strict cold `-n 32` first, then strict cold three-run
   `-n 96` only if the `-n 32` result improves token rate without violating any
   hard gate.
+
+## Phase 3ZX: Q4_0 decode one-shot GPU probe
+
+Design timestamp: 2026-07-03 09:18 CST.
+
+Current bottleneck:
+
+- The accepted Phase 3ZW diagnostic proves decode Q4_0 down fallback is the
+  largest remaining isolated decode fallback bucket:
+  - `4312` routed Q4_0 decode rows;
+  - `33.161 GiB` routed Q4_0 decode bytes;
+  - `7942.040 ms` measured CPU fallback time.
+- The seven layers are stable for the fixed France prompt:
+  `6,7,8,9,10,15,18`.
+- Shared-cache Q4_0 was rejected because it changed the global slot size and
+  hurt existing up/gate/down cache behavior. Phase 3ZX must not use the shared
+  expert cache for Q4_0.
+
+Selected next experiment:
+
+- Add a Q4_0 down CUDA probe that is:
+  - disabled by default;
+  - decode-only (`ids->ne[1] == 1`);
+  - down-only (`.ffn_down_exps.`);
+  - `GGML_TYPE_Q4_0` only;
+  - layer-allowlisted by env;
+  - no persistent shared-cache admission.
+- The first implementation may use one-shot staging into per-call scratch GPU
+  buffers. It is allowed to be slower than the final design because this phase
+  measures whether the Q4_0 CUDA kernel path is numerically and structurally
+  viable without touching shared cache behavior.
+
+Environment gate:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0_ONESHOT_LAYERS=6,7,8,9,10,15,18
+```
+
+Theory and upper bound:
+
+- Phase 3ZW decode wall time: `117.578 s`.
+- Full Q4_0 decode CPU fallback time: `7.942 s`.
+- Absolute best possible token-rate multiplier if Q4_0 decode fallback
+  disappears with no overhead:
+
+```text
+117.578 / (117.578 - 7.942) = 1.072x
+```
+
+- Upper token rate from the full bucket:
+
+```text
+0.65 tok/s * 1.072 = 0.697 tok/s
+```
+
+- One-shot copy bound:
+  - Q4_0 decode routed bytes: `33.161 GiB`.
+  - H2D at measured `34.95 GiB/s`: about `0.949 s`.
+  - host staging at measured `5.73 GiB/s`: about `5.79 s`.
+  - before kernel/sync cost, naive one-shot headroom is about
+    `7.94 - 0.95 - 5.79 = 1.20 s`.
+- Therefore this is not expected to be a large final speedup. Its value is to
+  prove correctness and quantify kernel/staging cost without poisoning shared
+  cache. If the one-shot path cannot beat CPU fallback in `-n 32`, move to an
+  isolated hot Q4_0 cache instead of trying to tune one-shot.
+
+Implementation plan:
+
+1. Add a CPU-side eligibility reason for env-gated Q4_0 one-shot down, separate
+   from the existing shared-cache down batch support.
+2. Add a CUDA entry point or extend the existing down batch entry with a
+   no-cache Q4_0 mode:
+   - allocate/reuse scratch slots sized to Q4_0 expert bytes;
+   - copy only active experts for the current tensor/call;
+   - run existing compact down MMVQ for Q4_0 if present, otherwise add the
+     minimal Q4_0 compact launcher;
+   - return false on any unsupported shape or launch error so CPU fallback
+     remains the safety net.
+3. Record counters that separate:
+   - one-shot accepted/declined calls;
+   - staged bytes;
+   - host staging time;
+   - H2D time;
+   - kernel time;
+   - fallback time remaining.
+4. Do not alter the shared cache slot size or admission policy.
+
+Execution:
+
+1. Build remote CUDA `llama-completion`.
+2. Run a strict cold `-n 4` smoke with the env gate enabled:
+   - must generate a France prefix;
+   - no read/launch failures;
+   - no malformed output;
+   - one-shot counters must show whether the Q4_0 path activated.
+3. Run strict cold `-n 32` only if smoke passes.
+4. Promote to strict cold `-n 96` only if `-n 32` improves token rate versus
+   the comparable accepted n32 baseline and satisfies all gates.
+
+Acceptance:
+
+- Build succeeds.
+- Host RAM remains below 16 GB including page cache.
+- TTFT remains below `106331.72 ms`.
+- France answer remains semantically correct and coherent.
+- `read_failures=0` and CUDA launch failures are zero.
+- Shared cache slot size must remain at the accepted non-Q4 value; any increase
+  toward the rejected `7.88 MiB` shared slot pattern is a failure.
+- Strict cold `-n 32` token rate must improve versus the comparable accepted
+  `0.584465 tok/s` n32 run before any `-n 96` promotion.
+
+Rollback:
+
+- Revert the source patch if:
+  - Q4_0 one-shot output is wrong;
+  - token rate regresses in strict cold `-n 32`;
+  - TTFT exceeds the gate;
+  - host RAM exceeds 16 GB;
+  - shared cache slot size changes;
+  - CUDA launch/read failures appear;
+  - fallback counters show that the path does not activate.
+
+Result timestamp: 2026-07-03 09:59 CST.
+
+Implementation attempted:
+
+- CPU eligibility allowed `GGML_TYPE_Q4_0` down batch only when
+  `GGML_MOE_STREAM_DOWN_Q4_0_ONESHOT_LAYERS` matched the tensor layer.
+- CUDA added a no-cache one-shot branch for Q4_0 down:
+  - copied active experts into `bc.d_src0` scratch;
+  - used compact MMVQ with `GGML_TYPE_Q4_0`;
+  - skipped `batch_cache_get()` and did not admit Q4_0 into the shared cache;
+  - emitted a `q4_0 oneshot profile` counter line.
+
+Build:
+
+- Remote CUDA build succeeded:
+
+```sh
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+```
+
+Smoke run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-025425Z-n4-phase3zx-q4-oneshot-smoke`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Output: `France is a country`.
+- TTFT: `76609.18 ms`, inside gate.
+- Decode: `8754.58 ms / 3 runs = 0.34 tok/s`.
+- Q4_0 one-shot activated:
+  - calls: `21`;
+  - accepted: `21`;
+  - declined: `0`;
+  - average active: `8`;
+  - staged: `1.292 GiB`;
+  - stage: `105.832 ms/call`;
+  - kernel: `0.109 ms/call`;
+  - D2H: `0.014 ms/call`;
+  - wall: `106.005 ms/call`.
+- `read_failures=0`.
+- Shared cache slot sizes stayed on the accepted non-Q4 path:
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`.
+
+Formal `-n 32` run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-025706Z-n32-phase3zx-q4-oneshot`.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- The SSH wrapper disconnected before post-processing, so no `exit.txt`,
+  `metrics.json`, or timing summary was written.
+- The `llama-completion` process later exited, but stderr had no final
+  `llama_print_timings` and stdout contained only an incomplete answer fragment.
+- cgroup evidence:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - `oom_kill=0`.
+- This run is invalid for acceptance and fails the quality/completeness gate.
+
+Decision:
+
+- Reject Phase 3ZX one-shot.
+- Do not promote to `-n 96`.
+- Revert Q4_0 one-shot source changes.
+- Keep this plan record.
+
+Gap analysis:
+
+- The Q4_0 CUDA kernel itself was cheap: `0.109 ms/call`.
+- The one-shot staging path was the bottleneck: `105.832 ms/call`.
+- Phase 3ZW measured CPU Q4_0 decode fallback at about
+  `7942 ms / 539 calls = 14.7 ms/call`.
+- Therefore the naive one-shot path is roughly `7x` slower than CPU fallback
+  per Q4_0 down call before considering end-to-end scheduling effects.
+- This matches the theoretical warning: one-shot copies cannot win unless
+  staging avoids slow pageable/mmap host copies or reuses copied experts.
+
+Next direction:
+
+- Do not retry Q4_0 one-shot from mmap host pointers.
+- The next Q4 attempt must reuse copied experts:
+  - isolated Q4_0 cache with hard cap, likely `1024-2048 MiB`;
+  - admit only hot experts from `fallback-profile.csv`;
+  - no shared cache slot-size changes;
+  - no prompt-phase Q4_0 path until TTFT is addressed separately.
+- Before implementing, update this plan with an isolated-cache design and a
+  hard bound using:
+  - hotset saved fallback upper bound (`4.19-5.54 s` for `1-2 GiB`);
+  - expected one-time fill cost;
+  - expected per-token cache hit rate;
+  - VRAM budget impact on the existing `15000 MiB` shared cache.
