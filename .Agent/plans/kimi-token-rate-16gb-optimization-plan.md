@@ -16687,6 +16687,113 @@ Rollback:
   `decode,type=2` is not reduced, revert the source change and keep only the
   plan/run record.
 
+Phase 7AN result - rejected:
+
+Source delta tested:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - added `GGML_TYPE_Q4_0` to `moe_stream_type_supported()`;
+  - added `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()`;
+  - did not add Q4_0 to the Q8_K reference path.
+- `ggml/src/ggml-cpu/ggml-cpu.c`
+  - added `GGML_TYPE_Q4_0` only to
+    `ggml_cuda_moe_stream_supports_down_batch()`;
+  - did not add Q4_0 to the shared up/gate support predicate.
+- Build:
+  `cmake --build build-cuda-batch -j 32 --target llama-completion`, success.
+
+n4 smoke 1, CUDA-side gate only:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145318Z-n4-phase7an-q4-down-compact-smoke`.
+- source status: dirty with only CUDA MoE batch changes.
+- result:
+  - exit `0`, no CUDA error;
+  - TTFT `56208.22 ms`;
+  - decode `5213.78 ms / 3`, `0.58 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- finding:
+  - `src0_type=2` Q4_0 remained `eligible=0`, `unsupported=4`;
+  - `decode,type=2` still present in fallback CSV;
+  - root cause was a separate CPU-side down eligibility gate.
+- decision:
+  - smoke was useful diagnostic evidence only;
+  - continue within the same phase by adding Q4_0 to the CPU down-only gate.
+
+n4 smoke 2, CUDA + CPU down gate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145611Z-n4-phase7an-q4-down-cpu-gate-smoke`.
+- source status: dirty with CPU and CUDA Q4_0 down compact changes.
+- result:
+  - exit `0`, no CUDA error;
+  - TTFT `63334.73 ms`;
+  - decode `5084.62 ms / 3`, `0.59 tok/s`;
+  - RAM `memory.peak=15899996160`, `oom=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- mechanism evidence:
+  - Q4_0 down tensors changed from unsupported to eligible, e.g.
+    `src0_type=2 eligible=4 unsupported=0`;
+  - `decode,type=2` fallback rows were eliminated in the n4 fallback CSV.
+- limitation:
+  - output was `France is a country`, which is too short for the full semantic
+    gate because this is only `-n 4`;
+  - proceed to n32 for real quality/performance judgment.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-145819Z-n32-phase7an-q4-down-compact`.
+- source status: dirty with CPU and CUDA Q4_0 down compact changes.
+- quality: pass; output:
+
+```text
+France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre
+```
+
+- TTFT: `62702.35 ms`.
+- decode: `43642.08 ms / 31`, `0.71 tok/s`.
+- comparison: slower than accepted Phase 7AE best n32 `36687.31 ms / 31` by
+  `6954.77 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- mechanism:
+  - `decode,type=2` Q4_0 fallback rows were eliminated;
+  - Q4_0 down tensors became eligible and accepted in decode;
+  - however down cache slot size increased from the accepted `7.44 MiB` to
+    `7.88 MiB`, reducing down slots from `806` to `761`;
+  - down hit rate dropped to `67.5%`;
+  - pinned main host stage rose to `32342.257 ms`;
+  - expert-pack iouring bytes rose to `55.67 GB`;
+  - down total remained high at `32.896 ms/call`, with
+    `fallback_t0=28.844 ms/call`;
+  - up/gate total also rose to `18.834 ms/call`.
+
+Interpretation:
+
+- The implementation proved the missing gates and generic compact path can make
+  Q4_0 down tensors eligible and remove Q4_0 CPU fallback.
+- End-to-end token rate regressed because adding Q4_0 to the same down VRAM
+  cache pool increased the required slot size for all down entries. The smaller
+  slot count caused more misses and more expert-pack staging, which dominated
+  the saved CPU fallback work.
+- This is not an acceptable SOTA path in its naive form.
+- A future Q4_0 attempt must avoid poisoning the main down cache slot size. The
+  likely design is a separate Q4_0 size class/cache pool, a Q4_0-only scoped
+  layer/range experiment, or a policy that keeps Q4_0 on CPU unless a dedicated
+  pool can be provisioned without reducing the existing 7.44 MiB down pool.
+
+Decision:
+
+- Reject Phase 7AN.
+- Revert both source files to the previous accepted SOTA behavior.
+- Rebuild `build-cuda-batch/bin/llama-completion` after revert, success.
+- Keep Phase 7AE as current accepted SOTA:
+  - Q4_0 down remains CPU fallback under the accepted config;
+  - down cache slot remains `7.44 MiB` with `806` slots;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
 ## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
 
 Design timestamp: 2026-07-02 17:35 UTC.
