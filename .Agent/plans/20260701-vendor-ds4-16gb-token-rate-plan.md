@@ -2571,6 +2571,19 @@
 - `gap_analysis`: Reducing global top3 budget from `-n 192` to `-n 160` does not solve the quality problem; it only moves the truncation point earlier. The high-speed global top3 path remains unusable without a semantic stop mechanism or a quality-preserving routing policy. Do not promote token-limit clipped top3 outputs as SOTA.
 - `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：global-top3-reverse-stop-first-sentence
+
+- `attempt_id`: `20260702-global-top3-reverse-stop-first-sentence`
+- `attempt_kind`: `config-probe/semantic-stop-boundary`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Global top3 has the best observed generation rate (`2.7-2.8 tok/s`) and the first sentence is semantically correct, but prior attempts fail because generation continues into a repetitive/incomplete tail. Token-budget clipping (`-n160`) only moves the truncation point. `llama-cli` supports `--reverse-prompt`, so a stop at the first sentence boundary is a bounded way to test whether the fast path can produce a complete short paragraph without relying on token-limit truncation.
+- `hypothesis`: With `GGML_MOE_KEEP_TOPK_UPDOWN=3` and `--reverse-prompt ". "`, the model should stop after the first complete sentence. A single complete sentence can be a valid short paragraph if it introduces France coherently. This must be rejected if the period is omitted, if the sentence is too terse to satisfy the prompt, or if the stop behavior creates an interactive/control artifact.
+- `theoretical_upper_bound`: Compute path is global top3, so per-token generation rate can stay near `2.7-2.8 tok/s`. Total wall may be lower because fewer tokens are generated, but SOTA promotion is based on measured `eval_tok_s`, RAM, TTFT, and strict manual correctness. This is a stop-policy experiment; it does not reduce underlying per-token CPU fallback cost.
+- `test_config`: clean source, no source changes, `GGML_MOE_KEEP_TOPK_UPDOWN=3`, no layer range override, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-n 192 -c 256 -b 16 -ub 16 -t 20 -tb 20 --reverse-prompt ". "`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, TTFT does not exceed `45449.496149ms`, and manual review confirms the output is a complete, semantically correct, coherent short paragraph with no missing final punctuation, no truncation, and no interactive artifact. Heuristic correctness is insufficient.
+- `rollback`: no source change. If token rate does not exceed `2.6`, output is incomplete/too terse/artifacted, RAM exceeds limit, or TTFT exceeds gate, record rejected. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then rerun the pushed config before promotion.
+- `required_evidence`: exact env/command showing global top3 and `--reverse-prompt ". "`, source commit/status, binary/shared-library hashes, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness/completeness note, explicit rejected/promoted status, and if promoted the pushed-rerun package.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
