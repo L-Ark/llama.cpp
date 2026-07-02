@@ -2271,6 +2271,21 @@
 - `rollback`: No source change. If CUDA graphs fail, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command showing `GGML_CUDA_DISABLE_GRAPHS=0` and trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
 
+### 当前执行 attempt：current-sota-repro-late10-trace
+
+- `attempt_id`: `20260702-current-sota-repro-late10-trace`
+- `attempt_kind`: `sota-reproduction`
+- `status`: completed_reproduced_current_sota`
+- `purpose`: User requested direct reproduction of the current accepted SOTA. This rerun uses the accepted late10 top3 traced config under cold `drop_caches` and strict 16GB cgroup.
+- `source_state`: repo HEAD `c6bddffdb803662b070065bea34b298b0bf7b83a`, branch `feat/ds4-moe-stream-on-vendor`, worktree clean, binary sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, binary version `9134 (78ee9ff26)`.
+- `test_config`: accepted late10 config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_TRACE_OUT=/root/lfz/runs/vendor-ds4-16gb/CURRENT_SOTA_REPRO_TRACE`, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T021305Z-20260702_current_sota_repro_late10_trace/france-cpu40-vram0gb`.
+- `result`: reproduced. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=35544.094785ms`, `elapsed_seconds=87.00`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15040581632`, `pgmajfault=288149`, `workingset_refault_file=3489226`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports `[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)`, CUDA free memory about `238 MiB`, and `hits=30180 misses=4971 hit_rate=85.9%`.
+- `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24216.224`, `dontneed_ms=1159.096`, `total_ms=26450.962`.
+- `conclusion`: Current accepted cold-start SOTA `2.6 tok/s` is reproducible under the stated vendor late10 top3 traced config, strict 16GB RAM including page cache, and France correctness gate. This rerun is not a new SOTA; it confirms the existing SOTA remains valid.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
