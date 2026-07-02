@@ -16794,6 +16794,128 @@ Decision:
   - down cache slot remains `7.44 MiB` with `806` slots;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AO - Q4_0 down compact path with separate VRAM cache pool
+
+Design timestamp: 2026-07-02 19:35 UTC.
+
+Reason:
+
+- Phase 7AN proved that Q4_0 down tensors can be made eligible for the generic
+  compact GPU batch path and that `decode,type=2` CPU fallback can be removed.
+- Phase 7AN failed because Q4_0 experts are about `7.88 MiB`, while the accepted
+  main down pool uses `7.44 MiB` slots.
+- Placing Q4_0 into the same down pool increased every down slot to `7.88 MiB`,
+  reducing slots from `806` to `761`, increasing misses and host-stage time.
+- Therefore, the next Q4_0 attempt must preserve the accepted `7.44 MiB` down
+  pool and put Q4_0 in a separate, bounded pool.
+
+Current bottleneck:
+
+- Accepted Phase 7AE keeps Q4_0 on CPU fallback:
+  - prior n96 records showed `decode,type=2` around `8.067 GiB` and `6.754 s`;
+  - this is real decode work, but moving it naively to GPU increased staging
+    more than it saved.
+- Phase 7AN n32 showed the failure mode:
+  - Q4_0 fallback eliminated;
+  - down slots `806 -> 761`;
+  - down hit rate `73.6% -> 67.5%`;
+  - pinned main host stage rose to `32342.257 ms`;
+  - decode regressed to `43642.08 ms / 31`.
+
+Hypothesis:
+
+- Add a third cache pool for Q4_0 down experts only:
+  - `cid=0`: accepted main down pool, slot size remains `7.44 MiB`;
+  - `cid=1`: accepted upgate pool, slot size remains `5.36 MiB`;
+  - `cid=2`: new Q4_0 down pool, slot size about `7.88 MiB`.
+- Enable Q4_0 compact GPU batch only when the separate Q4_0 pool is explicitly
+  enabled, e.g. `GGML_MOE_Q4_DOWN_CACHE_MIB > 0`.
+- Keep the Q4_0 pool small at first, so it does not steal enough VRAM to hurt
+  the main down/upgate pools:
+  - initial diagnostic budget: `GGML_MOE_Q4_DOWN_CACHE_MIB=512`;
+  - if stable and helpful, sweep `1024` and `1536`.
+- Preserve accepted `GGML_MOE_VRAM_CACHE_MIB=15000` for the existing two pools
+  unless VRAM pressure forces a reduction. If total VRAM allocation fails, reject
+  or explicitly budget the Q4 pool from the main pool and rerun baseline.
+
+Theoretical upper bound:
+
+- Best possible n96 saving remains bounded by the prior Q4_0 fallback bucket,
+  about `6-7 s`.
+- A 512 MiB Q4_0 pool can hold roughly `64` Q4_0 experts
+  (`512 / 7.88 ~= 64`), so it cannot eliminate all Q4_0 misses. Its realistic
+  first-run upside is smaller, likely `0.5-2 s` n96 if hot Q4_0 routes repeat.
+- If the Q4_0 pool causes VRAM allocation pressure, graph reserve pressure, or
+  extra staging that slows the main pools, it will regress and must be rejected.
+
+Implementation plan:
+
+1. Extend cache-pool arrays from 2 to 3 with a named constant, not magic `2`.
+2. Add `batch_cache_id_for_request(type, expert_sz, tensor_name)` or equivalent
+   so Q4_0 down tensors can route to `cid=2` without changing the size-based
+   behavior for existing upgate/down entries.
+3. Keep existing `batch_cache_id_for_size()` behavior for profile/preload
+   compatibility, or add a typed variant where tensor type is available.
+4. Add a default-off env:
+
+```sh
+GGML_MOE_Q4_DOWN_CACHE_MIB=0
+```
+
+5. When the env is `0` or absent:
+   - Q4_0 down remains unsupported for GPU batch;
+   - behavior is exactly the accepted Phase 7AE path.
+6. When the env is positive:
+   - allow Q4_0 in CPU down eligibility;
+   - allow Q4_0 in CUDA compact MMVQ;
+   - route Q4_0 down cache/preload/runtime load to `cid=2`;
+   - do not add Q4_0 to the Q8_K reference path.
+7. Update cache reports to include labels `down`, `upgate`, and `q4_down`.
+8. Build and run cold n4 smoke, then n32 only if:
+   - no CUDA errors;
+   - Q4_0 is eligible;
+   - existing down pool still reports `7.44 MiB` slots;
+   - q4_down pool reports `7.88 MiB` slots.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Source diff must be recorded in `git.txt`.
+- Accepted source must be committed and pushed immediately after n96
+  confirmation. Failed source must be reverted before continuing.
+
+Acceptance:
+
+- n4 smoke must show:
+  - no CUDA errors;
+  - Q4_0 down eligible;
+  - no `decode,type=2` fallback for decode rows;
+  - main down pool still at `7.44 MiB`;
+  - separate q4_down pool active at about `7.88 MiB`.
+- n32 must beat accepted Phase 7AE best `36687.31 ms / 31` twice.
+- n96 must beat accepted Phase 7AE best `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Mechanism evidence must show that Q4_0 fallback is reduced without reducing
+  the main down slot count or materially increasing main down misses.
+
+Rollback:
+
+- Revert if:
+  - default-off behavior differs from Phase 7AE;
+  - build fails;
+  - VRAM allocation fails;
+  - q4_down pool steals enough VRAM to shrink or disable existing pools;
+  - n32 is slower than Phase 7AE best;
+  - n32 improvement does not reproduce;
+  - n96 fails any gate.
+
 ## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
 
 Design timestamp: 2026-07-02 17:35 UTC.
