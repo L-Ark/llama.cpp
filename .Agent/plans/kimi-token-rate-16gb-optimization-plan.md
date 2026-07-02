@@ -16522,6 +16522,79 @@ Rollback:
 - If n32 does not beat Phase 7AE best, reject immediately.
 - If n32 passes but confirmation or n96 fails, reject Phase 7AM.
 
+Phase 7AM result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7am_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_BYTES=8388608
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-144643Z-n32-phase7am-sqpoll-depth16`.
+- env validation:
+  - `env.txt` has `GGML_MOE_IO_DEPTH=16`;
+  - `env.txt` has `GGML_MOE_IO_BYTES=8388608`;
+  - `git.txt` records clean HEAD `9c92fbcc7`.
+- quality: pass; output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- TTFT: `59502.04 ms`.
+- decode: `37944.53 ms / 31`, `0.82 tok/s`.
+- comparison: slower than Phase 7AE best n32 `36687.31 ms / 31` by
+  `1257.22 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, `oom_kill=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- fallback artifact:
+  - `fallback-profile.csv`, `840 KiB`;
+  - `13625` entries, `dropped=0`;
+  - contains both `prompt` and `decode` rows.
+- expert-pack io_uring:
+  - `iouring_reads=6620`;
+  - `iouring_bytes=44250759168`;
+  - `iouring_submit_us=47588`;
+  - `iouring_wait_us=7653473`;
+  - `inflight_avg=2.56`, `inflight_max=8`;
+  - `batch_hist=1:284,2-4:1592,5-8:314,9-16:0,17-32:0,gt32:0`.
+- pinned main:
+  - host stage `25388.116 ms`;
+  - H2D `4569.484 ms`;
+  - iouring `inflight_avg=2.80`, `inflight_max=8`.
+- up/gate total: `15.160 ms/call`.
+- down total: `31.264 ms/call`, fallback_t0 `28.494 ms`.
+
+Interpretation:
+
+- The run passed correctness, TTFT, RAM, and read-path gates, but wall decode
+  regressed on the first cold n32 run.
+- Although `GGML_MOE_IO_DEPTH=16` was present in the env, observed
+  `inflight_max` stayed at `8` and the batch histogram had no `9-16` bucket.
+  Under the current scheduler, queue depth is effectively limited by staging
+  slots / batch shape rather than the io_uring depth env alone.
+- Therefore this experiment does not reduce the visible wait/host-stage
+  bottleneck and should not continue to n32 confirmation or n96.
+
+Decision:
+
+- Reject Phase 7AM.
+- No source rollback is required because the experiment was env-only.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
 ## Phase 7AJ - slight VRAM cache reduction for cgroup pressure check
 
 Design timestamp: 2026-07-02 17:35 UTC.
