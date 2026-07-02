@@ -2811,3 +2811,12 @@
 - `full_guarded_trace`: `rows=35151`, `cache_hits=30528`, `cache_misses=4623`, `cache_inserts=3337`, `src0_ms=23479.610`, `dontneed_ms=1114.308`, `total_ms=25683.730`. The trajectory matches the promoted SOTA shape.
 - `full_guarded_correctness_manual_review`: pass. France output is complete/coherent and matches the accepted answer shape.
 - `merge_decision`: commit/push this guarded merge to `ssd/vendor/deepseek-token-rate-16gb` before continuing split-pool migration experiments. This checkpoint preserves current DeepSeek SOTA after merging Kimi changes; it does not yet claim a new DeepSeek token-rate improvement beyond `2.7 tok/s`.
+
+#### 2026-07-02 pushed guarded merge reproduction
+
+- `pushed_merge_commit`: `efd1aaee699b20a038041fe3e63880e0714da4fa` (`vendor-ds4: merge kimi split pool guarded`), pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- `pushed_clean_rebuild`: `cmake --build build-ds4-moe-stream -j 8`, clean build line `ggml commit: efd1aaee6`.
+- `pushed_clean_run`: `/root/lfz/runs/vendor-ds4-16gb/20260702T055944Z-20260702_merge_kimi_full_guarded_pushed_clean/france-cpu40-vram0gb`.
+- `pushed_clean_result`: accepted as reproducible merge checkpoint. `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=36333.418687ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15022682112`, `pgmajfault=287925`, `workingset_refault_file=2922099`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `pushed_clean_trace`: `rows=35151`, `cache_hits=30528`, `cache_misses=4623`, `cache_inserts=3337`, `src0_ms=23041.292`, `dontneed_ms=1108.210`, `total_ms=25233.510`.
+- `pushed_clean_sha256`: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cuda.so=347c3e94aa69e23bfcfba824c23f42e058e56506dcb6eda9e125d11bdcf37218`, profile `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
