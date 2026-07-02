@@ -11646,3 +11646,98 @@ Rollback:
 - Revert source changes if strict cold `-n 32` does not improve, if quality
   fails, if TTFT/RAM gates fail, if shared cache slot size changes, or if Q4_0
   cache counters do not prove activation.
+
+## Phase 3ZY result - isolated Q4_0 hot cache rejected
+
+Timestamp: `2026-07-02 03:27 UTC`.
+
+Code state tested: `fb60dbcbd-dirty-phase3zy`.
+
+Reproduction:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+
+GGML_MOE_VRAM_CACHE_MIB=14000 \
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512 \
+GGML_MOE_Q4_0_HOT_CACHE_MIB=1024 \
+GGML_MOE_Q4_0_HOT_CACHE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-024149Z-n96-phase3zw-fallback-profile-diagnostic/fallback-profile.csv \
+GGML_MOE_Q4_0_HOT_CACHE_LAYERS=6,7,8,9,10,15,18 \
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special \
+  -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+  --no-display-prompt -no-cnv -t 32 -tb 32 \
+  -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+```
+
+Strict run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260702-031333Z-n32-phase3zy-q4-hotcache`
+
+Result:
+
+- accepted: `false`;
+- rollback required: `true`;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`, pass;
+- cold start: `true`;
+- TTFT: `66999.95 ms`, pass against `106331.72 ms`;
+- decode: `57443.19 ms / 31 runs`;
+- token rate: `0.54 tok/s`, fail against comparable accepted n32 baseline
+  `0.584465 tok/s`;
+- quality: pass;
+- answer:
+  `France is a country in Western Europe known for its rich history, art, and culture. Its capital, Paris, is famous for landmarks like the Eiffel Tower`;
+- `read_failures=0`;
+- shared cache stayed at non-Q4 slot sizes:
+  - `5.36 MiB`;
+  - `6.02 MiB`;
+  - `7.44 MiB`.
+
+Q4_0 hot-cache counters:
+
+- enabled: `1`;
+- slots: `130`;
+- slot size: `7.88 MiB`;
+- profile slots: `130`;
+- calls: `217`;
+- accepted: `3`;
+- declined: `214`;
+- average active experts per call: `8.00`;
+- hits: `310`;
+- misses: `214`;
+- loads: `74`;
+- load failures: `0`;
+- staged: `0.569 GiB`;
+- stage: `0.167 ms/call`;
+- kernel: `0.001 ms/call`;
+- D2H: `0.000 ms/call`;
+- wall: `0.168 ms/call`.
+
+Gap analysis:
+
+- The isolated cache mechanics worked and did not alter shared-cache slot size.
+- The first implementation required every active Q4_0 expert in a batch to be
+  present in the 1 GiB hot set before launching GPU compute.
+- The profile-level hot-row coverage estimate of `52.74%` did not translate to
+  useful batch acceptance. With eight active experts per Q4_0 call, a full-batch
+  acceptance policy has very low probability unless the admitted hot set covers
+  nearly all routed experts for those layers.
+- The measured acceptance was only `3 / 217 = 1.38%`, so almost all Q4_0 work
+  still fell back to CPU while shared cache was reduced from `15000 MiB` to
+  `14000 MiB`. The shared-cache loss dominated the tiny accepted Q4_0 gain.
+
+Decision:
+
+- Reject this implementation.
+- Revert the source changes and keep this result as a plan-only record.
+- Do not commit or push Q4_0 hot-cache source code.
+
+Next design direction:
+
+- Do not continue full-batch-only Q4_0 hot caching.
+- If revisiting Q4_0, design partial-row handling: GPU rows for admitted hot
+  experts and CPU fallback only for missed experts, with explicit scatter/merge
+  correctness checks. Before coding, compute the upper bound using measured
+  per-row fallback time, hot-row coverage, extra scatter/merge cost, and any
+  shared-cache VRAM opportunity cost.
