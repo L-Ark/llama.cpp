@@ -16763,6 +16763,112 @@ Decision:
     `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
   - decode `88889.08 ms / 77`, `0.87 tok/s`.
 
+## Phase 7AS - current-SOTA IQ2_S up/gate parallel retest
+
+Design timestamp: 2026-07-02 17:08 UTC.
+
+Reason:
+
+- Phase 7AR, under the current SQPOLL SOTA, shows decode up/gate type buckets:
+  - `type=18` same-type: `311` calls, `18.323 ms/call`, estimated `5.70 s`;
+  - `type=22` same-type: `558` calls, `13.509 ms/call`, estimated `7.54 s`.
+- Type `22` (`IQ2_S`) is the larger total up/gate bucket because it has more
+  calls.
+- Existing code already has an env-gated IQ2_S parallel up/gate path:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- Phase 2F rejected this path very early in the project, before the current
+  SQPOLL, pack-mmap fallback, current-down overlap, split cache, and 7AR
+  type-pair profile. It should be retested once under current SOTA before
+  dismissing the largest total up/gate bucket.
+
+Bottleneck model:
+
+- Current type `22` up/gate profile:
+  - up `6.836 ms/call`;
+  - gate `6.578 ms/call`;
+  - kernel `13.418 ms/call`;
+  - wall `13.509 ms/call`;
+  - calls `558` on n32.
+- Perfect overlap upper bound:
+  - lower bound roughly `max(6.836, 6.578) + fuse/d2h/scatter`, about
+    `6.9-7.1 ms/call`;
+  - n32 saving upper bound about `(13.509 - 7.1) * 558 ~= 3.6 s`.
+- Expected risk:
+  - earlier Phase 2F showed stream/event waits can erase overlap;
+  - if 7AS shows type `22` wall not lower, reject immediately.
+
+Experiment:
+
+- No source change.
+- Use current committed source with Phase 7AR diagnostic profile.
+- Use accepted Phase 7AE runtime and change only:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache `UPGATE_PCT=60`;
+  - pinned slots `8`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7as-iq2-upgate-parallel"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Runner requirement:
+
+- `/tmp/run_phase7as_repro.sh` must add the two parallel envs only when
+  `IQ2_UPGATE_PARALLEL=1`.
+- The run directory must include the standard reproduction artifacts.
+
+Acceptance gates:
+
+- Host RAM:
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France answer coherent and semantically correct.
+- Read/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+- Performance:
+  - first n32 must beat Phase 7AE best `36687.31 ms / 31`;
+  - type `22` profile wall must be lower than Phase 7AR `13.509 ms/call` or
+    the mechanism is considered failed even if wall time is noisy;
+  - only then run n32 confirmation, followed by n96 and n96 confirmation.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate is slower or type `22` wall does not improve, reject without
+  confirmation.
+
 ## Phase 7AQ - narrow VRAM cache 15100 MiB retest
 
 Design timestamp: 2026-07-02 16:26 UTC.
