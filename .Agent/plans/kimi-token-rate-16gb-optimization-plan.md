@@ -12399,3 +12399,155 @@ Next direction:
 - The next design step should target a larger exposed bucket than cache slot
   waste, or first gather a more precise per-stage critical-path profile that
   proves raw host_stage savings are actually exposed on the decode path.
+
+## Phase 4B/E result - existing env-gated split cache accepted
+
+Timestamp: `2026-07-02 04:35 UTC`.
+
+Correction to Phase 4A decision:
+
+- A new source implementation is still unnecessary.
+- Current code already contains an env-gated two-pool cache mechanism:
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT`.
+- `SPLIT_MAX_MIB=6` places Kimi `4.484/5.359 MiB` up/gate experts into the
+  small pool while leaving `6.016/7.438 MiB` down experts in the large pool.
+- This directly implements the split-pool idea without changing inference
+  math or source code.
+
+Accepted runtime delta from SOTA env:
+
+```sh
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=60
+```
+
+All other accepted SOTA env variables remain unchanged:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+```
+
+n32 validation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-041341Z-n32-phase4b-existing-split-pct60`
+- token rate: `0.696370 tok/s`;
+- accepted comparable n32 baseline: `0.584465 tok/s`;
+- TTFT: `67636.18 ms`, pass;
+- host RAM peak: `15899996160` bytes, `14.808 GiB`, pass;
+- quality: pass;
+- `read_failures=0`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+
+n96 promotion:
+
+| run | token rate | decode | TTFT | RAM | quality | read failures |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-041625Z-n96-phase4b-existing-split-pct60` | `0.709216 tok/s` | `108570.66 ms / 77` | `59461.95 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-042207Z-n96-phase4b-existing-split-pct60` | `0.723042 tok/s` | `106494.48 ms / 77` | `69972.05 ms` | `14.808 GiB` | pass | `0` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260702-042537Z-n96-phase4b-existing-split-pct60` | `0.712519 tok/s` | `108067.25 ms / 77` | `63857.75 ms` | `14.808 GiB` | pass | `0` |
+
+Promotion summary:
+
+- average token rate: `0.714926 tok/s`;
+- min token rate: `0.709216 tok/s`;
+- max token rate: `0.723042 tok/s`;
+- average TTFT: `64430.58 ms`;
+- max TTFT: `69972.05 ms`;
+- SOTA accepted token rate: `0.634-0.65 tok/s`;
+- improvement vs `0.65 tok/s`: about `+10.0%`.
+
+Exact n96 answer, all three runs:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+Representative cache/profile counters from first n96 promotion run:
+
+- cache initialization:
+  - upgate/small pool: `8.8 GiB`, `1679` slots, `5.36 MiB` each;
+  - down pool first stage: `5.9 GiB`, `997` slots, `6.02 MiB` each;
+  - down pool final stage: `5.9 GiB`, `806` slots, `7.44 MiB` each.
+- final cache counters:
+  - global hit rate: `51.4%`;
+  - down: `22822` hits, `9802` misses, `70.0%` hit rate;
+  - upgate: `31967` hits, `41969` misses, `43.2%` hit rate.
+- pinned staging:
+  - copies: `56714`;
+  - host stage: `71092.196 ms`;
+  - H2D: `11754.203 ms`.
+- expert pack:
+  - hits: `56714`;
+  - misses: `3076`;
+  - `read_failures=0`.
+- up/gate profile:
+  - calls: `4621`;
+  - total: `16.896 ms/call`;
+  - fallback exposed: `0.001 ms/call`;
+  - batch accept: `4621`.
+- down profile:
+  - calls: `4798`;
+  - total: `17.827 ms/call`;
+  - cuda batch: `4.193 ms/call`;
+  - fallback exposed: `13.593 ms/call`;
+  - batch accept: `4082`.
+
+Comparison to previous SOTA profile:
+
+- SOTA token rate: `0.65 tok/s`; split-cache average: `0.714926 tok/s`.
+- SOTA pinned staging copies: `64145`; split-cache: `56714`.
+- SOTA host stage: `79083.729 ms`; split-cache first n96:
+  `71092.196 ms`.
+- SOTA H2D: `13310.781 ms`; split-cache first n96: `11754.203 ms`.
+- SOTA down total: `18.954 ms/call`; split-cache first n96:
+  `17.827 ms/call`.
+- SOTA up/gate total: `17.903 ms/call`; split-cache first n96:
+  `16.896 ms/call`.
+
+Decision:
+
+- Accept the env-gated split-cache runtime.
+- No source-code change is required; the implementation already exists.
+- This satisfies the split-pool goal under strict cold start and 16GB host RAM.
+- Commit and push this plan/runtime record immediately.
+
+Reproduction command shape:
+
+```sh
+cd /root/lfz/llama.cpp-vendor-kimi
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+env $(cat <accepted env above plus split delta>) \
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special \
+  -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  -c 512 -n 96 --temp 0 --top-p 1.0 --top-k 1 --seed 1 \
+  --no-display-prompt -no-cnv -t 32 -tb 32 \
+  -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'
+```
