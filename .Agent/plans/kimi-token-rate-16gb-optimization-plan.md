@@ -16618,3 +16618,123 @@ Decision:
   - `GGML_MOE_IO_REFILL_BATCH=4`;
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AI - minimal-profile retest on Phase 7AE SQPOLL SOTA
+
+Design timestamp: 2026-07-02 17:05 UTC.
+
+Reason:
+
+- Phase 7Y tested minimal-profile production mode before the accepted SQPOLL
+  SOTA. It produced one faster n32 candidate but failed n32 confirmation, so it
+  was rejected under the old Phase 7P runtime.
+- Phase 7AE later changed the accepted IO scheduling with
+  `GGML_MOE_IO_SQPOLL=1` and improved n32/n96 reproducibly.
+- Phase 7AH only disabled `GGML_MOE_BATCH_PROFILE=1` while keeping aggregate
+  Kimi CPU profile enabled, and it did not improve n32.
+- Current source already has fallback CSV recording decoupled from aggregate
+  CPU profiling: `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` can still produce the
+  mandatory `fallback-profile.csv` without `GGML_KIMI_CPU_MOE_PROFILE=1`.
+
+Bottleneck:
+
+- Accepted Phase 7AE n96 confirm:
+  - decode `88889.08 ms / 77`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - pinned main host stage `60514.789 ms`;
+  - H2D `11381.667 ms`;
+  - up/gate total `14.151 ms/call`;
+  - down total `16.369 ms/call`.
+- Minimal profiling can only remove diagnostic overhead and scheduling noise. It
+  cannot reduce actual SSD latency, H2D bytes, kernel math, or cache misses.
+
+Hypothesis:
+
+- Remove all diagnostic profile/debug envs that are not required for model
+  behavior:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+```
+
+- Keep:
+
+```sh
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv
+```
+
+- Keep every accepted Phase 7AE runtime setting:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache with `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback, dense/expert mmap drops, pinned slots `8`, and
+    `THREADS=32`.
+
+Theoretical upper bound:
+
+- Prior 7Y showed a possible n32 saving around `0.7-0.9 s` on one run, but it
+  did not reproduce.
+- Under SQPOLL, IO submit overhead is much lower, so profiling removal is
+  unlikely to save more than `0.5-1.5 s` unless it changes CPU scheduling
+  contention with fallback/staging.
+- A real win must show lower wall decode while preserving:
+  - fallback CSV artifact;
+  - expert-pack `read_failures=0`;
+  - cgroup memory peak under the 16GB gate;
+  - France semantic correctness.
+
+Experiment:
+
+- No source change unless fallback CSV fails without aggregate CPU profile.
+- Create `/tmp/run_phase7ai_repro.sh` from the Phase 7AE runner.
+- Default to `MIN_PROFILE=1`.
+- When `MIN_PROFILE=1`, remove the five diagnostic envs listed above but keep
+  `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 MIN_PROFILE=1
+```
+
+- Continue to n32 confirmation only if first n32 beats accepted Phase 7AE best
+  `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- `fallback-profile.csv` must exist, be non-empty, and include prompt/decode
+  rows.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AI cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Because batch/CPU profile counters are intentionally removed, mechanism
+  evidence must come from wall-clock improvement plus unchanged cache/read
+  counts and valid fallback CSV.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If fallback CSV is missing or empty, reject the run as invalid.
+- If n32 does not reproducibly beat Phase 7AE best, reject Phase 7AI.
+- If n32 passes but n96 fails, reject Phase 7AI and keep Phase 7AE as SOTA.
