@@ -15454,3 +15454,114 @@ Next-step rule:
 
 - Do not implement another cache/prefetch/kernel change until this diagnostic
   is recorded or a stronger current-SOTA profile is already available.
+
+Phase 7AB result - accepted as diagnostic evidence:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-124507Z-n32-phase7ab-sota-route-trace`.
+- runner: `/tmp/run_phase7ab_repro.sh`.
+- git head: `608fd52b7`.
+- output quality: pass; answer starts
+  `France is a country in Western Europe known for its rich history, culture...`.
+- TTFT: `71609.41 ms`, within gate.
+- decode with trace overhead: `38556.70 ms / 31`, `0.80 tok/s`; diagnostic
+  only, not compared as SOTA.
+- RAM: `memory.peak=15899996160`, `oom=0`, pass.
+- read path: `read_failures=0`, `iouring_bytes=44250759168`, pass.
+- trace/profile artifacts:
+  - `route-profile.csv`: `848K`, `13996` entries;
+  - `route-trace.csv`: `2.0M`, `42928` events;
+  - `ttft-trace.csv`: `3.8M`, `49928` events;
+  - `fallback-profile.csv`: `841K`.
+
+Route-profile aggregate:
+
+| bucket | routes | routed GiB | entries |
+| --- | ---: | ---: | ---: |
+| down | `13152` | `81.40` | `4284` |
+| gate | `14888` | `73.47` | `4856` |
+| up | `14888` | `67.96` | `4856` |
+
+Runtime counters:
+
+- VRAM cache:
+  - global hit rate `52.9%`;
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+- pinned staging:
+  - main copies `22360`, host stage `25153.816 ms`, H2D `4568.792 ms`;
+  - gate copies `1554`, host stage `1124.631 ms`, H2D `414.523 ms`.
+- expert pack:
+  - hits `24471`, misses `1179`;
+  - iouring reads `6620`, `read_failures=0`.
+- expert-pack CPU fallback mmap:
+  - hits `1727`, misses `9`, bytes `14260764672`, fallback_gguf `9`.
+- up/gate profile:
+  - calls `869`, kernel `15.418 ms/call`, total `15.491 ms/call`.
+- down profile:
+  - calls `2038`, total `36.826 ms/call`;
+  - cuda_batch `2.867 ms/call`;
+  - fallback_t0 `33.898 ms/call`;
+  - batch_accept `1644`, batch_decline `52`.
+
+Fallback-profile aggregate by `phase/src0_type`:
+
+| phase | type | count | calls | fallback time |
+| --- | ---: | ---: | ---: | ---: |
+| prompt | `11` | `5440` | `3032` | `21.012 s` |
+| prompt | `22` | `9248` | `4883` | `19.885 s` |
+| prompt | `18` | `6800` | `3819` | `15.475 s` |
+| prompt | `23` | `1632` | `867` | `6.973 s` |
+| prompt | `2` | `952` | `452` | `3.335 s` |
+| decode | `2` | `1736` | `1736` | `2.395 s` |
+
+Important interpretation:
+
+- Decode fallback is only `src0_type=2` (`Q4_0`) in this n32 diagnostic.
+- Prompt fallback remains much larger, but prompt fallback affects TTFT more
+  than decode token rate and is already within the TTFT gate.
+- Residual decode Q4_0 fallback is real but small at n32 (`2.395 s` local
+  fallback time). It is not enough by itself to reach a large token-rate jump
+  unless the change also avoids secondary staging/cache overhead.
+- Up/gate compute is now a larger repeatable visible bucket:
+  `869 * 15.491 ms ~= 13.46 s` in n32.
+
+Route-cache simulation from current SOTA trace:
+
+- command:
+
+```sh
+python3 scripts/moe-route-cache-sim.py \
+  $RUN/route-profile.csv \
+  --trace $RUN/route-trace.csv \
+  --budget-mib 15000 \
+  --upgate-pct 60 \
+  --policy lfu_lru \
+  --preload protected \
+  --admit-after 2 \
+  --profile-stderr $RUN/stderr.txt
+```
+
+- trace sim at `UPGATE_PCT=60`:
+  - up hit `50.62%`;
+  - down hit `52.76%`;
+  - total hit `51.28%`;
+  - miss `108.19 GiB`;
+  - bypassed `12009`.
+- sweep `45..75`:
+  - raw weighted miss is shallow and puts `60`/`65` almost equal;
+  - calibrated exposed down cost rises sharply when down slots are removed:
+    `down_exposed_ms` grows from `8240` at `60` to `8805` at `65`;
+  - this explains why Phase 7AA `65` was slower despite better upgate hit rate.
+
+Decision:
+
+- Accept Phase 7AB as the current authoritative diagnostic profile.
+- Keep Phase 7P as SOTA.
+- Do not continue coarse cache split sweeps.
+- Next implementation planning should prioritize:
+  1. up/gate compute or kernel scheduling, because it is about `13.5 s/n32`;
+  2. residual decode Q4_0 fallback only if the method avoids the previous GPU
+     down slowdown/quality risk and has a hard upper-bound larger than its
+     current `2.4 s/n32` local fallback bucket;
+  3. prompt fallback only if TTFT becomes the limiting gate.
