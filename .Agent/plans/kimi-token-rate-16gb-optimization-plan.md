@@ -16423,6 +16423,166 @@ Decision:
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
 
+## Phase 7AO - isolated Q4_0 down VRAM cache - rejected
+
+Start time: 2026-07-02 15:13 UTC.
+
+Design update before implementation:
+
+- Bottleneck targeted:
+  - Phase 7AN showed that enabling Q4_0 down compact batching can eliminate
+    `decode,type=2` fallback rows, but naively admitting Q4_0 into the main
+    down cache increased the slot size from `7.44 MiB` to `7.88 MiB` and
+    reduced main down capacity from `806` to `761` slots.
+  - That capacity loss slowed n32 to `43642.08 ms / 31`, so the likely
+    bottleneck was cache-pool pollution, not Q4_0 math support alone.
+- Hypothesis:
+  - Keep the accepted Phase 7AE down/upgate pools unchanged.
+  - Add a default-off, separately budgeted Q4_0 down cache controlled by
+    `GGML_MOE_Q4_DOWN_CACHE_MIB`.
+  - If Q4_0 fallback cost is larger than the additional H2D/launch/cache
+    overhead, a small isolated pool should improve decode without hurting the
+    current main down hit rate.
+- Theoretical bound:
+  - Phase 7AE n32 still has `decode,type=2` fallback work. If all such rows are
+    moved from CPU fallback to the compact CUDA path, the upper bound is the
+    fallback CPU time minus Q4_0 staging and GPU launch overhead.
+  - Because each Q4_0 down expert is `7.88 MiB`, a `512 MiB` pool can hold
+    about `65` experts. The optimization can only help when locality is high
+    enough for that small pool to avoid repeated SSD-to-pinned transfers.
+- Acceptance rule:
+  - default-off behavior must match Phase 7AE;
+  - `GGML_MOE_Q4_DOWN_CACHE_MIB=512` must pass n32 quality, RAM, TTFT, and
+    read gates, then beat Phase 7AE n32 in candidate and confirmation before
+    any n96 run.
+
+Implementation tested:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - added a third, default-off VRAM cache pool for Q4_0 down tensors;
+  - routed Q4_0 down tensors to that pool only when
+    `GGML_MOE_Q4_DOWN_CACHE_MIB>0`;
+  - kept existing down/upgate budgets unchanged;
+  - made Q4_0 compact launch eligibility conditional on the same env.
+- `ggml/src/ggml-cpu/ggml-cpu.c`
+  - made down batch support for `GGML_TYPE_Q4_0` conditional on
+    `GGML_MOE_Q4_DOWN_CACHE_MIB>0`.
+- build:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`;
+  - success, warnings only.
+
+Reproduction method:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ao-q4cache512"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 Q4_DOWN_CACHE_MIB=512 \
+      /tmp/run_phase7ao_repro.sh
+```
+
+Default-off smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151319Z-n4-phase7ao-default-off-smoke`.
+- env:
+  - no `GGML_MOE_Q4_DOWN_CACHE_MIB`.
+- mechanism:
+  - no `q4_down` pool;
+  - main down cache preserved at `806` slots, `7.44 MiB` each;
+  - upgate cache preserved at `1679` slots, `5.36 MiB` each;
+  - `src0_type=2` remains unsupported;
+  - `decode_type2_count=122`.
+- gates:
+  - exit `0`;
+  - TTFT `77114.79 ms`;
+  - decode `5239.73 ms / 3`;
+  - RAM gate pass, read gate pass;
+  - quality marked fail only because n4 truncates the required paragraph.
+
+Q4 cache n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151534Z-n4-phase7ao-q4cache512-smoke`.
+- env:
+  - `GGML_MOE_Q4_DOWN_CACHE_MIB=512`.
+- mechanism:
+  - q4_down pool active: `65` slots, `7.88 MiB` each;
+  - q4_down hit rate `56.5%`;
+  - main down cache preserved at `806` slots;
+  - upgate cache preserved at `1679` slots;
+  - `src0_type=2 eligible=4 unsupported=0`;
+  - no `decode,type=2` fallback rows.
+- gates:
+  - exit `0`;
+  - TTFT `78487.75 ms`;
+  - decode `5030.11 ms / 3`;
+  - RAM gate pass, read gate pass;
+  - quality marked fail only because n4 truncates the required paragraph.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-151902Z-n32-phase7ao-q4cache512`.
+- output:
+  - `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- quality: pass.
+- TTFT: `77212.74 ms`.
+- decode: `45525.81 ms / 31`, `0.68 tok/s`.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15133806592`;
+  - `oom=0`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_bytes=50318327808`;
+  - `iouring_wait_us=8927585`.
+- cache:
+  - main down `806` slots, hit rate `72.1%`;
+  - upgate `1679` slots, hit rate `40.1%`;
+  - q4_down `65` slots, hit rate `59.9%`.
+- fallback:
+  - no `decode,type=2` rows.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `8838.50 ms`;
+  - slower than Phase 7AE n32 confirm `36973.83 ms / 31` by `8551.98 ms`.
+
+Gap analysis:
+
+- The mechanism worked: Q4_0 down fallback was removed without reducing the
+  accepted down/upgate cache capacities.
+- The performance model did not hold: the extra Q4_0 staging and compact CUDA
+  work cost more than the CPU fallback it replaced.
+- The q4_down cache had only `65` slots and `59.9%` hit rate, so many Q4_0
+  experts still required SSD/io_uring/pinned/H2D movement.
+- `pinned_staging_0 host_stage=34345.106 ms` and
+  `iouring_wait_us=8927585` show the additional stream work is not hidden well
+  enough by current up/gate compute.
+- Because n32 candidate failed the performance gate, no n32 confirmation or
+  n96 run is allowed.
+
+Decision:
+
+- Reject Phase 7AO.
+- Revert the tested source changes before continuing.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
+Rollback:
+
+- Reverted uncommitted source patch for:
+  - `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Rebuilt accepted path with:
+  - `cmake --build build-cuda-batch -j 32 --target llama-completion`.
+
 ## Phase 7AM - SQPOLL io_uring depth 16 retest
 
 Design timestamp: 2026-07-02 18:50 UTC.
