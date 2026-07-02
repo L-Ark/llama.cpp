@@ -2205,7 +2205,7 @@
 
 - `attempt_id`: `20260702-late10-no-trace-production`
 - `attempt_kind`: `config-probe/trace-overhead`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Accepted late10 SOTA still writes per-expert trace for `35151` rows, and recent rejected probes show token-rate ties around `2.6` where sub-second overhead can decide the rounded metric. Earlier top4 no-trace did not improve, but late10 has a different row count and is the current production candidate.
 - `hypothesis`: Removing `GGML_MOE_STREAM_ONE_TRACE_OUT` from the accepted late10 config may reduce file-write/timing overhead without changing model math, RAM behavior, or correctness. If token rate improves, the production SOTA config should run without per-expert trace, while a separate trace diagnostic can remain available for bottleneck analysis.
 - `theoretical_upper_bound`: Accepted trace has `35151` rows; direct trace formatting/write cost is not isolated but is bounded by file output and timing overhead. Expected gain is small, likely below 1s wall time; only a rounded move from `2.6` to `>2.6 tok/s` would justify promotion.
@@ -2213,6 +2213,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected/diagnostic and keep accepted late10 trace-backed SOTA. If accepted, immediately stop further experiments, write full no-trace reproduction package, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command showing trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr including cache hit/miss summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status. If promoted, also run a separate traced diagnostic for bottleneck comparison without using that traced run as the performance number.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T015621Z-20260702_late10_no_trace_production/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=36548.431091ms`, `elapsed_seconds=87.18`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15011225600`, `pgmajfault=292933`, `workingset_refault_file=3484919`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports `[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)` and `hits=30180 misses=4971 hit_rate=85.9%`, matching accepted late10 cache behavior.
+- `gap_analysis`: Disabling per-expert trace reduced elapsed time versus the accepted traced rerun (`89.48s -> 87.18s`) and improved TTFT, but runner `eval_tok_s` still tied `2.6` and therefore does not satisfy the strict promotion gate. Trace overhead is not large enough by itself to produce a new rounded token-rate SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`; no-trace is a useful production/diagnostic tie but not a promoted SOTA.
 
 ## 记录与验收
 
