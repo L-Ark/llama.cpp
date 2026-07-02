@@ -2994,3 +2994,14 @@
 - `theoretical_bound`: Pack cannot reduce the GPU expert matmul cost on cache hits; it can only reduce cold miss source-load latency and page-cache churn. Bound should be estimated from miss count and expert size: accepted SOTA gate-only trace had about `4623` one-stream misses for the France run, each gate expert about `4.25MiB`. Random GGUF page faults/refaults can dominate cold source load; a sequential/aligned pack can at best approach device read bandwidth plus H2D copy bandwidth. Before promotion, compare observed `src0_ms`, `pgmajfault`, and refault reduction against this bound.
 - `acceptance_gate`: A new accepted SOTA requires `eval_tok_s > 2.7`, strict `memory_peak_bytes <= 16000000000` including page cache, `ram_limit_killed=false`, France output semantically correct/coherent, and TTFT not more than 20% above the current accepted baseline unless committed only as an explicitly rejected checkpoint. If accepted, immediately record full reproduction info, commit source/plan/pack metadata, push to `ssd/vendor/deepseek-token-rate-16gb`, and rerun from pushed commit.
 - `branch_policy`: All source/plan commits for this vendor work continue to be pushed to GitHub remote `ssd` branch `vendor/deepseek-token-rate-16gb` using the existing `L-Ark` identity. Rejected diagnostics may be committed only when clearly marked rejected; accepted SOTA must be committed and pushed immediately with enough information to reproduce future rollbacks.
+
+### 当前执行：repro-sota-after-restore-before-kimi-merge
+
+- `attempt_id`: `20260702-repro-sota-after-restore-before-kimi-merge`
+- `status`: completed_reproduced_current_sota
+- `purpose`: Revalidate DeepSeek accepted SOTA after rolling back rejected fused/up-gate source changes and before merging newer Kimi changes.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T103730Z-20260702_repro_sota_after_restore_before_kimi_merge/france-cpu40-vram0gb`.
+- `test_config`: strict cold `drop_caches`, 16GB cgroup, `cpu_moe=40`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `result`: reproduced accepted SOTA. `eval_tok_s=2.7`, `prompt_tok_s=0.9`, `TTFT=38591.376792ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043362816`, `pgmajfault=282230`, `workingset_refault_file=2816754`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `decision`: This is the baseline to preserve while merging newer Kimi changes. Any post-merge checkpoint must keep DeepSeek at `>=2.7 tok/s` with RAM/correctness/TTFT gates passing before push as a guarded merge.
+
