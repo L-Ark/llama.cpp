@@ -15303,3 +15303,74 @@ Rollback/commit rule:
 - Do not promote a single run.
 - If the setting passes n32 twice and n96 twice, record exact reproduction,
   commit the plan/config documentation, and push immediately.
+
+Phase 7AA result - rejected:
+
+- runner: `/tmp/run_phase7aa_repro.sh`, derived from
+  `/tmp/run_phase7t_repro.sh`.
+- every run captured `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+
+`UPGATE_PCT=65` n32:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-123434Z-n32-phase7aa-upgate65`.
+- git head: `bcff8a74015784766df5aa9b4e4af684a96caf79`.
+- quality: pass; answer starts
+  `France is a country in Western Europe known for its rich history, culture...`.
+- TTFT: `67735.64 ms`, within gate.
+- decode: `37461.58 ms / 31`, `0.83 tok/s`.
+- comparison: slower than Phase 7P n32 confirm `37379.97 ms / 31` by
+  `81.61 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, pass.
+- read path: `read_failures=0`, `iouring_bytes=48645832704`, pass.
+- cache/profile:
+  - down slots `705`, hit rate `71.3%`;
+  - upgate slots `1819`, hit rate `45.3%`;
+  - pinned main host stage `24364.188 ms`, H2D `4606.470 ms`;
+  - up/gate total `15.119 ms/call`;
+  - down total `35.825 ms/call`, fallback_t0 `32.839 ms`.
+
+Interpretation for `65`:
+
+- More upgate slots did increase upgate hit rate versus the expected Phase 7P
+  shape, but removing about `100` down slots reduced down hit rate and left
+  down fallback exposed.
+- The measured raw decode is slightly slower, so this is not a reproducible
+  improvement and cannot enter n32 confirmation.
+
+`UPGATE_PCT=55` diagnostic n32:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-123721Z-n32-phase7aa-upgate55`.
+- git head: `bcff8a74015784766df5aa9b4e4af684a96caf79`.
+- quality: pass; answer starts
+  `France is a country in Western Europe known for its rich history, culture...`.
+- TTFT: `64943.45 ms`, within gate.
+- decode: `39568.74 ms / 31`, `0.78 tok/s`.
+- comparison: slower than Phase 7P n32 confirm by `2188.77 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`, pass.
+- read path: `read_failures=0`, `iouring_bytes=42487431168`, pass.
+- cache/profile:
+  - down slots `907`, hit rate `74.7%`;
+  - upgate slots `1539`, hit rate `37.3%`;
+  - pinned main host stage `27038.475 ms`, H2D `4883.667 ms`;
+  - up/gate total `16.129 ms/call`;
+  - down total `33.501 ms/call`, fallback_t0 `30.666 ms`.
+
+Interpretation for `55`:
+
+- More down slots improved down hit rate and reduced local down fallback time,
+  but the loss of upgate capacity hurt the upgate path and increased total
+  decode time much more than the down-side gain.
+- The result confirms that the current `60/40` split is near the best local
+  balance among these coarse adjacent points under Phase 7P.
+
+Decision:
+
+- Reject Phase 7AA.
+- Do not run n96.
+- Keep Phase 7P as SOTA.
+- Do not spend more time on coarse split-cache percentage sweeps unless a new
+  route trace or critical-path profile shows a different exposed cost model.
