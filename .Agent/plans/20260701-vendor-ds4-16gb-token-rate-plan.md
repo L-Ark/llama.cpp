@@ -2079,6 +2079,19 @@
 - `gap_analysis`: Late8 avoids the late5 truncation failure, but it still increases gate stream misses (`4971 -> 5593`), `src0_ms` (`24305.283 -> 28245.587`), refault pressure, and elapsed time relative to accepted late10. Since rounded token rate only ties `2.6` and does not exceed the current SOTA, the top3 boundary should remain at layer 10. Further layer-boundary expansion is deprioritized; the next optimization should target cache/IO behavior under the late10 config.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-cache13700mib
+
+- `attempt_id`: `20260702-late10-cache13700mib`
+- `attempt_kind`: `config-probe/vram-cache-boundary`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Accepted late10 SOTA still has `cache_misses=4971` and `src0_ms=24305.283ms`; stderr reports `[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)` and CUDA free memory around `238 MiB`. Layer-boundary probes late8/late5 did not improve token rate, so the next isolated bottleneck probe is using a little more VRAM for the stream-one cache.
+- `hypothesis`: Increasing `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13568` to `13700` may add roughly `132 MiB / 4.25 MiB ≈ 31` cache slots while staying under the RTX 5090 free-memory cliff. This could reduce a small number of late10 gate cache misses without changing model math or correctness.
+- `theoretical_upper_bound`: With current average `src0_ms / misses ≈ 24305.283 / 4971 ≈ 4.89ms`, even a perfect 31-miss reduction saves only about `0.15s` direct source-load time, plus possible secondary refault effects. Therefore expected token-rate gain is small and may not exceed rounded `2.6 tok/s`; the main value is confirming the practical VRAM boundary under strict 16GB host RAM.
+- `test_config`: accepted late10 config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13700`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, cold `drop_caches`, strict 16GB cgroup, France prompt, gate trace enabled, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, no CUDA OOM/cache insertion failure occurs, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change is required. If CUDA OOM, cache insertion failure, token rate not above `2.6`, output correctness failure, RAM failure, or TTFT failure occurs, record rejected and keep `13568MiB` late10 as SOTA. If accepted, immediately write full reproduction evidence, commit/push records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: exact env/command, stderr cache size/slot/free-memory lines, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
