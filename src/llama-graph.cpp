@@ -1565,7 +1565,10 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
                 " silu=%d same_type=%d same_shape=%d"
                 " up_name=%s up_type=%s gate_name=%s gate_type=%s gate_up_name=%s"
                 " up_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
-                " gate_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]\n",
+                " gate_shape=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
+                " up_nb01=%zu up_nb02=%zu up_expert_bytes=%zu"
+                " gate_nb01=%zu gate_nb02=%zu gate_expert_bytes=%zu"
+                " n_expert=%" PRId64 "\n",
                 il,
                 n_tokens,
                 use_stream_fused_up_gate ? 1 : 0,
@@ -1593,7 +1596,14 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
                 gate_exps ? gate_exps->ne[0] : -1,
                 gate_exps ? gate_exps->ne[1] : -1,
                 gate_exps ? gate_exps->ne[2] : -1,
-                gate_exps ? gate_exps->ne[3] : -1);
+                gate_exps ? gate_exps->ne[3] : -1,
+                up_exps ? up_exps->nb[1] : 0,
+                up_exps ? up_exps->nb[2] : 0,
+                up_exps ? (size_t) up_exps->ne[1] * up_exps->nb[1] : 0,
+                gate_exps ? gate_exps->nb[1] : 0,
+                gate_exps ? gate_exps->nb[2] : 0,
+                gate_exps ? (size_t) gate_exps->ne[1] * gate_exps->nb[1] : 0,
+                up_exps ? up_exps->ne[2] : (gate_exps ? gate_exps->ne[2] : -1));
     }
     const bool build_gate_first_for_cuda_fusion =
         gate_up_exps == nullptr &&

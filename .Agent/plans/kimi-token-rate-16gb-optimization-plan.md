@@ -10282,3 +10282,219 @@ Rollback:
 - Revert if output changes semantically, if malformed text appears, if TTFT
   exceeds `106331.72 ms`, if host RAM exceeds 16GB, if `read_failures` or CUDA
   launch failures appear, or if token rate regresses.
+
+Static inspection result timestamp: 2026-07-02 23:04 CST.
+
+Finding:
+
+- `ggml_moe_up_gate()` currently falls back to separate
+  `ggml_mul_mat_id + swiglu_split` when `as_up->type != as_gate->type`. Merely
+  relaxing the graph-builder `same_type` condition would therefore not change
+  execution.
+- The CPU fused op asserts `src0_up->type == src0_gate->type` and uses the up
+  tensor type, row stride, and expert stride for both up and gate.
+- The CUDA fused entry currently receives one `src0_type_int`, one `nb01`, one
+  `nb02`, and one computed `src0_bytes`; it registers, stages, caches, and
+  launches both up and gate using that single type/size.
+- The CUDA MMVQ/MMQ launch helpers can dispatch by type, but the fused wrapper
+  does not yet pass independent up/gate types or independent expert byte
+  sizes.
+- `IQ2_S` and `IQ3_XXS` share `Q8_K` as the CPU vec-dot activation type, so
+  CPU fallback mixed support is possible without two different activation
+  conversions for the observed Kimi pair. The weight stride/cache side still
+  needs independent handling.
+
+Decision:
+
+- Do not directly enable mixed-type fused up/gate yet.
+- First extend the default-off graph attribution to print `nb01`, `nb02`, and
+  expert bytes for up and gate. This is required to compute the cache-capacity
+  and H2D/staging cost of a mixed-type fused implementation.
+
+## Next candidate: Phase 3ZS-A mixed-type stride/bytes attribution
+
+Design timestamp: 2026-07-02 23:07 CST.
+
+Current bottleneck:
+
+- Phase 3ZR proves all decode fused-upgate misses are mixed-type pairs.
+- Phase 3ZS static inspection proves the current fused wrapper assumes one
+  shared type and one shared expert byte size.
+- Before implementing independent up/gate cache paths, measure whether
+  `IQ2_S`/`IQ3_XXS` expert byte sizes differ and by how much.
+
+Hypothesis:
+
+Adding stride/bytes fields to `GGML_KIMI_MOE_GRAPH_PROFILE=1` is default-off
+and should not change runtime behavior. It will provide the hard inputs for the
+next upper-bound calculation:
+
+```text
+mixed_pair_bytes = up_expert_bytes + gate_expert_bytes
+cache_slots_needed_per_token = 2 * active_expert_count
+added_or_saved_h2d = mixed_pair_bytes - separate_path_current_bytes
+```
+
+Execution:
+
+1. Extend graph profile output with:
+   - `up_nb01`, `up_nb02`, `up_expert_bytes`;
+   - `gate_nb01`, `gate_nb02`, `gate_expert_bytes`;
+   - `expert_count`.
+2. Build remote CUDA `llama-completion`.
+3. Run strict cold `-n 32` with Phase 3ZG env plus graph/profile diagnostics.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Logs contain independent up/gate expert byte sizes for the mixed layers.
+- The next implementation bound is updated from measured byte sizes.
+
+Rollback:
+
+- Revert if the diagnostic changes graph behavior, breaks build, fails hard
+  gates, or does not produce byte-size attribution.
+
+Result timestamp: 2026-07-02 23:19 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-013634Z-n32-phase3zsa-graph-bytes`
+
+Measured result:
+
+- Source state: `3fd9914d0-dirty-phase3zsa`, default-off graph attribution
+  extended with up/gate stride and expert byte fields.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.832073 GiB`.
+- TTFT: `74850.51 ms`, inside the `106331.72 ms` gate.
+- Decode: `69.29622 s / 31 tokens = 2.235361935483871 s/token`,
+  `0.44735484850400203 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Graph attribution lines: `480` total, `113` fused, `367` non-fused.
+
+Mixed decode byte attribution:
+
+- `up=iq2_s`, `gate=iq3_xxs`: `116` decode decisions,
+  `4702208 + 5619712 = 10321920` bytes per active expert pair.
+- `up=iq3_xxs`, `gate=iq2_s`: `12` decode decisions,
+  `5619712 + 4702208 = 10321920` bytes per active expert pair.
+- `IQ2_S` expert bytes: `4702208`.
+- `IQ3_XXS` expert bytes: `5619712`.
+
+Cache/staging interpretation:
+
+- Both observed mixed sizes are larger than the current small-cache split
+  threshold and use the large cache id (`0`).
+- A mixed-type fused implementation can reuse the existing large cache pool,
+  but must stage up and gate with independent:
+  - type;
+  - row stride (`nb01`);
+  - expert stride (`nb02`);
+  - expert byte size;
+  - cache lookup/insert key.
+- The implementation must also protect same-call up/gate slots from evicting
+  each other, as the current same-type path already does with avoid-slot lists.
+
+Decision:
+
+- Accept Phase 3ZS-A as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, and byte-attribution
+  gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+## Next candidate: Phase 3ZT scoped mixed-type fused up/gate implementation
+
+Design timestamp: 2026-07-02 23:25 CST.
+
+Current bottleneck:
+
+- Phase 3ZR: all decode missed fused-upgate graph opportunities are mixed
+  `IQ2_S`/`IQ3_XXS` pairs.
+- Phase 3ZS static inspection: current op and CUDA wrapper assume one shared
+  type/stride/size.
+- Phase 3ZS-A: both mixed pair orientations are exactly `10321920` bytes per
+  active expert pair and can use the large VRAM cache pool.
+
+Hypothesis:
+
+A scoped mixed-type fused up/gate path for only `IQ2_S <-> IQ3_XXS` decode
+can remove separate generic up/gate fallback for mixed Kimi layers while
+preserving math:
+
+```text
+up   = MMVQ(type_up,   W_up[e],   x)
+gate = MMVQ(type_gate, W_gate[e], x)
+out  = up * silu(gate)
+```
+
+The path must remain opt-in behind
+`GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1` until it passes strict
+promotion gates.
+
+Implementation plan:
+
+1. Change `ggml_moe_up_gate()` so mixed `IQ2_S/IQ3_XXS` decode can construct
+   `GGML_OP_MOE_FUSED_UP_GATE` only when the new env is set; otherwise keep
+   the current fallback.
+2. Update CPU fused-op validation to allow the scoped mixed pair, but prefer
+   CUDA completion. CPU fallback must use independent up/gate type traits and
+   strides if CUDA declines.
+3. Update the weak CUDA function pointer/signature to pass:
+   - `src0_up_type`;
+   - `src0_gate_type`;
+   - `up_nb01`, `up_nb02`, `up_expert_bytes`;
+   - `gate_nb01`, `gate_nb02`, `gate_expert_bytes`.
+4. In CUDA staging:
+   - use `batch_cache_get(up_expert_bytes)` and
+     `batch_cache_get(gate_expert_bytes)`;
+   - require both cache ids to be compatible for the first scoped attempt;
+   - stage up and gate with independent expert byte sizes;
+   - keep avoid-slot protection between up and gate.
+5. In CUDA compute:
+   - launch up MMVQ with `up_type`;
+   - launch gate MMVQ with `gate_type`;
+   - fuse with the existing `moe_stream_up_gate_fuse_kernel`.
+6. Start with the existing non-MMQ compact path. Do not enable vendor fused
+   MMQ for mixed types in the first attempt.
+
+Theoretical upper bound:
+
+- Phase 3ZS-A n32 decode wall time: `69.29622 s`.
+- Prior decode fallback type buckets give an absolute upper bound near
+  `10.25 s`, or about `1.17x`.
+- Because mixed fusion still stages both up and gate tensors, expected gain is
+  lower than the absolute bound. The measured target is to reduce generic
+  fallback time without increasing:
+  - cache misses;
+  - pinned host staging;
+  - H2D time;
+  - up/gate CUDA batch time enough to erase the win.
+
+Acceptance:
+
+- Build succeeds.
+- `-n 4` strict cold smoke passes and graph profile shows mixed decode layers
+  entering fused up/gate.
+- `-n 32` strict cold validation passes host RAM, cold start, TTFT, France
+  semantic quality, read failure, launch failure, and VRAM gates.
+- Token rate improves over comparable Phase 3ZS-A/3ZR diagnostics.
+- If `-n 32` improves, run full strict cold `-n 96` before committing as a
+  performance improvement.
+- Commit and push immediately only after the full accepted promotion run.
+
+Rollback:
+
+- Revert if build fails, CUDA declines mixed layers, output quality regresses,
+  TTFT exceeds `106331.72 ms`, host RAM exceeds 16GB, read/launch failures
+  appear, or `-n 32` token rate regresses.
