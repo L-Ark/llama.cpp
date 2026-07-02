@@ -15665,3 +15665,55 @@ Rollback:
   - up/gate profile increases materially;
   - TTFT/RAM/quality gates fail.
 - Keep plan/run records for rejected evidence.
+
+Phase 7AC result - rejected at n4 smoke:
+
+- source candidate:
+  - dirty probe on top of `5f600ff98f21a9d9094350d3d07bec4fa06c43cf`;
+  - modified only `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added default-off `GGML_MOE_STREAM_IQ3_UP_GATE_PARALLEL=1` gating for
+    same-type `IQ3_XXS` in the existing non-mixed parallel up/gate path.
+- build: passed.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-125408Z-n4-phase7ac-iq3-upgate-parallel-smoke`.
+- runner: `/tmp/run_phase7ac_repro.sh`.
+- env delta:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_IQ3_UP_GATE_PARALLEL=1
+```
+
+- path activation: stderr printed
+  `[moe_stream] parallel up/gate streams active: type=18`.
+- exit: `0`.
+- output: `France is a country`; too short for semantic acceptance because this
+  was `-n 4`, but coherent as a smoke prefix.
+- TTFT: `76439.02 ms`, within gate.
+- decode smoke: `5437.59 ms / 3`, `0.55 tok/s`; not used for promotion.
+- RAM: `memory.peak=15899996160`, `oom=0`, pass.
+- read path: `read_failures=0`, pass.
+- up/gate profile:
+  - calls `85`;
+  - up `11.992 ms/call`;
+  - gate `10.899 ms/call`;
+  - kernel `22.823 ms/call`;
+  - total `22.893 ms/call`.
+
+Comparison and gap analysis:
+
+- The current accepted aggregate up/gate bucket is about `14-15 ms/call`.
+- Phase 7U's IQ3 same-type serial bucket was `18.568 ms/call`.
+- The IQ3 parallel probe is worse than both at `22.893 ms/call`.
+- The theoretical overlap assumption is false on this GPU/kernel shape: running
+  the two IQ3 MMVQ streams in parallel increases contention more than it hides
+  latency, matching the earlier Phase 7D mixed-parallel failure mode.
+
+Decision:
+
+- Reject Phase 7AC.
+- Do not run n32 or n96.
+- Revert source changes immediately and rebuild the accepted binary.
+- Keep Phase 7P as SOTA.
+- Do not pursue stream-parallel up/gate variants without a different kernel
+  implementation or occupancy evidence showing the kernels can actually overlap.
