@@ -203,6 +203,12 @@ struct ggml_kimi_cpu_moe_name_profile_entry {
     uint64_t calls;
     uint64_t total_us;
     uint64_t fallback_us;
+    uint64_t decode_calls;
+    uint64_t decode_total_us;
+    uint64_t decode_fallback_us;
+    uint64_t prompt_calls;
+    uint64_t prompt_total_us;
+    uint64_t prompt_fallback_us;
     uint64_t cuda_batch_eligible;
     uint64_t cuda_batch_accepted;
     uint64_t cuda_batch_declined;
@@ -296,7 +302,9 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
             fprintf(stderr,
                     "[kimi_cpu_moe_name_profile] top%d name=%s calls=%" PRIu64
                     " total=%.3f ms/call fallback_t0=%.3f ms/call"
-                    " batch_eligible=%" PRIu64 " batch_accept=%" PRIu64 " batch_decline=%" PRIu64 "\n",
+                    " batch_eligible=%" PRIu64 " batch_accept=%" PRIu64 " batch_decline=%" PRIu64
+                    " decode_calls=%" PRIu64 " decode_total=%.3f ms/call decode_fallback=%.3f ms/call"
+                    " prompt_calls=%" PRIu64 " prompt_total=%.3f ms/call prompt_fallback=%.3f ms/call\n",
                     rank + 1,
                     e->name,
                     e->calls,
@@ -304,7 +312,13 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
                     (double) e->fallback_us / 1000.0 / (double) e->calls,
                     e->cuda_batch_eligible,
                     e->cuda_batch_accepted,
-                    e->cuda_batch_declined);
+                    e->cuda_batch_declined,
+                    e->decode_calls,
+                    e->decode_calls ? (double) e->decode_total_us / 1000.0 / (double) e->decode_calls : 0.0,
+                    e->decode_calls ? (double) e->decode_fallback_us / 1000.0 / (double) e->decode_calls : 0.0,
+                    e->prompt_calls,
+                    e->prompt_calls ? (double) e->prompt_total_us / 1000.0 / (double) e->prompt_calls : 0.0,
+                    e->prompt_calls ? (double) e->prompt_fallback_us / 1000.0 / (double) e->prompt_calls : 0.0);
             if (ggml_kimi_cpu_moe_eligibility_profile_enabled()) {
                 fprintf(stderr,
                         "[kimi_cpu_moe_eligibility_profile] top%d name=%s"
@@ -364,6 +378,7 @@ static void ggml_kimi_cpu_moe_name_profile_record(
         const char * name,
         uint64_t total_us,
         uint64_t fallback_us,
+        bool prompt_phase,
         bool cuda_batch_eligible,
         bool cuda_batch_accepted) {
     if (!ggml_kimi_cpu_moe_profile.name_enabled) {
@@ -396,6 +411,15 @@ static void ggml_kimi_cpu_moe_name_profile_record(
     e->calls++;
     e->total_us += total_us;
     e->fallback_us += fallback_us;
+    if (prompt_phase) {
+        e->prompt_calls++;
+        e->prompt_total_us += total_us;
+        e->prompt_fallback_us += fallback_us;
+    } else {
+        e->decode_calls++;
+        e->decode_total_us += total_us;
+        e->decode_fallback_us += fallback_us;
+    }
     if (cuda_batch_eligible) {
         e->cuda_batch_eligible++;
         if (cuda_batch_accepted) {
@@ -2338,6 +2362,7 @@ static void ggml_compute_forward_mul_mat_id(
             src0->name,
             kimi_cpu_moe_total_us,
             kimi_cpu_moe_fallback_us,
+            ids->ne[1] > 1,
             use_gpu_stream_batch,
             kimi_cpu_moe_batch_done);
     }

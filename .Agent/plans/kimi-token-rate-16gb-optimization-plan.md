@@ -9989,3 +9989,146 @@ Rollback:
 
 - Revert if the default-off diagnostic changes runtime behavior, breaks build,
   fails hard gates, or does not produce actionable timing split.
+
+Result timestamp: 2026-07-02 22:15 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-011555Z-n32-phase3zq-fallback-time-split`
+
+Measured result:
+
+- Source state: `e6f19f131-dirty-phase3zq`, default-off phase time split added
+  to the Kimi CPU MoE name profile.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.850849 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `77894.97 ms`, inside the `106331.72 ms` gate.
+- Decode: `70.36203 s / 31 tokens = 2.2697429032258067 s/token`,
+  `0.4405783063256717 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `22.785 ms/call`,
+  `cuda_batch=22.600 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `28.698 ms/call`, `cuda_batch=2.678 ms/call`,
+  `fallback_t0=25.972 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - pinned staging `copies=13136`, `host_stage=18034.632 ms`,
+    `h2d=2844.721 ms`.
+
+Decode fallback time by `src0_type`:
+
+- `2 = Q4_0`: `decode_fallback_s=5.35246`,
+  `prompt_fallback_s=4.22665`, `decode_unsupported=217`,
+  `prompt_unsupported=7`.
+- `18 = IQ3_XXS`: `decode_fallback_s=5.643922`,
+  `prompt_fallback_s=5.320042`, `decode_unsupported=403`,
+  `prompt_unsupported=13`.
+- `22 = IQ2_S`: `decode_fallback_s=4.609576`,
+  `prompt_fallback_s=3.267975`, `decode_unsupported=279`,
+  `prompt_unsupported=9`.
+- `11 = Q3_K`: `decode_fallback_s=0.000279`,
+  `prompt_fallback_s=3.990211`.
+- `23 = IQ4_XS`: `decode_fallback_s=0.000248`,
+  `prompt_fallback_s=3.446672`.
+
+Decision:
+
+- Accept Phase 3ZQ as default-off diagnostic code because build, strict RAM,
+  cold start, TTFT, quality, read failure, launch failure, VRAM, and actionable
+  timing-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- Decode fallback time is real and material: the top unsupported type buckets
+  account for about `15.61 s` of the `70.36 s` n32 decode wall time.
+- Q4_0 remains excluded from the next speed patch because Phase 3ZO showed that
+  adding Q4_0 GPU down coverage regresses cache hit rate, staging, H2D, and
+  up/gate time.
+- `IQ3_XXS` and `IQ2_S` are the next visible fallback buckets by decode time,
+  but a direct type-support patch may repeat the Phase 3ZO cache contention
+  failure unless the exact graph path is understood.
+
+## Next candidate: Phase 3ZR fused up/gate graph attribution
+
+Design timestamp: 2026-07-02 22:24 CST.
+
+Current bottleneck:
+
+- Phase 3ZQ shows decode fallback time in `IQ3_XXS` and `IQ2_S` generic
+  `mul_mat_id` entries.
+- The graph builder only selects `ggml_moe_up_gate` when all fused up/gate
+  conditions are true:
+  - `GGML_MOE_STREAM_FUSED_UP_GATE` is enabled;
+  - `n_tokens == 1`;
+  - `gate_up_exps == nullptr`;
+  - `up_exps != nullptr`;
+  - `gate_exps != nullptr`;
+  - `up_exps_b == nullptr`;
+  - `gate_exps_b == nullptr`;
+  - `up_exps_s == nullptr`;
+  - `gate_exps_s == nullptr`;
+  - `type_op == LLM_FFN_SILU`;
+  - `up_exps->type == gate_exps->type`;
+  - `ggml_are_same_shape(up_exps, gate_exps)`.
+- Before changing math or adding a new type path, determine exactly which of
+  these conditions fails for the decode fallback names.
+
+Hypothesis:
+
+The remaining decode fallback may come from graph construction not choosing the
+vendor fused up/gate op for some Kimi FFN blocks, possibly because scale
+tensors, tensor type mismatch, or shape checks disable the fused path. A
+default-off graph attribution log can identify the blocker without changing
+runtime behavior.
+
+Theoretical upper bound:
+
+- Phase 3ZQ n32 decode wall time: `70.36203 s`.
+- Top unsupported decode fallback time by type:
+  - `IQ3_XXS`: `5.643922 s`;
+  - `IQ2_S`: `4.609576 s`.
+- If the graph attribution proves these are accidental separate up/gate paths
+  that can use the existing fused op with no new staging/cache pressure, the
+  absolute upper bound is roughly `10.25 s` saved over 31 decode tokens:
+  `70.36 / (70.36 - 10.25) = 1.17x`, or about `0.516 tok/s`.
+- If the blockers require new GPU type coverage or extra staging, use the
+  Phase 3ZO lesson and subtract added cache/staging/H2D cost from this bound
+  before coding.
+
+Execution:
+
+1. Add a default-off graph build diagnostic, e.g.
+   `GGML_KIMI_MOE_GRAPH_PROFILE=1`, around `build_moe_ffn`.
+2. For each Kimi MoE FFN block, log the fused up/gate decision and every
+   condition listed above, including tensor names, types, shape equality, and
+   whether scale/bias tensors are present.
+3. Build remote CUDA `llama-completion`.
+4. Run strict cold `-n 4` first to keep diagnostics small, then `-n 32` only if
+   the log is actionable and hard gates pass.
+5. Do not change the fused-path decision in this phase.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold run passes host RAM, cold start, TTFT, France semantic quality,
+  read failure, launch failure, and VRAM gates.
+- Logs explain why each decode MoE block did or did not use fused up/gate.
+- The next implementation candidate is chosen from measured blockers only.
+
+Rollback:
+
+- Revert if the diagnostic changes graph behavior, breaks build, fails hard
+  gates, or cannot attribute the fused up/gate decision.
