@@ -2450,6 +2450,19 @@
 - `trace_summary`: `/root/lfz/runs/vendor-ds4-16gb/20260702T030252Z-20260702_current_sota_repro_after_cpumoe39_reject/france-cpu40-vram0gb/trace_summary.json` recorded `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24770.360`, `dontneed_ms=1185.232`, `total_ms=27042.197`.
 - `repro_conclusion`: current SOTA is reproducible under cold `drop_caches` and strict 16GB cgroup. Metrics match the accepted late10 top3 path; TTFT is below the `45449.496149ms` gate and RAM including page cache is constrained by `memory_peak_bytes=16000000000`.
 
+### 当前执行 attempt：late10-cpu-chunk-bottleneck-trace
+
+- `attempt_id`: `20260702-late10-cpu-chunk-bottleneck-trace`
+- `attempt_kind`: `diagnostic/bottleneck-localization`
+- `status`: planned_before_execution
+- `bottleneck_basis`: The reproduced SOTA gate trace accounts for only about `27.0s` of the `88.98s` cold run (`rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24770.360`, `total_ms=27042.197`). The remaining trace-outside wall is still the largest unresolved component and is expected to be dominated by non-streamed `ffn_up_exps` / `ffn_down_exps` CPU fallback under the accepted late10 top3 routing.
+- `hypothesis`: Running the accepted SOTA config with the existing default-off `GGML_MOE_CPU_CHUNK_TRACE_OUT` hook will identify the current post-top3 CPU fallback distribution by tensor, layer, expert, chunk count, and summed chunk time. This should show whether future work should target specific layers/experts, chunk scheduling, page/refault behavior, or a broader routing/streaming strategy.
+- `theoretical_upper_bound`: This diagnostic cannot improve token rate and may slow the run because chunk tracing writes many rows. Its value is a hard upper-bound estimate for future optimizations: any proposed CPU fallback optimization cannot save more than the traced up/down fallback component it removes, and any stream replacement must beat the measured CPU fallback cost plus cache/page-in overhead.
+- `test_config`: current pushed source, no source changes, `cpu_moe=40`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_TRACE_OUT=/root/lfz/runs/vendor-ds4-16gb/LATE10_CPU_CHUNK_TRACE_GATE_TRACE`, `GGML_MOE_CPU_CHUNK_TRACE_OUT=/root/lfz/runs/vendor-ds4-16gb/LATE10_CPU_CHUNK_TRACE_CPU_TRACE`, `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=2500000`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: diagnostic passes if the run completes without RAM breach, France output remains semantically correct/coherent enough to trust the trace, and trace files can be summarized. It is not promoted even if rounded `eval_tok_s` ties or improves, because tracing changes runtime behavior.
+- `rollback`: no source change. If the run fails or trace files are incomplete, record the failure and do not use the data for optimization decisions.
+- `required_evidence`: exact run dir, source commit/status, binary sha256/build line/stat, summary.json, gate trace summary, CPU chunk trace summary by tensor/layer and top-cost entries, cgroup memory evidence, full France answer text, and explicit diagnostic conclusion with next optimization priority.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
