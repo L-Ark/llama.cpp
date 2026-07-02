@@ -16208,3 +16208,105 @@ Decision:
   - `GGML_MOE_IO_SQPOLL=1`;
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AG - SQPOLL refill batch retest
+
+Design timestamp: 2026-07-02 16:05 UTC.
+
+Bottleneck:
+
+- Current accepted Phase 7AE n96 confirm still spends most decode wall time on
+  miss/staging and expert compute:
+  - pinned main host stage `60514.789 ms`;
+  - pinned main H2D `11381.667 ms`;
+  - expert-pack `iouring_wait_us=19187389`;
+  - up/gate total `14.151 ms/call`;
+  - down total `16.369 ms/call`.
+- Phase 7AF showed that adding a small amount of VRAM cache is not
+  reproducible. The next target should be the miss pipeline, not more cache.
+
+Prior evidence:
+
+- Phase 7E rejected `GGML_MOE_IO_DEPTH=16` and
+  `GGML_MOE_IO_REFILL_BATCH=8` before SQPOLL because effective inflight stayed
+  at `8`, batch sizes remained mostly `2-4`, and n4 regressed.
+- Phase 7AE later accepted `GGML_MOE_IO_SQPOLL=1`, changing submission/wait
+  distribution. Therefore the narrow piece worth retesting is refill behavior
+  under SQPOLL while keeping depth capped at the already effective value `8`.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - current down overlap and down parallel staging.
+- Since max depth remains `8`, this should not increase memory materially. It
+  may reduce small refill gaps if the SQPOLL ring can accept a fuller batch
+  earlier.
+
+Theoretical upper bound:
+
+- Phase 7AE n32 confirm has expert-pack `iouring_wait_us=7397029`; candidate
+  n32 has `7915314`. The visible wait bucket is about `7.4-7.9 s`.
+- Refill can only reduce a fraction of this wait. A realistic upper bound is
+  `5-10%` of wait time, or about `0.4-0.8 s` n32.
+- That corresponds to improving n32 decode from `36687.31 ms / 31` to roughly
+  `35800-36300 ms / 31` if no staging or CPU scheduling cost is added.
+- Larger gains must be explained by lower pinned host_stage/H2D or fewer
+  misses. If host_stage rises, reject even if hit rate is unchanged.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ag_repro.sh` from the Phase 7AE runner, parameterizing
+  `IO_DEPTH` and `IO_REFILL_BATCH`.
+- Run strict cold n32 with:
+
+```sh
+N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 IO_DEPTH=8 IO_REFILL_BATCH=8
+```
+
+- Continue to n32 confirmation only if the first run beats the accepted Phase
+  7AE best n32 `36687.31 ms / 31` and all gates pass.
+- Continue to n96 only if n32 and n32 confirmation both beat
+  `36687.31 ms / 31`.
+
+Reproducibility:
+
+- Run directory must include `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- A single faster run is diagnostic only. Phase 7AG cannot become SOTA unless
+  the gain is reproduced by a second cold n32 and then by two cold n96 runs.
+
+Acceptance:
+
+- n32 must beat `36687.31 ms / 31` twice.
+- n96 must beat `88889.08 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France output coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters must show a concrete mechanism:
+  - lower expert-pack wait and/or lower pinned host_stage/H2D;
+  - no increase in fallback_t0 that cancels the IO gain;
+  - no increase in TTFT beyond the global 20% gate.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower than `36687.31 ms / 31`, reject Phase 7AG and keep
+  Phase 7AE as SOTA.
+- If first n32 is faster but confirmation does not reproduce, reject Phase 7AG
+  and do not run n96.
