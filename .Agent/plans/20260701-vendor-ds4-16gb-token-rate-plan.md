@@ -2243,7 +2243,7 @@
 
 - `attempt_id`: `20260702-late10-no-trace-dontneed0`
 - `attempt_kind`: `config-probe/page-reclaim-policy`
-- `status`: planned_before_execution
+- `status`: completed_rejected_regression_not_sota
 - `bottleneck_basis`: Accepted late10 trace still spends `dontneed_ms=1169.862ms` and `src0_ms=24305.283ms`; no-trace at `13568MiB` already reduced elapsed to `87.18s` but tied token rate. Earlier clean-baseline `DONTNEED=0` regressed by increasing `src0_ms`, but the accepted late10 routing/cache regime has fewer rows and may respond differently.
 - `hypothesis`: Setting `GGML_MOE_STREAM_DONTNEED=0` under the accepted late10/no-trace config removes the direct per-expert `madvise(DONTNEED)` overhead and may reduce syscall/reclaim work enough to exceed the rounded `2.6 tok/s` gate. The main risk is that retaining mmap source pages increases file-cache pressure and refault churn under the strict 16GB cgroup.
 - `theoretical_upper_bound`: Direct traced `dontneed_ms` in accepted late10 is about `1.17s`. If disabling it had no secondary cost, elapsed could improve from `87.18s` no-trace toward `~86s`, a small but plausible rounding move. If `src0_ms` rises as in the earlier clean-baseline probe, token rate will tie or regress.
@@ -2251,6 +2251,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or memory/refault evidence worsens materially, record rejected and keep accepted late10 SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command showing `GGML_MOE_STREAM_DONTNEED=0` and trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T020507Z-20260702_late10_no_trace_dontneed0/france-cpu40-vram0gb`.
+- `result`: rejected regression. `eval_tok_s=2.3`, `prompt_tok_s=0.9`, `TTFT=36790.815780ms`, `elapsed_seconds=93.62`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15039840256`, `pgmajfault=301260`, `workingset_refault_file=4459579`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports the accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`), so the regression is not caused by cache insertion failure.
+- `gap_analysis`: Disabling stream `DONTNEED` removes the direct `madvise` path, but under the 16GB cgroup it increases retained file pages/reclaim pressure and slows the run: elapsed regressed from the no-trace tie (`87.18s`) to `93.62s`, `workingset_refault_file` rose from `3484919` to `4459579`, and file-system inputs rose to `169695064`. Keep `GGML_MOE_STREAM_DONTNEED=1`; this confirms the syscall cost is outweighed by cgroup page-cache control.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
