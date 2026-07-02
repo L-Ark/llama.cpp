@@ -15717,3 +15717,96 @@ Decision:
 - Keep Phase 7P as SOTA.
 - Do not pursue stream-parallel up/gate variants without a different kernel
   implementation or occupancy evidence showing the kernels can actually overlap.
+
+## Phase 7AD - current-profile VRAM preload without protection
+
+Design timestamp: 2026-07-02 14:35 UTC.
+
+Reason:
+
+- Phase 7AB produced the first authoritative route profile/trace for the current
+  Phase 7P SOTA.
+- Phase 2J rejected broad profile preload plus protected profile eviction:
+  `GGML_MOE_VRAM_PROFILE_PROTECT=1`,
+  `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`, and
+  `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`. That config added too much
+  overhead and hurt n32 performance.
+- The current code can use `GGML_MOE_VRAM_PROFILE=<route-profile.csv>` without
+  `PROFILE_PROTECT` and without a profile eviction policy. In that mode preload
+  can seed likely experts but later cache replacement remains the accepted
+  policy, avoiding protected hotset overhead.
+
+Hypothesis:
+
+- Use the Phase 7AB route profile only as a preload source:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-124507Z-n32-phase7ab-sota-route-trace/route-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_CACHE_POLICY=
+```
+
+- Keep the accepted Phase 7P runtime otherwise unchanged.
+- This may reduce early decode cache misses and pinned staging without the
+  persistent pin/protection overhead that made Phase 2J slow.
+- Risk: preload itself still runs in the critical path when tensors are first
+  touched, may increase TTFT, and may perturb cache order enough to slow decode.
+
+Simulation evidence:
+
+- Replaying the current Phase 7AB trace with protected preload showed lower miss
+  GiB when reserve was reduced:
+  - reserve `20%`: `108.19 GiB`;
+  - reserve `5%`: `101.91 GiB`;
+  - reserve `0%`: `99.11 GiB`, but with dropped protected entries.
+- This is only a directional signal. Runtime overhead can erase the gain, as
+  Phase 2J already proved.
+
+Theoretical upper bound:
+
+- Phase 7AB pinned staging main host stage is `25.15 s` at n32, but much of it
+  is overlapped and includes both up/down cache misses.
+- If preload avoided 5-10% of exposed miss staging without adding overhead, the
+  optimistic n32 saving is roughly `0.5-2.0 s`.
+- Any larger measured gain must be supported by lower host_stage/H2D, improved
+  cache hit rate, or lower down/upgate profile time.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ad_repro.sh` from the current Phase 7P runner.
+- Add only:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260702-124507Z-n32-phase7ab-sota-route-trace/route-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=0
+```
+
+- Do not set `GGML_MOE_VRAM_CACHE_POLICY`.
+- Run strict cold n32 first. Continue to n32 confirm only if raw decode beats
+  Phase 7P n32 confirm `37379.97 ms / 31`.
+- Run n96 only after n32 and n32 confirm both pass.
+
+Reproducibility:
+
+- Run directory must contain `README.md`, `command.txt`, `env.txt`, `git.txt`,
+  `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+  `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+
+Acceptance:
+
+- n32 must beat `37379.97 ms / 31` twice before any n96.
+- n96 must beat `90610.91 ms / 77` twice before promotion.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- `read_failures=0`.
+- France answer must be coherent and semantically correct.
+- Counters must explain any gain.
+
+Rollback:
+
+- Env-only failure needs no source revert.
+- If n32 is slower, reject Phase 7AD and do not continue to n96.
