@@ -2372,6 +2372,19 @@
 - `gap_analysis`: Reducing generation budget from `-n 192` to `-n 160` did not change output text or improve rounded token rate; the model completed the same paragraph before the lower limit. Generation budget is not the current token-rate boundary as long as correctness is preserved. Keep accepted late10 config as SOTA.
 - `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：late10-no-trace-c192
+
+- `attempt_id`: `20260702-late10-no-trace-c192`
+- `attempt_kind`: `config-probe/context-budget`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Accepted runs use extra args `-c 256 -b 16 -ub 16`; the prompt plus complete France answer is short, and `-n160` showed output completeness does not require the full 192 generation cap. A smaller context may reduce KV/cache scheduling or memory overhead slightly while preserving correctness.
+- `hypothesis`: Lowering context from `-c 256` to `-c 192` under accepted late10/no-trace config may shave small per-token overhead without changing routing/cache policy. It should be rejected immediately if output truncates, semantics degrade, or token rate only ties.
+- `theoretical_upper_bound`: Context-size overhead is likely small compared with gate source loading and CPU fallback. This can only improve by a small rounding amount; promote only on strict `eval_tok_s > 2.6` with full France correctness.
+- `test_config`: accepted late10 config without `GGML_MOE_STREAM_ONE_TRACE_OUT`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 192 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: No source change. If token rate does not exceed `2.6`, output correctness/completeness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 `-c 256` SOTA.
+- `required_evidence`: exact env/command showing `-c 192` and trace disabled, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, full France answer text, manual correctness/completeness note, and explicit promoted/rejected status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
