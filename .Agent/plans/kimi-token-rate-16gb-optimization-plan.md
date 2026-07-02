@@ -10978,3 +10978,159 @@ Next direction:
 - Candidate: separate cache pool for Q4_0 down with a hard MiB cap, but only
   after computing whether the extra VRAM pool can fit without reducing mixed
   up/gate hit rate.
+
+## Phase 3ZW: cache pressure re-analysis before any new Q4_0 work
+
+Design timestamp: 2026-07-03 08:15 CST.
+
+Purpose:
+
+- Re-align the next optimization step with the hard gates before writing more
+  code.
+- Explain why Phase 3ZV regressed.
+- Decide whether the next implementation should be cache policy, Q4_0 isolated
+  cache, Q4_0 one-shot GPU staging, or more instrumentation.
+
+Required constraints for this phase:
+
+- No implementation patch before this plan section is written.
+- No accepted result without strict cold start, cgroup memory limit
+  `memory.max=15900000000`, `memory.swap.max=0`, and page-cache-inclusive host
+  RAM below 16 GB.
+- Every benchmark must use the fixed France prompt and pass semantic quality.
+- TTFT must remain below `106331.72 ms`.
+- Any accepted performance improvement must be committed and pushed
+  immediately with the exact reproduction method.
+- Any regression must be reverted before another optimization is attempted.
+
+Inputs:
+
+- Accepted runtime: commit `325b7b973`, recorded again at plan commit
+  `cbcd00547`.
+- Accepted `-n 96` reprofile run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile`.
+- Rejected Q4_0 shared-cache run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-022408Z-n32-phase3zv-q4down-allowlist`.
+
+Observed bottleneck after accepted Phase 3ZT/3ZU:
+
+- Up/gate fallback is effectively eliminated by the mixed IQ2/IQ3 fused path.
+- Remaining material decode fallback is Q4_0 down:
+  - layers: `6,7,8,9,10,15,18`;
+  - decode fallback: about `8.408 s` over the accepted `-n 96` decode;
+  - theoretical maximum if removed with zero new overhead:
+    `121.62653 / (121.62653 - 8.408) = 1.074x`;
+  - upper token-rate estimate:
+    `0.6331 tok/s * 1.074 = 0.680 tok/s`.
+
+Cache replay findings:
+
+Command:
+
+```sh
+python3 scripts/moe-route-cache-sim.py \
+  /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/route-profile.csv \
+  --budget-mib 15000 \
+  --trace /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/route-trace.csv \
+  --profile-stderr /root/lfz/runs/vendor-kimi-token-rate/20260702-021521Z-n96-phase3zu-accepted-mixed-reprofile/stderr.txt \
+  --sweep --sweep-min 45 --sweep-max 80 --sweep-step 5 \
+  --objective protected --policy lfu_lru --preload protected
+```
+
+`admit_after=1` result:
+
+- static split recommend: `upgate_pct=65`;
+- trace replay recommend: `upgate_pct=70`;
+- best replay miss estimate: `306.76 GiB`;
+- best replay hit estimate: `44.98%`.
+
+Same command with `--admit-after 2`:
+
+- trace replay recommend: `upgate_pct=65`;
+- best replay miss estimate: `298.93 GiB`;
+- best replay hit estimate: `46.08%`;
+- bypassed events: `21337`.
+
+Runtime calibration from Phase 3ZU:
+
+- down CUDA batch:
+  - calls: `4082`;
+  - average active: `8`;
+  - misses per call: `14.56`;
+  - stage: `5.840 ms/call`;
+  - stage per miss: `0.401 ms`;
+  - stage per GiB: `55.20 ms/GiB`;
+  - kernel: `0.110 ms/call`;
+  - total: `5.992 ms/call`.
+- pinned staging:
+  - copies: `64145`;
+  - waits: `64121`;
+  - slot: `7.44 MiB`;
+  - host_stage: `81296.308 ms`;
+  - H2D: `13334.103 ms`;
+  - host staging bandwidth estimate: `5.73 GiB/s`;
+  - H2D bandwidth estimate: `34.95 GiB/s`.
+
+Interpretation:
+
+- Cache split/policy tuning alone is a small lever. The best replay variants
+  differ by only a few GiB of estimated misses over the full run.
+- Phase 3ZV failed because enabling Q4_0 in the shared cache increased shared
+  slot size to `7.88 MiB`, reduced hit rate to `40.6%`, and increased staging
+  enough to erase the Q4_0 CPU fallback savings.
+- The route trace/profile currently records CUDA/cache-routed tensors but does
+  not include the Q4_0 CPU fallback down layers. Direct searches for
+  `blk.{6,7,8,9,10,15,18}.ffn_down_exps.weight` in `route-profile.csv` and
+  `route-trace.csv` returned no rows. Therefore route replay alone cannot size
+  or rank the Q4_0 fallback hotset.
+
+Next implementation priority:
+
+1. First add instrumentation, not a speed patch:
+   - emit a Q4_0 fallback route/profile CSV for CPU fallback MoE tensors;
+   - include tensor name, layer id, expert index, tensor type, expert bytes,
+     decode/prompt phase, count, and fallback time;
+   - keep this disabled unless a diagnostic env var is set;
+   - ensure no runtime behavior change when the env var is absent.
+2. Run a strict cold diagnostic `-n 96` under the accepted Phase 3ZT env plus
+   the new diagnostic output.
+3. Use the diagnostic data to choose between:
+   - separate hard-capped Q4_0 cache pool;
+   - Q4_0 one-shot GPU staging with no persistent cache admission;
+   - rejecting Q4_0 GPU work if the measured Q4 hotset cannot pay for staging.
+
+Theory for the diagnostic step:
+
+- The current `8.408 s` Q4_0 fallback number is enough to define an upper bound,
+  but not enough to design a safe cache. It lacks per-expert byte/hotness data.
+- A diagnostic CSV has near-zero theoretical speed upside and should not be
+  accepted as a performance improvement by itself.
+- The diagnostic is necessary because the previous implementation guessed the
+  Q4_0 cache shape and caused a measurable regression.
+
+Diagnostic acceptance:
+
+- Build succeeds.
+- No performance commit is made unless the diagnostic is completely behavior
+  neutral or improves performance accidentally while satisfying all gates.
+- Strict cold `-n 96` run passes:
+  - host RAM below 16 GB including page cache;
+  - TTFT below `106331.72 ms`;
+  - France output semantically correct and coherent;
+  - `read_failures=0`;
+  - no CUDA launch failures.
+- Diagnostic files record the Q4_0 fallback rows needed to compute:
+  - unique Q4_0 fallback expert bytes;
+  - routed Q4_0 fallback bytes;
+  - hotset hit curve for hard caps such as `256`, `512`, `1024`, and
+    `2048 MiB`;
+  - fallback time covered by each hotset.
+
+Rollback:
+
+- Revert the diagnostic patch if it changes token output, slows token rate
+  materially, increases TTFT beyond gate, increases host RAM above 16 GB, or
+  destabilizes CUDA/cache counters.
+- Do not implement a separate Q4_0 cache pool until the diagnostic proves the
+  expected saved CPU fallback time is larger than added host staging, H2D, and
+  cache-pressure cost.
