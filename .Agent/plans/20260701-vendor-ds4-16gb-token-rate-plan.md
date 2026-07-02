@@ -2376,7 +2376,7 @@
 
 - `attempt_id`: `20260702-late10-no-trace-c192`
 - `attempt_kind`: `config-probe/context-budget`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Accepted runs use extra args `-c 256 -b 16 -ub 16`; the prompt plus complete France answer is short, and `-n160` showed output completeness does not require the full 192 generation cap. A smaller context may reduce KV/cache scheduling or memory overhead slightly while preserving correctness.
 - `hypothesis`: Lowering context from `-c 256` to `-c 192` under accepted late10/no-trace config may shave small per-token overhead without changing routing/cache policy. It should be rejected immediately if output truncates, semantics degrade, or token rate only ties.
 - `theoretical_upper_bound`: Context-size overhead is likely small compared with gate source loading and CPU fallback. This can only improve by a small rounding amount; promote only on strict `eval_tok_s > 2.6` with full France correctness.
@@ -2384,6 +2384,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If token rate does not exceed `2.6`, output correctness/completeness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 `-c 256` SOTA.
 - `required_evidence`: exact env/command showing `-c 192` and trace disabled, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, full France answer text, manual correctness/completeness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T024516Z-20260702_late10_no_trace_c192/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=36644.751827ms`, `elapsed_seconds=87.64`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15023489024`, `pgmajfault=293970`, `workingset_refault_file=3329827`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated under `-c 192`.
+- `cache_observation`: stderr reports accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`).
+- `gap_analysis`: Reducing context from `-c 256` to `-c 192` preserved output quality and cache behavior but still tied `2.6`. Context budget is not the current token-rate boundary for this short France prompt. Keep accepted late10 `-c 256` config as SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
