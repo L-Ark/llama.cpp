@@ -9795,3 +9795,197 @@ Next direction:
 - Use the eligibility diagnostic to rank unsupported up/gate `IQ3_XXS`/`IQ2_S`
   generic fallback, but first distinguish prompt-only generic calls from decode
   calls so the implementation target is not inflated by prompt behavior.
+
+## Next candidate: Phase 3ZP eligibility phase split
+
+Design timestamp: 2026-07-02 21:38 CST.
+
+Current bottleneck:
+
+- Phase 3ZN shows many unsupported `ffn_gate_exps`/`ffn_up_exps` entries in the
+  generic `mul_mat_id` path, mostly `src0_type=18` (`IQ3_XXS`) and
+  `src0_type=22` (`IQ2_S`).
+- The current eligibility diagnostic does not say whether these unsupported
+  entries happen during prompt/multi-token evaluation or during decode.
+- Treating prompt-only generic fallback as decode optimization opportunity
+  would violate the planning rule: the next implementation target must be
+  based on the current token-rate bottleneck, not an inflated mixed-phase
+  profile.
+
+Hypothesis:
+
+Add a default-off phase split to the existing eligibility profile:
+
+- `decode_*` counters when `ids->ne[1] == 1`;
+- `prompt_*` counters when `ids->ne[1] > 1`.
+
+This uses the same shape value already used to build `matrix_rows`; it should
+not alter math, routing, cache policy, or launch decisions.
+
+Theoretical value and bound:
+
+- This is diagnostic-only and has no direct token-rate promotion bound.
+- It enables the next real optimization to compute a hard upper bound from
+  decode-only unsupported fallback, rather than mixed prompt+decode fallback.
+- If the unsupported `IQ3_XXS`/`IQ2_S` entries are prompt-only, skip them for
+  token-rate work and return to cache/prefetch policy. If they are decode-heavy,
+  rank by decode fallback time and type before designing a kernel/type change.
+
+Execution:
+
+1. Extend `ggml_kimi_cpu_moe_name_profile_entry` with prompt/decode
+   eligibility reason counters.
+2. Pass `ids->ne[1] > 1` as the prompt flag when recording eligibility in
+   `ggml_compute_forward_mul_mat_id`.
+3. Print per-name phase counts only when
+   `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`.
+4. Build remote CUDA `llama-completion`.
+5. Run strict cold `-n 32` using the accepted Phase 3ZG env plus:
+   - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+   - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`.
+
+Acceptance:
+
+- Source change is accepted only as default-off diagnostic code.
+- Build succeeds.
+- Strict cold `-n 32` passes:
+  - host RAM `< 16 GB` including page cache;
+  - TTFT `<= 106331.72 ms`;
+  - France prompt semantic quality;
+  - `read_failures=0`;
+  - CUDA launch failures `=0`;
+  - VRAM near the accepted runtime reserve.
+- Logs contain decode/prompt split counters for eligibility lines.
+
+Rollback:
+
+- Revert if the default-off diagnostic changes runtime behavior, breaks the
+  build, causes quality/TTFT/RAM failures, or fails to print actionable phase
+  counters.
+
+Result timestamp: 2026-07-02 21:48 CST.
+
+Run:
+`/root/lfz/runs/vendor-kimi-token-rate/20260702-010911Z-n32-phase3zp-eligibility-phase-split`
+
+Measured result:
+
+- Source state: `541bd512d-dirty-phase3zp`, default-off phase split added to
+  eligibility profile.
+- Build: remote CUDA `llama-completion` target succeeded.
+- Strict cgroup:
+  - `memory.max=15900000000`;
+  - `memory.swap.max=0`;
+  - child shell moved by `$BASHPID`.
+- Cold proof: `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- Host RAM peak: `15899996160` bytes, `14.808025 GiB`.
+- Page cache final: `13.831226 GiB`.
+- VRAM peak: `31286 MiB`; minimum free/reserve: `825 MiB`.
+- TTFT: `76040.36 ms`, inside the `106331.72 ms` gate.
+- Decode: `70.93261 s / 31 tokens = 2.288148709677419 s/token`,
+  `0.4370345317901033 tok/s`.
+- Quality: PASS for the `-n 32` diagnostic answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `read_failures=0`; strict CUDA launch failures `=0`.
+- Up/gate CPU profile: `869` calls, `22.596 ms/call`,
+  `cuda_batch=22.430 ms/call`, `fallback_t0=0.001 ms/call`.
+- Generic `mul_mat_id`/down CPU profile: `4022` calls,
+  `29.455 ms/call`, `cuda_batch=2.737 ms/call`,
+  `fallback_t0=26.668 ms/call`, `batch_accept=1644`,
+  `batch_decline=52`.
+- Cache/prefetch:
+  - VRAM cache `hits=14363`, `misses=12597`, `preloads=1446`,
+    `hit_rate=53.3%`;
+  - down prefetch `loads=1446`, `hits=1446`, `evicted_unused=0`,
+    `useful_rate=100.0%`.
+- Pinned staging: `copies=13136`, `host_stage=17315.407 ms`,
+  `h2d=2840.795 ms`.
+
+Phase split result:
+
+- Top visible unsupported counts by `src0_type` and phase:
+  - `2 = Q4_0`: `decode_unsupported=217`,
+    `prompt_unsupported=7`;
+  - `18 = IQ3_XXS`: `decode_unsupported=620`,
+    `prompt_unsupported=20`;
+  - `22 = IQ2_S`: `decode_unsupported=93`,
+    `prompt_unsupported=3`.
+- Supported down types remain decode-eligible:
+  - `11 = Q3_K`: `decode_eligible=186`, `prompt_eligible=6`;
+  - `23 = IQ4_XS`: `decode_eligible=124`, `prompt_eligible=4`.
+
+Decision:
+
+- Accept Phase 3ZP as diagnostic/default-off code evidence because build,
+  strict RAM, cold start, TTFT, quality, read failure, launch failure, VRAM, and
+  phase-output gates passed.
+- Do not promote it as a runtime improvement.
+- Commit and push the diagnostic code and plan record.
+
+Updated bottleneck interpretation:
+
+- Unsupported entries are not prompt-only; the top visible unsupported counts
+  are overwhelmingly decode-phase.
+- Q4_0 down coverage remains rejected because Phase 3ZO showed that moving Q4_0
+  down to GPU increases cache/staging/up-gate contention and slows `-n 32`.
+- The largest remaining visible unsupported class is `IQ3_XXS` (`src0_type=18`)
+  in `ffn_gate_exps`/`ffn_up_exps`, followed by `IQ2_S` (`src0_type=22`).
+- However, the current diagnostic still only gives phase counts, not phase/type
+  time. Before implementing another type/kernel change, measure fallback time
+  by prompt/decode phase and tensor type/name.
+
+## Next candidate: Phase 3ZQ fallback time phase/type split
+
+Design timestamp: 2026-07-02 21:53 CST.
+
+Current bottleneck:
+
+- Phase 3ZP identifies decode-heavy unsupported entries, especially
+  `IQ3_XXS` up/gate names.
+- The current top-name profile reports total time and fallback time per name,
+  but not whether that time is prompt or decode.
+- Counts alone are not enough to compute a defensible upper bound. The next
+  optimization must be ranked by decode fallback time, not just number of
+  unsupported calls.
+
+Hypothesis:
+
+Extend the default-off name profile with prompt/decode time split:
+
+- `decode_total_us`, `decode_fallback_us`, `decode_calls`;
+- `prompt_total_us`, `prompt_fallback_us`, `prompt_calls`.
+
+Use the same phase flag from Phase 3ZP (`ids->ne[1] > 1`). This is diagnostic
+only and should not alter runtime decisions.
+
+Theoretical value and bound:
+
+- This diagnostic has no direct token-rate promotion bound.
+- It enables the next actual optimization to compute:
+  - total decode fallback time for `IQ3_XXS` up/gate names;
+  - total decode fallback time for `IQ2_S` up names;
+  - whether the possible gain is large enough to justify a CUDA path despite
+    the Phase 3ZO cache-staging regression lesson.
+
+Execution:
+
+1. Add phase time counters to `ggml_kimi_cpu_moe_name_profile_entry`.
+2. Record total/fallback time into prompt or decode buckets when recording a
+   name profile entry.
+3. Print per-name phase time when `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`.
+4. Build remote CUDA `llama-completion`.
+5. Run strict cold `-n 32` with the same accepted Phase 3ZG env and profile
+   env used in Phase 3ZP.
+
+Acceptance:
+
+- Build succeeds.
+- Strict cold `-n 32` passes host RAM, cold start, TTFT, France semantic
+  quality, read failure, launch failure, and VRAM gates.
+- Logs contain per-name decode/prompt total and fallback timings.
+
+Rollback:
+
+- Revert if the default-off diagnostic changes runtime behavior, breaks build,
+  fails hard gates, or does not produce actionable timing split.

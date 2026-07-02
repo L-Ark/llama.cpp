@@ -208,6 +208,8 @@ struct ggml_kimi_cpu_moe_name_profile_entry {
     uint64_t cuda_batch_declined;
     int src0_type;
     uint64_t eligibility[GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT];
+    uint64_t eligibility_decode[GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT];
+    uint64_t eligibility_prompt[GGML_KIMI_CPU_MOE_ELIGIBILITY_REASON_COUNT];
 };
 
 struct ggml_kimi_cpu_moe_profile_state {
@@ -315,7 +317,11 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
                         " unsupported=%" PRIu64
                         " src1_not_f32=%" PRIu64
                         " ne13_not1=%" PRIu64
-                        " dst_not_f32=%" PRIu64 "\n",
+                        " dst_not_f32=%" PRIu64
+                        " decode_eligible=%" PRIu64
+                        " decode_unsupported=%" PRIu64
+                        " prompt_eligible=%" PRIu64
+                        " prompt_unsupported=%" PRIu64 "\n",
                         rank + 1,
                         e->name,
                         e->src0_type,
@@ -327,7 +333,11 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
                         e->eligibility[GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED],
                         e->eligibility[GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE],
                         e->eligibility[GGML_KIMI_CPU_MOE_INELIG_NE13],
-                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_DST_TYPE]);
+                        e->eligibility[GGML_KIMI_CPU_MOE_INELIG_DST_TYPE],
+                        e->eligibility_decode[GGML_KIMI_CPU_MOE_ELIGIBLE],
+                        e->eligibility_decode[GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED],
+                        e->eligibility_prompt[GGML_KIMI_CPU_MOE_ELIGIBLE],
+                        e->eligibility_prompt[GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED]);
             }
         }
     }
@@ -399,6 +409,7 @@ static void ggml_kimi_cpu_moe_name_profile_record(
 static void ggml_kimi_cpu_moe_name_profile_record_eligibility(
         const char * name,
         int src0_type,
+        bool prompt_phase,
         enum ggml_kimi_cpu_moe_eligibility_reason reason) {
     if (!ggml_kimi_cpu_moe_profile.name_enabled ||
             !ggml_kimi_cpu_moe_eligibility_profile_enabled()) {
@@ -431,6 +442,11 @@ static void ggml_kimi_cpu_moe_name_profile_record_eligibility(
     }
 
     ggml_kimi_cpu_moe_profile.names[idx].eligibility[reason]++;
+    if (prompt_phase) {
+        ggml_kimi_cpu_moe_profile.names[idx].eligibility_prompt[reason]++;
+    } else {
+        ggml_kimi_cpu_moe_profile.names[idx].eligibility_decode[reason]++;
+    }
     ggml_kimi_cpu_moe_profile.names[idx].src0_type = src0_type;
 }
 
@@ -2139,7 +2155,8 @@ static void ggml_compute_forward_mul_mat_id(
     }
 
     if (kimi_cpu_moe_profile && ith == 0) {
-        ggml_kimi_cpu_moe_name_profile_record_eligibility(src0->name, src0->type, kimi_cpu_moe_batch_reason);
+        ggml_kimi_cpu_moe_name_profile_record_eligibility(
+                src0->name, src0->type, ids->ne[1] > 1, kimi_cpu_moe_batch_reason);
     }
 
     const bool use_gpu_stream_batch =
