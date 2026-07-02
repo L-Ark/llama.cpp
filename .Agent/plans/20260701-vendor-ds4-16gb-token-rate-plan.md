@@ -2262,7 +2262,7 @@
 
 - `attempt_id`: `20260702-late10-no-trace-cuda-graphs`
 - `attempt_kind`: `config-probe/cuda-launch-overhead`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Page-cache/cache-size/DONTNEED probes have not exceeded accepted late10. The runner currently forces `GGML_CUDA_DISABLE_GRAPHS=1`, while the workload has many small CUDA operations per streamed expert. Even though `src0` remains the dominant traced field, launch/sync overhead outside source loading may still decide a rounded `2.6 -> 2.7` move.
 - `hypothesis`: Overriding the runner default with `GGML_CUDA_DISABLE_GRAPHS=0` under the accepted late10/no-trace config may reduce repeated CUDA launch overhead without changing model math, routing, VRAM cache capacity, or output semantics.
 - `theoretical_upper_bound`: Accepted late10 trace has `35151` streamed rows. If CUDA graph capture reduces even tens of microseconds of repeated launch overhead per row, the gross bound can be sub-second to low-single-digit seconds. If the stream path is not graph-captured or page faults dominate, there will be no gain; correctness should remain unchanged.
@@ -2270,6 +2270,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: No source change. If CUDA graphs fail, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 SOTA. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push records/source state to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: exact env/command showing `GGML_CUDA_DISABLE_GRAPHS=0` and trace disabled, source commit/status, binary sha256/build line/stat, model stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T021001Z-20260702_late10_no_trace_cuda_graphs/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=37897.894423ms`, `elapsed_seconds=90.25`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15023026176`, `pgmajfault=296741`, `workingset_refault_file=3554439`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`).
+- `gap_analysis`: Enabling CUDA graphs did not improve the accepted late10/no-trace path. Elapsed regressed versus the no-trace tie (`87.18s -> 90.25s`) and token rate still tied `2.6`, indicating either this stream-heavy path is not benefiting from graph capture or the remaining page-fault/source-load path dominates launch overhead. Keep runner default `GGML_CUDA_DISABLE_GRAPHS=1`.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ### 当前执行 attempt：current-sota-repro-late10-trace
 
