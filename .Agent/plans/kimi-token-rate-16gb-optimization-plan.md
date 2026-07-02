@@ -15867,3 +15867,80 @@ Decision:
 - Keep Phase 7P as SOTA.
 - Do not continue broad profile preload variants unless the preload is made much
   narrower and the theoretical upper bound exceeds its measured wall-gap cost.
+
+## Phase 7AE - io_uring SQPOLL env-only probe
+
+Design timestamp: 2026-07-02 15:05 UTC.
+
+Reason:
+
+- Phase 7AB/7AD show pinned staging and expert-pack io_uring remain visible.
+- Phase 7E rejected larger `GGML_MOE_IO_DEPTH=16` and
+  `GGML_MOE_IO_REFILL_BATCH=8`, but it did not test `GGML_MOE_IO_SQPOLL=1`
+  under the current Phase 7P SOTA.
+- SQPOLL changes io_uring submission/polling behavior without changing model
+  math, routing, cache keys, or tensor values.
+
+Hypothesis:
+
+- Enable:
+
+```sh
+GGML_MOE_IO_SQPOLL=1
+```
+
+- Keep all accepted Phase 7P env values:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - current down overlap and down parallel staging.
+- If kernel-side polling reduces submit/wait overhead in the expert-pack
+  staging rings, decode may improve modestly.
+- If SQPOLL ring creation fails or adds scheduler contention, the run should be
+  rejected.
+
+Theoretical upper bound:
+
+- Phase 7AB n32 expert-pack counters:
+  - `iouring_submit_us=2292889`;
+  - `iouring_wait_us=5834393`.
+- Phase 7P-like n32 counters are in the same range.
+- SQPOLL cannot remove actual SSD/device latency or H2D time. Optimistic upper
+  bound is reducing a fraction of submit/wait overhead, likely `0.5-2.0 s` on
+  n32 and `1-5 s` on n96.
+- Any gain larger than that must be explained by lower pinned host_stage/H2D or
+  fewer misses, not SQPOLL alone.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7ae_repro.sh` from the Phase 7P runner.
+- Add only `GGML_MOE_IO_SQPOLL=1`.
+- Run strict cold n32.
+- Continue to n32 confirm only if raw decode beats Phase 7P n32 confirm
+  `37379.97 ms / 31` and hard gates pass.
+- Run n96 only after n32 and n32 confirm both pass.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup `MemoryMax=15900000000`, `MemorySwapMax=0`.
+
+Acceptance:
+
+- n32 faster than `37379.97 ms / 31` twice.
+- n96 faster than `90610.91 ms / 77` twice.
+- TTFT `<=106331.72 ms`.
+- `memory.peak<=15899996160`, `oom=0`.
+- France answer coherent and semantically correct.
+- `read_failures=0`, `iouring_fallbacks=0`, no CUDA errors.
+- Counters should show lower submit/wait, lower host_stage/H2D, or another
+  concrete reason for any improvement.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, SQPOLL is rejected and no confirm/n96 is run.
