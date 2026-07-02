@@ -9032,3 +9032,73 @@ Decision rule:
 - Accept only if strict n96 beats Phase 3ZG:
   2.57811 s/token, 0.38788 tok/s.
 - Otherwise reject and keep Phase 3ZG as accepted runtime.
+
+Result timestamp: 2026-07-03 00:19 UTC / 2026-07-03 08:19 CST.
+
+Strict n96 hybrid profile policy result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-001404Z-n96-phase3zk-hybrid-profile-prefetch-depth2`
+- Config:
+  - `GGML_MOE_PREFETCH_DOWN=1`,
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`,
+  - `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260701-233721Z-n96-phase3zg-down-prefetch-depth2/route-profile.csv`,
+  - `GGML_MOE_VRAM_CACHE_POLICY=hybrid_profile_lfu_lru`,
+  - `GGML_MOE_VRAM_CACHE_PROFILE_AFTER=20000`.
+- Host RAM strict peak:
+  15899996160 bytes, 14.808025 GiB.
+- Page cache final:
+  13.683464 GiB.
+- VRAM:
+  peak 31286 MiB, minimum reserve 825 MiB.
+- TTFT:
+  74910.96 ms, gate PASS.
+- Decode:
+  313.31291 s / 95 tokens = 3.29803 s/token, 0.30321 tok/s.
+- Quality:
+  reject manually despite the simple flag returning true. The answer repeats
+  and contains awkward/corrupted phrasing:
+  `... Alpine mountains, and and charming countryside villages. It plays a major role in act European politics ... France is a country ...`
+- Strict launch failures:
+  0.
+- Read failures:
+  0.
+- Declines:
+  52 total, all `multirow_not_supported`.
+- Down prefetch:
+  loads=4489, hits=1150, evicted_unused=3339, useful_rate=25.6%.
+- Pinned staging:
+  copies=40791, host_stage=60323.152 ms, h2d=8969.023 ms.
+- Up/gate CPU profile:
+  calls=2661, total=39.746 ms/call, cuda_batch=39.539,
+  fallback_t0=0.001, batch_accept=2661, batch_decline=0.
+- Down CPU profile:
+  calls=11958, total=21.466 ms/call, cuda_batch=5.918,
+  fallback_t0=15.471, batch_accept=5036, batch_decline=52.
+- Down CUDA profile:
+  calls=5036, stage=13.387 ms/call, kernel=0.111 ms/call,
+  wall=14.039 ms/call.
+- VRAM cache:
+  hits=37634, misses=45134, preloads=6188, hit_rate=45.5%.
+- Cache policy diag:
+  profile_count_lookups=49698, hits=39936, inserted_nonzero=41901,
+  inserted_avg=5.59, evictions=49306, victim_nonzero=39545,
+  victim_avg=4.81.
+
+Comparison:
+
+- Phase 3ZG accepted depth=2:
+  2.57811 s/token, down prefetch useful-rate=100.0%.
+- Phase 3ZK hybrid profile:
+  3.29803 s/token, down prefetch useful-rate=25.6%.
+
+Decision:
+
+- Reject Phase 3ZK.
+- The hybrid profile eviction policy destroys the useful prefetch behavior:
+  3339 prefetched down entries are evicted before use, increasing misses,
+  staging, and up/gate contention.
+- Do not combine `hybrid_profile_lfu_lru` with the accepted depth=2 prefetch
+  runtime without a new policy that explicitly protects pending/useful
+  prefetch entries.
+- Keep Phase 3ZG unified cache + depth=2 prefetch as accepted runtime.
