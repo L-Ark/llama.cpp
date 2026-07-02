@@ -2292,6 +2292,20 @@
 - `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `src0_ms=24216.224`, `dontneed_ms=1159.096`, `total_ms=26450.962`.
 - `conclusion`: Current accepted cold-start SOTA `2.6 tok/s` is reproducible under the stated vendor late10 top3 traced config, strict 16GB RAM including page cache, and France correctness gate. This rerun is not a new SOTA; it confirms the existing SOTA remains valid.
 
+### 当前执行 attempt：late10-stream-alloc-lock-coalesce
+
+- `attempt_id`: `20260702-late10-stream-alloc-lock-coalesce`
+- `attempt_kind`: `implementation/cpu-overhead-reduction`
+- `status`: planned_before_execution
+- `bottleneck_basis`: Current accepted trace still has `35151` streamed expert calls. In `ggml_cuda_moe_stream_one()`, each call enters `g_resize_mu` twice: first for `d_src0/d_src1/d_dst/d_ids/h_scratch`, then again for `d_src1_f32/h_bounce`. Resizes are rare after warm slot sizing, but the global mutex acquisition and size checks remain on every call and are outside the dominant `src0_ms` trace field.
+- `hypothesis`: Coalescing `d_src1_f32` and `h_bounce` allocation into the first resize-guarded block removes one global mutex lock/unlock path per streamed expert without changing math, routing, cache behavior, memory capacity, or output semantics.
+- `theoretical_upper_bound`: The hard bound is small because source page loading remains dominant. With `35151` calls, saving even `5-20us` per second mutex/check block would be about `0.18-0.70s`; larger lock contention could save more, but expected gain is at most low single-digit seconds. Promote only if rounded `eval_tok_s` strictly exceeds `2.6`.
+- `implementation`: In `ggml/src/ggml-cuda/moe_stream.cu`, move `ensure_dev(ctx.d_src1_f32, ...)` and `ensure_host_pinned(ctx.h_bounce, ...)` into the existing first `g_resize_mu` block, include them in `ok`, and remove the second `g_resize_mu` block. Preserve existing fallback checks for `ctx.h_bounce` before copy.
+- `test_config`: patched source, accepted late10 traced config, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, trace enabled, `cpu_moe=40`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache hit/miss behavior remains consistent with accepted late10, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
+- `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache behavior diverges unexpectedly, revert source and clean rebuild. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
+- `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
