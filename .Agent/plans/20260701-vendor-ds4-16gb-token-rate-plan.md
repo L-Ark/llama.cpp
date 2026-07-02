@@ -2338,7 +2338,7 @@
 
 - `attempt_id`: `20260702-late10-cpu-fallback-chunk32-no-trace`
 - `attempt_kind`: `implementation/cpu-fallback-scheduling-plus-trace-overhead`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: `chunk32` improved TTFT/elapsed in the traced run but did not cross the rounded token-rate gate. Earlier accepted late10 no-trace also tied `2.6` while reducing elapsed. Combining chunk32 with no trace is the smallest follow-up to test whether the secondary wins cross `>2.6`.
 - `hypothesis`: With `GGML_MOE_CPU_CHUNK_SIZE=32` and no `GGML_MOE_STREAM_ONE_TRACE_OUT`, CPU fallback scheduling overhead and trace overhead are both lower while model math/cache/routing remain unchanged. This may produce a small rounded token-rate improvement.
 - `theoretical_upper_bound`: Traced chunk32 elapsed was `86.59s` versus accepted traced reproduction `87.00s`; no-trace accepted elapsed was `87.18s`. The measured component wins are small and noisy, so the practical bound is a possible rounded move only. Reject on tie.
@@ -2346,6 +2346,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review, cache hit/miss behavior remains consistent with accepted late10, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: If token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or cache behavior diverges unexpectedly, revert source and clean rebuild. If accepted, immediately stop further experiments, write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command showing trace disabled, source commit/status, binary/shared-library fingerprints, stdout/stderr cache summary, summary.json, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T023446Z-20260702_late10_cpu_fallback_chunk32_no_trace/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=36173.318643ms`, `elapsed_seconds=86.88`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15038951424`, `pgmajfault=229161`, `workingset_refault_file=3506770`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `cache_observation`: stderr reports accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`).
+- `gap_analysis`: `chunk32` plus no-trace preserved correctness and had low major faults/elapsed, but runner `eval_tok_s` still tied `2.6`. The chunk scheduling change improves secondary timing but not the accepted token-rate metric, so it cannot be promoted. Further chunk-size tuning is deprioritized unless paired with a larger CPU fallback reduction.
+- `rollback_status`: source patch reverted and clean rebuild completed; current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
