@@ -16583,6 +16583,120 @@ Rollback:
 - Rebuilt accepted path with:
   - `cmake --build build-cuda-batch -j 32 --target llama-completion`.
 
+## Phase 7AP - pinned staging slots 16 retest
+
+Design timestamp: 2026-07-02 16:08 UTC.
+
+Reason:
+
+- The current accepted Phase 7AE path uses `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- The remaining bottleneck is dominated by staging and IO:
+  - n32 Phase 7AE best:
+    - decode `36687.31 ms / 31`;
+    - main pinned host stage `24429.536 ms`;
+    - main H2D `4558.687 ms`;
+    - main slot wait `55.161 ms`;
+    - expert-pack io_uring wait `7915314 us`.
+  - n96 Phase 7AE confirm:
+    - decode `88889.08 ms / 77`;
+    - main pinned host stage `60514.789 ms`;
+    - main H2D `11381.667 ms`;
+    - main slot wait `134.521 ms`;
+    - expert-pack io_uring wait `19187389 us`.
+- Slot wait is small, so this is not expected to be a large win. It is still a
+  necessary controlled check before changing lower-level staging because it
+  verifies whether pinned ring pressure is currently limiting overlap.
+
+Bottleneck model:
+
+- If pinned slot reuse is forcing producers to wait before issuing the next
+  SSD/io_uring read or H2D copy, increasing slots from `8` to `16` can improve
+  overlap.
+- The hard upper bound from current counters is roughly:
+  - n32 main slot wait `55.161 ms` plus gate slot wait `6.729 ms`;
+  - n96 main slot wait `134.521 ms` plus gate slot wait `14.920 ms`.
+- Therefore a real improvement beyond about `0.15 s` on n96 cannot be explained
+  by slot wait alone and must come from secondary effects such as better IO
+  queue occupancy, fewer producer stalls, or less synchronization jitter.
+
+Experiment:
+
+- No source change.
+- Use the accepted Phase 7AE runtime and runner shape.
+- Change only:
+
+```sh
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
+- Keep:
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - split cache `UPGATE_PCT=60`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ap-pinned16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 \
+      /tmp/run_phase7ap_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+- A single faster run is diagnostic only.
+- Promotion requires:
+  - n32 candidate and n32 confirmation both beat Phase 7AE best
+    `36687.31 ms / 31`;
+  - n96 candidate and n96 confirmation both beat Phase 7AE confirm
+    `88889.08 ms / 77`.
+
+Acceptance gates:
+
+- Host RAM:
+  - cgroup `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France prompt answer must be coherent and semantically correct.
+- IO/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 candidate does not beat the accepted best, reject immediately and keep
+  Phase 7AE as SOTA.
+
 ## Phase 7AM - SQPOLL io_uring depth 16 retest
 
 Design timestamp: 2026-07-02 18:50 UTC.
