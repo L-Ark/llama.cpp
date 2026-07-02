@@ -2590,6 +2590,19 @@
 - `gap_analysis`: CLI reverse prompt is not a viable quality fix in this form: it stops before emitting the sentence-ending punctuation and reduces generated tokens enough that measured token rate falls to `1.8`. A semantic stop would need to preserve the stop punctuation and still produce an adequate paragraph; token/substring stopping cannot be promoted here.
 - `rollback_status`: no source change. Binary/shared-library hashes remain `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu.so=f74a75d7d1febcc7f46d9ccfc485b4392985417991fe1e194af8617c8859cc1d`, version `9166 (271567a39)`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
+### 当前执行 attempt：global-top3-reverse-stop-two-sentence
+
+- `attempt_id`: `20260702-global-top3-reverse-stop-two-sentence`
+- `attempt_kind`: `config-probe/semantic-stop-boundary`
+- `status`: planned_before_execution
+- `bottleneck_basis`: The first reverse-stop probe stopped on `. ` and removed the period, making the output too short. Historical global top3 output has a stable first two-sentence prefix ending in `fields.` before the next sentence begins with `The country is home...`. Stopping on `The country` may preserve two complete sentences and avoid the repetitive/incomplete tail.
+- `hypothesis`: With global top3 and `--reverse-prompt "The country"`, visible output should contain the first two complete sentences: a compact introduction of France plus key cultural strengths. This may satisfy the short-paragraph gate while retaining the fast top3 compute path.
+- `theoretical_upper_bound`: Per-token compute remains global top3, but output is much shorter than accepted late10. Very short outputs can lower the measured generation-rate metric due fixed overhead, as seen in the first reverse-stop probe (`1.8 tok/s`). Promotion requires measured `eval_tok_s > 2.6`, not only shorter wall time.
+- `test_config`: clean source, no source changes, `GGML_MOE_KEEP_TOPK_UPDOWN=3`, no layer range override, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, no `GGML_MOE_STREAM_ONE_TRACE_OUT`, cold `drop_caches`, strict 16GB cgroup, France prompt, CLI args `-n 192 -c 256 -b 16 -ub 16 -t 20 -tb 20 --reverse-prompt "The country"`.
+- `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, TTFT does not exceed `45449.496149ms`, and manual review confirms the output is a complete, semantically correct, coherent short paragraph with final punctuation and no reverse-prompt artifact.
+- `rollback`: no source change. If token rate does not exceed `2.6`, output is incomplete/too terse/artifacted, RAM exceeds limit, or TTFT exceeds gate, record rejected and close substring-stop top3 rescue for this prompt unless a non-fragile semantic stopping mechanism is implemented.
+- `required_evidence`: exact env/command showing global top3 and `--reverse-prompt "The country"`, source commit/status, binary/shared-library hashes, summary.json, stdout/stderr cache summary, cgroup memory evidence, full France answer text, manual correctness/completeness note, and explicit rejected/promoted status.
+
 ## 记录与验收
 
 - **硬性 SOTA 复现/push 门禁（不可省略）**：
