@@ -351,6 +351,59 @@ static bool ggml_moe_keep_topk_applies(const char * name) {
     return name && (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps"));
 }
 
+static int ggml_moe_tensor_layer(const char * name) {
+    if (!name) {
+        return -1;
+    }
+    const char * blk = strstr(name, "blk.");
+    if (!blk) {
+        return -1;
+    }
+    return atoi(blk + 4);
+}
+
+static int ggml_moe_keep_topk_for_tensor(const char * name) {
+    if (!ggml_moe_keep_topk_applies(name)) {
+        return 0;
+    }
+
+    const int fallback_keep_topk = ggml_moe_keep_topk_updown();
+
+    static int initialized = 0;
+    static int layer_start = -1;
+    static int layer_end = -1;
+    static int layer_keep_topk = 0;
+    if (!initialized) {
+        initialized = 1;
+        const char * range = getenv("GGML_MOE_KEEP_TOPK_LAYER_RANGE");
+        const char * value = getenv("GGML_MOE_KEEP_TOPK_LAYER_VALUE");
+        if (range && range[0] && value && value[0]) {
+            int start = -1;
+            int end = -1;
+            if (sscanf(range, "%d-%d", &start, &end) == 2) {
+                if (start > end) {
+                    const int tmp = start;
+                    start = end;
+                    end = tmp;
+                }
+                layer_start = start;
+                layer_end = end;
+                layer_keep_topk = atoi(value);
+                if (layer_keep_topk < 0) {
+                    layer_keep_topk = 0;
+                }
+            }
+        }
+    }
+
+    const int layer = ggml_moe_tensor_layer(name);
+    if (layer_keep_topk > 0 && layer >= layer_start && layer <= layer_end) {
+        return layer_keep_topk;
+    }
+
+    return fallback_keep_topk;
+}
+
 static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
 #if defined(__linux__)
     if (!ptr || size == 0) {
@@ -2125,8 +2178,8 @@ static void ggml_compute_forward_mul_mat_id(
     if (ith == 0) {
         // initialize matrix_row_counts
         memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
-        const int keep_topk_updown = ggml_moe_keep_topk_updown();
-        const bool prune_updown = keep_topk_updown > 0 && ggml_moe_keep_topk_applies(src0->name);
+        const int keep_topk_updown = ggml_moe_keep_topk_for_tensor(src0->name);
+        const bool prune_updown = keep_topk_updown > 0;
 
         // group rows by src0 matrix
         for (int64_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {

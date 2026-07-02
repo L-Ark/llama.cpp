@@ -1964,7 +1964,7 @@
 
 - `attempt_id`: `20260702-expert-keep-top3-late20-top4-rest`
 - `attempt_kind`: `source-probe/layer-selective-approximate-pruning`
-- `status`: planned
+- `status`: accepted_candidate_pending_pushed_commit_rerun
 - `hypothesis`: Global top3 and early-layer top3 are too aggressive for France output quality, but the failure mode may be layer-location dependent. Keeping layers `0-19` at the accepted top4 policy while pruning only later CPU-MoE layers `20-39` to top3 may save roughly half of the top4->top3 up/down fallback work while preserving enough early-layer representation quality for a coherent short France paragraph.
 - `theoretical_upper_bound`: Global top3 versus top4 has a rough additional bound of about `12.9s` wall reduction before overhead/page effects. Applying top3 to the later half of 40 CPU-MoE layers gives a coarse bound near `6.4s`, so token rate could land in the `2.4-2.6 tok/s` range if correctness holds. Real gain is bounded by gate streaming, non-expert work, output length, and layer imbalance.
 - `implementation`: Reintroduce a default-off layer-selective override in `ggml/src/ggml-cpu/ggml-cpu.c`: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=20-39` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3` override `GGML_MOE_KEEP_TOPK_UPDOWN=4` only for matching `blk.<layer>.ffn_up_exps` and `blk.<layer>.ffn_down_exps`. Unset env preserves current top4 SOTA behavior.
@@ -1972,6 +1972,13 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.3`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current top4 pushed rerun by more than `20%` (`39140.888549ms * 1.2 = 46969.066259ms`).
 - `rollback`: If build/run fails, token rate does not exceed `2.3`, output correctness fails, RAM exceeds limit, or TTFT exceeds gate, revert source and clean rebuild; record rejected. If accepted, immediately write full reproduction evidence, commit/push source and records to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T002611Z-20260702_expert_keep_top3_late20_top4_rest/france-cpu40-vram0gb`
+- `candidate_result`: `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=38334.961869ms`, `elapsed_seconds=106.11`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15013195776`, `pgmajfault=361605`, `workingset_refault_file=6074968`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, and complete; no truncation, repetition, or semantic degradation observed from late20 top3 pruning.
+- `trace_summary`: `rows=43086`, `cache_hits=37322`, `cache_misses=5764`, `span_ms=86687.225`, `src0_ms=28525.819`, `total_ms=31257.197`.
+- `sota_gate`: candidate passes initial gates. Token rate improves current pushed top4 SOTA `2.3 -> 2.4`; TTFT `38334.961869ms` is below the `46969.066259ms` limit; RAM including page cache is capped at `16000000000`; France correctness passes manual review.
+- `reproduction_record`: candidate run directory contains precommit source state/diff, binary sha256/stat/version, model stat, runner sha256, exact command/env, stdout/stderr, summary.json, cgroup memory files, gate trace, trace summary, plan snapshot, push target, manual correctness review, and candidate status.
+- `publish_status`: pending. Must commit/push source and plan to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild and rerun from pushed commit before promotion.
 
 ## 记录与验收
 
