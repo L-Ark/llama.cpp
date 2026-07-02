@@ -2123,7 +2123,7 @@
 
 - `attempt_id`: `20260702-late10-skip-dontneed-cache-hit`
 - `attempt_kind`: `implementation/io-refault-policy`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_rolled_back
 - `bottleneck_basis`: Current accepted late10 trace has `cache_hits=30180`, `cache_misses=4971`, `dontneed_ms=1169.862`, and `src0_ms=24305.283`. The current `moe_stream.cu` calls `MADV_DONTNEED` for every streamed expert call after scatter, including cache hits where the kernel used VRAM cache and did not need to touch the mmap source page for H2D. Since hits are `85.9%` of calls, most `DONTNEED` calls may be pure syscall/reclaim overhead or may drop pages that could be useful if an expert is later evicted.
 - `hypothesis`: Add a default-off env `GGML_MOE_STREAM_DONTNEED_ON_HIT=0` so `moe_stream_dontneed_source_pages()` is skipped for VRAM cache hits but remains enabled for misses/fallbacks. This may reduce direct `dontneed_ms` and possibly reduce refault churn without changing model math. It preserves current behavior when env is unset.
 - `theoretical_upper_bound`: If cache-hit `DONTNEED` cost is proportional to call count, skipping hits could remove up to `1169.862ms * 30180 / 35151 ≈ 1004ms` direct traced overhead. Secondary effects could be positive if refaults drop, or negative if retained file pages increase cgroup reclaim pressure. The hard upper bound is therefore around 1s direct plus reclaim variance; expected token-rate gain is modest but larger than cache-size-only probes.
@@ -2131,6 +2131,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct and coherent under manual review, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`).
 - `rollback`: If build fails, token rate does not exceed `2.6`, output correctness fails, RAM exceeds limit, TTFT exceeds gate, or trace/refault evidence shows worse reclaim pressure, revert source and clean rebuild. If accepted, immediately write full reproduction evidence, commit/push source to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit before promotion.
 - `required_evidence`: source diff, build log/version, exact env/command, source commit/status, binary sha256/build line, model stat, stdout/stderr, summary.json, gate trace, cgroup `memory.*`, France answer text, manual correctness note, trace summary, and explicit promoted/rejected/rollback status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T012047Z-20260702_late10_skip_dontneed_cache_hit/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=1.0`, `TTFT=37611.422067ms`, `elapsed_seconds=88.54`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15035154432`, `pgmajfault=289803`, `workingset_refault_file=3492371`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated.
+- `trace_summary`: `rows=35151`, `cache_hits=30180`, `cache_misses=4971`, `span_ms=68790.521`, `src0_ms=24187.822`, `dontneed_ms=980.980`, `total_ms=26244.469`.
+- `gap_analysis`: Skipping `MADV_DONTNEED` on VRAM cache hits reduced direct traced `dontneed_ms` only `1169.862 -> 980.980` rather than the ~1.0s proportional upper bound, and runner `eval_tok_s` still tied `2.6`. `src0_ms` and total trace improved only slightly and did not produce a strict token-rate SOTA. The likely explanation is that most hit-side `madvise` calls were cheap/no-op on already reclaimed pages, while keeping hit pages resident does not reduce future miss cost enough under the 16GB cgroup. This is useful evidence but not accepted.
+- `rollback_status`: source change reverted and clean rebuild completed; worktree clean and binary sha256 returned to `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
