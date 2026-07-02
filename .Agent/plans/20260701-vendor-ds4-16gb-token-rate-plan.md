@@ -2357,7 +2357,7 @@
 
 - `attempt_id`: `20260702-late10-no-trace-n160`
 - `attempt_kind`: `config-probe/generation-budget`
-- `status`: planned_before_execution
+- `status`: completed_rejected_tie_not_sota
 - `bottleneck_basis`: Multiple compute/cache/page experiments now tie at `2.6 tok/s`. Current accepted runs use `-n 192`, while the France prompt asks for a short paragraph. Historical `-n 128` failed by truncating the answer, so the next narrow boundary is `-n 160`: shorter than accepted, but with more headroom than the rejected `128`.
 - `hypothesis`: Under accepted late10 top3/no-trace config, `-n 160` may still allow a complete, coherent short France paragraph while reducing tail generation work or improving the measured generation-rate window enough to exceed the rounded `2.6 tok/s` gate.
 - `theoretical_upper_bound`: This does not change model math, routing, cache misses, or per-token compute. It can only alter output length/stop point and measurement averaging. If the accepted answer naturally needs more than 160 generated tokens, correctness will fail via truncation. If it finishes before 160, performance should tie. Promote only on strict `eval_tok_s > 2.6` and manual completeness pass.
@@ -2365,6 +2365,12 @@
 - `acceptance_gate`: promote only if `eval_tok_s > 2.6`, RAM including page cache stays `<=16000000000`, France answer is semantically correct/coherent/complete under manual review with no final-sentence truncation, and TTFT does not exceed current late10 pushed rerun by more than `20%` (`37874.580124ms * 1.2 = 45449.496149ms`). Because this changes generation budget, require clean pushed-commit rerun before any SOTA promotion.
 - `rollback`: No source change. If token rate does not exceed `2.6`, output correctness/completeness fails, RAM exceeds limit, or TTFT exceeds gate, record rejected and keep accepted late10 `-n 192` SOTA.
 - `required_evidence`: exact env/command showing `-n 160` and trace disabled, source commit/status, binary sha256/build line/stat, stdout/stderr cache summary, summary.json, cgroup `memory.*`, full France answer text, manual correctness/completeness note, and explicit promoted/rejected status.
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260702T024040Z-20260702_late10_no_trace_n160/france-cpu40-vram0gb`.
+- `result`: rejected tie. `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38339.244477ms`, `elapsed_seconds=89.62`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14985310208`, `pgmajfault=283876`, `workingset_refault_file=3490165`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- `correctness_manual_review`: pass. France answer is semantically correct, coherent, complete, and not repetitive/truncated despite `-n 160`.
+- `cache_observation`: stderr reports accepted cache shape (`13.2 GiB`, `3192 slots`, `hits=30180 misses=4971 hit_rate=85.9%`).
+- `gap_analysis`: Reducing generation budget from `-n 192` to `-n 160` did not change output text or improve rounded token rate; the model completed the same paragraph before the lower limit. Generation budget is not the current token-rate boundary as long as correctness is preserved. Keep accepted late10 config as SOTA.
+- `rollback_status`: no source change. Current accepted SOTA remains late10 top3 `2.6 tok/s`.
 
 ## 记录与验收
 
