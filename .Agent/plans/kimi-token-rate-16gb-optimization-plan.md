@@ -16687,6 +16687,70 @@ Rollback:
 - If n32 candidate beats but confirmation fails, reject and record as
   non-reproducible, same as Phase 7AF.
 
+Phase 7AQ n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-153038Z-n32-phase7aq-vram15100`.
+- git:
+  - head `9df9682746d1c8a4375d526957b7fdca93e0be8c`;
+  - status clean at run start.
+- env delta:
+  - `GGML_MOE_VRAM_CACHE_MIB=15100`;
+  - all other accepted Phase 7AE runtime settings preserved.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13556` lines.
+- output:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- TTFT: `69239.57 ms`.
+- decode: `36721.35 ms / 31`, `0.84 tok/s`.
+- comparison:
+  - slower than Phase 7AE n32 best `36687.31 ms / 31` by `34.04 ms`;
+  - faster than Phase 7AE n32 confirm `36973.83 ms / 31`, but this is not
+    sufficient because the promotion gate requires beating the accepted best
+    twice before n96.
+- RAM:
+  - `memory.peak=15899996160`;
+  - `oom=0`;
+  - final `file=14885502976`, `kernel=239931392`.
+- read path:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=7929123`.
+- cache:
+  - down slots increased from Phase 7AE `806` to `812`;
+  - upgate slots increased from Phase 7AE `1679` to `1690`;
+  - down hit rate unchanged at `73.6%`;
+  - upgate hit rate improved from `43.7%` to `44.1%`.
+- staging:
+  - main host stage `24835.547 ms`, higher than Phase 7AE n32 best
+    `24429.536 ms`;
+  - main H2D `4547.617 ms`, similar to Phase 7AE;
+  - main slot wait `57.060 ms`, not improved.
+
+Interpretation:
+
+- The added VRAM was successfully converted into extra down/upgate cache slots.
+- The additional slots did not reduce down misses for this n32 prompt and only
+  modestly improved upgate hit rate.
+- Host staging time increased enough to erase the small potential cache benefit.
+- Since the first n32 candidate failed the accepted-best gate, do not run n32
+  confirmation or n96.
+
+Decision:
+
+- Reject Phase 7AQ.
+- No source rollback required.
+- Keep Phase 7AE as current accepted SOTA:
+  - n96 confirm
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-131631Z-n96-phase7ae-iouring-sqpoll-confirm`;
+  - decode `88889.08 ms / 77`, `0.87 tok/s`;
+  - TTFT `64612.02 ms`;
+  - RAM/read/quality gates pass.
+
 Rollback:
 
 - Reverted uncommitted source patch for:
