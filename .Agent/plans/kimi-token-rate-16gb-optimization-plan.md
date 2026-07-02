@@ -16711,6 +16711,104 @@ Rollback:
 - If n32 does not beat Phase 7AE best, reject immediately.
 - If n32 passes but confirmation or n96 fails, reject Phase 7AK.
 
+Phase 7AK result - rejected:
+
+- no source change.
+- runner: `/tmp/run_phase7ak_repro.sh`.
+- env delta over Phase 7AE:
+
+```sh
+# removed from env.txt
+GGML_MOE_IO_SORT_OFFSET=1
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-142331Z-n32-phase7ak-sqpoll-sortoff`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass.
+- TTFT: `81766.67 ms`.
+- decode: `36590.53 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 `36687.31 ms / 31` by
+  `96.78 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=46422`;
+  - `iouring_wait_us=7479901`;
+  - `inflight_avg=2.60`, `inflight_max=8`.
+- pinned main: host stage `23946.446 ms`, H2D `4560.043 ms`.
+- up/gate total: `14.329 ms/call`.
+- down total: `37.544 ms/call`, fallback_t0 `34.896 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-142658Z-n32-phase7ak-sqpoll-sortoff-confirm`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass.
+- TTFT: `68413.60 ms`.
+- decode: `36639.29 ms / 31`, `0.85 tok/s`.
+- comparison: faster than Phase 7AE best n32 by `48.02 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=39446`;
+  - `iouring_wait_us=7910600`;
+  - `inflight_avg=2.59`, `inflight_max=8`.
+- pinned main: host stage `24771.533 ms`, H2D `4551.955 ms`.
+- up/gate total: `15.131 ms/call`.
+- down total: `35.359 ms/call`, fallback_t0 `32.609 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-143001Z-n96-phase7ak-sqpoll-sortoff`.
+- env validation: `command.txt` records `SORT_OFFSET=0`; `env.txt` has no
+  `GGML_MOE_IO_SORT_OFFSET=1`.
+- quality: pass; full answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT: `65429.18 ms`.
+- decode: `90520.15 ms / 77`, `0.85 tok/s`.
+- comparison: slower than Phase 7AE best n96 `88889.08 ms / 77` by
+  `1631.07 ms`.
+- RAM: `memory.peak=15899996160`, `oom=0`.
+- read path: `read_failures=0`, `iouring_fallbacks=0`.
+- expert-pack io_uring:
+  - `iouring_submit_us=119128`;
+  - `iouring_wait_us=19334392`;
+  - `inflight_avg=2.62`, `inflight_max=8`.
+- pinned main: host stage `61295.767 ms`, H2D `11421.991 ms`.
+- up/gate total: `14.109 ms/call`.
+- down total: `16.802 ms/call`, fallback_t0 `13.872 ms`.
+
+Interpretation:
+
+- Sort-off gives a small n32 benefit, but the n32 gain is only `48-97 ms` and
+  does not scale to n96.
+- n96 expert-pack wait is not lower than Phase 7AE confirm, and pinned host
+  stage is higher than Phase 7AE confirm (`61295.767 ms` vs `60514.789 ms`).
+- Keeping offset sorting remains better for the longer decode target.
+
+Decision:
+
+- Reject Phase 7AK.
+- Do not run n96 confirmation.
+- Keep Phase 7AE as current accepted SOTA:
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - n96 best confirmed decode `88889.08 ms / 77`.
+
 ## Phase 7AH - production run without batch CUDA profiling
 
 Design timestamp: 2026-07-02 16:35 UTC.
