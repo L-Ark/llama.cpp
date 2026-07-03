@@ -280,6 +280,59 @@ Next direction after this rejection:
 2. A useful staging fix now needs to target the actual down runtime load path directly, or provide a much more accurate down hotset/trace prefetch path with high pack coverage.
 3. Before another full run, run a short diagnostic that either reduces `host_stage`/`stage ms/call` directly, or shows pack hit coverage high enough to justify the VRAM/page-cache tradeoff.
 
+### 2026-07-03 Down-Only Top512 Pack Staging Probe
+
+Design:
+
+- Goal: target the actual down runtime load path directly. The top128 up/down pack only hit `126/1960` runtime load attempts, so it was too sparse to judge whether compact pack reads can reduce staging. Build a down-only hotset so the same 4.25MiB slots are used only for `ffn_down_exps`.
+- Hotset source: Phase 1 `fallback-profile.csv`, filtered to `phase=decode` and `tensor contains ffn_down_exps`, sorted by `fallback_us`.
+- Coverage calculation:
+  - total decode down fallback: `8752.587 ms`, `2627` entries;
+  - top512 selected: `5319.314 ms`, `10623` calls, `2.125 GiB` payload, `60.8%` of decode down fallback.
+- Theory: if pack hits increase materially and direct pack reads avoid scattered GGUF source faults, down `stage ms/call` should fall. A useful candidate must still overcome the known cost of reduced gate cache, where one-stream gate hit rate falls from `86.8%` to about `68.9%`.
+
+Artifacts:
+
+- fake trace: `/root/lfz/runs/vendor-ds4-16gb/20260703T042727Z-next-down-only-hotsets/decode_top512_down_fake_trace.csv`, sha256 `ed823324723ffb17f5759cd206072d3bf66ace70c8ad96f7ae19d7feefc4b7bc`
+- meta: `/root/lfz/runs/vendor-ds4-16gb/20260703T042727Z-next-down-only-hotsets/decode_top512_down_meta.tsv`, sha256 `4a0db23c4e2bf56bcc19cd4288435161d67508a54d1f2e263625818adc058131`
+- pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack`, sha256 `a046bd214a543d721f6410c2adbbef642b705730c45aa48ac78c260df954ca70`, size `2.2G`
+
+Temporary source probe:
+
+- Same temporary MXFP4 patch as previous down batch probes; not committed and reverted afterward.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T043352Z-20260703T043352Z-mxfp4-down-top512-pack-short/france-cpu40-vram0gb`
+- Config delta from previous short accepted-probe: `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_STAGE_PINNED=1`, `GGML_MOE_STAGE_PINNED_SLOTS=4`.
+
+Result:
+
+- `eval_tok_s=2.7`, `prompt_tok_s=1.5`, `TTFT=31010.975401 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15140425728`, `pgmajfault=149271`, `workingset_refault_file=22156`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true`; answer prefix remained semantic and coherent.
+
+Counters:
+
+- expert pack `hits=673 misses=1287`, improving coverage from top128's `126/1960` but still leaving most loads on GGUF mmap source.
+- down batch `batch_accept=1244 batch_decline=116`, same as prior short accepted-probe.
+- batch/down cache: `315` slots, `hits=2130 misses=1960 hit_rate=52.1%`.
+- down profile improved but not enough: `stage=3.705 ms/call`, `kernel=0.032 ms/call`, `total=3.751 ms/call`; previous short accepted-probe was `stage=4.538 ms/call`, `total=4.588 ms/call`.
+- pinned staging: `copies=1960 waits=1956 slot_wait=3.978 ms host_stage=4374.053 ms h2d=331.064 ms`.
+- gate one-stream remained degraded: `hits=6527 misses=2941 hit_rate=68.9%`.
+
+Verdict:
+
+- Rejected for SOTA. The better down-only pack proves pack coverage can reduce staging, but the measured short-run token rate is only `2.7 tok/s`, far below `4.2 tok/s`. The remaining stage cost plus degraded gate cache make a full SOTA run unjustified.
+- Do not continue by merely increasing pack size unless the design also prevents gate cache loss or removes runtime host staging more aggressively.
+- Rollback completed with `git restore ggml/src/ggml-cuda/moe_stream_batch.cu`; `build-ds4-moe-stream-batch-probe` rebuilt clean. Clean hashes after rollback: `llama-cli=866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`, `libggml-cuda.so.0.10.0=d20153144f5d0e19d6956086752a43f1f2d68719fb20af3ccab62c75a3be2801`.
+
+Next direction after this rejection:
+
+1. The main unsolved constraint is VRAM allocation: down batch needs cache/staging space, but taking that from one-stream gate cache destroys the accepted SOTA path.
+2. A future candidate must either preserve the `13568MiB` gate cache and find additional VRAM elsewhere, or reduce gate cache loss by sharing/partitioning slots without lowering gate hit rate.
+3. Another pack-size sweep alone is low priority; top512 already reduced stage but did not approach the promotion threshold.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
