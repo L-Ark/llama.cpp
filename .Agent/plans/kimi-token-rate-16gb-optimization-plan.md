@@ -20640,6 +20640,97 @@ Rollback:
 - If accepted through n96 confirmation, commit and push source plus plan/result
   immediately.
 
+Phase 7BM result - rejected:
+
+- Time recorded: 2026-07-03 09:12:29 UTC run start.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-091229Z-n32-phase7bm-cuda-memcpy-batch`.
+- Source state during experiment:
+  - dirty default-off patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added `GGML_MOE_CUDA_MEMCPY_BATCH=1`;
+  - collected each waited CQE plus immediately available `peek_cqe()` completions
+    into a ready wave;
+  - used `cudaMemcpyBatchAsync()` for ready waves with at least two copies;
+  - preserved existing per-slot `done` events, slot reuse, io_uring submission,
+    refill behavior, VRAM cache layout, and compact-batch compute kernels.
+- Build:
+  - remote `build-cuda-batch` compiled successfully with dirty source;
+  - CUDA headers and runtime linked `cudaMemcpyBatchAsync()` successfully;
+  - no new build errors; only pre-existing warnings.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bm-cuda-memcpy-batch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 CUDA_MEMCPY_BATCH=1 \
+      /tmp/run_phase7bm_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76130.14 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Activation:
+  - stderr shows:
+    `[moe_stream_batch] cudaMemcpyBatchAsync active`;
+  - main ring `memcpy_batch_calls=1189`, `memcpy_batch_jobs=2608`,
+    `memcpy_batch_fallbacks=0`;
+  - gate ring `memcpy_batch_calls=426`, `memcpy_batch_jobs=933`,
+    `memcpy_batch_fallbacks=0`;
+  - `env.txt` includes `GGML_MOE_CUDA_MEMCPY_BATCH=1`;
+  - `command.txt` records `CUDA_MEMCPY_BATCH=1`.
+- Performance:
+  - decode `35569.71 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BM is slower by `2098.12 ms`.
+- Mechanism evidence:
+  - H2D enqueue calls dropped:
+    - `iouring_reads=11297`;
+    - `iouring_h2d_enqueues=9371`;
+    - this proves CUDA batch enqueue reduced copy-call count for completed
+      bursts.
+  - The reduced enqueue count did not translate into lower wall time:
+    - main pinned `host_stage=19980.534 ms`, worse than Phase 7AS
+      `18631.890 ms`;
+    - gate pinned `host_stage=2351.866 ms`, worse than Phase 7AS
+      `2245.529 ms`;
+    - main timed H2D rose to `5077.539 ms`;
+    - gate timed H2D rose to `1176.658 ms`;
+    - expert-pack `iouring_wait_us=12624748`, worse than the Phase 7AS bucket
+      around `11570000`.
+  - Down profile stayed in the same broad range:
+    - `cuda_batch=2.875 ms/call`;
+    - `fallback_t0=36.273 ms/call`.
+- Analysis:
+  - `cudaMemcpyBatchAsync()` was functionally supported and did reduce the
+    number of H2D enqueue calls, but it is slower for this small pinned-host to
+    VRAM copy shape on this platform.
+  - Keeping per-slot timing/done events means event overhead remains, while the
+    batched memcpy runtime path appears to have higher H2D or scheduling cost
+    than individual `cudaMemcpyAsync()` calls.
+  - This confirms the current bottleneck is not the raw number of CUDA memcpy
+    enqueue API calls. The accepted SOTA path's per-CQE streaming and normal
+    memcpy path are better for these 4-8 MiB expert copies.
+- Decision:
+  - Reject Phase 7BM.
+  - Reverted the dirty source patch locally and on the remote using reverse
+    patch application.
+  - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
+    source at `af2a1163b`.
+  - Do not use `GGML_MOE_CUDA_MEMCPY_BATCH=1` in SOTA.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
