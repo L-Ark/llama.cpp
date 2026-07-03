@@ -1767,6 +1767,97 @@ Next direction:
   - therefore the cap is likely in refill/batch formation or dependency order,
     not the global io_uring queue depth.
 
+## Phase 7DI: up/gate stage-job histogram diagnostic
+
+Timestamp: 2026-07-03T19:12:10Z.
+
+Status: planned before implementation.
+
+Reason:
+
+- Phase 7DF showed `IO_DEPTH=16` does not help because effective iouring
+  batches still stop at `5-8`.
+- Code inspection shows up and gate stage jobs are planned separately:
+  - `up_jobs`;
+  - `gate_jobs`;
+  - each is copied through separate `copy_stage_jobs(...)` calls.
+- With top-k/active experts around 8, a single up or gate copy batch may never
+  exceed 8 jobs by design. A useful next optimization may be to combine up and
+  gate staging into one larger producer batch, but that could reduce the current
+  ability to start up compute before gate copy finishes.
+- Before changing behavior, record exact per-call distributions:
+  - up stage jobs;
+  - gate stage jobs;
+  - combined up+gate stage jobs.
+
+Selected diagnostic source change:
+
+- Extend `batch_profile` with:
+  - max up stage jobs;
+  - max gate stage jobs;
+  - max combined stage jobs;
+  - histograms for up, gate, and combined stage jobs using the same buckets as
+    iouring: `0`, `1`, `2-4`, `5-8`, `9-16`, `17-32`, `gt32`.
+- Update the counters in `up_gate_profile_add(...)`.
+- Print the histograms from `up_gate_profile_report_atexit()`.
+- Keep the change diagnostic-only:
+  - no staging order changes;
+  - no stream changes;
+  - no cache/VRAM/IO settings changes;
+  - enabled under existing `GGML_MOE_BATCH_PROFILE=1` path.
+
+Theoretical value:
+
+- If combined histogram has many `9-16` calls while up/gate individually stay
+  in `2-4` or `5-8`, a future combined staging probe has a plausible path to
+  increase per-submit work.
+- If combined histogram also stays `5-8`, combining cannot solve the depth cap.
+- If combined is often `9-16`, theoretical upper bound is limited by current
+  type22 staging wait:
+  - Phase 7DF/7DG type22 `up_wait/gate_wait` around `5.8-6.1 ms/call`;
+  - only the non-overlapped part can be recovered.
+
+Execution:
+
+1. Commit and push this plan.
+2. Apply only diagnostic counters and report formatting.
+3. Build `build-cuda-batch`.
+4. Run n96 cold-start diagnostic using accepted Phase 7CC runtime:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <diagnostic-commit>
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7di-stage-job-hist
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance:
+
+- Diagnostic only; not SOTA.
+- Must pass:
+  - exit `0`;
+  - France quality;
+  - TTFT <= `106331.72 ms`;
+  - 16GB cgroup;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Record:
+  - decode speed;
+  - up/gate/combined stage-job histograms by overall and type profile;
+  - whether combined staging is worth a behavior-changing Phase 7DJ.
+
+Rollback:
+
+- If diagnostic counters noticeably slow n96, revert them after recording.
+- If overhead is negligible and the added report is useful, the counters may
+  remain because they are profile-only and default to the existing
+  `GGML_MOE_BATCH_PROFILE` path.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
