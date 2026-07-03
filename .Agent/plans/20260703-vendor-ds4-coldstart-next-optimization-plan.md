@@ -2491,3 +2491,88 @@ Next candidate design: profile-guided one-time CPU up/down prewarm.
 - TTFT risk: prewarming `~2.1 GiB` can add startup/prompt latency. Accepted only if TTFT remains within the 20% gate relative to the accepted SOTA.
 - Acceptance gate: promote only if strict cold `drop_caches` run exceeds `4.2 tok/s`, RAM including page cache stays `<=16000000000`, France answer is manually correct/complete/coherent, gate pack remains `misses=0 direct_failures=0`, gate VRAM hit rate stays accepted-like, and TTFT is within gate.
 - Rollback: if it ties/regresses, fails correctness/RAM/TTFT, or counters show gate-cache disruption, revert runtime source and keep only records/artifacts.
+
+### 2026-07-04 Top512 MADV Prewarm Probe Result
+
+Temporary source:
+
+- Added default-off `GGML_MOE_CPU_PREWARM_PROFILE` and `GGML_MOE_CPU_PREWARM_LIMIT` in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- The implementation loaded the profile and called existing `ggml_moe_cpu_willneed_pages()` once for matching top512 up/down experts.
+- Default-off guard preserved behavior.
+
+Runs:
+
+| Run | eval_tok_s | prompt_tok_s | TTFT ms | RAM | Correctness | Verdict |
+| --- | ---: | ---: | ---: | --- | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T175047Z-20260704_cpu_prewarm_default_off_guard/france-cpu40-vram0gb` | `4.1` | `1.6` | `29327.755079` | 16GB cgroup pass | manual pass | default-off guard pass |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T175229Z-20260704_cpu_prewarm_top512_candidate/france-cpu40-vram0gb` | `4.1` | `1.6` | `28566.146015` | 16GB cgroup pass | manual pass | rejected tie |
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-prewarm-top512-madvise-result.json`
+
+Counters:
+
+- MADV prewarm candidate: `enabled=1 entries=512 advised=512 skipped=0 bytes=2281701376`.
+- Gate pack remained accepted-like: `hits=4623 misses=0 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM remained accepted-like: `hits=30528 misses=4623 hit_rate=86.8%`.
+- Major faults did not materially improve: default-off `268793`; MADV prewarm `267546`.
+
+Verdict and gap:
+
+- Reject as SOTA. It did not exceed `4.2 tok/s`.
+- The one-time `MADV_WILLNEED` calls were issued, but Linux did not fault enough target pages into memory to reduce cold major faults or generation time.
+- This narrows the next test: if we want to reproduce part of the no-drop benefit inside the 16GB cgroup, the next mechanism must force actual page residency for the bounded top512 set, not just advise it.
+
+Next candidate design: blocking page-touch top512 prewarm.
+
+- Add a second default-off switch to the same temporary source path, e.g. `GGML_MOE_CPU_PREWARM_TOUCH=1`.
+- For each matched profile expert, touch one byte per OS page after `MADV_WILLNEED`, accumulating a volatile checksum so the compiler cannot remove the reads.
+- Theory: touching forces the exact top512 expert pages into the cgroup page cache before decode. The cold/no-drop comparison shows the target upper bound is real, while the MADV-only run proves non-blocking advice is insufficient.
+- Hard bound: still the same top512 decode-only profile, `7947.407 ms` covered decode fallback and ideal `~5.37 tok/s`.
+- Risk: touching `~2.18 GiB` can raise TTFT and cause reclaim pressure under 16GB. A TTFT-over-gate result may be recorded as rejected/not accepted, but cannot be promoted.
+- Acceptance gate: same as above: strict cold, >`4.2 tok/s`, RAM including page cache <=16GB, manual France correctness, gate counters accepted-like, TTFT within accepted gate.
+- Rollback: if slower/tie/regression or TTFT/RAM/correctness fails, revert runtime source and keep only documentation/artifacts.
+
+### 2026-07-04 Top512 Blocking Touch Prewarm Candidate Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-prewarm-top512-touch-candidate-sota.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T175854Z-20260704_cpu_prewarm_top512_touch_candidate/france-cpu40-vram0gb`
+
+Config delta from accepted SOTA:
+
+- Temporary/default-off source path in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- `GGML_MOE_CPU_PREWARM_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_updown_decode_top512.tsv`
+- `GGML_MOE_CPU_PREWARM_LIMIT=512`
+- `GGML_MOE_CPU_PREWARM_TOUCH=1`
+- All accepted gate O_DIRECT pack/cache/top-k envs unchanged.
+
+Initial result:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.3`
+- `TTFT=32228.053147 ms`
+- TTFT gate: accepted SOTA TTFT `28014.740620 ms`; 20% limit `33617.688744 ms`; candidate is `+15.04%`, so it passes.
+- RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15085252608`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: manual pass. France answer is complete, coherent, and semantically correct.
+- Prewarm counters: `enabled=1 entries=512 advised=512 skipped=0 bytes=2281701376 checksum=66057597`.
+- Gate pack counters: `hits=4623 misses=0 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM counters: `hits=30528 misses=4623 hit_rate=86.8%`.
+
+Verdict:
+
+- This is a new initial cold-start SOTA candidate over the accepted `4.2 tok/s`, and it satisfies RAM, correctness, and TTFT gates on the first run.
+- It is not final until source is committed/pushed and the same path is rebuilt/rerun from the pushed source.
+
+Immediate promotion steps:
+
+1. Commit and push the source, profile, plan, and artifacts immediately to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+2. Rebuild from the pushed source so build metadata is clean.
+3. Rerun strict cold with the same env and `drop_caches`.
+4. Promote only if the pushed-source rerun remains `>4.2 tok/s` and passes RAM, correctness, TTFT, and counter gates.
+5. If pushed-source rerun fails, demote this to candidate-only and decide whether to keep source as rejected/default-off or revert runtime source.
