@@ -1,0 +1,93 @@
+{
+  "audit_time_note": "2026-07-03 plan completion audit after up/down io layout bounds commit",
+  "objective": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/plans/20260703-vendor-ds4-coldstart-next-optimization-plan.md \u6309\u7167\u8ba1\u5212\u5b8c\u6210\u4efb\u52a1",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "head": "60d4c7502553992801a51110f95caa45296fbc21",
+  "remote_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "remote_head_verified": "60d4c7502553992801a51110f95caa45296fbc21",
+  "git_identity": "L-Ark <fliangae@connect.ust.hk>",
+  "runtime_source_changed_in_final_cycle": false,
+  "accepted_sota": {
+    "eval_tok_s": 4.2,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb",
+    "status": "accepted historical SOTA unchanged"
+  },
+  "latest_clean_guard": {
+    "eval_tok_s": 4.1,
+    "prompt_tok_s": 1.6,
+    "ttft_ms": 28759.105881,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15084658688,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T130030Z-20260703_post_diagnostics_clean_sota_guard/france-cpu40-vram0gb"
+  },
+  "requirements": [
+    {
+      "requirement": "Optimize vendor DeepSeek only and keep final state on vendor branch/artifacts.",
+      "status": "proved",
+      "evidence": "All latest commits are in /root/lfz/vendor/llama.cpp-deepseek-v4 and pushed to ssd/vendor/deepseek-token-rate-16gb; no ik_llama changes are involved."
+    },
+    {
+      "requirement": "Respect 16GB host RAM including page cache for accepted SOTA/guards.",
+      "status": "proved",
+      "evidence": "Accepted SOTA and latest clean guard record memory_peak_bytes=16000000000 with memory_file_bytes about 15.08GiB and ram_ok=true."
+    },
+    {
+      "requirement": "Preserve correctness and TTFT gate for accepted SOTA.",
+      "status": "proved",
+      "evidence": "Accepted SOTA and latest clean guard have correctness_ok=true; latest clean guard TTFT=28759.105881 ms, below baseline gate."
+    },
+    {
+      "requirement": "Commit and push accepted SOTA and all plan/run metadata.",
+      "status": "proved",
+      "evidence": "Remote ssd/vendor/deepseek-token-rate-16gb verified at 60d4c7502553992801a51110f95caa45296fbc21 with L-Ark identity."
+    },
+    {
+      "requirement": "Do not promote eval_tok_s <= 4.2 or rejected/tie diagnostics.",
+      "status": "proved",
+      "evidence": "All later candidates were recorded as rejected/tie; accepted SOTA remains historical 4.2 tok/s."
+    },
+    {
+      "requirement": "Run MXFP4 harness before runtime kernel candidates.",
+      "status": "proved",
+      "evidence": ".Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-dot-harness-latest-summary.json recorded exact harness result; no runtime candidate was promoted from it."
+    },
+    {
+      "requirement": "Evaluate transient per-op repack if it is a new possible mechanism, and reject unless >=1.15x including repack.",
+      "status": "proved",
+      "evidence": "mxfp4-transient-repack-harness-summary.json shows 0.902x/0.919x and plan rejects runtime implementation/model run."
+    },
+    {
+      "requirement": "Audit broad up/down I/O layout before considering another full model candidate.",
+      "status": "proved",
+      "evidence": "updown-io-layout-feasibility-audit.json shows decode up/down unique payload 21.806GiB, call-weighted reads 148.916GiB, and plan rejects I/O-only runtime candidate."
+    },
+    {
+      "requirement": "If a kernel candidate passes harness threshold, write runtime source plan before touching source.",
+      "status": "not_triggered",
+      "evidence": "No kernel candidate passed threshold; therefore no runtime source plan/source edits are required."
+    },
+    {
+      "requirement": "If no mechanism has defensible path, stop full-model probes from rejected classes.",
+      "status": "proved",
+      "evidence": "Plan current completion state records no current mechanism above 4.2 gate; no full-model probe was launched after this conclusion."
+    }
+  ],
+  "closed_candidate_classes": [
+    "broad one-stream up/down",
+    "independent down-cache sizing under current VRAM budget",
+    "CUDA graph on current SOTA",
+    "CPU affinity pinning",
+    "context-size trimming",
+    "warmup/no-warmup toggles",
+    "willneed/page-advice sweeps",
+    "early-layer top-k pruning",
+    "compact mmap pack-size sweeps",
+    "persistent/hotset MXFP4 repack",
+    "transient per-op MXFP4 repack",
+    "broad up/down I/O layout without new data movement model"
+  ],
+  "completion_decision": "All actionable requirements in the active plan cycle are complete. No current evidence supports another runtime/model candidate; future work requires a new algorithmic mechanism not present in the current plan evidence."
+}

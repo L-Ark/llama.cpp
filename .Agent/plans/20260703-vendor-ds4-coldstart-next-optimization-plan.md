@@ -1750,3 +1750,34 @@ Current completion state:
 - Kernel directions closed in this plan cycle: existing repack harness only, transient per-op repack, naive AVX2/prefetch/multi-row attempts from prior records.
 - I/O/page directions closed in this plan cycle: compact mmap packs, willneed/no-warmup/no-repack, down-pack staging, and now broad up/down I/O-layout feasibility.
 - No current mechanism has a defensible path above the `4.2 tok/s` promotion gate without a new algorithmic idea. The plan should remain open only for discovery of a new mechanism; do not keep launching full-model probes from already rejected classes.
+
+### 2026-07-03 Plan Completion Audit
+
+Artifact:
+
+- `.Agent/runs/20260703-vendor-ds4-coldstart/plan-completion-audit.json`.
+
+Audit result:
+
+- Current head: `60d4c7502553992801a51110f95caa45296fbc21`.
+- Remote verified: `ssd/vendor/deepseek-token-rate-16gb` points to `60d4c7502553992801a51110f95caa45296fbc21`.
+- Git identity verified: `L-Ark <fliangae@connect.ust.hk>`.
+- Worktree was clean before this audit update; no runtime source files are modified in the final plan cycle.
+- Accepted SOTA remains historical `4.2 tok/s`; latest clean guard remains `4.1 tok/s` with strict 16GB cgroup, page cache included, correctness pass, and gate pack/cache counters aligned.
+
+Requirement status:
+
+- Vendor-only scope: satisfied.
+- 16GB host RAM including page cache: satisfied for accepted SOTA and latest clean guard.
+- Correctness and TTFT gates: satisfied for accepted SOTA/guard; rejected diagnostics were not promoted.
+- Commit/push discipline: satisfied; records are pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- Harness gate before runtime kernel source: satisfied.
+- Transient per-op repack: tested and rejected at microbench stage (`0.902x/0.919x` including repack).
+- Broad up/down I/O layout: audited and rejected as next runtime candidate due to `21.806 GiB` decode unique payload and `148.916 GiB` call-weighted reads.
+- Conditional runtime-source design after a passing kernel harness: not triggered because no kernel candidate passed the threshold.
+
+Completion decision:
+
+- All actionable tasks in this active plan cycle are complete.
+- No current mechanism has a defensible path above the `4.2 tok/s` promotion gate under the strict 16GB/page-cache/correctness/TTFT constraints.
+- Do not continue launching full-model probes from already rejected classes. Future progress requires a genuinely new algorithmic/kernel/data-movement mechanism, which must first be added to this plan with theory, hard upper bound, and a microbench or short diagnostic gate before runtime source changes.
