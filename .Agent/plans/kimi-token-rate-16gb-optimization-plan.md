@@ -24721,3 +24721,93 @@ Rollback:
 - If the patch changes output quality, violates TTFT/RAM, causes read failures,
   or materially changes SOTA runtime without a direct speed benefit, revert the
   source patch after collecting the diagnostic data.
+
+Phase 7BR result - diagnostic captured, source reverted:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `2c736322d` (`docs: plan kimi phase7br iq3 attribution`).
+- source patch:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - moved `up_stage_jobs_count` / `gate_stage_jobs_count` before the serial
+    staging lambdas;
+  - incremented them when `stage_tensor()` / `stage_tensor_slots_only()`
+    inserted a missing up/gate expert into the VRAM cache.
+- build:
+  - `cmake --build build-cuda-batch -j$(nproc) --target llama-completion`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-104143Z-n32-phase7br-iq3-stage-attribution`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-104143Z-n32-phase7br-iq3-stage-attribution"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7br_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77441.91 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `36287.94 ms / 31`, `0.85 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BR is slower by `2816.35 ms` (`8.4%`), failing the 3% diagnostic
+    performance guard.
+- activation:
+  - decode IQ3_XXS type 18 profile now reports nonzero serial stage jobs:
+    `calls=311`, `avg_active=8.00`, `up_stage_jobs=4.98`,
+    `gate_stage_jobs=4.98`, `up=10.391 ms`, `gate=9.626 ms`,
+    `kernel=20.035 ms`, `wall=20.160 ms/call`;
+  - decode IQ2_S type 22 remains active with parallel profile:
+    `calls=558`, `up_stage_jobs=4.67`, `gate_stage_jobs=4.67`,
+    `up_wait=6.772 ms`, `gate_wait=7.112 ms`,
+    `up_compute=0.166 ms`, `gate_compute=0.115 ms`,
+    `wall=7.337 ms/call`.
+- global counters:
+  - upgate cache `hits=13019`, `misses=16757`, hit rate `43.7%`;
+  - down cache `hits=9659`, `misses=3461`, hit rate `73.6%`;
+  - down prefetch `loads=3664`, `hits=3664`, useful rate `100.0%`;
+  - current down overlap `planned_jobs=3664`, `completed_jobs=3664`,
+    `worker_us=3443372`;
+  - expert pack `iouring_wait_us=11796307`;
+  - main pinned `host_stage=20190.648 ms`, `h2d=4161.866 ms`;
+  - gate pinned `host_stage=2460.455 ms`, `h2d=932.616 ms`.
+
+Diagnosis:
+
+- IQ3_XXS up/gate is not a pure compute-only bucket. For each type-18 decode
+  call, almost five up experts and almost five gate experts are staged on
+  average.
+- The existing CUDA event `up`/`gate` buckets include serial cache insertion,
+  expert H2D staging, and compact MMVQ launch/compute. The next diagnostic must
+  split serial `stage_tensor()` into copy/stage time and compute time before
+  deciding whether to write another IQ3 kernel.
+- The observed type-18 wall increased from Phase 7AS `18.646 ms/call` to
+  `20.160 ms/call`; some of this is likely run-to-run IO/cache variance because
+  the instrumentation only adds a small number of string comparisons on misses,
+  but it still violates the predefined 3% guard.
+
+Decision:
+
+- Reject Phase 7BR as a SOTA candidate.
+- Do not run n96.
+- Revert the source patch after recording these metrics.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Next plan should target a lower-overhead serial up/gate split-timer or an
+  actual copy/compute overlap design for IQ3_XXS. Do not retry Q8_K decode or
+  generic IQ3 parallel streams without proving the staging/compute split first.
