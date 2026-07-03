@@ -595,8 +595,17 @@ static std::unordered_map<std::string, current_down_overlap_tensor_profile> g_cu
 struct expert_pack_entry {
     char tensor[128] = {};
     int32_t expert_idx = -1;
+    int32_t source_idx = 0;
     uint64_t offset = 0;
     uint64_t nbytes = 0;
+};
+
+struct expert_pack_source {
+    FILE *file = nullptr;
+#if !defined(_WIN32)
+    int fd_direct = -1;
+#endif
+    char path[512] = {};
 };
 
 struct expert_pack_state {
@@ -604,6 +613,7 @@ struct expert_pack_state {
 #if !defined(_WIN32)
     int fd_direct = -1;
 #endif
+    std::vector<expert_pack_source> sources;
     std::vector<expert_pack_entry> entries;
     void *mmap_base = nullptr;
     size_t mmap_size = 0;
@@ -2288,6 +2298,102 @@ static bool expert_pack_read_exact(FILE *file, void *dst, size_t sz) {
     return true;
 }
 
+static expert_pack_source * expert_pack_source_for_entry(const expert_pack_entry *entry) {
+    if (!entry || entry->source_idx < 0 ||
+            (size_t)entry->source_idx >= g_expert_pack.sources.size()) {
+        return nullptr;
+    }
+    return &g_expert_pack.sources[(size_t)entry->source_idx];
+}
+
+static bool expert_pack_load_source(const char *path, int32_t source_idx, std::vector<expert_pack_entry> &entries) {
+    if (!path || !path[0]) return false;
+
+    FILE *file = std::fopen(path, "rb");
+    if (!file) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack: open failed: %s\n", path);
+        return false;
+    }
+
+    char magic[16] = {};
+    uint32_t version = 0;
+    uint32_t header_size = 0;
+    uint64_t n_entries = 0;
+    uint64_t data_start = 0;
+    if (!expert_pack_read_exact(file, magic, sizeof(magic)) ||
+            !expert_pack_read_exact(file, &version, sizeof(version)) ||
+            !expert_pack_read_exact(file, &header_size, sizeof(header_size)) ||
+            !expert_pack_read_exact(file, &n_entries, sizeof(n_entries)) ||
+            !expert_pack_read_exact(file, &data_start, sizeof(data_start)) ||
+            std::memcmp(magic, "GGMLMOEPACKv1", 13) != 0 ||
+            version != 1 || header_size < 40 || data_start < header_size || n_entries > 10000000ULL) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack: invalid header: %s\n", path);
+        std::fclose(file);
+        return false;
+    }
+
+    expert_pack_source source;
+    source.file = file;
+    std::snprintf(source.path, sizeof(source.path), "%s", path);
+#if !defined(_WIN32)
+    source.fd_direct = -1;
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+#if defined(O_DIRECT)
+        source.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
+#endif
+        if (source.fd_direct < 0) {
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: direct open failed; using buffered reads: %s\n", path);
+            g_expert_pack.io_backend = 0;
+        } else if (g_expert_pack.io_backend == 2) {
+#if defined(GGML_MOE_HAS_LIBURING)
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring direct reads enabled: %s io_bytes=%zu depth=%zu\n",
+                         path, expert_pack_io_bytes(), expert_pack_io_depth());
+#else
+            const bool require_direct = expert_pack_env_bool("GGML_MOE_IO_REQUIRE_DIRECT", false);
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring requested but liburing headers are unavailable; %s\n",
+                         require_direct ? "using direct fallback anyway" : "using direct fallback");
+            g_expert_pack.io_backend = 1;
+#endif
+        } else if (g_expert_pack.io_backend == 1) {
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: direct reads enabled: %s\n", path);
+        }
+    }
+#else
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack: direct/io_uring reads are not supported on this platform; using buffered reads\n");
+        g_expert_pack.io_backend = 0;
+    }
+#endif
+
+    if ((size_t)source_idx != g_expert_pack.sources.size()) {
+        std::fprintf(stderr, "[moe_stream_batch] expert pack: internal source index mismatch for %s\n", path);
+        std::fclose(file);
+        return false;
+    }
+    g_expert_pack.sources.push_back(source);
+
+    const size_t before = entries.size();
+    entries.resize(before + (size_t)n_entries);
+    for (uint64_t i = 0; i < n_entries; ++i) {
+        expert_pack_entry &e = entries[before + (size_t)i];
+        uint32_t reserved = 0;
+        if (!expert_pack_read_exact(file, e.tensor, sizeof(e.tensor)) ||
+                !expert_pack_read_exact(file, &e.expert_idx, sizeof(e.expert_idx)) ||
+                !expert_pack_read_exact(file, &reserved, sizeof(reserved)) ||
+                !expert_pack_read_exact(file, &e.offset, sizeof(e.offset)) ||
+                !expert_pack_read_exact(file, &e.nbytes, sizeof(e.nbytes))) {
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: short index: %s\n", path);
+            return false;
+        }
+        e.tensor[sizeof(e.tensor) - 1] = '\0';
+        e.source_idx = source_idx;
+    }
+
+    std::fprintf(stderr, "[moe_stream_batch] expert pack: loaded %lu entries from %s\n",
+                 (unsigned long)n_entries, path);
+    return true;
+}
+
 static void expert_pack_init_once() {
     std::lock_guard<std::mutex> lk(g_expert_pack.mu);
     if (g_expert_pack.inited) return;
@@ -2315,47 +2421,17 @@ static void expert_pack_init_once() {
         return;
     }
 
-    FILE *file = std::fopen(path, "rb");
-    if (!file) {
-        std::fprintf(stderr, "[moe_stream_batch] expert pack: open failed: %s\n", path);
-        g_expert_pack.inited = true;
-        return;
-    }
-
-    char magic[16] = {};
-    uint32_t version = 0;
-    uint32_t header_size = 0;
-    uint64_t n_entries = 0;
-    uint64_t data_start = 0;
-    if (!expert_pack_read_exact(file, magic, sizeof(magic)) ||
-            !expert_pack_read_exact(file, &version, sizeof(version)) ||
-            !expert_pack_read_exact(file, &header_size, sizeof(header_size)) ||
-            !expert_pack_read_exact(file, &n_entries, sizeof(n_entries)) ||
-            !expert_pack_read_exact(file, &data_start, sizeof(data_start)) ||
-            std::memcmp(magic, "GGMLMOEPACKv1", 13) != 0 ||
-            version != 1 || header_size < 40 || data_start < header_size || n_entries > 10000000ULL) {
-        std::fprintf(stderr, "[moe_stream_batch] expert pack: invalid header: %s\n", path);
-        std::fclose(file);
-        g_expert_pack.inited = true;
-        return;
-    }
-
     std::vector<expert_pack_entry> entries;
-    entries.resize((size_t)n_entries);
-    for (uint64_t i = 0; i < n_entries; ++i) {
-        expert_pack_entry &e = entries[(size_t)i];
-        uint32_t reserved = 0;
-        if (!expert_pack_read_exact(file, e.tensor, sizeof(e.tensor)) ||
-                !expert_pack_read_exact(file, &e.expert_idx, sizeof(e.expert_idx)) ||
-                !expert_pack_read_exact(file, &reserved, sizeof(reserved)) ||
-                !expert_pack_read_exact(file, &e.offset, sizeof(e.offset)) ||
-                !expert_pack_read_exact(file, &e.nbytes, sizeof(e.nbytes))) {
-            std::fprintf(stderr, "[moe_stream_batch] expert pack: short index: %s\n", path);
-            std::fclose(file);
+    if (!expert_pack_load_source(path, 0, entries)) {
+        g_expert_pack.inited = true;
+        return;
+    }
+    const char *overlay_path = std::getenv("GGML_MOE_EXPERT_PACK_OVERLAY");
+    if (overlay_path && overlay_path[0]) {
+        if (!expert_pack_load_source(overlay_path, (int32_t)g_expert_pack.sources.size(), entries)) {
             g_expert_pack.inited = true;
             return;
         }
-        e.tensor[sizeof(e.tensor) - 1] = '\0';
     }
 
     std::sort(entries.begin(), entries.end(),
@@ -2365,47 +2441,25 @@ static void expert_pack_init_once() {
             if (a.expert_idx != b.expert_idx) return a.expert_idx < b.expert_idx;
             return a.nbytes < b.nbytes;
         });
-
-    g_expert_pack.file = file;
-#if !defined(_WIN32)
-    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
-#if defined(O_DIRECT)
-        g_expert_pack.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
-#else
-        g_expert_pack.fd_direct = -1;
-#endif
-        if (g_expert_pack.fd_direct < 0) {
-            std::fprintf(stderr, "[moe_stream_batch] expert pack: direct open failed; using buffered reads: %s\n", path);
-            g_expert_pack.io_backend = 0;
-        } else {
-            if (g_expert_pack.io_backend == 2) {
-#if defined(GGML_MOE_HAS_LIBURING)
-                std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring direct reads enabled: %s io_bytes=%zu depth=%zu\n",
-                             path, expert_pack_io_bytes(), expert_pack_io_depth());
-#else
-                const bool require_direct = expert_pack_env_bool("GGML_MOE_IO_REQUIRE_DIRECT", false);
-                std::fprintf(stderr, "[moe_stream_batch] expert pack: io_uring requested but liburing headers are unavailable; %s\n",
-                             require_direct ? "using direct fallback anyway" : "using direct fallback");
-                g_expert_pack.io_backend = 1;
-#endif
-            }
-            if (g_expert_pack.io_backend == 1) {
-                std::fprintf(stderr, "[moe_stream_batch] expert pack: direct reads enabled: %s\n", path);
-            }
+    for (size_t i = 1; i < entries.size(); ++i) {
+        if (expert_pack_entry_cmp(entries[i - 1], entries[i].tensor, entries[i].expert_idx, entries[i].nbytes) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] expert pack: duplicate key across packs: %s expert=%d bytes=%lu\n",
+                         entries[i].tensor, entries[i].expert_idx, (unsigned long)entries[i].nbytes);
+            g_expert_pack.inited = true;
+            return;
         }
     }
-#else
-    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
-        std::fprintf(stderr, "[moe_stream_batch] expert pack: direct/io_uring reads are not supported on this platform; using buffered reads\n");
-        g_expert_pack.io_backend = 0;
-    }
+
+    g_expert_pack.file = g_expert_pack.sources.empty() ? nullptr : g_expert_pack.sources[0].file;
+#if !defined(_WIN32)
+    g_expert_pack.fd_direct = g_expert_pack.sources.empty() ? -1 : g_expert_pack.sources[0].fd_direct;
 #endif
     g_expert_pack.entries = std::move(entries);
     g_expert_pack.enabled = true;
     g_expert_pack.inited = true;
     std::atexit(expert_pack_report_atexit);
-    std::fprintf(stderr, "[moe_stream_batch] expert pack: loaded %zu entries from %s\n",
-                 g_expert_pack.entries.size(), path);
+    std::fprintf(stderr, "[moe_stream_batch] expert pack: total entries=%zu sources=%zu\n",
+                 g_expert_pack.entries.size(), g_expert_pack.sources.size());
 }
 
 static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int expert_idx, size_t nbytes) {
@@ -2698,15 +2752,16 @@ static void host_prefetch_worker() {
             if (slot_ptr->done) {
                 cudaEventSynchronize(slot_ptr->done);
             }
-            if (g_expert_pack.fd_direct >= 0 &&
+            const expert_pack_source *source = expert_pack_source_for_entry(entry);
+            if (source && source->fd_direct >= 0 &&
                     ((entry->offset % expert_pack_direct_alignment()) == 0) &&
                     (((uintptr_t)slot_ptr->host % expert_pack_direct_alignment()) == 0)) {
                 const size_t read_sz = (size_t)align_up_u64((uint64_t)e.expert_bytes, (uint64_t)expert_pack_direct_alignment());
-                ok = ::pread(g_expert_pack.fd_direct, slot_ptr->host, read_sz, (off_t)entry->offset) == (ssize_t)read_sz;
-            } else {
+                ok = ::pread(source->fd_direct, slot_ptr->host, read_sz, (off_t)entry->offset) == (ssize_t)read_sz;
+            } else if (source && source->file) {
                 std::lock_guard<std::mutex> lk(g_expert_pack.mu);
-                ok = ::fseeko(g_expert_pack.file, (off_t)entry->offset, SEEK_SET) == 0 &&
-                    expert_pack_read_exact(g_expert_pack.file, slot_ptr->host, e.expert_bytes);
+                ok = ::fseeko(source->file, (off_t)entry->offset, SEEK_SET) == 0 &&
+                    expert_pack_read_exact(source->file, slot_ptr->host, e.expert_bytes);
             }
         } else {
             std::lock_guard<std::mutex> lk(g_host_prefetch.mu);
@@ -2975,8 +3030,10 @@ static void ram_tier_init() {
         char *dst_ptr = (char *)region + loaded;
         {
             std::lock_guard<std::mutex> lk2(g_expert_pack.mu);
-            if (::fseeko(g_expert_pack.file, (off_t)ent.offset, SEEK_SET) != 0) continue;
-            if (!expert_pack_read_exact(g_expert_pack.file, dst_ptr, (size_t)ent.nbytes)) continue;
+            const expert_pack_source *source = expert_pack_source_for_entry(&ent);
+            if (!source || !source->file) continue;
+            if (::fseeko(source->file, (off_t)ent.offset, SEEK_SET) != 0) continue;
+            if (!expert_pack_read_exact(source->file, dst_ptr, (size_t)ent.nbytes)) continue;
         }
         g_expert_pack.ram_tier_index[lo2] = {loaded, (size_t)ent.nbytes};
         loaded += (size_t)ent.nbytes;
@@ -3018,7 +3075,8 @@ static void ram_tier_init() {
 
 static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void *dst, size_t sz) {
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
-    if (!entry || g_expert_pack.fd_direct < 0 || entry->nbytes != sz) return false;
+    expert_pack_source *source = expert_pack_source_for_entry(entry);
+    if (!entry || !source || source->fd_direct < 0 || entry->nbytes != sz) return false;
     const uint64_t alignment = expert_pack_direct_alignment();
     const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
     if ((entry->offset % alignment) != 0 ||
@@ -3042,7 +3100,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
         return false;
     }
 
-    io_uring_prep_read(sqe, g_expert_pack.fd_direct, dst, (unsigned)read_sz, (off_t)entry->offset);
+    io_uring_prep_read(sqe, source->fd_direct, dst, (unsigned)read_sz, (off_t)entry->offset);
     io_uring_sqe_set_data64(sqe, 1);
 
     const auto submit_start = std::chrono::steady_clock::now();
@@ -3086,18 +3144,19 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
 }
 
 static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, size_t sz) {
-    if (!entry || !g_expert_pack.file || entry->nbytes != sz) return false;
+    expert_pack_source *source = expert_pack_source_for_entry(entry);
+    if (!entry || !source || !source->file || entry->nbytes != sz) return false;
 
     std::call_once(g_ram_tier_once, ram_tier_init);
 
 #if !defined(_WIN32)
-    if (g_expert_pack.io_backend == 2 && g_expert_pack.fd_direct >= 0 &&
+    if (g_expert_pack.io_backend == 2 && source->fd_direct >= 0 &&
             expert_pack_env_bool("GGML_MOE_IO_URING_SINGLE", false)) {
         if (expert_pack_read_entry_iouring(entry, dst, sz)) {
             return true;
         }
     }
-    if ((g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) && g_expert_pack.fd_direct >= 0) {
+    if ((g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) && source->fd_direct >= 0) {
         const uint64_t alignment = expert_pack_direct_alignment();
         const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
         if ((entry->offset % alignment) == 0 &&
@@ -3107,7 +3166,7 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
             size_t done = 0;
             while (done < read_sz) {
                 const size_t chunk = std::min(read_sz - done, (size_t)64 * 1024 * 1024);
-                const ssize_t got = ::pread(g_expert_pack.fd_direct, out + done, chunk, (off_t)(entry->offset + done));
+                const ssize_t got = ::pread(source->fd_direct, out + done, chunk, (off_t)(entry->offset + done));
                 if (got <= 0) {
                     ++g_expert_pack.direct_fallbacks;
                     break;
@@ -3126,14 +3185,14 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
 
     std::lock_guard<std::mutex> lk(g_expert_pack.mu);
 #if defined(_WIN32)
-    if (_fseeki64(g_expert_pack.file, (int64_t)entry->offset, SEEK_SET) != 0) {
+    if (_fseeki64(source->file, (int64_t)entry->offset, SEEK_SET) != 0) {
 #else
-    if (::fseeko(g_expert_pack.file, (off_t)entry->offset, SEEK_SET) != 0) {
+    if (::fseeko(source->file, (off_t)entry->offset, SEEK_SET) != 0) {
 #endif
         ++g_expert_pack.read_failures;
         return false;
     }
-    if (!expert_pack_read_exact(g_expert_pack.file, dst, sz)) {
+    if (!expert_pack_read_exact(source->file, dst, sz)) {
         ++g_expert_pack.read_failures;
         return false;
     }
@@ -3413,7 +3472,7 @@ static bool expert_pack_iouring_copy_jobs(
         const char *trace_op) {
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     if (jobs.empty()) return true;
-    if (g_expert_pack.io_backend != 2 || g_expert_pack.fd_direct < 0) return false;
+    if (g_expert_pack.io_backend != 2) return false;
     if (!pinned_stage_ensure(ring, expert_bytes, true)) return false;
 
     const size_t alignment = expert_pack_direct_alignment();
@@ -3428,6 +3487,10 @@ static bool expert_pack_iouring_copy_jobs(
         if (!job.pack_entry ||
                 job.pack_entry->nbytes != expert_bytes ||
                 (job.pack_entry->offset % alignment) != 0) {
+            return false;
+        }
+        const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
+        if (!source || source->fd_direct < 0) {
             return false;
         }
         batch_copy_trace copy_trace;
@@ -3494,7 +3557,10 @@ static bool expert_pack_iouring_copy_jobs(
         }
         std::stable_sort(job_order.begin(), job_order.end(),
             [&](size_t a, size_t b) {
-                return jobs[read_jobs[a]].pack_entry->offset < jobs[read_jobs[b]].pack_entry->offset;
+                const expert_pack_entry *ea = jobs[read_jobs[a]].pack_entry;
+                const expert_pack_entry *eb = jobs[read_jobs[b]].pack_entry;
+                if (ea->source_idx != eb->source_idx) return ea->source_idx < eb->source_idx;
+                return ea->offset < eb->offset;
             });
     }
     auto ordered_job_idx = [&](size_t seq_idx) -> size_t {
@@ -3552,7 +3618,9 @@ static bool expert_pack_iouring_copy_jobs(
             read_sz,
             batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
-        io_uring_prep_read(sqe, g_expert_pack.fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
+        const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
+        if (!source || source->fd_direct < 0) return false;
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };

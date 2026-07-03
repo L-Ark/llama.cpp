@@ -3870,6 +3870,156 @@ Rollback:
 - If n32 regresses, quality fails, TTFT/RAM gates fail, or `blk.1/2` stage does
   not improve, keep the v2 pack in SOTA and do not promote v3.
 
+Phase 7DR build result - rejected before runtime:
+
+- result timestamp: 2026-07-04T01:28:00+08:00.
+- plan commit:
+  `e2d4750f8` (`docs: plan kimi phase7dr l1l2 down pack`).
+- attempted output:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v3-l1l2down.expert-pack`.
+- build precheck:
+  - filesystem had `111 GiB` available;
+  - old pack has `30831` entries;
+  - append target has `768` entries;
+  - append bytes are `4.511719 GiB`.
+- failure:
+  - monolithic pack rewrite failed with `OSError: [Errno 28] No space left on device`;
+  - failure happened while copying old pack entries, after `20480/30831`
+    entries.
+- root cause:
+  - the pack format stores the index before data;
+  - adding `768` index rows cannot be done in place because the existing
+    `data_start` has no enough slack;
+  - a monolithic rebuild needs old `164 GiB` pack plus a temporary new
+    `~168.5 GiB` pack at the same time, exceeding available disk.
+- cleanup:
+  - removed
+    `kimi-iq3s-france-l12-upgate-v3-l1l2down.expert-pack.tmp`;
+  - filesystem returned to `111 GiB` available.
+
+Decision:
+
+- Reject Phase 7DR monolithic pack build.
+- Do not run runtime benchmark.
+- Keep v2 pack as SOTA.
+- Next step must avoid copying the full old pack. Use an overlay pack that
+  contains only the missing `blk.1/2` down entries.
+
+## Phase 7DS: overlay expert-pack support for blk.1/2 down
+
+Start time:
+
+- 2026-07-04T01:30:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DR proved the missing `blk.1/2` down pack entries are a real coverage
+  gap, but monolithic rebuild is not practical on the current disk.
+- The desired runtime behavior is still valid:
+  - keep existing v2 pack for all current entries;
+  - add only a small overlay pack for `blk.1/2` down;
+  - make `expert_pack_lookup()` search both indexes.
+
+Hypothesis:
+
+- Add a default-off second pack path:
+
+```sh
+GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
+```
+
+- Each pack index entry records which source file it belongs to.
+- `expert_pack_lookup()` returns entries from the combined sorted index.
+- Reads use the entry's source fd/file, so the existing io_uring/direct path
+  works for both main and overlay packs.
+
+Why this can improve token rate:
+
+- Runtime misses for `blk.1/2` down can read from a 4.51GiB overlay pack via
+  O_DIRECT/io_uring instead of faulting GGUF mmap pages.
+- This avoids Phase 7DQ's extra overlap work and avoids Phase 7DR's full pack
+  rewrite.
+- Not setting the overlay env leaves SOTA behavior unchanged.
+
+Theoretical upper bound:
+
+- Same as Phase 7DR:
+  - hard n32 bound from `blk.1+blk.2` down stage is about `1.41 s`;
+  - realistic target is `0.2-0.8 s` if pack reads are faster than GGUF mmap
+    fallback for these rows.
+- Overlay overhead:
+  - extra index entries: `768`, negligible;
+  - extra fd/file handle: one;
+  - no additional host RAM tier.
+
+Implementation:
+
+- Source change, default-off:
+  - add `source_idx` to `expert_pack_entry`;
+  - add pack source records with `FILE*`, direct fd, and path;
+  - load `GGML_MOE_EXPERT_PACK` as source `0`;
+  - if `GGML_MOE_EXPERT_PACK_OVERLAY` is set, load it as source `1`;
+  - sort combined entries by `(tensor, expert, nbytes)`;
+  - reject duplicate keys across sources;
+  - update direct, buffered, and io_uring read paths to use the entry's source.
+- Build a small overlay pack:
+  - pack format remains `GGMLMOEPACKv1`;
+  - entries only for `blk.1/2.ffn_down_exps.weight`, experts `0..383`;
+  - expected size about `4.51 GiB`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+python3 /tmp/build_phase7ds_l1l2_overlay_pack.py
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ds_repro.sh
+sed -i '/^GGML_MOE_EXPERT_PACK=/a GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack' /tmp/run_phase7ds_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv' /tmp/run_phase7ds_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ds-l1l2-overlay-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ds_repro.sh
+```
+
+Acceptance gates:
+
+- Build:
+  - source builds;
+  - overlay pack exists;
+  - overlay pack has `768` entries;
+  - `blk.1/2` each have `384` entries;
+  - no duplicate key with the main pack.
+- Runtime hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Mechanism:
+  - stderr reports main pack and overlay pack loaded;
+  - total expert-pack entries increase from `30831` to `31599`;
+  - down CSV shows lower `blk.1/2` stage versus Phase 7DP;
+  - no large increase in main pinned host stage, H2D, or expert-pack wait.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats and mechanism is sane, run a second cold n32
+    confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, revert source patch.
+- If n32 regresses, quality fails, TTFT/RAM gates fail, or the mechanism does
+  not lower `blk.1/2` stage, reject the overlay runtime and keep overlay env out
+  of SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
