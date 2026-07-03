@@ -595,6 +595,33 @@ Implementation and result:
 - Verdict: rejected. Do not continue increasing single-row chunk count. Any future variant would need a much smaller value and a profile-only justification first, but this direction is deprioritized because it failed both speed and RAM gates.
 - Rollback: reverted `ggml/src/ggml-cpu/ggml-cpu.c` with `git restore` and clean rebuilt. Clean hashes after rollback: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `build-ds4-moe-stream/bin/libggml-cpu.so.0.10.0=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`.
 
+### 2026-07-03 MXFP4 Hotset Repack Microbench Design
+
+Design:
+
+- Goal: decide whether a future hotset-local CPU repack path is worth implementing for remaining up/down fallback. This is a theory/microbench step only, not a SOTA candidate.
+- Bottleneck basis: current profile shows `fallback_t0=1.469 ms/call` dominates `mul_mat_id` up/down; route/convert/barrier are near zero. Top-k/layer pruning and page-advice directions have been rejected because they either lose correctness, increase refaults, or tie/regress.
+- Source inspection: MXFP4 CPU fallback currently uses row-wise `ggml_vec_dot_mxfp4_q8_0` on mmap/default CPU buffers. The repo also has `CPU_REPACK` support with MXFP4 8x8 AVX2 `ggml_gemv_mxfp4_8x8_q8_0`, but current SOTA logs show no `CPU_REPACK` buffer and cgroup memory is mostly file page cache, so full repack is not active.
+- Full CPU repack is not acceptable under the 16GB host RAM limit because it would materialize large expert tensors as anonymous memory and displace the page cache. Any useful repack must be hotset-local and bounded, e.g. top tens/hundreds of up/down experts, with exact reproduction metadata.
+
+Theory and upper bound:
+
+- The hot top128 decode up/down entries cover only about `3695 ms` of measured decode fallback; top256 covers about `5379 ms`. A repack path can only speed the compute portion of that covered time, not routing, graph barriers, gate stream, or page-cache effects.
+- If 8x8 repack GEMV is `S` times faster than row-wise dot for DS4 dimensions, the hard upper bound for top128 is roughly `3695*(1-1/S) ms`. Even an ideal `2x` kernel speedup gives only about `1.85s`, likely below run variance unless page/refault behavior also improves.
+- Therefore first run a standalone microbench comparing current row-wise MXFP4 dot versus existing MXFP4 8x8 repack GEMV on representative DS4 shapes (`ne00=4096`, up rows `2048`, down rows `4096`, `Q8_0` activations). If speedup is below about `1.5x`, do not implement hotset repack integration.
+
+Practice plan:
+
+- Build a temporary standalone microbench outside committed source or under an ignored scratch path. It may compile against existing ggml CPU objects/headers but must not change runtime source.
+- Measure warm compute only for row-wise current layout and 8x8 repacked layout; include correctness max-abs/mean-abs against row-wise output.
+- Record exact compile command, CPU flags, dimensions, iteration count, speedup, and numerical error in this plan.
+- If the microbench shows strong speedup and exact numerical agreement, write a separate design for a bounded hotset-local repack path. If not, reject the direction without model runs.
+
+Acceptance for follow-up implementation:
+
+- No model SOTA claim can be made from this microbench.
+- A later hotset repack source candidate must be default-off, bounded by explicit memory budget, preserve accepted gate O_DIRECT config, pass France correctness, and satisfy strict 16GB cgroup including page cache.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
