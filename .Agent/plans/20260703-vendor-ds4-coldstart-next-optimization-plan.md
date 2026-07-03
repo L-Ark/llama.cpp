@@ -1308,6 +1308,30 @@ Next direction after profile guard:
 - Do not start another source candidate without a new mechanism that can attack early-layer up/down fallback while preserving output quality and gate/cache counters.
 - Plausible next work is offline analysis of routing/output sensitivity: compare accepted vs failed pruning traces and identify whether a safer per-layer/per-expert pruning rule exists. Without that, continue treating current `4.2 tok/s` as the effective cold-start SOTA.
 
+
+Offline MoE name-profile sensitivity analysis:
+
+- Artifact: `.Agent/run-tools/analyze_moe_name_profile.py` parses `kimi_cpu_moe_name_profile` lines from a run stderr and aggregates visible fallback by layer/kind/band.
+- Input: `/root/lfz/runs/vendor-ds4-16gb/20260703T112700Z-20260703T-current-clean-profile-guard/france-cpu40-vram0gb/stderr.txt`.
+- Output: `/root/lfz/runs/vendor-ds4-16gb/20260703T112700Z-20260703T-current-clean-profile-guard/france-cpu40-vram0gb/moe_name_profile_analysis.json`.
+- Parsed rows: top40 name-profile entries.
+- Visible top-row fallback total: `15940.896 ms`, split `down=9037.536 ms`, `up=6903.360 ms`.
+- Visible fallback by layer band:
+  - layers `0-2`: `4449.396 ms`.
+  - layers `3-9`: `5626.464 ms`.
+  - layers `10-19`: `2469.615 ms`.
+  - layers `20-29`: `1129.128 ms`.
+  - layers `30-39`: `2266.293 ms`.
+- Interpretation: the expensive visible fallback is heavily concentrated in early layers `0-9` (`~10.08s` of the top40 visible fallback). This matches the profile guard and explains why late-only pruning/cache work had little upside.
+- Constraint: early-layer top-k/routing changes have already failed output completeness/correctness in strict France runs. Therefore the biggest remaining theoretical savings are also the highest correctness risk.
+- Decision: do not start another pruning/top-k source candidate without a routing-sensitivity trace that proves which early-layer expert removals are semantically safe. Current evidence is insufficient to justify another full strict-cold candidate.
+
+Next required evidence before another source candidate:
+
+- Add or reuse a default-off routing trace that records selected expert ids/ranks per layer/token for accepted and rejected pruning runs, or otherwise collect equivalent routing evidence.
+- Compare accepted output path versus failed early/late pruning paths to identify whether any per-layer/per-expert rule can reduce CPU fallback while preserving France output and a small prompt set.
+- Until that evidence exists, current `4.2 tok/s` remains the effective vendor DeepSeek cold-start SOTA under the 16GB/page-cache/TTFT/correctness gates.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
