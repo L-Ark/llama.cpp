@@ -20034,6 +20034,141 @@ Decision:
   - or a down-cache residency policy that protects these rows without broad
     trace prefetch.
 
+### Phase 7CU - exact-tensor down profile preload for blk.1-2
+
+Start time:
+
+- 2026-07-03T16:13:52Z.
+
+Current bottleneck:
+
+- Phase 7CT proved the next large target is not up/gate movement:
+  - largest up/gate per-layer total `stage_ms` is only about `1.27 ms` in n32;
+  - top up/gate wall rows are mostly kernel dominated.
+- The same Phase 7CT run shows the largest movement-bound rows are down:
+  - `blk.1.ffn_down_exps.weight`, type `11`:
+    stage `696.971 ms`, wall `702.384 ms`, hits `74`, misses `174`;
+  - `blk.2.ffn_down_exps.weight`, type `11`:
+    stage `658.877 ms`, wall `664.098 ms`, hits `98`, misses `150`.
+- Phase 7CP/7CQ showed that trying to overlap these same down loads from the
+  current up/gate call can remove misses locally, but the synchronous thread
+  join and shared staging/IO contention made the gain non-reproducible.
+- Phase 7CR tried a non-protected profile preload for `blk.1/2` down and failed
+  to change their hits/misses. The likely reason is that profile lookup can map
+  up/gate tensor names to down profile rows, but then inserts using the current
+  up/gate tensor name/data/cache size. That can consume the preload tensor
+  budget without actually pinning the down tensor entries.
+
+Hypothesis:
+
+- Add a default-off exact-tensor profile preload mode:
+
+```sh
+GGML_MOE_VRAM_PROFILE_EXACT_TENSOR=1
+```
+
+- When enabled, `GGML_MOE_VRAM_PROFILE` entries only match the current tensor
+  name exactly. No up/gate-to-down lookup is allowed in this mode.
+- Reuse the existing `blk.1/2` down profile:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv
+GGML_MOE_VRAM_PROFILE_EXACT_TENSOR=1
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2
+GGML_MOE_VRAM_PROFILE_RESERVE_PCT=15
+GGML_MOE_VRAM_CACHE_POLICY=
+```
+
+- This should preload/protect only actual `blk.1` and `blk.2` down entries when
+  those down tensors are first encountered, rather than spending the profile on
+  up/gate tensors.
+
+Why this can improve token rate:
+
+- The targeted rows have about `1.36 s` combined down stage time in the n32
+  diagnostic.
+- If the first encounter seeds recurring hot experts into the down VRAM cache,
+  later decode tokens should see fewer misses on exactly the two largest
+  movement-bound rows.
+- The design avoids the Phase 7CP/7CQ failure mode because it does not start a
+  concurrent same-token preload from up/gate and does not add a join inside the
+  up/gate critical path.
+
+Theoretical upper bound:
+
+- Hard n32 upper bound from Phase 7CT top rows:
+  - `blk.1 + blk.2` down stage = `696.971 + 658.877 = 1355.848 ms`;
+  - wall = `702.384 + 664.098 = 1366.482 ms`.
+- Because the first token still needs to load some entries and cache capacity
+  is finite, realistic n32 saving is likely `0.2-0.8 s`.
+- For n96, the same layer hot entries recur more often, so a real residency win
+  should be more visible than in n32. If n32 improves only by noise and n96
+  regresses, reject.
+
+Implementation:
+
+- Source change, default-off:
+  - add `profile_exact_tensor_enabled()`;
+  - in `preload_profile_entries_for_tensor()`, when exact mode is enabled:
+    - do not use `profile_lookup_name()`;
+    - do not match profile rows against a translated down name;
+    - only match `e.tensor == tensor_name`.
+- Runtime experiment:
+  - keep every accepted Phase 7CC runtime setting unchanged;
+  - enable exact tensor profile preload with the `phase7cr-l1-l2-down-profile`;
+  - keep Phase 7CO/7CT CSV diagnostics active for mechanism validation:
+    `GGML_MOE_DOWN_BATCH_PROFILE_OUT` and `GGML_MOE_UP_GATE_PROFILE_OUT`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cu_repro.sh
+# append exact profile env and CSV profile outputs to env.txt
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cu-exact-down-profile-l1-l2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cu_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`,
+    `memory.peak<=15899996160`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_EXACT_TENSOR=1`;
+  - `env.txt` contains the l1/l2 down profile path;
+  - stderr shows profile preload loaded actual
+    `blk.1.ffn_down_exps.weight` and/or `blk.2.ffn_down_exps.weight`;
+  - down CSV shows `blk.1/2` misses or stage lower than Phase 7CT:
+    - `blk.1` baseline stage `696.971 ms`, misses `174`;
+    - `blk.2` baseline stage `658.877 ms`, misses `150`.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - both n96 runs must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, revert the source patch.
+- If n32 is slower, quality fails, TTFT/RAM gates fail, or activation does not
+  show actual `blk.1/2` down preload and lower misses/stage, reject the runtime
+  experiment.
+- If the source remains default-off and useful for future exact preload tests,
+  it may be retained as infrastructure; otherwise revert it.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
