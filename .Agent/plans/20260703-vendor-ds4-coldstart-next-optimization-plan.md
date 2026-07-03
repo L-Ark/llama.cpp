@@ -763,6 +763,27 @@ Acceptance:
 - Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and exact wrapper/source/command metadata are recorded and pushed.
 - If it ties or regresses, reject and keep current SOTA unchanged. No runtime source rollback is needed.
 
+
+Result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T061052Z-20260703T061052Z-taskset0-19-sota-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: strict runner binary was `.Agent/run-tools/llama-cli-taskset-0-19.sh`, which pins `llama-cli` to CPUs `0-19`; otherwise accepted gate O_DIRECT config, cache budget, top-k, threads, and strict 16GB cold cgroup.
+- Metrics: `eval_tok_s=3.2`, `prompt_tok_s=1.5`, `TTFT=31655.711601 ms`, `elapsed_seconds=73.79`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15099891712`, `pgmajfault=271107`, `workingset_refault_file=1653058`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: `correctness_ok=true`; France answer was semantic, coherent, and complete.
+- Gate/O_DIRECT counters stayed exactly aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+
+Diagnosis:
+
+- CPU affinity did not disturb the gate cache or page-cache shape, but it substantially reduced generation throughput. The regression is therefore CPU scheduling/throughput related, not a cache correctness issue.
+- Pinning exactly 20 threads to exactly 20 vCPUs likely removes scheduler flexibility that the CPU fallback path benefits from on this 61-vCPU single-NUMA VM.
+- Do not use fixed `taskset 0-19` for the SOTA path. Broader affinity masks are unlikely to be a high-priority path unless a future profile shows migration overhead explicitly.
+
+Verdict:
+
+- Rejected. Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold line remains `4.1 tok/s`.
+- No runtime source rollback required.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
