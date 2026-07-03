@@ -5383,3 +5383,64 @@ Rejection rules:
 
 - Reject if `eval_tok_s <= 4.4`, correctness fails, RAM gate fails, TTFT exceeds the gate, or pack direct failures/fallbacks appear.
 - If rejected, revert the source patch and push only docs/artifacts.
+
+### 2026-07-03T23:51Z Trace-Disabled Fast Path Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/trace-disabled-fastpath-result.json`
+- artifact sha256: `700a1df87cdb71ba14cc1659b37cae47f812f0c79840b03088704f7ee5880401`
+
+Source status:
+
+- Source patch was reverted after rejection.
+- No trace-disabled fast-path source change is retained in the final worktree.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T234245Z-20260704_trace_disabled_fastpath_candidate/france-cpu40-vram0gb`
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=33188.274852 ms`
+- TTFT gate: pass (`33188.274852 < 33617.688744`)
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15101935616`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The answer is complete, coherent, and semantically correct.
+
+Counters:
+
+- prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4662.410 pack_misses=0 read_failures=0`
+- pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=33265 misses=1886 hit_rate=94.6%`
+
+Artifact hashes:
+
+- `summary.json`: `5dd8367076d23288c6b07293d624edcdbf65043e6b474626b2d29a7fd5d3cb09`
+- `stdout.txt`: `537702d730b028fb485e89959f031dac66c8dd2ddd86c3ef9f18552d6c204005`
+- `stderr.txt`: `982c1c06274fdba60a1764cb60a92eca7c23a3c2eff959081b38fb76f82912d2`
+- `environment.txt`: `5335b6f306614bcd55b0adcb1d438fb8c18911844f21519877beda49676a8e18`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+
+Verdict:
+
+- Rejected/tie. Skipping no-trace timing and trace-lock overhead did not exceed the current `4.4 tok/s` SOTA.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+- The next bottleneck is likely actual per-expert GPU/D2H/sync/scatter work, not trace instrumentation.
