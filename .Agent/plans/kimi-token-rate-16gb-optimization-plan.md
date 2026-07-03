@@ -20294,6 +20294,127 @@ Decision:
   tiny cap such as per-tensor top `8-16` experts or a non-protected admission
   policy with explicit hit/miss validation before promotion.
 
+### Phase 7CV - non-protected top16 blk.1-2 down profile preload
+
+Start time:
+
+- 2026-07-03T16:23:42Z.
+
+Current bottleneck:
+
+- Phase 7CT shows `blk.1` and `blk.2` down remain the largest movement-bound
+  rows:
+  - `blk.1`: stage `696.971 ms`, wall `702.384 ms`, misses `174`;
+  - `blk.2`: stage `658.877 ms`, wall `664.098 ms`, misses `150`.
+- Phase 7CU proved broad protected down preload is harmful:
+  - pinned `685` of `806` down slots;
+  - down hit rate collapsed from `73.6%` to `29.8%`;
+  - `blk.1/2` misses increased sharply;
+  - decode regressed to `35282.08 ms / 31`.
+
+Hypothesis:
+
+- Instead of broad protection, create a tiny profile containing only top `16`
+  experts per target tensor for:
+  - `blk.1.ffn_down_exps.weight`;
+  - `blk.2.ffn_down_exps.weight`.
+- Use it without protection:
+
+```sh
+GGML_MOE_VRAM_PROFILE=<top16-profile.csv>
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2
+GGML_MOE_VRAM_CACHE_POLICY=
+```
+
+- This should seed only `32` down expert entries, avoiding the 7CU cache-lock
+  failure while testing whether a very small hotset helps the top two layers.
+
+Why this can improve token rate:
+
+- If the top `16` experts cover repeated misses in `blk.1/2`, down misses and
+  stage time should drop without reducing adaptive down-cache capacity.
+- Because no slots are pinned, the cache can still evict bad preload choices.
+- The realistic upside is modest but measurable if the selected experts recur:
+  `0.1-0.5 s` on n32, potentially larger on n96.
+
+Theoretical upper bound:
+
+- Absolute n32 upper bound remains `blk.1+blk.2` down stage from Phase 7CT:
+  `1355.848 ms`.
+- Top16 can cover at most a fraction of the `174+150=324` misses, so expected
+  saving is much lower than the full bound.
+- If top16 causes extra early IO but does not reduce misses/stage, it will
+  regress like Phase 7CU but on a smaller scale.
+
+Implementation:
+
+- Env/data-only experiment; no source patch.
+- Generate:
+
+```sh
+/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cv-l1-l2-down-top16-profile.csv
+```
+
+- The file is derived from:
+
+```sh
+/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv
+```
+
+- Keep only rows for `blk.1.ffn_down_exps.weight` and
+  `blk.2.ffn_down_exps.weight`, sorted by count descending, top `16` per tensor.
+- Use the accepted Phase 7CC runtime unchanged otherwise.
+- Keep `GGML_MOE_DOWN_BATCH_PROFILE_OUT` enabled to validate `blk.1/2` misses
+  and stage time.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cv-l1-l2-down-top16-profile.csv
+# Generate PROFILE from phase7cr-l1-l2-down-profile.csv.
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cv_repro.sh
+# append PROFILE env and down CSV output to env.txt
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cv-top16-l1-l2-down"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cv_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`,
+    `memory.peak<=15899996160`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - generated profile has `32` data rows plus header;
+  - `env.txt` contains the top16 profile path;
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_PROTECT=0`;
+  - down cache pinned count remains `0`;
+  - down CSV exists and includes `blk.1/2` rows.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - mechanism should not show worse `blk.1/2` misses/stage than Phase 7CT;
+  - if first n32 beats and mechanism is sane, run n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - both n96 runs must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- Env/data-only failure needs no source rollback.
+- If n32 regresses, quality fails, TTFT/RAM gates fail, or mechanism shows no
+  reduction in `blk.1/2` misses/stage, reject and do not run n96.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
