@@ -27767,6 +27767,145 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CH - raise expert-pack io_uring depth/refill and pinned slots
+
+Start time:
+
+- 2026-07-03T13:36:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CC remains the accepted SOTA, but the movement path is still a major
+  part of decode:
+  - n32 confirmation decode `33217.66 ms / 31`;
+  - expert-pack direct/iouring traffic is tens of GiB per n32 run;
+  - current-down overlap is active and moves up to `8` jobs per submitted
+    overlap batch.
+- Phase 7CG rejected the narrow Q3_K down Q8_K-reference path because the local
+  layer 1/2 change did not reduce wall time and the aggregate staging path
+  worsened:
+  - main pinned staging `host_stage=21852.099 ms`;
+  - expert-pack `iouring_wait_us=11810222`;
+  - iouring detail `inflight_max=8`, with no `9-16` batches.
+- The Phase 7CC repro script fixes:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- The observed iouring histograms repeatedly saturate at the current maximum
+  depth rather than showing larger batches, so the next low-risk bottleneck
+  check is whether the expert-pack read queue is depth-limited.
+
+Hypothesis:
+
+- Increase expert-pack iouring depth and refill:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- Increase pinned staging slots to match:
+
+```sh
+PINNED_SLOTS=16
+```
+
+- This may allow the current-down overlap worker and up/gate staging to keep
+  more direct reads in flight, reducing `iouring_wait_us` and `host_stage`.
+- Host RAM risk is limited because each down pinned slot is about `7.44 MiB`;
+  doubling the main and gate staging pools should cost on the order of hundreds
+  of MiB, and the cgroup gate still enforces the full 16GB limit including page
+  cache.
+
+Theoretical upper bound:
+
+- On the rejected 7CG run, expert-pack `iouring_wait_us` was `11.812 s` and
+  main pinned `host_stage` was `21.852 s`.
+- On the accepted 7CC n32 confirmation, the practical exposed movement budget
+  is still large enough that a queue-depth improvement could plausibly save
+  `0.3-1.5 s` over n32 if storage parallelism is underfilled.
+- A hard upper bound is lower than the full iouring wait because the selected
+  expert bytes still have to be read, staged, copied to GPU, and synchronized.
+- If `inflight_max` remains `8`, or if page-cache pressure/CPU scheduling grows,
+  the run should match or regress.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7ch_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Replace only:
+
+```sh
+GGML_MOE_IO_DEPTH=8        -> GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_REFILL_BATCH=4 -> GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- Launch with `PINNED_SLOTS=16`.
+- Keep every accepted Phase 7CC setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL and `IO_SORT_OFFSET=1`;
+  - `THREADS=32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ch_repro.sh
+perl -0pi -e 's/GGML_MOE_IO_DEPTH=8/GGML_MOE_IO_DEPTH=16/; s/GGML_MOE_IO_REFILL_BATCH=4/GGML_MOE_IO_REFILL_BATCH=8/' /tmp/run_phase7ch_repro.sh
+chmod +x /tmp/run_phase7ch_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ch-iodepth16-refill8-slots16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ch_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_IO_DEPTH=16`;
+  - `env.txt` contains `GGML_MOE_IO_REFILL_BATCH=8`;
+  - `env.txt` records `PINNED_SLOTS=16`;
+  - stderr pinned staging reports `slots=16`.
+- Performance:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - `expert_pack_iouring` should show `inflight_max > 8` or new `9-16`
+    histogram entries;
+  - `iouring_wait_us` and/or pinned `host_stage` should fall enough to explain
+    the decode gain;
+  - if decode improves without those mechanism signals, collect an additional
+    confirm run before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, quality fails, activation is missing, TTFT fails, or RAM
+  exceeds the cgroup cap, reject and keep Phase 7CC settings:
+  `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `PINNED_SLOTS=8`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
