@@ -1446,6 +1446,31 @@ Next direction after CPU chunk trace:
 - Given a diagnostic elapsed time of `62.17s`, a 20-30% fallback improvement is the first range likely to move rounded token rate beyond the current `4.2` SOTA. Smaller scheduling-only changes are unlikely to matter.
 - Next implementation candidate should inspect the existing CPU MoE up/down matvec path and look for a low-risk per-chunk speedup that does not alter selected experts, top-k policy, gate cache, or O_DIRECT pack behavior. Any candidate must be rebuilt and strict-cold rerun with the accepted France prompt before promotion.
 
+
+MoE CPU chunk-size candidate design:
+
+- Time: 2026-07-03 after CPU chunk bottleneck trace commit `8e5153409`.
+- Hypothesis: the current MoE CPU fallback uses fixed chunk size `16` (`64` only when `nr0==1 || nr1==1`). The CPU chunk trace hit the `500000` row cap and showed a balanced work-stealing distribution, so scheduler imbalance is not the main issue. However, very small chunks can still amplify atomic fetch, function-call, row-mapping, and loop overhead. Increasing MoE fallback chunk size may reduce per-chunk overhead without changing selected experts or math.
+- Source candidate: add default-off env `GGML_MOE_CPU_CHUNK_SIZE`. When unset, behavior is byte-for-byte intended to match the previous chunk-size policy. When set to `32` or `64`, only MoE fallback chunk partitioning changes; ordinary matmul chunking is untouched. Both `ggml_compute_forward_mul_mat_id` and the existing fused up/gate fallback path use the helper for consistency.
+- Theoretical upper bound: this cannot exceed the CPU fallback critical path from chunk trace (`~17.47s` captured max-thread lower bound). Since measured thread imbalance is only `~0.91s`, the realistic target is lower than a full microkernel rewrite. If chunk overhead is 5-10% of fallback time, expected save is `~0.9-1.7s`, likely at most a tie/slight improvement. If larger chunks hurt parallelism/cache locality, token rate will regress.
+- Experiment order: rebuild, run strict-cold France with `GGML_MOE_CPU_CHUNK_SIZE=32`; if it is not clearly worse and remains correct/RAM-safe, test `64`. Preserve all accepted SOTA envs and 16GB cgroup. Do not promote unless `eval_tok_s > 4.2`, France answer passes, TTFT gate passes, and pack/cache counters remain aligned.
+- Rollback: if both chunk-size values tie/regress or change output/RAM/TTFT/counters, revert `ggml/src/ggml-cpu/ggml-cpu.c`, rebuild clean, record rejection, and push docs only.
+
+
+MoE CPU chunk-size candidate result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T123416Z-20260703_moe_cpu_chunk32_probe/france-cpu40-vram0gb`.
+- Source delta during run: temporary `GGML_MOE_CPU_CHUNK_SIZE` override in `ggml/src/ggml-cpu/ggml-cpu.c`, tested with `GGML_MOE_CPU_CHUNK_SIZE=32`. Runtime source was reverted immediately after rejection with `git restore ggml/src/ggml-cpu/ggml-cpu.c` and `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` from clean commit `8e5153409`.
+- Metrics: `eval_tok_s=3.5`, `prompt_tok_s=1.6`, `TTFT=27902.340278 ms`, `elapsed_seconds=66.17`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15096217600`, `pgmajfault=533760`, `workingset_refault_file=1674932`, `ram_ok=true`, correctness pass.
+- Gate counters stayed aligned with accepted SOTA: pack `hits=4623 misses=0 direct_failures=0`, VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Diagnosis: larger chunk size did not change gate/cache behavior but doubled major faults and slowed decode from the repeated `4.1` line to `3.5`. This means the fixed chunk size `16` is not the bottleneck; larger chunks likely harm locality/page-fault overlap more than they reduce atomic/function overhead.
+- Verdict: rejected. Do not test `64`; `32` is already clearly worse. Current accepted SOTA remains `4.2 tok/s`.
+- Versioned artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/rejected-moe-cpu-chunk32-summary.json`.
+
+Next direction after chunk-size rejection:
+
+- Stop pursuing coarse chunk-size/scheduler-only changes. The next candidate needs to reduce actual per-dot or per-row cost while preserving memory locality, or move a targeted early up/down subset to a GPU/cache path without increasing page refaults.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
