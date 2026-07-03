@@ -530,7 +530,7 @@ France is a country in Western Europe known for its rich history, culture, and i
 
 Timestamp: 2026-07-03T17:48:19Z.
 
-Status: planned before implementation.
+Status: rejected and rolled back.
 
 Reason for this phase:
 
@@ -592,6 +592,72 @@ Reproducibility:
 - Record exact commit, branch, remote, build command, model, expert pack, prompt,
   seed, env, cgroup, cold-start method, output, memory, vram, and MoE counters.
 - A candidate without repeat is diagnostic only.
+
+Result:
+
+- Plan commit: `7e6f401d1`.
+- Probe commit: `458daa7b1` (`VDR_IQ3_XXS_Q8_1_MMVQ=4`,
+  `VDR_IQ3_XXS_Q8_1_MMQ=2`).
+- Rollback commit: `a91e199d3`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Build command:
+  `cmake --build build-cuda -j$(nproc)`.
+- n96 candidate run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-175014Z-n96-phase7db-iq3-vdr4`.
+- Reproduction command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-175014Z-n96-phase7db-iq3-vdr4 \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n96 metrics:
+  - exit: `0`;
+  - quality: pass;
+  - TTFT: `78178.97 ms`;
+  - decode: `79861.49 ms / 77`, `0.96 tok/s`;
+  - comparison: slower than accepted Phase 7CC n96 `79008.37 ms / 77` by
+    `853.12 ms` (`1.08%`);
+  - memory.max: `15899996160`;
+  - memory.peak: `15899996160`;
+  - memory.current.final: `15130103808`;
+  - expert pack: `hits=62651`, `misses=1461`, `read_failures=0`,
+    `iouring_reads=28899`, `iouring_bytes=168378384384`,
+    `iouring_fallbacks=0`;
+  - down cache: `slots=806`, `hits=23934`, `misses=8690`,
+    `hit_rate=73.4%`;
+  - upgate cache: `slots=1679`, `hits=31967`, `misses=41969`,
+    `hit_rate=43.2%`.
+- Exact n96 output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- Decision:
+  - Reject and roll back. Semantic quality, TTFT, host RAM, read-failure, and
+    iouring gates passed, but decode was slower than the accepted n96 SOTA gate.
+  - No repeat was run because the first n96 candidate failed the speed gate.
+  - The source probe was reverted by `a91e199d3` and pushed.
+- Gap analysis:
+  - Phase 7DA's n32 speed signal did not scale to n96. The likely explanation
+    is run-to-run noise and changed decode mix rather than a true reduction of
+    the type-18 compute bucket.
+  - VDR=4 is now rejected for the current Kimi IQ3_S MMVQ path. Do not retry it
+    without new kernel-level evidence that it reduces type-18 time.
+- Next direction:
+  - Return to Phase 7CC SOTA settings.
+  - The next viable optimization needs fresh kernel-level evidence rather than
+    another VDR macro sweep. Candidate directions are:
+    - add low-overhead type-18 kernel timing by layer without full CSV overhead;
+    - inspect generated register count/occupancy for IQ3_XXS MMVQ on the target
+      GPU;
+    - design a smaller IQ3_XXS vec-dot specialization that preserves `vdr=2`
+      but reduces lookup/sign unpack cost.
 
 ## Phase 0: cold 16GB baseline
 
