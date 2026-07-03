@@ -3530,3 +3530,162 @@ Immediate action:
 3. Run one strict cold France profile with the accepted SOTA knobs and the trace enabled.
 4. Record the overhead, output correctness, RAM, TTFT, token rate, and split totals.
 5. Use the split totals to design the next optimization. Do not promote a trace run unless it accidentally improves token rate while satisfying all constraints.
+
+Implementation detail for the first split trace:
+
+- Extend the existing `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` CSV rather than creating a parallel profiler.
+- Add a default-off source-touch measurement guarded by:
+  - `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE=1`
+- When enabled, immediately before the CPU fallback loop, thread 0 touches one byte per page of every still-active expert source tensor, records per-expert `touch_us`, then synchronizes before normal CPU fallback math.
+- The existing `fallback_us` will then measure fallback compute/scheduling after pages have been touched; `touch_us + fallback_us` gives the cold source-plus-compute estimate for that call group.
+- Add source-kind counters to each fallback-profile row:
+  - `pack_mmap_calls`
+  - `gguf_calls`
+- Also extend `GGML_MOE_CPU_CHUNK_TRACE_OUT` with a `role` column and include `up_gate` chunks if that fused CPU op is used in a future run. This remains default-off.
+
+Trace run env:
+
+- Use all accepted SOTA env/args unchanged.
+- Add:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-split-profile.csv`
+  - `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE=1`
+- Optional short diagnostic only if the full trace overhead is too high:
+  - `GGML_MOE_CPU_CHUNK_TRACE_OUT={case_dir}/chunk-trace.csv`
+  - `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=20000`
+
+Acceptance for trace quality:
+
+- The run must still pass RAM and correctness.
+- It does not need to beat SOTA; it is a diagnostic run.
+- The profile must contain nonzero `touch_us` for active up/down fallback rows and preserve nonzero `fallback_us`, otherwise the split is not informative.
+- If trace overhead is too large to interpret token rate, still use the touch/fallback proportions for bottleneck design, but mark token rate as trace-overhead affected.
+
+### 2026-07-04 Fallback Split Trace Implementation And Result
+
+Source change:
+
+- File: `ggml/src/ggml-cpu/ggml-cpu.c`
+- Added default-off split instrumentation:
+  - extends `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` with `touch_us`, `pack_mmap_calls`, and `gguf_calls`;
+  - adds `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE=1` to touch one byte per page for each still-active CPU fallback expert before fallback math;
+  - extends `GGML_MOE_CPU_CHUNK_TRACE_OUT` with a `role` column;
+  - adds chunk trace coverage for the fused CPU `up_gate` path if that op is used later.
+- Built diagnostic binary without overwriting accepted SOTA binary:
+  - `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-split-trace/bin/llama-cli`
+  - sha256 `47ba151f4ed383595dfa77741acce758729b19ac9af6124f2f00f683017e9d72`
+- Accepted SOTA binary remains unchanged:
+  - `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`
+  - sha256 `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+
+Touch split trace run:
+
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260703T204105Z-20260704_fallback_split_touch_profile/france-cpu40-vram0gb`
+- Added env:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-split-profile.csv`
+  - `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE=1`
+- Metrics:
+  - `eval_tok_s=2.5`
+  - `prompt_tok_s=1.0`
+  - `TTFT=35484.318865 ms`
+  - `elapsed_seconds=89.84`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15098998784`
+  - `pgmajfault=21616`
+  - `workingset_refault_file=1667513`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+- Verdict:
+  - diagnostic only;
+  - rejected as performance/SOTA because token rate is below `4.2` and TTFT is above the accepted `20%` limit (`33617.688744 ms`);
+  - useful because split profile is complete and correctness/RAM passed.
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Split profile aggregate:
+
+| Phase/role | count | calls | fallback_us after touch | touch_us | source |
+| --- | ---: | ---: | ---: | ---: | --- |
+| prompt/up | `1820` | `1171` | `135121` | `5559231` | `gguf` |
+| prompt/down | `1820` | `1171` | `138248` | `5490099` | `gguf` |
+| decode/up | `17940` | `17940` | `1384622` | `20833182` | `gguf` |
+| decode/down | `17940` | `17940` | `1389115` | `20784944` | `gguf` |
+| total | `39520` | `38222` | `3047106` | `52667456` | `gguf` |
+
+Interpretation:
+
+- The trace overstates end-to-end source time because page touching is serial and diagnostic-only, but it gives a useful lower bound on hot CPU fallback math.
+- Hot fallback math after source touch is only about `3.0s` total for this France run.
+- Therefore CPU dot/math is not the dominant bottleneck in the accepted run.
+- The bottleneck is source/page movement for up/down fallback experts. This is consistent with:
+  - cold current-SOTA profile fallback total around `25.7s`;
+  - no-drop fallback total around `13.0s`;
+  - touch trace lowering major faults to `21616` but increasing TTFT due serial page touching.
+- All profile rows used `gguf` source (`pack_mmap_calls=0`), so accepted up/down CPU fallback is still reading from the model mapping, not a route-ordered up/down pack.
+
+Default-off guard run:
+
+- Run directory: `/root/lfz/runs/vendor-ds4-16gb/20260703T204417Z-20260704_split_trace_default_off_guard/france-cpu40-vram0gb`
+- Same split-trace binary, no trace/touch env enabled.
+- Metrics:
+  - `eval_tok_s=4.2`
+  - `prompt_tok_s=1.5`
+  - `TTFT=30006.935752 ms`
+  - `elapsed_seconds=62.41`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15100276736`
+  - `pgmajfault=271786`
+  - `workingset_refault_file=1683134`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+- Gate counters:
+  - `VRAM cache: 13.2 GiB, 3192 slots`
+  - `VRAM cache: hits=30528 misses=4623 hit_rate=86.8%`
+  - gate pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_reads=4623 direct_fallbacks=0`
+- Verdict:
+  - default-off instrumentation does not break SOTA-level behavior;
+  - this is a tie, not a new promoted SOTA.
+
+Artifact hashes:
+
+- Touch trace:
+  - `summary.json`: `d1c4fad0daa1a55bd689a5ffd65f5393f1aba525dd91d03eff87b32a99beef19`
+  - `stdout.txt`: `29bafedd5708872e9f8c1b16bb7c76af4497ec981b0551b7aede55d33e041053`
+  - `stderr.txt`: `a950280cf1e3f7c5b92a60dc574353024f9ffacb6b92478c0cca65f2a6108173`
+  - `fallback-split-profile.csv`: `03e23df371eafefbc918e7c5b9759845656f713a6191353f2e482579a0bf42bd`
+- Default-off guard:
+  - `summary.json`: `8450d435ae119190d45f58d332987e474788c96ef6b4faed2931222726e11cb1`
+  - `stdout.txt`: `eb6f62f8d6cc5f4fb221820a3b5b1d133a3491f70f973cc2e783114112b1d474`
+  - `stderr.txt`: `38a0b13be351d0ff6da253c28cf4ed3222f029d563229194b9e794cb4fc724b3`
+
+Next optimization plan:
+
+1. Stop optimizing CPU fallback math until source movement is materially reduced.
+2. Inspect existing expert-pack implementations:
+   - one-stream gate pack used by accepted SOTA;
+   - batch/down pack code;
+   - any CPU fallback pack mmap/direct path.
+3. Design a route-ordered up/down source movement path that attacks both up and down, not only down:
+   - candidate A: CPU fallback reads up/down from a route-ordered pack with `O_DIRECT` or mmap source, using profile order;
+   - candidate B: bounded async source staging that overlaps next expert read with current hot CPU math;
+   - candidate C: small resident hotset only if hard-bound coverage exceeds the current `4.2 tok/s` SOTA.
+4. Hard bound before coding:
+   - current hot CPU fallback math lower bound is about `3.0s`;
+   - accepted cold fallback total is about `25.7s`;
+   - no-drop fallback total is about `13.0s`;
+   - any next candidate must plausibly remove at least several seconds of up/down source movement without shrinking the gate cache enough to lose the `86.8%` gate hit rate.
+5. Before implementation, update this plan with:
+   - exact source path;
+   - bytes moved per expert and per run;
+   - expected saved milliseconds;
+   - RAM/VRAM cost;
+   - correctness and TTFT rejection criteria.

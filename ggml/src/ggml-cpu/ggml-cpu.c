@@ -257,6 +257,9 @@ struct ggml_kimi_cpu_moe_fallback_profile_entry {
     uint64_t count;
     uint64_t calls;
     uint64_t fallback_us;
+    uint64_t touch_us;
+    uint64_t pack_mmap_calls;
+    uint64_t gguf_calls;
     size_t expert_bytes;
 };
 
@@ -370,19 +373,22 @@ static void ggml_kimi_cpu_moe_fallback_profile_report(void) {
         return;
     }
 
-    fprintf(f, "rank,count,calls,fallback_us,expert_bytes,src0_type,phase,expert_idx,tensor\n");
+    fprintf(f, "rank,count,calls,fallback_us,touch_us,expert_bytes,src0_type,phase,expert_idx,pack_mmap_calls,gguf_calls,tensor\n");
     for (int i = 0; i < ggml_kimi_cpu_moe_fallback_profile.n_entries; ++i) {
         const struct ggml_kimi_cpu_moe_fallback_profile_entry * e =
             &ggml_kimi_cpu_moe_fallback_profile.entries[i];
-        fprintf(f, "%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%zu,%d,%s,%d,%s\n",
+        fprintf(f, "%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%zu,%d,%s,%d,%" PRIu64 ",%" PRIu64 ",%s\n",
                 i + 1,
                 e->count,
                 e->calls,
                 e->fallback_us,
+                e->touch_us,
                 e->expert_bytes,
                 e->src0_type,
                 e->prompt_phase ? "prompt" : "decode",
                 e->expert_idx,
+                e->pack_mmap_calls,
+                e->gguf_calls,
                 e->name);
     }
     fclose(f);
@@ -418,7 +424,9 @@ static void ggml_kimi_cpu_moe_fallback_profile_record(
         int expert_idx,
         int64_t count,
         size_t expert_bytes,
-        uint64_t fallback_us) {
+        uint64_t fallback_us,
+        uint64_t touch_us,
+        bool pack_mmap_source) {
     if (!ggml_kimi_cpu_moe_fallback_profile_enabled() || count <= 0) {
         return;
     }
@@ -459,6 +467,12 @@ static void ggml_kimi_cpu_moe_fallback_profile_record(
     e->count += (uint64_t) count;
     e->calls++;
     e->fallback_us += fallback_us;
+    e->touch_us += touch_us;
+    if (pack_mmap_source) {
+        e->pack_mmap_calls++;
+    } else {
+        e->gguf_calls++;
+    }
     e->expert_bytes = expert_bytes;
 }
 
@@ -826,6 +840,21 @@ static bool ggml_moe_cpu_chunk_trace_enabled(void) {
     return enabled != 0;
 }
 
+static const char * ggml_moe_tensor_role(const char * name) {
+    if (name) {
+        if (strstr(name, "ffn_up_exps")) {
+            return "up";
+        }
+        if (strstr(name, "ffn_gate_exps")) {
+            return "gate";
+        }
+        if (strstr(name, "ffn_down_exps")) {
+            return "down";
+        }
+    }
+    return "other";
+}
+
 static double ggml_moe_cpu_trace_now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -846,7 +875,7 @@ static FILE * ggml_moe_cpu_chunk_trace_fp(void) {
             if (fp) {
                 setvbuf(fp, NULL, _IOLBF, 0);
                 fprintf(fp,
-                    "seq,tensor,type,expert,ith,nth,cne1,ir0_start,ir0_end,ir1_start,ir1_end,src0_bytes,ms\n");
+                    "seq,role,tensor,type,expert,ith,nth,cne1,ir0_start,ir0_end,ir1_start,ir1_end,src0_bytes,ms\n");
             } else {
                 fprintf(stderr, "[moe_cpu_trace] failed to open trace: %s\n", path);
             }
@@ -858,6 +887,7 @@ static FILE * ggml_moe_cpu_chunk_trace_fp(void) {
 }
 
 static void ggml_moe_cpu_chunk_trace_write(
+    const char * role,
     const char * tensor,
     enum ggml_type type,
     int expert,
@@ -893,8 +923,9 @@ static void ggml_moe_cpu_chunk_trace_write(
 
     flockfile(fp);
     fprintf(fp,
-        "%d,%s,%d,%d,%d,%d,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%zu,%.3f\n",
+        "%d,%s,%s,%d,%d,%d,%d,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%zu,%.3f\n",
         cur_seq,
+        role ? role : "",
         tensor ? tensor : "",
         (int) type,
         expert,
@@ -908,6 +939,50 @@ static void ggml_moe_cpu_chunk_trace_write(
         src0_bytes,
         ms);
     funlockfile(fp);
+}
+
+static bool ggml_moe_cpu_fallback_touch_profile_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE");
+        enabled = env && env[0] && env[0] != '0' ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static volatile uint8_t ggml_moe_cpu_touch_sink;
+
+static uint64_t ggml_moe_cpu_touch_pages_us(const void * ptr, size_t size) {
+#if defined(__linux__)
+    if (!ptr || size == 0) {
+        return 0;
+    }
+
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        return 0;
+    }
+
+    const uintptr_t begin = (uintptr_t) ptr;
+    const uintptr_t end = begin + size;
+    const uintptr_t aligned_begin = begin & ~(uintptr_t) (page_size - 1);
+    const uintptr_t aligned_end = (end + (uintptr_t) page_size - 1) & ~(uintptr_t) (page_size - 1);
+    if (aligned_end <= aligned_begin) {
+        return 0;
+    }
+
+    uint8_t acc = 0;
+    const uint64_t t0 = ggml_time_us();
+    for (uintptr_t p = aligned_begin; p < aligned_end; p += (uintptr_t) page_size) {
+        acc ^= *(const volatile uint8_t *) p;
+    }
+    ggml_moe_cpu_touch_sink ^= acc;
+    return ggml_time_us() - t0;
+#else
+    (void) ptr;
+    (void) size;
+    return 0;
+#endif
 }
 
 static bool ggml_moe_cpu_willneed_enabled(void) {
@@ -2725,6 +2800,9 @@ static void ggml_compute_forward_mul_mat_id(
     const void ** fallback_pack_mmap_ptrs =
         incr_ptr_aligned(&wdata_cur, n_as*sizeof(void *), sizeof(void *));
 
+    uint64_t * fallback_touch_us =
+        incr_ptr_aligned(&wdata_cur, n_as*sizeof(uint64_t), sizeof(uint64_t));
+
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
     const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
@@ -2968,6 +3046,19 @@ static void ggml_compute_forward_mul_mat_id(
                 matrix_row_counts,
                 (size_t) ne01 * nb01,
                 fallback_pack_mmap_ptrs);
+        memset(fallback_touch_us, 0, n_as*sizeof(uint64_t));
+        if (ggml_moe_cpu_fallback_touch_profile_enabled()) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                if (matrix_row_counts[cur_a] == 0) {
+                    continue;
+                }
+                const char * src0_cur = fallback_pack_mmap_ptrs[cur_a] ?
+                    (const char *) fallback_pack_mmap_ptrs[cur_a] :
+                    (const char *) src0->data + cur_a * nb02;
+                fallback_touch_us[cur_a] =
+                    ggml_moe_cpu_touch_pages_us(src0_cur, (size_t) ne01 * nb01);
+            }
+        }
     }
     ggml_barrier(params->threadpool);
 
@@ -3033,6 +3124,7 @@ static void ggml_compute_forward_mul_mat_id(
             if (trace_cpu_chunk) {
                 const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();
                 ggml_moe_cpu_chunk_trace_write(
+                    ggml_moe_tensor_role(src0->name),
                     src0->name,
                     src0->type,
                     cur_a,
@@ -3077,7 +3169,9 @@ static void ggml_compute_forward_mul_mat_id(
                             cur_a,
                             cne1,
                             (size_t) nb02,
-                            expert_fallback_us);
+                            expert_fallback_us,
+                            fallback_touch_us[cur_a],
+                            fallback_pack_mmap_ptrs[cur_a] != NULL);
                 }
             }
         }
@@ -3409,10 +3503,31 @@ static void ggml_compute_forward_moe_up_gate(
             const int64_t ir1_start = dr1 * ith1;
             const int64_t ir1_end = MIN(ir1_start + dr1, nr1);
 
+            const bool trace_cpu_chunk = ggml_moe_cpu_chunk_trace_enabled();
+            const double trace_t0_ms = trace_cpu_chunk ? ggml_moe_cpu_trace_now_ms() : 0.0;
+
             ggml_compute_forward_moe_up_gate_one_chunk(
                 dst, src0_up, src0_gate, src1, ids, cur_a,
                 ir0_start, ir0_end, ir1_start, ir1_end,
                 src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op);
+
+            if (trace_cpu_chunk) {
+                const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();
+                ggml_moe_cpu_chunk_trace_write(
+                    "up_gate",
+                    src0_up->name,
+                    src0_up->type,
+                    cur_a,
+                    ith,
+                    nth,
+                    cne1,
+                    ir0_start,
+                    ir0_end,
+                    ir1_start,
+                    ir1_end,
+                    (size_t) ne01 * nb01 + (size_t) src0_gate->ne[1] * src0_gate->nb[1],
+                    trace_t1_ms - trace_t0_ms);
+            }
 
             if (nth >= nchunk0 * nchunk1) {
                 break;
@@ -4586,6 +4701,8 @@ struct ggml_cplan ggml_graph_plan(
                         cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;
                         // CPU fallback expert-pack mmap pointers
                         cur += n_as * sizeof(void *) + sizeof(void *);
+                        // CPU fallback source-touch profile timings
+                        cur += n_as * sizeof(uint64_t) + sizeof(uint64_t);
                     } break;
                 case GGML_OP_MOE_FUSED_UP_GATE:
                     {
