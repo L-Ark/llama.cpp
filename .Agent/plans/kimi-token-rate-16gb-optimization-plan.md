@@ -19603,3 +19603,118 @@ Decision:
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
   - n96 confirm decode `84173.24 ms / 77`.
+
+## Phase 7AX - Q4_0 CPU fallback chunk-size probe
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AW proves global thread-count scaling is not viable:
+  - `THREADS=40` slightly reduces local fallback cost but greatly increases
+    route/barrier, staging, and wall decode.
+- The residual decode fallback is now narrowly identified:
+  - Phase 7AS n96 fallback CSV `decode,type=2` is Q4_0 down fallback:
+    `4312` calls, `8.067 GiB`, `5.291 s`;
+  - `kimi_cpu_fallback_pack_mmap` hits `4286` and misses only `26`, so most
+    residual fallback reads from expert-pack mmap rather than GGUF.
+- The current CPU fallback loop chooses:
+
+```c
+int chunk_size = 16;
+if (nr0 == 1 || nr1 == 1) {
+    chunk_size = 64;
+}
+```
+
+- For decode Q4_0 down fallback, `nr1` is typically `1` for a selected expert
+  row group, so the effective chunk size is `64`.
+
+Hypothesis:
+
+- For Q4_0 decode fallback only, increasing chunk size from `64` to `128` may
+  reduce atomic chunk scheduling overhead and improve CPU cache behavior without
+  changing math.
+- This should not increase global threadpool contention because `THREADS`
+  remains `32`.
+- Risk:
+  - larger chunks reduce parallelism inside each expert matvec;
+  - if the Q4_0 CPU kernel is compute-bound and already balanced at `64`, the
+    run may regress.
+
+Implementation:
+
+- Add a default-off env:
+
+```sh
+GGML_KIMI_Q4_0_FALLBACK_CHUNK=128
+```
+
+- Scope:
+  - only applies inside the residual CPU fallback loop;
+  - only when `src0->type == GGML_TYPE_Q4_0`;
+  - only accepts positive integer values;
+  - default behavior is exactly unchanged.
+- Add a one-time stderr log when the override is active so reproduction can
+  prove the tested path:
+
+```text
+[kimi_cpu_fallback] Q4_0 chunk override active: 128
+```
+
+Theoretical upper bound:
+
+- n32 Phase 7AS residual Q4_0 fallback is about `2.630 s`.
+- If chunk scheduling overhead accounts for `10-20%` of that bucket, the n32
+  upper-bound saving is roughly `0.26-0.53 s`.
+- n96 upper-bound saving is roughly `0.53-1.06 s` from the `5.291 s` bucket.
+- End-to-end improvement must be smaller than this unless the chunk change also
+  reduces barrier or memory-bandwidth contention.
+
+Experiment:
+
+- Source patch is default-off and not committed until accepted.
+- Build:
+
+```bash
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ax-q4fallback-chunk128"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_KIMI_Q4_0_FALLBACK_CHUNK=128 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Same hard gates as Phase 7AS:
+  - cold start;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - non-empty `fallback-profile.csv`;
+  - standard reproduction artifacts.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - n32 confirmation must also beat `33471.59 ms / 31`;
+  - n96 candidate and confirmation must both beat Phase 7AS n96 confirmation
+    `84173.24 ms / 77`.
+- Mechanism:
+  - stderr must show the Q4_0 chunk override log;
+  - fallback CSV `decode,type=2` time should drop relative to Phase 7AS n32
+    confirmation (`2.630 s`) or any wall improvement is not explained.
+
+Rollback:
+
+- If build fails, output quality fails, hard gates fail, the override does not
+  activate, or n32 token rate does not improve, revert the source patch and
+  keep only the plan/result record.
