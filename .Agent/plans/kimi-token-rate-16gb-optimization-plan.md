@@ -28238,6 +28238,126 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CJ - current SOTA route trace and miss-sequence refresh
+
+Start time:
+
+- 2026-07-03T13:55:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CG rejected narrow Q3_K down Q8_K-reference:
+  - layer-local math change did not improve wall time;
+  - aggregate staging and fallback time dominated.
+- Phase 7CH rejected larger iouring depth/refill and pinned slots:
+  - `IO_DEPTH=16` activated;
+  - `inflight_max` remained `8`;
+  - no `9-16` batches appeared;
+  - the scheduler is capped by per-layer active expert count rather than queue
+    capacity.
+- Phase 7CI rejected same-step planned host prefetch:
+  - `planned_enqueued=5093`, but only `hits=80`;
+  - `misses=11721`, `evicted=4949`;
+  - the worker starts too late for most immediately consumed jobs.
+- The next useful implementation must change the future-event schedule, not
+  only the local copy primitive. Before editing that scheduler, collect a
+  current Phase 7CC route trace because older route traces came from pre-7CC
+  runtimes and are not authoritative after the larger l12-upgate expert pack.
+
+Hypothesis:
+
+- A strict Phase 7CC diagnostic with route/profile/TTFT traces can identify:
+  - exact current-SOTA route event order;
+  - top hot tensors and experts under the accepted larger expert pack;
+  - whether future-event trace prefetch has enough lead distance to be useful;
+  - whether remaining misses are concentrated in upgate, down, Q4_0 fallback,
+    or a small set of layers.
+- This phase is diagnostic-only. It should not be promoted as SOTA because
+  writing trace CSVs can add overhead.
+
+Theoretical upper bound:
+
+- Accepted token-rate improvement for this phase is zero because it changes only
+  instrumentation.
+- The value is reducing implementation uncertainty. If trace analysis shows
+  that future-event prefetch would mostly evict before use, do not implement it.
+  If it shows repeated future misses with stable lead distance and matching
+  expert sizes, the next implementation can target cross-layer or trace-driven
+  VRAM prefetch with a bounded window.
+
+Implementation:
+
+- Env-only diagnostic; no source patch.
+- Create `/tmp/run_phase7cj_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append:
+
+```sh
+GGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv
+```
+
+- Keep every accepted Phase 7CC runtime setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cj_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_BATCH_PROFILE_OUT=$RUN\\/route-profile.csv\nGGML_MOE_ROUTE_TRACE_OUT=$RUN\\/route-trace.csv\nGGML_MOE_TTFT_TRACE_OUT=$RUN\\/ttft-trace.csv\nEOF\n/' /tmp/run_phase7cj_repro.sh
+chmod +x /tmp/run_phase7cj_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cj-7cc-route-trace"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cj_repro.sh
+```
+
+Acceptance gates:
+
+- Diagnostic gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct;
+  - `route-profile.csv`, `route-trace.csv`, and `ttft-trace.csv` exist and are
+    non-empty.
+- Activation:
+  - `env.txt` contains all three trace output env vars;
+  - stderr reports route trace/profile files written.
+- Analysis deliverables:
+  - line counts for all three CSVs;
+  - top route-profile entries by count;
+  - route-trace tensor-type distribution;
+  - current-down overlap, pinned staging, expert-pack, and fallback counters;
+  - explicit recommendation for the next implementation:
+    - trace-driven VRAM prefetch,
+    - cross-layer down prefetch,
+    - Q4_0 down kernel/pack path,
+    - or no prefetch if reuse distance is unfavorable.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If the run fails hard gates or trace files are missing, reject the diagnostic
+  and rerun only after fixing instrumentation.
+- Do not compare trace-overhead decode time directly against Phase 7CC for
+  promotion.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
