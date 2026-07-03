@@ -28358,6 +28358,180 @@ Rollback:
 - Do not compare trace-overhead decode time directly against Phase 7CC for
   promotion.
 
+Phase 7CJ result - accepted as diagnostic evidence:
+
+- result timestamp: 2026-07-03T13:52:57Z.
+- plan commit:
+  `408c7fe76` (`docs: plan kimi phase7cj route trace refresh`).
+- ignored aborted run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-135134Z-n32-phase7cj-7cc-route-trace`;
+  - stopped after the script injection wrote trace paths as `/route-*.csv`
+    instead of `$RUN/route-*.csv`;
+  - systemd ended with `code=killed/status=TERM`;
+  - not used as evidence.
+- valid run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cj_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_BATCH_PROFILE_OUT=\$RUN/route-profile.csv\nGGML_MOE_ROUTE_TRACE_OUT=\$RUN/route-trace.csv\nGGML_MOE_TTFT_TRACE_OUT=\$RUN/ttft-trace.csv\nEOF\n|' /tmp/run_phase7cj_repro.sh
+chmod +x /tmp/run_phase7cj_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cj_repro.sh
+```
+
+- activation:
+  - `env.txt` contains:
+    - `GGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv`;
+    - `GGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv`;
+    - `GGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv`;
+  - stderr reports:
+    - route profile written with `13996` entries;
+    - route trace written with `42928` events.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `78265.25 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode with trace overhead:
+  - `33997.44 ms / 31`, `0.91 tok/s`;
+  - diagnostic-only, not promoted or compared as SOTA.
+- trace artifacts:
+  - `route-profile.csv`: `848K`, `13997` lines including header;
+  - `route-trace.csv`: `2.0M`, `42929` lines including header;
+  - `ttft-trace.csv`: `3.8M`, `49929` lines including header;
+  - `fallback-profile.csv`: `841K`.
+- memory at finish:
+  - `memory.current.final=15113617408`;
+  - `file=14873341952`;
+  - `inactive_file=1127821312`;
+  - `active_file=13744852992`;
+  - `kernel=236797952`;
+  - `anon=442368`.
+
+Route-trace aggregate:
+
+| kind | events | routed GiB |
+| --- | ---: | ---: |
+| up | `14888` | `67.960` |
+| gate | `14888` | `73.470` |
+| down | `13152` | `81.396` |
+
+Top repeated route-profile entries by count:
+
+- `31` routes each:
+  - `blk.49` expert `102` up/gate/down;
+  - `blk.47` expert `121` up/gate/down;
+  - `blk.44` expert `7` up/gate/down;
+  - `blk.43` expert `230` up/gate/down;
+  - `blk.42` expert `345` up/gate/down;
+  - `blk.41` experts `179` and `27` up/gate/down.
+- `30` routes each:
+  - `blk.46` experts `270` and `176` up/gate/down;
+  - `blk.40` expert `48` up/gate/down;
+  - `blk.38` expert `32` up/gate/down;
+  - `blk.37` expert `111` up/gate/down.
+
+Runtime counters:
+
+- VRAM cache:
+  - global hit rate `52.9%`;
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+- expert pack:
+  - hits `25134`, misses `516`;
+  - `iouring_reads=11655`;
+  - `iouring_bytes=67926376448`;
+  - `iouring_wait_us=12966777`;
+  - `inflight_avg=2.98`, `inflight_max=8`;
+  - no `9-16` batches.
+- pinned staging:
+  - main copies `19754`, host stage `17543.507 ms`, H2D `4147.426 ms`;
+  - gate copies `4160`, host stage `1395.191 ms`, H2D `924.087 ms`.
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3664`;
+  - cache hits `3528`;
+  - `max_jobs=8`;
+  - worker time `3545.137 ms`.
+- up/gate type profile:
+  - type `18`: `311` decode calls, `15.132 ms/call`;
+  - type `22`: `558` decode calls, `6.406 ms/call`.
+- aggregate up_gate profile:
+  - `1861` calls;
+  - `12.976 ms/call`.
+- aggregate down profile:
+  - `2038` calls;
+  - `41.124 ms/call`;
+  - `cuda_batch=2.923 ms/call`;
+  - `fallback_t0=38.148 ms/call`.
+
+Fallback-profile aggregate:
+
+| phase | type | rows | calls | fallback time | routed GiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| prompt | `22` | `9248` | `4883` | `22.825 s` | `40.500` |
+| prompt | `11` | `5440` | `3032` | `22.088 s` | `31.958` |
+| prompt | `18` | `6800` | `3819` | `18.614 s` | `35.590` |
+| prompt | `23` | `1632` | `867` | `7.876 s` | `11.854` |
+| prompt | `2` | `952` | `452` | `3.735 s` | `7.321` |
+| decode | `2` | `1736` | `1736` | `2.597 s` | `13.351` |
+
+Decode Q4_0 fallback layer attribution:
+
+| layer | rows | fallback time | routed GiB |
+| ---: | ---: | ---: | ---: |
+| `18` | `248` | `485.512 ms` | `1.907` |
+| `6` | `248` | `417.400 ms` | `1.907` |
+| `9` | `248` | `415.376 ms` | `1.907` |
+| `8` | `248` | `367.208 ms` | `1.907` |
+| `7` | `248` | `359.144 ms` | `1.907` |
+| `10` | `248` | `322.672 ms` | `1.907` |
+| `15` | `248` | `229.480 ms` | `1.907` |
+
+TTFT trace aggregate:
+
+- `runtime_load`: `20250` events, `52619.031 ms` copy time, `19779` pack hits;
+- `current_down_overlap`: `3495` events, `11291.375 ms` copy time;
+- `call_upgate`: `1861` events, `23848.850 ms`;
+- `call_down`: `1644` events, `5791.460 ms`;
+- `cache_hit`: `22678` events.
+
+Interpretation:
+
+- The current 7CC route shape is stable enough to expose repeated hot experts
+  with count `30-31` over n32, especially in layers `37-49`.
+- Simple queue scaling is already ruled out by `inflight_max=8` and no `9-16`
+  batches.
+- Same-step host prefetch is too late, but the new route trace can drive a
+  future-event VRAM prefetch smoke test with bounded `window` and `max_loads`.
+- Decode Q4_0 fallback is real but only `2.597 s/n32` local fallback time. It
+  is a valid cleanup target, but its speedup ceiling is smaller than the full
+  movement/runtime-load bucket unless a Q4_0 path also reduces staging pressure.
+
+Decision:
+
+- Accept Phase 7CJ as the current authoritative Phase 7CC diagnostic trace.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Next implementation should test trace-driven VRAM prefetch with strict small
+  bounds first. If useful hit rate is low or decode regresses, stop prefetch
+  work and move to a narrow Q4_0 down fallback cleanup.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
