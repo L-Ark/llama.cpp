@@ -5466,6 +5466,99 @@ Result handling:
 - If accepted, run n96 confirmation.
 - If rejected, revert `745b15979` and keep Phase 7DS as SOTA.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-224141Z-n32-phase7dza-serial-stage-confirm`;
+  - source commit `2720cc13c`, containing source `745b15979`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`;
+  - no `GGML_MOE_COPY_PROFILE_OUT`.
+- Correctness and gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous`;
+  - quality `pass`;
+  - TTFT `78140.39 ms`, below `106331.72 ms`;
+  - decode `30286.11 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`;
+  - direct_reads `8707`, iouring_reads `15024`,
+    iouring_bytes `87082139648`, iouring_wait_us `15213220`.
+- Cache and staging:
+  - down cache: slots `806`, hits `9659`, misses `3461`,
+    hit rate `73.6%`;
+  - upgate cache: slots `1679`, hits `13019`, misses `16757`,
+    hit rate `43.7%`;
+  - pinned staging main: host_stage `11810.469 ms`, h2d `4131.677 ms`;
+  - pinned staging gate: host_stage `348.900 ms`, h2d `928.328 ms`.
+- Operator profiles:
+  - upgate rows `869`, wall `6379.882 ms`, up `4843.991 ms`,
+    gate `1392.225 ms`, stage `44.414 ms`, kernel `6285.799 ms`,
+    up_jobs `4154`, gate_jobs `4154`;
+  - down rows `1644`, wall `4569.575 ms`, stage `4243.765 ms`,
+    kernel `191.988 ms`, jobs `3493`.
+- Comparison:
+  - beats Phase 7DS n32 confirmation `31647.69 ms / 31` by
+    `1361.58 ms`;
+  - beats Phase 7DU diagnostic `31343.27 ms / 31` by `1057.16 ms`;
+  - TTFT remains below the allowed ceiling and below Phase 7DS confirm
+    `78620.85 ms`.
+
+Decision:
+
+- Accept Phase 7DZA as an n32 candidate.
+- Run n96 confirmation before promoting as stable SOTA.
+
+## Phase 7DZB: n96 confirmation for serial same-type staging
+
+Start time:
+
+- 2026-07-04T06:44:00+08:00.
+
+Hypothesis:
+
+- The no-profile n32 win should carry to n96 because the mechanism changes
+  decode-time staging and selected experts are the same quality path.
+- n96 must remain under the same 16GB host RAM cgroup and TTFT gate.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 2720cc13c
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7dza_repro.sh /tmp/run_phase7dzb_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7dzb-serial-stage-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dzb_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- France output coherent and semantically correct;
+- n96 decode beats Phase 7DS confirmation `77839.21 ms / 77`.
+
+Result handling:
+
+- If accepted, commit and push the result docs immediately and mark Phase 7DZB
+  as the new SOTA.
+- If rejected, keep the default-off implementation but do not promote it; add
+  a follow-up plan to understand n32/n96 divergence.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
