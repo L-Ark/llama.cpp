@@ -1345,12 +1345,16 @@ static __device__ __forceinline__ float vec_dot_iq3_xxs_q8_1(
     const int2 q3_packed = make_int2(get_int_b2(bq3->qs, iqs), get_int_b2(bq3->qs, iqs+1));
     const uint8_t * q3 = (const uint8_t *) &q3_packed;
     const uint32_t aux32 = get_int_b2(bq3->qs, QK_K/16 + iqs/2);
+    const uint32_t signs_l0 = unpack_ksigns(aux32);
+    const uint32_t signs_l2 = unpack_ksigns(aux32 >> 7);
+    const uint32_t signs_l4 = unpack_ksigns(aux32 >> 14);
+    const uint32_t signs_l6 = unpack_ksigns(aux32 >> 21);
 
     int sumi = 0;
 #pragma unroll
     for (int l0 = 0; l0 < 8; l0 += 2) {
         const int2 grid_pos = make_int2(iq3xxs_grid[q3[l0 + 0]], iq3xxs_grid[q3[l0 + 1]]);
-        const uint32_t signs = unpack_ksigns(aux32 >> (7*l0/2));
+        const uint32_t signs = l0 == 0 ? signs_l0 : l0 == 2 ? signs_l2 : l0 == 4 ? signs_l4 : signs_l6;
 
         const int signs0 = __vcmpne4(signs & 0x08040201, 0);
         const int grid_l = __vsub4(grid_pos.x ^ signs0, signs0);
