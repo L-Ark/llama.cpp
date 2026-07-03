@@ -4897,18 +4897,6 @@ static bool moe_stream_type_supported(ggml_type type) {
         type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
-static bool moe_down_q4_0_enabled() {
-    static int enabled = [] {
-        const char *env = std::getenv("GGML_MOE_STREAM_DOWN_Q4_0");
-        return env && env[0] && env[0] != '0';
-    }();
-    return enabled != 0;
-}
-
-static bool moe_stream_down_type_supported(ggml_type type) {
-    return moe_stream_type_supported(type) || (type == GGML_TYPE_Q4_0 && moe_down_q4_0_enabled());
-}
-
 static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
     if (!range || !range[0]) return true;
     if (!name) return false;
@@ -5239,7 +5227,6 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
-        case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
@@ -6959,11 +6946,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     };
     if (!init_batch_once()) return decline("init_batch_once");
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
-    if (!moe_stream_down_type_supported(src0_type)) return decline("unsupported_type");
-    static std::atomic<int> first_down_q4_0{0};
-    if (src0_type == GGML_TYPE_Q4_0 && first_down_q4_0.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream_batch] down Q4_0 MMVQ batch path active\n");
-    }
+    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 

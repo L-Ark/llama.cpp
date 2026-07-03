@@ -6314,6 +6314,66 @@ Result handling:
   leave it default-off only if it is useful for further diagnostic work; do not
   promote `GGML_MOE_STREAM_DOWN_Q4_0`.
 
+Result:
+
+- Source commits tested:
+  - `500518744 cuda: gate q40 down moe batch`;
+  - `33ba10414 cuda: enable gated q40 down batch eligibility`.
+- First run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-232216Z-n32-phase7ee-q40-down`;
+  - env contained `GGML_MOE_STREAM_DOWN_Q4_0=1`;
+  - output quality `pass`;
+  - decode `30332.21 ms / 31`, slower than SOTA;
+  - activation line for Q4_0 did not appear;
+  - `batch_eligible=0` remained for Q4_0 down tensors.
+- Gap after first run:
+  - CUDA-side allowlist was insufficient;
+  - CPU-side `ggml_cuda_moe_stream_supports_down_batch()` rejected Q4_0 before
+    CUDA received the call.
+- Second run after CPU eligibility patch:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-232833Z-n32-phase7ee-q40-down-r2`;
+  - build passed;
+  - exit `0`;
+  - activation line present:
+    `[moe_stream_batch] down Q4_0 MMVQ batch path active`;
+  - output: `France is a country in Western Europe known for its rich history,
+    art, and culture. It is famous for landmarks like the Eiffel Tower, the
+    Louvre`;
+  - quality `pass`;
+  - TTFT `77678.17 ms`, below `106331.72 ms`;
+  - decode `39317.82 ms / 31`, `0.79 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`.
+- Mechanism:
+  - Q4_0 down batch activated with `q40_rows=217`;
+  - down batch rows increased from SOTA `1644` to `1861`;
+  - `decode,type=2` fallback disappeared from fallback-profile;
+  - however slot size increased from `7.44 MiB` to `7.88 MiB`;
+  - down slots decreased from `806` to `761`;
+  - down misses increased from `3461` to `5327`;
+  - upgate misses worsened from `16757` to `17825`;
+  - main pinned host_stage increased from Phase 7EA `11573.190 ms` to
+    `21825.100 ms`;
+  - gate host_stage increased from Phase 7EA `366.627 ms` to `2537.813 ms`;
+  - expert-pack bytes increased from `87082139648` to `95201361920`;
+  - down wall increased to `8503.228 ms`, with stage `8151.348 ms`.
+- Gap analysis:
+  - Eliminating Q4_0 CPU decode fallback removed the direct fallback bucket,
+    but it forced a larger down cache slot class and more expert movement.
+  - The added staging/IO/cache miss cost is much larger than the recovered
+    CPU fallback time.
+  - Q4_0 down GPU MMVQ is therefore not a valid SOTA path in the current
+    unified down cache design.
+
+Decision:
+
+- Reject Phase 7EE.
+- Do not run n96.
+- Revert the Q4_0 down source patch.
+- Keep Phase 7EB as current SOTA.
+- Future Q4_0 work should only be reconsidered with a separate Q4_0 down pool
+  or layer-specific routing that does not inflate the common down slot size.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.

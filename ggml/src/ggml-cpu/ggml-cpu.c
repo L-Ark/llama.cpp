@@ -176,13 +176,8 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
         return false;
     }
 
-    const char * down_q4_0_env = getenv("GGML_MOE_STREAM_DOWN_Q4_0");
-    const bool down_q4_0_enabled =
-        down_q4_0_env && down_q4_0_env[0] && down_q4_0_env[0] != '0';
-
     return ggml_cuda_moe_stream_supports_type(type) ||
-           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS ||
-           (type == GGML_TYPE_Q4_0 && down_q4_0_enabled);
+           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
 struct ggml_kimi_cpu_moe_profile_op {
