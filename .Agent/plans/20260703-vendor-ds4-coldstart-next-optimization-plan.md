@@ -4072,3 +4072,92 @@ For any new compliant SOTA:
 - rebuild and rerun from the pushed source before calling the result promoted/reproducible.
 
 Do not promote any unpushed local run as SOTA.
+
+## 2026-07-03T21:16Z Execution: Top128 O_DIRECT Staging Diagnostic
+
+Start time:
+
+- `2026-07-03T21:16:33Z` on the remote host.
+
+Hypothesis:
+
+- The current `4.2 tok/s` SOTA is limited by CPU fallback up/down source movement under cold 16GB page-cache pressure.
+- Mmap-only up/down packs did not help because they still populate/fault file-backed pages in the same cgroup.
+- Reading top128 up/down expert payloads with O_DIRECT into one bounded anonymous staging buffer may reduce file refault pressure enough to beat `4.2 tok/s`, even if the first implementation is synchronous.
+
+Hard bound and risk:
+
+- Accepted generation time estimate: `192 / 4.2 = 45.7s`.
+- Top128 up/down fallback coverage: `3897.807 ms`.
+- Ideal upper bound if all covered fallback time vanished: about `4.6 tok/s`.
+- Observed top128 hit payload volume from mmap probe: about `44.79 GB`.
+- Because the first implementation is synchronous, it may regress if O_DIRECT read time exceeds avoided page-cache/refault time. This run is diagnostic and must not replace the accepted SOTA unless it passes all gates.
+
+Code change scope:
+
+- Implement default-off source instrumentation only.
+- Add CUDA-side batch pack read export:
+  - `ggml_cuda_moe_expert_pack_read(...)`.
+- Add CPU fallback direct staging behind:
+  - `GGML_MOE_CPU_FALLBACK_PACK_DIRECT=1`.
+- Decode fallback only for the first run.
+- Use one 4096-byte-aligned expert-sized staging buffer from op workspace.
+- Add per-expert barriers to keep the shared buffer safe.
+- Add stderr counters for direct hits/misses/read failures/bytes/fallback-to-GGUF.
+
+Run config:
+
+- Binary to build/run: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Strict runner: `/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/strict_ds4_runner.py`
+- Model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+- Prompt: `Please introduce France in a short paragraph.`
+- Args: `-c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on --n-cpu-moe 40 --defer-experts`
+- Base env:
+  - `CUDA_VISIBLE_DEVICES=0`
+  - `GGML_CUDA_DISABLE_GRAPHS=1`
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DONTNEED=1`
+  - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
+  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
+- Added env:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack`
+  - `GGML_MOE_IO_BACKEND=direct`
+  - `GGML_MOE_CPU_FALLBACK_PACK_DIRECT=1`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-packdirect-profile.csv`
+- Explicitly not enabled:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP`
+  - `GGML_MOE_STREAM_DOWN_BATCH`
+
+Artifact hashes before run:
+
+- Gate admit profile: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`
+- Up/down decode profile: `45c35b2cb00faa4b37ad793e5e63e6008b68235064f5fdeb23a7e843c437084e`
+- Top128 up/down pack: `f57ff2426647514c0145bb4b367b750f7a1753837b2ead22df091e9645483894`
+- Gate pack historical hash: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`
+
+Acceptance:
+
+- strict cold `drop_caches` run;
+- `memory_peak_bytes <= 16000000000` including file/page cache;
+- `MemorySwapMax=0`;
+- France answer is semantically correct and coherent;
+- `TTFT <= 33617.688744 ms`;
+- `eval_tok_s > 4.2`;
+- direct staging counters show meaningful pack hits;
+- immediately commit/push source and docs to `ssd/vendor/deepseek-token-rate-16gb`;
+- rebuild/rerun from pushed source before promoting as SOTA.
+
+Rejection:
+
+- Any correctness/RAM/TTFT violation rejects the run.
+- `eval_tok_s <= 4.2` rejects the run.
+- If rejected, record full metrics and counters, then revert direct-staging source changes unless they are needed for the next explicitly planned diagnostic.
