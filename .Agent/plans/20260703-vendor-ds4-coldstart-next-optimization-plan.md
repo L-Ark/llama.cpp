@@ -883,6 +883,71 @@ Verdict:
 - Rejected/tie. Keep current accepted SOTA unchanged.
 - No runtime source rollback required.
 
+
+### 2026-07-03 Latest State And Next Optimization Plan
+
+Current accepted state:
+
+- Accepted cold-start SOTA remains the historical `4.2 tok/s` line from `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`.
+- Repeated strict-cold reproduction line is `4.1 tok/s`; this is expected run-to-run variance and does not replace the accepted `4.2 tok/s` record.
+- Latest pushed source/record head: `17f769b54441b3d33e42d1995cb0ea4500b41a0c`, pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- Current demo script: `.Agent/examples/demo_current_sota.sh`, added in commit `f8524ddd0 vendor-ds4: add current sota demo script` and pushed to the same `ssd` branch. It runs the strict 16GB cold SOTA config and prints run directory, exact command, answer, RAM counters, pack counters, and cache counters.
+- Latest demo verification run: `/root/lfz/runs/vendor-ds4-16gb/20260703T083454Z-demo-current-sota-file-check/france-cpu40-vram0gb`, `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29384.906208 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15103238144`, `ram_ok=true`, `correctness_ok=true`, gate pack `hits=4623 misses=0 direct_failures=0`, gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+
+Model and artifact sizes:
+
+- Model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, `156,148,189,760 bytes` (`156.1 GB` decimal, `145.4 GiB`, `ls -lh` shows `146G`).
+- Gate expert pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `20,495,904,768 bytes` (`20.5 GB` decimal, `19.1 GiB`, `ls -lh` shows `20G`), sha256 `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`.
+- Admission profile: `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`, sha256 `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`.
+
+Current compute split:
+
+- GPU: attention/main dense/norm/embedding/output as far as `-ngl all --fit on` allows, plus `ffn_gate_exps.weight` via the DS4 one-stream path using the `13568MiB` VRAM gate cache and O_DIRECT gate expert pack misses.
+- CPU: `ffn_up_exps.weight` and `ffn_down_exps.weight` still run mostly through CPU fallback with `-t 20 -tb 20`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, and layers `10-39` reduced to top3.
+- This is not a full layer split and not all experts per layer. Only routed/pruned experts are computed. Gate uses one-stream cache; broad up/down one-stream and down-batch cache have been rejected.
+- Accepted SOTA disables CUDA graph with `GGML_CUDA_DISABLE_GRAPHS=1`. The wrapper-based graph-enabled probe tied at `4.1 tok/s` and is rejected, so CUDA launch overhead is not the current promotion bottleneck.
+
+Latest bottleneck conclusion:
+
+- The stable accepted path is gate-only one-stream plus CPU up/down fallback. Gate O_DIRECT pack and gate VRAM cache are working and must not be disturbed without a specific theory and guard run.
+- Rejected down-batch probes show GPU down kernel time is small, but host staging dominates. Reducing gate cache to make room for down cache collapses gate hit rate and loses far more than it gains.
+- Preserving the accepted gate cache leaves only about `238MiB` free VRAM in observed runs, too little for an independent useful down cache.
+- Broad one-stream up/down is much slower than CPU fallback and damages gate locality.
+- CPU fallback remains the only large unresolved component, but previous coarse fixes failed: compact mmap pack tied/regressed, willneed regressed, fixed CPU affinity regressed, single-row chunks40 failed RAM gate, and MXFP4 prefetch regressed in microbench.
+
+Next optimization plan:
+
+1. Baseline guard before any new source change:
+   - Run `.Agent/examples/demo_current_sota.sh --run-name <timestamp>-pre-next-candidate-guard` or the equivalent strict runner command.
+   - Required: `4.1 tok/s` class or better, `ram_ok=true`, `correctness_ok=true`, no OOM/kill, pack `direct_failures=0`, gate cache `hit_rate` near `86.8%`.
+   - If the guard fails, stop and debug reproducibility instead of starting a new optimization.
+
+2. Fine CPU fallback phase trace before the next optimization method:
+   - Add only default-off diagnostic instrumentation first, or use existing profiles if they can provide the same split.
+   - The trace must split CPU up/down fallback by tensor, layer, expert, prompt/decode, `nr1/cne1`, chunk count, wall time, thread-sum or tail proxy, and page/refault deltas where available.
+   - Record whether time is dominated by MXFP4 dot compute, source page faults/refaults, chunk tail imbalance, synchronization/barrier, or repeated setup/conversion.
+   - This is diagnostic only and cannot promote SOTA.
+
+3. Design candidates only after the trace identifies a compressible component:
+   - If dot compute dominates: run microbench-first CPU kernel candidates only. No model run unless microbench shows a clear speedup threshold and identical/acceptable numerical output.
+   - If tail imbalance dominates: design a smaller and safer scheduling change than the rejected `single-row chunks40`, with a theory for why it will not raise cgroup/file pressure. Start with a short profile run, not a full SOTA run.
+   - If page/refault dominates: design a bounded page-source strategy that does not add anonymous RAM and does not displace the accepted gate cache/page-cache shape. Large buffered packs and broad `MADV_WILLNEED` remain rejected.
+   - If setup/barrier dominates: target that path directly with a default-off source patch and prove the counter falls before a full run.
+
+4. Low-priority/deprioritized directions unless new evidence appears:
+   - More independent down-cache sizing: blocked by VRAM budget and gate cache loss.
+   - Broad one-stream up/down offload: rejected by `1.7 tok/s` no-filter diagnostic.
+   - CUDA graph: rejected/tie on current SOTA.
+   - CPU affinity to exactly 20 CPUs: rejected.
+   - Context-size trimming: did not free useful VRAM.
+   - Larger compact mmap packs alone: top128/top256 tied/regressed.
+
+5. Promotion and push discipline:
+   - Any result with `eval_tok_s > 4.2` and passing RAM/correctness/TTFT/O_DIRECT gates must immediately stop exploration.
+   - Commit source, plan, and run metadata, then push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using the existing `L-Ark` identity.
+   - Rebuild clean from the pushed source and rerun strict cold before declaring the new SOTA.
+   - Rejected or tie runs may be committed only as records. Any temporary source patch must be reverted and clean-rebuilt before recording rejection.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
