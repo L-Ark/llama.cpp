@@ -4161,3 +4161,104 @@ Rejection:
 - Any correctness/RAM/TTFT violation rejects the run.
 - `eval_tok_s <= 4.2` rejects the run.
 - If rejected, record full metrics and counters, then revert direct-staging source changes unless they are needed for the next explicitly planned diagnostic.
+
+### 2026-07-03T21:29Z Top128 O_DIRECT Staging Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T212905Z-20260704_cpu_fallback_packdirect_top128_updown/france-cpu40-vram0gb`
+- Binary: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Source state at run time: `88de4bb09-dirty` with local default-off direct-staging patch.
+- This dirty source is not accepted and must not be promoted.
+
+Binary/shared-library hashes at run time:
+
+- `llama-cli`: `866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`
+- `libggml-cpu.so`: `707e560e16f34d46d2ccbf6ad9c4897757f51a4e770084763a6ea6e7b3e08ef1`
+- `libggml-cuda.so`: `877205d77f402b42200d3669ac294e7c52da4dcc36e2a1155387601a51f3cd70`
+- `libggml.so`: `95dc04232d3c2d502b882c1feaffd2e805a1aa724673b63a8fee5ffc09ac3e57`
+
+Metrics:
+
+- `eval_tok_s=2.9`
+- `prompt_tok_s=1.5`
+- `TTFT=31516.236517 ms`
+- `elapsed_seconds=77.74`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15075065856`
+- `memory_max_events=16542`
+- `pgmajfault=264469`
+- `workingset_refault_file=1526493`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Direct staging and gate counters:
+
+- Batch up/down pack:
+  - loaded `128` entries from top128 up/down pack;
+  - `hits=10051`;
+  - `misses=25829`;
+  - `read_failures=0`;
+  - `direct_reads=10051`;
+  - `direct_fallbacks=0`.
+- CPU direct staging:
+  - `enabled=1`;
+  - `available=1`;
+  - `hits=10051`;
+  - `misses=25829`;
+  - `read_failures=25829` in the CPU-side counter, because the wrapper currently cannot distinguish pack miss from read failure;
+  - `bytes=44791758848`;
+  - `fallback_mmap=0`;
+  - `fallback_gguf=25829`.
+- Gate one-stream remained healthy:
+  - gate pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_reads=4623 direct_fallbacks=0`;
+  - `VRAM cache: hits=30528 misses=4623 hit_rate=86.8%`.
+
+Fallback profile aggregate:
+
+| Phase/role | count | calls | fallback_us |
+| --- | ---: | ---: | ---: |
+| prompt/up | `1820` | `1171` | `3159051` |
+| prompt/down | `1820` | `1171` | `4408500` |
+| decode/up | `17940` | `17940` | `18731302` |
+| decode/down | `17940` | `17940` | `18372494` |
+| total | `39520` | `38222` | `44671347` |
+
+Note: this CSV profile only records `pack_mmap_calls` versus `gguf_calls`; it is not direct-staging aware. Use the stderr direct counters above for direct hit/miss accounting.
+
+Artifact hashes:
+
+- `summary.json`: `adde60e49ba67e264294e7c9ab606196b1f087ed7ced3c2326173b878b0f702e`
+- `stdout.txt`: `988f05743f37872f6fefdaccc3c9a2d7d0b8f0dc9baeedf14b7df9413d775c24`
+- `stderr.txt`: `40c68cb8436b56b1797aebaaf80837b5a1ed7352705db138d7c91b927e241ef0`
+- `fallback-packdirect-profile.csv`: `2886abae122ccc576265584eef8bac48af920322f75c2d1a37a4ffd5060362af`
+- `environment.txt`: `2c43c7b96800d5da4ce0354a484068fb4dc2906b62675044ba0b48b4a64ed4bd`
+- `exact_command.txt`: `e3d225597c6e8058978ce1ca2e28187b437fd8317d1e1b99f4fb7539ca3447de`
+
+Verdict:
+
+- Rejected.
+- Correctness, RAM, and TTFT pass, but `eval_tok_s=2.9` is far below the accepted `4.2`.
+- The direct path functionally hit the expected top128 entries and avoided pack read failures, but synchronous O_DIRECT staged about `44.79 GB` during decode. That IO cost dominated the run.
+- Fallback profile total rose to about `44.7s`, much worse than the previous top128 mmap diagnostic (`~26.1s`), even though major faults/refaults were slightly lower.
+- Do not continue synchronous direct staging.
+- Revert the direct-staging source patch; keep only this rejected-result record.
+
+Next direction after this rejection:
+
+- Current accepted SOTA remains the pushed `4.2 tok/s` run.
+- CPU fallback source movement is still the bottleneck, but synchronous O_DIRECT staging is the wrong movement model.
+- Any future pack-based CPU fallback attempt must use real overlap or reduce bytes moved:
+  - async prefetch of next expert while current expert computes;
+  - coalesced multi-expert reads only if access order is predictable;
+  - or a smaller correctness-preserving up/down cache/admission set with much lower byte volume.
+- Before coding another movement path, first measure whether there is enough per-expert CPU compute time to hide the next expert read. If not, move to a different bottleneck such as fewer CPU fallback calls or GPU-side up/down execution.
