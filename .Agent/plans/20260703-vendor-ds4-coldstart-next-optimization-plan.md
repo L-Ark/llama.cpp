@@ -836,6 +836,32 @@ Rollback:
 - Clean hashes after rollback: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`, `libggml-cuda=bc5f8d943233bd73b46c6df8307f42f2399bac269d4c69e1179a7b80f10e492e`.
 - Verdict: rejected at microbench stage; no model run performed. Current accepted SOTA remains unchanged.
 
+
+### 2026-07-03 Current SOTA CUDA Graph Probe Design
+
+Design:
+
+- Goal: retry CUDA graph on the current accepted vendor DeepSeek SOTA path, using the exact current gate O_DIRECT config and strict 16GB cold-start runner.
+- Switch semantics: `ggml/src/ggml-cuda/common.cuh` disables CUDA graph when `getenv("GGML_CUDA_DISABLE_GRAPHS") != nullptr`, so setting `GGML_CUDA_DISABLE_GRAPHS=0` still disables graph. The actual `llama-cli` process must run with this env unset.
+- Current runner behavior: `.Agent/run-tools/strict_ds4_runner.py` always exports `GGML_CUDA_DISABLE_GRAPHS=1`. Therefore this probe uses a wrapper binary that unsets the variable immediately before executing the real `llama-cli`.
+- Theory: CUDA graph may reduce repeated CUDA launch overhead in the accepted gate one-stream path. It cannot reduce cold source page-in, O_DIRECT expert pack reads, or CPU up/down fallback. Prior older attempts did not improve earlier SOTA lines, but the current O_DIRECT/gate-cache path should be retested directly.
+- Hard upper bound: only CUDA launch/scheduling overhead is affected. Accept only if rounded `eval_tok_s` exceeds `4.2` and all SOTA gates pass.
+
+Artifact:
+
+- Wrapper: `.Agent/run-tools/llama-cli-cuda-graphs-enabled.sh`, sha256 `3e08e54173e404646f7cdbf269abb8e9bfa425e201eb881363ba74d7808310ee`. It runs `unset GGML_CUDA_DISABLE_GRAPHS` then execs `build-ds4-moe-stream/bin/llama-cli`.
+
+Practice plan:
+
+- Run strict cold France with `--binary .Agent/run-tools/llama-cli-cuda-graphs-enabled.sh` and otherwise accepted SOTA config.
+- Keep all normal SOTA env vars unchanged, including the runner-provided `GGML_CUDA_DISABLE_GRAPHS=1`; the wrapper is responsible for unsetting it only for the child `llama-cli`.
+- Verify actual run evidence via `environment.txt` plus stderr/command; exact command should show wrapper as binary.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and gate pack/cache counters remain aligned with accepted SOTA.
+- If it ties or regresses, reject and keep current SOTA unchanged. No runtime source rollback is needed.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
