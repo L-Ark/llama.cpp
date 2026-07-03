@@ -1180,6 +1180,20 @@ Next direction after transient repack rejection:
 - Return to bottleneck localization with cold-aware evidence. The next candidate must reduce actual cold source reads/refaults or CPU fallback scheduling imbalance without adding another pass over expert rows.
 - Plausible next diagnostic: compare accepted SOTA vs rejected transient run by `pgmajfault`, `workingset_refault_file`, pack hits/misses, and CPU fallback profile to quantify how much of the regression came from refault pressure versus arithmetic overhead. Only after that should another source candidate be designed.
 
+
+Cold-aware comparison after transient repack rejection:
+
+- Compared runs:
+  - accepted SOTA `4.2`: `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`.
+  - pre-candidate guard `4.1`: `/root/lfz/runs/vendor-ds4-16gb/20260703T095237Z-20260703T095236Z-pre-next-candidate-guard/france-cpu40-vram0gb`.
+  - transient rejected `3.4`: `/root/lfz/runs/vendor-ds4-16gb/20260703T105753Z-20260703T-transient-down-repack-probe/france-cpu40-vram0gb`.
+- Accepted SOTA: `eval_tok_s=4.2`, `prompt_tok_s=1.6`, `TTFT=28014.740620 ms`, `elapsed_seconds=60.89`, `pgmajfault=280239`, `workingset_refault_file=1674043`, pack `hits=4623 misses=0`, VRAM `hits=30528 misses=4623 hit_rate=86.8%`.
+- Pre-candidate guard: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29406.374764 ms`, `elapsed_seconds=62.51`, `pgmajfault=266453`, `workingset_refault_file=1678871`, pack `hits=4623 misses=0`, VRAM `hits=30528 misses=4623 hit_rate=86.8%`.
+- Transient rejected: `eval_tok_s=3.4`, `prompt_tok_s=1.5`, `TTFT=29319.203769 ms`, `elapsed_seconds=85.81`, `pgmajfault=333912`, `workingset_refault_file=4373107`, pack `hits=5131 misses=1657`, VRAM `hits=41080 misses=6788 hit_rate=85.8%`.
+- Interpretation: the regression is not a TTFT regression; TTFT stayed close to the guard. The failure is decode/steady work under cold cgroup pressure: elapsed time increased by about `23.3s` versus the pre-candidate guard, while file refaults increased by about `2.69M` and gate pack/cache counters shifted substantially. The transient repack path added extra source-row scans and scratch traffic that disrupted the gate stream/cache behavior and created more page churn than the warm microbench model predicted.
+- Consequence for planning: any future CPU-kernel candidate must be cold-source neutral or reduce source reads. A warm arithmetic speedup is not enough under the 16GB page-cache constraint. Do not accept candidates whose cache counters diverge materially from the accepted SOTA unless the divergence is explained and total strict-cold metrics improve.
+- Next bottleneck focus: preserve gate cache/pack hit shape while attacking CPU fallback. Candidate classes that add an extra pass over expert rows are deprioritized. Prefer scheduling/imbalance reductions, fewer CPU fallback calls, or moving work to already-loaded GPU/cache paths without increasing file refault pressure.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
