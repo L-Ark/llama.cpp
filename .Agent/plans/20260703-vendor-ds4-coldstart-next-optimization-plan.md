@@ -1047,6 +1047,24 @@ Native MXFP4 multi-row dot microbench design:
 - Practice: write a scratch microbench outside committed runtime source comparing current `ggml_vec_dot_mxfp4_q8_0()` row-wise calls against a prototype native multi-row implementation on representative up/down row counts. Verify max/mean abs against baseline.
 - Acceptance for source implementation: proceed to a default-off source candidate only if the scratch benchmark shows at least `>=8%` warm compute speedup with exact or negligible numerical difference and no persistent memory requirement. Otherwise reject at microbench stage and do not run a full model candidate.
 
+
+Native MXFP4 multi-row dot microbench result:
+
+- Scratch source: `/tmp/native_mxfp4_multirow_bench.cpp`; binary: `/tmp/native_mxfp4_multirow_bench`. No repository runtime source was modified.
+- Compile command: `g++ -O3 -march=native -std=c++17 -Iggml/include -Iggml/src -Iggml/src/ggml-cpu /tmp/native_mxfp4_multirow_bench.cpp -Lbuild-ds4-moe-stream/bin -lggml-cpu -lggml-base -Wl,-rpath,/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -pthread -ldl -lm -o /tmp/native_mxfp4_multirow_bench`.
+- First compile attempt failed because `ggml-impl.h` was incorrectly included inside `extern "C"`; the scratch source was fixed by including `ggml-impl.h` as C++ and wrapping only `quants.h` for C linkage.
+- Results:
+  - up-like `rows=2048 k=4096 iters=200`: baseline `93.1654 ms`, prototype `103.351 ms`, speedup `0.901x`, `max_abs=11924.5`, `mean_abs=2534.74`.
+  - down-like `rows=4096 k=2048 iters=200`: baseline `95.2566 ms`, prototype `106.318 ms`, speedup `0.896x`, `max_abs=9282.04`, `mean_abs=1756.87`.
+  - large `rows=4096 k=4096 iters=100`: baseline `91.7078 ms`, prototype `105.784 ms`, speedup `0.867x`, `max_abs=14492.8`, `mean_abs=2539.25`.
+- Diagnosis: the quick native multi-row prototype failed both gates: it was slower than row-wise baseline and numerically wrong. The likely issue is that duplicating the x86 MXFP4 dot path outside the exact compiled runtime is fragile across VNNI/AVX feature paths and accumulation details; regardless, it provides no positive performance signal.
+- Verdict: rejected at microbench stage. Do not implement this prototype in runtime source and do not run a full model candidate.
+
+Next direction after native multi-row rejection:
+
+- Do not continue ad hoc MXFP4 kernel rewrites without first building a correctness-identical unit test against the exact runtime feature path.
+- Remaining plausible work is now instrumentation/feasibility, not blind source changes: either identify an existing tested kernel path that can be reused without repack/RAM cost, or prove a page-source/refault lever with a hard upper bound. Current accepted SOTA remains unchanged.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
