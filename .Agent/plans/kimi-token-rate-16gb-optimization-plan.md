@@ -29394,6 +29394,118 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CO - per-call down batch profile for Phase 7CC
+
+Start time:
+
+- 2026-07-03T15:05:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CN widened CPU MoE name profiling and showed the top decode down rows:
+  - `blk.1.ffn_down_exps.weight`, Q3_K, `24.726 ms/call`;
+  - `blk.2.ffn_down_exps.weight`, Q3_K, `22.456 ms/call`;
+  - `blk.60.ffn_down_exps.weight`, Q3_K, `13.519 ms/call`;
+  - Q4_0 fallback rows are real but bounded to about `2.6 s` on n32.
+- Existing aggregate profiles do not explain whether the large eligible Q3_K
+  rows are dominated by:
+  - cache misses and expert-pack/H2D staging;
+  - CUDA kernel time;
+  - D2H/scatter;
+  - or per-call synchronization/wall overhead.
+- Previous attempts that guessed the mechanism regressed:
+  - Q3_K Q8_K-reference path for layers `1-2` regressed;
+  - broader down overlap removed misses but moved cost into other buckets;
+  - Q4_0 GPU/cache work removed fallback but regressed wall time.
+
+Hypothesis:
+
+- Add default-off per-call CSV profiling for accepted CUDA down batch calls:
+
+```sh
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+```
+
+- For every accepted `ggml_cuda_moe_stream_batch()` call, record:
+  - tensor name and type;
+  - active route count;
+  - cache hits and misses within that call;
+  - number of staged jobs;
+  - stage, quant, kernel, D2H, scatter, and wall milliseconds.
+- This does not change math, routing, cache policy, IO scheduling, VRAM budget,
+  or host RAM behavior unless the env is set.
+- The result will identify the next implementation target with direct evidence:
+  - if layer `1/2` are miss-heavy, optimize placement/admission for those calls;
+  - if kernel-heavy, optimize the Q3_K compact path;
+  - if D2H/scatter/sync-heavy, optimize handoff or result movement.
+
+Theoretical upper bound:
+
+- This phase has no accepted token-rate upside; it is diagnostic.
+- It should add only CSV write overhead when enabled, and default behavior must
+  remain unchanged.
+- The next optimization upper bound can be calculated after the run from the
+  per-call breakdown:
+  - sum of compressible miss/stage time;
+  - sum of kernel time for the top tensors;
+  - sum of D2H/scatter overhead.
+
+Implementation:
+
+1. Modify only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+2. Add a small default-off CSV writer guarded by
+   `GGML_MOE_DOWN_BATCH_PROFILE_OUT`.
+3. Protect the file with a mutex because calls are serialized by
+   `g_batch_mu` today, but future code may change that.
+4. Record rows only for accepted down batch calls; declined/fallback calls are
+   already covered by CPU name and fallback profiles.
+5. Keep all runtime behavior unchanged when the env is unset.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7co_repro.sh
+perl -0pi -e 's#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\\$RUN/fallback-profile.csv\\n#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv\\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\\n#' /tmp/run_phase7co_repro.sh
+chmod +x /tmp/run_phase7co_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7co-down-batch-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7co_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- Hard diagnostic gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_DOWN_BATCH_PROFILE_OUT`;
+  - `down-batch-profile.csv` exists and has rows for decode Q3_K down tensors;
+  - rows include `blk.1.ffn_down_exps.weight`,
+    `blk.2.ffn_down_exps.weight`, and `blk.60.ffn_down_exps.weight`.
+- Analysis deliverables:
+  - top tensors by wall time;
+  - top tensors by staged misses;
+  - top tensors by kernel time;
+  - explicit recommendation for the next performance implementation.
+
+Rollback:
+
+- If build fails, output changes, hard gates fail, or default behavior changes,
+  revert the source patch and record rejection.
+- If diagnostic succeeds, keep the instrumentation because it is default-off
+  and directly supports reproducible bottleneck analysis.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
