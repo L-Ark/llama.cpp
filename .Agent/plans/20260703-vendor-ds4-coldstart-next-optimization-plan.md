@@ -12,13 +12,16 @@
 - 2026-07-04 all-output ngram-simple 和 server speculative partial-serial fallback 均已验证并拒绝：前者会卡在同一 verification position，后者可保证正确推进但只有 `3.7 tok/s`。相关临时源码均已回退，当前有效 SOTA 仍是 `4.2 tok/s`。
 - 2026-07-04 top512 CPU blocking-touch prewarm 首跑观测到 `4.3 tok/s`，但从已 push source 清洁 rebuild 后只复现 `4.2 tok/s`，未超过当前 SOTA；该源码已回退，当前 head 为接受路径。
 - 2026-07-04 no-drop diagnostic 可达 `7.2 tok/s`，但不是 accepted cold-start，因为没有执行全局 `drop_caches`；它只能说明冷启动主要损失来自 CPU up/down fallback 的 page/source stall，不可作为 SOTA。
+- 2026-07-04 target-only `llama-lookahead` 已拒绝：两次 strict cold 机械诊断都在第一 token 后因 DeepSeek4 coupled-sequence/KV 路径失败，且 gate cache hit rate 从接受路径的 `86-87%` 塌到约 `11.5%`。
+- 当前最新计划是收口 no-draft `ngram-mod` target-verified speculative 诊断；若不超过 `4.2 tok/s` 或任一 gate 失败，立即回退该 probe source，只保留 rejected 记录。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `source_head`: `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
-- `runtime_binary_build`: clean rebuild after rollback reports ggml commit `5484a1806`。
+- `current_pushed_head`: `75ed51621` (`vendor-ds4: update post-prewarm optimization plan`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
+- `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
 - `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`。
 - `libggml_cpu_sha256`: `a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a` after rollback rebuild。
@@ -58,18 +61,20 @@ Current measured bottleneck after O_DIRECT:
 
 Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 
-1. Treat `5484a1806` as the current accepted runtime source head. Before a new source change, verify the worktree is clean and the remote `ssd/vendor/deepseek-token-rate-16gb` contains this head.
+1. Treat `75ed51621` as the current pushed documentation/source baseline, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
 2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
-3. Prioritize a speculative/draft feasibility pass because small residency/prefetch/fallback-layout changes cannot plausibly reach `10 tok/s` by the current hard bounds. The DS4 GGUF initial tensor-name check found no internal `mtp`, `draft`, `eagle`, `spec`, or `next` tensors; only `hc_head_base`, `hc_head_fn`, `hc_head_scale`, and normal attention output tensors matched related terms. Therefore the next viable speculative path is likely an external compatible draft model, not internal MTP.
-4. If no compatible high-acceptance draft path exists, fall back to a combined CPU fallback + source elimination design. That design must first show a hard upper bound above `4.2 tok/s` and preferably toward `8-10 tok/s`; otherwise do not code.
-5. Do not resume pure compact-mmap, broad up/down hotset, down-batch staging, no-filter one-stream, ngram-simple, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
-6. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
+3. External draft/internal MTP is currently not viable: DS4 GGUF has no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors, and local model inventory has no tokenizer-compatible small DS4 draft model.
+4. The only active speculative diagnostic is no-draft `ngram-mod` through `llama-speculative-simple`, because it is target-verified and does not require an external draft model. This is a diagnostic, not accepted source, until strict cold metrics prove it.
+5. If no-draft `ngram-mod` fails, fall back to a combined CPU fallback + source elimination design. That design must first show a hard upper bound above `4.2 tok/s` and preferably toward `8-10 tok/s`; otherwise do not code.
+6. Do not resume pure compact-mmap, broad up/down hotset, down-batch staging, no-filter one-stream, ngram-simple, lookahead, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
+7. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
 
 ## Execution Plan
 
 ### Phase 0: Source/Remote Guard
 
-- Confirm `git status --short` is clean, local head is `5484a1806`, and `ssd/vendor/deepseek-token-rate-16gb` points to the same or newer committed plan state.
+- Confirm local head is at least `75ed51621` and `ssd/vendor/deepseek-token-rate-16gb` points to the same or newer committed plan state.
+- If `examples/speculative-simple/speculative-simple.cpp` is dirty, it must be treated as the active no-draft `ngram-mod` probe only; do not commit it unless it produces a compliant new SOTA and passes pushed-source reproduction.
 - Confirm the accepted SOTA runtime binary hash is still `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` after rollback rebuild.
 - If source or binary does not match the accepted state, stop and repair reproducibility before any optimization.
 
@@ -2663,3 +2668,140 @@ Immediate next steps:
 Promotion rule for all next work:
 
 - When a compliant new SOTA appears, immediately record full reproducibility metadata, commit and push source/docs/artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, rebuild from pushed source, and rerun strict cold. Only the pushed-source rerun can become the new accepted SOTA.
+
+### 2026-07-04 Target-Only Lookahead Diagnostic Design
+
+Speculative/MTP feasibility result before this practice:
+
+- Internal DS4 GGUF support is absent by tensor-name check: no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors.
+- Local external draft inventory is not compatible:
+  - DeepSeek V4 target tokenizer: `tokenizer.ggml.pre=joyai-llm`, `vocab=129280`, `bos=0`, `eos=1`.
+  - GLM-5.2 GGUF tokenizer: `tokenizer.ggml.pre=glm4`, `vocab=154880`, `bos=154822`, `eos=154820`.
+  - MiniMax and GLM FP8 directories only contain metadata/tokenizer files, not a DS4-compatible small GGUF draft.
+- Therefore normal `llama-speculative` / `llama-speculative-simple` with an external draft model is not currently runnable without downloading or creating a compatible draft model.
+
+Next diagnostic:
+
+- Test `llama-lookahead`, which is target-only lookahead decoding. It does not use an external draft model, but verifies multiple candidate n-grams in one target decode using parallel sequences.
+- This is distinct from the previously rejected ngram-simple/server speculative path. It may increase output tokens per target decode if n-gram verification acceptance is high enough.
+- It is a diagnostic first, not a SOTA candidate. It must run under strict cold `drop_caches` and the same 16GB cgroup/page-cache accounting.
+
+Theory and hard bound:
+
+- Current accepted generation speed is `4.2 tok/s`, roughly `238 ms/output token`.
+- `llama-lookahead` has fixed source constants `W=15`, `N=5`, `G=15`; at most `N=5` tokens can be accepted per verification group, so the ideal upper bound is about `5 * 4.2 = 21 tok/s` if target batch overhead were free.
+- Real cost is much higher because each iteration evaluates a larger batch with up to roughly `1 + G*(N-1) + (W-1) + W*(N-2) = 120` target positions and `W+G+1 = 31` sequences. If the extra batch work increases per-iteration time by more than the accepted-token gain, throughput will regress.
+- To beat SOTA, effective decoded speed from the lookahead log must exceed `4.2 tok/s` and the output must remain semantic/coherent. To be worth deeper work toward `10 tok/s`, the short diagnostic should show either high `n_accept/n_predict` or a decoded speed clearly above SOTA while preserving accepted gate counters.
+
+Planned run:
+
+- Binary: `build-ds4-moe-stream/bin/llama-lookahead`.
+- Model/env: accepted SOTA gate O_DIRECT pack/cache/top-k envs unchanged.
+- CLI overrides: `-c 256 -b 128 -ub 16 -t 20 -tb 20`, `--n-cpu-moe 40`, `--defer-experts`, `--fit on`, greedy sampling.
+- Strict cgroup: `MemoryMax=16000000000`, `MemorySwapMax=0`, global `drop_caches` before run.
+- Prompt: `Please introduce France in a short paragraph.`
+
+Acceptance/rejection:
+
+- Promote only if full strict-cold run exceeds `4.2 tok/s`, RAM/correctness/TTFT gates pass, and pushed-source reproduction also exceeds `4.2 tok/s`.
+- Reject if `llama-lookahead` fails to fit, lowers gate cache materially, violates 16GB RAM, produces incoherent output, or decoded speed is `<=4.2 tok/s`.
+
+First mechanical result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T183353Z-20260704_lookahead_target_only_strict_cold_wrapper/france-cpu40-vram0gb`
+- Wrapper reason: `llama-lookahead` rejects runner's default `--no-display-prompt`; wrapper only removes that flag and forwards all other args.
+- Config: `-c 256 -b 128 -ub 16`, accepted SOTA gate envs, strict cold 16GB cgroup.
+- Result: model loaded but generation failed after the first token with `llama_decode failed - increase KV cache size`; output was only `France`, so correctness failed and no token-rate result is valid.
+- RAM stayed inside cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15169888256`, `oom=0`, `oom_kill=0`.
+- Gate counters were already bad before failure: one expert pack `hits=986 misses=178`, gate VRAM cache `hits=151 misses=1164 hit_rate=11.5%`. This suggests lookahead's candidate branches are not aligned with the accepted France gate profile and heavily disturb the SOTA gate cache.
+
+Single retry design:
+
+- Run one more mechanical diagnostic with larger KV/batch room: `-c 512 -b 128 -ub 128`.
+- Rationale: the first failure explicitly requested more KV cache, and avoiding ubatch splitting may remove a coupled-sequence split issue.
+- If this retry still fails, violates RAM/VRAM, or keeps gate hit rate far below the accepted `86-87%`, reject `llama-lookahead` as a viable SOTA path and do not continue sweeping its parameters.
+
+Second mechanical result and verdict:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T183621Z-20260704_lookahead_target_only_c512_ub128_retry/france-cpu40-vram0gb`
+- Config: `-c 512 -b 128 -ub 128`, accepted SOTA gate envs, strict cold 16GB cgroup.
+- Result: failed at the same point with `init: sequence 1 is coupled to 0 in the input batch, but have divereged` and `llama_decode failed - increase KV cache size`. Output was only `France`; correctness failed and no token-rate result is valid.
+- RAM stayed inside cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15141363712`, `oom=0`, `oom_kill=0`.
+- Gate counters again collapsed before failure: one expert pack `hits=986 misses=178`, gate VRAM cache `hits=151 misses=1164 hit_rate=11.5%`.
+- Verdict: reject `llama-lookahead` for this SOTA path. It is mechanically incompatible with the current DeepSeek4 memory/coupled-sequence path and would also heavily disturb the accepted gate cache.
+
+### 2026-07-04 No-Draft Ngram-Mod Speculative Diagnostic Design
+
+Rationale:
+
+- `llama-cli` exposes speculative arguments but does not call `common_speculative` in its generation loop.
+- `llama-speculative` and `llama-speculative-simple` currently require `--model-draft` before reaching the no-draft `ngram_mod` implementation, even though `common_speculative_init()` supports `COMMON_SPECULATIVE_TYPE_NGRAM_MOD` without a draft model.
+- `ngram_mod` is still target-verified: drafted tokens are committed only if the target sampler accepts them from target logits. Therefore output correctness should match target greedy decoding, aside from bugs in context rollback or sampling state.
+
+Implementation plan:
+
+- Patch only `examples/speculative-simple/speculative-simple.cpp`.
+- Preserve default behavior when neither `--model-draft` nor `--spec-type` is supplied: still error out.
+- If `--spec-type ngram-mod` is supplied without a draft model:
+  - skip draft model load;
+  - keep `params.speculative.draft.model == nullptr`;
+  - let `common_speculative_init()` create the ngram implementation only.
+- Improve the final stats line to report `common_speculative_n_max(spec, params_spec)` rather than draft-model `n_max` when no draft model is present.
+
+Theory and bound:
+
+- Each target decode can verify `1 + drafted_tokens` positions. With `n_max=8`, the ideal no-overhead upper bound is about `9 * 4.2 = 37.8 tok/s`.
+- Real speed depends on ngram hit rate and acceptance. For the short France prompt, the likely draft rate is low until enough generated text accumulates, so this may tie/regress. It is still worth one short diagnostic because it is a different no-draft algorithm from the already rejected ngram-simple path.
+- Use `--spec-type ngram-mod --spec-ngram-mod-n-match 4 --spec-ngram-mod-n-min 1 --spec-ngram-mod-n-max 8` for the first diagnostic to force possible matches without requiring long context.
+
+Practice plan:
+
+- Build `llama-speculative-simple` after the default-off source patch.
+- Run strict cold France under 16GB cgroup with accepted SOTA gate envs and `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- If the example binary rejects runner-only args such as `--no-display-prompt`, use a wrapper that only filters incompatible display flags and does not change model/speculative configuration.
+
+Acceptance/rejection:
+
+- Promote only if full strict-cold run exceeds `4.2 tok/s`, RAM/correctness/TTFT/gate counters pass, and pushed-source reproduction also exceeds `4.2 tok/s`.
+- Reject and revert the example source patch if throughput is `<=4.2`, correctness fails, target context rollback fails, RAM/TTFT gates fail, or accepted draft rate is too low to justify more work.
+
+### 2026-07-04 Current Latest Execution Plan
+
+Current state:
+
+- Accepted cold-start SOTA remains `4.2 tok/s` from the strict 16GB cgroup vendor DeepSeek path.
+- Current pushed branch for all source/docs/artifacts remains `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- `llama-lookahead` is rejected and must not be swept further without a new design, because it fails mechanically on the current DeepSeek4 coupled-sequence path and collapses the gate-cache behavior.
+- The only active source probe is the no-draft `ngram-mod` enablement in `examples/speculative-simple/speculative-simple.cpp`. It is not accepted SOTA source yet.
+
+Immediate execution order:
+
+1. Close the no-draft `ngram-mod` diagnostic.
+   - Verify whether `llama-speculative-simple` accepts the strict runner's `--no-display-prompt`; if not, use a wrapper that removes only this display flag.
+   - Run strict cold France with the accepted SOTA env unchanged: gate one-stream name filter `ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, accepted gate frequency profile, O_DIRECT gate expert pack, `cpu_moe=40`, `--vram-cache-gb 0`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+   - Add only the speculative args: `--spec-type ngram-mod --spec-ngram-mod-n-match 4 --spec-ngram-mod-n-min 1 --spec-ngram-mod-n-max 8`.
+   - Record: decoded speed, prompt speed if available, TTFT, `n_predict`, `n_drafted`, `n_accept`, acceptance rate, exact France output, RAM/page-cache cgroup stats, pack counters, VRAM cache counters, and any context rollback errors.
+
+2. Decide immediately after the first valid no-draft run.
+   - If throughput is `<=4.2 tok/s`, correctness fails, rollback/context fails, RAM exceeds 16GB including page cache, TTFT exceeds the accepted gate, pack direct fallbacks appear, or gate cache hit rate materially drops, reject the probe.
+   - On rejection, revert `examples/speculative-simple/speculative-simple.cpp`, rebuild the accepted binary path, record the rejected run and reason in this document, then push only docs/artifacts.
+   - If it exceeds `4.2 tok/s` and passes all gates, stop exploration and start the SOTA promotion protocol immediately.
+
+3. SOTA promotion protocol for a passing no-draft result.
+   - Record complete reproducibility metadata: run path, exact command/env, source head, build metadata, binary hashes, model/profile/pack hashes, memory including file/page cache, counters, TTFT, token rates, and full France output.
+   - Commit source, plan, profile/artifact updates with git identity `L-Ark <fliangae@connect.ust.hk>`.
+   - Push to `ssd/vendor/deepseek-token-rate-16gb`.
+   - Clean rebuild from the pushed source and rerun strict cold with the same command/env.
+   - Promote only if the pushed-source rerun still exceeds `4.2 tok/s` and passes every gate. If it ties or regresses, revert the runtime source and keep it as rejected diagnostic evidence.
+
+4. If no-draft `ngram-mod` is rejected, return to cold-start bottleneck design before coding.
+   - Refresh the accepted SOTA profile only if needed, then split the remaining cost into CPU fallback compute, fallback source/page stalls, one-stream source load, synchronization, and scatter.
+   - Compute a hard upper bound before implementation. A design whose bound cannot exceed `4.2 tok/s` with margin is rejected on paper.
+   - Preserve the accepted gate cache and O_DIRECT pack unless a slot-level calculation proves the tradeoff; current accepted gate cache is the core of the `4.2 tok/s` path.
+   - Do not repeat rejected families: pure compact mmap, broad up/down hotset, down-batch staging, no-filter one-stream, `llama-lookahead`, ngram-simple/server partial fallback, or CPU page-touch prewarm sweeps.
+
+Next non-speculative candidate class after rejection:
+
+- Focus on cold page/source stalls without relying on warm global page cache.
+- Candidate designs must explicitly account for the 16GB cgroup including file cache and must avoid displacing the accepted gate pack/cache working set.
+- The most plausible next design is a narrow, measured source-elimination path for high-impact CPU up/down fallback reads, using O_DIRECT or bounded direct-read staging rather than buffered page-cache prewarm. Before coding, calculate covered bytes, per-call latency, expected removable time, cgroup memory impact, and the resulting token-rate upper bound.
