@@ -1,0 +1,34 @@
+{
+  "status": "rejected",
+  "reason": "valid ngram-simple speculative run passed correctness/RAM but regressed to 3.7 tok/s and did not beat 4.2; no draft/accept counters were emitted by llama-cli logs",
+  "invalid_invocation": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T145037Z-20260703_ngram_simple_spec_probe/france-cpu40-vram0gb",
+    "exit_status": 127,
+    "reason": "relative binary path used inside systemd case directory; not a model result"
+  },
+  "valid_run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T145145Z-20260703_ngram_simple_spec_probe_absbin/france-cpu40-vram0gb",
+    "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -t 20 -tb 20 --spec-type ngram-simple --spec-ngram-simple-size-n 3 --spec-ngram-simple-size-m 8 --spec-ngram-simple-min-hits 1",
+    "eval_tok_s": 3.7,
+    "prompt_tok_s": 1.6,
+    "ttft_estimate_ms": 31729.485794,
+    "elapsed_seconds": 66.3,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15077982208,
+    "pgmajfault": 273206,
+    "workingset_refault_file": 1824871,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "pack_line": "[moe_stream] one expert pack: hits=4795 misses=162 reads=4795 bytes=21368668160 failures=0 entries=4599 direct_enabled=1 direct_reads=4795 direct_failures=0 direct_fallbacks=0",
+    "cache_line": "[moe_stream] VRAM cache: hits=34514 misses=4957 hit_rate=87.4%"
+  },
+  "baseline_reference": {
+    "accepted_sota_eval_tok_s": 4.2,
+    "repeated_clean_guard_eval_tok_s": 4.1,
+    "accepted_pack_line": "hits=4623 misses=0 direct_failures=0",
+    "accepted_cache_line": "hits=30528 misses=4623 hit_rate=86.8%"
+  },
+  "decision": "Reject ngram-simple speculative decoding for France cold-start SOTA. Do not sweep ngram parameters without first adding instrumentation or a stats path that proves substantial accepted drafts."
+}

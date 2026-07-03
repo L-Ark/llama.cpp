@@ -1781,3 +1781,58 @@ Completion decision:
 - All actionable tasks in this active plan cycle are complete.
 - No current mechanism has a defensible path above the `4.2 tok/s` promotion gate under the strict 16GB/page-cache/correctness/TTFT constraints.
 - Do not continue launching full-model probes from already rejected classes. Future progress requires a genuinely new algorithmic/kernel/data-movement mechanism, which must first be added to this plan with theory, hard upper bound, and a microbench or short diagnostic gate before runtime source changes.
+
+### 2026-07-03 N-Gram Speculative Decode Probe Design
+
+Goal:
+
+- Continue toward the `10 tok/s` target with a new algorithmic class instead of repeating closed kernel/I/O/page-cache directions.
+- Test built-in target-validated n-gram speculative decoding without a draft model. This can improve token rate only by accepting multiple generated tokens per target decode step.
+
+Why this is correctness-safe enough to test:
+
+- The target model still validates the drafted tokens before they are committed. A draft token is accepted only when it matches the target sampler result, so model arithmetic, routing, top-k policy, gate cache, and O_DIRECT expert pack behavior are unchanged for committed output.
+- Manual/heuristic France correctness remains mandatory. Any incoherent, incomplete, or degenerate output is rejected regardless of speed.
+
+Theory and hard bound:
+
+- Current accepted cold-start SOTA is `4.2 tok/s`; the new target is `10 tok/s`.
+- Ignoring overhead, this requires about `10 / 4.2 = 2.38` accepted output tokens per expensive target decode pass. Equivalently, each pass must accept roughly `1.38` extra drafted tokens on average.
+- N-gram speculation can only reach that if the generated France paragraph contains repeated n-grams that reliably predict following tokens. This is unlikely for a short non-repetitive answer, so the diagnostic must inspect `n_drafted`, `n_accept`, acceptance rate, and token rate before any further sweep.
+
+Practice plan:
+
+- Run one strict cold France diagnostic with current accepted SOTA env/config plus:
+  - `--spec-type ngram-simple`
+  - `--spec-ngram-simple-size-n 3`
+  - `--spec-ngram-simple-size-m 8`
+  - `--spec-ngram-simple-min-hits 1`
+- Keep `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate O_DIRECT pack, top-k policy, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, `drop_caches`, and 16GB cgroup.
+- Acceptance for further work: proceed only if correctness passes, RAM/TTFT/gate counters pass, and logs show a non-trivial accepted draft rate with `eval_tok_s` at least above the repeated `4.1` line. Promote only if `eval_tok_s > 4.2` and all normal gates pass.
+- If accepted draft count is zero/negligible or token rate regresses/ties, reject this class for France cold-start SOTA and do not sweep n-gram parameters blindly.
+
+N-gram speculative decode probe result:
+
+- Invalid first invocation: `/root/lfz/runs/vendor-ds4-16gb/20260703T145037Z-20260703_ngram_simple_spec_probe/france-cpu40-vram0gb`, `exit_status=127`, caused by passing a relative binary path into the systemd case directory. This is not a model result.
+- Valid run: `/root/lfz/runs/vendor-ds4-16gb/20260703T145145Z-20260703_ngram_simple_spec_probe_absbin/france-cpu40-vram0gb`.
+- Artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/ngram-simple-spec-probe-summary.json`.
+- Config delta: `--spec-type ngram-simple --spec-ngram-simple-size-n 3 --spec-ngram-simple-size-m 8 --spec-ngram-simple-min-hits 1`; otherwise current accepted SOTA env/config.
+
+Metrics:
+
+- `eval_tok_s=3.7`, `prompt_tok_s=1.6`, `TTFT=31729.485794 ms`, `elapsed_seconds=66.3`.
+- RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15077982208`, `pgmajfault=273206`, `workingset_refault_file=1824871`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: `correctness_ok=true`; France answer was semantic, coherent, and complete.
+- Gate pack/cache counters changed from accepted SOTA shape: pack `hits=4795 misses=162 direct_failures=0`; VRAM cache `hits=34514 misses=4957 hit_rate=87.4%`.
+- The logs did not emit explicit `n_drafted`/`n_accept` counters for `llama-cli` ngram-simple mode, so acceptance cannot be proven from counters. The speed result itself is below both the `4.2 tok/s` accepted SOTA and the repeated `4.1 tok/s` guard line.
+
+Diagnosis:
+
+- Target-validated n-gram speculation preserved answer quality, but it did not reduce effective decode cost. It likely added target batch/cache trajectory overhead without enough accepted draft tokens on this short non-repetitive France prompt.
+- The required bound for `10 tok/s` was about `2.38` accepted tokens per target pass. This run provides no evidence of a substantial accepted-draft rate and regresses to `3.7 tok/s`.
+
+Verdict:
+
+- Rejected. Do not promote and do not sweep n-gram parameters blindly.
+- Future speculative work needs either a real compatible draft model, implemented MTP/NextN support, or instrumentation proving a high accepted-draft rate before another strict cold model candidate.
+- Current accepted SOTA remains `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
