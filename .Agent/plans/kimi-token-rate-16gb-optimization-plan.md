@@ -21165,6 +21165,156 @@ Rollback:
 - If activation is missing or files are empty, mark the diagnostic invalid and
   rerun with fixed script injection before making source decisions.
 
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-172113Z-n96-phase7cy-full-profile`.
+- Source:
+  - clean runtime source with documentation-only head `431be684c`;
+  - no source patch.
+- Hard gates:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `70108.59 ms`;
+  - memory peak `15899996160`;
+  - `memory.swap.max=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- Diagnostic decode timing:
+  - `81829.86 ms / 77`, `0.94 tok/s`;
+  - not compared for SOTA because route/down/upgate/TTFT CSV tracing is active.
+- CSV artifacts:
+  - `route-profile.csv`: `23357` lines, `1.4 MiB`;
+  - `route-trace.csv`: `106593` lines, `5.0 MiB`;
+  - `ttft-trace.csv`: capped at `120001` lines, `9.1 MiB`;
+  - `down-batch-profile.csv`: `4083` lines, `390 KiB`;
+  - `up-gate-profile.csv`: `2158` lines, `441 KiB`;
+  - `fallback-profile.csv`: `14033` lines, `866 KiB`.
+- Memory final sample:
+  - `memory.current.final=15087611904`;
+  - `file=14831599616`;
+  - `inactive_file=7046602752`;
+  - `active_file=7784722432`;
+  - `pgmajfault=961111`;
+  - `workingset_refault_file=167777`.
+
+Runtime counters:
+
+- Expert pack:
+  - `hits=62651`, `misses=1461`;
+  - `iouring_reads=28899`;
+  - `iouring_bytes=168378384384`;
+  - `iouring_wait_us=32421795`;
+  - `inflight_avg=2.98`, `inflight_max=8`;
+  - no `9-16` batches.
+- Pinned staging:
+  - main `copies=49350`, `host_stage=43238.500 ms`,
+    `h2d=10343.080 ms`;
+  - gate `copies=10450`, `host_stage=2944.907 ms`,
+    `h2d=2309.928 ms`.
+- VRAM cache:
+  - down slots `806`, hits `23934`, misses `8690`, hit rate `73.4%`;
+  - upgate slots `1679`, hits `31967`, misses `41969`,
+    hit rate `43.2%`.
+
+Route-trace aggregate:
+
+- The trace file does not include `src0_type`, so aggregation uses tensor name:
+  - up: `36968` events, `168.743 GiB`;
+  - gate: `36968` events, `182.428 GiB`;
+  - down: `32656` events, `202.106 GiB`.
+- Top repeated route tensor/expert pairs:
+  - `blk.47` expert `121`: `77` routes each for up/gate/down;
+  - `blk.41` expert `27`: `75` routes each for up/gate/down;
+  - `blk.42` expert `345`: `75` routes each for up/gate/down;
+  - `blk.43` expert `230`: `75` routes each for up/gate/down;
+  - `blk.44` expert `7`: `75` routes each for up/gate/down;
+  - `blk.38` expert `32`: `74` routes each for up/gate/down;
+  - `blk.46` expert `270`: `74` routes each for up/gate/down.
+
+Fallback aggregate:
+
+- Decode fallback:
+  - `decode,type=2`: `4312` expert uses, `4125.120 ms`,
+    `33.161 GiB`.
+- Prompt fallback:
+  - `prompt,type=22`: `9112` uses, `19862.423 ms`, `39.904 GiB`;
+  - `prompt,type=18`: `6800` uses, `16401.497 ms`, `35.590 GiB`;
+  - `prompt,type=11`: `5440` uses, `19394.429 ms`, `31.958 GiB`;
+  - `prompt,type=23`: `1632` uses, `7626.773 ms`, `11.854 GiB`;
+  - `prompt,type=2`: `952` uses, `3742.616 ms`, `7.321 GiB`.
+- Top decode Q4_0 fallback layers:
+  - `blk.6`: `616` uses, `710.416 ms`, `4.737 GiB`;
+  - `blk.7`: `616` uses, `682.616 ms`, `4.737 GiB`;
+  - `blk.10`: `616` uses, `642.464 ms`, `4.737 GiB`;
+  - `blk.8`: `616` uses, `605.400 ms`, `4.737 GiB`;
+  - `blk.9`: `616` uses, `542.768 ms`, `4.737 GiB`;
+  - `blk.15`: `616` uses, `504.160 ms`, `4.737 GiB`;
+  - `blk.18`: `616` uses, `437.296 ms`, `4.737 GiB`.
+
+Down batch profile:
+
+- By type:
+  - type `11` Q3_K: `3158` calls, active `25264`,
+    hits `20770`, misses `4494`, stage `7106.708 ms`,
+    kernel `392.644 ms`, wall `7651.700 ms`;
+  - type `23` IQ4_XS: `924` calls, active `7392`,
+    hits `3164`, misses `4228`, stage `5521.333 ms`,
+    kernel `80.146 ms`, wall `5667.246 ms`.
+- Top down rows by wall:
+  - `blk.2` Q3_K: stage `1405.562 ms`, wall `1418.396 ms`;
+  - `blk.1` Q3_K: stage `1225.677 ms`, wall `1238.469 ms`;
+  - `blk.4` IQ4_XS: stage `680.769 ms`, wall `712.480 ms`;
+  - `blk.60` Q3_K: stage `589.670 ms`, wall `603.576 ms`;
+  - `blk.26` IQ4_XS: stage `463.997 ms`, wall `474.026 ms`.
+- Interpretation:
+  - down remains movement/stage-bound, not kernel-bound;
+  - layer `1/2` same-type overlap previously eliminated local stage but failed
+    globally, so future down work needs a different scheduling/admission point.
+
+Up/gate profile:
+
+- Type `18` IQ3_XXS:
+  - `771` calls, active `6168`;
+  - up/gate cache misses and stage jobs reported as `0` in this current
+    source/profile path;
+  - `kernel=11768.544 ms`, `wall=11834.778 ms`;
+  - this is now best treated as a compute-bound bucket under Phase 7CC n96.
+- Type `22` IQ2_S:
+  - `1386` calls, active `11088`;
+  - up misses `6547`, gate misses `6548`;
+  - up stage jobs `6547`, gate stage jobs `6548`;
+  - up wait `8943.171 ms`, gate `198.072 ms`,
+    kernel `9206.198 ms`, wall `9311.408 ms`;
+  - this remains staging/wait dominated despite the accepted parallel path.
+
+Decision:
+
+- Accept Phase 7CY as valid n96 diagnostic evidence.
+- Do not promote or compare the profiled timing as SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`;
+  - n96 confirmation decode `79008.37 ms / 77`;
+  - best observed n96 candidate decode `77239.32 ms / 77`.
+
+Next implementation direction:
+
+- Do not repeat already rejected queue-depth, refill, H2D batching, mmap advice,
+  Q4_0 shared-cache GPU, static hotset, or simple same-type overlap work.
+- The largest newly clarified bucket is IQ3_XXS type `18` compute:
+  `11.835 s` n96 wall with no current-profile stage jobs.
+- However, prior alternatives were rejected:
+  - vendor MMQ was much slower;
+  - IQ3 Q8_K decode was slower;
+  - true-batch/parallel IQ3 paths regressed;
+  - IQ3 gate-copy pipeline improved locally but worsened global IO.
+- Therefore the next source phase should first inspect and instrument the
+  current compact MMVQ IQ3 path at kernel/launch granularity, or design a
+  targeted IQ3 micro-kernel change with a small n4/n32 smoke, rather than
+  changing IO policy again.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
