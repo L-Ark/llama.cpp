@@ -1,0 +1,128 @@
+{
+  "artifact": "gate-prefill-top3000-pushed-repro-result",
+  "date_utc": "2026-07-03T22:08:20Z",
+  "status": "promoted_sota",
+  "accepted_previous_sota_eval_tok_s": 4.2,
+  "new_sota_eval_tok_s": 4.4,
+  "source_commit": "503d75cd7",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "pushed_remote": "ssd",
+  "pushed_branch": "vendor/deepseek-token-rate-16gb",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "manual_correctness_ok": true,
+    "cpu_moe": 40,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "exit_status": 0,
+    "first_answer_ms": 32892.55329,
+    "max_rss_kb": 15599120,
+    "memory_file_bytes": 15102607360,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 17341,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 271465,
+    "prompt_tok_s": 1.8,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "unit": "vendor-ds4-16gb-20260703T220820Z-cpu40.service",
+    "workingset_refault_file": 1638812
+  },
+  "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -t 20 -tb 20\n",
+  "environment_key_values": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv",
+    "GGML_MOE_VRAM_CACHE_GB": "0"
+  },
+  "hashes": {
+    "summary_json": "cca15940de41427cdba1d6457d702888195fbd2cf7ce3a434f9644ce723b1423",
+    "stdout_txt": "1ec9f76ae3ec1a74b0701a6cb756ee2822f1a554cb3b6f67f436250fad823f71",
+    "stderr_txt": "186bc7727f28c254ac6e5a9e216c1577b831530fde11ea2e6febbd1b1170af69",
+    "environment_txt": "1be760a41fa1dcc46d74c05347331a605c145e7b5ede9a3dde03f045746e549e",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace_csv": "421e58e3393917bd785df7a9ef300e59fab8f7eb7ccabd499f2e16a85ae84c64",
+    "llama_cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+    "libggml_cuda": "f73af32dcfc67f23dadef8c20217f784350b7df6a4e7a67c647dad3d2cf89c36",
+    "libggml_cpu": "b7d0a3a7a65adac0e8ff2a83ce7bcbbeef8a5ce38ddd173cf8bd6b75abe9ed39",
+    "libggml": "e49b194a510b150e2eee78271fc6bfae51f7ea8113909528c829a003756b217f",
+    "gate_profile": "8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b",
+    "gate_pack": "7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076"
+  },
+  "prefill_counters": {
+    "enabled": "1",
+    "loaded": "3313",
+    "limit": "3000",
+    "attempted": "3000",
+    "inserted": "3000",
+    "pack_misses": "0",
+    "read_failures": "0",
+    "bytes": "13369344000",
+    "elapsed_ms": "4485.962"
+  },
+  "pack_counters": {
+    "hits": "4886",
+    "misses": "0",
+    "reads": "4886",
+    "bytes": "21774204928",
+    "failures": "0",
+    "entries": "4599",
+    "direct_enabled": "1",
+    "direct_reads": "4886",
+    "direct_failures": "0",
+    "direct_fallbacks": "0"
+  },
+  "vram_cache_counters": {
+    "hits": "33265",
+    "misses": "1886",
+    "hit_rate": "94.6"
+  },
+  "one_trace_aggregate": {
+    "all_gate": {
+      "rows": 35151,
+      "src0_ms": 6707.771,
+      "total_ms": 8050.224
+    },
+    "gate_hits": {
+      "rows": 33265,
+      "src0_ms": 4520.134,
+      "total_ms": 5513.78
+    },
+    "gate_misses": {
+      "rows": 1886,
+      "src0_ms": 2187.637,
+      "total_ms": 2536.444
+    }
+  },
+  "acceptance": {
+    "eval_tok_s_gt_previous_sota": true,
+    "correctness_ok": true,
+    "ram_ok_including_page_cache": true,
+    "ttft_within_20_percent_gate": true,
+    "no_pack_direct_failures": true,
+    "pushed_source_repro": true
+  },
+  "verdict": "promoted cold-start SOTA: eval_tok_s=4.4 under strict 16GB cgroup including page cache, correctness pass, TTFT within gate"
+}

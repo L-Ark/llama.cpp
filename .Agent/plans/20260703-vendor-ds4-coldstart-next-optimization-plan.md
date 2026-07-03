@@ -4504,3 +4504,121 @@ Initial verdict:
 - It passes RAM, correctness, TTFT, pack, and cache gates in this first dirty-source run.
 - Immediate action: commit source, plan, and artifact; push to `ssd/vendor/deepseek-token-rate-16gb`; rebuild from pushed source; rerun strict cold with the same env.
 - Promote only if the pushed-source rerun remains `>4.2 tok/s` with the same gates passing.
+
+### 2026-07-03T22:08Z Gate Prefill Top3000 Pushed-Source Promotion
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-pushed-repro-result.json`
+- artifact sha256: `9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658`
+
+Source/repro status:
+
+- Source commit: `503d75cd7`
+- Commit message: `vendor-ds4: add gate prefill sota candidate`
+- Pushed remote branch: `ssd/vendor/deepseek-token-rate-16gb`
+- Build metadata from pushed source: `b14649-503d75cd7`
+- Git identity used for commit: `L-Ark <fliangae@connect.ust.hk>`
+- This run was rebuilt from the pushed source before promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+
+Config:
+
+- vendor DeepSeek framework only.
+- strict cold `drop_caches` before the case.
+- 16GB cgroup: `MemoryMax=16000000000`, `MemorySwapMax=0`.
+- `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`.
+- gate one-stream only: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- gate VRAM cache size: `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- gate O_DIRECT pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`.
+- gate prefill profile: `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`.
+- prefill limit: `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`.
+- top-k policy: `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=32892.55329 ms`
+- TTFT gate: pass (`32892.55329 < 33617.688744`)
+- `elapsed_seconds=63.94`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `memory_max_events=17341`
+- `pgmajfault=271465`
+- `workingset_refault_file=1638812`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The France answer is complete, coherent, and semantically correct.
+
+Prefill counters:
+
+- profile loaded entries: `3313`
+- limit: `3000`
+- attempted: `3000`
+- inserted: `3000`
+- pack misses: `0`
+- read failures: `0`
+- bytes: `13369344000`
+- elapsed: `4485.962 ms`
+
+Gate pack/cache counters:
+
+- one expert pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- VRAM cache after excluding prefill insertions from miss accounting: `hits=33265 misses=1886 hit_rate=94.6%`
+
+One-trace aggregate:
+
+| Slice | rows | src0_ms | total_ms |
+| --- | ---: | ---: | ---: |
+| all gate | `35151` | `6707.771` | `8050.224` |
+| gate hits | `33265` | `4520.134` | `5513.780` |
+| gate misses | `1886` | `2187.637` | `2536.444` |
+
+Artifact hashes:
+
+- `summary.json`: `cca15940de41427cdba1d6457d702888195fbd2cf7ce3a434f9644ce723b1423`
+- `stdout.txt`: `1ec9f76ae3ec1a74b0701a6cb756ee2822f1a554cb3b6f67f436250fad823f71`
+- `stderr.txt`: `186bc7727f28c254ac6e5a9e216c1577b831530fde11ea2e6febbd1b1170af69`
+- `environment.txt`: `1be760a41fa1dcc46d74c05347331a605c145e7b5ede9a3dde03f045746e549e`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `421e58e3393917bd785df7a9ef300e59fab8f7eb7ccabd499f2e16a85ae84c64`
+- `llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- `libggml-cuda.so`: `f73af32dcfc67f23dadef8c20217f784350b7df6a4e7a67c647dad3d2cf89c36`
+- `libggml-cpu.so`: `b7d0a3a7a65adac0e8ff2a83ce7bcbbeef8a5ce38ddd173cf8bd6b75abe9ed39`
+- `libggml.so`: `e49b194a510b150e2eee78271fc6bfae51f7ea8113909528c829a003756b217f`
+- gate profile: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`
+- gate pack: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`
+
+Promotion verdict:
+
+- Promoted as the current strict cold-start SOTA.
+- Accepted SOTA is now `4.4 tok/s`, replacing the previous `4.2 tok/s`.
+- It satisfies all active gates: strict 16GB host RAM including page cache, no swap, no cgroup kill, correct output, TTFT within +20%, no gate pack direct failures/fallbacks, and source/docs/artifacts pushed.
+
+Next plan:
+
+- Treat `503d75cd7` and the above run as the new baseline.
+- Before any next implementation, re-profile the promoted SOTA bottleneck from its trace and counters.
+- Highest-priority next hypotheses are:
+  - reduce prefill TTFT cost while preserving the `94.6%` gate hit rate, likely by ranking top entries by saved miss cost rather than raw frequency;
+  - test a smaller prefill limit sweep (`2048`, `2560`, `2816`) to recover TTFT headroom and compare generation rate;
+  - investigate whether remaining `1886` gate misses are concentrated in a small set that can be prefetched without exceeding the TTFT gate.
+- Any new practice run must first append its design, hard-bound, acceptance/rejection gates, and exact config to this plan. Any compliant SOTA must again be fully recorded and immediately pushed to `ssd/vendor/deepseek-token-rate-16gb`.
