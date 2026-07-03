@@ -29782,6 +29782,123 @@ Rollback:
 - If n32 improves but mechanism shows global cache/IO damage, do not promote;
   either tighten the layer range or reject.
 
+Phase 7CP result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `a50695e4d` (`docs: plan kimi phase7cp l1 l2 overlap`).
+- source commit tested:
+  `5c06dc378` (`cuda: limit same type down overlap by layer`).
+- source status:
+  - implemented as default-off env
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS`;
+  - after failed confirmation, reverted by commit
+    `2562c876e` (`Revert "cuda: limit same type down overlap by layer"`);
+  - revert pushed to `wici/vendor/kimi-moe-stream-on-vendor`.
+
+First n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-150150Z-n32-phase7cp-sametype-overlap-l1-l2`.
+- activation:
+  - `env.txt` contains
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1-2`;
+  - stderr contains
+    `layer-limited same-type current down overlap active: layers=1-2`;
+  - `down-batch-profile.csv` exists with `1644` accepted down rows.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `80727.52 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33047.08 ms / 31`, `0.94 tok/s`;
+  - this beats Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `170.58 ms`, so a confirmation run was required.
+- mechanism:
+  - layer `1/2` down stage was eliminated:
+    - `blk.1`: hits `248`, misses `0`, stage `2.074 ms`,
+      wall `8.864 ms`;
+    - `blk.2`: hits `248`, misses `0`, stage `2.148 ms`,
+      wall `9.377 ms`;
+  - baseline Phase 7CO was:
+    - `blk.1` stage `727.793 ms`, wall `734.186 ms`;
+    - `blk.2` stage `697.773 ms`, wall `703.975 ms`;
+  - down cache improved from Phase 7CO/7CC shape:
+    - hits `9967`, misses `3153`, hit rate `76.0%`;
+  - current-down overlap increased modestly:
+    - calls `1054`, planned jobs `3988`, worker `5513388 us`;
+  - up_gate regressed:
+    - `13.375 ms/call` versus Phase 7CO `12.722 ms/call`;
+  - main pinned host stage increased to `18034.066 ms`;
+  - expert-pack wait was `11560170 us`.
+
+Second n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-150514Z-n32-phase7cp-sametype-overlap-l1-l2-confirm`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `79261.35 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34187.75 ms / 31`, `0.91 tok/s`;
+  - slower than Phase 7CC n32 confirmation by `970.09 ms`;
+  - fails promotion, so n96 was not run.
+- mechanism:
+  - layer `1/2` down stage was again eliminated:
+    - `blk.1`: hits `248`, misses `0`, stage `2.268 ms`,
+      wall `8.091 ms`;
+    - `blk.2`: hits `248`, misses `0`, stage `1.883 ms`,
+      wall `8.052 ms`;
+  - down cache stayed improved:
+    - hits `9967`, misses `3153`, hit rate `76.0%`;
+  - but up_gate regressed further:
+    - `13.843 ms/call`;
+  - main pinned host stage increased to `18583.822 ms`;
+  - expert-pack wait was `12687716 us`;
+  - down profile total was `40.415 ms/call`, worse than the first candidate.
+
+Gap analysis:
+
+- The narrow layer-limited overlap achieved its local target:
+  - layer `1/2` down misses were eliminated;
+  - down hit rate rose from `73.6%` to `76.0%`.
+- The global schedule still regressed or became unstable:
+  - extra current-down work increased up_gate wall by about
+    `0.65-1.12 ms/call`;
+  - over `1861` up_gate calls, that is enough to erase the
+    `blk.1/blk.2` down-stage savings;
+  - main pinned staging also increased, so the improvement is not isolated.
+- The first candidate's `170 ms` gain was within noise and did not reproduce.
+
+Decision:
+
+- Reject Phase 7CP.
+- Do not run n96.
+- Keep `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS` out of SOTA.
+- Revert the source patch and keep only Phase 7CO's default-off diagnostic CSV
+  profiler.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
