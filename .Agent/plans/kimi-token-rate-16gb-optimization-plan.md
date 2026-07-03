@@ -4815,6 +4815,68 @@ Result handling:
 - If n32 fails, reject and keep `UPGATE_PCT=60`; do not continue broad split
   sweeps without a more direct model for per-tensor cache value.
 
+Phase 7DW result - rejected:
+
+- End time: 2026-07-04T06:00:00+08:00.
+- Local plan commit before run: `f4dca39f4`.
+- Remote source commit: `f4dca39f4`.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-215714Z-n32-phase7dw-upgate70`.
+- Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard f4dca39f4
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dw-upgate70"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=70 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+- Exit: `0`, systemd result `success`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT: `75672.91 ms`, below cap.
+- Decode: `32766.51 ms / 31`, `0.95 tok/s`.
+- Memory:
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- Expert pack:
+  - `hits=26289`, `misses=192`;
+  - `read_failures=0`;
+  - `iouring_reads=13211`;
+  - `iouring_bytes=78481686528`;
+  - `iouring_fallbacks=0`.
+- VRAM cache:
+  - down `slots=605`, `hit_rate=68.3%`, `hits=8957`,
+    `misses=4163`;
+  - upgate `slots=1959`, `hit_rate=45.6%`, `hits=13588`,
+    `misses=16188`.
+- Profile deltas versus Phase 7DU:
+  - up/gate wall regressed `7904.478 -> 8030.496 ms`
+    (`+126.018 ms`) despite more upgate slots;
+  - down wall regressed `4480.557 -> 5143.028 ms`
+    (`+662.471 ms`);
+  - down stage regressed `4161.386 -> 4826.567 ms`
+    (`+665.181 ms`);
+  - decode regressed `31343.27 -> 32766.51 ms`
+    (`+1423.24 ms`).
+
+Decision:
+
+- Reject `UPGATE_PCT=70`.
+- No source revert required because this was a parameter-only experiment.
+- Keep accepted SOTA env at `UPGATE_PCT=60`.
+- Stop broad global split sweeps. Phase 7DV and 7DW together show that
+  `UPGATE_PCT=60` is a local balance under the current cache policy:
+  - too little upgate cache causes large upgate wall regression;
+  - too little down cache causes large down stage and iouring-byte regression.
+- The next useful direction must be per-tensor or per-layer cache value, not a
+  global pool percentage.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
