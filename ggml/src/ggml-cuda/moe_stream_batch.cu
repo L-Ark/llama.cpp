@@ -1769,6 +1769,95 @@ static void down_batch_profile_record(
     std::fclose(f);
 }
 
+static bool up_gate_profile_csv_enabled() {
+    const char *env = std::getenv("GGML_MOE_UP_GATE_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void up_gate_profile_csv_record(
+        bool prompt_mode,
+        const char *up_tensor,
+        const char *gate_tensor,
+        ggml_type up_type,
+        ggml_type gate_type,
+        int n_active,
+        int up_cache_hits,
+        int up_cache_misses,
+        int gate_cache_hits,
+        int gate_cache_misses,
+        int up_stage_jobs,
+        int gate_stage_jobs,
+        float stage_ms,
+        float quant_ms,
+        float up_ms,
+        float gate_ms,
+        float up_wait_ms,
+        float gate_wait_ms,
+        float up_compute_ms,
+        float gate_compute_ms,
+        float fuse_ms,
+        float kernel_ms,
+        float d2h_ms,
+        double scatter_ms,
+        double wall_ms,
+        bool use_handoff,
+        bool parallel_up_gate,
+        bool parallel_stage) {
+    const char *path = std::getenv("GGML_MOE_UP_GATE_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,mode,up_tensor,gate_tensor,up_type,gate_type,n_active,"
+                "up_cache_hits,up_cache_misses,gate_cache_hits,gate_cache_misses,"
+                "up_stage_jobs,gate_stage_jobs,stage_ms,quant_ms,up_ms,gate_ms,"
+                "up_wait_ms,gate_wait_ms,up_compute_ms,gate_compute_ms,fuse_ms,"
+                "kernel_ms,d2h_ms,scatter_ms,wall_ms,use_handoff,parallel_up_gate,parallel_stage\n");
+        header_written = true;
+    }
+
+    static uint64_t seq = 0;
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
+            "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%d,%d,%d\n",
+            (unsigned long)++seq,
+            prompt_mode ? "prompt" : "decode",
+            up_tensor ? up_tensor : "",
+            gate_tensor ? gate_tensor : "",
+            (int)up_type,
+            (int)gate_type,
+            n_active,
+            up_cache_hits,
+            up_cache_misses,
+            gate_cache_hits,
+            gate_cache_misses,
+            up_stage_jobs,
+            gate_stage_jobs,
+            (double)stage_ms,
+            (double)quant_ms,
+            (double)up_ms,
+            (double)gate_ms,
+            (double)up_wait_ms,
+            (double)gate_wait_ms,
+            (double)up_compute_ms,
+            (double)gate_compute_ms,
+            (double)fuse_ms,
+            (double)kernel_ms,
+            (double)d2h_ms,
+            scatter_ms,
+            wall_ms,
+            use_handoff ? 1 : 0,
+            parallel_up_gate ? 1 : 0,
+            parallel_stage ? 1 : 0);
+    std::fclose(f);
+}
+
 static void current_down_overlap_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
     uint64_t current = target.load(std::memory_order_relaxed);
     while (current < value &&
@@ -4361,8 +4450,8 @@ static bool init_batch_once() {
         }
         const char *prof_env = std::getenv("GGML_MOE_BATCH_PROFILE");
         g_bprof.enabled = prof_env && prof_env[0] && prof_env[0] != '0';
-        g_uprof.enabled = g_bprof.enabled;
-        if (g_batch.stream && g_bprof.enabled) {
+        g_uprof.enabled = g_bprof.enabled || up_gate_profile_csv_enabled();
+        if (g_batch.stream && (g_bprof.enabled || g_uprof.enabled)) {
             cudaEventCreate(&g_batch.ev_start);
             cudaEventCreate(&g_batch.ev_stage);
             cudaEventCreate(&g_batch.ev_quant);
@@ -4375,9 +4464,13 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_gate_start);
             cudaEventCreate(&g_batch.ev_up);
             cudaEventCreate(&g_batch.ev_gate);
-            std::atexit(batch_profile_report_atexit);
-            std::atexit(up_gate_profile_report_atexit);
-            std::atexit(current_down_overlap_report_atexit);
+            if (g_bprof.enabled) {
+                std::atexit(batch_profile_report_atexit);
+                std::atexit(current_down_overlap_report_atexit);
+            }
+            if (g_uprof.enabled) {
+                std::atexit(up_gate_profile_report_atexit);
+            }
         }
     }
     g_batch_inited.store(true, std::memory_order_release);
@@ -6033,6 +6126,35 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 0.0,
                 0.0,
                 0.0);
+            up_gate_profile_csv_record(
+                prompt_mode,
+                up_key_name,
+                gate_key_name,
+                src0_type,
+                gate_type,
+                n_active,
+                n_active - up_stage_jobs_count,
+                up_stage_jobs_count,
+                n_active - gate_stage_jobs_count,
+                gate_stage_jobs_count,
+                up_stage_jobs_count,
+                gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                0.0,
+                0.0,
+                0.0,
+                use_handoff,
+                parallel_up_gate,
+                parallel_stage);
         }
         return true;
     }
@@ -6134,6 +6256,35 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             d2h_ms,
             scatter_ms,
             wall_ms);
+        up_gate_profile_csv_record(
+            prompt_mode,
+            up_key_name,
+            gate_key_name,
+            src0_type,
+            gate_type,
+            n_active,
+            n_active - up_stage_jobs_count,
+            up_stage_jobs_count,
+            n_active - gate_stage_jobs_count,
+            gate_stage_jobs_count,
+            up_stage_jobs_count,
+            gate_stage_jobs_count,
+            stage_ms,
+            quant_ms,
+            up_ms,
+            gate_ms,
+            up_wait_ms,
+            gate_wait_ms,
+            up_compute_ms,
+            gate_compute_ms,
+            fuse_ms,
+            kernel_ms,
+            d2h_ms,
+            scatter_ms,
+            wall_ms,
+            use_handoff,
+            parallel_up_gate,
+            parallel_stage);
     }
     return true;
 }
