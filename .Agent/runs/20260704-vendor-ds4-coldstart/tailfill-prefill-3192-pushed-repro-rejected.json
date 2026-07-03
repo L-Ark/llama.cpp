@@ -1,0 +1,98 @@
+{
+  "artifact": "tailfill-prefill-3192-pushed-repro-rejected",
+  "date_utc": "2026-07-03T23:00:00Z",
+  "status": "rejected_not_reproduced",
+  "candidate_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/tailfill-prefill-sweep-candidate-result.json",
+  "source_head": "c6a03329d",
+  "build_metadata": "b14654-c6a03329d",
+  "previous_sota_eval_tok_s": 4.4,
+  "candidate_eval_tok_s": 4.6,
+  "repro_eval_tok_s": 4.3,
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T225335Z-20260704_tailfill_prefill_3192_pushed_repro/france-cpu40-vram0gb",
+  "config": {
+    "framework": "vendor DeepSeek",
+    "drop_caches": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "gate_cache_mib": 13568,
+    "name_filter": "ffn_gate_exps",
+    "gate_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "gate_pack_io": "direct",
+    "gate_profile": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "prefill_limit": 3192,
+    "cli_extra_args": "-c 256 -b 16 -ub 16 -t 20 -tb 20",
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "manual_correctness_ok": true,
+    "elapsed_seconds": 63.7,
+    "eval_tok_s": 4.3,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32241.707711,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15096586240,
+    "memory_max_events": 17142,
+    "pgmajfault": 275787,
+    "workingset_refault_file": 1638793,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "exit_status": 0
+  },
+  "prefill": {
+    "loaded": 3313,
+    "limit": 3192,
+    "attempted": 3192,
+    "inserted": 3192,
+    "bytes": 14224982016,
+    "elapsed_ms": 4654.953,
+    "pack_misses": 0,
+    "read_failures": 0
+  },
+  "pack": {
+    "hits": 5172,
+    "misses": 0,
+    "reads": 5172,
+    "bytes": 23048749056,
+    "entries": 4599,
+    "direct_reads": 5172,
+    "direct_failures": 0,
+    "direct_fallbacks": 0
+  },
+  "vram_cache": {
+    "hits": 33171,
+    "misses": 1980,
+    "hit_rate": 94.4
+  },
+  "trace": {
+    "all_gate": {
+      "rows": 35151,
+      "src0_ms": 6973.252,
+      "total_ms": 8333.827
+    },
+    "gate_hits": {
+      "rows": 33171,
+      "src0_ms": 4688.515,
+      "total_ms": 5683.304
+    },
+    "gate_misses": {
+      "rows": 1980,
+      "src0_ms": 2284.737,
+      "total_ms": 2650.523
+    }
+  },
+  "hashes": {
+    "summary_json": "50b1194fbc48d3b83cbf657bab9ad947dcb15ac38e74699d2d7f87a82f8e44eb",
+    "stdout_txt": "c46b2115a93a6d86a0e9d28919176b8e45fcf01d6f4d0fa996ac9b0e167b9bf5",
+    "stderr_txt": "84600ec41c95db80a9f2b302ed2538354c17ecddccc6d2d5542126b074978557",
+    "environment_txt": "9144b7e47be345dbc4cd22af6b8ff013d1007ee0b4d65a2c85c003641de1c2f6",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace_csv": "522c15ce318d7bb885b2a4436a1d3c99ec2b3fe2992b440f16fdf10d88370b80"
+  },
+  "verdict": "rejected: pushed-source strict cold rerun did not exceed 4.4 tok/s; current accepted SOTA remains top3000 prefill at 4.4 tok/s"
+}

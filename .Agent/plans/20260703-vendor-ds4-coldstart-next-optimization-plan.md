@@ -4903,3 +4903,70 @@ Initial verdict:
 - `3192` produced `4.6 tok/s`, above the current accepted `4.4 tok/s`, and passed RAM, TTFT, correctness, and pack gates.
 - It is not yet promoted because the cache-hit and trace metrics do not clearly explain the speedup; it may include run-to-run variance.
 - Immediate action: commit and push this source/docs/artifact state, then rerun `3192` strict cold from the pushed state. Promote only if the rerun remains `>4.4 tok/s` and all gates pass.
+
+### 2026-07-03T23:00Z Tail-Fill 3192 Pushed Repro Rejection
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/tailfill-prefill-3192-pushed-repro-rejected.json`
+- artifact sha256: `d52ff43cfe991a1070dfdcc7122a2a1e6cf5191a62360ae7da5c38e9cf674981`
+
+Source/repro status:
+
+- Source HEAD: `c6a03329d`
+- Build metadata: `b14654-c6a03329d`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T225335Z-20260704_tailfill_prefill_3192_pushed_repro/france-cpu40-vram0gb`
+
+Result:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.8`
+- `TTFT=32241.707711 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15096586240`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The answer is complete, coherent, and semantically correct.
+
+Counters:
+
+- prefill: `attempted=3192 inserted=3192 bytes=14224982016 elapsed_ms=4654.953 pack_misses=0 read_failures=0`
+- pack: `hits=5172 misses=0 reads=5172 bytes=23048749056 direct_reads=5172 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=33171 misses=1980 hit_rate=94.4%`
+
+Trace:
+
+| Slice | rows | src0_ms | total_ms |
+| --- | ---: | ---: | ---: |
+| all gate | `35151` | `6973.252` | `8333.827` |
+| gate hits | `33171` | `4688.515` | `5683.304` |
+| gate misses | `1980` | `2284.737` | `2650.523` |
+
+Artifact hashes:
+
+- `summary.json`: `50b1194fbc48d3b83cbf657bab9ad947dcb15ac38e74699d2d7f87a82f8e44eb`
+- `stdout.txt`: `c46b2115a93a6d86a0e9d28919176b8e45fcf01d6f4d0fa996ac9b0e167b9bf5`
+- `stderr.txt`: `84600ec41c95db80a9f2b302ed2538354c17ecddccc6d2d5542126b074978557`
+- `environment.txt`: `9144b7e47be345dbc4cd22af6b8ff013d1007ee0b4d65a2c85c003641de1c2f6`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `522c15ce318d7bb885b2a4436a1d3c99ec2b3fe2992b440f16fdf10d88370b80`
+
+Verdict:
+
+- Rejected. The `4.6 tok/s` initial candidate did not reproduce from the pushed state.
+- Current accepted strict cold SOTA remains `4.4 tok/s` from top3000 prefill.
+- Full-cache `3192` also has worse miss count than top3000 (`1980` vs `1886`), consistent with LRU eviction reducing the expected benefit.
+- Next optimization should avoid filling all slots blindly. Prefer a source-level cache policy change, such as preserving prefilled high-frequency entries from early eviction or reserving a small runtime-insert pool.
