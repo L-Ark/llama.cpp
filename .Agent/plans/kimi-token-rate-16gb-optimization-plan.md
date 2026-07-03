@@ -4877,6 +4877,229 @@ Decision:
 - The next useful direction must be per-tensor or per-layer cache value, not a
   global pool percentage.
 
+## Phase 7DX: actual runtime miss analysis from 7DU trace
+
+Start time:
+
+- 2026-07-04T06:15:00+08:00.
+
+Purpose:
+
+- Use the existing Phase 7DU `ttft-trace.csv` to distinguish:
+  - real runtime loads that miss the expert pack (`pack_hit=0`);
+  - mandatory runtime loads that already hit the expert pack (`pack_hit=1`);
+  - cache hits.
+- This is required because Phase 7DT proved static pack-index coverage is not a
+  reliable optimization signal.
+
+Source data:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-214331Z-n32-phase7du-sota-profile-refresh`.
+- File:
+  `ttft-trace.csv`.
+- Source commit:
+  `c1e868ef9` for the run, with later docs commits only.
+
+Reproduction commands:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-214331Z-n32-phase7du-sota-profile-refresh
+awk -F, 'NR>1 && $3=="runtime_load"{cnt++; copy+=$10; bytes+=$6; if($8==0){nopack++; nopackcopy+=$10; nopackbytes+=$6} if($8==1){pack++; packcopy+=$10; packbytes+=$6}} END{printf "runtime_load count=%d copy=%.3f bytes=%.3fGiB pack=%d pack_copy=%.3f pack_bytes=%.3fGiB nopack=%d nopack_copy=%.3f nopack_bytes=%.3fGiB\n",cnt,copy,bytes/1024/1024/1024,pack,packcopy,packbytes/1024/1024/1024,nopack,nopackcopy,nopackbytes/1024/1024/1024}' "$RUN/ttft-trace.csv"
+awk -F, 'NR>1 && $3=="runtime_load" && $8==0{key=$4; cnt[key]++; copy[key]+=$10; bytes[key]+=$6} END{for(k in cnt) printf "%.3f copy_ms count=%d bytes=%.3fGiB %s\n",copy[k],cnt[k],bytes[k]/1024/1024/1024,k}' "$RUN/ttft-trace.csv" | sort -nr | head -40
+awk -F, 'NR>1{ops[$3]++; copy[$3]+=$10; bytes[$3]+=$6} END{for(o in ops) printf "%s count=%d copy=%.3f bytes=%.3fGiB\n",o,ops[o],copy[o],bytes[o]/1024/1024/1024}' "$RUN/ttft-trace.csv" | sort
+```
+
+Result:
+
+- Runtime loads:
+  - total `20250` events;
+  - copy time `48817.839 ms`;
+  - logical bytes `102.523 GiB`.
+- Runtime loads with expert-pack hit:
+  - `20103` events;
+  - copy time `47656.086 ms`;
+  - logical bytes `101.792 GiB`.
+- Runtime loads with expert-pack miss:
+  - only `147` events;
+  - copy time `1161.753 ms`;
+  - logical bytes `0.732 GiB`.
+- Cache hits:
+  - `22678` events;
+  - `120.302 GiB`.
+- Other traced operation totals:
+  - `call_upgate`: `1861` events, `22660.983 ms`;
+  - `current_down_overlap`: `3495` events, `10574.136 ms`;
+  - `call_down`: `1644` events, `4538.615 ms`.
+
+Top `pack_hit=0` tensors:
+
+- `blk.55.ffn_gate_exps.weight`: `56.530 ms`, `6` events,
+  `0.031 GiB`;
+- `blk.55.ffn_up_exps.weight`: `43.590 ms`, `6` events,
+  `0.026 GiB`;
+- `blk.16.ffn_down_exps.weight`: `33.420 ms`, `3` events,
+  `0.022 GiB`;
+- `blk.49.ffn_gate_exps.weight`: `28.858 ms`, `3` events,
+  `0.016 GiB`;
+- `blk.54.ffn_gate_exps.weight`: `27.037 ms`, `3` events,
+  `0.016 GiB`.
+
+Top runtime-load tensors are already pack hits:
+
+- `blk.1.ffn_up_exps.weight`: `938.954 ms`, `179` events,
+  `179` pack hits;
+- `blk.1.ffn_gate_exps.weight`: `884.217 ms`, `179` events,
+  `179` pack hits;
+- `blk.10.ffn_up_exps.weight`: `807.037 ms`, `168` events,
+  `167` pack hits;
+- `blk.10.ffn_gate_exps.weight`: `773.325 ms`, `168` events,
+  `167` pack hits;
+- `blk.4.ffn_down_exps.weight`: `744.810 ms`, `169` events,
+  `169` pack hits.
+
+Interpretation:
+
+- Future pack-coverage work has a hard n32 ceiling of about `1.16 s` from the
+  actual missing-pack runtime-load path, and the largest individual missing
+  tensors are tiny.
+- The dominant copy path is not missing pack coverage. It is already
+  expert-pack-backed movement through pinned staging and H2D.
+- This explains why Phase 7DT's static overlay v2 did not reduce runtime bytes
+  or misses.
+- The next optimization must target the cost inside pack-hit runtime loads:
+  slot wait, io_uring wait/read, H2D enqueue/copy, or stream synchronization.
+
+Decision:
+
+- Do not add more overlay entries from static index coverage.
+- Do not retry broad profile preload or protected hotsets; repeated expert
+  counts in the trace are small and prior protected hotsets damaged the shared
+  cache.
+- Proceed to a default-off per-copy breakdown profiler before source-level
+  scheduling changes.
+
+## Phase 7DY: per-copy pack-hit breakdown profiler
+
+Start time:
+
+- 2026-07-04T06:24:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DU shows runtime-load copy time `48.818 s` in n32.
+- Phase 7DX shows `47.656 s` of that runtime-load copy time already hits the
+  expert pack.
+- Current global counters report aggregate pinned staging:
+  - main `slot_wait=49.138 ms`, `host_stage=15334.923 ms`,
+    `enqueue=308.999 ms`, `h2d=4139.919 ms`;
+  - expert-pack `iouring_wait_us=12815733`.
+- These totals are not enough to tell which tensors and op labels are
+  dominated by:
+  - slot reuse wait;
+  - io_uring read/wait;
+  - host-stage read or memcpy;
+  - H2D enqueue;
+  - CUDA H2D completion;
+  - non-instrumented wall gap.
+
+Hypothesis:
+
+- Add a default-off CSV profiler:
+
+```sh
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+```
+
+- Record one row per `batch_cache_copy_h2d()` or io_uring copy-job completion:
+  - op label (`runtime_load`, `current_down_overlap`, `trace_prefetch`, etc.);
+  - tensor name;
+  - expert id;
+  - bytes;
+  - `pack_hit`;
+  - `ram_hit`;
+  - whether the io_uring batched path was used;
+  - slot wait time;
+  - host/read time or io wait contribution;
+  - enqueue time;
+  - H2D event time when available;
+  - wall time.
+
+Why this can improve token rate:
+
+- This phase is diagnostic, not a direct optimization.
+- It identifies the next behavior-changing implementation with a hard upper
+  bound:
+  - if io wait dominates, optimize submission grouping/admission;
+  - if H2D dominates, optimize pinned slot/ring/stream placement;
+  - if slot wait dominates, adjust slot reuse or ring partitioning;
+  - if wall gap dominates, inspect synchronization/thread scheduling.
+
+Theory and upper bound:
+
+- Absolute n32 runtime-load copy ceiling from 7DX is `48.818 s`, but only the
+  exposed part can improve decode.
+- The profiler must explain at least the aggregate 7DU counters:
+  - about `12.816 s` expert-pack io_uring wait;
+  - about `15.335 s` main host stage;
+  - about `4.140 s` main H2D.
+- Any proposed optimization after 7DY must compute its upper bound from the
+  measured largest bucket, not from total copy time.
+
+Implementation:
+
+- Source patch, default-off, in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add a small mutex-protected CSV writer.
+- Extend `batch_copy_trace` with optional detail fields, or pass local timing
+  directly to the writer.
+- Instrument:
+  - direct `batch_cache_copy_h2d()` path;
+  - `expert_pack_iouring_copy_jobs()` completion path.
+- Do not change default behavior when env is unset.
+- Do not change math, routing, cache policy, IO depth, pinned slots, or stream
+  order.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase7dy-source-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7du_repro.sh /tmp/run_phase7dy_repro.sh
+sed -i '/^GGML_MOE_TTFT_TRACE_OUT=/a GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv' /tmp/run_phase7dy_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dy-copy-breakdown"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dy_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- `copy-profile.csv` exists and has rows for:
+  - `runtime_load`;
+  - `current_down_overlap`;
+  - direct fallback copies, if any.
+- The aggregate copy-profile totals must be reconciled against existing
+  `metrics.txt`/stderr counters before using them to plan an optimization.
+
+Result handling:
+
+- Do not promote 7DY as SOTA.
+- If profiling overhead makes decode slower, keep the source only if default-off
+  and the data is useful; otherwise revert.
+- The next behavior-changing phase must target the largest measured 7DY sub
+  bucket and include a hard upper-bound calculation.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
