@@ -26936,6 +26936,100 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
 
+Phase 7CD result - rejected:
+
+- result time:
+  - 2026-07-03T13:01:00Z.
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-125640Z-n32-phase7cd-upgate58-l12-pack`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-125640Z-n32-phase7cd-upgate58-l12-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=58 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_UPGATE_PCT=58`;
+  - `env.txt` contains the Phase 7CC larger expert pack path;
+  - stderr reports `entries=30831`;
+  - stderr reports:
+    - upgate pool `8.5 GiB`, `1623` slots;
+    - down pool `6.2 GiB`, `847` slots.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `73263.02 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33258.31 ms / 31`, `0.93 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CD is slower by `40.65 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15127003136`;
+  - `file=14886506496`;
+  - `inactive_file=4548575232`;
+  - `active_file=10337280000`;
+  - `kernel=236777472`;
+  - `anon=442368`.
+- mechanism:
+  - down slots increased from Phase 7CC `806` to `847`;
+  - upgate slots decreased from Phase 7CC `1679` to `1623`;
+  - down misses were almost unchanged:
+    - Phase 7AS/7CC-shaped n32 down misses were about `3461`;
+    - Phase 7CD down misses are `3450`;
+  - upgate misses worsened to `17623`;
+  - expert-pack `iouring_bytes=69482348544`, higher than Phase 7CC n32
+    `67926376448`;
+  - expert-pack `iouring_wait_us=12400953`, slightly lower than Phase 7CC n32
+    confirmation `12673556`, so raw iouring wait is not the deciding negative
+    signal;
+  - main pinned host stage `17878.680 ms`, worse than Phase 7CC n32
+    confirmation `17392.245 ms`;
+  - gate pinned host stage `1342.147 ms`, similar to Phase 7CC n32 confirmation
+    `1343.540 ms`;
+  - up/gate type profiles stayed healthy:
+    - type `18`: `wall=14.847 ms/call`;
+    - type `22`: `wall=6.159 ms/call`;
+  - down profile stayed near Phase 7CC:
+    - total `38.343 ms/call`;
+    - `cuda_batch=2.735 ms/call`;
+    - `fallback_t0=35.547 ms/call`.
+
+Gap analysis:
+
+- The additional down capacity only avoided about `11` down misses on n32.
+- The reduced upgate pool added hundreds of upgate misses and raised total
+  expert-pack bytes by about `1.56 GiB` versus Phase 7CC n32.
+- This means Phase 7CC's larger pack did not make upgate capacity loose enough
+  to donate VRAM to down. The 60% upgate split remains the best observed split
+  under the larger pack.
+
+Decision:
+
+- Reject Phase 7CD.
+- Do not run n32 confirmation or n96.
+- Keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+- Keep Phase 7CC as the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
