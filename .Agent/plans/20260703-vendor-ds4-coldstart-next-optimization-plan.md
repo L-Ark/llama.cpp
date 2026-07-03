@@ -1251,6 +1251,35 @@ Next direction after gate-cache expansion rejection:
 - Current accepted SOTA remains `4.2 tok/s`; no source/config improvement was accepted.
 - The stable gate path is already near its useful VRAM limit. Remaining work should focus on reducing CPU fallback calls or finding a correctness-preserving routing/cache change that does not alter gate cache shape or increase page faults.
 
+
+Late-layer top2 second-range candidate design:
+
+- Time: 2026-07-03 after gate-cache-size rejection commit `b49652523`.
+- Bottleneck basis: complete CPU chunk trace aggregates fallback thread-sum for layers `30-39` as `103879.400 ms`, or about `5193.970 ms` at 20 threads. Current accepted config already uses top3 for layers `10-39`; changing only layers `30-39` from top3 to top2 can at most remove about one third of that late-layer fallback, a rough wall upper bound of `~1.73s` before output-trajectory effects.
+- Prior boundary: early-layer pruning failed correctness/completeness, so this probe must be late-layer-only. Existing env supports only one layer range, so it cannot express `10-29 top3 + 30-39 top2` without a default-off second range.
+- Source candidate: add optional env `GGML_MOE_KEEP_TOPK_LAYER2_RANGE` and `GGML_MOE_KEEP_TOPK_LAYER2_VALUE` to `ggml_moe_keep_topk_for_tensor()`. Range2 is checked before the existing range. If env is unset, default behavior is identical.
+- Practice config: keep accepted SOTA env plus existing `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, and add `GGML_MOE_KEEP_TOPK_LAYER2_RANGE=30-39`, `GGML_MOE_KEEP_TOPK_LAYER2_VALUE=2`.
+- Risk: this changes selected experts and can change answer semantics/length. The France output must be manually reviewed; heuristic correctness alone is insufficient.
+- Acceptance: promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, answer is complete/coherent, and gate pack/cache counters remain direct-failure-free. If it ties, regresses, truncates, or drifts semantically, revert source and record rejection.
+
+
+Late-layer top2 second-range candidate result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T112234Z-20260703T-late-layer30-39-top2-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: temporary default-off second range enabled with `GGML_MOE_KEEP_TOPK_LAYER2_RANGE=30-39`, `GGML_MOE_KEEP_TOPK_LAYER2_VALUE=2`; otherwise accepted SOTA config with layers `10-39` top3, gate O_DIRECT pack/cache, strict 16GB cgroup, and same CLI/thread settings.
+- Metrics: `eval_tok_s=3.5`, `prompt_tok_s=1.7`, `TTFT=28826.576851 ms`, `elapsed_seconds=82.71`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15063646208`, `pgmajfault=319186`, `workingset_refault_file=3963195`, `ram_ok=true`, `ram_limit_killed=false`.
+- Gate/cache counters changed badly: one expert pack `hits=5444 misses=1838 reads=5444 bytes=24260902912 direct_failures=0`; gate VRAM cache `hits=40590 misses=7282 hit_rate=84.8%`.
+- Correctness: rejected by manual review. The answer was mostly semantic but contained an error in the French motto (`Fratinité`) and ended without a complete closing sentence. This fails the complete coherent France-output requirement.
+- Diagnosis: the estimated late-layer CPU fallback reduction did not translate into speed. Changing late-layer routing changed the generation/cache trajectory, increased gate misses/refaults, and produced worse output. This is the same failure pattern as other pruning attempts, so additional top-k pruning is deprioritized.
+- Verdict: rejected. It fails speed and manual correctness. The runtime source candidate was reverted with `git restore ggml/src/ggml-cpu/ggml-cpu.c`, and `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` was rerun from clean source commit `b49652523`.
+
+Next direction after late-layer pruning rejection:
+
+- Current accepted SOTA remains `4.2 tok/s`.
+- Do not continue top-k pruning unless a future candidate includes a stronger correctness-preserving routing model and prompt-set validation before full SOTA claims.
+- Remaining optimization space is now very narrow: accepted gate cache is near optimal, CPU scheduling/repack/page-policy/top-k/updown one-stream have all been rejected. Next work should be measurement-first, not another source change: identify any untested no-source configuration with a hard upper bound, or produce a new bottleneck trace under the exact current clean binary to see whether the repeated line has shifted.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
