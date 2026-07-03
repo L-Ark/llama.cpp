@@ -383,6 +383,83 @@ France is a country
     while keeping n4 only as a CUDA-crash precheck if explicitly labelled
     non-promotional.
 
+## Phase 7DA: corrected IQ3_XXS VDR validation with n32 quality gate
+
+Timestamp: 2026-07-03T17:42:08Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7CZ exposed a protocol issue: `N=4` cannot satisfy the required
+  "short paragraph" semantic gate because generation stops after only three
+  decode tokens. It is valid as a CUDA-crash precheck, but invalid as a quality
+  promotion gate.
+- The VDR=4 source probe completed without process failure, CUDA error,
+  iouring fallback, or read failure in Phase 7CZ. The failure was that the n4
+  output was truncated by construction.
+- The underlying bottleneck remains unchanged:
+  - Phase 7CY type-18 IQ3_XXS up/gate compute was `11768.544 ms` kernel time
+    and `11834.778 ms` wall time for n96.
+  - This bucket is the largest clarified non-IO target after the rejected
+    queue-depth, refill, Q4 down batch, MMQ, Q8_K, true-batch, and gate-copy
+    pipeline attempts.
+
+Selected change:
+
+- Re-test the same scoped source probe:
+  `VDR_IQ3_XXS_Q8_1_MMVQ=4` and `VDR_IQ3_XXS_Q8_1_MMQ=2`.
+- Do not change cache policy, VRAM budget, RAM tier, iouring settings, down
+  batching, or prompt fallback behavior in this phase.
+
+Validation protocol correction:
+
+- Optional n4 run is only a crash/CUDA precheck and cannot pass or fail semantic
+  quality by itself.
+- Minimum real quality/performance gate is n32 with the fixed France prompt.
+- n32 must produce a coherent short paragraph about France and must beat the
+  accepted Phase 7CC n32 gate `33217.66 ms / 31` before any repeat or n96 run.
+- If n32 quality fails, TTFT exceeds `106331.72 ms`, host RAM reaches or exceeds
+  16GB, `read_failures` or `iouring_fallbacks` are nonzero, or decode is not
+  faster than the Phase 7CC n32 gate, the source probe is rejected and reverted.
+
+Theory and bound:
+
+- Same as Phase 7CZ: VDR changes `blocks_per_iter = vdr * nwarps * warp_size /
+  qi` for IQ3_XXS MMVQ.
+- The full n96 type-18 bucket is `11.835 s`; this is the hard upper bound.
+- Expected useful gain, if any, is still only `0.59-1.18 s` n96 from a 5-10%
+  reduction of that bucket. This means n32 may show only a small improvement,
+  so the repeat gate is required before promotion.
+
+Execution order:
+
+1. Commit and push this Phase 7DA plan.
+2. Re-apply the single-line VDR=4 source probe and push the exact source commit.
+3. Build remotely with `cmake --build build-cuda -j$(nproc)`.
+4. Run cold-start n32:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n32-phase7da-iq3-vdr4 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+5. If n32 passes all gates and improves decode, run one n32 repeat.
+6. If the repeat confirms, run n96 validation.
+7. If any gate fails, revert the source probe, commit and push the rollback,
+   then record metrics and exact output in this plan.
+
+Reproducibility:
+
+- The run directory must contain the standard required artifacts from this
+  plan.
+- The result is not accepted without a repeat. The first n32 run can only be a
+  candidate.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
