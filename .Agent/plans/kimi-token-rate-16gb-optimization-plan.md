@@ -20413,6 +20413,95 @@ Rollback:
 - If accepted through n96 confirmation, commit and push source plus plan/result
   immediately with exact reproduction commands and run directories.
 
+Phase 7BL result - rejected:
+
+- Time recorded: 2026-07-03 08:46:59 UTC run start.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-084659Z-n32-phase7bl-batched-h2d`.
+- Source state during experiment:
+  - dirty default-off patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added reusable pinned batch buffer to `pinned_stage_ring`;
+  - added `GGML_MOE_IO_URING_BATCH_H2D=1`;
+  - after RAM-tier/host-prefetch misses, sorted SSD-read jobs by VRAM cache
+    slot and used io_uring reads into one pinned batch buffer;
+  - used `cudaMemcpy2DAsync()` for adjacent cache-slot runs;
+  - kept existing compact-batch compute kernels and slot-id layout unchanged.
+- Build:
+  - remote `build-cuda-batch` compiled successfully with dirty source;
+  - no new build errors; only pre-existing warnings.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bl-batched-h2d"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 BATCH_H2D=1 \
+      /tmp/run_phase7bl_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77266.23 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Activation:
+  - stderr shows:
+    `[moe_stream_batch] expert pack iouring batched H2D active`;
+  - `env.txt` includes `GGML_MOE_IO_URING_BATCH_H2D=1`;
+  - `command.txt` records `BATCH_H2D=1`.
+- Performance:
+  - decode `35625.08 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BL is slower by `2153.49 ms`.
+- Mechanism evidence:
+  - batched-H2D did real work:
+    - main ring `batch_h2d_groups=895`, `batch_h2d_jobs=1793`;
+    - gate ring `batch_h2d_groups=310`, `batch_h2d_jobs=639`;
+  - expert-pack totals:
+    - `iouring_reads=11297`;
+    - `iouring_h2d_enqueues=10070`;
+    - enqueue count dropped for the batched subset, but not enough to improve
+      wall time.
+  - main pinned staging regressed:
+    - Phase 7AS main `host_stage=18631.890 ms`;
+    - Phase 7BL main `host_stage=19869.156 ms`.
+  - gate pinned staging regressed:
+    - Phase 7AS gate `host_stage=2245.529 ms`;
+    - Phase 7BL gate `host_stage=2354.552 ms`.
+  - expert-pack wait also rose slightly:
+    - Phase 7AS `iouring_wait_us` about `11570000`;
+    - Phase 7BL `iouring_wait_us=11842038`.
+  - down CUDA batch did not explain the regression:
+    - `cuda_batch=2.831 ms/call`, still close to the 7AS bucket.
+- Analysis:
+  - The implementation reduced the number of H2D enqueue calls for jobs served
+    by the batched path, but it also changed the streaming behavior.
+  - The old path can enqueue H2D immediately as each CQE arrives. The 7BL path
+    waits until all reads for the sorted batch complete, then enqueues grouped
+    H2D copies. That delays early H2D and increases host-stage wall time.
+  - The single reusable batch pinned buffer also requires event-protected reuse,
+    adding synchronization pressure that offsets the smaller enqueue count.
+  - Therefore the bottleneck is not primarily per-expert H2D enqueue overhead;
+    preserving CQE-to-H2D streaming is more important than coalescing copies at
+    the current batch shape.
+- Decision:
+  - Reject Phase 7BL.
+  - Reverted the dirty source patch locally and on the remote using reverse
+    patch application.
+  - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
+    source at `e77de6715`.
+  - Do not use `GGML_MOE_IO_URING_BATCH_H2D=1` in SOTA.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
