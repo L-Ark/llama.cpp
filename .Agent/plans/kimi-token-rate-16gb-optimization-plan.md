@@ -20627,6 +20627,170 @@ prompt,src0_data,type=23 count=1632 calls=867 us=8108358 bytes=6761545728 GiB=6.
   - buffer must remain within the strict 16GB host-RAM cgroup and must not steal
     memory from pinned staging or increase TTFT by more than 20%.
 
+## Phase 7BP - targeted decode pack-mmap `MADV_WILLNEED` probe
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7BO source attribution shows residual decode CPU fallback is almost
+  entirely expert-pack mmap:
+  - `decode,pack_mmap,type=2`: `13.281 GiB`, `1727` calls,
+    `2957696 us`;
+  - `decode,src0_data,type=2`: `0.069 GiB`, `9` calls,
+    `11336 us`.
+- Phase 7Z already rejected an anonymous hot cache:
+  - it avoided repeated file-backed reads mechanically;
+  - but first-load memcpy, lookup, and cgroup memory pressure outweighed the
+    saved fallback time.
+- Phase 7BK rejected global `MADV_RANDOM` on the whole expert-pack mmap:
+  - major faults/refaults increased;
+  - decode slowed heavily.
+- Therefore the next narrow question is whether targeted readahead for only the
+  active decode fallback experts can move page-cache work out of worker compute
+  without adding anonymous memory.
+
+Hypothesis:
+
+Add a default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED=1
+```
+
+When CPU fallback resolves an active expert through expert-pack mmap during
+decode, call:
+
+```c
+madvise((void *) ptr, expert_bytes, MADV_WILLNEED)
+```
+
+before the CPU fallback worker loop starts.
+
+Why this can improve token rate:
+
+- `MADV_WILLNEED` targets only active decode fallback expert ranges, unlike
+  Phase 7BK's whole-map policy.
+- It does not allocate a long-lived anonymous cache, unlike Phase 7Z.
+- It may initiate kernel readahead/fault handling before all worker threads
+  enter Q4 vec-dot, reducing page-fault stalls inside the hot compute loop.
+- It preserves:
+  - tensor values;
+  - routing;
+  - GPU cache;
+  - io_uring expert-pack reads for GPU staging;
+  - pinned staging;
+  - VRAM split;
+  - prompt page-cache drop behavior.
+
+Theoretical upper bound:
+
+- The direct target is the Phase 7BO decode pack-mmap bucket:
+  - `13.281 GiB`;
+  - `2.958 s` attributed fallback CSV time.
+- This probe cannot remove Q4 dot compute and cannot remove mandatory page
+  cache residency for touched pages.
+- Realistic n32 upside is `0.2-0.8 s` if worker-visible major faults/refaults
+  are reduced.
+- It can regress if `MADV_WILLNEED` causes synchronous readahead, overfetch,
+  extra cgroup reclaim, or interference with existing io_uring/H2D staging.
+- A valid gain must show lower wall decode and at least one supporting counter:
+  - lower `pgmajfault`;
+  - lower `workingset_refault_file`;
+  - lower `decode,type=2` fallback time;
+  - lower down `fallback_t0`;
+  - or lower perf/filemap share in a later diagnostic.
+
+Implementation:
+
+- Source patch is default-off and must be reverted if the first n32 run fails.
+- In `ggml/src/ggml-cpu/ggml-cpu.c`:
+  - include `<sys/mman.h>` on Linux for `madvise`;
+  - extend `ggml_kimi_cpu_fallback_pack_mmap_state` with:
+    - `willneed_enabled`;
+    - `willneed_calls`;
+    - `willneed_bytes`;
+    - `willneed_failures`;
+  - parse `GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED` once next to
+    `GGML_MOE_CPU_FALLBACK_PACK_MMAP`;
+  - in `ggml_kimi_cpu_fallback_pack_mmap_prepare()`, after a non-null
+    expert-pack pointer is found, and only when `prompt_phase == false`, call
+    `madvise(..., MADV_WILLNEED)`;
+  - record counters and emit them in the existing
+    `[kimi_cpu_fallback_pack_mmap]` summary.
+- Do not change source pointer choice:
+  - fallback still uses the same `pack_mmap` pointer;
+  - misses still fall back to GGUF `src0->data`.
+- Do not add anonymous buffers, persistent cache entries, direct reads, pinned
+  memory, or new GPU work.
+
+Experiment:
+
+- Commit this plan before source edits.
+- Build on the server:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Create `/tmp/run_phase7bp_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  record:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED=1
+```
+
+- Run strict cold n32 first:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bp-pack-mmap-willneed"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PACK_MMAP_WILLNEED=1 \
+      /tmp/run_phase7bp_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED=1`;
+  - `command.txt` records `PACK_MMAP_WILLNEED=1`;
+  - stderr summary shows nonzero `willneed_calls` and `willneed_bytes`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - compare `decode,type=2`, `pgmajfault`, `workingset_refault_file`,
+    `inactive_file/active_file`, `iouring_wait_us`, pinned `host_stage`,
+    down `fallback_t0`, and `willneed_*` counters.
+
+Rollback:
+
+- If build fails, activation is missing, quality fails, hard gates fail, or
+  first n32 is slower than Phase 7AS, reject immediately.
+- On rejection:
+  - revert the source patch locally and on the server;
+  - rebuild the server binary from clean accepted source;
+  - record the full result here;
+  - keep Phase 7AS as SOTA.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
