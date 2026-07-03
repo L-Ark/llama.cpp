@@ -4761,3 +4761,70 @@ Conclusion:
 - The limit-only sweep shows that simply reducing top-N does not unlock more token rate.
 - `2560` is a useful fallback/tie point with lower prefill bytes, but it is not promotable because it does not exceed `4.4 tok/s`.
 - Next optimization should re-rank prefill entries by measured/predicted saved miss cost or target the remaining misses directly, instead of sweeping raw frequency top-N.
+
+### 2026-07-03T22:38Z Tail-Fill Prefill Sweep Design
+
+Goal:
+
+- Use remaining VRAM cache slot headroom above top3000 prefill.
+- Test whether adding the profile tail into the remaining `192` empty slots improves decode token rate beyond `4.4 tok/s` while staying inside the TTFT gate.
+- This is a no-source-change experiment from the current pushed branch.
+
+Current bottleneck and opportunity:
+
+- Current promoted SOTA has `3192` VRAM cache slots and prefilled `3000`, leaving `192` empty slots.
+- Remaining misses at top3000: `1886` miss rows, `2187.637 ms` miss `src0_ms`.
+- Prefill is capped by code to `g_vcache.n_slots`, so any limit above `3192` is equivalent to `3192`.
+- The profile tail after top3000 has nonzero frequency coverage:
+  - top3000 to top3072 adds `72` entries and about `144` profile-frequency hits.
+  - top3000 to top3136 adds `136` entries and about `272` profile-frequency hits.
+  - top3000 to top3192 adds `192` entries and about `384` profile-frequency hits.
+
+Hard-bound estimate:
+
+Using the promoted run's measured prefill throughput and `4456448` bytes per gate expert payload:
+
+| Prefill limit | Extra entries vs 3000 | Extra payload GiB | Estimated extra prefill cost | Profile coverage |
+| ---: | ---: | ---: | ---: | ---: |
+| `3072` | `72` | `0.30` | `107.7 ms` | `98.58%` |
+| `3136` | `136` | `0.56` | `203.4 ms` | `98.96%` |
+| `3192` | `192` | `0.80` | `287.1 ms` | `99.29%` |
+
+Potential upper bound:
+
+- Average top3000 miss `src0_ms` is about `1.16 ms/miss`.
+- If the added tail entries avoid `144/272/384` misses, the rough generation-side source savings are up to about `167/316/446 ms` before accounting for lookup, kernel, and eviction effects.
+- Since `eval_tok_s` excludes TTFT, any real miss reduction can improve token rate, while TTFT should remain under the `33617.688744 ms` gate if prefill cost follows the observed bound.
+
+Main risk:
+
+- `3192` fills every VRAM cache slot. Runtime misses may trigger LRU eviction immediately and can evict prefilled entries that have not been hit yet.
+- Therefore `3072` and `3136` are included to leave some empty slots for runtime misses while still using more VRAM than top3000.
+
+Practice config:
+
+- Use `strict_ds4_runner.py` with cold `drop_caches` before each case.
+- Use `MemoryMax=16000000000`, `MemorySwapMax=0`, `ram_kill_threshold_bytes=16000000000`.
+- Keep vendor DeepSeek only, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`.
+- Keep gate-only one-stream: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Keep gate cache size: `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- Keep O_DIRECT gate pack and current profile.
+- Sweep only `GGML_MOE_STREAM_ONE_PREFILL_LIMIT` over `3072`, `3136`, and `3192`.
+- Keep CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Prompt remains: `Please introduce France in a short paragraph.`
+
+Acceptance gates:
+
+- Promote only if `eval_tok_s > 4.4`.
+- France output must be complete, coherent, and semantically correct by manual review.
+- `memory_peak_bytes <= 16000000000`, with page cache included.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+- Any accepted SOTA must be recorded with full reproduction info and immediately pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Rejection rules:
+
+- Reject/tie if `eval_tok_s <= 4.4`.
+- Reject if correctness fails, TTFT exceeds the gate, cgroup kills the run, OOM occurs, or pack direct failures/fallbacks appear.
+- If `3192` regresses despite higher hit potential, inspect whether full-cache LRU eviction is the cause before designing a source change.
