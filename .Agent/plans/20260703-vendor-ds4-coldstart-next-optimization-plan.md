@@ -808,6 +808,34 @@ Acceptance for model candidate:
 - If microbench ties/regresses, revert source, clean rebuild, record rejection, and do not run a full model candidate.
 - Any later model candidate must still pass `eval_tok_s > 4.2`, 16GB cgroup including page cache, TTFT gate, gate O_DIRECT counters, and manual France correctness.
 
+
+Microbench result:
+
+- Temporary default-off patch added `GGML_MXFP4_DOT_PREFETCH_BLOCKS=<N>` to `ggml/src/ggml-cpu/arch/x86/quants.c` inside `ggml_vec_dot_mxfp4_q8_0` AVX2 loop.
+- Dirty candidate CPU lib hash: `72ea8640e9b152bbe1f6653b4f1cda8c4f685e61e94f19cf33665e030a5c74a5`; `llama-cli` hash stayed `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- Scratch source: `/tmp/mxfp4_dot_prefetch_bench.cpp`; binary: `/tmp/mxfp4_dot_prefetch_bench`.
+- Compile command: `g++ -O3 -march=native -std=c++17 -Iggml/include -Iggml/src -Iggml/src/ggml-cpu /tmp/mxfp4_dot_prefetch_bench.cpp -Lbuild-ds4-moe-stream/bin -lggml-cpu -lggml-base -Wl,-rpath,/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -pthread -ldl -lm -o /tmp/mxfp4_dot_prefetch_bench`.
+- The bench calls `ggml_cpu_init()` so the E8M0 lookup table is initialized, then measures `n=4096`, `rows=4096`, `iters=300`; each prefetch distance ran in a separate process.
+
+| Prefetch blocks | ms | ns/dot | dots/s | checksum | Verdict |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 257.461 | 209.523 | 4772755.230 | 2343998.85 | baseline |
+| 4 | 267.941 | 218.051 | 4586088.358 | 2343998.85 | slower by `~4.1%` |
+| 8 | 263.111 | 214.120 | 4670270.858 | 2343998.85 | slower by `~2.2%` |
+| 16 | 262.079 | 213.280 | 4688671.309 | 2343998.85 | slower by `~1.8%` |
+
+Diagnosis:
+
+- Checksums and first/last values matched, so prefetch did not change arithmetic.
+- Every tested prefetch distance regressed warm dot throughput. The MXFP4 AVX2 loop appears compute/instruction-bound enough, or hardware prefetch is already sufficient for this access pattern; explicit prefetch adds overhead/pollution.
+- This fails the `>=5%` microbench threshold and does not justify a strict cold model run.
+
+Rollback:
+
+- Reverted `ggml/src/ggml-cpu/arch/x86/quants.c` with `git restore` and clean rebuilt.
+- Clean hashes after rollback: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`, `libggml-cuda=bc5f8d943233bd73b46c6df8307f42f2399bac269d4c69e1179a7b80f10e492e`.
+- Verdict: rejected at microbench stage; no model run performed. Current accepted SOTA remains unchanged.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
