@@ -19788,6 +19788,152 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`;
+  - TTFT `77844.70 ms` on n96, under the `106331.72 ms` gate.
+- Phase 7AS n32 still spends substantial time in host/IO movement:
+  - expert-pack `iouring_wait_us=11567536`;
+  - main pinned `host_stage=18631.890 ms`;
+  - gate pinned `host_stage=2245.529 ms`;
+  - residual Q4_0 decode fallback `2.630 s`.
+- Phase 7AW proved that increasing global CPU threads from `32` to `40` is not
+  viable:
+  - local fallback `fallback_t0` improved slightly;
+  - but wall decode regressed to `97405.94 ms / 31`;
+  - iouring wait rose to `14601447 us`;
+  - main pinned host stage rose to `24662.628 ms`;
+  - route/post barriers increased materially.
+- This indicates the current runtime is sensitive to CPU scheduling contention
+  between CPU fallback workers, io_uring/SQPOLL, pinned staging, and CUDA launch
+  coordination. A lower thread count may improve the IO/staging side enough to
+  offset modestly slower residual Q4_0 fallback.
+
+Hypothesis:
+
+Change only:
+
+```sh
+THREADS=28
+```
+
+- This sets llama `-t` and `-tb` to `28`.
+- Keep every accepted Phase 7AS runtime/env setting unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `PINNED_SLOTS=8`, `PREFETCH_DOWN_DEPTH=2`.
+
+Why this can improve token rate:
+
+- The `40`-thread probe gives a concrete contention signal: more CPU fallback
+  parallelism made IO wait and staging worse by multiple seconds.
+- Lowering to `28` gives back four cores to SQPOLL, io_uring completion,
+  staging threads, and CUDA submission without changing math, routing, cache
+  policy, tensor residency, quantization, or generation settings.
+- If the current `32`-thread setting is slightly over the contention knee,
+  reduced staging/IO delay can outweigh slower Q4_0 fallback.
+
+Theoretical upper bound:
+
+- Lowering threads cannot remove H2D bytes or SSD reads. It can only reduce
+  scheduling/contention overhead.
+- Phase 7AS n32 residual Q4_0 fallback is `2.630 s`. If fallback scales
+  ideally with thread count, moving from `32` to `28` could add about:
+
+```text
+2.630 * (32 / 28 - 1) = 0.376 s
+```
+
+- Therefore n32 needs at least about `0.4 s` saved from iouring wait, pinned
+  staging, route barriers, or CUDA scheduling just to break even.
+- The optimistic upside is bounded by the visible host/IO wait buckets:
+  - expert-pack wait `11.57 s`;
+  - main pinned host stage `18.63 s`;
+  - gate pinned host stage `2.25 s`.
+- A realistic gain, if the contention hypothesis is correct, is `0.3-1.5 s`
+  on n32 and `0.8-3.0 s` on n96. A larger gain would require a measured
+  reduction in iouring wait/staging rather than fallback math alone.
+
+Experiment:
+
+- Env-only; no source patch.
+- Use the accepted Phase 7AS runner `/tmp/run_phase7as_repro.sh`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bi-7as-threads28"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=28 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+- `command.txt` must record `THREADS=28`.
+- `env.txt` must preserve all Phase 7AS runtime env and show the llama command
+  using `-t 28 -tb 28`.
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under strict cgroup `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`, `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct for
+    `Please introduce France in a short paragraph.`
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - if wall decode improves, compare:
+    - fallback CSV `decode,type=2`;
+    - expert-pack `iouring_wait_us`;
+    - pinned main/gate `host_stage`;
+    - route/post CUDA barrier buckets.
+  - If wall improves while fallback gets slower, promotion is only allowed when
+    staging/IO counters explain the win.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower, quality fails, TTFT exceeds the gate, memory exceeds
+  the strict cgroup, or required artifacts are missing, reject immediately and
+  keep `THREADS=32` as SOTA.
+
 ## Phase 7BD - same-type current-down overlap probe
 
 Design timestamp: 2026-07-03 CST.
