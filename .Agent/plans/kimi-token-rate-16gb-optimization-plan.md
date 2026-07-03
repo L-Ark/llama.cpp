@@ -26814,6 +26814,128 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CD - fine-grained VRAM split toward down on Phase 7CC
+
+Start time:
+
+- 2026-07-03T13:10:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CC is the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Phase 7CC changed the cache/IO balance relative to Phase 7AS:
+  - n32 expert-pack misses dropped from `1179` to `516`;
+  - n96 expert-pack misses dropped from `3102` to `1461`;
+  - n96 gate pinned host stage dropped from about `4945 ms` to
+    `2939-2987 ms`;
+  - n96 main pinned host stage dropped from about `48190 ms` to
+    `41762-42483 ms`.
+- The remaining n96 confirmation bottleneck is still movement-heavy:
+  - expert-pack `iouring_wait_us=31993861`;
+  - main pinned host stage `42483.097 ms`;
+  - down profile `19.204 ms/call`, with `fallback_t0=16.434 ms/call`;
+  - down cache misses `8690` with hit rate `73.4%`;
+  - upgate cache misses `41969` with hit rate `43.2%`.
+
+Hypothesis:
+
+- Lower `GGML_MOE_VRAM_CACHE_UPGATE_PCT` from `60` to `58`, keeping the total
+  VRAM cache budget at `15000 MiB` and keeping the Phase 7CC larger expert
+  pack.
+- This shifts roughly `0.3 GiB` from upgate to down:
+  - expected down capacity gain: about `40` additional down slots;
+  - expected upgate capacity loss: about `55-60` upgate slots.
+- Because Phase 7CC reduced exposed upgate pack misses and gate host-stage
+  cost, a small down shift may reduce down movement/fallback enough to improve
+  decode.
+- Risk: prior Phase 7BX (`UPGATE_PCT=55`) under Phase 7AS was much slower
+  because upgate misses rose sharply. If Phase 7CC still needs the 60% upgate
+  pool, the first n32 run should show worse upgate misses, gate host-stage, and
+  decode time.
+
+Theoretical upper bound:
+
+- The hard upper bound is the down-side exposed movement/fallback cost:
+  - n96 down fallback component is `16.434 ms/call * 4798 ~= 78.86 s` inside
+    the down profile, but only part of this is removable because many fallback
+    waits are required miss service or overlap with other work;
+  - n96 main pinned host-stage is `42.48 s`, but the extra down slots can only
+    remove a small fraction of read/H2D work.
+- With only about `40` additional down slots, a realistic first-run upside is:
+  - n32: `0.2-0.8 s`;
+  - n96: `0.5-2.0 s`.
+- If upgate misses increase enough to add more than about `0.5 s` to gate
+  host-stage on n32, the experiment should be rejected immediately.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Reuse `/tmp/run_phase7cc_repro.sh` so the larger Phase 7CC expert pack is
+  active.
+- Change only:
+
+```sh
+UPGATE_PCT=58
+```
+
+- Keep all accepted Phase 7CC settings unchanged:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `IQ2_UPGATE_PARALLEL=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cd-upgate58-l12-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=58 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - command records `UPGATE_PCT=58`;
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_UPGATE_PCT=58`;
+  - `env.txt` contains the Phase 7CC `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - stderr reports `entries=30831`;
+  - stderr VRAM cache reports a smaller upgate pool and larger down pool than
+    Phase 7CC.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower or fails a hard gate, reject and keep
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
