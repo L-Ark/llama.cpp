@@ -19788,6 +19788,156 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BC - same-type IQ3 decode Q8_K up/gate probe
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS remains the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Env-only follow-ups after Phase 7AS did not improve:
+  - 7AT larger VRAM cache rejected;
+  - 7AU upgate pct 65 rejected;
+  - 7AV no batch profile rejected;
+  - 7AW 40 threads rejected;
+  - 7AX Q4 fallback chunk rejected;
+  - 7AY split up/gate staging rejected;
+  - 7AZ refill batch 8 rejected;
+  - 7BA no current-down overlap rejected;
+  - 7BB GPU handoff rejected for correctness and performance.
+- Current remaining decode-side bottleneck:
+  - Phase 7AS n96 type profile keeps same-type `IQ3_XXS` up/gate around
+    `18.396 ms/call`;
+  - same-type `IQ2_S` was already reduced to about `6.5-7.0 ms/call`;
+  - Q4_0 down GPU/cache attempts removed fallback but regressed wall time;
+  - simple IQ3 parallel streams and true compact-batch MMVQ were already
+    rejected because they increased contention or used a slower kernel shape.
+
+Current code finding:
+
+- `moe_stream_batch.cu` already has an `IQ3_XXS x Q8_K` reference batch kernel:
+  `launch_moe_iq3_xxs_q8k_batch()`.
+- That path is currently used for `GGML_MOE_STREAM_PROMPT_UP_GATE=exact-q8-k`
+  prompt experiments, not for decode same-type IQ3.
+- The path quantizes the activation rows to `Q8_K` once, then computes the
+  IQ3 dot products with a dedicated kernel. It avoids the current compact MMVQ
+  path used by same-type IQ3 decode.
+
+Hypothesis:
+
+- Add a default-off env:
+
+```sh
+GGML_MOE_STREAM_IQ3_Q8K_DECODE=1
+```
+
+- When enabled, only route same-type decode up/gate calls with:
+  - `src0_type == GGML_TYPE_IQ3_XXS`;
+  - not prompt mode;
+  - not mixed-type;
+  - not GPU handoff;
+  - same accepted Phase 7AS cache/IO/staging settings.
+- Reuse the existing Q8_K activation quantization and
+  `launch_moe_iq3_xxs_q8k_batch()` for both up and gate tensors.
+- Keep the feature default-off, so accepted SOTA behavior is unchanged unless
+  the env is present.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 confirmation has same-type IQ3 wall around `18.646 ms/call`;
+  Phase 7AS n96 has `18.396 ms/call`.
+- If the Q8_K path only matches the current IQ3 wall, there is no reason to keep
+  it.
+- If it reduces IQ3 toward the observed IQ2 bucket (`~6.9 ms/call`), the maximum
+  per-call saving is about `11.5 ms`.
+- With roughly `200` IQ3 same-type calls at n32, the n32 upper bound is about
+  `2.3 s`, moving `33471.59 ms / 31` toward `31.2 s / 31`
+  (`~0.99 tok/s`) before secondary effects.
+- At n96 the possible saving is larger, but still bounded by the type-18 call
+  count and any added quantization/staging overhead.
+
+Correctness risk:
+
+- This changes the numerical implementation for up/gate logits in decode.
+- Even if the prompt-only exact path has been useful diagnostically, decode
+  routing can still corrupt generation through wrong row ids, dst ids, cache
+  slots, activation quantization stride, or synchronization.
+- Therefore use n4 correctness smoke before n32, and inspect exact output text.
+  Automated `quality=pass` is not sufficient.
+
+Implementation plan:
+
+1. Add helper `decode_iq3_q8k_enabled()` reading
+   `GGML_MOE_STREAM_IQ3_Q8K_DECODE`.
+2. In the fused up/gate batch path, compute `q8k_up_gate` as:
+   - existing `exact_prompt_q8k`, or
+   - the new decode IQ3 condition.
+3. Allocate `bc.d_src1_q8k` when `q8k_up_gate` is true.
+4. Quantize `bc.d_src1_f32` into `bc.d_src1_q8k` for the new decode path.
+5. In the per-tensor launch lambda, use `launch_moe_iq3_xxs_q8k_batch()` when
+   `q8k_up_gate` is true.
+6. Disable IQ2 parallel up/gate and fused MMQ for this specific IQ3 Q8_K decode
+   path to keep the first probe narrow and interpretable.
+7. Print a one-time activation log:
+   `[moe_stream] IQ3_XXS decode Q8_K up/gate path active`.
+8. Build `build-cuda-batch/bin/llama-completion`.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Strict cold start:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup:
+  `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Env is Phase 7AS plus:
+
+```sh
+GGML_MOE_STREAM_IQ3_Q8K_DECODE=1
+```
+
+- Accepted source must be committed and pushed immediately after a passing n96
+  confirmation.
+- Rejected source must be reverted after recording results.
+
+Acceptance gates:
+
+- n4 smoke:
+  - exit `0`;
+  - no CUDA errors;
+  - activation log present;
+  - `memory.peak<=15899996160`, `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output must be coherent English and not malformed.
+- n32 candidate:
+  - must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - France answer must be semantically correct and coherent;
+  - type-18 wall/kernel bucket must improve relative to Phase 7AS
+    (`~18.4-18.7 ms/call`) or the speedup must have another clear mechanism.
+- n32 confirmation:
+  - must also beat `33471.59 ms / 31`;
+  - same quality, RAM, TTFT, and read gates.
+- n96 candidate and confirmation:
+  - both must beat Phase 7AS n96 confirmation `84173.24 ms / 77`;
+  - semantic output must remain correct.
+
+Rollback:
+
+- Revert immediately if:
+  - build fails;
+  - n4 activation is missing;
+  - n4 output is malformed;
+  - CUDA errors occur;
+  - RAM/TTFT/read gates fail;
+  - first n32 is slower than Phase 7AS;
+  - type-18 bucket does not improve and wall time does not improve;
+  - n32 improvement does not reproduce;
+  - n96 fails any gate.
+
 ## Phase 7AY - IQ2 parallel up/gate split staging probe
 
 Design timestamp: 2026-07-03 CST.
