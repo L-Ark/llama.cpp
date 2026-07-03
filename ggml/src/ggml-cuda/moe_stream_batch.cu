@@ -915,7 +915,6 @@ struct batch_vram_cache {
 };
 
 static constexpr int BATCH_VRAM_CACHE_COUNT = 3;
-static constexpr int BATCH_VRAM_CACHE_DOWN = 0;
 static constexpr int BATCH_VRAM_CACHE_UPGATE = 1;
 static constexpr int BATCH_VRAM_CACHE_Q40_DOWN = 2;
 
