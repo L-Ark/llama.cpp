@@ -20353,6 +20353,280 @@ systemd-run --wait --collect --same-dir \
     - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
     - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BO - CPU fallback source attribution diagnostic
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7BJ perf shows decode is still dominated by file-backed CPU fallback
+  pressure rather than Q4 arithmetic:
+  - `filemap_fault`, `filemap_add_folio`, page faults, memcg reclaim, and
+    spinlock wait dominate decode-window callchains;
+  - `ggml_vec_dot_q4_0_q8_0` self time is below `0.5%` in the decode window.
+- Phase 7BK proved a global mmap advice change is wrong:
+  - `MADV_RANDOM` increased major faults and refaults;
+  - decode slowed from `33471.59 ms / 31` to `59962.71 ms / 31`.
+- Before changing fallback storage, we need exact attribution of the remaining
+  CPU fallback:
+  - how much fallback still reads GGUF `src0->data`;
+  - how much reads expert-pack mmap;
+  - which tensors/layers/types cause the bytes and wall time;
+  - whether prompt fallback and decode fallback have different source mix.
+
+Hypothesis:
+
+Add a diagnostic-only source label to the existing CPU fallback CSV profile.
+For every fallback expert entry:
+
+- `pack_mmap`: `fallback_pack_mmap_ptrs[cur_a] != NULL`;
+- `src0_data`: fallback uses `(char *) src0->data + cur_a * nb02`.
+
+This should answer whether the next optimization should target:
+
+- expert-pack mmap page faults;
+- residual GGUF fallback reads;
+- prompt-only fallback/page-cache pressure;
+- or a smaller per-tensor/layer subset.
+
+Theoretical upper bound:
+
+- This diagnostic should not improve token rate; it is run to compute the bound
+  for the next implementation.
+- If nearly all decode fallback bytes are `pack_mmap`, then an anonymous bounded
+  fallback buffer can at most save the measured decode fallback/page-fault time
+  on that subset.
+- If decode still has large `src0_data` fallback bytes, then the upper bound of
+  a pack-only change is low, and the next implementation must first remove
+  GGUF fallback eligibility misses or add a GGUF-to-pack fallback source.
+- Based on Phase 7AS and Phase 7BJ, the hard n32 upside for source-path changes
+  is bounded by the visible residual fallback bucket plus page-fault side
+  effects. It cannot exceed the full gap between SOTA and ideal GPU-resident
+  execution unless it also reduces iouring wait and pinned staging contention.
+
+Implementation:
+
+- Source patch is diagnostic-only and default-off.
+- Extend `ggml_kimi_cpu_moe_fallback_profile_entry` in
+  `ggml/src/ggml-cpu/ggml-cpu.c` with a `source_kind` field.
+- Extend `ggml_kimi_cpu_moe_fallback_profile_record()` with a source label.
+- Change the CSV header from:
+
+```text
+rank,count,calls,fallback_us,expert_bytes,src0_type,phase,expert_idx,tensor
+```
+
+  to:
+
+```text
+rank,count,calls,fallback_us,expert_bytes,src0_type,phase,source,expert_idx,tensor
+```
+
+- In the down fallback profile loop, record `pack_mmap` vs `src0_data` for each
+  active expert.
+- Do not change routing, math, cache policy, io_uring, mmap advice, pinned
+  staging, CUDA graph settings, VRAM tier, or prompt/drop behavior.
+- If the diagnostic adds measurable overhead, revert the source patch after the
+  run and keep only the recorded result in this plan.
+
+Experiment:
+
+- Build:
+
+```bash
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Create `/tmp/run_phase7bo_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  ensure it records:
+
+```sh
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT="$RUN/fallback-profile.csv"
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bo-fallback-source-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bo_repro.sh
+```
+
+Required output:
+
+- standard SOTA metrics:
+  - `decode ms / tokens` and token rate;
+  - TTFT;
+  - quality output for `Please introduce France in a short paragraph.`;
+  - `memory.peak`, `memory.stat`, OOM/swap status;
+  - `read_failures`, `iouring_fallbacks`, `iouring_bytes`,
+    `iouring_wait_us`;
+  - pinned stage and CPU MoE profile lines.
+- source profile:
+  - top fallback rows from `$RUN/fallback-profile.csv`;
+  - aggregate bytes/calls/fallback_us by `phase,source,src0_type`;
+  - top tensors/layers by decode `src0_data` bytes and decode `pack_mmap`
+    bytes.
+
+Acceptance gates:
+
+- This phase is diagnostic, not a SOTA promotion by itself.
+- Hard gates still apply:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- If decode is slower than Phase 7AS by more than measurement noise, classify
+  the source patch as rejected for runtime use and revert it after extracting
+  attribution.
+
+Decision rule:
+
+- If decode fallback is mostly `pack_mmap`, next phase should implement a small
+  bounded non-file-backed fallback buffer for the hot decode subset and compute
+  the bound from `pack_mmap` bytes/time.
+- If decode fallback has material `src0_data`, next phase should first find why
+  `ggml_cuda_moe_expert_pack_mmap_ptr()` misses those tensors and either fix
+  expert-pack coverage or explicitly route CPU fallback through the pack.
+- If prompt is the only large `src0_data` source, keep prompt page-cache drop
+  work and avoid optimizing prompt fallback at the expense of decode.
+
+Rollback:
+
+- Revert the diagnostic source patch if:
+  - build fails;
+  - CSV source column is missing;
+  - hard gates fail;
+  - or runtime overhead is material.
+- Commit and push the plan/result immediately after the run.
+
+Phase 7BO result - diagnostic accepted, source patch reverted:
+
+- Time recorded: 2026-07-03 09:57:46 UTC run start.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-095746Z-n32-phase7bo-fallback-source-profile`.
+- Source state during experiment:
+  - temporary diagnostic patch in `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - added a CSV `source` column to the existing CPU fallback profile;
+  - source labels were:
+    - `pack_mmap` when `fallback_pack_mmap_ptrs[cur_a] != NULL`;
+    - `src0_data` when fallback used `src0->data + cur_a * nb02`;
+  - no routing, math, cache policy, io_uring, pinned staging, mmap advice,
+    CUDA graph, VRAM tier, or prompt/drop behavior changes.
+- Build:
+  - remote `build-cuda-batch` compiled successfully with the diagnostic patch;
+  - only the pre-existing `GGML_OP_LIGHTNING_INDEXER` switch warning appeared.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bo-fallback-source-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bo_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `79441.57 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Performance:
+  - decode `36307.96 ms / 31`, `0.85 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - diagnostic run is slower by `2836.37 ms`, so it is not a SOTA candidate.
+- Memory at final sample:
+  - `memory.current.final=15128674304`;
+  - `anon=442368`;
+  - `file=14884663296`;
+  - `kernel=239702016`;
+  - `inactive_file=5435940864`;
+  - `active_file=9448235008`;
+  - `pgmajfault=994874`;
+  - `workingset_refault_file=261560`.
+- Standard stream/caching metrics:
+  - expert pack:
+    - `hits=24471`, `misses=1179`;
+    - `iouring_reads=11297`;
+    - `iouring_bytes=66242985984`;
+    - `iouring_wait_us=12369747`;
+  - pinned main:
+    - `host_stage=20485.722 ms`;
+    - `h2d=4145.713 ms`;
+  - pinned gate:
+    - `host_stage=2287.092 ms`;
+    - `h2d=925.507 ms`;
+  - down CPU profile:
+    - `calls=2038`;
+    - `total=39.899 ms/call`;
+    - `cuda_batch=2.797 ms/call`;
+    - `fallback_t0=37.049 ms/call`;
+  - VRAM cache:
+    - down slots `806`, hit rate `73.6%`;
+    - up/gate slots `1679`, hit rate `43.7%`.
+- Source attribution from `fallback-profile.csv`:
+
+```text
+decode,pack_mmap,type=2 count=1727 calls=1727 us=2957696 bytes=14260764672 GiB=13.281
+decode,src0_data,type=2 count=9 calls=9 us=11336 bytes=74317824 GiB=0.069
+prompt,src0_data,type=11 count=5440 calls=3032 us=21088960 bytes=19125370880 GiB=17.812
+prompt,src0_data,type=18 count=6800 calls=3819 us=17912788 bytes=21461680128 GiB=19.988
+prompt,src0_data,type=2 count=952 calls=452 us=4050489 bytes=3732406272 GiB=3.476
+prompt,src0_data,type=22 count=9248 calls=4883 us=21366428 bytes=22960881664 GiB=21.384
+prompt,src0_data,type=23 count=1632 calls=867 us=8108358 bytes=6761545728 GiB=6.297
+```
+
+- Decode conclusion:
+  - residual decode CPU fallback is overwhelmingly expert-pack mmap:
+    - `13.281 GiB` `pack_mmap`;
+    - only `0.069 GiB` `src0_data`;
+    - `src0_data` is about `0.5%` of decode fallback bytes.
+  - GGUF `src0_data` misses are not the main decode bottleneck.
+  - The useful next target is removing file-backed page faults from
+    expert-pack mmap CPU fallback, not first expanding GGUF fallback coverage.
+- Prompt conclusion:
+  - prompt fallback is still entirely `src0_data`;
+  - this explains why prompt can create large GGUF file cache even after decode
+    uses expert-pack mmap;
+  - prompt fallback should stay protected by prompt-end page-cache dropping,
+    but prompt-only optimization should not be allowed to slow decode.
+- Decision:
+  - Accept Phase 7BO as diagnostic evidence.
+  - Reject the diagnostic source patch for runtime/SOTA use because the run was
+    materially slower than Phase 7AS.
+  - Reverted the source patch locally and on the remote.
+  - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
+    source after the experiment.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Next implementation target:
+  - design a bounded non-file-backed decode fallback buffer for the `type=2`
+    `pack_mmap` subset;
+  - size and admission policy must be derived from the `13.281 GiB` n32 decode
+    pack-mmap bytes, not from prompt fallback bytes;
+  - buffer must remain within the strict 16GB host-RAM cgroup and must not steal
+    memory from pinned staging or increase TTFT by more than 20%.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
