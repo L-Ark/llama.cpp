@@ -20839,6 +20839,84 @@ Rollback:
 - If accepted through n96 confirmation, commit and push the plan/result
   immediately and update the SOTA recipe to include `GGML_CUDA_GRAPH_OPT=1`.
 
+Phase 7BN result - rejected:
+
+- Time recorded: 2026-07-03 09:27:32 UTC run start.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-092732Z-n32-phase7bn-cuda-graph-opt`.
+- Source/build state:
+  - no source patch;
+  - used existing `build-cuda-batch/bin/llama-completion`;
+  - `build-cuda-batch/CMakeCache.txt` has `GGML_CUDA_GRAPHS:BOOL=ON`;
+  - stderr confirms `USE_GRAPHS = 1`.
+- Env delta over Phase 7AS:
+
+```sh
+GGML_CUDA_GRAPH_OPT=1
+```
+
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bn-cuda-graph-opt"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 CUDA_GRAPH_OPT=1 \
+      /tmp/run_phase7bn_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77922.12 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Activation:
+  - stderr shows `USE_GRAPHS = 1`;
+  - stderr reports `graphs reused = 30`;
+  - `env.txt` includes `GGML_CUDA_GRAPH_OPT=1`;
+  - `command.txt` records `CUDA_GRAPH_OPT=1`.
+- Performance:
+  - decode `34427.80 ms / 31`, `0.90 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BN is slower by `956.21 ms`.
+- Mechanism evidence:
+  - CUDA graph reuse remained active, so this was a real CUDA-graph-opt probe:
+    `graphs reused = 30`.
+  - Expert-pack wait was worse than Phase 7AS:
+    - Phase 7AS `iouring_wait_us=11567536`;
+    - Phase 7BN `iouring_wait_us=12315019`.
+  - Main pinned stage was worse:
+    - Phase 7AS main `host_stage=18631.890 ms`;
+    - Phase 7BN main `host_stage=19408.597 ms`.
+  - Gate pinned stage was slightly worse:
+    - Phase 7AS gate `host_stage=2245.529 ms`;
+    - Phase 7BN gate `host_stage=2289.607 ms`.
+  - Down CUDA batch bucket stayed similar:
+    - `cuda_batch=2.781 ms/call`.
+- Analysis:
+  - The accepted SOTA already uses CUDA graphs. The extra
+    `GGML_CUDA_GRAPH_OPT=1` path did not improve decode wall time.
+  - The regression came from host/IO movement buckets, not from graph reuse
+    disappearing.
+  - CUDA graph optimization cannot address the dominant expert-pack wait,
+    pinned staging, and CPU fallback/page-fault path; it may perturb stream
+    scheduling enough to worsen those buckets.
+- Decision:
+  - Reject Phase 7BN.
+  - Do not add `GGML_CUDA_GRAPH_OPT=1` to SOTA.
+  - Keep the current CUDA graph state exactly as Phase 7AS already uses it:
+    `USE_GRAPHS=1`, `graphs reused=30`, but no graph-opt env.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
