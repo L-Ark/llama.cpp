@@ -2183,6 +2183,139 @@ Decision:
   - up compute allowed to start as soon as up jobs finish, without waiting for
     all gate jobs.
 
+## Phase 7DK: combined iouring reads with per-job stream handoff
+
+Timestamp: 2026-07-03T19:32:40Z.
+
+Status: planned before implementation.
+
+Reason:
+
+- Phase 7DI proved combined up+gate stage jobs often reach `9-16`.
+- Phase 7DJ proved a naive one-stream merge is not acceptable:
+  - it created `684` `9-16` iouring batches;
+  - it reduced expert-pack wait from `29620731 us` to `25025815 us`;
+  - but decode regressed to `79469.35 ms / 77`;
+  - type22 wall worsened because up compute had to wait for gate staging.
+- Therefore the correct next probe must preserve overlap:
+  - submit combined iouring reads together;
+  - enqueue each completed H2D copy on that job's target stream;
+  - release up compute once all up H2Ds are enqueued;
+  - continue reading/enqueuing gate jobs in the same worker.
+
+Design:
+
+- Add env gate:
+  - `GGML_MOE_STREAM_UP_GATE_COMBINED_ASYNC_STAGE=1`
+- Apply only when:
+  - `parallel_up_gate && parallel_stage`;
+  - stage split is disabled;
+  - both up and gate streams exist;
+  - `bc.ev_up_copy_aux_done` and `bc.ev_gate_copy_aux_done` exist.
+- Introduce a combined job wrapper:
+
+```text
+struct combined_stage_copy_job {
+  stage_copy_job job;
+  cudaStream_t stream;
+  bool is_up;
+}
+```
+
+- Add a new iouring helper for combined async staging:
+  - takes combined jobs;
+  - uses one pinned ring and one io_uring queue;
+  - submits reads in combined order, optionally offset-sorted;
+  - when a CQE completes, enqueues `cudaMemcpyAsync` to the job's own stream;
+  - records a slot done event on that same stream;
+  - counts completed up and gate jobs separately.
+- The helper must signal:
+  - `up_ready` after every up job has had its H2D enqueued;
+  - `gate_ready` after every gate job has had its H2D enqueued;
+  - failure if any read/copy/event fails.
+- The calling path:
+  - starts a worker thread for combined staging;
+  - waits until `up_ready`;
+  - launches up on `bc.up_stream`;
+  - then waits until `gate_ready`;
+  - launches gate on `bc.gate_stream`;
+  - joins worker before leaving the stage block.
+
+Correctness constraints:
+
+- H2D for up jobs must be enqueued on `bc.up_stream` before up kernel launch.
+- H2D for gate jobs must be enqueued on `bc.gate_stream` before gate kernel
+  launch.
+- Pinned slot reuse must remain safe:
+  - before reusing a slot, synchronize the previous slot `done` event;
+  - record each slot `done` event on the stream used for that job's H2D.
+- If the helper falls back or fails, clear stage jobs and return failure; do
+  not silently change semantics.
+- Default behavior must be unchanged when the env var is not set.
+
+Theoretical bound:
+
+- Phase 7DJ showed the combined iouring part works:
+  - `9-16` batches appeared;
+  - iouring wait improved by about `4.6 s`.
+- Phase 7DJ's regression came from lost overlap, visible as type22 wall
+  worsening from `5.885 ms/call` to `6.521 ms/call`.
+- Phase 7DK can at best retain the iouring wait reduction while recovering most
+  of the lost overlap.
+- Realistic n96 gain target:
+  - `0.3-1.0 s` over Phase 7CC if overlap is preserved;
+  - if the worker synchronization adds overhead, it may still be slower.
+
+Execution:
+
+1. Commit and push this plan.
+2. Implement env-gated async combined staging.
+3. Build `build-cuda-batch`.
+4. Run n96 cold-start candidate:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <source-commit>
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7dk-async-combined-upgate-stage
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dk_async_combined_stage_repro.sh
+```
+
+Runner requirement:
+
+- Copy `/tmp/run_phase7cc_repro.sh` and append to `env.txt` when
+  `IQ2_UPGATE_PARALLEL=1`:
+
+```text
+GGML_MOE_STREAM_UP_GATE_COMBINED_ASYNC_STAGE=1
+```
+
+Acceptance:
+
+- exit `0`;
+- quality pass on the France prompt;
+- TTFT <= `106331.72 ms`;
+- 16GB cgroup including page cache;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`;
+- profile evidence:
+  - `9-16` iouring batches appear;
+  - type22 wall does not regress like Phase 7DJ;
+  - up compute starts before all gate work is complete.
+- If candidate passes, run one n96 repeat before promotion.
+
+Rollback:
+
+- If n96 is slower, quality fails, TTFT regresses, or memory violates the
+  constraint, revert the source patch and record the result.
+- If implementation complexity proves too high or introduces race risk, stop
+  and record a diagnostic-only conclusion instead of shipping a fragile path.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
