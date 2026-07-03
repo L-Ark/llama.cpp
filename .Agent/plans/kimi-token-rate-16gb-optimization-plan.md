@@ -19977,3 +19977,119 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7AZ - retest io_uring refill batch 8 on Phase 7AS
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS is the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7AG tested `GGML_MOE_IO_REFILL_BATCH=8` on the earlier Phase 7AE
+  SQPOLL SOTA. It produced a small reproducible n32 gain but failed n96 because
+  pinned host stage rose.
+- Phase 7AS changes the IO shape:
+  - IQ2_S up/gate parallel staging increases expert-pack traffic;
+  - Phase 7AS n96 expert-pack bytes are `164569595904`, versus Phase 7AE n96
+    around `109577273344`;
+  - Phase 7AS n32 expert-pack `iouring_wait_us=11567536`, with
+    `inflight_avg=2.91`;
+  - Phase 7AY showed that adding more staging threads/aux streams hurts because
+    it fragments batches and raises wait, so the safer next IO probe is to keep
+    staging topology fixed and only let the refill loop submit a larger batch.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- Keep all accepted Phase 7AS behavior:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - no split up/gate staging;
+  - split VRAM cache `15000 MiB`, upgate pct `60`;
+  - current down overlap, down parallel staging, pack-mmap CPU fallback;
+  - dense/expert mmap drops, pinned slots `8`, `THREADS=32`.
+- A larger refill batch may reduce short gaps in the now-heavier Phase 7AS read
+  stream without changing math, routing, cache capacity, prompt, or CUDA
+  kernels.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 visible expert-pack wait is `11.57 s`.
+- Refill can only reduce a fraction of this wait because the queue is still
+  capped at depth `8` and many waits are true data dependencies.
+- A realistic bound is `5-10%` of visible wait, or `0.6-1.2 s` on n32.
+- n96 realistic bound is roughly `1.5-3 s` if the improvement scales with the
+  larger 7AS expert-pack traffic.
+- If larger refill raises pinned host stage or lowers effective inflight, the
+  run should regress and be rejected after first n32.
+
+Experiment:
+
+- Env-only probe. Source remains clean at `c8ba8b89d` or later.
+- Create `/tmp/run_phase7az_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  parameterize:
+
+```sh
+IO_REFILL_BATCH=8
+```
+
+- The runner must write the actual `GGML_MOE_IO_REFILL_BATCH` value into
+  `env.txt` and record `IO_REFILL_BATCH` in `command.txt`.
+- Strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7az-7as-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IO_REFILL_BATCH=8 \
+      /tmp/run_phase7az_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - cold start with `drop_caches`;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer for
+    `Please introduce France in a short paragraph.`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - run directory includes `README.md`, `command.txt`, `env.txt`, `git.txt`,
+    `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`,
+    and `metrics.txt`.
+- Activation:
+  - `env.txt` must contain `GGML_MOE_IO_REFILL_BATCH=8`;
+  - `env.txt` must still contain `GGML_MOE_STREAM_UP_GATE_PARALLEL=1` and
+    `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - stderr must still contain `IQ2_S parallel up/gate streams active`;
+  - stderr must not contain `up/gate split CPU staging active`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if it beats, run n32 confirmation;
+  - if both n32 runs beat and gates pass, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - expert-pack `iouring_wait_us` and/or pinned main host-stage should drop
+    relative to 7AS n32 (`11567536 us`, `18631.890 ms`);
+  - if wall improves without lower IO/stage counters, inspect down fallback and
+    up/gate profiles before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower than Phase 7AS confirmation, reject immediately and
+  keep Phase 7AS as SOTA.
