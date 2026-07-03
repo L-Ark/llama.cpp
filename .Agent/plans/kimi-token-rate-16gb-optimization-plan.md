@@ -28667,6 +28667,122 @@ Rollback:
   trace-prefetch loads are ineffective, RAM/TTFT/read gates fail, or cache churn
   increases, reject and keep trace prefetch disabled in SOTA.
 
+Phase 7CK result - rejected:
+
+- result timestamp: 2026-07-03T14:03:27Z.
+- plan commit:
+  `729dea83f` (`docs: plan kimi phase7ck trace vram prefetch`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-140327Z-n32-phase7ck-trace-vram-prefetch`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ck_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv\nGGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64\nGGML_MOE_TRACE_PREFETCH_WINDOW=128\nGGML_MOE_TRACE_PREFETCH_MAX_LOADS=4\nEOF\n|' /tmp/run_phase7ck_repro.sh
+chmod +x /tmp/run_phase7ck_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-140327Z-n32-phase7ck-trace-vram-prefetch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ck_repro.sh
+```
+
+- activation:
+  - `env.txt` contains:
+    - `GGML_MOE_TRACE_PREFETCH=<Phase 7CJ route-trace.csv>`;
+    - `GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64`;
+    - `GGML_MOE_TRACE_PREFETCH_WINDOW=128`;
+    - `GGML_MOE_TRACE_PREFETCH_MAX_LOADS=4`;
+  - stderr reports:
+    `trace prefetch: loaded 42928 events ... window=128 max_loads=4 lead_events=64`;
+  - final trace-prefetch report:
+    - `calls=42928`;
+    - `matched=42928`;
+    - `resync=0`;
+    - `loads=2404`;
+    - `cached=19503`;
+    - `missing_tensor=4`;
+    - `cache_unavailable=0`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `80255.54 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33554.47 ms / 31`, `0.92 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CK is slower by `336.81 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15124611072`;
+  - `file=14884413440`;
+  - `inactive_file=6565343232`;
+  - `active_file=8318541824`;
+  - `kernel=236670976`;
+  - `anon=446464`.
+- mechanism:
+  - VRAM cache hit rate improved:
+    - global: Phase 7CJ diagnostic `52.9%` to Phase 7CK `57.5%`;
+    - down: `73.6%` to `76.3%`;
+    - upgate: `43.7%` to `49.2%`;
+  - current-down overlap improved locally:
+    - planned jobs fell from Phase 7CJ `3664` to `3258`;
+    - worker time fell from `3545.137 ms` to `3068.078 ms`;
+  - but prefetch added too much IO work:
+    - expert-pack `iouring_bytes` rose from Phase 7CJ `67926376448` to
+      `73917333504`;
+    - expert-pack `iouring_wait_us` rose from `12966777` to `14595165`;
+    - expert-pack batches rose from `3266` to `5274`;
+    - many new one-job batches appeared: `batch_hist=1:2513`;
+  - pinned main `host_stage` fell from `17543.507 ms` to `16009.934 ms`, but
+    that reduction did not overcome the extra prefetch IO/wait and H2D work;
+  - aggregate up_gate improved slightly to `12.732 ms/call`, but type-specific
+    decode rows worsened:
+    - type `18`: `15.852 ms/call`;
+    - type `22`: `7.175 ms/call`;
+  - down profile remained high at `40.588 ms/call`.
+
+Gap analysis:
+
+- The route trace is perfectly aligned for this prompt (`matched=42928`,
+  `resync=0`), so route instability is not the issue.
+- The mechanism improved cache hit rate, but the cost model is unfavorable:
+  `2404` prefetch loads create extra direct reads and many small iouring
+  batches, increasing total read wait more than the removed runtime-load waits.
+- This means the current trace-prefetch implementation needs either:
+  - stricter admission so it only prefetches high-confidence future misses that
+    would otherwise be exposed on the critical path; or
+  - batching across future events rather than submitting many small prefetch
+    batches; or
+  - integration with current-down overlap so it does not duplicate/compete with
+    the same prefetch stream.
+- The existing small-window env setting is not sufficient for promotion.
+
+Decision:
+
+- Reject Phase 7CK.
+- Do not run second n32 or n96.
+- Keep trace-driven VRAM prefetch disabled in SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Next step should not be a broader trace-prefetch sweep. Either implement a
+  stricter prefetch admission/batching strategy using Phase 7CJ as input, or
+  move to narrow Q4_0 down fallback cleanup.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
