@@ -166,6 +166,77 @@ static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
            type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
 }
 
+static bool ggml_cuda_moe_stream_q4_0_down_enabled(void) {
+    const char * env = getenv("GGML_MOE_STREAM_Q4_0_DOWN");
+    return env && strcmp(env, "0") != 0 && strcmp(env, "false") != 0 && strcmp(env, "FALSE") != 0;
+}
+
+static bool ggml_cuda_moe_stream_tensor_layer(const char * name, int * layer) {
+    if (!name || !layer) {
+        return false;
+    }
+    const char * p = strstr(name, "blk.");
+    if (!p) {
+        return false;
+    }
+    p += 4;
+    char * end = NULL;
+    const long value = strtol(p, &end, 10);
+    if (end == p || value < 0 || value > INT_MAX) {
+        return false;
+    }
+    *layer = (int) value;
+    return true;
+}
+
+static bool ggml_cuda_moe_stream_layer_in_range(int layer, const char * range) {
+    if (!range || !range[0]) {
+        return true;
+    }
+
+    const char * p = range;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',') {
+            ++p;
+        }
+        if (!*p) {
+            break;
+        }
+
+        char * end = NULL;
+        const long start = strtol(p, &end, 10);
+        if (end == p) {
+            return false;
+        }
+        long finish = start;
+        p = end;
+        if (*p == '-') {
+            ++p;
+            finish = strtol(p, &end, 10);
+            if (end == p) {
+                return false;
+            }
+            p = end;
+        }
+
+        if (start <= layer && layer <= finish) {
+            return true;
+        }
+        while (*p && *p != ',') {
+            ++p;
+        }
+    }
+
+    return false;
+}
+
+static bool ggml_cuda_moe_stream_supports_q4_0_down_batch(const char * name) {
+    int layer = -1;
+    return ggml_cuda_moe_stream_q4_0_down_enabled() &&
+           ggml_cuda_moe_stream_tensor_layer(name, &layer) &&
+           ggml_cuda_moe_stream_layer_in_range(layer, getenv("GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE"));
+}
+
 static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_type gate_type) {
     return (up_type == GGML_TYPE_IQ2_S && gate_type == GGML_TYPE_IQ3_XXS) ||
            (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
@@ -177,7 +248,8 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
     }
 
     return ggml_cuda_moe_stream_supports_type(type) ||
-           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
+           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS ||
+           (type == GGML_TYPE_Q4_0 && ggml_cuda_moe_stream_supports_q4_0_down_batch(name));
 }
 
 struct ggml_kimi_cpu_moe_profile_op {
