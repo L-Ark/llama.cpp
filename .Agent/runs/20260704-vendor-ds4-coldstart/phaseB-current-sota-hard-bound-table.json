@@ -1,0 +1,143 @@
+{
+  "base_decode_ms_estimate": 33658.53658536586,
+  "base_eval_tok_s": 4.1,
+  "bottleneck_summary_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-bottleneck-summary.json",
+  "decode_tokens_assumed": 138,
+  "hard_bounds": [
+    {
+      "candidate": "top128 up/down residency",
+      "caveat": "requires extra residency; previous small hotset/cache paths regressed or tied",
+      "removable_decode_ms": 3741.536000000001,
+      "required_extra": "544.0 MiB payload",
+      "theoretical_tok_s": 4.612761884542122
+    },
+    {
+      "candidate": "top256 up/down residency",
+      "caveat": "requires extra residency; previous small hotset/cache paths regressed or tied",
+      "removable_decode_ms": 4899.473,
+      "required_extra": "1075.2 MiB payload",
+      "theoretical_tok_s": 4.79848725221435
+    },
+    {
+      "candidate": "top512 up/down residency",
+      "caveat": "requires extra residency; previous small hotset/cache paths regressed or tied",
+      "removable_decode_ms": 6315.441,
+      "required_extra": "2112.2 MiB payload",
+      "theoretical_tok_s": 5.046977931564493
+    },
+    {
+      "candidate": "top1024 up/down residency",
+      "caveat": "requires extra residency; previous small hotset/cache paths regressed or tied",
+      "removable_decode_ms": 9080.313999999998,
+      "required_extra": "4190.5 MiB payload",
+      "theoretical_tok_s": 5.614726594679254
+    },
+    {
+      "candidate": "top2048 up/down residency",
+      "caveat": "requires extra residency; previous small hotset/cache paths regressed or tied",
+      "removable_decode_ms": 12647.09599999998,
+      "required_extra": "8198.2 MiB payload",
+      "theoretical_tok_s": 6.5678504736183925
+    },
+    {
+      "candidate": "all CPU up/down decode fallback removed",
+      "caveat": "ideal upper bound; still below 10 tok/s by itself",
+      "removable_decode_ms": 18089.280000000068,
+      "required_extra": "~22.3 GiB unique decode payload if naively resident",
+      "theoretical_tok_s": 8.863621666413545
+    },
+    {
+      "candidate": "all CPU up/down decode fallback + all one-stream source time removed",
+      "caveat": "not a single feasible implementation; shows 10 tok/s needs stacked wins or speculation",
+      "removable_decode_ms": 23325.91300000426,
+      "required_extra": "requires eliminating CPU fallback plus gate source stalls",
+      "theoretical_tok_s": 13.355756053622908
+    }
+  ],
+  "phaseA_summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T172115Z-20260704_phaseA_clean_sota_guard_head4be08352/france-cpu40-vram0gb",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "cpu_moe": 40,
+    "elapsed_seconds": 62.63,
+    "eval_ms": null,
+    "eval_tok_s": 4.1,
+    "exit_status": 0,
+    "first_answer_ms": 29484.204486,
+    "load_ms": null,
+    "max_rss_kb": 15592664,
+    "memory_file_bytes": 15101456384,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 16471,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 11295584256,
+      "anon": 1019904,
+      "file": 15101456384,
+      "file_mapped": 278528,
+      "inactive_file": 3805855744,
+      "kernel": 112558080,
+      "pgfault": 2308751,
+      "pgmajfault": 268389,
+      "slab": 112005856,
+      "workingset_activate_file": 604200,
+      "workingset_refault_file": 1629739,
+      "workingset_restore_file": 604166
+    },
+    "oom_seen": false,
+    "pgmajfault": 268389,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.5,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 29484.204486,
+    "unit": "vendor-ds4-16gb-20260703T172115Z-cpu40.service",
+    "workingset_refault_file": 1629739
+  },
+  "phaseB_summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "cpu_moe": 40,
+    "elapsed_seconds": 62.28,
+    "eval_ms": null,
+    "eval_tok_s": 4.1,
+    "exit_status": 0,
+    "first_answer_ms": 29663.442807,
+    "load_ms": null,
+    "max_rss_kb": 15593816,
+    "memory_file_bytes": 15102832640,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 16758,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 10347606016,
+      "anon": 1146880,
+      "file": 15102832640,
+      "file_mapped": 270336,
+      "inactive_file": 4755197952,
+      "kernel": 112717824,
+      "pgfault": 2314032,
+      "pgmajfault": 265548,
+      "slab": 112105632,
+      "workingset_activate_file": 484804,
+      "workingset_refault_file": 1671406,
+      "workingset_restore_file": 484697
+    },
+    "oom_seen": false,
+    "pgmajfault": 265548,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.5,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 29663.442807,
+    "unit": "vendor-ds4-16gb-20260703T172436Z-cpu40.service",
+    "workingset_refault_file": 1671406
+  }
+}

@@ -1,0 +1,343 @@
+{
+  "by_band": {
+    "0-2": {
+      "ms": 55777.45299999903,
+      "rows": 41600
+    },
+    "10-19": {
+      "ms": 71032.27300000326,
+      "rows": 115904
+    },
+    "20-29": {
+      "ms": 64883.56500000405,
+      "rows": 117912
+    },
+    "3-9": {
+      "ms": 65405.2600000042,
+      "rows": 108800
+    },
+    "30-39": {
+      "ms": 71134.37800000291,
+      "rows": 115784
+    }
+  },
+  "by_kind": {
+    "down": {
+      "ms": 174922.64200009976,
+      "rows": 277048
+    },
+    "up": {
+      "ms": 153310.28700001253,
+      "rows": 222952
+    }
+  },
+  "max_thread_ms": 17238.911999999775,
+  "median_thread_ms": 16389.567999999592,
+  "sum_chunk_ms": 328232.92900026374,
+  "top_tensors": [
+    {
+      "ms": 11470.204999999934,
+      "rows": 6448,
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "ms": 9576.081000000051,
+      "rows": 7432,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "ms": 9418.256999999985,
+      "rows": 6536,
+      "tensor": "blk.1.ffn_up_exps.weight"
+    },
+    {
+      "ms": 8717.510000000048,
+      "rows": 7216,
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "ms": 8703.110999999964,
+      "rows": 6536,
+      "tensor": "blk.2.ffn_up_exps.weight"
+    },
+    {
+      "ms": 7892.289000000033,
+      "rows": 7432,
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "ms": 7849.092000000075,
+      "rows": 6028,
+      "tensor": "blk.39.ffn_down_exps.weight"
+    },
+    {
+      "ms": 6651.326999999947,
+      "rows": 8256,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "ms": 6407.347999999981,
+      "rows": 7784,
+      "tensor": "blk.4.ffn_down_exps.weight"
+    },
+    {
+      "ms": 5699.164999999965,
+      "rows": 9020,
+      "tensor": "blk.9.ffn_down_exps.weight"
+    },
+    {
+      "ms": 5264.363999999965,
+      "rows": 6848,
+      "tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "ms": 5028.415999999991,
+      "rows": 5656,
+      "tensor": "blk.19.ffn_down_exps.weight"
+    },
+    {
+      "ms": 5027.885999999983,
+      "rows": 6932,
+      "tensor": "blk.35.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4970.908999999986,
+      "rows": 4876,
+      "tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4870.8469999999825,
+      "rows": 6440,
+      "tensor": "blk.21.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4843.605000000045,
+      "rows": 8940,
+      "tensor": "blk.5.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4774.919999999981,
+      "rows": 5396,
+      "tensor": "blk.35.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4697.607999999997,
+      "rows": 4888,
+      "tensor": "blk.19.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4659.250999999949,
+      "rows": 8724,
+      "tensor": "blk.8.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4500.142000000007,
+      "rows": 7100,
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4321.628999999989,
+      "rows": 5160,
+      "tensor": "blk.21.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4255.283999999965,
+      "rows": 8684,
+      "tensor": "blk.6.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4212.330999999967,
+      "rows": 6632,
+      "tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4197.67499999995,
+      "rows": 7068,
+      "tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "ms": 4164.929000000004,
+      "rows": 6832,
+      "tensor": "blk.18.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4134.641999999913,
+      "rows": 8920,
+      "tensor": "blk.7.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4130.2219999999525,
+      "rows": 6244,
+      "tensor": "blk.11.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4063.9769999999558,
+      "rows": 7048,
+      "tensor": "blk.16.ffn_down_exps.weight"
+    },
+    {
+      "ms": 4014.78999999998,
+      "rows": 6400,
+      "tensor": "blk.17.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3985.652000000012,
+      "rows": 6656,
+      "tensor": "blk.30.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3966.3009999999936,
+      "rows": 5772,
+      "tensor": "blk.10.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3899.262999999993,
+      "rows": 6852,
+      "tensor": "blk.36.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3889.035000000004,
+      "rows": 6656,
+      "tensor": "blk.15.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3762.8649999999543,
+      "rows": 6932,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "ms": 3749.489999999977,
+      "rows": 6380,
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3743.008000000002,
+      "rows": 6832,
+      "tensor": "blk.27.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3703.603999999976,
+      "rows": 5004,
+      "tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "ms": 3661.414999999964,
+      "rows": 6460,
+      "tensor": "blk.25.ffn_down_exps.weight"
+    },
+    {
+      "ms": 3592.0090000000077,
+      "rows": 5248,
+      "tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "ms": 3550.195999999999,
+      "rows": 4924,
+      "tensor": "blk.37.ffn_up_exps.weight"
+    }
+  ],
+  "top_threads": [
+    {
+      "ms": 17238.911999999775,
+      "rows": 23794,
+      "thread": 19
+    },
+    {
+      "ms": 16945.79599999972,
+      "rows": 25021,
+      "thread": 14
+    },
+    {
+      "ms": 16915.767999999647,
+      "rows": 24923,
+      "thread": 15
+    },
+    {
+      "ms": 16778.95900000022,
+      "rows": 24140,
+      "thread": 18
+    },
+    {
+      "ms": 16693.90099999965,
+      "rows": 25326,
+      "thread": 9
+    },
+    {
+      "ms": 16624.078999999438,
+      "rows": 25030,
+      "thread": 8
+    },
+    {
+      "ms": 16565.27599999976,
+      "rows": 25181,
+      "thread": 2
+    },
+    {
+      "ms": 16456.568999999603,
+      "rows": 25566,
+      "thread": 1
+    },
+    {
+      "ms": 16404.46699999945,
+      "rows": 24883,
+      "thread": 7
+    },
+    {
+      "ms": 16403.514999999446,
+      "rows": 25232,
+      "thread": 6
+    },
+    {
+      "ms": 16375.620999999734,
+      "rows": 24484,
+      "thread": 17
+    },
+    {
+      "ms": 16374.077000000292,
+      "rows": 24958,
+      "thread": 16
+    },
+    {
+      "ms": 16330.350999999622,
+      "rows": 24989,
+      "thread": 13
+    },
+    {
+      "ms": 16271.914999999573,
+      "rows": 25196,
+      "thread": 5
+    },
+    {
+      "ms": 16109.474999999811,
+      "rows": 25398,
+      "thread": 12
+    },
+    {
+      "ms": 16086.856999999829,
+      "rows": 24854,
+      "thread": 10
+    },
+    {
+      "ms": 15991.04399999983,
+      "rows": 25016,
+      "thread": 11
+    },
+    {
+      "ms": 15974.126999999693,
+      "rows": 25138,
+      "thread": 3
+    },
+    {
+      "ms": 15936.820999999314,
+      "rows": 25277,
+      "thread": 4
+    },
+    {
+      "ms": 15755.398999998864,
+      "rows": 25594,
+      "thread": 0
+    }
+  ],
+  "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb/cpu_chunk_trace.csv",
+  "trace_rows": 500000
+}

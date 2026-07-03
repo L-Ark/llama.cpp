@@ -14,9 +14,9 @@
 
 ## Current Baseline
 
-- `source_head`: `b568e210f941f76faf12c1211ac47c1cd4dca57c`，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `source_head`: `4be08352fd0416b4933f8522c997ef4ed8badf54`，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `runtime_binary_build`: stdout reports `build : b14557-1e9b327d5`。
-- `runtime_source_note`: all-output/server-speculative probes after the accepted SOTA were reverted before commit; committed head `b568e210f` contains records/rejected artifacts and no promoted runtime-source change beyond the accepted SOTA path. Runtime binary hash remains the accepted SOTA binary hash below.
+- `runtime_source_note`: all-output/server-speculative probes after the accepted SOTA were reverted before commit; committed heads through `4be08352f` contain records/rejected artifacts/plan updates and no promoted runtime-source change beyond the accepted SOTA path. Runtime binary hash remains the accepted SOTA binary hash below.
 - `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`。
 - `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076` for `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`。
 - `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b` for `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`。
@@ -2383,3 +2383,60 @@ Rollback rule:
 
 - If a candidate is slower than `4.2 tok/s`, fails France correctness, exceeds the 16GB host RAM budget including page cache, triggers OOM/kill, or violates the accepted TTFT gate, revert the runtime source before committing.
 - It is acceptable to commit and push rejected experiment records, but the committed runtime tree must return to the last accepted SOTA path unless the new candidate is promoted.
+
+### 2026-07-04 Phase A/B Current-SOTA Guard And Bottleneck Refresh
+
+Phase A clean SOTA guard:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T172115Z-20260704_phaseA_clean_sota_guard_head4be08352/france-cpu40-vram0gb`.
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/phaseA-clean-sota-guard-summary.json`.
+- Result: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=29484.204486 ms`.
+- RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15101456384`, `pgmajfault=268389`, `workingset_refault_file=1629739`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: manual pass. The France answer is complete, coherent, and semantically correct.
+- Counters: one expert pack `hits=4623 misses=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Verdict: current pushed head reproduces the accepted SOTA shape. Proceed to diagnostic profiling.
+
+Phase B current-SOTA profile:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb`.
+- Artifacts:
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-profile-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-bottleneck-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-cpu-chunk-analysis.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-name-profile-analysis.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-hard-bound-table.json`
+- Diagnostic result: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=29663.442807 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102832640`, `ram_ok=true`, correctness pass.
+- One-stream/gate trace: rows `35151`, hit rate `86.85%`, `src0_ms=5236.633`, `src1_ms=156.695`, `kernel_ms=332.856`, `sync_ms=1039.234`, `total_ms=6986.810`.
+- CPU fallback profile: total `25743.677 ms`, decode `18089.280 ms`, prompt `7654.397 ms`, up `12387.490 ms`, down `13356.187 ms`.
+- CPU chunk trace: `500000` rows capped; multi-thread chunk-sum `328232.929 ms`, max thread `17238.912 ms`, median thread `16389.568 ms`, up chunk-sum `153310.287 ms`, down chunk-sum `174922.642 ms`.
+- Page/cache pressure: `pgmajfault=265548`, `workingset_refault_file=1671406`.
+
+Hard-bound table from Phase B:
+
+| Candidate | Covered decode ms | Required extra residency | Hard upper bound | Decision |
+| --- | ---: | ---: | ---: | --- |
+| top128 up/down residency | `3741.536` | `544.0 MiB` | `4.61 tok/s` | reject as primary direction |
+| top256 up/down residency | `4899.473` | `1075.2 MiB` | `4.80 tok/s` | reject as primary direction |
+| top512 up/down residency | `6315.441` | `2112.2 MiB` | `5.05 tok/s` | reject unless gate cache can be preserved |
+| top1024 up/down residency | `9080.314` | `4190.5 MiB` | `5.61 tok/s` | reject under current VRAM budget |
+| top2048 up/down residency | `12647.096` | `8198.2 MiB` | `6.57 tok/s` | reject under current VRAM budget |
+| all CPU up/down decode fallback removed | `18089.280` | `~22.3 GiB unique decode payload if naively resident` | `8.86 tok/s` | insufficient alone for 10 tok/s |
+| all CPU up/down decode fallback plus all one-stream source time removed | `23325.913` | stacked CPU fallback + gate source removal | `13.36 tok/s` | only indicates required stacked wins/speculation |
+
+Conclusion:
+
+- The next optimization cannot be another simple hotset residency sweep; the hard upper bound is too low unless it also preserves gate cache and removes more than the covered fallback time.
+- Pure CPU fallback elimination is not enough for `10 tok/s` by itself. Reaching `10 tok/s` needs either stacked wins across CPU fallback and gate source stalls, or a speculative/MTP path with much higher acceptance than ngram-simple.
+- Before changing source, the next diagnostic must split CPU fallback into page-fault/source-stall vs CPU math. A no-drop/warm comparison under the same 16GB cgroup is useful only as diagnostic evidence; it is not an acceptable cold-start result because external hot page cache may not be charged to the new cgroup.
+
+Next diagnostic plan:
+
+1. Run the same Phase B profile without `drop_caches` while preserving the 16GB cgroup and SOTA env.
+2. Compare cold vs no-drop:
+   - `eval_tok_s`, TTFT, `pgmajfault`, `workingset_refault_file`, file inputs;
+   - CPU fallback total/decode/up/down ms;
+   - one-stream `src0_ms` and cache hit rate;
+   - full France correctness.
+3. If no-drop greatly reduces fallback ms and major faults, prioritize O_DIRECT/bounded async prefetch for CPU fallback source loads.
+4. If no-drop does not materially reduce fallback ms, treat CPU fallback math as dominant and deprioritize IO/layout work; then design either CPU kernel/fusion changes or a higher-acceptance speculative/MTP source.
+5. Do not promote the no-drop result regardless of speed; it is diagnostic only.
