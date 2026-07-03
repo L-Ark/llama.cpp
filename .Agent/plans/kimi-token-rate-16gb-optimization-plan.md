@@ -3630,6 +3630,109 @@ Rollback:
   not add planned jobs for the top rows, revert the behavior change before
   continuing.
 
+Phase 7DQ result - rejected:
+
+- result timestamp: 2026-07-03T20:49:00Z.
+- source/plan commit:
+  `777f67ba3` (`cuda: extend current down overlap to fused upgate`).
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-204627Z-n32-phase7dq-ordinary-current-down-overlap`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 777f67ba3
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dq_repro.sh
+sed -i "/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=\$RUN/current-down-overlap-profile.csv" /tmp/run_phase7dq_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-204627Z-n32-phase7dq-ordinary-current-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dq_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `77964.78 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `33362.17 ms / 31`, `0.93 tok/s`;
+  - slower than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `144.51 ms`;
+  - fails the promotion gate, so no n32 repeat or n96 run.
+- mechanism:
+  - current-down-overlap calls increased from `992` to `1861`;
+  - planned jobs increased from `3664` to `7149`;
+  - completed jobs `7149`;
+  - down cache hit rate became `100.0%`:
+    - hits `13120`;
+    - misses `0`;
+    - preloads `7125`.
+  - top rows are now covered:
+    - `blk.1`: planned `174`, cache hits `74`, missing pack `174`;
+    - `blk.2`: planned `150`, cache hits `98`, missing pack `150`;
+    - `blk.4`: planned `169`, cache hits `79`, missing pack `0`;
+    - `blk.60`: planned `162`, cache hits `86`, missing tensor `1`.
+- target down rows improved strongly:
+  - `blk.1`: stage `2.089 ms`, wall `8.112 ms`, hits `248`, misses `0`;
+  - `blk.2`: stage `1.939 ms`, wall `7.968 ms`, hits `248`, misses `0`;
+  - `blk.4`: stage `1.711 ms`, wall `7.603 ms`, hits `248`, misses `0`;
+  - `blk.60`: stage `176.488 ms`, wall `187.635 ms`,
+    hits `248`, misses `8`.
+- but the cost moved upstream:
+  - Phase 7DP main pinned host stage `17636.744 ms`;
+  - Phase 7DQ main pinned host stage `18415.577 ms`, regression
+    `+778.833 ms`;
+  - Phase 7DP main H2D `4137.261 ms`;
+  - Phase 7DQ main H2D `4523.910 ms`, regression `+386.649 ms`;
+  - Phase 7DP main pinned copies `19754`;
+  - Phase 7DQ main pinned copies `21304`, regression `+1550`;
+  - Phase 7DP expert-pack `iouring_wait_us=13247674`;
+  - Phase 7DQ expert-pack `iouring_wait_us=10104357`, improvement
+    `-3143317 us`;
+  - Phase 7DP down profile total `39.346 ms/call`;
+  - Phase 7DQ down profile total `38.929 ms/call`, only `0.417 ms/call`
+    better despite the 100% down hit rate.
+
+Gap analysis:
+
+- The behavior patch proved the coverage hypothesis:
+  ordinary up/gate overlap can preload the previously uncovered top down rows.
+- It did not improve decode because the work was not removed; it was moved from
+  down batch stage into the up/gate tail and extra pinned staging/H2D work.
+- The earlier join/IO contention concern was correct:
+  - the run performs more pinned copies and H2D;
+  - missing-pack on `blk.1/2` forces fallback copies despite planned jobs;
+  - extra overlap work consumes the same staging resources used by the critical
+    path.
+- Therefore "make every down row resident before down" is not enough. The next
+  valid optimization must reduce total movement or make the extra movement run
+  on otherwise idle resources, not simply shift it earlier.
+
+Decision:
+
+- Reject Phase 7DQ.
+- Revert the behavior change that starts current-down-overlap in the ordinary
+  path.
+- Keep Phase 7DP default-off per-tensor diagnostic infrastructure.
+- Keep Phase 7CC as accepted SOTA.
+- Next plan should focus on reducing movement volume or staging contention:
+  - fix expert-pack coverage for `blk.1/2` only if it avoids extra pinned
+    copies;
+  - or reduce H2D/copy count through larger coalesced current-down jobs;
+  - or optimize Q4_0 CPU fallback separately, since 7DP shows Q4 layers are
+    the only true `missing_tensor` group.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.

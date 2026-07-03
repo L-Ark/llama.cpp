@@ -6383,25 +6383,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     }
     if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
 
-    start_current_down_overlap();
-    auto ordinary_overlap_fail = [&]() -> bool {
-        (void)join_current_down_overlap();
-        return false;
-    };
-
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
         bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
-    if (cudaGetLastError() != cudaSuccess) return ordinary_overlap_fail();
+    if (cudaGetLastError() != cudaSuccess) return false;
     if (profile) cudaEventRecord(bc.ev_kernel, st);
 
     if (use_handoff) {
         const char *handoff_sync_env = std::getenv("GGML_MOE_GPU_HANDOFF_SYNC");
         const bool sync_handoff = profile ||
             (handoff_sync_env && handoff_sync_env[0] && handoff_sync_env[0] != '0');
-        if (sync_handoff && cudaStreamSynchronize(st) != cudaSuccess) return ordinary_overlap_fail();
+        if (sync_handoff && cudaStreamSynchronize(st) != cudaSuccess) return false;
         g_handoff.host_ptr = dst;
         g_handoff.d_data = fused_d;
         g_handoff.bytes = dst_bytes;
@@ -6526,14 +6520,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 parallel_up_gate,
                 parallel_stage);
         }
-        (void)join_current_down_overlap();
         return true;
     }
 
-    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return ordinary_overlap_fail();
+    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
     if (profile) cudaEventRecord(bc.ev_d2h, st);
-    if (cudaStreamSynchronize(st) != cudaSuccess) return ordinary_overlap_fail();
-    (void)join_current_down_overlap();
+    if (cudaStreamSynchronize(st) != cudaSuccess) return false;
 
     if (point_dump && point_active >= 0 && point_active < n_active && point_col >= 0 && point_col < ne01) {
         const float *point_tmp = (const float *)bc.h_dst;
