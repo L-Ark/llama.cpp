@@ -30202,6 +30202,116 @@ Rollback:
 - Env/profile-file failure needs no source rollback.
 - If first n32 is slower or hard gates fail, reject and keep SOTA unchanged.
 
+Phase 7CR result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `7bd2421b5` (`docs: plan kimi phase7cr l1 l2 profile preload`).
+- source status:
+  - env/profile-file only;
+  - no source patch;
+  - no source rollback required.
+- generated profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv`.
+- profile size:
+  - `180` unique tensor/expert rows;
+  - `496` route-count coverage from the Phase 7CJ route trace;
+  - only `blk.1.ffn_down_exps.weight` and
+    `blk.2.ffn_down_exps.weight`.
+
+First n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-152126Z-n32-phase7cr-profile-preload-l1-l2`.
+- activation:
+  - `env.txt` contains the phase7cr profile path;
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_PROTECT=0`;
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2`;
+  - stderr reports:
+    `profile preload: loaded 180 entries from .../phase7cr-l1-l2-down-profile.csv`;
+  - `down-batch-profile.csv` exists.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77690.53 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `31832.42 ms / 31`, `0.97 tok/s`;
+  - faster than Phase 7CC n32 confirmation by `1385.24 ms`;
+  - because mechanism did not match the hypothesis, a confirmation run was
+    required before any promotion.
+- mechanism:
+  - profile preload did not reduce layer `1/2` down misses:
+    - `blk.1`: hits `74`, misses `174`, stage `735.548 ms`,
+      wall `741.479 ms`;
+    - `blk.2`: hits `98`, misses `150`, stage `641.934 ms`,
+      wall `648.142 ms`;
+  - down cache totals unchanged versus Phase 7CC shape:
+    - hits `9659`, misses `3461`, hit rate `73.6%`;
+  - the fast wall time came from other buckets:
+    - up_gate `12.011 ms/call`;
+    - main pinned host stage `16537.318 ms`;
+  - this was not the expected mechanism, so it was treated as a candidate only.
+
+Second n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-152554Z-n32-phase7cr-profile-preload-l1-l2-confirm`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77233.31 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33377.72 ms / 31`, `0.93 tok/s`;
+  - slower than Phase 7CC n32 confirmation by `160.06 ms`;
+  - fails promotion, so no n96 was run.
+- mechanism:
+  - profile preload again did not reduce layer `1/2` down misses:
+    - `blk.1`: hits `74`, misses `174`, stage `772.674 ms`,
+      wall `777.849 ms`;
+    - `blk.2`: hits `98`, misses `150`, stage `667.004 ms`,
+      wall `672.199 ms`;
+  - down cache totals unchanged:
+    - hits `9659`, misses `3461`, hit rate `73.6%`;
+  - up_gate returned to normal range:
+    - `12.723 ms/call`;
+  - main pinned host stage returned to `17631.328 ms`.
+
+Gap analysis:
+
+- The profile file was loaded, but the target layer hit/miss counts did not
+  change. The loaded profile entries did not persist to decode-time `blk.1/2`
+  consumption in a useful way.
+- The first fast candidate was not caused by reduced `blk.1/2` stage; it was an
+  unrelated favorable run-to-run shift in up_gate and main staging.
+- The confirmation removed that apparent gain, so the optimization is not
+  reproducible.
+
+Decision:
+
+- Reject Phase 7CR.
+- Do not use the phase7cr profile in SOTA.
+- Keep Phase 7CO's default-off diagnostic CSV profiler only.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
