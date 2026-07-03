@@ -5276,3 +5276,58 @@ Rejection rules:
 
 - Reject/tie if `eval_tok_s <= 4.4`.
 - Reject if correctness fails, RAM gate fails, TTFT exceeds the gate, or pack direct failures/fallbacks appear.
+
+### 2026-07-03T23:39Z No-Trace SOTA Guard Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/no-trace-sota-guard-result.json`
+- artifact sha256: `2192fd9a25145666051ec75c8558a887b5357e227d94db977784fc156920a3c5`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T233237Z-20260704_top3000_no_trace_guard/france-cpu40-vram0gb`
+
+Metrics:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.9`
+- `TTFT=31989.966998 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15106867200`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The answer is complete, coherent, and semantically correct.
+
+Counters:
+
+- prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4450.097 pack_misses=0 read_failures=0`
+- pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=33265 misses=1886 hit_rate=94.6%`
+
+Artifact hashes:
+
+- `summary.json`: `ad30fa465d03e69ff953f4a0fa60665132cfeee809294feb81d3b1c58c919485`
+- `stdout.txt`: `b5a1e0152d675b4a95dd33683665160b1804e189b7fa7eaa7475968d10d33fc5`
+- `stderr.txt`: `23f72cf0de69442e37b584a4797c8ac547da15d49b682d1c4767e779abc5bd5d`
+- `environment.txt`: `15bf65f081f30992c44a935019a57b63fe30c34fdf9bd3a458676bd2fbdb110f`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+
+Verdict:
+
+- Rejected. Removing `GGML_MOE_STREAM_ONE_TRACE_OUT` did not improve token rate.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+- Trace file output is not the bottleneck at this point; next work should focus on compute/synchronization/H2D path costs rather than instrumentation output.
