@@ -6265,6 +6265,12 @@ Implementation:
 - Use the down-specific helper only in `ggml_cuda_moe_stream_batch()`.
 - Add `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()` switch.
 - Add one-time stderr activation line when Q4_0 down is enabled and used.
+- CPU-side eligibility must also be gated:
+  - update `ggml_cuda_moe_stream_supports_down_batch()` in
+    `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - use the same `GGML_MOE_STREAM_DOWN_Q4_0=1` env gate;
+  - otherwise Q4_0 down is marked `batch_eligible=0` before CUDA receives the
+    call.
 - Default behavior without env must remain identical.
 
 Reproduction command:
