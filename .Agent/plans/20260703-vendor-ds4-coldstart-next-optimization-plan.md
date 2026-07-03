@@ -948,6 +948,16 @@ Next optimization plan:
    - Rebuild clean from the pushed source and rerun strict cold before declaring the new SOTA.
    - Rejected or tie runs may be committed only as records. Any temporary source patch must be reverted and clean-rebuilt before recording rejection.
 
+
+Baseline guard execution:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T095237Z-20260703T095236Z-pre-next-candidate-guard/france-cpu40-vram0gb`.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29406.374764 ms`, `elapsed_seconds=62.51`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15086735360`, `pgmajfault=266453`, `workingset_refault_file=1678871`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: `correctness_ok=true`; answer was semantic, coherent, and complete for `Please introduce France in a short paragraph.`.
+- Gate/O_DIRECT counters: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Verdict: baseline guard passed. This confirms the current pushed path remains reproducible at the `4.1 tok/s` repeated strict-cold line and is safe to use as the pre-candidate baseline. Accepted historical SOTA remains `4.2 tok/s`; this guard is not a promotion.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
