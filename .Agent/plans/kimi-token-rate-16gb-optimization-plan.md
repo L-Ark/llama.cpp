@@ -25960,6 +25960,106 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
 
+### Phase 7BZ - fine-grained VRAM split, upgate pct 62
+
+Start time:
+
+- 2026-07-03T12:03:28Z.
+
+Current bottleneck and evidence:
+
+- Phase 7BX (`UPGATE_PCT=55`) was much slower because the upgate pool shrink
+  added `1908` upgate misses while avoiding only `142` down misses.
+- Phase 7BY (`UPGATE_PCT=65`) improved upgate behavior but still lost:
+  - upgate misses improved from `16757` to `16286`;
+  - down misses worsened from `3461` to `3767`;
+  - expert-pack bytes increased to `70163136512`;
+  - decode was `34406.12 ms / 31`, slower than SOTA by `934.53 ms`.
+- The evidence suggests the optimum may be near 60%, but the 65% result is
+  close enough that a smaller move toward upgate could reduce upgate miss cost
+  without paying the full down miss penalty.
+
+Hypothesis:
+
+- Set `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`, keeping total VRAM budget at 15GB.
+- This should shift about `0.3 GiB` from down to upgate versus Phase 7AS:
+  - expected upgate capacity gain: roughly `55-60` slots;
+  - expected down capacity loss: roughly `40` slots.
+- If the upgate side still has higher marginal value at 60%, this smaller
+  shift can reduce upgate wall time while keeping down miss growth small.
+- If 60% is already the true local optimum, decode will regress through higher
+  down misses or unchanged iouring wait.
+
+Theoretical upper bound:
+
+- Phase 7BY improved up_gate profile by about `0.48 ms/call` compared with the
+  7BW comparable run, but lost more on down and iouring bytes.
+- A 62% split can only capture a fraction of that upgate improvement. A
+  realistic ceiling is `0.3-0.8 s` on n32.
+- The hard cap is still bounded by mandatory expert transfers and the existing
+  current-down overlap schedule.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Reuse `/tmp/run_phase7as_repro.sh`.
+- Change only:
+
+```sh
+UPGATE_PCT=62
+```
+
+- Keep all other accepted Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bz-upgate62"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - command records `UPGATE_PCT=62`;
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`;
+  - stderr VRAM cache reports upgate/down pools between Phase 7AS and Phase
+    7BY.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower or fails a hard gate, reject and keep
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+
 Phase 7BY result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
