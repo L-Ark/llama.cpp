@@ -28532,6 +28532,141 @@ Decision:
   bounds first. If useful hit rate is low or decode regresses, stop prefetch
   work and move to a narrow Q4_0 down fallback cleanup.
 
+### Phase 7CK - bounded trace-driven VRAM prefetch smoke
+
+Start time:
+
+- 2026-07-03T14:04:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CJ produced the current Phase 7CC route trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv`.
+- Same-step planned host prefetch failed in Phase 7CI because the worker started
+  too late:
+  - `planned_enqueued=5093`;
+  - `hits=80`;
+  - `misses=11721`;
+  - `evicted=4949`.
+- Queue-depth scaling failed in Phase 7CH because per-layer active expert
+  count caps the immediate IO batch:
+  - `inflight_max=8`;
+  - no `9-16` batches.
+- Existing code has a different prefetch mechanism:
+  `GGML_MOE_TRACE_PREFETCH`, which preloads future route events directly into
+  the VRAM cache using `g_batch.prefetch_stream`.
+- This path avoids the failed host-prefetch pinned-buffer layer and can be
+  bounded by:
+  - `GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS`;
+  - `GGML_MOE_TRACE_PREFETCH_WINDOW`;
+  - `GGML_MOE_TRACE_PREFETCH_MAX_LOADS`.
+
+Hypothesis:
+
+- Use the Phase 7CJ route trace to prefetch a small number of future route
+  events into the existing VRAM cache:
+
+```sh
+GGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv
+GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64
+GGML_MOE_TRACE_PREFETCH_WINDOW=128
+GGML_MOE_TRACE_PREFETCH_MAX_LOADS=4
+```
+
+- The `lead_events=64` setting skips immediately upcoming events that are too
+  late to prefetch and targets events far enough ahead to overlap IO/H2D.
+- The `window=128` and `max_loads=4` settings keep eviction and prefetch-stream
+  pressure bounded.
+- If the route is stable, this may reduce `runtime_load`/pinned staging copies
+  and improve upgate/down cache hit rate without changing math.
+- If the route diverges, if prefetch evicts useful entries, or if prefetch
+  stream work contends with current-down overlap, decode will regress.
+
+Theoretical upper bound:
+
+- Phase 7CJ TTFT trace shows:
+  - `runtime_load`: `20250` events, `52.619 s` copy time;
+  - `current_down_overlap`: `3495` events, `11.291 s` copy time;
+  - cache hits: `22678` events.
+- Most of `runtime_load` is not fully exposed on the decode critical path, and
+  some occurs during prompt/TTFT, so the practical n32 upper bound is much
+  smaller than `52.619 s`.
+- A plausible first-pass target is `0.3-1.5 s` n32 decode improvement if
+  future prefetch converts enough runtime loads into cache hits.
+- Hard upper bound is limited by cache capacity: prefetch uses the same VRAM
+  cache, so every prefetched tensor can evict another tensor.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7ck_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append the four trace-prefetch env vars above.
+- Keep every accepted Phase 7CC runtime setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ck_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv\nGGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64\nGGML_MOE_TRACE_PREFETCH_WINDOW=128\nGGML_MOE_TRACE_PREFETCH_MAX_LOADS=4\nEOF\n|' /tmp/run_phase7ck_repro.sh
+chmod +x /tmp/run_phase7ck_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ck-trace-vram-prefetch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ck_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains all four trace-prefetch env vars;
+  - stderr contains `trace prefetch: loaded 42928 events`;
+  - final trace-prefetch report has nonzero `calls` and `loads`;
+  - `matched` should be high enough to prove the Phase 7CJ route trace aligns
+    with the current deterministic run.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - VRAM cache hit rate should improve or runtime loads / pinned staging copies
+    should decrease;
+  - trace-prefetch `loads` must not be so large that it explains a slowdown via
+    cache churn;
+  - if decode improves without mechanism signals, run an extra n32 confirmation
+    before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, output quality changes, trace alignment is poor,
+  trace-prefetch loads are ineffective, RAM/TTFT/read gates fail, or cache churn
+  increases, reject and keep trace prefetch disabled in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
