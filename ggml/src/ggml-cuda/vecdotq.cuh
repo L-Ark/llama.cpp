@@ -1334,7 +1334,7 @@ static __device__ __forceinline__ float vec_dot_iq2_s_q8_1(
     return d * sumi;
 }
 
-#define VDR_IQ3_XXS_Q8_1_MMVQ 2
+#define VDR_IQ3_XXS_Q8_1_MMVQ 4
 #define VDR_IQ3_XXS_Q8_1_MMQ  2
 
 static __device__ __forceinline__ float vec_dot_iq3_xxs_q8_1(
