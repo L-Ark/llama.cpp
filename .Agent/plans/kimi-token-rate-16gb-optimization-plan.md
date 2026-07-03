@@ -20727,9 +20727,117 @@ systemd-run --wait --collect --same-dir \
   - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
     source at `af2a1163b`.
   - Do not use `GGML_MOE_CUDA_MEMCPY_BATCH=1` in SOTA.
-  - Keep Phase 7AS as accepted SOTA:
+- Keep Phase 7AS as accepted SOTA:
     - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
     - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BN - CUDA graph optimization probe on Phase 7AS
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck and current graph state:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- The accepted `build-cuda-batch` binary is already compiled with CUDA graphs:
+  - `CMakeCache.txt` has `GGML_CUDA_GRAPHS:BOOL=ON`;
+  - Phase 7AS stderr shows `USE_GRAPHS = 1`;
+  - Phase 7AS stderr reports `graphs reused = 30`.
+- Therefore the next CUDA-graph experiment is not "turn graphs on"; they are
+  already on in the accepted SOTA.
+- The remaining graph-related runtime candidate in the CUDA backend is:
+
+```sh
+GGML_CUDA_GRAPH_OPT=1
+```
+
+Hypothesis:
+
+Enable `GGML_CUDA_GRAPH_OPT=1` on top of the exact Phase 7AS runtime. This may
+let the CUDA backend optimize graph stream scheduling/graph structure after
+capture while keeping the existing graph reuse path active.
+
+Expected effect:
+
+- It should not change model math, routing, expert-pack reads, VRAM cache
+  policy, pinned staging, or CPU fallback.
+- It may reduce CUDA graph launch/scheduling overhead for the dense/attention
+  parts already covered by CUDA graphs.
+- It is unlikely to affect the dominant expert-pack io_uring, pinned H2D, or
+  CPU fallback page-fault buckets.
+
+Theoretical upper bound:
+
+- Since Phase 7AS already reuses CUDA graphs for decode, this can only improve
+  residual graph scheduling overhead, not the full kernel launch overhead.
+- Phase 7AS still spends about `11.57 s` in expert-pack wait and about
+  `18.63 s` in main pinned host-stage on n32. CUDA graph optimization cannot
+  remove those buckets.
+- A realistic n32 upside is at most sub-second unless the graph optimizer
+  materially changes stream overlap. Any improvement must show:
+  - `graphs reused` remains nonzero;
+  - decode wall improves;
+  - expert-pack/pinned staging does not regress enough to hide the gain.
+
+Implementation:
+
+- No source patch.
+- Use the existing `build-cuda-batch/bin/llama-completion` after confirming it
+  reports `USE_GRAPHS = 1`.
+- Create `/tmp/run_phase7bn_repro.sh` from `/tmp/run_phase7as_repro.sh` that
+  records:
+
+```sh
+GGML_CUDA_GRAPH_OPT=1
+```
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bn-cuda-graph-opt"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 CUDA_GRAPH_OPT=1 \
+      /tmp/run_phase7bn_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr shows `USE_GRAPHS = 1`;
+  - stderr reports `graphs reused > 0`;
+  - `env.txt` includes `GGML_CUDA_GRAPH_OPT=1`;
+  - `command.txt` records `CUDA_GRAPH_OPT=1`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - compare `graphs reused`, prompt/decode times, `iouring_wait_us`, pinned
+    `host_stage`, down `cuda_batch`, and fallback buckets.
+  - If wall improves but `graphs reused` is missing or zero, reject as not a
+    CUDA graph improvement.
+
+Rollback:
+
+- If first n32 is slower, activation is missing, quality fails, or hard gates
+  fail, reject immediately.
+- No source rollback is needed because this is env-only.
+- If accepted through n96 confirmation, commit and push the plan/result
+  immediately and update the SOTA recipe to include `GGML_CUDA_GRAPH_OPT=1`.
 
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
