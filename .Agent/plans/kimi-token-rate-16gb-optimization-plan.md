@@ -21923,3 +21923,87 @@ Rollback:
   reject immediately and keep Phase 7AS as SOTA.
 - Do not test deeper queues such as `32` unless depth16 improves n32 and the
   mechanism clearly shows lower io_uring wait.
+
+Phase 7BG result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `90da83ce6` (`docs: plan kimi phase7bg depth16 retest`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no rollback or rebuild required.
+- runner:
+  `/tmp/run_phase7bg_repro.sh`, copied from `/tmp/run_phase7as_repro.sh`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-052939Z-n32-phase7bg-7as-depth16`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-052939Z-n32-phase7bg-7as-depth16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IO_DEPTH=16 \
+      /tmp/run_phase7bg_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `78337.71 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr shows `io_bytes=8388608 depth=16`;
+  - `env.txt` contains `GGML_MOE_IO_DEPTH=16`;
+  - `command.txt` records `IO_DEPTH=16`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `36050.78 ms / 31`, `0.86 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BG is slower by `2579.19 ms`.
+- mechanism:
+  - expert-pack `iouring_wait_us=12604545`, worse than Phase 7AS
+    `11567536`;
+  - `inflight_avg=2.91`, unchanged from Phase 7AS;
+  - `inflight_max=8`, still not using the new depth `16`;
+  - main pinned `host_stage=20491.197 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - down `cuda_batch=2.926 ms/call`, worse than Phase 7AS `2.675 ms/call`.
+
+Gap analysis:
+
+- The original hypothesis was that Phase 7AS might be limited by
+  `GGML_MOE_IO_DEPTH=8` because `inflight_max=8`.
+- The actual depth16 run still reports `inflight_max=8`, so the effective cap is
+  not the io_uring depth setting. It is likely pinned staging slots, batch shape,
+  or dependency order.
+- Increasing depth adds no useful concurrency and makes wait/staging counters
+  worse.
+
+Decision:
+
+- Reject Phase 7BG.
+- Do not run n96.
+- Keep `GGML_MOE_IO_DEPTH=8` in SOTA.
+- Do not test `IO_DEPTH=32` unless a later source-level change increases the
+  effective in-flight cap beyond 8.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
