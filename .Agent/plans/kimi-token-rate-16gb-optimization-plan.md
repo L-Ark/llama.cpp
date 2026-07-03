@@ -387,7 +387,7 @@ France is a country
 
 Timestamp: 2026-07-03T17:42:08Z.
 
-Status: planned before implementation.
+Status: rejected and rolled back.
 
 Reason for this phase:
 
@@ -459,6 +459,72 @@ Reproducibility:
   plan.
 - The result is not accepted without a repeat. The first n32 run can only be a
   candidate.
+
+Result:
+
+- Plan commit: `efd764f81`.
+- Probe commit: `c5504a545` (`VDR_IQ3_XXS_Q8_1_MMVQ=4`,
+  `VDR_IQ3_XXS_Q8_1_MMQ=2`).
+- Rollback commit: `33ae2ff66`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Build command:
+  `cmake --build build-cuda -j$(nproc)`.
+- n32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-174405Z-n32-phase7da-iq3-vdr4`.
+- Reproduction command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-174405Z-n32-phase7da-iq3-vdr4 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n32 metrics:
+  - exit: `0`;
+  - TTFT: `69952.30 ms`;
+  - decode: `32235.16 ms / 31`, `0.96 tok/s`;
+  - comparison: faster than Phase 7CC n32 `33217.66 ms / 31` by
+    `982.50 ms` (`2.96%`);
+  - memory.max: `15899996160`;
+  - memory.peak: `15899996160`;
+  - memory.current.final: `15131688960`;
+  - expert pack: `hits=25134`, `misses=516`, `read_failures=0`,
+    `iouring_reads=11655`, `iouring_bytes=67926376448`,
+    `iouring_fallbacks=0`;
+  - down cache: `slots=806`, `hits=9659`, `misses=3461`,
+    `hit_rate=73.6%`;
+  - upgate cache: `slots=1679`, `hits=13019`, `misses=16757`,
+    `hit_rate=43.7%`.
+- Exact n32 output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+```
+
+- Decision:
+  - Reject and roll back. The run had a real speed candidate and passed process,
+    RAM, TTFT, read-failure, and iouring-fallback checks, but the answer ended
+    mid-sentence. Under the user's hard requirement, the France answer must be
+    semantically correct and coherent; a truncated paragraph is not accepted.
+  - n32 is still too short for this prompt under strict quality judgment.
+  - Per rule, no n32 repeat or n96 run was stacked on top of the rejected source
+    commit.
+- Gap analysis:
+  - The automated runner's simple quality heuristic marked the output as pass
+    because it detected France/Europe and enough words. Human gate is stricter:
+    the answer must not end in an incomplete clause.
+  - The speed signal is worth preserving as diagnostic evidence, but not as an
+    accepted optimization.
+- Next direction:
+  - Future source probes that affect model math or kernel scheduling should use
+    n96 as the first semantic quality gate. n32 may remain a speed smoke, but it
+    cannot be used as a final correctness gate for this prompt.
+  - If revisiting VDR=4, write a new plan that runs n96 directly after a minimal
+    crash precheck, and only accepts the change if the n96 answer is coherent
+    and the speedup is reproduced.
 
 ## Phase 0: cold 16GB baseline
 
