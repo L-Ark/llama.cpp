@@ -1010,6 +1010,15 @@ Early-layer top3 probe result:
 - Diagnosis: reducing all layers to top3 changed output trajectory, length, and gate-access pattern enough to increase cache misses/refault pressure. It also regressed token rate well below the `4.2 tok/s` promotion threshold.
 - Verdict: rejected. Do not use global `0-39` top3 for accepted SOTA.
 
+
+Narrow layer 0-2 top3 candidate design:
+
+- Goal: test the smallest top-k change suggested by the fine trace, after global `0-39` top3 failed correctness and speed.
+- Mechanism: the code supports one layer override on top of the default `GGML_MOE_KEEP_TOPK_UPDOWN`. Use `GGML_MOE_KEEP_TOPK_UPDOWN=3`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=3-9`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=4`. This means layers `0-2` and `10-39` use top3, while layers `3-9` stay at top4. It preserves the accepted `10-39` top3 policy and only changes layers `0-2` relative to SOTA.
+- Theory and upper bound: layers `0-2` account for `4304.726 ms` (`16.0%`) of up/down fallback. Reducing those layers from top4 to top3 has a rough compute upper bound of `~1076 ms`, enough for a boundary test but likely smaller than the global top3 candidate.
+- Risk: even layers `0-2` can influence the output trajectory and gate profile. Reject if France answer is incomplete or incoherent, if gate misses/direct behavior changes materially, if TTFT violates gate, if RAM exceeds 16GB, or if `eval_tok_s <= 4.2`.
+- Acceptance: same SOTA gates as usual; no source rollback needed because this is env-only.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
