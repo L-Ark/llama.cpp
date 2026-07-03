@@ -1141,6 +1141,45 @@ Latest next-step plan after harness verification:
 7. Push discipline: when a compliant new SOTA appears, immediately commit source, plan, run metadata, command/env, hashes, and reproduction notes, then push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`. After push, clean rebuild from the pushed source and rerun strict cold before declaring it reproducible. Use git identity `L-Ark <fliangae@connect.ust.hk>`.
 8. If the transient repack bound is weak or correctness/memory gates fail, reject without full-model trial and return to bottleneck profiling. Current accepted SOTA remains the `4.2 tok/s` cold-start record.
 
+
+Transient down-only MXFP4 repack candidate design:
+
+- Time: 2026-07-03 after commit `6608472d2`.
+- Source basis: `ggml_compute_forward_mul_mat_id_one_chunk()` computes CPU fallback with one `vec_dot()` per output row. The existing tested `ggml_gemv_mxfp4_8x8_q8_0()` can compute 8 consecutive MXFP4 rows for the same Q8 activation vector with exact output in the harness.
+- Bound script added: `.Agent/run-tools/analyze_transient_repack_bound.py` reads the complete CPU chunk trace from `/root/lfz/runs/vendor-ds4-16gb/20260703T100011Z-20260703T100011Z-cpu-fallback-fine-trace-limit2m/france-cpu40-vram0gb/cpu_chunk_trace.csv` and charges repack cost only to full 8-row groups; tail rows remain row-wise.
+- Bound result from `.Agent/run-tools/analyze_transient_repack_bound.py --json-out /tmp/transient_repack_bound.json`:
+  - `down:cne1=1`: eligible row fraction `0.9765625`, estimated net wall saving `686.77 ms` at 20 threads.
+  - `down:cne1>1`: eligible row fraction `1.0`, estimated net wall saving `748.58 ms` at 20 threads.
+  - down-only total: estimated net wall saving `1435.35 ms`.
+  - up-only total: estimated net wall saving `-103.43 ms`, so up is explicitly excluded.
+  - all up+down total: estimated net wall saving `1331.92 ms`, lower than down-only because up cne1=1 repack cost outweighs compute saving.
+- Memory bound: DS4 down chunks in the trace are mostly `205` or `16` rows. For down `k=2048`, `nb=64` and `sizeof(block_mxfp4x8)=136`; the largest common `205`-row chunk repacks `200` rows, requiring `(200/8)*64*136 = 217600` bytes plus `800` bytes output per thread. Even if all 20 threads hit this path simultaneously, transient scratch is about `4.37 MB`, freed at chunk return and not persistent page cache. This is inside the 16GB cgroup budget.
+- Runtime source candidate: add a default-off env gate `GGML_MOE_TRANSIENT_REPACK_DOWN=1`. When enabled, only `GGML_TYPE_MXFP4` tensors whose name contains `ffn_down_exps.weight` use transient 8-row repack inside CPU fallback. Full 8-row groups call `ggml_gemv_mxfp4_8x8_q8_0()`; tail rows continue using the original `vec_dot()` path. Default behavior remains unchanged when the env var is absent.
+- Correctness expectation: arithmetic should be exact for full 8-row groups based on the harness (`max_abs=0`, `mean_abs=0`); tail rows are unchanged. The full France run still must pass semantic/coherence correctness because any ordering/layout bug would be visible in output.
+- Build result: `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` completed successfully with only existing warnings.
+- Full practice command: run strict cold France with accepted SOTA config plus `--env GGML_MOE_TRANSIENT_REPACK_DOWN=1`, preserving `MemoryMax=16000000000`, `MemorySwapMax=0`, drop_caches, gate O_DIRECT pack, admission profile, top-k policy, and `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Acceptance: promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass. If it ties/regresses or output is wrong, reject and revert this runtime source candidate before pushing accepted source.
+
+
+Transient down-only MXFP4 repack candidate result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T105753Z-20260703T-transient-down-repack-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: runtime source candidate enabled with `GGML_MOE_TRANSIENT_REPACK_DOWN=1`; otherwise accepted SOTA env/CLI, O_DIRECT gate pack, admission profile, top-k policy, drop_caches, and strict 16GB cgroup.
+- Metrics: `eval_tok_s=3.4`, `prompt_tok_s=1.5`, `TTFT=29319.203769 ms`, `elapsed_seconds=85.81`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15051288576`, `pgmajfault=333912`, `workingset_refault_file=4373107`, `ram_ok=true`, `ram_limit_killed=false`.
+- Gate/O_DIRECT counters changed materially: one expert pack `hits=5131 misses=1657 reads=5131 bytes=22866034688 direct_failures=0`; gate VRAM cache `hits=41080 misses=6788 hit_rate=85.8%`. This differs from accepted SOTA (`pack hits=4623 misses=0`, VRAM `hits=30528 misses=4623`), likely because the source change altered timing/page pressure enough to affect stream/cache behavior.
+- Correctness: rejected by manual review. The answer was semantically normal but incomplete, ending at `It is a popular tourist destination, attracting millions of`, so it fails the complete coherent France-output requirement even though the heuristic set `correctness_ok=true`.
+- Gap analysis: the harness warm speedup did not transfer to strict cold. The runtime candidate repacked inside every CPU fallback chunk, increasing source memory scans, stack scratch traffic, major faults/refaults, and gate pack/cache pressure. The theoretical model charged repack CPU time but underweighted cold page-cache side effects and interaction with the gate stream path. The changed cache counters and much higher refault count (`4.37M` vs about `1.66M` in the no-warmup tie and `~1.68M` in SOTA-like runs) explain the token-rate collapse.
+- Verdict: rejected. It fails `eval_tok_s > 4.2` and manual correctness. The runtime source candidate was reverted immediately with `git restore ggml/src/ggml-cpu/ggml-cpu.c`, and `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` was rerun. The current binary is rebuilt from clean source commit `6608472d2`, not the rejected runtime path.
+- Keep artifact: `.Agent/run-tools/analyze_transient_repack_bound.py` remains useful as a repeatable bound checker, but the bound is now known to be insufficient unless it models cold page/refault interaction. Do not retry transient per-chunk repack without a stronger cold-source model or a design that avoids extra source scans.
+
+Next direction after transient repack rejection:
+
+- Current accepted SOTA remains `4.2 tok/s`; no source improvement was accepted.
+- Do not pursue per-chunk transient repack for up or down in the current form. It has a narrow theoretical bound and a measured strict-cold regression to `3.4 tok/s`.
+- Return to bottleneck localization with cold-aware evidence. The next candidate must reduce actual cold source reads/refaults or CPU fallback scheduling imbalance without adding another pass over expert rows.
+- Plausible next diagnostic: compare accepted SOTA vs rejected transient run by `pgmajfault`, `workingset_refault_file`, pack hits/misses, and CPU fallback profile to quantify how much of the regression came from refault pressure versus arithmetic overhead. Only after that should another source candidate be designed.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
