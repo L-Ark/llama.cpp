@@ -20288,3 +20288,92 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If first n32 is slower than Phase 7AS confirmation, reject immediately and
   keep Phase 7AS as SOTA.
+
+Phase 7BA n32 result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-041139Z-n32-phase7ba-no-current-down-overlap`.
+- git:
+  - head `33f516338`;
+  - status clean at run start.
+- runner:
+  - `/tmp/run_phase7ba_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - parameterizes `CURRENT_DOWN_OVERLAP` and omits
+    `GGML_MOE_CURRENT_DOWN_OVERLAP=1` when `CURRENT_DOWN_OVERLAP=0`.
+- env delta over Phase 7AS:
+
+```sh
+# removed from env.txt
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+- activation:
+  - `command.txt` records `CURRENT_DOWN_OVERLAP=0`;
+  - `env.txt` does not contain `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - stderr does not contain `current down overlap active`;
+  - stderr contains `IQ2_S parallel up/gate streams active`;
+  - old down prefetch path is active with `loads=3217`, `hits=3217`,
+    `useful_rate=100.0%`.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `76193.47 ms`, under the `106331.72 ms` gate.
+- decode: `38756.47 ms / 31`, `0.80 tok/s`.
+- comparison:
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BA regresses by `5284.88 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=8367`;
+  - `iouring_bytes=46690516992`;
+  - `iouring_wait_us=11116352`.
+- pinned staging:
+  - main `host_stage=24802.840 ms`, `h2d=4159.554 ms`;
+  - gate `host_stage=2141.799 ms`, `h2d=922.647 ms`.
+- up/gate type profile:
+  - type `18` wall `24.823 ms/call`, wall gap `4.521 ms/call`;
+  - type `22` wall `11.018 ms/call`, wall gap `3.139 ms/call`;
+  - type `22` `up_wait=7.039 ms/call`;
+  - type `22` `gate_wait=7.502 ms/call`.
+- down profile:
+  - `calls=2038`;
+  - total `39.819 ms/call`;
+  - `fallback_t0=36.701 ms/call`;
+  - `cuda_batch=3.071 ms/call`.
+- VRAM cache:
+  - down hits `9212`, misses `3908`, hit rate `70.2%`;
+  - Phase 7AS down hit rate was `73.6%`.
+
+Interpretation:
+
+- The isolation worked: current-down overlap was removed while IQ2 parallel
+  up/gate remained active and all hard gates passed.
+- Removing current-down overlap sharply regresses wall decode.
+- The mechanism is clear:
+  - main pinned host-stage rises from Phase 7AS n32 `18631.890 ms` to
+    `24802.840 ms`;
+  - down cache hit rate falls from `73.6%` to `70.2%`;
+  - type-18 up/gate wall gap grows to `4.521 ms/call`;
+  - type-22 wall gap grows to `3.139 ms/call`.
+- Although total expert-pack bytes fall because fewer current-down overlap jobs
+  are issued early, the saved IO concurrency is not useful. It exposes down
+  staging and synchronization on the critical path and harms up/gate wall
+  scheduling.
+
+Decision:
+
+- Reject Phase 7BA.
+- No source rollback is needed because this was env-only.
+- Keep `GGML_MOE_CURRENT_DOWN_OVERLAP=1` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
