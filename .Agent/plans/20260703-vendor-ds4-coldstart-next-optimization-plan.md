@@ -1537,6 +1537,17 @@ Next direction after AVX2 dot inspection:
 
 - Remaining viable work is now either a deeper existing-kernel optimization with its own microbench and correctness proof, or an I/O/layout redesign that reduces broad up/down page faults without consuming host RAM. Do not add another model-run candidate without a stronger bound than the rejected chunk/repack/hot/page probes.
 
+
+Post-diagnostics clean SOTA guard:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T130030Z-20260703_post_diagnostics_clean_sota_guard/france-cpu40-vram0gb`.
+- Purpose: verify that all temporary instrumentation/candidate source edits were reverted and the accepted SOTA path still reproduces after clean rebuild.
+- Config: accepted France SOTA config unchanged, no diagnostic trace envs, strict cold `drop_caches`, `MemoryMax=16000000000`.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=28759.105881 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15084658688`, `pgmajfault=271934`, `workingset_refault_file=1718362`, `ram_ok=true`, correctness pass.
+- Gate counters stayed aligned with accepted SOTA: pack `hits=4623 misses=0 direct_failures=0`, VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Verdict: current clean source reproduces the repeated strict-cold line (`4.1 tok/s`) and remains below the historical accepted `4.2 tok/s` SOTA. No new SOTA was found in this cycle.
+- Versioned artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/post-diagnostics-clean-sota-guard-summary.json`.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
