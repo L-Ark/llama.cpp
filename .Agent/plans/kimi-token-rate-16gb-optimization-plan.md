@@ -5616,8 +5616,9 @@ GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
     `/root/lfz/runs/vendor-kimi-token-rate/20260703-224141Z-n32-phase7dza-serial-stage-confirm`;
   - n96:
     `/root/lfz/runs/vendor-kimi-token-rate/20260703-224602Z-n96-phase7dzb-serial-stage-confirm`.
-- Current SOTA source/docs commit after result recording:
-  - `92c181b7f`.
+- Result docs are recorded in this section; the pushed branch HEAD is the
+  authoritative result-doc revision. The reproducible run source commit remains
+  `d636a7a4c`, containing source commit `745b15979`.
 
 ## Phase 0: cold 16GB baseline
 
