@@ -27287,6 +27287,123 @@ Decision:
   decode-only split profile so prompt single-call rows do not hide decode
   split rows.
 
+### Phase 7CF - expanded split-profile decode row extraction on Phase 7CC
+
+Start time:
+
+- 2026-07-03T13:20:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CE was a valid graph/split diagnostic on the Phase 7CC SOTA:
+  - hard gates passed;
+  - graph decode sync was only `24.337 ms` total, `0.785 ms/call`;
+  - expert movement and CPU MoE/down fallback remained dominant.
+- Phase 7CE split profile with `TOP=50` was not enough for decode attribution:
+  - top rows were prompt single-call CPU MoE splits;
+  - only two decode rows with `calls=31` were visible:
+    - layer 2: `34.600 ms/call`;
+    - layer 6: `33.549 ms/call`.
+- Before designing another source patch, the decode CPU split rows must be
+  visible across more layers. Otherwise the next optimization risks targeting
+  only the first visible rows instead of the real decode tail.
+
+Purpose:
+
+- This is a diagnostic phase, not a SOTA promotion candidate.
+- Re-run the Phase 7CC n32 diagnostic with a larger split-profile top count:
+
+```sh
+LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=150
+```
+
+- Extract all `[kimi_split_profile]` rows with `calls=31` and rank them by
+  wall time / avg time.
+- Use the result to decide whether the next implementation should target:
+  - specific Q4_0 down decode layers;
+  - broader CPU fallback scheduling/source path;
+  - current-down overlap coverage;
+  - or another expert movement bottleneck.
+
+Theoretical upper bound:
+
+- The diagnostic itself should not improve production token rate.
+- It can bound the next implementation:
+  - if the top decode rows sum to only a few seconds, a layer-specific fix has
+    limited upside;
+  - if many decode rows are around `30-35 ms/call`, a broad CPU fallback/down
+    path improvement may have a several-second n32 ceiling;
+  - if decode split rows are still hidden by prompt rows at top 150, a true
+    decode-only split profiler should be implemented before source work.
+
+Implementation:
+
+- Env-only diagnostic; no source patch.
+- Create `/tmp/run_phase7cf_diag.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append diagnostic env to the generated `env.txt`:
+
+```sh
+LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=150
+```
+
+- Keep every accepted Phase 7CC runtime setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cf_diag.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nLLAMA_KIMI_GRAPH_PROFILE=1\nGGML_KIMI_SPLIT_PROFILE=1\nGGML_KIMI_SPLIT_PROFILE_TOP=150\nEOF\n/' /tmp/run_phase7cf_diag.sh
+chmod +x /tmp/run_phase7cf_diag.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cf-7cc-split-top150"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cf_diag.sh
+```
+
+Validation:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_KIMI_SPLIT_PROFILE_TOP=150`;
+  - stderr contains `[kimi_graph_profile]`;
+  - stderr contains `[kimi_split_profile]`.
+- Required result record:
+  - normal decode/TTFT/token-rate metrics;
+  - graph submit/sync totals;
+  - all split rows with `calls=31` visible in top 150;
+  - top decode rows grouped by layer and first/last node;
+  - conclusion for the next optimization phase.
+
+Rollback:
+
+- Env-only diagnostic needs no source rollback.
+- Do not promote this run as SOTA even if wall time is faster; any promotion
+  requires a clean production rerun without diagnostic env.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
