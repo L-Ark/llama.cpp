@@ -19248,3 +19248,115 @@ Decision:
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
   - n96 confirm decode `84173.24 ms / 77`.
+
+## Phase 7AV - production no-batch-profile retest on Phase 7AS
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS became SOTA with IQ2 parallel up/gate streams, but the accepted
+  runner still keeps `GGML_MOE_BATCH_PROFILE=1`.
+- Batch profiling records CUDA event timings and type buckets in hot decode
+  paths. It is valuable for bottleneck attribution but is not required for
+  model computation.
+- Phase 7AH removed batch profile under Phase 7AE and did not improve. That
+  does not fully close the question under Phase 7AS because:
+  - 7AS adds parallel up/gate stream timing;
+  - 7AS records type-profile data for both same-type buckets after the IQ2
+    parallel path is active;
+  - 7AS has more gate-side staging and iouring traffic, so CPU/event overhead
+    may interact differently with the critical path.
+
+Current bottleneck:
+
+- Phase 7AS n96 confirmation:
+  - decode `84173.24 ms / 77`;
+  - up/gate type profile:
+    - `type=18` wall `18.396 ms/call`;
+    - `type=22` wall `6.888 ms/call`;
+  - down fallback local profile `16.178 ms/call`;
+  - expert-pack iouring wait `29041797 us`;
+  - main host stage `48189.734 ms`;
+  - gate host stage `4945.195 ms`.
+- Removing batch profile cannot reduce SSD bytes, H2D bytes, quant math, or
+  cache misses. It can only reduce profiling/event overhead and scheduling
+  disturbance.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+# remove from env.txt
+GGML_MOE_BATCH_PROFILE=1
+```
+
+- Keep CPU/fallback profiling enabled so the run still emits mandatory
+  `fallback-profile.csv`:
+
+```sh
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv
+```
+
+- Keep the full accepted Phase 7AS runtime:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - SQPOLL, IO depth `8`, refill batch `4`;
+  - pinned slots `8`;
+  - current down overlap, down parallel staging, pack mmap fallback, mmap drops.
+
+Theoretical upper bound:
+
+- If profiling overhead is only per-call event bookkeeping, expected gain is
+  small: roughly `0.1-1.0 s` on n96.
+- If CUDA event timing or profile collection perturbs stream scheduling in the
+  7AS parallel up/gate path, the practical upper bound could be closer to
+  `1-2 s`.
+- Because this does not change math or IO policy, any improvement must reproduce
+  with identical output quality and hard gates. A single fast n32 run remains
+  diagnostic only.
+
+Experiment:
+
+- No source change.
+- Create `/tmp/run_phase7av_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Add a `BATCH_PROFILE` switch:
+  - default `1`, matching Phase 7AS;
+  - when `BATCH_PROFILE=0`, omit `GGML_MOE_BATCH_PROFILE=1` from `env.txt`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7av-7as-no-batch-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 BATCH_PROFILE=0 \
+      /tmp/run_phase7av_repro.sh
+```
+
+Acceptance gates:
+
+- Same hard gates as Phase 7AS:
+  - cold start;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - non-empty `fallback-profile.csv`;
+  - standard reproduction artifacts.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - n32 confirmation must also beat `33471.59 ms / 31`;
+  - n96 candidate and confirmation must both beat Phase 7AS n96 confirmation
+    `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If the first n32 does not beat Phase 7AS confirmation or fallback CSV is
+  missing, reject immediately and keep Phase 7AS as SOTA.
