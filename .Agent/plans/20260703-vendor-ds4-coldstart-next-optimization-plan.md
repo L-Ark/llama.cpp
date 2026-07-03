@@ -233,6 +233,53 @@ Next direction after this rejection:
 2. If revisiting down compute, focus on eliminating staging overhead, not just increasing cache slots. The measured kernel time is already small; the bottleneck is host-to-device staging/cache insertion.
 3. A plausible future design needs either true async prefetch overlap ahead of the down op, or a compact hotset that is loaded before decode without displacing gate cache. It must first show `stage ms/call` dropping materially in a short diagnostic before running full France.
 
+### 2026-07-03 Current Down Overlap / Top128 Pack Probe
+
+Design:
+
+- Goal: test the next proposed staging fix directly. The prior accepted-probe showed down batch kernel time was tiny (`0.035 ms/call`) but stage time was dominant (`4.538 ms/call`). This probe keeps the same short diagnostic shape, but adds current-token down overlap and a small top128 up/down pack.
+- Hypothesis: `GGML_MOE_CURRENT_DOWN_OVERLAP=1` can prefetch current-token down experts during the up/gate CUDA window; `GGML_MOE_EXPERT_PACK=ds4-france-decode-top128-updown-20260703.pack` plus `GGML_MOE_IO_BACKEND=iouring` can make those prefetched copies cheaper than scattered GGUF mmap staging. A useful signal must show `current down overlap` counters and a material drop in down `stage ms/call`.
+- Risk: the current overlap hook is inside the fused up/gate batch path. If this model path does not invoke `ggml_cuda_moe_stream_up_gate_batch()`, overlap will not run. The top128 pack may also cover too few down experts to move staging.
+
+Temporary source probe:
+
+- Same temporary MXFP4 patch as the previous down-cache probe:
+  - add `GGML_TYPE_MXFP4` to `moe_stream_type_supported()`;
+  - add `GGML_TYPE_MXFP4` to the compact MMVQ launcher type switch;
+  - use `dst_tmp_rows=max(dst_cols,n_active)` for compact dst workspace.
+- This patch was not committed and was reverted after the probe.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T042727Z-20260703T042727Z-mxfp4-current-down-overlap-top128-short/france-cpu40-vram0gb`
+- Config delta from prior short accepted-probe: `GGML_MOE_CURRENT_DOWN_OVERLAP=1`, `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_STAGE_PINNED=1`, `GGML_MOE_STAGE_PINNED_SLOTS=4`.
+- Top128 pack sha256: `f57ff2426647514c0145bb4b367b750f7a1753837b2ead22df091e9645483894`, size `545M`.
+
+Result:
+
+- `eval_tok_s=2.4`, `prompt_tok_s=1.5`, `TTFT=30268.960184 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15118184448`, `pgmajfault=152072`, `workingset_refault_file=40603`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true`; answer prefix remained semantic and coherent.
+
+Counters and diagnosis:
+
+- No `[moe_stream_batch] current down overlap ...` report appeared, so the overlap hook did not run. This confirms the current model execution path does not enter the fused up/gate batch trigger needed by `GGML_MOE_CURRENT_DOWN_OVERLAP`.
+- Down batch still accepted `1244` calls and declined `116`, but stage did not improve: `stage=4.777 ms/call`, worse than the previous `4.538 ms/call`.
+- Top128 pack coverage was too low for this run: expert pack `hits=126 misses=1834`, with `iouring_reads=0`; most copies still used GGUF mmap source.
+- Pinned staging report: `copies=1960`, `waits=1956`, `slot_wait=4.205 ms`, `host_stage=5706.089 ms`, `h2d=334.868 ms`. The bottleneck is host staging/page source time, not GPU copy or kernel.
+- Gate behavior remained degraded by the reduced one-stream cache: gate VRAM cache `hits=6527 misses=2941 hit_rate=68.9%`.
+
+Verdict:
+
+- Rejected. This did not meet the plan requirement of proving staging can be reduced before running a full SOTA candidate.
+- Rollback completed with `git restore ggml/src/ggml-cuda/moe_stream_batch.cu`; `build-ds4-moe-stream-batch-probe` rebuilt clean. Clean hashes after rollback: `llama-cli=866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`, `libggml-cuda.so.0.10.0=eef7caaf00861bdae63de2f9629a8bd6bf8114b9819e4134b149399a8bd18716`.
+
+Next direction after this rejection:
+
+1. Do not rely on the current fused up/gate overlap hook for DeepSeek unless a separate diagnostic first proves `ggml_cuda_moe_stream_up_gate_batch()` is entered.
+2. A useful staging fix now needs to target the actual down runtime load path directly, or provide a much more accurate down hotset/trace prefetch path with high pack coverage.
+3. Before another full run, run a short diagnostic that either reduces `host_stage`/`stage ms/call` directly, or shows pack hit coverage high enough to justify the VRAM/page-cache tradeoff.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
