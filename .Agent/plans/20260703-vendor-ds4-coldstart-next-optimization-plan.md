@@ -333,6 +333,74 @@ Next direction after this rejection:
 2. A future candidate must either preserve the `13568MiB` gate cache and find additional VRAM elsewhere, or reduce gate cache loss by sharing/partitioning slots without lowering gate hit rate.
 3. Another pack-size sweep alone is low priority; top512 already reduced stage but did not approach the promotion threshold.
 
+### 2026-07-03 Context-Size VRAM Free Probe
+
+Design:
+
+- Goal: test whether reducing context from `-c 256` to `-c 128` frees enough VRAM to add a down batch cache without stealing capacity from the accepted `13568MiB` gate one-stream cache.
+- Theory: if context/KV/graph buffers are a meaningful part of the remaining VRAM pressure, `-c 128` should increase free VRAM. If the accepted path's pressure is dominated by model weights plus the gate cache and allocator overhead, context reduction will not help.
+- This probe uses the clean accepted O_DIRECT SOTA binary and no source changes.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T043852Z-20260703T043851Z-odirect-sota-c128-vram-free-probe/france-cpu40-vram0gb`
+- Config delta from accepted SOTA: `-c 128`; gate O_DIRECT config unchanged, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, strict cold 16GB cgroup.
+
+Result:
+
+- `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=29441.246676 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15089229824`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true`; France answer was semantic and coherent.
+- Counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0`, gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- GPU samples showed max used/free about `31873/237 MiB`, effectively the same as `-c 256`; context reduction does not free useful VRAM for down cache.
+
+Verdict:
+
+- Rejected/tie. It preserves correctness and RAM behavior but does not exceed `4.2 tok/s` and does not create additional VRAM budget.
+- Next VRAM work should focus on the large unaccounted allocation/cache footprint, not context-size trimming.
+
+### 2026-07-03 Tiny Down Cache While Preserving Gate Cache Probe
+
+Design:
+
+- Goal: verify whether any down-batch improvement is possible while preserving the accepted `13568MiB` gate one-stream cache.
+- Theory: if a small down cache can be allocated in the remaining free VRAM, it might capture a narrow hotset and reduce staging without lowering gate hit rate. The required signal is nonzero down-cache hits and lower `stage ms/call`; otherwise the remaining free VRAM is not enough for this direction.
+- Config keeps gate cache at `13568MiB`, requests only `GGML_MOE_VRAM_CACHE_MIB=256`, and uses the down-only top512 pack. This is a short diagnostic, not a SOTA candidate.
+- Temporary MXFP4 batch patch was used only for measurement and was not committed.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T044340Z-20260703T044340Z-tiny-down-cache256-keep-gate13568-short/france-cpu40-vram0gb`
+- Config delta: batch-probe binary, `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_MIB=256`, `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_STAGE_PINNED=1`, `GGML_MOE_STAGE_PINNED_SLOTS=4`, short `-n 32`.
+
+Result:
+
+- `eval_tok_s=2.4`, `prompt_tok_s=1.5`, `TTFT=30438.814584 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15137615872`, `pgmajfault=148222`, `workingset_refault_file=22637`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true` for a short prefix; output: `Here is a short paragraph introducing France: France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and`
+
+Counters and diagnosis:
+
+- Gate cache requested and initialized as accepted: `13.2GiB`, `3192` slots.
+- Remaining GPU free was too small: down cache requested `256MiB`, but `cudaMalloc 0.2GiB FAILED`; fallback allocation was only `0.1GiB`, `34` slots.
+- Down cache was ineffective: `hits=0 misses=4090 hit_rate=0.0%`.
+- Down batch accepted `1244` calls, but profile regressed to `stage=5.243 ms/call`, `kernel=0.031 ms/call`, `total=5.288 ms/call`; pinned staging reported `host_stage=6225.021 ms`, `h2d=695.276 ms`.
+- Down top512 pack hits were `2221 misses=1869`, but iouring counters stayed zero; the path did not convert pack coverage into a useful cache hit path.
+- One-stream gate counters in this short run were `hits=6527 misses=2941 hit_rate=68.9%`; this matches the earlier short down-batch probes and remains far from a SOTA signal.
+
+Verdict:
+
+- Rejected. Preserving the accepted gate cache leaves too little usable VRAM for an independent down cache, and the tiny fallback allocation has zero hit rate.
+- Rollback completed: `git restore ggml/src/ggml-cuda/moe_stream_batch.cu`; clean rebuild of `build-ds4-moe-stream-batch-probe` succeeded. Clean hashes after rollback: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `build-ds4-moe-stream-batch-probe/bin/llama-cli=866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`.
+
+Next direction after this rejection:
+
+1. Do not spend more time on independent down-cache sizing until the VRAM budget problem is solved. With the accepted gate cache intact, a useful down cache cannot allocate.
+2. First locate and classify the roughly `14.7GiB` unaccounted CUDA memory shown by `common_memory_breakdown_print`; determine how much is the one-stream gate cache, CUDA allocator reserve, libraries/context, pack/batch staging, or fragmentation.
+3. If the unaccounted memory is mostly gate cache, design a shared/partitioned cache that keeps gate hit rate near `86.8%` while reserving a small down hotset. This needs a theoretical slot-level plan before source changes.
+4. If the unaccounted memory includes avoidable allocator reserve or duplicate buffers, reclaim that first and rerun a strict cold SOTA guard before testing down batch again.
+5. Any next source candidate must first show either nonzero down-cache hit rate without reducing gate hit rate, or direct reduction of `stage ms/call` below the top512 probe's `3.705 ms/call`; otherwise reject at short diagnostic stage.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
