@@ -998,6 +998,18 @@ Fine trace completed and early-layer top3 candidate design:
 - Risk: top-k pruning changes model math and may reduce answer quality or truncate/alter the output. This probe is acceptable only if France remains semantic, coherent, and complete. It must preserve 16GB cgroup, TTFT gate, gate pack direct failures `0`, and gate cache behavior.
 - Acceptance: promote only if `eval_tok_s > 4.2` with RAM/correctness/TTFT/O_DIRECT gates passing. If `eval_tok_s <= 4.2` or correctness degrades, reject as diagnostic and keep accepted SOTA unchanged. No source rollback is needed because this is env-only.
 
+
+Early-layer top3 probe result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T100937Z-20260703T100937Z-early-layer-top3-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`; otherwise accepted gate O_DIRECT config, `cpu_moe=40`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold 16GB cgroup.
+- Metrics: `eval_tok_s=3.6`, `prompt_tok_s=1.5`, `TTFT=29979.512524 ms`, `elapsed_seconds=82.72`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15069327360`, `pgmajfault=311622`, `workingset_refault_file=3570771`, `ram_ok=true`, `ram_limit_killed=false`.
+- Manual correctness: rejected. The answer was semantic for most of the paragraph but ended incomplete at `The country is also known`, so it does not satisfy the complete coherent France-output requirement.
+- Gate/cache counters changed materially: one expert pack `hits=5290 misses=2086 direct_failures=0`; gate VRAM cache `hits=40507 misses=7376 hit_rate=84.6%`. Accepted SOTA has pack `hits=4623 misses=0` and gate cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Diagnosis: reducing all layers to top3 changed output trajectory, length, and gate-access pattern enough to increase cache misses/refault pressure. It also regressed token rate well below the `4.2 tok/s` promotion threshold.
+- Verdict: rejected. Do not use global `0-39` top3 for accepted SOTA.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
