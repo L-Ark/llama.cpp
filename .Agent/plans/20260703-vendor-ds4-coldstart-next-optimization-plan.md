@@ -171,6 +171,68 @@ Do not continue with pure CPU fallback compact mmap as the primary optimization.
 3. Start with a narrow default-off path and a tiny top64/top128 subset; check MXFP4 correctness on France before expanding.
 4. Keep current gate O_DIRECT pack untouched during the first compute/offload probe.
 
+### 2026-07-03 Batch-On / MXFP4 Down Cache Probe
+
+Design:
+
+- Goal: test whether the existing `moe_stream_batch.cu` implementation can now be compiled and used for a real compute/offload experiment, then check whether a small down-batch VRAM cache can reduce CPU fallback enough to beat `4.2 tok/s`.
+- Theoretical upper bound: Phase 1 measured down fallback `13097.675 ms` total (`8752.587 ms` decode + `4345.088 ms` prompt). If down batch were correct, cache-resident, and staging were cheap, this is the maximum removable component. In practice, any benefit must pay for GPU staging, quantization, D2H/scatter, reduced gate cache, and synchronization.
+- VRAM budget test: reduce gate one-stream cache from `13568MiB` to `12288MiB` to free about `1.25GiB`, then request `GGML_MOE_VRAM_CACHE_MIB=1536` for batch/down cache. This is intentionally a short diagnostic first because reducing gate slots risks increasing direct pack reads.
+
+Batch-on build probe:
+
+- Build dir: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe`
+- Configure: same CUDA/MoE stream build with `GGML_CUDA_MOE_STREAM_BATCH=ON`
+- Result: build now succeeds on source head `2723926b0`; old missing `iqk/iqk_mul_mat.h` failure is no longer present.
+- Clean batch-probe hashes after rollback: `llama-cli=866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`, `libggml-cuda.so.0.10.0=0265f38feea12270583ebe2a5c633091650ef4b037776bfd44f92ad916656ec8`.
+
+Batch-on down-only diagnostic without MXFP4 enablement:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T041435Z-20260703T041435Z-batch-on-down-short-diagnostic/france-cpu40-vram0gb`
+- Config: batch-probe binary, current accepted gate O_DIRECT env, `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_MOE_STREAM_DECLINE_DEBUG=1`, short `-n 16`, strict cold 16GB cgroup.
+- Result: `eval_tok_s=3.0`, `prompt_tok_s=1.5`, `TTFT=28704.939681 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15144034304`, `ram_ok=true`.
+- Correctness: intentionally too short for the normal heuristic; output was a valid prefix: `France, officially the French Republic, ...`.
+- Counters: down batch declined with `reason=unsupported_type type=39`; type `39` is MXFP4. Batch implementation is reachable, but DS4 down cannot use it without MXFP4 gates.
+
+Temporary MXFP4 source probe:
+
+- Temporary changes in `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+  - add `GGML_TYPE_MXFP4` to `moe_stream_type_supported()`;
+  - add `GGML_TYPE_MXFP4` to the compact MMVQ launcher type switch;
+  - restore the previous correctness fix by allocating compact dst workspace with `dst_tmp_rows=max(dst_cols,n_active)` in both up/gate and down paths.
+- This patch was never committed and was reverted after the rejected probes.
+
+Short compare before compact launcher gate fix:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T041815Z-20260703T041815Z-mxfp4-down-batch-cache1536-short-compare/france-cpu40-vram0gb`
+- Result: `eval_tok_s=2.4`, `prompt_tok_s=1.5`, `TTFT=30765.751509 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15138635776`, `ram_ok=true`, `correctness_ok=true`.
+- Compare: `rows=32`, `max_abs=9.53674316e-07`, `mean_abs_avg=2.1451e-08`, `max_rel=2.34157307e-05`.
+- Counters: `batch_accept=0`, `batch_decline=1360`; batch cache allocated only `1.3GiB` after requested `1.5GiB` failed; gate one-stream hit rate dropped to `69.0%`.
+- Diagnosis: MXFP4 passed the outer type gate but compact launcher still rejected it.
+
+Short accepted-probe after compact launcher gate fix:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T042041Z-20260703T042041Z-mxfp4-down-batch-cache1536-short-accepted-probe/france-cpu40-vram0gb`
+- Result: `eval_tok_s=2.4`, `prompt_tok_s=1.5`, `TTFT=31736.282097 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15155052544`, `ram_ok=true`, `correctness_ok=true`.
+- Counters:
+  - down batch accepted `1244` calls and declined `116`;
+  - batch/down cache requested `1536MiB`, `cudaMalloc 1.5GiB FAILED`, fallback allocation `1.3GiB`, `315` slots, `hits=2130 misses=1960 hit_rate=52.1%`;
+  - batch profile `calls=1244 avg_active=3.29 stage=4.538 ms quant=0.001 ms kernel=0.035 ms d2h=0.006 ms scatter=0.008 ms total=4.588 ms/call`;
+  - one-stream gate cache fell to `hits=6527 misses=2941 hit_rate=68.9%`;
+  - one expert pack `hits=2926 misses=15 direct_failures=0`.
+- Gap analysis:
+  - The actual CUDA kernel is cheap (`~0.035 ms/call`), but staging dominates (`~4.538 ms/call`).
+  - Reducing gate cache to free down-cache VRAM destroys too much of the accepted gate cache behavior.
+  - Even with down batch accepted, the short run is `2.4 tok/s`, far below the `4.2 tok/s` promotion line. A full SOTA run is not justified.
+- Verdict: rejected; do not promote and do not commit source.
+- Rollback: `git restore ggml/src/ggml-cuda/moe_stream_batch.cu`, rebuild `build-ds4-moe-stream-batch-probe`; `git status` clean after rollback.
+
+Next direction after this rejection:
+
+1. Do not trade large gate cache capacity for down batch unless staging is fixed first.
+2. If revisiting down compute, focus on eliminating staging overhead, not just increasing cache slots. The measured kernel time is already small; the bottleneck is host-to-device staging/cache insertion.
+3. A plausible future design needs either true async prefetch overlap ahead of the down op, or a compact hotset that is loaded before decode without displacing gate cache. It must first show `stage ms/call` dropping materially in a short diagnostic before running full France.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
