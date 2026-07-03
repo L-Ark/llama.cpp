@@ -19932,6 +19932,154 @@ Rollback:
   invalid and do not use it for source decisions.
 - Keep Phase 7AS as accepted SOTA regardless of perf-wrapped timing.
 
+Phase 7BJ result - valid diagnostic:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `7389cfc8a` (`docs: plan kimi phase7bj perf hotspots`).
+- source status:
+  - env-only diagnostic;
+  - no source patch;
+  - no rollback or rebuild required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-060657Z-n32-phase7bj-7as-perf`.
+- git:
+  - head `7389cfc8ac8f254246c72e404d57badd11f96c23`;
+  - status clean at run start.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-060657Z-n32-phase7bj-7as-perf"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bj_perf_repro.sh
+```
+
+- perf wrapper recorded in `command.txt`:
+
+```bash
+perf record -F 99 --call-graph fp \
+  -o /root/lfz/runs/vendor-kimi-token-rate/20260703-060657Z-n32-phase7bj-7as-perf/perf.data -- \
+  build-cuda-batch/bin/llama-completion ...
+```
+
+- produced artifacts:
+  - `perf.data`, `57 MiB`, `281730` samples, lost samples `0`;
+  - `perf-report-nochildren.txt`;
+  - `perf-report-children.txt`;
+  - `perf-report-flat-nochildren.txt`;
+  - `perf-report-flat-children.txt`;
+  - `perf-script-header.txt`;
+  - standard Phase 7AS artifacts, including `metrics.txt`,
+    `fallback-profile.csv`, stdout/stderr, cgroup files, `git.txt`,
+    `command.txt`, and `script.sh`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `72845.45 ms`, under the `106331.72 ms` gate.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- perf-wrapped timing:
+  - decode `37612.83 ms / 31`, `0.82 tok/s`;
+  - do not compare this directly to SOTA because perf sampling adds overhead.
+- fallback profile:
+  - `decode,type=2`: `1736` count/calls, `13.351 GiB`, `2.690 s`;
+  - prompt fallback remains present for types `11`, `18`, `2`, `22`, `23`;
+  - CPU fallback pack mmap active: hits `1727`, misses `9`, bytes
+    `14260764672`, fallback GGUF `9`.
+- runtime counters:
+  - expert-pack `iouring_wait_us=12728642`;
+  - main pinned `host_stage=20968.651 ms`;
+  - gate pinned `host_stage=2487.914 ms`;
+  - down profile `fallback_t0=35.709 ms/call`, `cuda_batch=3.027 ms/call`;
+  - same-type IQ3_XXS up/gate type `18` wall `21.123 ms/call`;
+  - IQ2_S type `22` wall `8.258 ms/call`.
+
+Perf evidence:
+
+- Flat self-time top symbols:
+  - `57.64%` `[kernel] __pv_queued_spin_lock_slowpath`;
+  - `23.00%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `2.68%` `[kernel] io_sq_thread`;
+  - `0.65%` `[kernel] __filemap_add_folio`;
+  - `0.54%` `[kernel] clear_page_erms`;
+  - `0.51%` `[kernel] _raw_spin_lock_irq`;
+  - `0.50%` `ggml_vec_dot_iq3_xxs_q8_K`;
+  - `0.48%` `ggml_vec_dot_iq2_s_q8_K`;
+  - `0.23%` `ggml_vec_dot_q4_0_q8_0`;
+  - `0.23%` `ggml_vec_dot_q3_K_q8_K`;
+  - `0.08%` `ggml_vec_dot_iq4_xs_q8_K`.
+- Flat children-time vec-dot symbols:
+  - `20.78%` children / `0.48%` self: `ggml_vec_dot_iq2_s_q8_K`;
+  - `19.91%` children / `0.23%` self: `ggml_vec_dot_q3_K_q8_K`;
+  - `17.20%` children / `0.50%` self: `ggml_vec_dot_iq3_xxs_q8_K`;
+  - `7.28%` children / `0.08%` self: `ggml_vec_dot_iq4_xs_q8_K`;
+  - `6.05%` children / `0.23%` self: `ggml_vec_dot_q4_0_q8_0`.
+- Flat children-time kernel path:
+  - `70.13%` children in `asm_exc_page_fault`;
+  - `70.08%` in `exc_page_fault`;
+  - `70.05%` in `do_user_addr_fault`;
+  - `68.40%` in `filemap_fault`;
+  - `65.41%` in `filemap_add_folio`;
+  - `64.84%` in `__filemap_add_folio`;
+  - `57.89%` self/children in `__pv_queued_spin_lock_slowpath`;
+  - `31.35%` in `try_to_free_mem_cgroup_pages`.
+- Callchain evidence:
+  - the large kernel/filemap path appears under GGUF/expert vec-dot callchains
+    such as `ggml_vec_dot_q3_K_q8_K`, `ggml_vec_dot_iq2_s_q8_K`,
+    `ggml_vec_dot_iq3_xxs_q8_K`, and `ggml_vec_dot_q4_0_q8_0`;
+  - the dominant cost is page-cache insertion/readahead/reclaim spinlock under
+    the strict 16GB cgroup, not the arithmetic self-time of the Q4 function.
+
+Interpretation:
+
+- The residual decode fallback should not be treated as mostly Q4 arithmetic.
+  `ggml_vec_dot_q4_0_q8_0` self-time is only `0.23%`; its children-time is
+  dominated by mmap/file-backed page faults and memcg reclaim.
+- CPU fallback pack mmap avoids GGUF fallback most of the time, but it still
+  faults file-backed expert-pack pages under the 16GB cgroup. This explains why
+  Q4 chunking and global thread changes did not help: they do not remove the
+  filemap/memcg pressure.
+- The same issue is not limited to Q4_0. Other CPU fallback/prompt vec-dot
+  types also show high children time through the same page-fault path.
+- Source-level Q4 math rewrites are unlikely to produce a large token-rate gain
+  unless they also reduce file-backed page faults or avoid CPU fallback over
+  mmap pages.
+
+Next implication:
+
+- Do not retry Q4 chunking, Q4 overchunking, or global thread tuning.
+- The next optimization should target file-backed CPU fallback pressure under
+  16GB. Candidate directions:
+  - narrow anonymous hot cache for only recurring decode Q4_0 fallback pages;
+  - pack-backed fallback read into a reusable anonymous buffer for the seven
+    Q4_0 decode tensors, with measured copy cost versus page-fault savings;
+  - post-prompt page-cache policy that preserves only decode fallback hot pages
+    and releases prompt-only fallback pages;
+  - avoid CPU fallback mmap for decode if direct buffered copy plus compute is
+    cheaper than repeated mmap page faults.
+- Any such source change must first compute the upper bound from:
+  - `decode,type=2` `2.690 s` fallback time;
+  - `13.351 GiB` Q4_0 decode bytes;
+  - observed page-fault/memcg dominance in perf;
+  - available host RAM under the strict 16GB cgroup.
+
+Decision:
+
+- Accept Phase 7BJ as valid diagnostic evidence.
+- Keep Phase 7AS as accepted SOTA; no performance promotion.
+- Use the perf evidence to design the next source-level optimization.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
