@@ -26197,6 +26197,201 @@ Next optimization direction if Phase 7CS is rejected:
     than expert staging;
   - broad trace prefetch, because previous trace-prefetch phases improved hit
     rate but regressed correctness or wall time.
+
+Phase 7CS result - rejected:
+
+- result timestamp: 2026-07-03T16:00:00Z.
+- plan commit:
+  `eb0477a09` (`docs: plan kimi phase7cs production profile retest`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- runner:
+  `/tmp/run_phase7cs_repro.sh`.
+- activation:
+  - copied from `/tmp/run_phase7cc_repro.sh`;
+  - added `MIN_PROFILE=1`;
+  - when enabled, `env.txt` omits:
+    - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_NAME_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE`;
+    - `GGML_MOE_STREAM_DECLINE_DEBUG`;
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`.
+  - kept accepted runtime envs:
+    - l12 up/gate expert pack
+      `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+    - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+    - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+    - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+    - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+    - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+    - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+    - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+    - `PINNED_SLOTS=8`, `THREADS=32`.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-155008Z-n32-phase7cs-7cc-min-profile`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-155008Z-n32-phase7cs-7cc-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7cs_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `78563.82 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `32918.60 ms / 31`, `0.94 tok/s`;
+  - faster than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `299.06 ms`, so n32 confirmation was required.
+- memory at finish:
+  - `memory.current.final=15142531072`;
+  - `file=14902308864`;
+  - `inactive_file=7188631552`;
+  - `active_file=7712993280`;
+  - `kernel=236355584`;
+  - `anon=458752`.
+- expert movement:
+  - expert pack `iouring_reads=11655`, `iouring_bytes=67926376448`,
+    `iouring_wait_us=13242765`;
+  - down cache hit rate `73.6%`;
+  - upgate cache hit rate `43.7%`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-155247Z-n32-phase7cs-7cc-min-profile-confirm`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-155247Z-n32-phase7cs-7cc-min-profile-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7cs_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `77855.77 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `32888.12 ms / 31`, `0.94 tok/s`;
+  - faster than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `329.54 ms`, so n96 candidate was required.
+- memory at finish:
+  - `memory.current.final=15143321600`;
+  - `file=14902382592`;
+  - `inactive_file=5287821312`;
+  - `active_file=9613901824`;
+  - `kernel=236347392`;
+  - `anon=471040`.
+- expert movement:
+  - expert pack `iouring_reads=11655`, `iouring_bytes=67926376448`,
+    `iouring_wait_us=13083087`;
+  - down cache hit rate `73.6%`;
+  - upgate cache hit rate `43.7%`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-155523Z-n96-phase7cs-7cc-min-profile`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-155523Z-n96-phase7cs-7cc-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7cs_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `76421.65 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- decode:
+  - `79669.75 ms / 77`, `0.97 tok/s`;
+  - slower than Phase 7CC n96 confirmation `79008.37 ms / 77` by
+    `661.38 ms`.
+- memory at finish:
+  - `memory.current.final=15130677248`;
+  - `file=14873563136`;
+  - `inactive_file=5163868160`;
+  - `active_file=9709109248`;
+  - `kernel=252452864`;
+  - `anon=454656`.
+- expert movement:
+  - expert pack `iouring_reads=28899`, `iouring_bytes=168378384384`,
+    `iouring_wait_us=32286612`;
+  - down cache hit rate `73.4%`;
+  - upgate cache hit rate `43.2%`.
+
+Gap analysis:
+
+- Removing diagnostics reproducibly improves short n32 by about `0.30-0.33 s`,
+  but does not improve n96.
+- The longer n96 run is still dominated by expert movement:
+  - n96 expert-pack `iouring_wait_us=32.287 s`;
+  - expert-pack bytes `168.38 GB`;
+  - down/upgate cache hit rates are essentially unchanged from 7CC.
+- The n32 improvement is therefore likely reduced bookkeeping/scheduling noise,
+  while the n96 regression is normal cold-start variance plus unchanged
+  movement pressure.
+- Because user rules require reproducible SOTA at n96, a short-run-only gain
+  cannot be accepted.
+
+Decision:
+
+- Reject Phase 7CS.
+- Do not run n96 confirmation.
+- Do not promote `MIN_PROFILE=1` to SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `79008.37 ms / 77`, `0.97 tok/s`;
+  - l12 up/gate expert pack;
+  - diagnostic envs retained in the accepted reproduction runner for
+    bottleneck visibility.
+- Next implementation should follow the preplanned fallback:
+  add a default-off per-call up/gate CSV profiler, then target a specific
+  stage/movement bucket with evidence instead of broad scheduling changes.
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
