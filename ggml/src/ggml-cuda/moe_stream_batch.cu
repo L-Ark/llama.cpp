@@ -5653,6 +5653,14 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const char *mmq_compare_env = std::getenv("GGML_MOE_STREAM_UP_GATE_MMQ_COMPARE");
     const bool mmq_compare =
         fused_mmq_up_gate && mmq_compare_env && mmq_compare_env[0] && mmq_compare_env[0] != '0';
+    const char *serial_stage_batch_env = std::getenv("GGML_MOE_STREAM_SERIAL_STAGE_BATCH");
+    const bool serial_stage_batch =
+        serial_stage_batch_env && serial_stage_batch_env[0] && serial_stage_batch_env[0] != '0' &&
+        !prompt_mode && !mixed_types && !exact_prompt_q8k;
+    static std::atomic<int> first_serial_stage_batch{0};
+    if (serial_stage_batch && first_serial_stage_batch.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream] serial same-type batched staging active\n");
+    }
 
     auto stage_tensor = [&](
             const char *key_name, const void *host_base, void *d_out,
@@ -6527,16 +6535,47 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return parallel_fail();
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return parallel_fail();
     } else {
-        if (!stage_tensor(
-                up_key_name, src0_up_data, bc.d_up, st,
-                bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids, nullptr, nullptr, 0)) {
-            return false;
-        }
-        if (profile) cudaEventRecord(bc.ev_up, st);
-        if (!stage_tensor(
-                gate_key_name, src0_gate_data, bc.d_gate, st,
-                bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids, nullptr, nullptr, 0)) {
-            return false;
+        if (serial_stage_batch) {
+            std::vector<stage_copy_job> up_jobs;
+            std::vector<stage_copy_job> gate_jobs;
+            if (!plan_tensor(up_key_name, src0_up_data, bc.h_x_ids, nullptr, nullptr, 0, up_jobs)) {
+                clear_stage_jobs(up_jobs);
+                return false;
+            }
+            up_stage_jobs_count = (int)up_jobs.size();
+            if (!copy_stage_jobs(up_jobs, st, bc.stage_ring)) {
+                clear_stage_jobs(up_jobs);
+                return false;
+            }
+            if (!launch_tensor(bc.d_up, st, bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids)) {
+                return false;
+            }
+            if (profile) cudaEventRecord(bc.ev_up, st);
+
+            if (!plan_tensor(gate_key_name, src0_gate_data, bc.h_x_ids, nullptr, nullptr, 0, gate_jobs)) {
+                clear_stage_jobs(gate_jobs);
+                return false;
+            }
+            gate_stage_jobs_count = (int)gate_jobs.size();
+            if (!copy_stage_jobs(gate_jobs, st, bc.stage_ring)) {
+                clear_stage_jobs(gate_jobs);
+                return false;
+            }
+            if (!launch_tensor(bc.d_gate, st, bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids)) {
+                return false;
+            }
+        } else {
+            if (!stage_tensor(
+                    up_key_name, src0_up_data, bc.d_up, st,
+                    bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids, nullptr, nullptr, 0)) {
+                return false;
+            }
+            if (profile) cudaEventRecord(bc.ev_up, st);
+            if (!stage_tensor(
+                    gate_key_name, src0_gate_data, bc.d_gate, st,
+                    bc.d_x_ids, bc.d_src1_q8, bc.h_x_ids, nullptr, nullptr, 0)) {
+                return false;
+            }
         }
         if (profile) cudaEventRecord(bc.ev_gate, st);
     }
