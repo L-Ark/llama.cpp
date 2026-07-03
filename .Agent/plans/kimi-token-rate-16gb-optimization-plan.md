@@ -5559,6 +5559,66 @@ Result handling:
 - If rejected, keep the default-off implementation but do not promote it; add
   a follow-up plan to understand n32/n96 divergence.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-224602Z-n96-phase7dzb-serial-stage-confirm`;
+  - source/docs commit `d636a7a4c`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Correctness and gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous for landmarks like the Eiffel Tower and the Louvre Museum.
+    France is also known for its diverse landscapes, from the vineyards of
+    Bordeaux to the beaches of the Riviera, and plays a major role in European
+    and global affairs.<|im_end|> [end of text]`;
+  - quality `pass`;
+  - TTFT `79924.70 ms`, below `106331.72 ms`;
+  - decode `74693.07 ms / 77`, `1.03 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`;
+  - direct_reads `22113`, iouring_reads `37080`,
+    iouring_bytes `214923018240`, iouring_wait_us `37557543`.
+- Cache and staging:
+  - down cache: slots `806`, hits `23934`, misses `8690`,
+    hit rate `73.4%`;
+  - upgate cache: slots `1679`, hits `31967`, misses `41969`,
+    hit rate `43.2%`;
+  - pinned staging main: host_stage `30768.844 ms`, h2d `10390.990 ms`;
+  - pinned staging gate: host_stage `1132.345 ms`, h2d `2324.794 ms`.
+- Operator profiles:
+  - upgate rows `2157`, wall `16669.189 ms`, up `12497.444 ms`,
+    gate `3870.694 ms`, stage `73.754 ms`, kernel `16492.259 ms`,
+    up_jobs `10449`, gate_jobs `10449`;
+  - down rows `4082`, wall `11127.859 ms`, stage `10410.381 ms`,
+    kernel `473.253 ms`, jobs `8722`.
+- Comparison:
+  - beats Phase 7DS n96 confirmation `77839.21 ms / 77` by
+    `3146.14 ms`;
+  - token rate improves from `0.99 tok/s` to `1.03 tok/s`;
+  - n32 confirmation was `30286.11 ms / 31`, also accepted.
+
+Decision:
+
+- Accept Phase 7DZB as the current SOTA.
+- Required SOTA env delta, in addition to Phase 7DS settings:
+
+```sh
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+```
+
+- Current SOTA run set:
+  - n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-224141Z-n32-phase7dza-serial-stage-confirm`;
+  - n96:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-224602Z-n96-phase7dzb-serial-stage-confirm`.
+- Current SOTA source/docs commit after result recording:
+  - `92c181b7f`.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
