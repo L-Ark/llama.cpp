@@ -1194,6 +1194,35 @@ Cold-aware comparison after transient repack rejection:
 - Consequence for planning: any future CPU-kernel candidate must be cold-source neutral or reduce source reads. A warm arithmetic speedup is not enough under the 16GB page-cache constraint. Do not accept candidates whose cache counters diverge materially from the accepted SOTA unless the divergence is explained and total strict-cold metrics improve.
 - Next bottleneck focus: preserve gate cache/pack hit shape while attacking CPU fallback. Candidate classes that add an extra pass over expert rows are deprioritized. Prefer scheduling/imbalance reductions, fewer CPU fallback calls, or moving work to already-loaded GPU/cache paths without increasing file refault pressure.
 
+
+CPU fallback cne1 overpartition candidate design:
+
+- Time: 2026-07-03 after rejected transient repack comparison commit `987d3ac7e`.
+- Bottleneck basis: fine trace shows cne1=1 CPU fallback dominates thread-sum: `up:cne1=1 213850.057 ms`, `down:cne1=1 210147.554 ms`, about `423997.611 ms` thread-sum or `~21199.9 ms` at 20 threads. The cold comparison shows candidates that add source scans increase refaults and fail; the next candidate must not add scans.
+- Source finding: in `ggml_compute_forward_mul_mat_id()`, when `nr1 == 1`, `chunk_size` starts at `64`, giving natural chunk counts of about `32` for up (`nr0=2048`) and `64` for down (`nr0=4096`). The current heuristic then collapses any `nchunk0*nchunk1 < nth*4` to exactly `nth` chunks, so cne1=1 often becomes only 20 large chunks. With `nth >= total_chunks`, each thread takes at most one chunk and there is no work stealing for page-fault stragglers.
+- Candidate: add default-off env `GGML_MOE_CPU_OVERPARTITION_CNE1=1`. When enabled and `nr1 == 1`, skip the collapse-to-`nth` heuristic and keep the natural 64-row chunks. This changes only scheduling granularity; selected experts, arithmetic, source reads, gate cache, O_DIRECT pack, and memory layout are unchanged.
+- Theoretical upper bound: no arithmetic speedup is expected. The only recoverable time is scheduling/page-fault tail. If improved granularity recovers just `5%` of the `~21199.9 ms` cne1=1 wall estimate, the bound is about `1.06s`; `10%` would be about `2.12s`. This is enough to justify one strict cold candidate because it does not add source scans and should not increase page-cache pressure materially.
+- Risk: more chunks increase atomic scheduling overhead. However the candidate changes from 20 to roughly 32/64 chunks per cne1=1 op, not thousands, so overhead should be small compared with cold page-fault variance. If token rate does not improve, reject and revert.
+- Practice: implement default-off env gate, rebuild, run strict cold France with accepted SOTA config plus `GGML_MOE_CPU_OVERPARTITION_CNE1=1`. Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and gate pack/cache counters remain close to accepted SOTA.
+
+
+CPU fallback cne1 overpartition candidate result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T110856Z-20260703T-cne1-overpartition-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: runtime source candidate enabled with `GGML_MOE_CPU_OVERPARTITION_CNE1=1`; otherwise accepted SOTA env/CLI, O_DIRECT gate pack, admission profile, top-k policy, drop_caches, and strict 16GB cgroup.
+- Metrics: `eval_tok_s=3.9`, `prompt_tok_s=1.5`, `TTFT=30606.713915 ms`, `elapsed_seconds=65.10`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15103713280`, `pgmajfault=440429`, `workingset_refault_file=1697965`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: passed by manual review. The France answer was complete, semantic, and coherent.
+- Gate/O_DIRECT counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_failures=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Diagnosis: preserving gate/cache shape was successful, but finer CPU chunking did not improve strict-cold wall time. Major faults increased (`440429` vs accepted `280239` and guard `266453`), and the added scheduling/atomic overhead plus more fault interleaving outweighed any straggler reduction. This disproves the simple overpartition lever under the current 16GB cgroup.
+- Verdict: rejected. It fails `eval_tok_s > 4.2`. The runtime source candidate was reverted with `git restore ggml/src/ggml-cpu/ggml-cpu.c`, and `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` was rerun from clean source commit `987d3ac7e`.
+
+Next direction after overpartition rejection:
+
+- Current accepted SOTA remains `4.2 tok/s`; no source improvement was accepted.
+- Avoid CPU fallback changes that increase page faults even if they improve scheduling theory. Under 16GB, page-fault behavior dominates small CPU scheduling wins.
+- Remaining viable directions need a stronger mechanism than per-chunk scheduling or per-chunk repack: reduce misses before CPU fallback, move a bounded additional expert subset into VRAM without causing OOM, or change gate/admission so pack/cache counters remain aligned while CPU fallback calls decrease.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
