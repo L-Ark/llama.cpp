@@ -3125,7 +3125,7 @@ git fetch wici vendor/kimi-moe-stream-on-vendor
 git reset --hard 2562a5b65
 cmake --build build-cuda-batch -j 32 --target llama-completion
 cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7do_down_profile_repro.sh
-perl -0pi -e 's#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\$RUN/fallback-profile.csv\n#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\n#' /tmp/run_phase7do_down_profile_repro.sh
+perl -0pi -e 's#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\$RUN/fallback-profile.csv\n#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\\$RUN/fallback-profile.csv\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=\\$RUN/down-batch-profile.csv\n#' /tmp/run_phase7do_down_profile_repro.sh
 chmod +x /tmp/run_phase7do_down_profile_repro.sh
 RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7do-down-batch-profile"
 systemd-run --wait --collect --same-dir \
@@ -3152,6 +3152,36 @@ Result handling:
 - Do not promote Phase 7DO as SOTA.
 - If profile overhead materially changes decode, record it as diagnostic only.
 - Use the profile to rank the next behavior-changing source probe.
+
+Phase 7DO harness attempt - rejected:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-201311Z-n32-phase7do-down-batch-profile`.
+- Command intent:
+  - accepted SOTA behavior;
+  - add `GGML_MOE_DOWN_BATCH_PROFILE_OUT`.
+- Hard runtime gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `75531.14 ms`;
+  - decode `32943.15 ms / 31`, `0.94 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Harness failure:
+  - `down-batch-profile.csv` was missing;
+  - `fallback-profile.csv` was missing from the run directory;
+  - generated env contained:
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/fallback-profile.csv`;
+    - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=/down-batch-profile.csv`.
+- Root cause:
+  - the Perl replacement command treated `$RUN` in the replacement string as a
+    Perl variable and expanded it to empty.
+- Decision:
+  - reject this as a 7DO diagnostic because required artifacts are missing;
+  - fix the runner command by escaping `$RUN` as `\$RUN` in the replacement;
+  - rerun Phase 7DO.
 
 ## Phase 0: cold 16GB baseline
 
