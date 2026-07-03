@@ -30072,6 +30072,136 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CR - non-protected profile preload for blk.1-2 down
+
+Start time:
+
+- 2026-07-03T15:48:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CO shows `blk.1/2` down are movement/stage dominated:
+  - combined stage `1425.566 ms` on n32;
+  - kernel is only about `7.4 ms` combined.
+- Phase 7CP and 7CQ proved preloading these experts into the down cache removes
+  their local stage cost, but same-type overlap performs the movement on the
+  up_gate critical path and is not stable.
+- Existing profile preload is synchronous and not pinned when
+  `GGML_MOE_VRAM_PROFILE_PROTECT` is unset:
+  - it does not add a source patch;
+  - it does not protect slots;
+  - it can warm a specific tensor once and then let normal LRU evict entries.
+
+Hypothesis:
+
+- Generate a narrow profile from the Phase 7CJ route trace containing only
+  decode uses of:
+  - `blk.1.ffn_down_exps.weight`;
+  - `blk.2.ffn_down_exps.weight`.
+- Enable profile preload without protection:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2
+GGML_MOE_VRAM_CACHE_POLICY=
+```
+
+- This moves layer `1/2` down loading to the first touch of each down tensor,
+  without pinning hundreds of slots and without using up_gate overlap.
+- It may improve if one-time preload reduces repeated miss churn enough to
+  offset preload overhead.
+
+Theoretical upper bound:
+
+- Since bytes still have to move, this cannot recover the full `1425.566 ms`.
+- A realistic ceiling is `0.1-0.5 s` if profile preload improves cache order or
+  avoids repeated reloads.
+- If preload simply moves the same bytes into the first down call, decode will
+  be flat or slower.
+
+Implementation:
+
+- Env/profile-file only; no source patch.
+- Use the accepted Phase 7CC runtime and keep Phase 7CO's down batch CSV
+  enabled for mechanism evidence.
+- Generate the profile from:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv`.
+
+Profile generation:
+
+```bash
+mkdir -p /root/lfz/runs/vendor-kimi-token-rate/profiles
+python3 - <<'PY'
+import csv, collections
+src = "/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv"
+dst = "/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv"
+targets = {"blk.1.ffn_down_exps.weight", "blk.2.ffn_down_exps.weight"}
+cnt = collections.Counter()
+bytes_by = {}
+with open(src) as f:
+    for r in csv.DictReader(f):
+        t = r["tensor"]
+        if t not in targets:
+            continue
+        e = int(r["expert_idx"])
+        b = int(r["expert_bytes"])
+        cnt[(t, e)] += 1
+        bytes_by[(t, e)] = b
+rows = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][1]))
+cum = 0
+with open(dst, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["rank","count","expert_bytes","cumulative","tensor_base","expert_idx","tensor"])
+    for rank, ((tensor, expert), count) in enumerate(rows, 1):
+        cum += count
+        w.writerow([rank, count, bytes_by[(tensor, expert)], cum, "0x0", expert, tensor])
+print(dst, len(rows), cum)
+PY
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7co_repro.sh /tmp/run_phase7cr_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_VRAM_PROFILE=\/root\/lfz\/runs\/vendor-kimi-token-rate\/profiles\/phase7cr-l1-l2-down-profile.csv\nGGML_MOE_VRAM_PROFILE_PROTECT=0\nGGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2\nEOF\n/' /tmp/run_phase7cr_repro.sh
+chmod +x /tmp/run_phase7cr_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cr-profile-preload-l1-l2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cr_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - profile file exists;
+  - `env.txt` contains the profile path and `PRELOAD_MAX_TENSORS=2`;
+  - stderr shows profile preload for `blk.1` and `blk.2` down;
+  - `down-batch-profile.csv` exists.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - `blk.1/2` stage should drop without up_gate regression;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation.
+
+Rollback:
+
+- Env/profile-file failure needs no source rollback.
+- If first n32 is slower or hard gates fail, reject and keep SOTA unchanged.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
