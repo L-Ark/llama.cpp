@@ -332,6 +332,12 @@ struct batch_profile {
     uint64_t active_experts = 0;
     uint64_t up_stage_jobs = 0;
     uint64_t gate_stage_jobs = 0;
+    uint64_t max_up_stage_jobs = 0;
+    uint64_t max_gate_stage_jobs = 0;
+    uint64_t max_combined_stage_jobs = 0;
+    uint64_t up_stage_jobs_hist[7] = {};
+    uint64_t gate_stage_jobs_hist[7] = {};
+    uint64_t combined_stage_jobs_hist[7] = {};
     double stage_ms = 0.0;
     double quant_ms = 0.0;
     double kernel_ms = 0.0;
@@ -350,6 +356,16 @@ struct batch_profile {
 static batch_profile g_bprof;
 static batch_profile g_uprof;
 static batch_profile g_uprof_by_type[2][GGML_TYPE_COUNT][GGML_TYPE_COUNT];
+
+static size_t stage_jobs_hist_bucket(uint64_t jobs) {
+    if (jobs == 0) return 0;
+    if (jobs == 1) return 1;
+    if (jobs <= 4) return 2;
+    if (jobs <= 8) return 3;
+    if (jobs <= 16) return 4;
+    if (jobs <= 32) return 5;
+    return 6;
+}
 
 struct up_gate_layer_profile_entry {
     bool used = false;
@@ -388,6 +404,19 @@ static void up_gate_profile_add(
     p.active_experts += active_experts;
     p.up_stage_jobs += up_stage_jobs;
     p.gate_stage_jobs += gate_stage_jobs;
+    const uint64_t combined_stage_jobs = up_stage_jobs + gate_stage_jobs;
+    if (p.max_up_stage_jobs < up_stage_jobs) {
+        p.max_up_stage_jobs = up_stage_jobs;
+    }
+    if (p.max_gate_stage_jobs < gate_stage_jobs) {
+        p.max_gate_stage_jobs = gate_stage_jobs;
+    }
+    if (p.max_combined_stage_jobs < combined_stage_jobs) {
+        p.max_combined_stage_jobs = combined_stage_jobs;
+    }
+    ++p.up_stage_jobs_hist[stage_jobs_hist_bucket(up_stage_jobs)];
+    ++p.gate_stage_jobs_hist[stage_jobs_hist_bucket(gate_stage_jobs)];
+    ++p.combined_stage_jobs_hist[stage_jobs_hist_bucket(combined_stage_jobs)];
     p.stage_ms += stage_ms;
     p.quant_ms += quant_ms;
     p.up_ms += up_ms;
@@ -665,6 +694,27 @@ static void up_gate_profile_report_atexit() {
         accounted_ms / calls,
         g_uprof.wall_ms / calls,
         wall_gap_ms / calls);
+    std::fprintf(stderr,
+        "[moe_stream_batch] up/gate stage-job hist: "
+        "max_up=%lu max_gate=%lu max_combined=%lu "
+        "up=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu "
+        "gate=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu "
+        "combined=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
+        g_uprof.max_up_stage_jobs,
+        g_uprof.max_gate_stage_jobs,
+        g_uprof.max_combined_stage_jobs,
+        g_uprof.up_stage_jobs_hist[0], g_uprof.up_stage_jobs_hist[1],
+        g_uprof.up_stage_jobs_hist[2], g_uprof.up_stage_jobs_hist[3],
+        g_uprof.up_stage_jobs_hist[4], g_uprof.up_stage_jobs_hist[5],
+        g_uprof.up_stage_jobs_hist[6],
+        g_uprof.gate_stage_jobs_hist[0], g_uprof.gate_stage_jobs_hist[1],
+        g_uprof.gate_stage_jobs_hist[2], g_uprof.gate_stage_jobs_hist[3],
+        g_uprof.gate_stage_jobs_hist[4], g_uprof.gate_stage_jobs_hist[5],
+        g_uprof.gate_stage_jobs_hist[6],
+        g_uprof.combined_stage_jobs_hist[0], g_uprof.combined_stage_jobs_hist[1],
+        g_uprof.combined_stage_jobs_hist[2], g_uprof.combined_stage_jobs_hist[3],
+        g_uprof.combined_stage_jobs_hist[4], g_uprof.combined_stage_jobs_hist[5],
+        g_uprof.combined_stage_jobs_hist[6]);
     for (int mode = 0; mode < 2; ++mode) {
         for (int up_type = 0; up_type < GGML_TYPE_COUNT; ++up_type) {
             for (int gate_type = 0; gate_type < GGML_TYPE_COUNT; ++gate_type) {
@@ -705,6 +755,30 @@ static void up_gate_profile_report_atexit() {
                     p_accounted_ms / pcalls,
                     p.wall_ms / pcalls,
                     p_wall_gap_ms / pcalls);
+                std::fprintf(stderr,
+                    "[moe_stream_batch] up/gate type stage-job hist: mode=%s up_type=%d gate_type=%d "
+                    "max_up=%lu max_gate=%lu max_combined=%lu "
+                    "up=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu "
+                    "gate=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu "
+                    "combined=0:%lu,1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
+                    mode ? "prompt" : "decode",
+                    up_type,
+                    gate_type,
+                    p.max_up_stage_jobs,
+                    p.max_gate_stage_jobs,
+                    p.max_combined_stage_jobs,
+                    p.up_stage_jobs_hist[0], p.up_stage_jobs_hist[1],
+                    p.up_stage_jobs_hist[2], p.up_stage_jobs_hist[3],
+                    p.up_stage_jobs_hist[4], p.up_stage_jobs_hist[5],
+                    p.up_stage_jobs_hist[6],
+                    p.gate_stage_jobs_hist[0], p.gate_stage_jobs_hist[1],
+                    p.gate_stage_jobs_hist[2], p.gate_stage_jobs_hist[3],
+                    p.gate_stage_jobs_hist[4], p.gate_stage_jobs_hist[5],
+                    p.gate_stage_jobs_hist[6],
+                    p.combined_stage_jobs_hist[0], p.combined_stage_jobs_hist[1],
+                    p.combined_stage_jobs_hist[2], p.combined_stage_jobs_hist[3],
+                    p.combined_stage_jobs_hist[4], p.combined_stage_jobs_hist[5],
+                    p.combined_stage_jobs_hist[6]);
             }
         }
     }
