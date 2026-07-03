@@ -299,7 +299,7 @@ static void *vram_cache_lookup(uintptr_t key) {
 }
 
 // Insert expert into cache. LRU eviction of slot's previous owner.
-static void *vram_cache_insert(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st) {
+static void *vram_cache_insert_impl(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool count_miss) {
     if (!g_vcache.pool || g_vcache.n_slots == 0 || sz > g_vcache.slot_sz) return nullptr;
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
@@ -321,8 +321,14 @@ static void *vram_cache_insert(uintptr_t key, const void *host_data, size_t sz, 
 
     void *dst = (char *)g_vcache.pool + (size_t)slot * g_vcache.slot_sz;
     cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st);
-    g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
+    if (count_miss) {
+        g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
+    }
     return dst;
+}
+
+static void *vram_cache_insert(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st) {
+    return vram_cache_insert_impl(key, host_data, sz, st, true);
 }
 
 // === Pool of GPU stream slots ==============================================
@@ -588,6 +594,211 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
     ++g_one_pack.reads;
     g_one_pack.bytes.fetch_add(sz);
     return true;
+}
+
+static bool ensure_host_pinned(void *&p, size_t &cur, size_t need);
+
+struct one_prefill_entry {
+    std::string tensor;
+    int64_t expert = -1;
+    int64_t score = 0;
+};
+
+struct one_prefill_state {
+    bool initialized = false;
+    bool enabled = false;
+    bool registered = false;
+    bool done = false;
+    size_t limit = 0;
+    std::vector<one_prefill_entry> entries;
+    std::mutex mu;
+    uint64_t attempted = 0;
+    uint64_t inserted = 0;
+    uint64_t pack_misses = 0;
+    uint64_t read_failures = 0;
+    uint64_t bytes = 0;
+    double elapsed_ms = 0.0;
+};
+
+static one_prefill_state g_one_prefill;
+
+static void one_prefill_report_atexit() {
+    if (!g_one_prefill.enabled && g_one_prefill.attempted == 0) {
+        return;
+    }
+    std::fprintf(stderr,
+        "[moe_stream] one prefill: enabled=%d loaded=%zu limit=%zu attempted=%lu inserted=%lu"
+        " pack_misses=%lu read_failures=%lu bytes=%lu elapsed_ms=%.3f\n",
+        g_one_prefill.enabled ? 1 : 0,
+        g_one_prefill.entries.size(),
+        g_one_prefill.limit,
+        g_one_prefill.attempted,
+        g_one_prefill.inserted,
+        g_one_prefill.pack_misses,
+        g_one_prefill.read_failures,
+        g_one_prefill.bytes,
+        g_one_prefill.elapsed_ms);
+}
+
+static void one_prefill_init_once_locked() {
+    if (g_one_prefill.initialized) {
+        return;
+    }
+    g_one_prefill.initialized = true;
+
+    const char * path = std::getenv("GGML_MOE_STREAM_ONE_PREFILL_PROFILE");
+    if (!path || !path[0]) {
+        return;
+    }
+
+    const char * limit_env = std::getenv("GGML_MOE_STREAM_ONE_PREFILL_LIMIT");
+    g_one_prefill.limit = (limit_env && limit_env[0]) ? (size_t) std::strtoull(limit_env, nullptr, 10) : 0;
+
+    FILE * fp = std::fopen(path, "r");
+    if (!fp) {
+        std::fprintf(stderr, "[moe_stream] one prefill: failed to open profile %s\n", path);
+        return;
+    }
+
+    char line[4096];
+    while (std::fgets(line, sizeof(line), fp)) {
+        char tensor[3072];
+        long long expert = -1;
+        long long score = 0;
+        const int n = std::sscanf(line, "%3071[^\t]\t%lld\t%lld", tensor, &expert, &score);
+        if (n >= 2 && expert >= 0) {
+            one_prefill_entry e;
+            e.tensor = tensor;
+            e.expert = expert;
+            e.score = (n >= 3) ? score : 0;
+            g_one_prefill.entries.push_back(std::move(e));
+        }
+    }
+    std::fclose(fp);
+
+    std::sort(g_one_prefill.entries.begin(), g_one_prefill.entries.end(),
+        [](const one_prefill_entry & a, const one_prefill_entry & b) {
+            if (a.score != b.score) {
+                return a.score > b.score;
+            }
+            const int name_cmp = std::strcmp(a.tensor.c_str(), b.tensor.c_str());
+            if (name_cmp != 0) {
+                return name_cmp < 0;
+            }
+            return a.expert < b.expert;
+        });
+
+    if (g_one_prefill.limit == 0 || g_one_prefill.limit > g_one_prefill.entries.size()) {
+        g_one_prefill.limit = g_one_prefill.entries.size();
+    }
+    g_one_prefill.enabled = !g_one_prefill.entries.empty();
+    if (g_one_prefill.enabled && !g_one_prefill.registered) {
+        g_one_prefill.registered = true;
+        std::atexit(one_prefill_report_atexit);
+    }
+    std::fprintf(stderr, "[moe_stream] one prefill: loaded %zu entries from %s limit=%zu\n",
+            g_one_prefill.entries.size(), path, g_one_prefill.limit);
+}
+
+static bool one_prefill_enabled() {
+    std::lock_guard<std::mutex> lk(g_one_prefill.mu);
+    one_prefill_init_once_locked();
+    return g_one_prefill.enabled;
+}
+
+static uintptr_t one_named_cache_key(const char * tensor, int64_t expert) {
+    uint64_t h = 1469598103934665603ULL;
+    if (tensor) {
+        for (const unsigned char * p = (const unsigned char *) tensor; *p; ++p) {
+            h ^= (uint64_t) *p;
+            h *= 1099511628211ULL;
+        }
+    }
+    h ^= 0xff;
+    h *= 1099511628211ULL;
+    uint64_t x = (uint64_t) expert;
+    for (int i = 0; i < 8; ++i) {
+        h ^= (x >> (i * 8)) & 0xffU;
+        h *= 1099511628211ULL;
+    }
+    if (h == 0) {
+        h = 1;
+    }
+    return (uintptr_t) h;
+}
+
+static bool one_prefill_key_mode_enabled() {
+    static int enabled = [] {
+        const char * path = std::getenv("GGML_MOE_STREAM_ONE_PREFILL_PROFILE");
+        return path && path[0] ? 1 : 0;
+    }();
+    return enabled != 0;
+}
+
+static uintptr_t one_cache_key_for(const char * tensor, int64_t expert, const void * src0_data) {
+    return one_prefill_key_mode_enabled() ? one_named_cache_key(tensor, expert) : (uintptr_t) src0_data;
+}
+
+static void one_prefill_maybe(slot_ctx & ctx, cudaStream_t st, size_t src0_bytes) {
+    if (!one_prefill_key_mode_enabled() || !one_prefill_enabled()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(g_one_prefill.mu);
+    if (g_one_prefill.done || !g_one_prefill.enabled || !g_vcache.pool || g_vcache.n_slots <= 0) {
+        return;
+    }
+    g_one_prefill.done = true;
+
+    size_t n = g_one_prefill.limit;
+    if (n > (size_t) g_vcache.n_slots) {
+        n = (size_t) g_vcache.n_slots;
+    }
+    if (n > g_one_prefill.entries.size()) {
+        n = g_one_prefill.entries.size();
+    }
+
+    {
+        std::lock_guard<std::mutex> rk(g_resize_mu);
+        if (!ensure_host_pinned(ctx.h_src0_pack, ctx.h_src0_pack_sz, src0_bytes)) {
+            g_one_prefill.read_failures += n;
+            return;
+        }
+    }
+
+    const auto t0 = std::chrono::steady_clock::now();
+    for (size_t i = 0; i < n; ++i) {
+        const one_prefill_entry & e = g_one_prefill.entries[i];
+        g_one_prefill.attempted++;
+        const one_expert_pack_entry * pack_entry = one_pack_lookup(e.tensor.c_str(), e.expert, src0_bytes);
+        if (!pack_entry) {
+            g_one_prefill.pack_misses++;
+            continue;
+        }
+        if (!one_pack_read_entry(pack_entry, ctx.h_src0_pack, src0_bytes)) {
+            g_one_prefill.read_failures++;
+            continue;
+        }
+        const uintptr_t key = one_named_cache_key(e.tensor.c_str(), e.expert);
+        if (vram_cache_insert_impl(key, ctx.h_src0_pack, src0_bytes, st, false)) {
+            g_one_prefill.inserted++;
+            g_one_prefill.bytes += src0_bytes;
+        } else {
+            g_one_prefill.read_failures++;
+        }
+    }
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        g_one_prefill.read_failures++;
+    }
+    const auto t1 = std::chrono::steady_clock::now();
+    g_one_prefill.elapsed_ms =
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
+    std::fprintf(stderr,
+        "[moe_stream] one prefill: completed attempted=%lu inserted=%lu bytes=%lu elapsed_ms=%.3f\n",
+        g_one_prefill.attempted,
+        g_one_prefill.inserted,
+        g_one_prefill.bytes,
+        g_one_prefill.elapsed_ms);
 }
 
 struct one_trace_state {
@@ -969,9 +1180,10 @@ extern "C" bool ggml_cuda_moe_stream_one(
         std::lock_guard<std::mutex> lk(g_init_mu);
         if (!g_vcache_inited) vram_cache_init(src0_bytes);
     }
+    one_prefill_maybe(ctx, st, src0_bytes);
 
     // VRAM cache lookup: if this expert is already in VRAM, skip H2D entirely.
-    uintptr_t cache_key = (uintptr_t)src0_data;
+    uintptr_t cache_key = one_cache_key_for(src0_name, expert_index, src0_data);
     void *cached_vram = vram_cache_lookup(cache_key);
     const bool cache_hit = cached_vram != nullptr;
     bool cache_inserted = false;

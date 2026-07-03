@@ -4404,3 +4404,103 @@ If rejected:
 - record metrics, counters, answer, and artifact hashes;
 - revert the runtime source patch;
 - push only documentation/artifact records.
+
+### 2026-07-03T21:56Z Gate Prefill Top3000 Initial Candidate Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-candidate-result.json`
+- artifact sha256: `357a7c97c54d29981cedfeb26259003063f345742f322671de8a68971539ae72`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T215630Z-20260704_gate_prefill_top3000_candidate/france-cpu40-vram0gb`
+- Source state at run time: `52f88093d-dirty`
+- Binary build metadata: `b14648-52f88093d`
+- This is an initial SOTA candidate only. It is not promoted until pushed-source rerun passes.
+
+Dirty candidate hashes:
+
+- `llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- `libggml-cuda.so`: `f73af32dcfc67f23dadef8c20217f784350b7df6a4e7a67c647dad3d2cf89c36`
+- `libggml-cpu.so`: `b7d0a3a7a65adac0e8ff2a83ce7bcbbeef8a5ce38ddd173cf8bd6b75abe9ed39`
+- `libggml.so`: `e49b194a510b150e2eee78271fc6bfae51f7ea8113909528c829a003756b217f`
+- gate profile: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b`
+- gate pack historical hash: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`
+
+Metrics:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.8`
+- `TTFT=32587.062204 ms`
+- TTFT gate: pass (`32587.062204 < 33617.688744`)
+- `elapsed_seconds=64.07`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102803968`
+- `memory_max_events=16945`
+- `pgmajfault=264753`
+- `workingset_refault_file=1696731`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The France answer is complete, coherent, and semantically correct.
+
+Prefill counters:
+
+- profile loaded entries: `3313`
+- limit: `3000`
+- attempted: `3000`
+- inserted: `3000`
+- pack misses: `0`
+- read failures: `0`
+- bytes: `13369344000`
+- elapsed: `4708.250 ms`
+
+Gate pack/cache counters:
+
+- one expert pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- VRAM cache after excluding prefill insertions from miss accounting: `hits=33265 misses=1886 hit_rate=94.6%`
+
+One-trace aggregate:
+
+| Slice | rows | src0_ms | total_ms |
+| --- | ---: | ---: | ---: |
+| all gate | `35151` | `6927.392` | `8269.649` |
+| gate hits | `33265` | `4742.504` | `5737.827` |
+| gate misses | `1886` | `2184.888` | `2531.822` |
+| gate inserts | `600` | `710.526` | `821.257` |
+
+Trace interpretation:
+
+- Runtime cache hit rate improved from accepted `86.8%` to `94.6%`.
+- Pack direct path remained clean with no misses, direct failures, or direct fallbacks.
+- Prefill moved about `4.7s` of O_DIRECT/H2D source movement into TTFT while keeping TTFT under the 20% gate.
+- The one-trace `src0_ms` includes prefilled-hit lookup/other overhead and is not directly comparable to the no-prefill trace, but normal generation token rate improved to `4.3 tok/s`.
+
+Artifact hashes:
+
+- `summary.json`: `84aa2ab9bcd9310fcf5e7b56634fc28cc15722f997ca47f77e57063bbc99ec30`
+- `stdout.txt`: `e835f6417380c169ff34ac13d80b4d437483fef1eb211990e71490aafafefe4a`
+- `stderr.txt`: `14543ceea118c4d3755bce31bede165948657489998c954ea4101cb52a814f22`
+- `environment.txt`: `b6f20cebd94eb6d3ef9f35d8018b713a1a262cafda85af5ffa91bec21500d271`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `ad9b730842efba367af253affcf23653c94418fbaab86643bba90677b6eb98f7`
+
+Initial verdict:
+
+- This is a compliant initial SOTA candidate over the previous accepted `4.2 tok/s`.
+- It passes RAM, correctness, TTFT, pack, and cache gates in this first dirty-source run.
+- Immediate action: commit source, plan, and artifact; push to `ssd/vendor/deepseek-token-rate-16gb`; rebuild from pushed source; rerun strict cold with the same env.
+- Promote only if the pushed-source rerun remains `>4.2 tok/s` with the same gates passing.
