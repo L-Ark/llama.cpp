@@ -19014,3 +19014,75 @@ Rollback:
   Phase 7AS as SOTA.
 - If n32 passes but confirmation or n96 fails, reject this env and keep Phase
   7AS as SOTA.
+
+Phase 7AT n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-032146Z-n32-phase7at-7as-vram15100`.
+- git:
+  - head `7f4dba87982f472aca3a8c4e63b8af42d947d410`;
+  - status clean at run start.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15100
+```
+
+- retained accepted Phase 7AS env:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`.
+- reproduction artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `fallback-profile.csv`, and
+    `metrics.txt` were produced;
+  - `fallback-profile.csv` has `13626` lines.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `77614.36 ms`, under the `106331.72 ms` gate.
+- decode: `33898.36 ms / 31`, `0.91 tok/s`.
+- comparison:
+  - Phase 7AS n32 candidate: `33811.07 ms / 31`;
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`;
+  - Phase 7AT is slower than the acceptance threshold by `426.77 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11240`;
+  - `iouring_bytes=65974960128`;
+  - `iouring_wait_us=12302785`.
+- pinned staging:
+  - main `host_stage=18579.436 ms`, `h2d=4123.884 ms`;
+  - gate `host_stage=2353.501 ms`, `h2d=907.438 ms`.
+- VRAM cache:
+  - down slots increase from `806` to `812`, hit rate `73.6%`;
+  - upgate slots increase from `1679` to `1690`, hit rate `44.1%`.
+
+Interpretation:
+
+- The larger cache works functionally and raises slot count/hit rate slightly.
+- The extra slots do not reduce critical-path wall time enough to beat Phase
+  7AS. The run remains dominated by host staging / iouring wait and down
+  fallback timing.
+- Because n32 failed the first performance gate, do not run n32 confirmation or
+  n96 for this phase.
+
+Decision:
+
+- Reject Phase 7AT.
+- No source rollback is needed because this was env-only.
+- Keep Phase 7AS as the current accepted SOTA:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - n96 confirm decode `84173.24 ms / 77`.
