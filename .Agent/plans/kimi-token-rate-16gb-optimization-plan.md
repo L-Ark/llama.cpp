@@ -20109,6 +20109,162 @@ Decision:
 - Keep Phase 7AS as accepted SOTA; no performance promotion.
 - Use the perf evidence to design the next source-level optimization.
 
+## Phase 7BK - expert-pack mmap random-access advice probe
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7BJ perf diagnostic shows the remaining CPU fallback path is not mostly
+  Q4 arithmetic:
+  - full-run self-time: `ggml_vec_dot_q4_0_q8_0` only `0.23%`;
+  - decode-window self-time: `ggml_vec_dot_q4_0_q8_0` only `0.43%`;
+  - decode-window children-time includes:
+    - `36.30%` in `asm_exc_page_fault`;
+    - `35.37%` in `filemap_fault`;
+    - `33.80%` in `filemap_add_folio`;
+    - `17.27%` in `try_to_free_mem_cgroup_pages`;
+    - `29.65%` in `__pv_queued_spin_lock_slowpath`.
+- The callchains put page-cache/reclaim work under vec-dot functions, so the
+  CPU fallback is spending substantial time faulting file-backed expert-pack
+  mmap pages under the strict 16GB cgroup.
+- Current expert-pack mmap setup maps the whole pack with `MAP_SHARED` but does
+  not tell the kernel the access pattern is sparse/random. The full-run perf
+  callchain also shows `do_sync_mmap_readahead` and `page_cache_ra_*`, which can
+  add extra page-cache pressure when access is random by tensor/expert.
+
+Hypothesis:
+
+Add a default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1
+```
+
+When enabled, after expert-pack mmap succeeds, call:
+
+```c
+madvise(base, size, MADV_RANDOM)
+```
+
+Optional if available and harmless:
+
+```c
+madvise(base, size, MADV_NOHUGEPAGE)
+```
+
+Expected effect:
+
+- `MADV_RANDOM` should reduce kernel mmap readahead for sparse expert fallback
+  reads.
+- It cannot remove the page faults for pages actually touched by CPU fallback,
+  but it may avoid extra page-cache insertion, reclaim, and spinlock contention
+  from unused readahead pages.
+- It does not change tensor bytes, math, routing, cache residency, prompt, or
+  generation settings.
+- If the kernel was already not over-reading, the run should be neutral or
+  slightly slower; reject if it fails the n32 gate.
+
+Theoretical upper bound:
+
+- The visible n32 Q4 decode fallback bucket is about `2.630-2.690 s`, but
+  `MADV_RANDOM` targets only the page-fault/readahead component, not compute.
+- Phase 7BJ decode-window perf shows `35.37%` children in `filemap_fault` and
+  `17.27%` in memcg reclaim across the perf-wrapped decode window. Only the
+  fraction caused by avoidable readahead is removable.
+- A realistic n32 upside is `0.2-1.0 s` if readahead is materially overfilling
+  page cache. The hard upper bound is lower than the full Q4 fallback bucket
+  because actual touched pages still fault.
+- A valid improvement must show at least one supporting counter:
+  - lower `pgmajfault` or `workingset_refault_file`;
+  - lower expert-pack mmap fallback time;
+  - lower `decode,type=2` fallback seconds;
+  - lower perf filemap/readahead share in a later diagnostic;
+  - lower wall decode without worsening TTFT/RAM/quality.
+
+Implementation:
+
+- Source patch is default-off and should not be committed unless accepted.
+- In `ggml/src/ggml-cuda/moe_stream_batch.cu`, inside
+  `expert_pack_mmap_ensure()`:
+  - read `GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM`;
+  - if enabled, call `madvise(base, size, MADV_RANDOM)`;
+  - print a one-line activation/result log:
+
+```text
+[moe_stream_batch] expert pack mmap: MADV_RANDOM enabled rc=<rc> errno=<errno>
+```
+
+- Keep default behavior exactly unchanged when the env is absent or `0`.
+- Do not change CPU fallback profile, pack lookup, io_uring, direct reads,
+  pinned staging, VRAM cache, down overlap, or Q4 GPU eligibility.
+
+Experiment:
+
+- Build:
+
+```bash
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Create `/tmp/run_phase7bk_repro.sh` from `/tmp/run_phase7as_repro.sh` that
+  records:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bk-pack-mmap-random"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PACK_MMAP_RANDOM=1 \
+      /tmp/run_phase7bk_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr shows the `MADV_RANDOM` activation line;
+  - `env.txt` contains `GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1`;
+  - `command.txt` records `PACK_MMAP_RANDOM=1`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - compare `decode,type=2`, `pgmajfault`, `workingset_refault_file`,
+    `inactive_file/active_file`, `iouring_wait_us`, pinned `host_stage`, and
+    down `fallback_t0`;
+  - if wall improves without any supporting counter, treat the first run as
+    diagnostic and require confirmation before promotion.
+
+Rollback:
+
+- If build fails, activation log is missing, quality fails, hard gates fail, or
+  first n32 is slower than Phase 7AS, reject immediately.
+- On rejection, revert source patch and rebuild accepted Phase 7AS source before
+  continuing.
+- If accepted through n96 confirmation, commit and push source plus plan/result
+  immediately.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
