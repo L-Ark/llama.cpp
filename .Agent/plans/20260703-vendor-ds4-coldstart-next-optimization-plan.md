@@ -784,6 +784,30 @@ Verdict:
 - Rejected. Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold line remains `4.1 tok/s`.
 - No runtime source rollback required.
 
+
+### 2026-07-03 MXFP4 Dot Prefetch Microbench Design
+
+Design:
+
+- Goal: check whether the remaining CPU up/down fallback can benefit from a low-level x86 MXFP4 dot prefetch path before spending another strict cold model run.
+- Bottleneck basis: current accepted path still spends most time in CPU up/down fallback. The active MXFP4 CPU path uses `ggml_vec_dot_mxfp4_q8_0` from `ggml/src/ggml-cpu/arch/x86/quants.c`; the surrounding q4 x86 code has explicit `_mm_prefetch`, while the MXFP4 loop currently relies on hardware prefetch only.
+- Theory: each MXFP4 dot scans sequential `block_mxfp4` source blocks and Q8 activation blocks. Explicitly prefetching several blocks ahead may hide some memory latency when expert rows are read from mmap/page cache under cold cgroup pressure. It cannot reduce routing, barriers, gate stream, or model math. It must be bitwise/near-bitwise equivalent because it only changes prefetch hints.
+- Risk: the loop is already small and hardware prefetch may be sufficient; explicit prefetch can add instruction overhead or pollute cache. Therefore this is a microbench-first diagnostic.
+- Hard upper bound: if prefetch improved the dot kernel by `S`, only the compute/memory-scan portion of the `~24.8s` CPU fallback can benefit. A warm microbench speedup below about `3%` is not worth a model run; `>=5%` with exact output agreement is the minimum signal for one strict cold candidate.
+
+Implementation plan:
+
+- Add a temporary default-off env `GGML_MXFP4_DOT_PREFETCH_BLOCKS=<N>` to the x86 MXFP4 dot path. Unset or `0` must preserve current behavior.
+- When enabled, prefetch `x[ib+N]` and `y[ib+N]` in the AVX2 loop before loading current blocks.
+- Build `build-ds4-moe-stream` and run a standalone microbench that calls `ggml_vec_dot_mxfp4_q8_0` on DS4-like shapes (`n=4096`) for representative row counts/iterations.
+- Test distances `4`, `8`, and `16` in separate processes because the env is cached once.
+
+Acceptance for model candidate:
+
+- Proceed to a strict cold France model run only if microbench shows `>=5%` speedup over baseline and `max_abs`/`mean_abs` are zero or explainably identical within floating accumulation order.
+- If microbench ties/regresses, revert source, clean rebuild, record rejection, and do not run a full model candidate.
+- Any later model candidate must still pass `eval_tok_s > 4.2`, 16GB cgroup including page cache, TTFT gate, gate O_DIRECT counters, and manual France correctness.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
