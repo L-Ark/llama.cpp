@@ -29106,6 +29106,95 @@ Rollback:
   `VRAM_MIB=15000` in SOTA.
 - Do not test `15200` or larger unless `15100` is a clear, reproducible win.
 
+Phase 7CM result - rejected:
+
+- result timestamp: 2026-07-03T14:19:23Z.
+- plan commit:
+  `e5a269e45` (`docs: plan kimi phase7cm vram15100`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-141923Z-n32-phase7cm-7cc-vram15100`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-141923Z-n32-phase7cm-7cc-vram15100"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_MIB=15100`;
+  - stderr reports:
+    `VRAM cache budget: requested=15100 MiB actual=15100 MiB`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `79114.42 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33436.53 ms / 31`, `0.93 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CM is slower by `218.87 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15130845184`;
+  - `file=14891249664`;
+  - `inactive_file=14166482944`;
+  - `active_file=724156416`;
+  - `kernel=236535808`;
+  - `anon=450560`.
+- mechanism:
+  - actual cache capacity increased:
+    - upgate slots `1679 -> 1690`;
+    - down slots `806 -> 812`;
+  - upgate misses improved slightly versus Phase 7CC/7CJ shape:
+    - `16757 -> 16646`;
+  - down misses did not improve:
+    - stayed `3461`;
+  - expert-pack traffic improved only slightly:
+    - `iouring_bytes=67648946176`, slightly below Phase 7CJ
+      `67926376448`;
+    - `iouring_wait_us=12842603`, slightly below Phase 7CJ
+      `12966777`;
+  - pinned staging remained in the same range:
+    - main `host_stage=17692.653 ms`;
+    - gate `host_stage=1333.517 ms`;
+  - up_gate profile `12.799 ms/call`;
+  - down profile `39.630 ms/call`.
+
+Gap analysis:
+
+- The `100 MiB` larger cache did move counters in the expected direction, but
+  the improvement is too small to beat the accepted 7CC n32 confirmation.
+- Down misses did not change, and the small upgate miss reduction does not
+  offset normal cold-run variance and unchanged critical path work.
+- This reproduces the earlier lesson from Phase 7AT at the new 7CC SOTA: larger
+  VRAM cache by itself is not a reliable win at this scale.
+
+Decision:
+
+- Reject Phase 7CM.
+- Do not run second n32 or n96.
+- Keep `VRAM_MIB=15000` in SOTA.
+- Do not test `15200` or larger without a new cache admission/policy change.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
