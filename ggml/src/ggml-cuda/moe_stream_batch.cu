@@ -3221,6 +3221,59 @@ struct batch_copy_trace {
     bool ram_hit = false;
 };
 
+static bool copy_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_COPY_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void copy_profile_record(
+        const char *op,
+        const char *tensor,
+        int expert_idx,
+        size_t bytes,
+        bool pack_hit,
+        bool ram_hit,
+        bool iouring,
+        double slot_wait_ms,
+        double host_ms,
+        double io_wait_ms,
+        double enqueue_ms,
+        double h2d_ms,
+        double wall_ms) {
+    const char *path = std::getenv("GGML_MOE_COPY_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,tensor,expert_idx,bytes,pack_hit,ram_hit,iouring,slot_wait_ms,host_ms,io_wait_ms,enqueue_ms,h2d_ms,wall_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%d,%zu,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            tensor ? tensor : "",
+            expert_idx,
+            bytes,
+            pack_hit ? 1 : 0,
+            ram_hit ? 1 : 0,
+            iouring ? 1 : 0,
+            slot_wait_ms,
+            host_ms,
+            io_wait_ms,
+            enqueue_ms,
+            h2d_ms,
+            wall_ms);
+    std::fclose(f);
+}
+
 static bool expert_pack_ram_tier_copy_h2d(
         const expert_pack_entry *pack_entry,
         void *dst,
@@ -3389,15 +3442,28 @@ static bool batch_cache_copy_h2d(
         pinned_stage_ring &ring,
         void *dst, const void *host_data, size_t sz, cudaStream_t st,
         const expert_pack_entry *pack_entry,
-        batch_copy_trace *copy_trace = nullptr) {
+        batch_copy_trace *copy_trace = nullptr,
+        const char *trace_op = nullptr,
+        const char *tensor_name = nullptr,
+        int expert_idx = -1) {
     if (copy_trace) {
         copy_trace->pack_hit = pack_entry != nullptr;
         copy_trace->ram_hit = false;
     }
+    const bool profile_copy = copy_profile_enabled() && trace_op && trace_op[0];
+    const auto copy_profile_start = profile_copy ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     // RAM tier fast path: if the entry is resident in the registered mmap,
     // do a direct H2D from the pinned region, bypassing the staging slot.
     if (expert_pack_ram_tier_copy_h2d(pack_entry, dst, sz, st, copy_trace)) {
+        if (profile_copy) {
+            const auto copy_profile_end = std::chrono::steady_clock::now();
+            copy_profile_record(
+                    trace_op, tensor_name, expert_idx, sz,
+                    pack_entry != nullptr, true, false,
+                    0.0, 0.0, 0.0, 0.0, -1.0,
+                    std::chrono::duration<double, std::milli>(copy_profile_end - copy_profile_start).count());
+        }
         return true;
     }
 
@@ -3406,19 +3472,26 @@ static bool batch_cache_copy_h2d(
         if (pinned_stage_ensure(ring, sz, pack_entry != nullptr)) {
             const bool profile_stage = pinned_stage_profile_enabled();
             pinned_stage_slot &slot = ring.slots[ring.next++ % ring.slots.size()];
+            double slot_wait_ms = 0.0;
             if (slot.pending) {
                 const auto wait_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                const auto copy_wait_start = profile_copy && !profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
                 if (profile_stage) {
                     const auto wait_end = std::chrono::steady_clock::now();
-                    ring.slot_wait_ms += std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+                    slot_wait_ms = std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+                    ring.slot_wait_ms += slot_wait_ms;
+                } else if (profile_copy) {
+                    const auto wait_end = std::chrono::steady_clock::now();
+                    slot_wait_ms = std::chrono::duration<double, std::milli>(wait_end - copy_wait_start).count();
                 }
                 slot.pending = false;
                 ++ring.waits;
             }
             pinned_stage_collect_timing(ring, slot);
 
-            const auto host_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            const bool measure_host = profile_stage || profile_copy;
+            const auto host_start = measure_host ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (pack_entry) {
                 if (!expert_pack_read_entry(pack_entry, slot.host, sz)) {
                     return false;
@@ -3426,11 +3499,17 @@ static bool batch_cache_copy_h2d(
             } else {
                 std::memcpy(slot.host, host_data, sz);
             }
+            double host_ms = 0.0;
             if (profile_stage) {
                 const auto host_end = std::chrono::steady_clock::now();
-                ring.host_stage_ms += std::chrono::duration<double, std::milli>(host_end - host_start).count();
+                host_ms = std::chrono::duration<double, std::milli>(host_end - host_start).count();
+                ring.host_stage_ms += host_ms;
+            } else if (profile_copy) {
+                const auto host_end = std::chrono::steady_clock::now();
+                host_ms = std::chrono::duration<double, std::milli>(host_end - host_start).count();
             }
-            const auto enqueue_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            const bool measure_enqueue = profile_stage || profile_copy;
+            const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (profile_stage && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) return false;
             }
@@ -3443,18 +3522,43 @@ static bool batch_cache_copy_h2d(
                 cudaStreamSynchronize(st);
                 return false;
             }
+            double enqueue_ms = 0.0;
             if (profile_stage) {
                 const auto enqueue_end = std::chrono::steady_clock::now();
-                ring.enqueue_ms += std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                ring.enqueue_ms += enqueue_ms;
+            } else if (profile_copy) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
             slot.pending = true;
             ++ring.copies;
+            if (profile_copy) {
+                const auto copy_profile_end = std::chrono::steady_clock::now();
+                copy_profile_record(
+                        trace_op, tensor_name, expert_idx, sz,
+                        pack_entry != nullptr, false, false,
+                        slot_wait_ms, host_ms, 0.0, enqueue_ms, -1.0,
+                        std::chrono::duration<double, std::milli>(copy_profile_end - copy_profile_start).count());
+            }
             return true;
         }
         ++ring.fallbacks;
     }
 
-    return cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st) == cudaSuccess;
+    const auto enqueue_start = profile_copy ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const bool ok = cudaMemcpyAsync(dst, host_data, sz, cudaMemcpyHostToDevice, st) == cudaSuccess;
+    if (profile_copy && ok) {
+        const auto copy_profile_end = std::chrono::steady_clock::now();
+        copy_profile_record(
+                trace_op, tensor_name, expert_idx, sz,
+                pack_entry != nullptr, false, false,
+                0.0, 0.0, 0.0,
+                std::chrono::duration<double, std::milli>(copy_profile_end - enqueue_start).count(),
+                -1.0,
+                std::chrono::duration<double, std::milli>(copy_profile_end - copy_profile_start).count());
+    }
+    return ok;
 }
 
 static bool batch_cache_copy_h2d(
@@ -3595,6 +3699,7 @@ static bool expert_pack_iouring_copy_jobs(
     }
 
     const bool profile_stage = pinned_stage_profile_enabled();
+    const bool profile_copy = copy_profile_enabled();
     auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
         const Job &job = jobs[job_idx];
         pinned_stage_slot &slot = ring.slots[slot_idx];
@@ -3616,7 +3721,7 @@ static bool expert_pack_iouring_copy_jobs(
             job_idx,
             slot_idx,
             read_sz,
-            batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
+            (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
@@ -3682,7 +3787,8 @@ static bool expert_pack_iouring_copy_jobs(
             ++g_expert_pack.iouring_cqes;
             ++ring.iouring_cqes;
 
-            const auto enqueue_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            const bool measure_enqueue = profile_stage || profile_copy;
+            const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (profile_stage && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
                     return false;
@@ -3701,9 +3807,14 @@ static bool expert_pack_iouring_copy_jobs(
                 cudaStreamSynchronize(st);
                 return false;
             }
+            double enqueue_ms = 0.0;
             if (profile_stage) {
                 const auto enqueue_end = std::chrono::steady_clock::now();
-                ring.enqueue_ms += std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                ring.enqueue_ms += enqueue_ms;
+            } else if (profile_copy) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
             slot.pending = true;
             ++ring.copies;
@@ -3713,15 +3824,24 @@ static bool expert_pack_iouring_copy_jobs(
 
             if (done.copy_start != std::chrono::steady_clock::time_point{}) {
                 const auto copy_end = std::chrono::steady_clock::now();
-                batch_ttft_trace_record(
-                    trace_op,
-                    job.tensor,
-                    job.expert_idx,
-                    expert_bytes,
-                    false,
-                    true,
-                    false,
-                    std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count());
+                const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
+                if (batch_ttft_trace_enabled()) {
+                    batch_ttft_trace_record(
+                        trace_op,
+                        job.tensor,
+                        job.expert_idx,
+                        expert_bytes,
+                        false,
+                        true,
+                        false,
+                        wall_ms);
+                }
+                if (profile_copy) {
+                    copy_profile_record(
+                            trace_op, job.tensor, job.expert_idx, expert_bytes,
+                            true, false, true,
+                            0.0, 0.0, wall_ms, enqueue_ms, -1.0, wall_ms);
+                }
             }
 
             ++completed;
@@ -3902,8 +4022,11 @@ static int batch_cache_insert_slot(
         const expert_pack_entry *pack_entry = expert_pack_lookup(tensor_name, expert_idx, sz);
         batch_copy_trace copy_trace;
         const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-        if (!batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, pack_entry, &copy_trace)) {
-            if (pack_entry && !batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, nullptr, &copy_trace)) {
+        const char *copy_op = preload ? "preload_load" : "runtime_load";
+        if (!batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, pack_entry, &copy_trace,
+                    copy_op, tensor_name, expert_idx)) {
+            if (pack_entry && !batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, nullptr, &copy_trace,
+                        copy_op, tensor_name, expert_idx)) {
                 clear_slot();
                 return -1;
             }
@@ -4174,7 +4297,8 @@ static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_
         for (const trace_prefetch_job &job : jobs) {
             batch_copy_trace copy_trace;
             if (!batch_cache_copy_h2d(g_batch.stage_ring, job.dst, job.host_data, job_bytes,
-                    g_batch.prefetch_stream, job.pack_entry, &copy_trace)) {
+                    g_batch.prefetch_stream, job.pack_entry, &copy_trace,
+                    "trace_prefetch", job.tensor, job.expert_idx)) {
                 copied = false;
                 break;
             }
@@ -5683,9 +5807,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         for (const stage_copy_job &job : jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace)) {
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
+                        "runtime_load", job.tensor, job.expert_idx)) {
                 if (!job.pack_entry ||
-                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace)) {
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace,
+                            "runtime_load", job.tensor, job.expert_idx)) {
                     return false;
                 }
             }
@@ -5816,7 +5942,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 for (const stage_copy_job &job : down_jobs) {
                     batch_copy_trace copy_trace;
                     if (!batch_cache_copy_h2d(bc.stage_ring, job.dst, job.host_data, expert_bytes,
-                            bc.prefetch_stream, job.pack_entry, &copy_trace)) {
+                            bc.prefetch_stream, job.pack_entry, &copy_trace,
+                            "current_down_overlap", job.tensor, job.expert_idx)) {
                         copied = false;
                         break;
                     }
@@ -6906,9 +7033,11 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         for (const down_stage_copy_job &job : jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace)) {
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
+                        "runtime_load", job.tensor, job.expert_idx)) {
                 if (!job.pack_entry ||
-                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace)) {
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace,
+                            "runtime_load", job.tensor, job.expert_idx)) {
                     return false;
                 }
             }
