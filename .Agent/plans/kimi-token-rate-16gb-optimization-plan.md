@@ -6510,6 +6510,119 @@ Result:
     cache layout before isolating mixed-size tensors such as Q4_0 into a
     separate pool or layer-specific route.
 
+## Phase 7EG: isolated Q4_0 down cache pool probe
+
+Start time:
+
+- 2026-07-04T07:48:51+08:00.
+
+Current bottleneck:
+
+- Current accepted SOTA remains Phase 7EB:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Phase 7EE proved broad Q4_0 down GPU enablement is not acceptable when Q4_0
+  shares the normal down cache:
+  - Q4_0 activation removed `decode,type=2` fallback;
+  - common down slot inflated from `7.44 MiB` to `7.88 MiB`;
+  - down slots dropped from `806` to `761`;
+  - down misses increased from `3461` to `5327`;
+  - upgate misses increased from `16757` to `17825`;
+  - n32 decode regressed to `39317.82 ms / 31`.
+- Phase 7EF showed that simply enlarging the existing two-pool cache to
+  `15300 MiB` is not useful:
+  - n32 decode regressed to `31771.21 ms / 31`;
+  - keep `VRAM_MIB=15000`.
+- Remaining Q4_0 fallback is real but bounded. The previous n96 SOTA profile
+  showed `decode,type=2` fallback about `8.067 GiB` and `6.754 s`; earlier
+  decode name profiles attributed the hot Q4_0 down rows to layers
+  `6,7,8,9,10,15,18`.
+
+Hypothesis:
+
+- Add a third VRAM cache pool used only by explicitly enabled Q4_0 down tensors.
+- Keep the existing upgate and normal down pools isolated, so Q4_0 cannot
+  inflate the normal down slot size.
+- Make the feature default-off and controlled by:
+  - `GGML_MOE_STREAM_DOWN_Q4_0=1`;
+  - `GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE`;
+  - `GGML_MOE_VRAM_CACHE_Q40_MIB`.
+- First probe only the known hot Q4_0 layers:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0=1
+GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE=6-10,15,18
+GGML_MOE_VRAM_CACHE_Q40_MIB=256
+```
+
+Theory and upper bound:
+
+- The maximum possible n32 gain is bounded by the removed Q4_0 CPU fallback
+  time. Based on previous attribution, expect at most about `2-3 s` on n32.
+- A 256 MiB Q4_0 pool gives roughly `32` slots if the Q4_0 slot is about
+  `7.88 MiB`.
+- To stay within the accepted 15GB VRAM cache envelope, subtract the Q4_0 pool
+  from the normal down pool when split caching is active:
+  - upgate remains about `9000 MiB`;
+  - normal down becomes about `5744 MiB`;
+  - Q4_0 gets `256 MiB`.
+- The optimization can only win if the Q4_0 fallback removed is larger than
+  the extra normal-down misses caused by reducing the normal down pool.
+- If the result resembles Phase 7EE with high Q4_0 staging and worse normal
+  down misses, reject and revert.
+
+Implementation plan:
+
+- Source patch, default-off:
+  - increase cache pool count from `2` to `3`;
+  - add `cid=2` for Q4_0 down only when the env is enabled and layer range
+    matches;
+  - keep the old size-based routing for upgate and normal down;
+  - make cache reporting name `q4_0_down` for `cid=2`;
+  - add Q4_0 to the down MMVQ launch path only for the gated down path;
+  - do not enable Q4_0 up/gate or prompt paths.
+- Build and run n32 first under the same hard 16GB cgroup.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase7eg-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7eg_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7eg_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7eg-q40-pool256"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_DOWN_Q4_0=1 \
+      GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE=6-10,15,18 \
+      GGML_MOE_VRAM_CACHE_Q40_MIB=256 \
+      /tmp/run_phase7eg_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- stderr shows Q4_0 down path active and a separate Q4_0 cache pool;
+- normal down slot size remains `7.44 MiB` and does not inflate to Q4_0 size;
+- n32 decode beats Phase 7EB n32 SOTA `29599.64 ms / 31`.
+
+Rollback:
+
+- If the source patch fails to build, reverts source and record the failure.
+- If n32 fails a hard gate or is slower, revert source before continuing unless
+  the patch is kept only as default-off diagnostic code with SOTA behavior
+  proven unchanged.
+- Only run n96 if n32 beats SOTA and all gates pass.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
