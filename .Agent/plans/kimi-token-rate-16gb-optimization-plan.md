@@ -4478,6 +4478,211 @@ Result handling:
 - The next behavior-changing phase must target the largest measured bucket and
   include a hard upper-bound estimate from Phase 7DU data.
 
+Phase 7DU result - diagnostic accepted:
+
+- End time: 2026-07-04T05:48:00+08:00.
+- Local plan commit before run: `c1e868ef9`.
+- Remote source commit: `c1e868ef9`.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-214331Z-n32-phase7du-sota-profile-refresh`.
+- Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard c1e868ef9
+cp /tmp/run_phase7ds_repro.sh /tmp/run_phase7du_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\nGGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv\nGGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv\nGGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv\nGGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv' /tmp/run_phase7du_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7du-sota-profile-refresh"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+- Exit: `0`, systemd result `success`.
+- Cold-start guard: runner used cache drop path inherited from
+  `/tmp/run_phase7ds_repro.sh`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT: `78257.33 ms`, below the cap `106331.72 ms`.
+- Decode: `31343.27 ms / 31`, `0.99 tok/s`.
+- Memory:
+  - `memory.max=15899996160`;
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15112511488`;
+  - `anon=450560`;
+  - `file=14873960448`;
+  - `inactive_file=4731551744`;
+  - `active_file=10141937664`;
+  - `kernel=234889216`;
+  - `oom=0`, `oom_kill=0`.
+- Expert pack:
+  - `hits=25458`, `misses=192`;
+  - `read_failures=0`;
+  - `iouring_reads=11979`;
+  - `iouring_bytes=69970116608`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=12815733`;
+  - `entries=31599`.
+- VRAM cache:
+  - down `slots=806`, `hit_rate=73.6%`, `hits=9659`,
+    `misses=3461`;
+  - upgate `slots=1679`, `hit_rate=43.7%`, `hits=13019`,
+    `misses=16757`.
+- Pinned staging:
+  - down/main `copies=19754`, `host_stage=15334.923 ms`,
+    `h2d=4139.919 ms`;
+  - gate `copies=4160`, `host_stage=327.581 ms`,
+    `h2d=925.848 ms`.
+- Profile artifacts present:
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`;
+  - `fallback-profile.csv`.
+
+Measured decode bottleneck breakdown:
+
+- Up/gate profile:
+  - total `wall=7904.478 ms`;
+  - `kernel=7808.690 ms`;
+  - `stage=44.211 ms`;
+  - `up=5544.578 ms`;
+  - `gate=2215.537 ms`;
+  - top rows:
+    - `blk.60.ffn_up_exps.weight`: `673.378 ms`
+      (`kernel=662.489 ms`);
+    - `blk.5.ffn_up_exps.weight`: `543.050 ms`
+      (`kernel=539.929 ms`);
+    - `blk.4.ffn_up_exps.weight`: `469.425 ms`
+      (`kernel=466.235 ms`);
+    - `blk.3.ffn_up_exps.weight`: `447.880 ms`
+      (`kernel=444.673 ms`);
+    - `blk.6.ffn_up_exps.weight`: `427.522 ms`
+      (`kernel=424.309 ms`).
+- Down profile:
+  - total `wall=4480.557 ms`;
+  - `stage=4161.386 ms`;
+  - `kernel=191.821 ms`;
+  - top rows:
+    - `blk.60.ffn_down_exps.weight`: `371.600 ms`
+      (`stage=363.957 ms`);
+    - `blk.4.ffn_down_exps.weight`: `357.854 ms`
+      (`stage=325.871 ms`);
+    - `blk.16.ffn_down_exps.weight`: `186.869 ms`
+      (`stage=181.604 ms`);
+    - `blk.25.ffn_down_exps.weight`: `179.989 ms`
+      (`stage=175.629 ms`);
+    - `blk.23.ffn_down_exps.weight`: `175.219 ms`
+      (`stage=170.870 ms`).
+- CPU fallback:
+  - prompt fallback dominates TTFT, not decode:
+    - prompt type `11`: `21910.722 ms`;
+    - prompt type `22`: `21843.496 ms`;
+    - prompt type `18`: `18668.451 ms`;
+    - prompt type `23`: `7588.057 ms`;
+    - prompt type `2`: `3834.927 ms`;
+  - decode type `2` Q4_0 fallback: `2631.088 ms`.
+  - decode Q4_0 tensor top:
+    - `blk.6.ffn_down_exps.weight`: `514.760 ms`;
+    - `blk.9.ffn_down_exps.weight`: `435.496 ms`;
+    - `blk.10.ffn_down_exps.weight`: `397.328 ms`;
+    - `blk.8.ffn_down_exps.weight`: `396.808 ms`;
+    - `blk.7.ffn_down_exps.weight`: `317.200 ms`.
+- TTFT runtime-load trace:
+  - total `copy_ms=86591.573`;
+  - bytes `271.211 GiB`;
+  - `pack_hits=23598`, `cache_hits=22678`, `ram_hits=0`.
+
+Interpretation:
+
+- Up/gate is now compute/kernel bound, not staging bound:
+  `stage=44.211 ms` versus `kernel=7808.690 ms`.
+- Down remains staging bound:
+  `stage=4161.386 ms` versus `kernel=191.821 ms`.
+- Because Phase 7DT showed static missing pack entries did not change runtime
+  bytes or misses, the next pack work must be driven by runtime trace or cache
+  misses, not static index coverage.
+- The most conservative next experiment is a parameter-only VRAM split test:
+  shift some VRAM cache budget from up/gate to down and check whether reduced
+  down stage outweighs any added up/gate staging.
+
+## Phase 7DV: VRAM split re-pool toward down cache
+
+Start time:
+
+- 2026-07-04T05:49:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DU shows down stage is still `4161.386 ms` while up/gate stage is only
+  `44.211 ms`.
+- Current split at `UPGATE_PCT=60` gives:
+  - down `806` slots and `73.6%` hit rate;
+  - upgate `1679` slots and `43.7%` hit rate.
+
+Theory and upper bound:
+
+- This is a parameter-only experiment: no source change and no new model data.
+- Set `UPGATE_PCT=50` while keeping `VRAM_MIB=15000`.
+- Approximate cache capacity change:
+  - down slots increase from about `806` to about `1008`
+    (`+202`, `+25%`);
+  - upgate slots decrease from about `1679` to about `1399`
+    (`-280`, `-17%`).
+- Hard upper bound if all 7DU down staging disappeared:
+  - decode lower bound `31343.27 - 4161.386 = 27181.884 ms`;
+  - token-rate upper bound `31 / 27.181884 = 1.14 tok/s`.
+- Realistic bound is lower because:
+  - not all down misses will become hits;
+  - some up/gate misses may increase;
+  - up/gate total wall is compute dominated and should not improve directly.
+- Expected useful win threshold:
+  - down stage reduction must exceed any added up/gate staging and scheduling
+    cost;
+  - first n32 must beat Phase 7DS n32 confirmation `31647.69 ms / 31` and
+    Phase 7DU diagnostic `31343.27 ms / 31` to justify n96 confirmation.
+
+Implementation:
+
+- No source patch.
+- Use Phase 7DS SOTA packs and overlay.
+- Use the same 7DU profiling runner, with only `UPGATE_PCT=50`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard c1e868ef9
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dv-upgate50"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=50 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- n32 decode must be faster than `31343.27 ms / 31`.
+
+Result handling:
+
+- If accepted, run n96 confirmation with the same env.
+- If n32 is slower or violates any gate, reject `UPGATE_PCT=50`, keep
+  Phase 7DS/7DU split `UPGATE_PCT=60`, and do not continue this direction
+  without a narrower measured reason.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
