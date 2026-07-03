@@ -29195,6 +29195,103 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CN - configurable CPU MoE name-profile top count
+
+Start time:
+
+- 2026-07-03T14:31:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CJ produced the current Phase 7CC route/fallback diagnostic.
+- The fallback CSV is complete, but stderr name/eligibility profile is limited
+  by source code to the top `40` entries:
+
+```c
+const int top_n = MIN(40, ggml_kimi_cpu_moe_profile.n_names);
+```
+
+- Phase 7CF already needed `GGML_KIMI_SPLIT_PROFILE_TOP=150` to expose the
+  important decode rows. The CPU MoE name profile has the same issue: top 40 is
+  not enough to see all repeated down/upgate tensors and their eligibility.
+- Before another source optimization, collect a wider name/eligibility profile
+  under current Phase 7CC without changing runtime behavior.
+
+Hypothesis:
+
+- Add a default-preserving env:
+
+```sh
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=160
+```
+
+- Default remains `40`, so SOTA behavior and logs are unchanged unless the env
+  is set.
+- With `TOP=160`, the n32 diagnostic should expose all major decode fallback
+  tensors, eligible-but-expensive down tensors, and prompt-heavy tensors in one
+  run.
+- This phase is diagnostic/instrumentation only; it should not be promoted as
+  a token-rate improvement.
+
+Theoretical upper bound:
+
+- Accepted performance gain for this phase is zero. It only changes profiling
+  output when the env is present.
+- It can prevent wasted implementation work by identifying the next narrow
+  target with complete per-tensor evidence.
+
+Implementation:
+
+1. Modify only `ggml/src/ggml-cpu/ggml-cpu.c`.
+2. Add a small helper that reads `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP`, clamps it
+   to `[1, GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX]`, and defaults to `40`.
+3. Replace the hardcoded `MIN(40, ...)` with the parsed value.
+4. No math, routing, CUDA, cache, IO, memory-drop, or generation behavior
+   changes.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cn_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=160\nEOF\n/' /tmp/run_phase7cn_repro.sh
+chmod +x /tmp/run_phase7cn_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cn-name-profile-top160"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cn_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- Hard diagnostic gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=160`;
+  - stderr contains at least `top100` name-profile rows.
+- Analysis deliverables:
+  - top decode Q4_0 fallback rows;
+  - top eligible down rows by decode time;
+  - top up/gate rows by decode time;
+  - explicit recommendation for the next implementation target.
+
+Rollback:
+
+- If build fails, default behavior changes, the run fails gates, or profiling
+  output is missing, revert the source change and record the rejection.
+- If the diagnostic succeeds, keep the instrumentation because it is
+  default-preserving and useful for future reproducible profiling.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:

@@ -351,6 +351,23 @@ static bool ggml_kimi_cpu_moe_eligibility_profile_enabled(void) {
     return enabled;
 }
 
+static int ggml_kimi_cpu_moe_name_profile_top(void) {
+    const char * env = getenv("GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP");
+    if (!env || !env[0]) {
+        return 40;
+    }
+
+    char * end = NULL;
+    long value = strtol(env, &end, 10);
+    if (end == env || value <= 0) {
+        return 40;
+    }
+    if (value > GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX) {
+        value = GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX;
+    }
+    return (int) value;
+}
+
 static void ggml_kimi_cpu_moe_fallback_profile_report(void) {
     if (!ggml_kimi_cpu_moe_fallback_profile.enabled ||
             !ggml_kimi_cpu_moe_fallback_profile.out ||
@@ -495,7 +512,7 @@ static void ggml_kimi_cpu_moe_profile_report(void) {
 
     if (ggml_kimi_cpu_moe_profile.name_enabled) {
         bool printed[GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX] = { false };
-        const int top_n = MIN(40, ggml_kimi_cpu_moe_profile.n_names);
+        const int top_n = MIN(ggml_kimi_cpu_moe_name_profile_top(), ggml_kimi_cpu_moe_profile.n_names);
 
         for (int rank = 0; rank < top_n; ++rank) {
             int best = -1;
