@@ -2174,3 +2174,35 @@ Next optimization direction:
 - Do not continue performance sweeps on this exact ngram-simple setup until the repeated `start_pos=181` progress bug is understood.
 - If speculative batching remains the priority, inspect the ngram-simple/target verification loop and its interaction with DeepSeek4 memory positions before another strict run. The next proof must show monotonically advancing positions, a complete France answer, and a completed timing summary.
 - Otherwise return to current-SOTA bottleneck decomposition and select the next candidate only if the hard upper bound has enough margin beyond `4.2 tok/s`.
+
+### 2026-07-04 Server Speculative Progress Trace Design
+
+Audit finding:
+
+- `llama-cli` uses `tools/server/server-context.cpp`, not `examples/speculative-simple`, for completion generation.
+- In `server_slot::update_batch()`, speculative mode appends `sampled` and every `spec_draft` token to `prompt.tokens` before target verification.
+- After target verification, partial acceptance with `COMMON_CONTEXT_SEQ_RM_TYPE_FULL` stores `slot.spec_draft = accepted`, restores the checkpoint, keeps the prompt at `ckpt.n_tokens`, restores the sampler, and `continue`s. The next `update_batch()` reuses the partial draft.
+- DeepSeek4 is classified as `COMMON_CONTEXT_SEQ_RM_TYPE_FULL` because partial `llama_memory_seq_rm(mem, 0, 1, -1)` is unsupported. Therefore server speculative decode always uses the checkpoint/partial-replay path for this model.
+- The rejected all-output run repeatedly built `n_tokens=2 n_outputs=2 work_tokens=2 start_pos=181`, which is consistent with a partial-replay loop that is not committing progress.
+
+Diagnostic plan:
+
+1. Add a temporary default-off server trace gate, e.g. `LLAMA_SERVER_SPEC_TRACE=1`, around the speculative sections of `tools/server/server-context.cpp`.
+2. Trace only compact state, not full logits:
+   - `update_batch` entry: `sampled`, `prompt.tokens.size()`, `prompt.tokens.pos_next()`, `spec_draft.size()`, whether the draft is newly generated or reused.
+   - verification result: original `n_draft`, `accepted.size()`, whether partial acceptance happened, checkpoint `n_tokens/pos_min/pos_max`, and post-restore prompt length.
+   - commit result: `ids.size()`, `n_draft_total`, `n_draft_accepted`, new prompt length, new sampled token.
+   - memory trim result around `llama_memory_seq_rm(... prompt.tokens.pos_next(), -1)`.
+3. Reapply the all-output batch source probe only behind `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1`, run one short strict diagnostic with both trace gates enabled, and stop as soon as the repeated position is explained.
+4. Accept source changes only if they produce a compliant SOTA. Trace-only and failed speculative source probes must be reverted before committing; only the plan/artifact records should be pushed.
+
+Theory:
+
+- If the trace shows repeated partial acceptance with the same `sampled`, same `spec_draft`, and same checkpoint `n_tokens`, then the server checkpoint replay path is incompatible with the current DeepSeek4 memory semantics and needs a semantic fix before speed testing.
+- If prompt length and `sampled` advance while DeepSeek4 graph start_pos remains fixed, then the bug is in DeepSeek4 memory position restoration or graph position mapping.
+- If no partial acceptance loop occurs with trace enabled, the earlier hang may have been caused by logging overhead or signal timing; rerun with a smaller generation cap before any performance claim.
+
+Gate:
+
+- This diagnostic is not a SOTA candidate. The required output is a clear root-cause trace and a complete record.
+- Do not leave trace/all-output source changes in the committed tree unless a later run exceeds `4.2 tok/s` and passes correctness, RAM, and TTFT gates.
