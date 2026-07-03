@@ -27030,6 +27030,133 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CE - Phase 7CC current-SOTA graph/split bottleneck refresh
+
+Start time:
+
+- 2026-07-03T13:24:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CC is the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Phase 7CD proved that shifting VRAM from upgate to down does not help under
+  the larger pack:
+  - down misses improved by only about `11`;
+  - upgate misses worsened to `17623`;
+  - decode regressed to `33258.31 ms / 31`.
+- Several older high-level knobs are already rejected and should not be blindly
+  repeated:
+  - global `MADV_RANDOM` increased major faults/refaults badly;
+  - Q4_0 down GPU/cache and overchunk paths regressed;
+  - `THREADS=28`, `THREADS=40`, refill `2/8`, depth `16`, and generic H2D
+    batching all regressed on the pre-7CC SOTA.
+- The remaining Phase 7CC n96 confirmation bottleneck is still movement-heavy:
+  - expert-pack `iouring_wait_us=31993861`;
+  - main pinned host stage `42483.097 ms`;
+  - gate pinned host stage `2987.401 ms`;
+  - down profile `19.204 ms/call`, with `fallback_t0=16.434 ms/call`.
+
+Purpose:
+
+- This is a diagnostic phase, not a SOTA promotion candidate.
+- Refresh current-SOTA bottleneck attribution under Phase 7CC by enabling the
+  existing graph and backend-split profilers:
+
+```sh
+LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=50
+```
+
+- The result should identify whether the next source-level attempt should focus
+  on:
+  - CUDA graph submit/sync or scheduler split overhead;
+  - backend split boundaries;
+  - expert movement/staging;
+  - CPU fallback/page-cache work.
+
+Theoretical upper bound:
+
+- The diagnostic itself should not improve wall time and may add small logging
+  overhead.
+- It can bound future optimizations:
+  - if graph sync/submit is under `1 ms/token`, CUDA graph work remains
+    deprioritized;
+  - if a small backend split signature dominates several seconds, a targeted
+    scheduler/source change may have a real ceiling;
+  - if split/graph overhead is small while expert staging remains tens of
+    seconds, the next optimization should stay on expert movement/fallback.
+
+Implementation:
+
+- Env-only diagnostic; no source patch.
+- Create `/tmp/run_phase7ce_diag.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append the three diagnostic env lines to the generated `env.txt` before the
+  model command is run.
+- Keep all accepted Phase 7CC runtime settings unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ce_diag.sh
+python3 - <<'PY'
+from pathlib import Path
+p = Path('/tmp/run_phase7ce_diag.sh')
+s = p.read_text()
+needle = 'LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\\nEOF\\n'
+repl = 'LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\\nLLAMA_KIMI_GRAPH_PROFILE=1\\nGGML_KIMI_SPLIT_PROFILE=1\\nGGML_KIMI_SPLIT_PROFILE_TOP=50\\nEOF\\n'
+p.write_text(s.replace(needle, repl))
+PY
+chmod +x /tmp/run_phase7ce_diag.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ce-7cc-graph-split-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ce_diag.sh
+```
+
+Validation:
+
+- Hard gates still apply even though this is diagnostic:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains all three diagnostic env lines;
+  - stderr contains `[kimi_graph_profile]`;
+  - stderr contains `[kimi_split_profile]`.
+- Required result record:
+  - decode/TTFT/token rate;
+  - graph submit/sync totals and decode averages;
+  - split-profile top rows;
+  - expert-pack, pinned-staging, VRAM cache, and fallback counters;
+  - conclusion for the next optimization phase.
+
+Rollback:
+
+- Env-only diagnostic needs no source rollback.
+- Do not promote this run as SOTA even if wall time is faster; rerun without
+  diagnostic env would be required for any promotion.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
