@@ -663,7 +663,7 @@ France is a country in Western Europe known for its rich history, culture, and i
 
 Timestamp: 2026-07-03T17:58:01Z.
 
-Status: planned before implementation.
+Status: accepted as diagnostic capability; no SOTA token-rate promotion.
 
 Reason for this phase:
 
@@ -747,6 +747,107 @@ Acceptance:
 - The next optimization phase must use the layer ranking to choose one concrete
   target, with a theoretical speed bound derived from that layer's measured
   cost.
+
+Result:
+
+- Plan commit: `c274a1174`.
+- Source commits:
+  - `1f2753801` added default-off layer aggregation;
+  - `bd5d1879b` added activation/record-count tracing for the diagnostic env.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Correct build command:
+  `cmake --build build-cuda-batch -j$(nproc)`.
+- Important correction:
+  - The runner uses `build-cuda-batch/bin/llama-completion`.
+  - A first diagnostic run built only `build-cuda`, so it did not exercise the
+    new binary and produced no layer-profile rows. That run is rejected as a
+    build-target mistake:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-180215Z-n96-phase7dc-layer-profile`.
+  - After rebuilding `build-cuda-batch`, n4 activation smoke printed
+    `up/gate layer profile enabled`, `records=85`, and layer rows:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-181259Z-n4-phase7dc-layer-profile-smoke3`.
+- Accepted n96 diagnostic run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-181509Z-n96-phase7dc-layer-profile-v2`.
+- Reproduction command:
+
+```bash
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dc_repro.sh
+sed -i '/GGML_MOE_BATCH_PROFILE=1/a GGML_MOE_UP_GATE_LAYER_PROFILE=1\nGGML_MOE_UP_GATE_LAYER_PROFILE_TOP=40' /tmp/run_phase7dc_repro.sh
+chmod +x /tmp/run_phase7dc_repro.sh
+
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard bd5d1879b
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-181509Z-n96-phase7dc-layer-profile-v2
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dc_repro.sh
+```
+
+- n96 diagnostic gates:
+  - exit: `0`;
+  - quality: pass;
+  - TTFT: `73932.68 ms`;
+  - decode: `76828.93 ms / 77`, `1.00 tok/s`;
+  - memory.max: `15899996160`;
+  - memory.peak: `15899996160`;
+  - memory.current.final: `15129894912`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - layer profile activation: `records=2157`.
+- Exact n96 output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- Aggregate type ranking from the layer profile:
+  - type 18 / IQ3_XXS decode up/gate:
+    `10` layer buckets, `771` calls, `11152.518 ms` wall,
+    `11089.154 ms` kernel.
+  - type 22 / IQ2_S decode up/gate:
+    `18` layer buckets, `1386` calls, `8586.474 ms` wall,
+    `8483.329 ms` kernel.
+- Top type-18 IQ3_XXS layers:
+
+```text
+rank  layer  calls  wall_ms   kernel_ms  wall_per_call_ms
+1     blk.2     77  1376.291  1370.495  17.874
+2     blk.3     77  1288.754  1282.753  16.737
+3     blk.5     77  1235.465  1229.923  16.045
+4     blk.4     77  1200.974  1195.380  15.597
+5     blk.60    78  1200.283  1187.268  15.388
+6     blk.6     77  1037.140  1031.499  13.469
+7     blk.59    77  1001.577   996.230  13.007
+8     blk.56    77   945.883   940.348  12.284
+9     blk.57    77   945.457   939.915  12.279
+10    blk.58    77   920.694   915.343  11.957
+```
+
+- Mechanism:
+  - All top type-18 rows have `up_stage_jobs=0` and `gate_stage_jobs=0`.
+  - Their wall time is almost entirely kernel time; wall gaps are about
+    `1.3-1.5 ms` total per layer except `blk.60` where fuse/wall gap is larger.
+  - This confirms that the next type-18 optimization should target IQ3_XXS MMVQ
+    compute itself, not iouring, staging, or VRAM cache residency.
+- Decision:
+  - Keep the default-off diagnostic capability.
+  - Do not promote a new SOTA from this diagnostic run despite `76828.93 ms`
+    decode, because profiling changes timing and the purpose was measurement.
+  - The current accepted SOTA remains Phase 7CC.
+- Next direction:
+  - Use `blk.2` and `blk.3` as the first kernel investigation targets because
+    they have the highest measured type-18 wall and kernel totals.
+  - The next plan should inspect IQ3_XXS MMVQ kernel occupancy/register pressure
+    for these layers and design a small, default-off kernel specialization that
+    preserves `VDR=2`.
+  - The theoretical upper bound for optimizing only `blk.2` and `blk.3` is
+    `2665.045 ms` n96 wall. A realistic first target is 5-10% of those two
+    layers, about `133-267 ms` n96, which is small but measurable with repeats.
 
 ## Phase 0: cold 16GB baseline
 
