@@ -19938,6 +19938,141 @@ Rollback:
   - n32 improvement does not reproduce;
   - n96 fails any gate.
 
+Phase 7BC result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- source:
+  - head `8f2e9935d`;
+  - dirty experimental diff in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - diff stat: `30` lines changed, `22` insertions, `8` deletions.
+- implementation tested:
+  - added `decode_iq3_q8k_enabled()` for
+    `GGML_MOE_STREAM_IQ3_Q8K_DECODE`;
+  - reused the existing `Q8_K` activation buffer and
+    `launch_moe_iq3_xxs_q8k_batch()`;
+  - enabled the path only for non-prompt, non-mixed,
+    same-type `IQ3_XXS` up/gate when GPU handoff is disabled;
+  - kept all Phase 7AS runtime env unchanged except the new opt-in env.
+- runner:
+  - `/tmp/run_phase7bc_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - records `IQ3_Q8K_DECODE=1` in `command.txt`;
+  - appends `GGML_MOE_STREAM_IQ3_Q8K_DECODE=1` to `env.txt`.
+
+n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-043659Z-n4-phase7bc-iq3-q8k-decode-smoke`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-043659Z-n4-phase7bc-iq3-q8k-decode-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IQ3_Q8K_DECODE=1 \
+      /tmp/run_phase7bc_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `78993.57 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr contains `IQ3_XXS decode Q8_K up/gate path active`;
+  - stderr still contains `IQ2_S parallel up/gate streams active`.
+- output:
+  `France is a country`
+- quality:
+  - automated `quality=fail` because n4 is too short for the full paragraph
+    rule;
+  - manual prefix inspection is coherent and not malformed.
+- decode:
+  - `5332.77 ms / 3`, `0.56 tok/s`.
+- type profile:
+  - type `18` wall `35.950 ms/call`, kernel `35.586 ms/call`;
+  - type `22` wall `10.974 ms/call`.
+- interpretation:
+  - activation and hard gates passed;
+  - the sampled type-18 Q8_K path was already much slower than Phase 7AS
+    (`~18.4-18.7 ms/call`), but n32 was run once for full quality and wall-time
+    evidence.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-043951Z-n32-phase7bc-iq3-q8k-decode`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-043951Z-n32-phase7bc-iq3-q8k-decode"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IQ3_Q8K_DECODE=1 \
+      /tmp/run_phase7bc_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `78805.97 ms`, under the `106331.72 ms` gate.
+- output:
+  `France is a country in Western Europe known for its rich history, art, and culture. Its capital, Paris, is famous for landmarks like the Eiffel Tower`
+- quality: pass.
+- decode:
+  - `40982.44 ms / 31`, `0.76 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BC regresses by `7510.85 ms`.
+- type profile:
+  - type `18` wall `22.125 ms/call`, kernel `21.940 ms/call`;
+  - type `22` wall `8.474 ms/call`;
+  - type `18` remains slower than Phase 7AS instead of improving.
+- staging and IO:
+  - main pinned `host_stage=24903.906 ms`, `h2d=4393.392 ms`;
+  - gate pinned `host_stage=3265.110 ms`, `h2d=973.025 ms`;
+  - expert-pack `iouring_bytes=64888979456`;
+  - expert-pack `iouring_wait_us=12305921`.
+- fallback aggregate:
+  - decode Q4_0 fallback remains: `decode,type=2`, `3.120 s`;
+  - prompt fallback remains unchanged in principle and is not the target of this
+    phase.
+
+Gap analysis:
+
+- The Q8_K path is mathematically coherent enough to preserve output quality at
+  n32, but it is not faster for this decode shape.
+- The added Q8_K activation quantization is small (`0.045 ms/call` at n32), so
+  the regression is not caused by quantization overhead.
+- The main gap is the custom Q8_K IQ3 kernel itself:
+  - type-18 kernel is `21.940 ms/call`, worse than the Phase 7AS IQ3 bucket
+    around `18.4-18.7 ms/call`;
+  - n4 showed an even worse `35.586 ms/call` sample.
+- Therefore the existing `IQ3_XXS x Q8_K` reference kernel should stay a prompt
+  diagnostic path only. It is not a viable decode optimization.
+
+Decision:
+
+- Reject Phase 7BC.
+- Do not run n32 confirmation or n96.
+- Revert the source diff in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Keep `GGML_MOE_STREAM_IQ3_Q8K_DECODE` out of SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7AY - IQ2 parallel up/gate split staging probe
 
 Design timestamp: 2026-07-03 CST.
