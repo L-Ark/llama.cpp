@@ -19934,6 +19934,118 @@ Rollback:
   the strict cgroup, or required artifacts are missing, reject immediately and
   keep `THREADS=32` as SOTA.
 
+Phase 7BI result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `3c8ee9949` (`docs: plan kimi phase7bi threads28`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no rollback or rebuild required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-054556Z-n32-phase7bi-7as-threads28`.
+- git:
+  - head `3c8ee99499b9527edeebbe858bbce77ac06a5d6a`;
+  - status clean at run start.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-054556Z-n32-phase7bi-7as-threads28"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=28 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- env delta over Phase 7AS:
+
+```sh
+THREADS=28
+```
+
+- activation:
+  - `command.txt` records `THREADS=28`;
+  - llama command uses `-t 28 -tb 28`;
+  - all accepted Phase 7AS runtime env was retained, including IQ2 parallel
+    up/gate, current-down overlap, SQPOLL, split VRAM cache, pinned slots `8`,
+    and `PREFETCH_DOWN_DEPTH=2`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `81445.56 ms`, under the `106331.72 ms` gate.
+- reproducibility artifacts:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+    stdout/stderr, cgroup memory files, `metrics.txt`, and
+    `fallback-profile.csv` were produced;
+  - `fallback-profile.csv` has `13626` lines and `860775` bytes.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `37278.42 ms / 31`, `0.83 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BI is slower by `3806.83 ms`.
+
+Mechanism:
+
+- Residual Q4_0 decode fallback worsened:
+  - Phase 7AS n32 `decode,type=2` was `2.630 s`;
+  - Phase 7BI `decode,type=2` is `1736` calls, `13.351 GiB`,
+    `3.155 s`.
+- CPU fallback pack mmap remained active and correct:
+  - hits `1727`, misses `9`;
+  - bytes `14260764672`;
+  - fallback GGUF `9`.
+- Expert-pack IO/staging also worsened instead of improving:
+  - Phase 7AS expert-pack `iouring_wait_us=11567536`;
+  - Phase 7BI expert-pack `iouring_wait_us=12742335`;
+  - Phase 7AS main pinned `host_stage=18631.890 ms`;
+  - Phase 7BI main pinned `host_stage=21348.590 ms`;
+  - Phase 7AS gate pinned `host_stage=2245.529 ms`;
+  - Phase 7BI gate pinned `host_stage=2340.835 ms`.
+- Down profile:
+  - total `42.675 ms/call`;
+  - `cuda_batch=2.845 ms/call`;
+  - `fallback_t0=39.777 ms/call`;
+  - this is worse than Phase 7AS down profile
+    `total=40.220 ms/call`, `cuda_batch=2.675 ms/call`,
+    `fallback_t0=37.441 ms/call`.
+- Up/gate type profile also regressed:
+  - type `18` wall `22.602 ms/call`, worse than Phase 7AS `18.646`;
+  - type `22` wall `7.648 ms/call`, worse than Phase 7AS `7.048`.
+- Down prefetch/current-overlap remained active:
+  - down prefetch `loads=3664`, `hits=3664`, `evicted_unused=0`;
+  - current down overlap planned/completed `3664`.
+
+Gap analysis:
+
+- The hypothesis was that freeing CPU cores might reduce SQPOLL/io_uring,
+  staging, or CUDA scheduling contention enough to offset slower fallback.
+- The result falsifies that hypothesis for `THREADS=28`: fallback got slower,
+  and the IO/staging counters also got worse. This indicates `32` threads is
+  not above the contention knee for Phase 7AS; reducing global threads removes
+  useful CPU throughput without creating enough scheduling headroom.
+- Together with Phase 7AW, the useful global thread-count window is narrow:
+  `40` is too high, `28` is too low, and `32` remains the accepted setting.
+
+Decision:
+
+- Reject Phase 7BI.
+- Do not run n32 confirmation or n96.
+- Keep `THREADS=32` in the accepted Phase 7AS SOTA.
+- Do not test nearby global thread counts unless a later source-level change
+  changes the CPU fallback/staging balance; further fallback work should be
+  local to the Q4_0 path or CUDA/down kernels rather than global `-t` tuning.
+
 ## Phase 7BD - same-type current-down overlap probe
 
 Design timestamp: 2026-07-03 CST.
