@@ -19896,3 +19896,84 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If n32 is slower, quality fails, TTFT fails, RAM fails, or activation is
   missing, reject immediately and keep Phase 7AS as SOTA.
+
+Phase 7AY n32 result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-035844Z-n32-phase7ay-iq2-upgate-stage-split`.
+- git:
+  - head `c53588347`;
+  - status clean at run start.
+- runner:
+  - `/tmp/run_phase7ay_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - adds `IQ2_UPGATE_STAGE_SPLIT=1` support and records
+    `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1` in `env.txt`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1`;
+  - stderr contains `IQ2_S parallel up/gate streams active`;
+  - stderr contains `up/gate split CPU staging active`.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `77080.07 ms`, under the `106331.72 ms` gate.
+- decode: `33995.89 ms / 31`, `0.91 tok/s`.
+- comparison:
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7AY regresses by `524.30 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11381`;
+  - `iouring_bytes=66637971456`;
+  - `iouring_wait_us=17167920`.
+- pinned staging:
+  - main `host_stage=18570.646 ms`, `h2d=3935.986 ms`;
+  - gate `host_stage=1914.204 ms`, `h2d=718.296 ms`;
+  - up_aux `host_stage=546.436 ms`, `h2d=214.128 ms`;
+  - gate_aux `host_stage=534.480 ms`, `h2d=211.660 ms`.
+- up/gate type profile:
+  - type `18` wall `18.469 ms/call`;
+  - type `22` wall `7.371 ms/call`;
+  - type `22` `up_wait=6.909 ms/call`;
+  - type `22` `gate_wait=7.159 ms/call`.
+- down profile:
+  - `calls=2038`;
+  - total `39.139 ms/call`;
+  - `fallback_t0=36.326 ms/call`;
+  - `cuda_batch=2.765 ms/call`.
+
+Interpretation:
+
+- Split staging activates correctly and all hard gates pass, but it regresses
+  both mechanism and wall time.
+- The type-22 wall bucket worsens from Phase 7AS n32 `7.048 ms/call` to
+  `7.371 ms/call`.
+- The auxiliary rings move some copies out of the main/gate rings, but the
+  aggregate expert-pack iouring wait rises from 7AS n32 `11567536 us` to
+  `17167920 us`, and queue utilization drops (`inflight_avg=2.27` vs 7AS
+  `2.91`).
+- The extra host threads/aux streams therefore fragment iouring batches and
+  increase completion waits more than they reduce local staging pressure.
+
+Decision:
+
+- Reject Phase 7AY.
+- No source rollback is needed because this was env-only.
+- Do not use `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
