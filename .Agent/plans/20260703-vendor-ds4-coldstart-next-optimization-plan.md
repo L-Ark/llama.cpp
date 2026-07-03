@@ -622,6 +622,17 @@ Acceptance for follow-up implementation:
 - No model SOTA claim can be made from this microbench.
 - A later hotset repack source candidate must be default-off, bounded by explicit memory budget, preserve accepted gate O_DIRECT config, pass France correctness, and satisfy strict 16GB cgroup including page cache.
 
+Microbench result:
+
+- Scratch source: `/tmp/mxfp4_repack_microbench.cpp`; binary: `/tmp/mxfp4_repack_microbench`. No repository runtime source was modified.
+- Compile command: `g++ -O3 -march=native -std=c++17 -Iggml/include -Iggml/src -Iggml/src/ggml-cpu /tmp/mxfp4_repack_microbench.cpp -Lbuild-ds4-moe-stream/bin -lggml-cpu -lggml-base -Wl,-rpath,/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -pthread -ldl -lm -o /tmp/mxfp4_repack_microbench`.
+- CPU: AMD EPYC 7B13 with AVX2/FMA, no AVX512/AMX.
+- Up-like shape (`k=4096`, `rows=2048`, `iters=200`): `repack_ms=4.075`, row-wise `86.766 ms`, repack GEMV `61.689 ms`, speedup `1.407x`, `max_abs=0`, `mean_abs=0`.
+- Down-like shape (`k=2048`, `rows=4096`, `iters=200`): `repack_ms=3.027`, row-wise `89.916 ms`, repack GEMV `61.430 ms`, speedup `1.464x`, `max_abs=0`, `mean_abs=0`.
+- Earlier oversized down check (`k=4096`, `rows=4096`, `iters=100`) showed similar `1.418x` speedup and exact agreement.
+- Theoretical implication: top128 decode up/down coverage is about `3695 ms`; with `S=1.41-1.46`, the compute-only upper bound is roughly `1070-1170 ms`. Top256 coverage gives roughly `1680-1990 ms`, before repack memory, hotset lookup, page-cache effects, and integration overhead. This is below the threshold needed to reliably beat the `4.2 tok/s` SOTA under cold-run variance.
+- Verdict: reject hotset-local MXFP4 CPU repack integration for now. Existing repack kernels are mathematically exact and faster in warm compute, but not fast enough to justify adding a memory-consuming hotset path under the strict 16GB cold-start constraint.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
