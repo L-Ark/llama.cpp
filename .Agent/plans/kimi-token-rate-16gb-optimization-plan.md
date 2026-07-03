@@ -24811,3 +24811,137 @@ Decision:
 - Next plan should target a lower-overhead serial up/gate split-timer or an
   actual copy/compute overlap design for IQ3_XXS. Do not retry Q8_K decode or
   generic IQ3 parallel streams without proving the staging/compute split first.
+
+## Phase 7BS - IQ3_XXS gate-copy/up-compute pipeline probe
+
+Design timestamp: 2026-07-03T10:51:05Z.
+
+Current bottleneck:
+
+- Phase 7BR showed decode IQ3_XXS type 18 is not pure kernel compute:
+  - `calls=311`;
+  - `up_stage_jobs=4.98`, `gate_stage_jobs=4.98`;
+  - `up=10.391 ms`, `gate=9.626 ms`, `kernel=20.035 ms`,
+    `wall=20.160 ms/call`.
+- The existing Phase 7AS path for same-type IQ3_XXS is serial:
+  - stage/copy up experts;
+  - compute up;
+  - stage/copy gate experts;
+  - compute gate;
+  - fuse.
+- Prior generic IQ3 parallel attempts are not acceptable:
+  - full same-type IQ3 parallel streams regressed;
+  - Q8_K decode reference path regressed;
+  - compact MMVQ kernel probes regressed.
+- The untested middle ground is to overlap only gate expert movement with up
+  compute while keeping the two IQ3 MMVQ compute kernels serialized.
+
+Hypothesis:
+
+For IQ3_XXS same-type decode, copy up experts first, start gate expert staging
+on the gate staging stream, launch up compute on the main/up stream, then wait
+for both gate staging and up compute before launching gate compute. This should
+hide part of gate staging behind up compute without introducing concurrent
+IQ3_XXS MMVQ kernels.
+
+Why this can improve token rate:
+
+- Phase 7BR shows about five gate misses per IQ3 call. Some of that copy/stage
+  time currently sits after up compute on the critical path.
+- Unlike the rejected full parallel IQ3 attempt, this design serializes up and
+  gate compute with a CUDA event dependency, so it avoids SM/cache contention
+  between two IQ3 MMVQ kernels.
+- Unlike mmap/page-cache advice, it changes the schedule of already-required
+  expert movement rather than increasing memory pressure.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 IQ3 type-18 bucket is about
+  `311 * 18.646 ms = 5.80 s`.
+- Phase 7BR observed about `4.98` gate stage jobs per IQ3 call. If half of
+  gate staging is hidden and staging is roughly half of the `gate=9.626 ms`
+  bucket, optimistic n32 improvement is:
+  `311 * 2.0-2.5 ms ~= 0.62-0.78 s`.
+- Absolute n32 ceiling for this narrow change is therefore around:
+  `31 / (33.47159 - 0.78) ~= 0.95 tok/s`.
+- If H2D gate staging contends heavily with up compute or the event/thread
+  overhead dominates, the run will regress and must be reverted.
+
+Implementation:
+
+- Source patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add env-gated path:
+
+```sh
+GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1
+```
+
+- Activate only when:
+  - decode mode, not prompt;
+  - not mixed types;
+  - `src0_type == gate_type == GGML_TYPE_IQ3_XXS`;
+  - not exact prompt Q8_K;
+  - `bc.gate_stream`, `bc.ev_up_done`, and `bc.ev_gate_done` exist.
+- Schedule:
+  - plan up/gate stage jobs with existing `plan_tensor()`;
+  - copy up jobs on `st`;
+  - start a host thread to copy gate jobs on `bc.gate_stream`;
+  - launch up MMVQ on `st`;
+  - record `bc.ev_up_done`;
+  - join gate copy thread;
+  - make `bc.gate_stream` wait on `bc.ev_up_done`;
+  - launch gate MMVQ on `bc.gate_stream`;
+  - record `bc.ev_gate_done`;
+  - make `st` wait on `bc.ev_gate_done`;
+  - continue existing fuse/D2H/scatter path.
+- Do not change math, cache size, IO depth, pinned slots, selected experts, or
+  down scheduling.
+
+Reproducible experiment:
+
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+```
+
+- Create `/tmp/run_phase7bs_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  append `GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1` to `env.txt`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bs-iq3-pipeline-copy"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bs_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr contains `IQ3_XXS gate-copy/up-compute pipeline active`;
+  - decode type-18 IQ3 profile remains present.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- If first n32 is slower, quality fails, TTFT rises above gate, read failures
+  appear, or host RAM violates the 16GB cgroup limit, revert source patch and
+  record the result.
