@@ -1065,6 +1065,16 @@ Next direction after native multi-row rejection:
 - Do not continue ad hoc MXFP4 kernel rewrites without first building a correctness-identical unit test against the exact runtime feature path.
 - Remaining plausible work is now instrumentation/feasibility, not blind source changes: either identify an existing tested kernel path that can be reused without repack/RAM cost, or prove a page-source/refault lever with a hard upper bound. Current accepted SOTA remains unchanged.
 
+
+Current SOTA `--no-warmup` diagnostic design:
+
+- Goal: test the only remaining low-risk no-source page/TTFT lever not yet recorded on the current `4.2 tok/s` O_DIRECT/gate-pack SOTA path.
+- Existing support: `llama-cli --help` shows `--warmup, --no-warmup` with warmup enabled by default.
+- Theory: warmup can touch model pages and CUDA paths before measured generation. Disabling it may lower TTFT and reduce cold file-cache churn inside the 16GB cgroup. It does not change model arithmetic, selected experts, gate cache policy, or CPU fallback math.
+- Hard upper bound: `--no-warmup` cannot remove the measured `~27s` up/down fallback cost or gate expert pack reads. The only plausible gain is reduced warmup/page-cache side effects and maybe TTFT. Expect at most a small rounded-boundary move; accept only if it exceeds `4.2 tok/s` and all gates pass.
+- Practice: run strict cold full France with accepted SOTA config plus CLI `--no-warmup`. Preserve `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate admission profile, gate O_DIRECT pack, top-k policy, threads, context, drop_caches, and 16GB cgroup.
+- Acceptance: promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and gate pack/cache counters remain aligned with accepted SOTA. If it ties/regresses or any gate fails, reject. No source rollback is needed.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
