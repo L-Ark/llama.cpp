@@ -20976,6 +20976,53 @@ Promotion:
   - `read_failures=0`, `iouring_fallbacks=0`;
   - France output coherent and semantically correct.
 
+Result:
+
+- n96 candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-170808Z-n96-phase7cx-post-q4rollback-verify`
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `75618.03 ms`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - decode `78647.93 ms / 77`, token rate `0.98 tok/s`;
+  - this beat Phase 7CC n96 confirmation by `360.44 ms`, so a confirmation run
+    was required.
+- n96 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-171130Z-n96-phase7cx-post-q4rollback-verify-confirm`
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `78400.33 ms`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - decode `79555.99 ms / 77`, token rate `0.97 tok/s`;
+  - slower than Phase 7CC n96 confirmation by `547.62 ms`, so promotion fails.
+
+Decision:
+
+- Reject Phase 7CX as a SOTA update.
+- No source rollback is needed because this was the accepted standard runtime
+  after the Q4_0 rollback.
+- The two n32 runs were reproducibly faster (`32870.58` and `32603.24 ms`),
+  but the n96 confirmation failed the required gate. Treat the n32 improvement
+  as cold-run variance that does not survive the longer decode validation.
+- Keep Phase 7CC as accepted SOTA:
+  - n32 confirmation
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124021Z-n32-phase7cc-l12-upgate-pack-confirm`,
+    decode `33217.66 ms / 31`, token rate `0.93 tok/s`;
+  - n96 confirmation
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124705Z-n96-phase7cc-l12-upgate-pack-confirm`,
+    decode `79008.37 ms / 77`, token rate `0.97 tok/s`;
+  - best observed n96 candidate remains
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124316Z-n96-phase7cc-l12-upgate-pack`,
+    decode `77239.32 ms / 77`, token rate `1.00 tok/s`.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
