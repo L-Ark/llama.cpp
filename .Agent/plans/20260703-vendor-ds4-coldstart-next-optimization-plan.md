@@ -5230,3 +5230,49 @@ Verdict:
 - Rejected. The hit-rate target and runtime-pool behavior were achieved, but token rate only tied `4.4` and TTFT exceeded the acceptance gate.
 - Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
 - This path suggests cache-hit count alone is no longer the dominant bottleneck. Next work should reduce miss-path and hit-path overhead directly, especially H2D/sync/scatter cost and prefill TTFT cost.
+
+### 2026-07-03T23:30Z No-Trace SOTA Guard Design
+
+Goal:
+
+- Test whether the currently accepted top3000 prefill SOTA is paying measurable decode overhead for writing `one_trace.csv`.
+- Keep the exact accepted runtime path and remove only `GGML_MOE_STREAM_ONE_TRACE_OUT`.
+
+Bottleneck:
+
+- Current accepted top3000 SOTA recorded `35151` gate trace rows.
+- Trace writing includes a per-call mutex, timestamp formatting, and line-buffered file output when `GGML_MOE_STREAM_ONE_TRACE_OUT` is set.
+- Accepted `4.4 tok/s` run used trace output; if trace I/O is on the hot path, a no-trace strict cold run may increase `eval_tok_s` without changing model math.
+
+Hard-bound:
+
+- The maximum direct trace-writing benefit is bounded by the traced gate `total_ms` overhead, but the exact file I/O cost is not separately recorded.
+- If the only cost is line-buffered CSV output, expected improvement is likely small but nearly free to test.
+- Correctness should be unchanged because this is instrumentation-only.
+
+Practice config:
+
+- No source change.
+- strict cold `drop_caches`, 16GB cgroup, `MemorySwapMax=0`.
+- vendor DeepSeek only, `cpu_moe=40`, gate O_DIRECT pack, gate one-stream.
+- Keep accepted top3000 prefill:
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+- Keep accepted cache and top-k env.
+- Omit only `GGML_MOE_STREAM_ONE_TRACE_OUT`.
+- Keep CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Acceptance gates:
+
+- Promote only if `eval_tok_s > 4.4`, and a repeated no-trace strict cold run also exceeds `4.4`.
+- France output must be complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+- Record stderr counters, exact command, environment, summary, hashes, and correctness output even though there will be no `one_trace.csv`.
+
+Rejection rules:
+
+- Reject/tie if `eval_tok_s <= 4.4`.
+- Reject if correctness fails, RAM gate fails, TTFT exceeds the gate, or pack direct failures/fallbacks appear.
