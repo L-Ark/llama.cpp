@@ -488,6 +488,20 @@ Acceptance:
 - Promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and exact run metadata is recorded and pushed.
 - Reject/tie on `eval_tok_s <= 4.2` or any gate violation.
 
+Results:
+
+| Threads | Run | eval_tok_s | prompt_tok_s | TTFT ms | memory_peak | memory_file | correctness | Verdict |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 18 | `/root/lfz/runs/vendor-ds4-16gb/20260703T050107Z-20260703T050107Z-odirect-sota-thread18-probe/france-cpu40-vram0gb` | 4.1 | 1.5 | 29008.648567 | 16000000000 | 15078158336 | true | rejected |
+| 22 | `/root/lfz/runs/vendor-ds4-16gb/20260703T050239Z-20260703T050239Z-odirect-sota-thread22-probe/france-cpu40-vram0gb` | 4.1 | 1.6 | 28949.464863 | 16000000000 | 15078350848 | true | rejected |
+
+Counters and diagnosis:
+
+- Both runs preserved the accepted gate path: one expert pack `hits=4623 misses=0 direct_failures=0`, gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Both stayed within the strict 16GB cgroup with `oom=0`, `oom_kill=0`, `ram_limit_killed=false`.
+- Both France answers were semantic and coherent.
+- Neither exceeded the accepted `4.2 tok/s`; keep `-t 20 -tb 20` as the current best-known thread setting.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
