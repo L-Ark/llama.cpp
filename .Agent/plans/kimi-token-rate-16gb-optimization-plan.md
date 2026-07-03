@@ -1196,7 +1196,7 @@ Decision:
 
 Timestamp: 2026-07-03T18:43:20Z.
 
-Status: planned before implementation.
+Status: rejected after n96; env-only probe not promoted.
 
 Current bottleneck:
 
@@ -1289,6 +1289,111 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If n96 is slower, quality fails, TTFT regresses too much, or memory exceeds
   the cgroup behavior, reject Phase 7DF and keep Phase 7CC as SOTA.
+
+Execution record:
+
+- Plan commit:
+  - `431a22207 docs: plan kimi phase7df io depth probe`
+- Source changes:
+  - none.
+- Server commit:
+  - `431a22207`
+- Runner:
+  - `/tmp/run_phase7df_io16_repro.sh`;
+  - copied from `/tmp/run_phase7cc_repro.sh`;
+  - only env changes:
+    - `GGML_MOE_IO_DEPTH=16`;
+    - `GGML_MOE_IO_REFILL_BATCH=8`;
+    - `GGML_MOE_STAGE_PINNED_SLOTS=16`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 431a22207
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-184519Z-n96-phase7df-io16-pinned16
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7df_io16_repro.sh
+```
+
+n96 result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-184519Z-n96-phase7df-io16-pinned16`
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `75515.17 ms`
+- decode: `79189.56 ms / 77`, `0.97 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15003017216`
+  - `file=14746722304`
+  - `inactive_file=11166638080`
+  - `active_file=3579392000`
+- expert pack:
+  - `depth=16`;
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+  - `iouring_wait_us=31061222`
+  - `inflight_avg=2.97`
+  - `inflight_max=8`
+- pinned staging:
+  - main slots: `16`, `slot_wait=126.984 ms`,
+    `host_stage=42718.028 ms`, `h2d=10381.371 ms`;
+  - gate slots: `16`, `slot_wait=27.430 ms`,
+    `host_stage=2683.372 ms`, `h2d=2306.710 ms`.
+- up/gate profile:
+  - overall `wall=9.427 ms/call`;
+  - type18 `wall=15.383 ms/call`;
+  - type22 `wall=6.114 ms/call`.
+
+Comparison to Phase 7CC:
+
+- Accepted Phase 7CC n96 confirm:
+  `79008.37 ms / 77`, `0.97 tok/s`.
+- Phase 7DF:
+  `79189.56 ms / 77`, `0.97 tok/s`.
+- Phase 7DF is slower by `181.19 ms`.
+
+Gap analysis:
+
+- Increasing depth to 16 did not increase measured inflight beyond 8:
+  `inflight_max=8` and batch histogram still stops at `5-8`.
+- This suggests the current producer/refill path or batch formation, not the
+  global io_uring depth, caps effective in-flight requests.
+- Slot count was not the bottleneck:
+  - main `slot_wait` stayed around `127 ms`;
+  - gate `slot_wait` stayed around `27 ms`;
+  - these are tiny relative to total decode.
+- Type22 wait improved slightly, but type18 compute-bound wall worsened from
+  the Phase 7DE repeat `14.837 ms/call` to `15.383 ms/call`, likely normal
+  cold-run variance or scheduling pressure from extra pinned/IO resources.
+
+Decision:
+
+- Reject Phase 7DF.
+- Do not promote `IO_DEPTH=16`, `IO_REFILL_BATCH=8`, or `PINNED_SLOTS=16`.
+- Keep Phase 7CC settings:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- Next optimization should not simply increase queue sizes. It should target
+  actual batch formation or compute-bound type18 kernels with a measurable
+  per-layer/per-type profile before implementation.
 
 ## Phase 0: cold 16GB baseline
 
