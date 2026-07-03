@@ -656,8 +656,97 @@ France is a country in Western Europe known for its rich history, culture, and i
     - add low-overhead type-18 kernel timing by layer without full CSV overhead;
     - inspect generated register count/occupancy for IQ3_XXS MMVQ on the target
       GPU;
-    - design a smaller IQ3_XXS vec-dot specialization that preserves `vdr=2`
+  - design a smaller IQ3_XXS vec-dot specialization that preserves `vdr=2`
       but reduces lookup/sign unpack cost.
+
+## Phase 7DC: low-overhead decode IQ3_XXS up/gate layer profile
+
+Timestamp: 2026-07-03T17:58:01Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7DB rejected the only current VDR macro candidate:
+  - n96 quality passed;
+  - decode regressed to `79861.49 ms / 77`, slower than accepted Phase 7CC
+    `79008.37 ms / 77`.
+- The remaining actionable bottleneck is still the IQ3_XXS up/gate compute
+  bucket identified in Phase 7CY:
+  - type 18 / IQ3_XXS: `771` calls, `6168` active experts,
+    `11768.544 ms` kernel time, `11834.778 ms` wall time.
+- Existing profile modes are either too coarse or too intrusive:
+  - atexit `up/gate type profile` groups only by type pair and prompt/decode;
+  - `GGML_MOE_UP_GATE_PROFILE_OUT` gives per-call CSV by tensor, but adds
+    per-call file open/write overhead and produced a diagnostic-only run.
+- Before touching IQ3_XXS vec-dot or kernel scheduling again, we need a
+  reproducible per-layer ranking of decode IQ3_XXS up/gate cost using the same
+  16GB cold-start constraints.
+
+Selected change:
+
+- Add a default-off env:
+
+```text
+GGML_MOE_UP_GATE_LAYER_PROFILE=1
+```
+
+- When enabled, reuse the existing CUDA event timing path, but aggregate in
+  memory by `(mode, up_tensor, gate_tensor, up_type, gate_type)` and print only
+  at process exit.
+- Do not write per-call CSV.
+- Do not change cache policy, VDR, MMQ/MMVQ dispatch, iouring, RAM tier, VRAM
+  budget, prompt, seed, or sampling.
+
+Theory and expected overhead:
+
+- This is a diagnostic patch, not a performance patch.
+- It should add negligible overhead beyond the already required CUDA event
+  profiling because aggregation is one mutex-protected in-memory update per
+  profiled up/gate call and one atexit report.
+- The run is diagnostic only; it cannot promote SOTA.
+- The useful output is a layer ranking that can separate:
+  - true compute-heavy IQ3_XXS layers;
+  - layers dominated by staging/miss wait;
+  - layers with unusually high fuse/scatter/wall gap.
+
+Execution order:
+
+1. Commit and push this plan.
+2. Implement the default-off layer profile.
+3. Build remotely.
+4. Run n96 cold-start diagnostic under the same 16GB cgroup:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7dc-layer-profile \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_UP_GATE_LAYER_PROFILE=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+5. Required gates for keeping the diagnostic patch:
+   - default-off build succeeds;
+   - diagnostic run exits `0`;
+   - France output remains coherent;
+   - TTFT <= `106331.72 ms`;
+   - host RAM remains below 16GB;
+   - `read_failures=0`;
+   - `iouring_fallbacks=0`;
+   - stderr includes at least one `up/gate layer profile` line for decode
+     IQ3_XXS layers.
+6. If any gate fails, revert the diagnostic source patch and record the failed
+   run.
+
+Acceptance:
+
+- This phase accepts only the diagnostic capability and the measured layer
+  ranking. It does not change SOTA token rate.
+- The next optimization phase must use the layer ranking to choose one concrete
+  target, with a theoretical speed bound derived from that layer's measured
+  cost.
 
 ## Phase 0: cold 16GB baseline
 
