@@ -502,6 +502,31 @@ Counters and diagnosis:
 - Both France answers were semantic and coherent.
 - Neither exceeded the accepted `4.2 tok/s`; keep `-t 20 -tb 20` as the current best-known thread setting.
 
+### 2026-07-03 CPU-Side Skip Filtered One-Stream Design
+
+Design:
+
+- Goal: reduce overhead before CPU up/down fallback without changing model math, routing, cache policy, or accepted gate stream behavior.
+- Bottleneck basis: the accepted profile reports `single_accept=35151 single_decline=38222` and `cuda_single=0.429 ms/call` inside the CPU MoE profile. With `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, many up/down `ggml_cuda_moe_stream_one()` calls are guaranteed to be rejected by the CUDA-side name filter. Those failed calls happen before CPU fallback and do not contribute useful compute.
+- Theory: add a default-off CPU-side precheck that mirrors the existing one-stream name filter. When `GGML_MOE_CPU_SKIP_FILTERED_STREAM_ONE=1` and `GGML_MOE_STREAM_ONE_NAME_FILTER` is set, `ggml_compute_forward_mul_mat_id()` skips the per-expert one-stream single path entirely for names that do not contain the filter substring. Gate tensors still enter the existing one-stream path; up/down tensors go directly to existing CPU fallback. Arithmetic and selected experts are unchanged.
+- Theoretical upper bound: the coarse profile's `cuda_single` component is about `0.429 ms/call * 16920 calls ~= 7.3s`. Only the guaranteed-decline part is removable, so the practical bound is lower, but even a few seconds could move the rounded `4.2 tok/s` metric. If `cuda_single` mostly measures accepted gate work, the probe will tie and be rejected.
+
+Implementation plan:
+
+- Add a small helper in `ggml/src/ggml-cpu/ggml-cpu.c`:
+  - default-off env `GGML_MOE_CPU_SKIP_FILTERED_STREAM_ONE`;
+  - read `GGML_MOE_STREAM_ONE_NAME_FILTER`;
+  - return false for stream-one eligibility when the filter is set and `src0->name` does not contain it.
+- Preserve default behavior exactly when the env is unset.
+- Build `build-ds4-moe-stream`.
+- Run strict cold France with accepted SOTA config plus `GGML_MOE_CPU_SKIP_FILTERED_STREAM_ONE=1` and `GGML_KIMI_CPU_MOE_PROFILE=1` for first measurement.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and the profile confirms rejected single calls are reduced without damaging gate cache.
+- If accepted, commit source and plan immediately, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then rerun from pushed source.
+- If `eval_tok_s <= 4.2` or any gate fails, revert source and rebuild clean.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
