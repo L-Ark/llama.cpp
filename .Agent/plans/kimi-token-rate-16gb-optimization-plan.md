@@ -20718,6 +20718,79 @@ Rollback:
   `2` is not reduced, reject and revert unless the code is useful as a
   default-off diagnostic probe.
 
+### Phase 7CW-v2 - CPU-side Q4_0 down eligibility fix
+
+Start time:
+
+- 2026-07-03T16:51:00Z.
+
+New finding from n4 smoke:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-164347Z-n4-phase7cw-q4down-smoke`.
+- Hard runtime gates passed:
+  - exit `0`;
+  - TTFT `76831.79 ms`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Output prefix was coherent (`France is a country`), but n4 is too short for
+  final quality scoring.
+- Activation failed:
+  - no `[moe_stream_batch] Q4_0 down batch path active` stderr line;
+  - down profile had `q4_down_rows=0`;
+  - fallback profile still had `decode,type=2` rows.
+
+Root cause:
+
+- `ggml-cpu.c` calls `ggml_cuda_moe_stream_supports_down_batch()` before
+  invoking `ggml_cuda_moe_stream_batch()`.
+- Phase 7CW only changed CUDA-side acceptance, so CPU-side eligibility still
+  rejected Q4_0 down tensors as unsupported before CUDA could accept them.
+
+Implementation:
+
+- Add CPU-side helpers mirroring the CUDA gate:
+  - `GGML_MOE_STREAM_Q4_0_DOWN=1`;
+  - `GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE=6-10,15,18`;
+  - tensor name must contain `ffn_down_exps`.
+- Update only `ggml_cuda_moe_stream_supports_down_batch()` to accept Q4_0 down
+  under that gate.
+- Keep generic `ggml_cuda_moe_stream_supports_type()` unchanged so up/gate and
+  single-expert stream paths do not get Q4_0.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n4-phase7cw-v2-q4down-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_Q4_0_DOWN=1 \
+      GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE=6-10,15,18 \
+      GGML_MOE_DOWN_BATCH_PROFILE_OUT="$RUN/down-batch-profile.csv" \
+      GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT="$RUN/fallback-profile.csv" \
+      /tmp/run_phase7cw_repro.sh
+```
+
+Success criteria before n32:
+
+- stderr contains `[moe_stream_batch] Q4_0 down batch path active`.
+- down CSV contains type `2` accepted rows for scoped layers.
+- fallback CSV shows lower decode type `2` rows/time than the Phase 7CW smoke.
+- hard gates remain within the strict 16 GB RAM, TTFT, cold-start, and IO
+  requirements.
+
+Rollback:
+
+- If Q4_0 activation is still missing after this CPU-side fix, reject Phase 7CW
+  and revert the Q4_0 source changes as an unsuccessful probe.
+- If activation works but n4/n32 quality, RAM, TTFT, or decode time regresses,
+  revert immediately and record the exact run directory and failure reason.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
