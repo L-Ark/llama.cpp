@@ -19360,3 +19360,72 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If the first n32 does not beat Phase 7AS confirmation or fallback CSV is
   missing, reject immediately and keep Phase 7AS as SOTA.
+
+Phase 7AV n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-033315Z-n32-phase7av-7as-no-batch-profile`.
+- git:
+  - head `6126c195e`;
+  - status clean at run start.
+- runner:
+  - `/tmp/run_phase7av_repro.sh`;
+  - derived from `/tmp/run_phase7as_repro.sh`;
+  - `BATCH_PROFILE=0` removes `GGML_MOE_BATCH_PROFILE=1`.
+- env validation:
+  - `env.txt` contains no `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1` and
+    `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv` remain
+    enabled.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `80433.21 ms`, under the `106331.72 ms` gate.
+- decode: `34590.91 ms / 31`, `0.90 tok/s`.
+- comparison:
+  - Phase 7AS n32 candidate: `33811.07 ms / 31`;
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`;
+  - Phase 7AV regresses by `1119.32 ms` versus the confirmation threshold.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11297`;
+  - `iouring_bytes=66242985984`;
+  - `iouring_submit_us=36393`;
+  - `iouring_wait_us=12718546`.
+- pinned staging:
+  - batch-profile timing fields are intentionally absent;
+  - copy/wait counts remain:
+    - main `copies=19754`, `waits=19730`;
+    - gate `copies=4160`, `waits=4144`.
+- VRAM cache:
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+
+Interpretation:
+
+- The production no-batch-profile variant is valid and preserves required
+  artifacts, but it does not improve decode.
+- Removing batch profile lowers some submit accounting, but iouring wait and
+  wall decode are worse than the accepted 7AS confirmation.
+- The run also loses detailed CUDA type-profile timing, so it is less useful for
+  bottleneck work unless it becomes faster, which it did not.
+
+Decision:
+
+- Reject Phase 7AV.
+- No source rollback is needed because this was env-only and used a temporary
+  runner.
+- Keep Phase 7AS as the current accepted SOTA:
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - n96 confirm decode `84173.24 ms / 77`.
