@@ -5620,6 +5620,121 @@ GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
   authoritative result-doc revision. The reproducible run source commit remains
   `d636a7a4c`, containing source commit `745b15979`.
 
+## Phase 7EA: deeper io_uring and pinned staging queue
+
+Start time:
+
+- 2026-07-04T07:00:00+08:00.
+
+Current bottleneck:
+
+- Current accepted SOTA is Phase 7DZB:
+  - n32: `30286.11 ms / 31`, `1.02 tok/s`;
+  - n96: `74693.07 ms / 77`, `1.03 tok/s`.
+- Phase 7DZB n96 still spends most decode-side movement time in expert
+  staging:
+  - expert-pack `iouring_wait_us=37557543`;
+  - main pinned staging `host_stage=30768.844 ms`,
+    `h2d=10390.990 ms`;
+  - gate pinned staging `host_stage=1132.345 ms`,
+    `h2d=2324.794 ms`;
+  - iouring inflight max is `8`, matching the current `IO_DEPTH=8` and
+    `PINNED_SLOTS=8`.
+- This suggests the next low-risk bottleneck is queue depth, not math
+  correctness or VRAM allocation. The n96 profile still has enough repeated
+  miss traffic for deeper asynchronous staging to potentially reduce wait
+  bubbles.
+
+Hypothesis:
+
+- Increase only runtime queue capacity:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
+- Keep all SOTA math, cache, pack, and overlap behavior unchanged, including:
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - overlay expert pack;
+  - current-down overlap;
+  - CPU fallback pack mmap.
+- More pinned slots should allow larger in-flight io_uring read/H2D groups and
+  reduce the amount of serial wait visible as `iouring_wait_us` and
+  `host_stage`.
+- The expected host RAM cost is small relative to the 16GB cgroup:
+  - one 7.44 MiB slot class grows from 8 to 16 slots, about +59.5 MiB per ring;
+  - gate/up slot classes are similarly small;
+  - total extra pinned memory should be far below 1 GiB.
+
+Theory and upper bound:
+
+- Hard upper bound from Phase 7DZB n96 movement counters:
+  - expert-pack wait `37.558 s`;
+  - main pinned host staging `30.769 s`;
+  - main H2D `10.391 s`.
+- Queue-depth tuning cannot remove mandatory SSD bytes or H2D bytes; it can
+  only reduce tail waits and improve overlap.
+- Plausible n32 saving is `0.3-1.2 s`; plausible n96 saving is `1-3 s`.
+- If measured speedup is larger, verify it by:
+  - higher `inflight_max` and batch_hist moving into `9-16`;
+  - lower `host_stage` and/or lower decode wall;
+  - no material TTFT increase.
+- If `iouring_wait_us` increases but decode improves, treat wait counter as
+  overlapped per-job accounting and rely on decode/profile wall times.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Use current branch HEAD and current SOTA script.
+- Copy `/tmp/run_phase7dza_repro.sh` to `/tmp/run_phase7ea_repro.sh`.
+- Ensure `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1` is present.
+- Remove any copy-profile env.
+- Run first with n32; only run n96 if n32 passes.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 6fc6f0cfa
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7dza_repro.sh /tmp/run_phase7ea_repro.sh
+grep -q "GGML_MOE_STREAM_SERIAL_STAGE_BATCH" /tmp/run_phase7ea_repro.sh || \
+  sed -i '/^GGML_MOE_TTFT_TRACE_OUT=/a GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1' /tmp/run_phase7ea_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ea_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ea-depth16-slots16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 GGML_MOE_IO_DEPTH=16 \
+      /tmp/run_phase7ea_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- France output coherent and semantically correct;
+- n32 decode beats Phase 7DZA `30286.11 ms / 31`;
+- mechanism evidence:
+  - stderr reports io depth `16`;
+  - pinned slots report `16`;
+  - iouring inflight max can exceed `8` or batch histogram shows `9-16`;
+  - decode/profile wall does not regress.
+
+Result handling:
+
+- If n32 passes, record result and run n96 confirmation with the same env.
+- If n32 fails or slows down, reject the env-only experiment and keep Phase
+  7DZB as current SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
