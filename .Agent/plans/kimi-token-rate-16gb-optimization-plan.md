@@ -19718,3 +19718,72 @@ Rollback:
 - If build fails, output quality fails, hard gates fail, the override does not
   activate, or n32 token rate does not improve, revert the source patch and
   keep only the plan/result record.
+
+Phase 7AX n32 result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-034538Z-n32-phase7ax-q4fallback-chunk128`.
+- git:
+  - head `5aeaf72ae-dirty`;
+  - dirty source patch was limited to default-off
+    `GGML_KIMI_Q4_0_FALLBACK_CHUNK` support in
+    `ggml/src/ggml-cpu/ggml-cpu.c`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_KIMI_Q4_0_FALLBACK_CHUNK=128
+```
+
+- activation:
+  - stderr confirmed:
+    `[kimi_cpu_fallback] Q4_0 chunk override active: 128`.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `77771.48 ms`, under the `106331.72 ms` gate.
+- decode: `35364.24 ms / 31`, `0.88 tok/s`.
+- comparison:
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7AX regresses by `1892.65 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11297`;
+  - `iouring_bytes=66242985984`;
+  - `iouring_wait_us=12444470`.
+- pinned staging:
+  - main `host_stage=19848.328 ms`, `h2d=4138.883 ms`;
+  - gate `host_stage=2277.846 ms`, `h2d=920.027 ms`.
+- down profile:
+  - `calls=2037`;
+  - total `40.009 ms/call`;
+  - `fallback_t0=37.168 ms/call`;
+  - `cuda_batch=2.791 ms/call`.
+
+Interpretation:
+
+- The Q4_0 chunk override activated correctly and all hard gates passed, but
+  wall decode regressed.
+- The larger chunk does not reduce the residual Q4_0 fallback bucket. It likely
+  lowers useful intra-expert parallelism and increases tail imbalance more than
+  it saves atomic chunk scheduling overhead.
+- The result confirms that blindly increasing fallback chunk size is not a
+  viable Phase 7AS follow-up. Further Q4_0 residual fallback work needs a
+  deeper per-kernel profile or a narrower kernel change, not a coarse chunk
+  knob.
+
+Decision:
+
+- Reject Phase 7AX.
+- Revert the source patch and do not keep
+  `GGML_KIMI_Q4_0_FALLBACK_CHUNK` support in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
