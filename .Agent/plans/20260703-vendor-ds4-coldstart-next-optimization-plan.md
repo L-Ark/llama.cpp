@@ -1574,3 +1574,42 @@ Rejected/tie handling:
 - `4.2 tok/s` remains the historical highest observed/current accepted record only when citing its original run.
 - `4.1 tok/s` is the currently repeated strict-cold reproduction line.
 - No runtime source edits are included in this plan commit; the added files are repeatable run-tool harness artifacts for future candidate gating.
+
+### 2026-07-03 Latest Plan Update: Post-Diagnostics Cold-Start Path
+
+This section supersedes any older "latest head" note above if the commit id differs. Current repository observation:
+
+- Local branch: `feat/ds4-moe-stream-on-vendor`.
+- Current head: `2a8b3bb5fab995e750bf19e6123b7b388db7cbb1` (`vendor-ds4: record post diagnostics clean guard`).
+- Push target remains `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- Git identity for future commits/pushes must remain `L-Ark <fliangae@connect.ust.hk>`.
+- Runtime source must stay clean before starting the next candidate. Any temporary source patch must be reverted and clean-rebuilt before recording a rejection.
+
+Current accepted SOTA remains unchanged:
+
+- Accepted cold-start SOTA: `eval_tok_s=4.2` from `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`.
+- Repeated strict-cold guard after later diagnostics: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=28759.105881 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15084658688`, `ram_ok=true`, `correctness_ok=true`, gate pack `hits=4623 misses=0 direct_failures=0`, gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%` from `/root/lfz/runs/vendor-ds4-16gb/20260703T130030Z-20260703_post_diagnostics_clean_sota_guard/france-cpu40-vram0gb`.
+- The accepted configuration is still the vendor DS4 gate-only one-stream path with `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate O_DIRECT pack, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold `drop_caches`, and 16GB cgroup including page cache.
+
+Hard promotion discipline for every future step:
+
+1. Before any new practice run, update this plan with the bottleneck being tested, theory, hard upper bound, expected resource cost, acceptance gates, and rollback plan.
+2. For any result with `eval_tok_s > 4.2` and passing all gates, stop exploration immediately.
+3. Record full reproduction metadata: source commit, branch, binary sha256, model path and size, pack/profile path and sha256, exact command, env, cgroup limit, cgroup memory peak/file/anon/refault counters, TTFT, prompt/eval token rates, answer text, correctness judgment, pack counters, VRAM cache counters, and run directory.
+4. Immediately commit source plus plan/run metadata and push to `ssd/vendor/deepseek-token-rate-16gb` using the `L-Ark` identity.
+5. Rebuild clean from the pushed source and rerun strict cold before declaring the new SOTA reproducible.
+6. If RAM exceeds 16GB including page cache, output correctness fails, TTFT exceeds the allowed gate, direct pack failures appear, or token rate does not beat `4.2`, the candidate is rejected. Revert source, clean rebuild, and record only diagnostic/rejected artifacts.
+
+Next optimization focus:
+
+- Do not continue broad one-stream up/down, independent down-cache sizing, CUDA graph, CPU affinity pinning, context-size trimming, warmup/no-warmup toggles, willneed/page-advice sweeps, early-layer top-k pruning, compact mmap pack-size sweeps, or ad hoc MXFP4 rewrites unless a new diagnostic gives a hard upper bound above about `1-2s` and a clear reason the previous rejection no longer applies.
+- The current bottleneck remains correctness-preserving CPU up/down fallback work under cold page-cache pressure. The fine trace showed decode-like `cne1=1` MXFP4 up/down dominates; previous scheduling/page-source/kernel microbenches did not produce an acceptable speed signal.
+- The immediate next artifact should be a reproducible MXFP4 correctness/performance harness, not a model run. The harness must compare candidate kernels against the exact runtime `ggml_vec_dot_mxfp4_q8_0()` behavior on DS4-like shapes, report numerical error and warm speed, and reject variants before runtime integration if they are not correctness-identical or do not reach the configured speedup threshold.
+- Only if the harness finds a defensible speedup should the next runtime source candidate be designed. That candidate must be default-off, bounded in memory, preserve the accepted gate O_DIRECT path, and first run a short diagnostic showing the targeted fallback counter actually decreases before a full strict-cold SOTA run.
+
+Next concrete checklist:
+
+- [ ] Verify worktree cleanliness and `ssd/vendor/deepseek-token-rate-16gb` push state before the next experiment.
+- [ ] Run or extend `.Agent/run-tools/mxfp4_dot_harness.cpp` so the harness is the canonical gate for MXFP4 CPU fallback kernel ideas.
+- [ ] If a kernel candidate passes the harness threshold, write a new plan subsection with theory and upper bound before touching runtime source.
+- [ ] Otherwise record that no current mechanism has a defensible path beyond `4.2 tok/s` and stop full-model candidate runs until a new bottleneck mechanism is identified.
