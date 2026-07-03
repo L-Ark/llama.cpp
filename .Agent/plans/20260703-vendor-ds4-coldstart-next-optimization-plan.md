@@ -1415,6 +1415,37 @@ Next direction after prompt-set study:
 - A valid next France-SOTA candidate must reduce early-layer up/down CPU fallback without changing selected experts or materially increasing page refaults. Candidate classes: CPU fallback microkernel/scheduling improvements, reducing per-call overhead for early `ffn_up_exps`/`ffn_down_exps`, or a correctness-preserving GPU assist for up/down rows.
 - Before implementing such a source candidate, design must include a hard upper bound from measured early-layer fallback time (`~10.08s` visible top40 fallback, `~2.013 ms/call` CPU MoE average with `~1.581 ms/call` fallback component) and a rollback rule if France output, RAM, TTFT, or counters regress.
 
+
+CPU chunk trace design for next France-SOTA candidate:
+
+- Time: 2026-07-03 after prompt-set portability commit `e6105dd7c`.
+- Goal: quantify whether early up/down fallback bottleneck is due to scheduling imbalance, per-thread work distribution, or per-chunk compute/memory cost.
+- Tooling: added `.Agent/run-tools/analyze_cpu_chunk_trace.py` to aggregate `GGML_MOE_CPU_CHUNK_TRACE_OUT` CSV by kind, layer band, tensor, and CPU thread.
+- Config: accepted France SOTA config unchanged plus `GGML_MOE_CPU_CHUNK_TRACE_OUT={case_dir}/cpu_chunk_trace.csv` and `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=500000`. This is diagnostic only because trace writing perturbs timing and the 500k-row limit truncates the tail.
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T122329Z-20260703_cpu_chunk_trace_current_sota_france/france-cpu40-vram0gb`.
+- Versioned artifacts: `.Agent/runs/20260703-vendor-ds4-coldstart/cpu-chunk-trace-current-sota-summary.json` and `.Agent/runs/20260703-vendor-ds4-coldstart/cpu-chunk-trace-current-sota-analysis.json`.
+
+CPU chunk trace result:
+
+- Diagnostic run metrics: `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=28549.934553 ms`, `elapsed_seconds=62.17`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15105380352`, `pgmajfault=258746`, `workingset_refault_file=1664574`, `ram_ok=true`, correctness heuristic/manual France output pass.
+- Gate path stayed aligned: expert pack `hits=4623 misses=0 direct_failures=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Trace rows captured: `500000`, exactly the configured cap, so totals are lower-bound/partial-run diagnostics.
+- Sum of chunk wall times: `331934.650 ms`, split `down=173564.403 ms` over `277048` rows and `up=158370.247 ms` over `222952` rows.
+- Parallel critical-path approximation by CPU thread: max thread `17469.732 ms`, median thread `16561.1175 ms`. The imbalance between median and max is only about `0.91s`, so scheduler/split-pool improvements have a hard upper bound below one second for this captured portion.
+- Band totals in captured rows: layers `0-2` `55516.103 ms`, `3-9` `71964.752 ms`, `10-19` `70037.269 ms`, `20-29` `67246.542 ms`, `30-39` `67169.984 ms`.
+- Top tensors by captured chunk time remain early-heavy: `blk.0.ffn_up_exps.weight` `10401.987 ms`, `blk.0.ffn_down_exps.weight` `9975.936 ms`, `blk.2.ffn_down_exps.weight` `9624.730 ms`, `blk.1.ffn_down_exps.weight` `9064.312 ms`, `blk.2.ffn_up_exps.weight` `8456.973 ms`, `blk.1.ffn_up_exps.weight` `7992.165 ms`.
+
+Next direction after CPU chunk trace:
+
+- Do not prioritize split-pool or thread scheduling; the measured imbalance is too small to produce a new France SOTA by itself.
+- A plausible source candidate must reduce per-chunk up/down cost. The hard bound from this trace is approximately:
+  - `10%` faster CPU fallback critical path saves `~1.75s`.
+  - `20%` faster saves `~3.49s`.
+  - `30%` faster saves `~5.24s`.
+  - `50%` faster saves `~8.73s`.
+- Given a diagnostic elapsed time of `62.17s`, a 20-30% fallback improvement is the first range likely to move rounded token rate beyond the current `4.2` SOTA. Smaller scheduling-only changes are unlikely to matter.
+- Next implementation candidate should inspect the existing CPU MoE up/down matvec path and look for a low-risk per-chunk speedup that does not alter selected experts, top-k policy, gate cache, or O_DIRECT pack behavior. Any candidate must be rebuilt and strict-cold rerun with the accepted France prompt before promotion.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
