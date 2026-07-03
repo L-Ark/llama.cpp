@@ -21045,6 +21045,105 @@ Rollback:
 - If accepted through n96 confirmation, commit/push the plan and update the
   reproduction runner/config documentation immediately.
 
+Phase 7BQ result - rejected:
+
+- Time recorded: 2026-07-03 10:25:21 UTC run start.
+- Plan commit:
+  `bdd592573` (`docs: plan kimi phase7bq minimal profile retest`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-102521Z-n32-phase7bq-7as-min-profile`.
+- Source status:
+  - env-only experiment;
+  - no source patch;
+  - no rebuild or source rollback required.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bq-7as-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7bq_repro.sh
+```
+
+- Activation:
+  - `command.txt` records `MIN_PROFILE=1`;
+  - `env.txt` does not contain:
+    - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_NAME_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE`;
+    - `GGML_MOE_STREAM_DECLINE_DEBUG`;
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`;
+  - accepted runtime envs remain present:
+    - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+    - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+    - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+    - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+    - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`.
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `78016.89 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Performance:
+  - decode `35267.20 ms / 31`, `0.88 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BQ is slower by `1795.61 ms`.
+- Key counters:
+  - expert pack:
+    - `iouring_reads=11297`;
+    - `iouring_bytes=66242985984`;
+    - `iouring_wait_us=12649862`;
+    - `iouring_fallbacks=0`;
+  - cache:
+    - down slots `806`, hit rate `73.6%`;
+    - upgate slots `1679`, hit rate `43.7%`;
+    - global hit rate `52.9%`;
+  - down prefetch:
+    - `loads=3664`;
+    - `hits=3664`;
+    - `evicted_unused=0`;
+    - useful rate `100.0%`;
+  - pack-mmap CPU fallback:
+    - `hits=1727`;
+    - `misses=9`;
+    - `bytes=14260764672`;
+    - `fallback_gguf=9`;
+  - memory final sample:
+    - `memory.current.final=15142006784`;
+    - `file=14897872896`;
+    - `inactive_file=2589908992`;
+    - `active_file=12307357696`;
+    - `pgmajfault=970442`;
+    - `workingset_refault_file=261074`.
+- Analysis:
+  - Removing diagnostics reduced log/profile output and removed detailed
+    per-stage timing, but did not improve end-to-end decode.
+  - Expert-pack wait was higher than Phase 7AS (`12649862 us` versus
+    `11567536 us`), so any removed instrumentation overhead was lost in
+    cold-run IO/staging variance or scheduling changes.
+  - This confirms previous profile-trim conclusions under the true Phase 7AS
+    runtime: diagnostic removal is not a reproducible optimization path.
+- Decision:
+  - Reject Phase 7BQ.
+  - Do not run n32 confirmation or n96.
+  - Keep diagnostics enabled in the accepted reproduction runner because they
+    are useful for future bottleneck analysis and removing them did not improve
+    token rate.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
