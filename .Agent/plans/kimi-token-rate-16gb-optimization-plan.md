@@ -19788,6 +19788,149 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BD - same-type current-down overlap probe
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Existing current-down overlap is important:
+  - Phase 7BA disabled it and regressed n32 to `38756.47 ms / 31`,
+    `0.80 tok/s`;
+  - Phase 7AS n32 current-down overlap counters:
+    `calls=992`, `planned_jobs=3664`, `completed_jobs=3664`,
+    `cache_hits=3528`, `worker_us=3244613`;
+  - Phase 7AS n96 counters:
+    `calls=2464`, `planned_jobs=9109`, `completed_jobs=9109`,
+    `cache_hits=8755`, `worker_us=8925545`.
+- Code inspection shows `start_current_down_overlap()` is called in the
+  mixed-type up/gate branch before fuse/D2H, but not in the same-type up/gate
+  branch.
+- Same-type up/gate is still a major decode component:
+  - n32 type `18`: `311` calls, `18.646 ms/call`;
+  - n32 type `22`: `558` calls, `7.048 ms/call`;
+  - n96 type `18`: `771` calls, `18.396 ms/call`;
+  - n96 type `22`: `1386` calls, `6.888 ms/call`.
+
+Hypothesis:
+
+- Add a default-off env:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE=1
+```
+
+- When enabled, start the existing current-down overlap logic for non-mixed
+  same-type up/gate calls just before the common same-type fuse/D2H section.
+- This does not change math, quantization, cache sizes, expert-pack format, or
+  routing. It only attempts to move some same-type down expert staging earlier,
+  into the same fuse/D2H overlap window already used by mixed-type up/gate.
+
+Theoretical upper bound:
+
+- This phase cannot reduce up/gate kernel time.
+- It can only reduce later down-stage critical path by increasing down cache
+  residency before `ggml_cuda_moe_stream_batch()` handles the matching down
+  tensor.
+- Phase 7AS n32 has:
+  - main pinned `host_stage=18631.890 ms`;
+  - down hit rate `73.6%`;
+  - down `cuda_batch=2.675 ms/call`;
+  - down `fallback_t0=36.549 ms/call`;
+  - expert-pack `iouring_wait_us=11567536`.
+- Best-case n32 saving is bounded by the portion of down staging that belongs to
+  same-type up/gate calls and can be hidden by the fuse/D2H window. Realistic
+  upside is likely under `1-2 s`; if added overlap increases IO wait or up/gate
+  wall by more than that, the run will regress.
+
+Risk:
+
+- Same-type up/gate has many more calls than the current mixed-only overlap.
+  Enabling overlap for all same-type calls may:
+  - increase expert-pack IO traffic;
+  - contend with IQ2 parallel up/gate staging;
+  - increase main pinned `host_stage`;
+  - reduce type-22 gains from Phase 7AS.
+- Therefore this must be a default-off source probe and should stop after the
+  first n32 if it does not beat Phase 7AS.
+
+Implementation plan:
+
+1. Add helper `current_down_overlap_same_type_enabled()` reading
+   `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE`.
+2. In `ggml_cuda_moe_stream_up_gate_batch()`, after same-type up/gate compute
+   and before the common fuse/D2H path, call `start_current_down_overlap()` only
+   when:
+   - `!mixed_types`;
+   - `!prompt_mode`;
+   - `current_down_overlap_same_type_enabled()`;
+   - `current_down_overlap_enabled()`;
+   - GPU handoff is disabled.
+3. Ensure every return after the same-type overlap start joins the overlap
+   worker before leaving the function.
+4. Print a one-time activation log:
+   `[moe_stream_batch] same-type current down overlap active`.
+5. Build `build-cuda-batch/bin/llama-completion`.
+
+Reproducibility:
+
+- Every run directory must include `README.md`, `command.txt`, `env.txt`,
+  `git.txt`, `script.sh`, stdout/stderr, cgroup memory files,
+  `fallback-profile.csv`, and `metrics.txt`.
+- Strict cold start:
+  `sync; echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup:
+  `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Env is Phase 7AS plus:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE=1
+```
+
+- Accepted source must be committed and pushed immediately after a passing n96
+  confirmation.
+- Rejected source must be reverted after recording results.
+
+Acceptance gates:
+
+- n4 smoke:
+  - exit `0`;
+  - activation log present;
+  - no CUDA errors;
+  - `memory.peak<=15899996160`, `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output prefix must be coherent and not malformed.
+- n32 candidate:
+  - must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - France answer must be semantically correct and coherent;
+  - mechanism must show either higher useful current-down overlap work,
+    better down hit rate, lower down host-stage, or lower down total without
+    increasing type-18/type-22 wall enough to erase the gain.
+- n32 confirmation:
+  - must also beat `33471.59 ms / 31`;
+  - same quality, RAM, TTFT, read, and mechanism gates.
+- n96 candidate and confirmation:
+  - both must beat Phase 7AS n96 confirmation `84173.24 ms / 77`;
+  - semantic output must remain correct.
+
+Rollback:
+
+- Revert immediately if:
+  - build fails;
+  - n4 activation is missing;
+  - output is malformed;
+  - CUDA errors occur;
+  - RAM/TTFT/read gates fail;
+  - first n32 is slower than Phase 7AS;
+  - mechanism shows added overlap is mostly wasted or causes IO/staging
+    contention;
+  - n32 improvement does not reproduce;
+  - n96 fails any gate.
+
 ## Phase 7BC - same-type IQ3 decode Q8_K up/gate probe
 
 Design timestamp: 2026-07-03 CST.
