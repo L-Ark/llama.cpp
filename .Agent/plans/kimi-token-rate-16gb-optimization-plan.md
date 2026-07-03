@@ -4182,6 +4182,122 @@ Decision:
   diagnostic proves the target is missing and the expected gain exceeds the
   extra expert-pack read cost.
 
+## Phase 7DT: overlay v2 for blk.4 and blk.60 down coverage
+
+Start time:
+
+- 2026-07-04T01:42:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DS is the accepted SOTA, but n96 confirmation still has down-stage
+  hotspots:
+  - `blk.4.ffn_down_exps.weight`: stage `648.164 ms`, pack `202/384`;
+  - `blk.60.ffn_down_exps.weight`: stage `508.194 ms`, pack `158/384`.
+- A pack-index diagnostic over the Phase 7DS main+overlay packs showed:
+  - `blk.4`: main pack `202`, overlay `0`, missing `182`;
+  - `blk.60`: main pack `158`, overlay `0`, missing `226`;
+  - existing Phase 7DS `blk.1/2` overlay remains complete at `384/384`.
+
+Hypothesis:
+
+- Build a second overlay artifact containing:
+  - all Phase 7DS `blk.1/2` entries;
+  - only the missing `blk.4` experts not already in the main pack;
+  - only the missing `blk.60` experts not already in the main pack.
+- Keep source and scheduling unchanged.
+- This should reduce `blk.4/60` GGUF-backed staging without reintroducing
+  Phase 7DQ overlap contention.
+
+Why this can improve token rate:
+
+- Phase 7DS proved expert-pack coverage can reduce large down-stage rows.
+- `blk.4/60` are now the top two remaining rows and both have partial pack
+  coverage.
+- Adding only missing entries avoids duplicate-key rejection and keeps overlay
+  growth bounded.
+
+Theoretical upper bound:
+
+- Hard n96 bound from Phase 7DS confirmation:
+  - `blk.4 + blk.60` stage = `648.164 + 508.194 = 1156.358 ms`.
+- Hard n32 bound from Phase 7DS n32 confirmation:
+  - `blk.4 + blk.60` stage = `343.055 + 294.020 = 637.075 ms`.
+- Expected useful range:
+  - n32 `0.1-0.5 s`;
+  - n96 `0.2-0.9 s`.
+- If expert-pack wait or pinned host stage increases more than the local
+  `blk.4/60` stage savings, reject.
+
+Implementation:
+
+- Artifact-only experiment; no source patch.
+- Create:
+
+```text
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack
+```
+
+- The overlay must contain no duplicate `(tensor, expert, nbytes)` keys present
+  in the main v2 pack.
+- Expected entries:
+  - `blk.1`: `384`;
+  - `blk.2`: `384`;
+  - `blk.4`: `182`;
+  - `blk.60`: `226`;
+  - total `1176`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 4b0c234dd
+python3 /tmp/build_phase7dt_overlay_v2.py
+cp /tmp/run_phase7ds_repro.sh /tmp/run_phase7dt_repro.sh
+sed -i 's#kimi-iq3s-l1l2down-overlay.expert-pack#kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack#g' /tmp/run_phase7dt_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dt-l4-l60-overlay-v2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dt_repro.sh
+```
+
+Acceptance gates:
+
+- Build:
+  - overlay exists;
+  - entries total `1176`;
+  - no duplicate key with main pack;
+  - counts match expected per tensor.
+- Runtime hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Mechanism:
+  - total expert-pack entries increase from Phase 7DS `31599` to `32007`;
+  - down CSV shows lower `blk.4/60` stage than Phase 7DS n32 confirmation:
+    - `blk.4` baseline `343.055 ms`;
+    - `blk.60` baseline `294.020 ms`;
+  - total decode must beat Phase 7DS n32 confirmation `31647.69 ms / 31`
+    before any n96 test.
+- Promotion:
+  - first n32 must beat Phase 7DS n32 confirmation;
+  - if first n32 beats and mechanism is sane, run a second cold n32
+    confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7DS n96 confirmation `77839.21 ms / 77`.
+
+Rollback:
+
+- Artifact-only failure needs no source rollback.
+- If n32 regresses or local stage gain is offset by expert-pack/pinned staging
+  cost, keep Phase 7DS overlay as SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
