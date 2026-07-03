@@ -973,6 +973,15 @@ CPU fallback fine trace design:
   - decide whether the next candidate should target dot compute, tail imbalance, page/refault/source load, or setup/barrier.
 - Acceptance: this is diagnostic only. It cannot promote SOTA even if token rate ties/exceeds historical `4.2`; any optimization must be designed from the trace and run separately under the normal acceptance gates.
 
+
+Fine trace first attempt:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T095715Z-20260703T095715Z-cpu-fallback-fine-trace/france-cpu40-vram0gb`.
+- Metrics: `eval_tok_s=3.9`, `prompt_tok_s=1.5`, `TTFT=30553.465559 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15103176704`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- Gate/O_DIRECT counters remained aligned with SOTA: one expert pack `hits=4623 misses=0 direct_failures=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Problem: `cpu_chunk_trace.csv` has exactly `800001` lines including header, so the `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=800000` limit was hit and the trace is incomplete.
+- Action: rerun the same diagnostic with `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=2000000` before drawing bottleneck conclusions. The first attempt is useful only as a guard that profiling does not disturb RAM/correctness/gate counters; it is not sufficient for phase-trace analysis.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
