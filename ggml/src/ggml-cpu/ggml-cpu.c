@@ -177,7 +177,8 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
     }
 
     return ggml_cuda_moe_stream_supports_type(type) ||
-           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
+           type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS ||
+           type == GGML_TYPE_Q4_0;
 }
 
 struct ggml_kimi_cpu_moe_profile_op {
