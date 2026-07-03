@@ -19086,3 +19086,103 @@ Decision:
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
   - n96 confirm decode `84173.24 ms / 77`.
+
+## Phase 7AU - retest split-cache upgate 65 on Phase 7AS SOTA
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AT showed that increasing total VRAM cache from `15000` to `15100 MiB`
+  slightly increases hit rate but does not improve n32 wall time under Phase 7AS.
+- Phase 7AS changes the cache/IO balance relative to the old Phase 7AA split
+  sweep:
+  - Phase 7AS enables IQ2 up/gate parallel streams;
+  - gate-side staging and expert-pack iouring bytes rise materially;
+  - the current upgate hit rate is only about `43-44%`.
+- Phase 7AA tested `UPGATE_PCT=65` only under Phase 7P and rejected it because
+  losing down slots outweighed the upgate benefit at that time. Under 7AS, the
+  extra gate-side pressure may make a larger upgate pool more valuable.
+
+Current bottleneck:
+
+- Phase 7AS n32 confirmation:
+  - decode `33471.59 ms / 31`;
+  - expert-pack iouring bytes `66242985984`;
+  - main host stage `18631.890 ms`;
+  - gate host stage `2241.251 ms`;
+  - down cache `806` slots, hit rate `73.6%`;
+  - upgate cache `1679` slots, hit rate not enough to avoid heavy gate reads.
+- Phase 7AT `15100 MiB`:
+  - decode `33898.36 ms / 31`, rejected;
+  - down slots `812`, upgate slots `1690`;
+  - upgate hit rate `44.1%`;
+  - not enough slot movement to change the critical path.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=65
+```
+
+- Keep total cache at the accepted `GGML_MOE_VRAM_CACHE_MIB=15000`.
+- Keep full Phase 7AS runtime:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - SQPOLL, IO depth `8`, refill batch `4`;
+  - pinned slots `8`;
+  - current down overlap, down parallel staging, pack mmap fallback, mmap drops;
+  - `THREADS=32`.
+
+Theoretical upper bound:
+
+- Moving from `UPGATE_PCT=60` to `65` shifts about `750 MiB` from down cache to
+  upgate cache:
+  - about `+139` upgate slots at `5.36 MiB`;
+  - about `-100` down slots at `7.44 MiB`.
+- If the extra upgate slots reduce 7AS gate-side staging enough, n32 can improve
+  by up to the currently exposed gate staging delta, roughly `2.2 s` local gate
+  host-stage plus associated iouring wait/H2D.
+- The risk is larger down miss traffic. If down hit rate drops enough to expose
+  more main host staging/fallback, the run will regress as Phase 7AA did.
+- Because the expected gain is small and tradeoff-heavy, require the first n32
+  run to beat the current Phase 7AS n32 confirmation before running repeats.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7as_repro.sh`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7au-7as-upgate65"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=65 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Same hard gates as Phase 7AT:
+  - cold start;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - standard reproduction artifacts including non-empty fallback CSV.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - n32 confirmation must also beat `33471.59 ms / 31`;
+  - n96 candidate and confirmation must both beat Phase 7AS n96 confirmation
+    `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- Reject immediately if the first n32 is slower than Phase 7AS confirmation or
+  if counters show the down miss increase dominates the upgate benefit.
