@@ -29662,6 +29662,126 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CP - layer-limited same-type current-down overlap for blk.1-2
+
+Start time:
+
+- 2026-07-03T15:22:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CO proves the largest accepted down batch rows are movement-bound:
+  - `blk.1.ffn_down_exps.weight`: stage `727.793 ms`, kernel `3.743 ms`,
+    wall `734.186 ms`;
+  - `blk.2.ffn_down_exps.weight`: stage `697.773 ms`, kernel `3.642 ms`,
+    wall `703.975 ms`;
+  - combined layer `1-2` stage is `1425.566 ms` on n32.
+- These rows are same-type Q3_K down calls, not mixed IQ2/IQ3 up/gate calls.
+  Existing current-down overlap only starts from the mixed-type branch.
+- Phase 7BD broad same-type overlap failed because it applied to all same-type
+  calls:
+  - down hit rate reached `100%`, but type `18/22` up/gate wall regressed
+    badly;
+  - the join moved too much prefetch work onto the up/gate critical path.
+- Phase 7BE detached broad same-type overlap avoided most up/gate wall
+  regression but added enough H2D/staging competition to still regress.
+
+Hypothesis:
+
+- Reintroduce same-type current-down overlap only for a tiny layer range:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1-2
+```
+
+- This keeps the existing accepted mixed current-down overlap unchanged.
+- For same-type up/gate calls whose tensor name is in `blk.1` or `blk.2`, start
+  the existing current-down overlap before the common fuse/D2H path, then join
+  before returning, matching Phase 7BD semantics but only for layers `1-2`.
+- The limited scope should target about `62` same-type calls instead of all
+  same-type calls, reducing the chance that H2D contention or join wait
+  overwhelms the benefit.
+
+Theoretical upper bound:
+
+- Maximum n32 saving from layer `1-2` down movement is bounded by their measured
+  stage time: `727.793 + 697.773 = 1425.566 ms`.
+- Kernel/D2H/scatter are already small and cannot contribute meaningful gain.
+- Realistic n32 upside is `0.3-1.0 s` if a meaningful fraction of the staged
+  misses are moved into the up/gate fuse/D2H overlap window.
+- If the same-type join adds more than about `1.4 s` to up/gate wall, the run
+  must regress.
+
+Implementation:
+
+1. Modify only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+2. Add helper reading
+   `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS`.
+3. In the non-mixed same-type branch, after up/gate compute is complete and
+   before the common fuse/D2H path, call `start_current_down_overlap()` only
+   when:
+   - `current_down_overlap_enabled()`;
+   - `!prompt_mode`;
+   - `!mixed_types`;
+   - `use_handoff` is false;
+   - `src0_up_name` matches the env layer range.
+4. Ensure error exits after starting the worker join it before returning.
+5. Print a one-time activation log:
+   `[moe_stream_batch] layer-limited same-type current down overlap active: layers=...`.
+6. Keep default behavior unchanged when the env is unset.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cp_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1-2\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN\/down-batch-profile.csv\nEOF\n/' /tmp/run_phase7cp_repro.sh
+chmod +x /tmp/run_phase7cp_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cp-sametype-overlap-l1-l2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cp_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1-2`;
+  - stderr contains the layer-limited activation log;
+  - current-down overlap planned jobs increase only modestly versus Phase 7CC;
+  - `down-batch-profile.csv` exists.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - `blk.1` and `blk.2` stage time should drop versus Phase 7CO:
+    - `blk.1` stage baseline `727.793 ms`;
+    - `blk.2` stage baseline `697.773 ms`;
+  - type `18/22` upgate wall must not show the broad Phase 7BD regression;
+  - if n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, activation is missing, output is malformed, TTFT/RAM/read
+  gates fail, or first n32 is slower than Phase 7CC, revert the source patch and
+  record rejection.
+- If n32 improves but mechanism shows global cache/IO damage, do not promote;
+  either tighten the layer range or reject.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
