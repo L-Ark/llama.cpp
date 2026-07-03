@@ -1488,6 +1488,34 @@ Next direction after DS4 hot bound check:
 - Existing broad levers are now rejected by measurement or bound: gate union packs hurt France, scheduler/chunk-size is not enough, transient repack causes refault pressure, and current DS4 hot dispatch has weak CPU-row savings per VRAM.
 - Continue with measurement-first work. The next useful diagnostic should target either page/refault source attribution for early up/down fallback or a correctness-preserving CPU special case that skips provably zero/sentinel work without changing selected expert outputs.
 
+
+CPU fallback page-fault attribution design:
+
+- Time: 2026-07-03 after DS4 hot-dispatch bound commit `8f7f66b9a`.
+- Goal: identify whether the remaining cold-start up/down fallback cost is dominated by page faults/refaults from specific tensors/layers rather than arithmetic. Existing strict summaries expose only whole-run `pgmajfault` and `workingset_refault_file`, which is too coarse to design another source candidate.
+- Source candidate: temporary default-off instrumentation in `ggml/src/ggml-cpu/ggml-cpu.c`, activated by `GGML_MOE_FALLBACK_FAULT_TRACE_OUT={case_dir}/fallback_fault_trace.csv`. Around each CPU fallback expert loop in `ggml_compute_forward_mul_mat_id`, record `tensor, expert, cne1, elapsed_ms, minor_fault_delta, major_fault_delta` using `getrusage(RUSAGE_SELF)` before and after the per-expert fallback work. Keep it per expert, not per chunk, to limit trace overhead.
+- Expected insight: if major faults concentrate in a small set of early up/down tensors, future work should target page placement/O_DIRECT/hot packing for those tensors. If faults are spread and elapsed is mostly compute with low fault deltas, page-policy changes are unlikely to beat SOTA.
+- Execution: run accepted France SOTA config under strict cold 16GB cgroup with the trace enabled. This is diagnostic only; trace overhead means it cannot replace SOTA even if token rate rounds high.
+- Rollback: after the diagnostic, revert `ggml/src/ggml-cpu/ggml-cpu.c`, rebuild clean, record the analysis, and push docs/artifacts only unless a later non-diagnostic SOTA candidate passes all acceptance gates.
+
+
+CPU fallback page-fault attribution result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T124828Z-20260703_fallback_fault_trace_current_sota_france/france-cpu40-vram0gb`.
+- Source handling: temporary `GGML_MOE_FALLBACK_FAULT_TRACE_OUT` instrumentation was reverted with `git restore ggml/src/ggml-cpu/ggml-cpu.c`; `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` was rerun from clean commit `8f7f66b9a`.
+- Diagnostic run metrics: `eval_tok_s=3.9`, `prompt_tok_s=1.5`, `TTFT=28854.585053 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15106760704`, `pgmajfault=271525`, `workingset_refault_file=1877185`, `ram_ok=true`, correctness pass. The run is diagnostic only because fault tracing adds overhead.
+- Versioned artifacts: `.Agent/runs/20260703-vendor-ds4-coldstart/fallback-fault-trace-current-sota-summary.json` and `.Agent/runs/20260703-vendor-ds4-coldstart/fallback-fault-trace-current-sota-analysis.json`.
+- Trace rows captured: `500000`, exactly the configured cap.
+- Captured thread-local fallback fault totals: `majflt=215254`, `minflt=498903`, elapsed trace threadsum `388857.025 ms`.
+- By kind: `down` has `123516` major faults and `207722.614 ms`; `up` has `91738` major faults and `181134.411 ms`.
+- By layer band major faults: `0-2` `26476`, `3-9` `45578`, `10-19` `48357`, `20-29` `47652`, `30-39` `47191`. Early layers contain the largest individual tensors, but major faults are broadly distributed across the model, not isolated to one tiny hotset.
+- Top major-fault tensors include early up/down (`blk.1.ffn_down_exps`, `blk.2.ffn_down_exps`, `blk.0.ffn_up_exps`, `blk.1.ffn_up_exps`, `blk.0.ffn_down_exps`, `blk.2.ffn_up_exps`) and some later down tensors (`blk.35.ffn_down_exps`, `blk.36.ffn_down_exps`).
+- Interpretation: cold page faults are a real part of CPU fallback cost, but they are too broad to solve with a small per-layer hotset under current VRAM. This also explains why transient repack and larger chunking increased refault pressure. A viable page strategy would need to reduce source scans or change I/O layout globally without consuming host RAM/page cache, not just pin a few early experts.
+
+Next direction after fault attribution:
+
+- Do not pursue small hotset/page-hint candidates unless they include a hard model for broad fault reduction. Current evidence favors either a true compute kernel improvement with no extra source scan, or a deeper I/O layout change that reduces distributed up/down page faults while preserving the accepted gate pack/cache behavior.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
