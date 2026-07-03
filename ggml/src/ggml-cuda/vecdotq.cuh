@@ -1345,6 +1345,8 @@ static __device__ __forceinline__ float vec_dot_iq3_xxs_q8_1(
     const int2 q3_packed = make_int2(get_int_b2(bq3->qs, iqs), get_int_b2(bq3->qs, iqs+1));
     const uint8_t * q3 = (const uint8_t *) &q3_packed;
     const uint32_t aux32 = get_int_b2(bq3->qs, QK_K/16 + iqs/2);
+    const block_q8_1 * bq8 = bq8_1 + iqs/2;
+    const int * q8 = (const int *) bq8->qs;
 
     int sumi = 0;
 #pragma unroll
@@ -1355,12 +1357,12 @@ static __device__ __forceinline__ float vec_dot_iq3_xxs_q8_1(
         const int signs0 = __vcmpne4(signs & 0x08040201, 0);
         const int grid_l = __vsub4(grid_pos.x ^ signs0, signs0);
 
-        const int u0 = get_int_b4(bq8_1[iqs/2].qs, l0 + 0);
+        const int u0 = q8[l0 + 0];
 
         const int signs1 = __vcmpne4(signs & 0x80402010, 0);
         const int grid_h = __vsub4(grid_pos.y ^ signs1, signs1);
 
-        const int u1 = get_int_b4(bq8_1[iqs/2].qs, l0 + 1);
+        const int u1 = q8[l0 + 1];
 
         sumi = ggml_cuda_dp4a(grid_l, u0, sumi);
         sumi = ggml_cuda_dp4a(grid_h, u1, sumi);
@@ -1368,7 +1370,7 @@ static __device__ __forceinline__ float vec_dot_iq3_xxs_q8_1(
 
     const int ls = aux32 >> 28;
     sumi = (ls*sumi + sumi/2)/2;
-    const float d = __half2float(bq3->d) * __low2float(bq8_1[iqs/2].ds);
+    const float d = __half2float(bq3->d) * __low2float(bq8->ds);
     return d * sumi;
 }
 
