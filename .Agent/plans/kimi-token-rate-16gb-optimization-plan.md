@@ -26527,6 +26527,127 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+### Phase 7CC - retest larger l12-upgate expert pack on Phase 7AS
+
+Start time:
+
+- 2026-07-03T12:35:20Z.
+
+Current bottleneck and evidence:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7AS still has expert-pack misses:
+  - n32 expert-pack summary:
+    - `hits=24471`;
+    - `misses=1179`;
+    - `iouring_reads=11297`;
+    - `iouring_bytes=66242985984`;
+    - `iouring_wait_us=11567536`.
+  - current-down overlap reports `missing_pack=36`.
+- Earlier plan analysis recorded that runtime-load host fallback events plus
+  current-down `missing_pack` account for the expert-pack misses. Those misses
+  fall back to GGUF mmap / host copies instead of the O_DIRECT io_uring pack
+  path.
+- The asset directory contains a larger pack not yet tested on the vendor
+  Phase 7AS runtime:
+  - current pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack`;
+    `159.90 GiB`, `30162` entries;
+  - candidate pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+    `163.11 GiB`, `30831` entries.
+
+Hypothesis:
+
+- Replace only `GGML_MOE_EXPERT_PACK` with the larger
+  `kimi-iq3s-france-l12-upgate-v2.expert-pack`.
+- The extra `669` entries may cover some current expert-pack misses or improve
+  the route-specific entry set, reducing GGUF mmap fallback and page-cache
+  pressure.
+- Alternatively, the larger pack may worsen IO locality or add entries that do
+  not matter for the France route, increasing iouring wait.
+
+Theoretical upper bound:
+
+- The hard ceiling from eliminating all n32 expert-pack misses is limited:
+  only `1179` lookup misses out of the total routed expert movements, and the
+  measured Q4_0 decode fallback bucket is about `2.63 s`.
+- If the larger pack eliminates a useful subset of those misses without
+  worsening layout locality, plausible n32 upside is `0.2-1.0 s`.
+- If the new layout increases seek distance or changes offset order, it can
+  regress even with fewer pack misses. Mechanism must be judged by:
+  - expert-pack `misses`;
+  - `missing_pack`;
+  - iouring bytes/wait;
+  - pinned host-stage;
+  - final host `file` memory.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7cc_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Change only line 36 in the runner env:
+
+```sh
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+```
+
+- Keep all accepted Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`;
+  - `UPGATE_PCT=60`, `IQ2_UPGATE_PARALLEL=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7as_repro.sh /tmp/run_phase7cc_repro.sh
+sed -i 's#kimi-iq3s-france.expert-pack#kimi-iq3s-france-l12-upgate-v2.expert-pack#g' /tmp/run_phase7cc_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cc-l12-upgate-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains the `kimi-iq3s-france-l12-upgate-v2.expert-pack` path;
+  - stderr expert-pack open line contains the same path;
+  - stderr reports `entries=30831`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, quality fails, TTFT rises above the gate, read failures
+  appear, or RAM violates the 16GB cgroup cap, reject and keep the original
+  `kimi-iq3s-france.expert-pack` in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
