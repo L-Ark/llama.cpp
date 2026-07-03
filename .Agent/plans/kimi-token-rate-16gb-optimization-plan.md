@@ -20502,6 +20502,144 @@ systemd-run --wait --collect --same-dir \
     - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
     - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BM - CUDA memcpy batch enqueue for completed CQE waves
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7BL proved that H2D batching must preserve streaming:
+  - batched-H2D activated and served `2432` jobs across main/gate rings;
+  - H2D enqueue count dropped for the batched subset;
+  - decode still regressed to `35625.08 ms / 31`;
+  - main pinned `host_stage` rose to `19869.156 ms`;
+  - gate pinned `host_stage` rose to `2354.552 ms`.
+- The failure mode is clear: 7BL waited for all reads in a coalesced batch
+  before enqueueing H2D. The accepted path starts H2D immediately as each CQE
+  arrives.
+- CUDA headers on the test server expose `cudaMemcpyBatchAsync()`, which can
+  submit multiple independent copies in one runtime call without requiring
+  contiguous destinations.
+
+Hypothesis:
+
+Add a default-off env:
+
+```sh
+GGML_MOE_CUDA_MEMCPY_BATCH=1
+```
+
+Modify only the completion side of `expert_pack_iouring_copy_jobs()`:
+
+- keep the current io_uring submission/refill behavior;
+- after `io_uring_wait_cqe()`, collect that CQE plus immediately available
+  `io_uring_peek_cqe()` completions into a small ready wave;
+- enqueue that ready wave with `cudaMemcpyBatchAsync()` when it contains at
+  least two copies;
+- fall back to the existing per-CQE `cudaMemcpyAsync()` when the wave has one
+  copy, when CUDA returns unsupported/invalid, or when the env is disabled.
+
+Expected effect:
+
+- Preserves CQE-to-H2D streaming: no waiting for all jobs in the original batch.
+- Reduces CUDA runtime enqueue overhead for natural completion bursts.
+- Does not require contiguous VRAM cache slots and does not change the compact
+  batch compute kernels.
+- Does not change model math, routing, cache keys, expert-pack reads, or the
+  VRAM cache layout.
+
+Theoretical upper bound:
+
+- This still cannot remove SSD read time, H2D bytes, or GPU matmul time.
+- It can only reduce CPU-side CUDA enqueue overhead for completed CQE bursts.
+- The maximum copy-call reduction is bounded by the number of CQEs that arrive
+  together in the existing `peek_cqe()` loop. If most completions arrive one at
+  a time, the effect will be near zero.
+- A realistic n32 upside is `0.2-0.8 s`; anything larger would require evidence
+  that CUDA runtime enqueue overhead was a hidden part of pinned `host_stage`.
+
+Implementation:
+
+- Add small fixed-size scratch arrays to `pinned_stage_ring` or stack vectors in
+  `expert_pack_iouring_copy_jobs()` for:
+  - destination pointers;
+  - source pinned-slot pointers;
+  - copy sizes;
+  - pending-job indices.
+- Use one `cudaMemcpyAttributes` entry with:
+  - `srcAccessOrder=cudaMemcpySrcAccessOrderStream`;
+  - `flags=cudaMemcpyFlagPreferOverlapWithCompute`.
+- After `cudaMemcpyBatchAsync()` succeeds:
+  - record each slot's existing `done` event on the same stream;
+  - preserve existing slot reuse safety;
+  - update `iouring_h2d_enqueues` by batch call count, not by job count;
+  - add stderr counters for `memcpy_batch_calls` and `memcpy_batch_jobs`.
+- Keep default behavior unchanged when the env is absent or `0`.
+
+Experiment:
+
+- Build:
+
+```bash
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Create `/tmp/run_phase7bm_repro.sh` from `/tmp/run_phase7as_repro.sh` that
+  records:
+
+```sh
+GGML_MOE_CUDA_MEMCPY_BATCH=1
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bm-cuda-memcpy-batch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 CUDA_MEMCPY_BATCH=1 \
+      /tmp/run_phase7bm_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr shows `cudaMemcpyBatchAsync active`;
+  - stderr reports nonzero `memcpy_batch_calls` and `memcpy_batch_jobs`;
+  - `env.txt` contains `GGML_MOE_CUDA_MEMCPY_BATCH=1`;
+  - `command.txt` records `CUDA_MEMCPY_BATCH=1`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - `memcpy_batch_jobs > memcpy_batch_calls`;
+  - `iouring_h2d_enqueues` should drop relative to `iouring_reads`;
+  - pinned `enqueue_ms` and/or `host_stage` should drop without raising
+    `iouring_wait_us`, TTFT, RAM peak, or down `cuda_batch`.
+
+Rollback:
+
+- If build fails, `cudaMemcpyBatchAsync` is unsupported at link/runtime,
+  activation is missing, quality fails, hard gates fail, or first n32 is slower
+  than Phase 7AS, reject immediately.
+- On rejection, revert source patch and rebuild accepted Phase 7AS source before
+  continuing.
+- If accepted through n96 confirmation, commit and push source plus plan/result
+  immediately.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
