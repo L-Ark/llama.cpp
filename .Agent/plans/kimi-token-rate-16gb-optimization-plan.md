@@ -1972,7 +1972,7 @@ Decision:
 
 Timestamp: 2026-07-03T19:20:10Z.
 
-Status: planned before implementation.
+Status: rejected after n96; source patch reverted.
 
 Reason:
 
@@ -2084,6 +2084,104 @@ Rollback:
 - If naive combined is slower but histograms show `9-16` iouring batches, plan a
   future per-job-stream combined read design instead of discarding the idea
   entirely.
+
+Execution record:
+
+- Plan commit:
+  - `1da851d1d docs: plan kimi phase7dj combined staging`
+- Source probe commit:
+  - `112039d77 cuda: add env gated combined upgate staging`
+- Rollback commit:
+  - `15de9abe0 Revert "cuda: add env gated combined upgate staging"`
+- Runner:
+  - `/tmp/run_phase7dj_combined_stage_repro.sh`
+  - copied from `/tmp/run_phase7cc_repro.sh`
+  - added:
+    `GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE=1`
+- Activation evidence:
+  - `env.txt` contains `GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE=1`
+  - stderr contains `[moe_stream] up/gate combined CPU staging active`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 112039d77
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-192323Z-n96-phase7dj-combined-upgate-stage
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dj_combined_stage_repro.sh
+```
+
+n96 result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-192323Z-n96-phase7dj-combined-upgate-stage`
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `74901.60 ms`
+- decode: `79469.35 ms / 77`, `0.97 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15125938176`
+  - `file=14870335488`
+  - `inactive_file=503029760`
+  - `active_file=14366838784`
+- expert pack:
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+  - `iouring_submit_us=131238`
+  - `iouring_wait_us=25025815`
+  - `inflight_avg=3.89`
+  - `inflight_max=8`
+  - `batch_hist=1:694,2-4:4070,5-8:1299,9-16:684,17-32:0,gt32:0`
+
+Profile changes versus Phase 7DI:
+
+- Positive:
+  - `9-16` iouring batches appeared: `684`;
+  - expert-pack `iouring_wait_us` dropped from `29620731` to `25025815`;
+  - expert-pack `iouring_submit_us` dropped from `170613` to `131238`;
+  - effective `inflight_avg` improved from `2.97` to `3.89`.
+- Negative:
+  - decode regressed from Phase 7CC accepted `79008.37 ms / 77` to
+    `79469.35 ms / 77`, slower by `460.98 ms`;
+  - type22 up/gate wall worsened from Phase 7DI `5.885 ms/call` to
+    `6.521 ms/call`;
+  - type22 `up_wait` worsened from `5.423 ms` to `6.219 ms`;
+  - type22 `gate_wait` worsened from `5.657 ms` to `6.304 ms`;
+  - main pinned staging copies increased because gate jobs moved onto the main
+    ring:
+    `copies=55898`, `h2d=11436.610 ms`;
+  - gate ring workload shrank, proving the merge occurred, but the lost overlap
+    was more expensive than lower iouring wait.
+
+Decision:
+
+- Reject Phase 7DJ.
+- Revert the source patch and push the rollback.
+- Keep the conclusion from Phase 7DI:
+  - there is enough combined work to form `9-16` batches;
+  - naive one-stream combined staging is not acceptable.
+- Future combined staging must preserve per-job H2D stream overlap:
+  - combined iouring read submission;
+  - H2D enqueue to up or gate stream per job;
+  - up compute allowed to start as soon as up jobs finish, without waiting for
+    all gate jobs.
 
 ## Phase 0: cold 16GB baseline
 
