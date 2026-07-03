@@ -20265,6 +20265,94 @@ Rollback:
 - If accepted through n96 confirmation, commit and push source plus plan/result
   immediately.
 
+Phase 7BK result - rejected:
+
+- Time recorded: 2026-07-03 09:44:13 UTC run start.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-094413Z-n32-phase7bk-pack-mmap-random`.
+- Source state during experiment:
+  - dirty default-off patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - added `GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1`;
+  - after expert-pack mmap succeeds, called `madvise(..., MADV_RANDOM)`;
+  - also called `MADV_NOHUGEPAGE` where available;
+  - no changes to math, routing, VRAM cache, io_uring, pinned staging, or
+    fallback compute.
+- Build:
+  - remote `build-cuda-batch` compiled successfully with dirty source;
+  - no new build errors; only pre-existing warnings.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bk-pack-mmap-random"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PACK_MMAP_RANDOM=1 \
+      /tmp/run_phase7bk_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `72599.56 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Activation:
+  - stderr shows:
+    - `[moe_stream_batch] expert pack mmap: MADV_RANDOM enabled rc=0 errno=0`;
+    - `[moe_stream_batch] expert pack mmap: MADV_NOHUGEPAGE enabled rc=0 errno=0`;
+  - `env.txt` includes `GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1`;
+  - `command.txt` records `PACK_MMAP_RANDOM=1`.
+- Performance:
+  - decode `59962.71 ms / 31`, `0.52 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BK is slower by `26491.12 ms`.
+- Mechanism evidence:
+  - The intended page-cache/readahead reduction backfired:
+    - Phase 7BK `pgmajfault=2339979`;
+    - Phase 7BK `workingset_refault_file=508073`;
+    - these are much worse than recent Phase 7AS-shaped runs, which were around
+      `pgmajfault` under one million and `workingset_refault_file` around
+      `262k`.
+  - Expert-pack wait worsened:
+    - Phase 7AS `iouring_wait_us=11567536`;
+    - Phase 7BK `iouring_wait_us=13161474`.
+  - Main pinned stage worsened:
+    - Phase 7AS main `host_stage=18631.890 ms`;
+    - Phase 7BK main `host_stage=21508.423 ms`.
+  - Gate pinned stage worsened:
+    - Phase 7AS gate `host_stage=2245.529 ms`;
+    - Phase 7BK gate `host_stage=2704.397 ms`.
+  - Down fallback bucket worsened:
+    - Phase 7BK down `fallback_t0=45.855 ms/call`;
+    - Phase 7AS was in the mid-30 ms/call range.
+- Analysis:
+  - `MADV_RANDOM` did suppress useful readahead for this workload rather than
+    just avoiding wasteful readahead.
+  - The CPU fallback access pattern is sparse but still benefits from kernel
+    readahead or clustered file-cache behavior across expert-pack/GGUF pages.
+  - Removing that behavior greatly increased major faults and file refaults,
+    which dominated any theoretical page-cache savings.
+  - This result strengthens the next-roadmap conclusion: do not tune mmap
+    advice further as a blind global policy. The next useful step is
+    fallback-source profiling and a controlled non-file-backed fallback buffer
+    for the tensors/layers that actually fault during decode.
+- Decision:
+  - Reject Phase 7BK.
+  - Reverted the dirty source patch locally and on the remote using reverse
+    patch application.
+  - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
+    source at `1b903cc85`.
+  - Do not use `GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1` in SOTA.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
