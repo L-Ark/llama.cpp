@@ -4683,6 +4683,138 @@ Result handling:
   Phase 7DS/7DU split `UPGATE_PCT=60`, and do not continue this direction
   without a narrower measured reason.
 
+Phase 7DV result - rejected:
+
+- End time: 2026-07-04T05:56:00+08:00.
+- Local plan commit before run: `65bbd3658`.
+- Remote source commit: `65bbd3658`.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-215158Z-n32-phase7dv-upgate50`.
+- Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 65bbd3658
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dv-upgate50"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=50 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+- Exit: `0`, systemd result `success`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT: `74914.19 ms`, below cap.
+- Decode: `34450.35 ms / 31`, `0.90 tok/s`.
+- Memory:
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- Expert pack:
+  - `hits=27585`, `misses=192`;
+  - `read_failures=0`;
+  - `iouring_reads=12319`;
+  - `iouring_bytes=70370148352`;
+  - `iouring_fallbacks=0`.
+- VRAM cache:
+  - down `slots=1008`, `hit_rate=76.1%`, `hits=9979`,
+    `misses=3141`;
+  - upgate `slots=1399`, `hit_rate=34.5%`, `hits=10271`,
+    `misses=19505`.
+- Profile deltas versus Phase 7DU:
+  - down wall improved only `4480.557 -> 4385.411 ms`
+    (`-95.146 ms`);
+  - down stage improved `4161.386 -> 4087.962 ms`
+    (`-73.424 ms`);
+  - up/gate wall regressed `7904.478 -> 9375.381 ms`
+    (`+1470.903 ms`);
+  - up/gate kernel regressed `7808.690 -> 9298.729 ms`
+    (`+1490.039 ms`);
+  - decode regressed `31343.27 -> 34450.35 ms`
+    (`+3107.08 ms`).
+
+Decision:
+
+- Reject `UPGATE_PCT=50`.
+- No source revert required because this was a parameter-only experiment.
+- Keep accepted SOTA env at `UPGATE_PCT=60`.
+- The result disproves the assumption that down cache has higher marginal
+  value. It shows the opposite: reducing upgate by `280` slots caused a much
+  larger regression than the gain from adding `202` down slots.
+
+## Phase 7DW: reverse VRAM split toward upgate cache
+
+Start time:
+
+- 2026-07-04T05:57:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DV shows upgate cache has much higher marginal value than down cache:
+  - losing `280` upgate slots added `1470.903 ms` up/gate wall;
+  - gaining `202` down slots saved only `95.146 ms` down wall.
+- Although Phase 7DU's upgate `stage_ms` column was small, the total up/gate
+  wall and kernel columns are sensitive to upgate cache residency. The likely
+  reason is that misses feed into the measured up/gate kernel path through
+  wait/compute scheduling rather than appearing as standalone stage time.
+
+Theory and upper bound:
+
+- Set `UPGATE_PCT=70` while keeping `VRAM_MIB=15000`.
+- Approximate cache capacity change versus Phase 7DU:
+  - upgate slots increase from about `1679` to about `1959`
+    (`+280`, `+17%`);
+  - down slots decrease from about `806` to about `604`
+    (`-202`, `-25%`).
+- Empirical bound from Phase 7DV slope:
+  - recovering `280` upgate slots could save up to `1470.903 ms`;
+  - losing `202` down slots might cost around `95 ms` if the reverse slope is
+    symmetric, but may cost more because lower down residency can increase
+    iouring/H2D pressure.
+- Conservative expected bound:
+  - target decode improvement `>500 ms` versus Phase 7DU;
+  - hard best-case decode estimate
+    `31343.27 - 1470.903 + 95.146 = 29967.513 ms`;
+  - best-case token rate estimate `31 / 29.967513 = 1.03 tok/s`.
+
+Implementation:
+
+- No source patch.
+- Use the same profiling runner and Phase 7DS packs.
+- Only change `UPGATE_PCT=70`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 65bbd3658
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dw-upgate70"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=70 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- n32 decode must be faster than Phase 7DU `31343.27 ms / 31`.
+
+Result handling:
+
+- If n32 passes, run n96 confirmation with `UPGATE_PCT=70`.
+- If n32 fails, reject and keep `UPGATE_PCT=60`; do not continue broad split
+  sweeps without a more direct model for per-tensor cache value.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
