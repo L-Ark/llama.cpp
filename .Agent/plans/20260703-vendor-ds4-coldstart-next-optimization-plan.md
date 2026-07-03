@@ -1944,3 +1944,27 @@ Fallback if source-level lookahead is rejected:
 
 - Do not repeat closed full-model probes from compact mmap packs, transient repack, down batch staging, CUDA graph, n-gram speculative decoding, or no-source lookahead.
 - The next plan must introduce a genuinely new mechanism with a microbench or short diagnostic gate first, such as a real compatible draft model, a GGUF/runtime path with actual DeepSeek MTP heads, or a GPU-resident up/down compute path whose staging cost is proven lower than current CPU fallback before a full strict-cold run.
+
+### 2026-07-03 Source-Level Lookahead Compatibility Audit Result
+
+Artifact:
+
+- `.Agent/runs/20260703-vendor-ds4-coldstart/source-lookahead-compat-audit-summary.json`.
+
+Audit findings:
+
+- `examples/lookahead/lookahead.cpp` requires true parallel KV branches: it sets `n_parallel = W + G + 1`, copies seq `0` to branch sequences, assigns the current token to all sequence IDs, and then writes lookahead/verification tokens into different sequence IDs.
+- `src/llama-memory-deepseek4.cpp` currently has no functional branch-copy semantics: `llama_memory_deepseek4::seq_cp()` and `seq_keep()` are no-ops, while `seq_rm()` only supports full removal/clear. This explains the observed `sequence 1 is coupled to 0 ... diverged` failure: branch sequence metadata was never activated by the prefix copy.
+- Patching only metadata is insufficient. DeepSeek4 `init_batch()` explicitly rejects ubatches unless `n_seqs_unq == 1`, with the runtime error that DeepSeek4 currently supports a single sequence per ubatch.
+- More importantly, DeepSeek4 state is stored in global position-indexed tensors such as `attn_kv` and `indexer_kv`; it does not have the normal KV cache cell table that can attach different sequence IDs to different cells. Lookahead with `W >= 2` creates divergent branch tokens at the same positions across different sequence IDs, which the current DeepSeek4 memory model cannot represent correctly.
+
+Decision:
+
+- Reject source-level lookahead as the next immediate tiny-probe path. A tiny `W/N/G` run would either fail the same coupled-sequence/runtime single-sequence checks, or require patches that pass checks without representing correct branch KV state.
+- Do not implement a default-off tiny lookahead probe for DeepSeek4 unless the memory model is redesigned to support per-branch KV/state storage and correct `seq_cp`/`seq_rm` semantics. That redesign would be large, would multiply memory pressure, and has no defensible path under the current 16GB host RAM and tight VRAM budget.
+- Current accepted SOTA remains `4.2 tok/s`; no new model run was performed for this rejected path because it failed the source-audit correctness gate before execution.
+
+Next pivot:
+
+- Do not repeat lookahead, n-gram, compact mmap, transient repack, down-batch staging, or CUDA graph probes from already rejected classes.
+- The next candidate must be a different high-bound mechanism with a microbench or short diagnostic gate first. Acceptable classes are: a real compatible DeepSeek draft/MTP artifact, a GGUF/runtime path with actual DeepSeek MTP heads, or a GPU-resident up/down compute path whose staging and compute savings are proven before any full strict-cold France run.

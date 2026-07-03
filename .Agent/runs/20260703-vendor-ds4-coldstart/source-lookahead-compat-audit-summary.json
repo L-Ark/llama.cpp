@@ -1,0 +1,38 @@
+{
+  "timestamp_utc": "2026-07-03T15:29:07Z",
+  "source_head": "ef4007521dfa4e48ace67616c402040f053689cd",
+  "objective": "Evaluate source-level lookahead compatibility for vendor DeepSeek4 after no-source lookahead failed.",
+  "accepted_sota_tok_s": 4.2,
+  "target_tok_s": 10.0,
+  "hard_bound_needed": {
+    "accepted_tokens_per_target_forward": 2.380952380952381,
+    "note": "Speculative/lookahead path must commit about 2.38 tokens per expensive target forward pass before overhead to reach 10 tok/s from 4.2 tok/s."
+  },
+  "findings": [
+    {
+      "file": "examples/lookahead/lookahead.cpp",
+      "evidence": "Lookahead hardcodes W=15,N=5,G=15, sets n_parallel=W+G+1, copies seq 0 to all branch seqs, then adds current token to seq_id_all and branch/verification tokens to separate sequence IDs.",
+      "impact": "The algorithm requires multiple parallel KV sequences sharing a prefix and then diverging."
+    },
+    {
+      "file": "src/llama-memory-deepseek4.cpp",
+      "evidence": "llama_memory_deepseek4::seq_cp and seq_keep are no-ops; seq_rm only supports full removal/clear and rejects partial removal.",
+      "impact": "The initial lookahead prefix copy does not actually activate branch sequence metadata, causing the observed coupled-sequence/diverged failure."
+    },
+    {
+      "file": "src/llama-memory-deepseek4.cpp",
+      "evidence": "init_batch returns FAILED_PREPARE unless each ubatch has n_seqs_unq == 1; comments/logging state the DeepSeek4 runtime currently supports a single sequence per ubatch.",
+      "impact": "Even if seq_cp metadata were patched, lookahead batches with a token assigned to multiple seq IDs would be rejected by DeepSeek4 runtime preparation."
+    },
+    {
+      "file": "src/llama-memory-deepseek4.cpp and src/models/deepseek4.cpp",
+      "evidence": "DeepSeek4 runtime state tensors are position-indexed global tensors such as attn_kv and indexer_kv, updated with ggml_set_rows by position; there is no per-sequence cell table like the normal KV cache.",
+      "impact": "W>=2 lookahead creates different branch tokens at the same positions across different seq IDs. Current DeepSeek4 memory cannot represent those divergent branch states without a larger redesign adding per-branch state storage/copy semantics."
+    }
+  ],
+  "decision": "Reject source-level lookahead as the next immediate tiny-probe path under the current DeepSeek4 memory model.",
+  "reason": "A tiny W/N/G probe would either fail at the same coupled-sequence/runtime single-seq checks or require source patches that pass checks without representing correct branch KV state. Such a run would not be correctness-safe and cannot be used toward SOTA.",
+  "source_changes": "none",
+  "runtime_result": "not run; rejected at source audit gate before model execution",
+  "next_pivot": "Do not repeat lookahead/no-source speculative probes. Next plan must introduce a different high-bound mechanism such as compatible draft/MTP artifacts or a GPU-resident up/down compute path with a microbench/short diagnostic proving staging and compute savings before full strict-cold model runs."
+}
