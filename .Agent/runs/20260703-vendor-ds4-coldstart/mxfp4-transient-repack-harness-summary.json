@@ -1,0 +1,44 @@
+{
+  "time_note": "2026-07-03 transient per-op MXFP4 repack microbench",
+  "source_head_before_record_commit": "265f6494d727227cd039a9fdf45cde1fbacd5904",
+  "harness": ".Agent/run-tools/mxfp4_transient_repack_harness.cpp",
+  "runner": ".Agent/run-tools/run_mxfp4_transient_repack_harness.sh",
+  "raw_log": ".Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-transient-repack-harness-latest.log",
+  "sha256": {
+    "harness_cpp": "5b509a6def16494634733f6547b63142b8873c7cb8f3fde8fd5e0bd97c9e722c",
+    "runner_sh": "06c614f8176cc7fda84c6096c7cd2b3df3a6336b26b0e5e78c860c421918b611",
+    "raw_log": "0ff206f435aae6fac6f96b48ffb2c65c5460c9459aacd26822541c52488b9b82"
+  },
+  "iters": 300,
+  "results": [
+    {
+      "shape": "up-like",
+      "k": 4096,
+      "rows": 2048,
+      "src_mib": 4.25,
+      "tmp_mib": 4.25,
+      "row_ms": 131.333,
+      "transient_ms": 145.574,
+      "repack_only_ms": 52.681,
+      "gemv_inside_ms": 92.893,
+      "speedup_incl_repack": 0.902,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    {
+      "shape": "down-like",
+      "k": 2048,
+      "rows": 4096,
+      "src_mib": 4.25,
+      "tmp_mib": 4.25,
+      "row_ms": 137.045,
+      "transient_ms": 149.12,
+      "repack_only_ms": 56.615,
+      "gemv_inside_ms": 92.505,
+      "speedup_incl_repack": 0.919,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    }
+  ],
+  "decision": "Rejected at microbench stage. Transient per-op repack is numerically exact but slower than row-wise current runtime dot once repack cost is paid every iteration, failing the >=1.15x threshold. No runtime source candidate or full model run is justified."
+}

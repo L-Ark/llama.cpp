@@ -1642,3 +1642,58 @@ Decision:
 - This does not justify a new strict-cold model candidate because it is the already-evaluated repack direction. The warm speedup is not enough to overcome the strict 16GB cold-start constraints once repack memory, hotset lookup, page-cache displacement, and integration overhead are included.
 - Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
 - Next runtime source work requires a new correctness-identical kernel/layout idea with a stronger hard upper bound than the existing repack path. Until then, do not run another full model SOTA candidate.
+
+### 2026-07-03 Transient Per-Op MXFP4 Repack Microbench Design
+
+Design:
+
+- Goal: test a new CPU fallback compute mechanism that differs from the rejected persistent/hotset repack direction.
+- Observation from `ggml_compute_forward_mul_mat_id_one_chunk()`: for decode-like `cne1=1`, CPU fallback repeatedly calls row-wise `ggml_vec_dot_mxfp4_q8_0()` over all output rows of one routed expert. The same Q8 activation row is reused for thousands of MXFP4 rows.
+- Existing harness result: persistent 8x8 repack GEMV is numerically exact and warm-compute faster (`1.425x` up-like, `1.499x` down-like), but persistent/hotset integration was rejected because it consumes memory and does not fit the 16GB cold-start/page-cache constraints.
+- New candidate idea: repack only the current expert matrix into a small per-op/per-thread temporary buffer, immediately run `ggml_gemv_mxfp4_8x8_q8_0()`, then discard/reuse the buffer. This avoids persistent anonymous RAM and avoids changing routing, top-k, gate cache, O_DIRECT pack, or model math.
+
+Theory and hard upper bound:
+
+- Temporary memory size is bounded by one expert matrix per worker: up-like and down-like DS4 shapes are about a few MiB each after MXFP4 8x8 repack, so even 20 workers should be tens to low hundreds of MiB, not GiB. This must still be validated under the 16GB cgroup if it reaches runtime testing.
+- The transient path reads the mmap source once to repack and then reads the temporary hot buffer for GEMV. It may reduce repeated activation reload/loop overhead, but it may increase cold source traffic and anonymous memory pressure.
+- Fine trace measured decode-like `cne1=1` up/down fallback at about `21199.9 ms` wall-equivalent. If transient repack including repack cost gives speedup `S`, the optimistic bound is `21199.9*(1-1/S) ms`. At `S=1.15`, the bound is about `2.8s`; at `S=1.30`, about `4.9s`. This is large enough to test only if a microbench includes repack cost every iteration.
+
+Practice plan:
+
+- Add a run-tool-only transient repack harness; do not edit runtime source yet.
+- Benchmark row-wise current runtime dot against `repack every iteration + ggml_gemv_mxfp4_8x8_q8_0()` on DS4-like shapes.
+- Required output: compile command, CPU flags, shape, row-wise ms, transient repack+GEMV ms, repack-only ms, speedup including repack, max/mean abs, and checksum/sink.
+- Proceed to runtime source design only if speedup including repack is at least `1.15x` on both up-like and down-like shapes with `max_abs=0` and `mean_abs=0`.
+- If the harness fails that threshold, reject transient repack at microbench stage and do not run a full model candidate.
+
+Runtime acceptance if microbench passes:
+
+- Before touching runtime source, write a new plan subsection with the exact default-off env, scratch-buffer ownership, memory bound, correctness comparison method, and rollback plan.
+- First runtime run must be diagnostic/short or profile-only and prove CPU fallback timing decreases without RAM/correctness/gate counter regressions.
+- A full strict-cold France SOTA run is allowed only after the diagnostic shows the targeted counter decreases. Promotion still requires `eval_tok_s > 4.2`, strict 16GB including page cache, TTFT gate, pack direct failures `0`, and complete coherent France output.
+
+Transient per-op MXFP4 repack microbench result:
+
+- Harness: `.Agent/run-tools/mxfp4_transient_repack_harness.cpp`, sha256 `5b509a6def16494634733f6547b63142b8873c7cb8f3fde8fd5e0bd97c9e722c`.
+- Runner: `.Agent/run-tools/run_mxfp4_transient_repack_harness.sh`, sha256 `06c614f8176cc7fda84c6096c7cd2b3df3a6336b26b0e5e78c860c421918b611`.
+- Raw log: `.Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-transient-repack-harness-latest.log`, sha256 `0ff206f435aae6fac6f96b48ffb2c65c5460c9459aacd26822541c52488b9b82`.
+- Versioned summary: `.Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-transient-repack-harness-summary.json`.
+
+Results with `iters=300`:
+
+| Shape | k | rows | src MiB | tmp MiB | row_ms | transient_ms | repack_only_ms | GEMV inside ms | speedup incl repack | max_abs | mean_abs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| up-like | 4096 | 2048 | 4.250 | 4.250 | 131.333 | 145.574 | 52.681 | 92.893 | 0.902x | 0 | 0 |
+| down-like | 2048 | 4096 | 4.250 | 4.250 | 137.045 | 149.120 | 56.615 | 92.505 | 0.919x | 0 | 0 |
+
+Diagnosis:
+
+- The transient path is numerically exact, but it fails the required `>=1.15x` speedup threshold once repack cost is paid every iteration.
+- The existing 8x8 GEMV kernel remains faster than row-wise dot by itself, but per-op repack costs about `52-57 ms` over 300 iterations for these shapes, more than the GEMV saving.
+- Under cold-start model execution this would likely be worse because the transient path adds source copy, temporary writes, and anonymous memory pressure. It does not provide a defensible SOTA path under the strict 16GB page-cache constraint.
+
+Verdict:
+
+- Rejected at microbench stage. Do not implement transient per-op MXFP4 repack in runtime source and do not run a full model candidate for this direction.
+- Current accepted SOTA remains historical `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
+- Remaining work requires a new mechanism beyond row-wise dot, persistent/hotset repack, and transient per-op repack.
