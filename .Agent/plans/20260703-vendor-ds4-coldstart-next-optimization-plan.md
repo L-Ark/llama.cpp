@@ -3284,3 +3284,43 @@ Next direction:
    - require nonzero meaningful down-cache hit rate and stage time below `3.705 ms/call` in a short diagnostic before any full run.
 3. If a cache admission design cannot show a hard bound above `4.2 tok/s`, abandon down-batch and return to CPU fallback source/page-stall elimination.
 4. Before the next implementation, update this plan with the exact cache policy, expected covered calls/bytes, VRAM cost, gate hit impact, theoretical token-rate bound, and rejection criteria.
+
+### 2026-07-04 Down Cache Admission Bound: No-Run Decision
+
+Inputs:
+
+- Corrected down batch compare run: `eval_tok_s=2.6` for `-n 192`, so approximate generation time is `192/2.6 = 73.8s`.
+- Accepted SOTA target to beat: `4.2 tok/s`, approximate generation time `192/4.2 = 45.7s`.
+- Required saving from the corrected down-batch path to merely tie/beat SOTA: about `28.1s`.
+- Corrected down-batch measured staging:
+  - `calls=7644`
+  - `stage=4.740 ms/call`
+  - `stage_total≈36.24s`
+  - runtime route copies/misses: `24889`
+  - implied average staging cost per route copy: about `1.46 ms`.
+- Down-only hotset metadata:
+  - `/root/lfz/runs/vendor-ds4-16gb/20260703T042727Z-next-down-only-hotsets/decode_top512_down_meta.tsv`
+  - sha256 `4a0db23c4e2bf56bcc19cd4288435161d67508a54d1f2e263625818adc058131`
+
+Coverage table:
+
+| Hotset | fallback_ms | route calls | payload |
+| --- | ---: | ---: | ---: |
+| top34 down | `1195.564` | `3316` | `144.5 MiB` |
+| top60 down | `1755.483` | `4771` | `255.0 MiB` |
+| top128 down | `2673.535` | `6754` | `544.0 MiB` |
+| top256 down | `3785.421` | `8483` | `1088.0 MiB` |
+| top512 down | `5319.314` | `10623` | `2176.0 MiB` |
+
+Hard-bound estimate:
+
+- A perfect 60-slot pinned down cache can only cover about `4771` of `24889` route copies. At the measured `~1.46 ms/copy`, the upper-bound stage saving is about `6.9s`.
+- Corrected down batch would improve from roughly `73.8s` to `66.9s`, or only about `2.9 tok/s`, still far below the accepted `4.2 tok/s`.
+- Even a perfect top512 down hotset would cover about `10623` route copies, upper-bound stage saving about `15.5s`, giving roughly `3.3 tok/s`, still below accepted SOTA and requiring `2.125 GiB` of payload that cannot fit without materially displacing the gate cache.
+- Removing all measured down stage time would reach about `5.1 tok/s`, but that requires eliminating nearly all `24889` route loads, not a small pinned hotset. This would need a much larger resident set or a fundamentally different read/compute pipeline.
+
+Decision:
+
+- Do not implement a 60-slot or top128 pinned/admission down cache. Its hard upper bound is below the accepted `4.2 tok/s` SOTA.
+- Do not spend more runs on small down-cache admission policies unless the design changes the amount of removable stage time, not merely which `255-544 MiB` subset is cached.
+- The next implementation must target a larger bottleneck class: either combined up+down fallback elimination with a new movement model, or cold-legal CPU fallback source/page-stall reduction that does not trade away gate cache.
