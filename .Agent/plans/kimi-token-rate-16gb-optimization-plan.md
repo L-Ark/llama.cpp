@@ -20169,6 +20169,131 @@ Rollback:
 - If the source remains default-off and useful for future exact preload tests,
   it may be retained as infrastructure; otherwise revert it.
 
+Phase 7CU result - rejected:
+
+- result timestamp: 2026-07-03T16:20:00Z.
+- plan commit:
+  `0746108e6` (`docs: plan kimi phase7cu exact down preload`).
+- source commit:
+  `5b7495ba6` (`cuda: add exact tensor profile preload mode`).
+- rollback commit:
+  `005d72f8f` (`Revert "cuda: add exact tensor profile preload mode"`).
+- source status:
+  - exact tensor preload patch was reverted because the activated mechanism
+    regressed both performance and down-cache behavior;
+  - Phase 7CT default-off up/gate CSV profiler remains.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-161742Z-n32-phase7cu-exact-down-profile-l1-l2`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-161742Z-n32-phase7cu-exact-down-profile-l1-l2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cu_repro.sh
+```
+
+- activation:
+  - `env.txt` contained
+    `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv`;
+  - `env.txt` contained `GGML_MOE_VRAM_PROFILE_EXACT_TENSOR=1`;
+  - `env.txt` contained `GGML_MOE_VRAM_PROFILE_PROTECT=1`;
+  - `env.txt` contained `GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2`;
+  - stderr showed profile file loaded:
+    `profile preload: loaded 180 entries from ...phase7cr-l1-l2-down-profile.csv`;
+  - up/down CSV artifacts existed:
+    - `up-gate-profile.csv`: `870` lines;
+    - `down-batch-profile.csv`: `1645` lines.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `74935.32 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `35282.08 ms / 31`, `0.88 tok/s`;
+  - slower than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `2064.42 ms`;
+  - slower than Phase 7CT diagnostic `33025.25 ms / 31` by `2256.83 ms`.
+- memory at finish:
+  - `memory.current.final=15140134912`;
+  - `file=14900105216`;
+  - `inactive_file=7215472640`;
+  - `active_file=7684087808`;
+  - `kernel=236646400`;
+  - `anon=446464`.
+- expert movement:
+  - expert pack `iouring_reads=14292`;
+  - expert pack `iouring_bytes=86197207040`;
+  - expert pack `iouring_wait_us=18535120`;
+  - down cache hit rate collapsed to `29.8%`:
+    - hits `3912`;
+    - misses `9208`;
+    - preloads `685`;
+    - pinned `685`;
+  - Phase 7CT comparison was down hit rate `73.6%`, hits `9659`,
+    misses `3461`, preloads `3664`, pinned `0`.
+
+Mechanism comparison for target rows:
+
+- `blk.1.ffn_down_exps.weight`, type `11`:
+  - Phase 7CT baseline: stage `696.971 ms`, wall `702.384 ms`,
+    hits `74`, misses `174`;
+  - Phase 7CU: stage `768.597 ms`, wall `774.993 ms`,
+    hits `4`, misses `244`;
+  - regression: stage `+71.626 ms`, misses `+70`.
+- `blk.2.ffn_down_exps.weight`, type `11`:
+  - Phase 7CT baseline: stage `658.877 ms`, wall `664.098 ms`,
+    hits `98`, misses `150`;
+  - Phase 7CU: stage `808.282 ms`, wall `814.031 ms`,
+    hits `11`, misses `237`;
+  - regression: stage `+149.405 ms`, misses `+87`.
+- `blk.4.ffn_down_exps.weight`, type `23`:
+  - Phase 7CT baseline: stage `368.159 ms`, wall `396.839 ms`,
+    hits `79`, misses `169`;
+  - Phase 7CU: stage `419.691 ms`, wall `450.133 ms`,
+    hits `14`, misses `234`.
+- `blk.60.ffn_down_exps.weight`, type `11`:
+  - Phase 7CT baseline: stage `362.158 ms`, wall `368.986 ms`,
+    hits `86`, misses `170`;
+  - Phase 7CU: stage `325.965 ms`, wall `333.474 ms`,
+    hits `2`, misses `254`.
+
+Gap analysis:
+
+- The exact match did avoid the previous up/gate/down name confusion, but
+  combining exact preload with `GGML_MOE_VRAM_PROFILE_PROTECT=1` pinned `685`
+  down-cache slots.
+- That over-protected a broad set of profile entries inside an `806` slot down
+  pool, leaving too little adaptive capacity for actual routed experts.
+- The result was worse global down hit rate, more expert-pack bytes, higher
+  `iouring_wait_us`, and slower decode.
+- Therefore the next down-residency attempt must not pin hundreds of entries in
+  the shared down pool. It needs either:
+  - a much smaller per-layer/per-expert protected set; or
+  - an admission policy that protects only after confirming repeated decode
+    reuse in the current run; or
+  - a detached prefetch path that does not evict live down-cache entries.
+
+Decision:
+
+- Reject Phase 7CU.
+- Revert source commit `5b7495ba6`; rollback commit is `005d72f8f`.
+- Do not run n32 confirmation or n96.
+- Keep Phase 7CC as accepted SOTA.
+- Keep Phase 7CT diagnostic profiler only.
+- Next plan should avoid broad protected profile preload and instead test a
+  tiny cap such as per-tensor top `8-16` experts or a non-protected admission
+  policy with explicit hit/miss validation before promotion.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
