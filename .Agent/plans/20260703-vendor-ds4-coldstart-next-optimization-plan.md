@@ -5096,3 +5096,65 @@ Conclusion:
 - Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
 - This suggests the next bottleneck is not only miss count; the remaining source movement, sync/scatter overhead, or loss of runtime insert reuse matters.
 - Next source-level direction should preserve a small runtime insert pool or reduce miss-path H2D/sync cost, rather than fully disabling runtime cache insertions.
+
+### 2026-07-03T23:22Z Protected Prefix Plus Runtime Pool Design
+
+Goal:
+
+- Combine the useful part of protected prefill with the useful part of runtime cache insertion.
+- Protect the high-frequency prefill prefix, but leave a small unprotected runtime insert pool for repeated tail misses.
+
+Bottleneck after protected-all:
+
+- Protected top3192 achieved the predicted `33623 hits / 1528 misses`, but `eval_tok_s=4.4` only tied SOTA.
+- It also had `cache_inserts=0`, so repeated out-of-profile/profile-tail misses could not be reused.
+- Current unprotected top3000 has worse theoretical protection but allows runtime inserts; it remains the accepted `4.4 tok/s` SOTA.
+
+Hard-bound sequential simulation:
+
+Using the promoted top3000 trace order, current admission profile, `3192` total slots, protected top-N prefix, and an LRU runtime pool of `3192 - N` unprotected slots:
+
+| Protected prefix | Runtime pool slots | Sim hits | Sim misses | Sim hit rate | Runtime-pool hits |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| `3000` | `192` | `33491` | `1660` | `95.28%` | `252` |
+| `3072` | `120` | `33566` | `1585` | `95.49%` | `183` |
+| `3136` | `56` | `33633` | `1518` | `95.68%` | `122` |
+| `3192` | `0` | `33623` | `1528` | `95.65%` | `0` |
+
+Hypothesis:
+
+- `3136` protected prefix + `56` runtime slots is the best predicted point: it slightly beats protected top3192's miss count while avoiding full-cache eviction of protected entries.
+- It has lower prefill cost than top3192 and preserves enough runtime insertion to catch repeated tail keys.
+
+Implementation plan:
+
+- Re-apply the default-off protected-slot cache patch already tested:
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROTECT=1` marks prefill slots protected.
+  - normal runtime insertions use empty slots first and then evict only unprotected slots.
+  - if no unprotected slots exist, insertion fails and falls back to the staging buffer.
+- No behavior change when the env is unset.
+- Run protected `PREFILL_LIMIT=3136` first. If it exceeds `4.4`, commit/push source/docs/artifacts and rerun from pushed source before promotion.
+- If it only ties or regresses, revert source again and record rejection.
+
+Practice config:
+
+- strict cold `drop_caches`, 16GB cgroup, `MemorySwapMax=0`.
+- vendor DeepSeek only, `cpu_moe=40`, gate O_DIRECT pack, gate one-stream.
+- env delta:
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3136`
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROTECT=1`
+- Keep CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Acceptance gates:
+
+- Promote only if `eval_tok_s > 4.4`, and a pushed-source rerun also exceeds `4.4`.
+- France output must be complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+
+Rejection rules:
+
+- Reject if `eval_tok_s <= 4.4`, correctness fails, TTFT exceeds the gate, RAM gate fails, or pack direct failures/fallbacks appear.
+- If rejected, revert source and push only docs/artifacts.
