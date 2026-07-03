@@ -2982,6 +2982,177 @@ Result handling:
 - If promising, write Phase 7DO before source edits.
 - Phase 7DO must be default-off or tightly scoped, and must run n32 first.
 
+Phase 7DN result - rejected for implementation:
+
+- Result timestamp:
+  `2026-07-04T00:00:00+08:00`.
+- Plan commit:
+  `2562a5b65` (`docs: plan kimi phase7dn q4 isolated pool diagnostic`).
+- Source status:
+  - no source patch;
+  - no runtime behavior change;
+  - no model run.
+- Artifacts used:
+  - Phase 7DL:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-194853Z-n96-phase7dl-post-rollback-bottleneck`;
+  - Phase 7DM:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-195859Z-n32-phase7dm-q4-down-batch`.
+- Q4_0 baseline fallback from Phase 7DL:
+  - Q4_0 decode down fallback total:
+    `4805.416 ms`;
+  - references:
+    `4312`;
+  - tensor/expert pairs:
+    `1049`;
+  - Q4_0 slot size:
+    `7.875 MiB`.
+- Top Q4_0 tensors by baseline decode fallback:
+  - `blk.6.ffn_down_exps.weight`: `805.864 ms`, `148` experts;
+  - `blk.9.ffn_down_exps.weight`: `755.872 ms`, `162` experts;
+  - `blk.18.ffn_down_exps.weight`: `748.736 ms`, `130` experts;
+  - `blk.8.ffn_down_exps.weight`: `699.864 ms`, `166` experts;
+  - `blk.7.ffn_down_exps.weight`: `662.904 ms`, `159` experts;
+  - `blk.10.ffn_down_exps.weight`: `585.920 ms`, `156` experts;
+  - `blk.15.ffn_down_exps.weight`: `546.256 ms`, `128` experts.
+- Hot pair coverage estimate:
+  - `8` pairs: `63.0 MiB`, `446.977 ms`, `9.3%`;
+  - `16` pairs: `126.0 MiB`, `775.471 ms`, `16.1%`;
+  - `32` pairs: `252.0 MiB`, `1224.713 ms`, `25.5%`;
+  - `64` pairs: `504.0 MiB`, `1749.743 ms`, `36.4%`;
+  - `96` pairs: `756.0 MiB`, `2132.368 ms`, `44.4%`;
+  - `128` pairs: `1008.0 MiB`, `2430.655 ms`, `50.6%`;
+  - `256` pairs: `2016.0 MiB`, `3266.049 ms`, `68.0%`;
+  - `512` pairs: `4032.0 MiB`, `4209.460 ms`, `87.6%`.
+- Phase 7DM activation comparison:
+  - Q4_0 decode fallback dropped to about `0.001-0.002 ms/call`;
+  - but Q4_0 GPU batch decode total was not consistently faster:
+    - `blk.6`: baseline fallback `10.469 ms/call`, Q4 batch
+      `13.713 ms/call`;
+    - `blk.7`: baseline fallback `8.613 ms/call`, Q4 batch
+      `10.398 ms/call`;
+    - `blk.18`: baseline fallback `9.727 ms/call`, Q4 batch
+      `7.910 ms/call`;
+    - `blk.9`: baseline fallback `9.820 ms/call`, Q4 batch
+      `9.805 ms/call`;
+    - `blk.10`: baseline fallback `7.613 ms/call`, Q4 batch
+      `8.742 ms/call`;
+    - `blk.15`: baseline fallback `7.098 ms/call`, Q4 batch
+      `7.709 ms/call`;
+    - `blk.8`: baseline fallback `9.093 ms/call`, Q4 batch
+      `8.841 ms/call`.
+
+Gap analysis:
+
+- The Q4_0 recoverable time is too diffuse:
+  - a `512 MiB` isolated pool covers only about `1.75 s` n96 gross fallback;
+  - a `1 GiB` isolated pool covers about `2.43 s` n96 gross fallback.
+- This gross number does not subtract:
+  - extra expert-pack reads;
+  - H2D staging;
+  - CUDA Q4_0 batch kernel time;
+  - D2H/scatter;
+  - potential VRAM pressure against the accepted upgate/down pools.
+- Phase 7DM's per-layer GPU totals show that Q4_0 GPU batch is not a reliable
+  per-layer win even before accounting for isolated-pool management overhead.
+- Therefore Phase 7DN does not meet the threshold for a source implementation
+  probe.
+
+Decision:
+
+- Reject Q4_0 isolated pool implementation for now.
+- Keep Q4_0 down on CPU fallback / fallback-pack mmap under the current SOTA.
+- Do not spend VRAM on a Q4_0 pool unless a future trace proves a much more
+  concentrated hotset or a cheaper Q4_0 GPU kernel.
+- Next step: collect down-batch profile CSV on the accepted SOTA path to find a
+  target that does not change the main down slot class.
+
+## Phase 7DO: accepted-path down-batch profile refresh
+
+Start time:
+
+- 2026-07-04T00:00:00+08:00.
+
+Purpose:
+
+- Get per-tensor down batch timing, hit/miss, and stage/kernel/D2H data under
+  the accepted SOTA path.
+- Do not change runtime behavior.
+- Use this to choose the next optimization that avoids:
+  - global Q4_0 admission;
+  - upgate/down split changes already rejected;
+  - combined up/gate staging already rejected.
+
+Current bottleneck:
+
+- Phase 7DL down profile:
+  - calls `4798`;
+  - total `18.712 ms/call`;
+  - CUDA batch `2.576 ms/call`;
+  - fallback `16.092 ms/call`;
+  - batch accepted `4082`;
+  - batch declined `52`.
+- Phase 7DN rejects Q4_0 pool implementation, so the next target must be in
+  accepted down batch behavior:
+  - stage/H2D efficiency;
+  - down prefetch/current overlap;
+  - per-type batch kernel cost;
+  - per-layer hotset behavior inside the existing slot class.
+
+Implementation:
+
+- No source patch.
+- Create `/tmp/run_phase7do_down_profile_repro.sh` from
+  `/tmp/run_phase7cc_repro.sh`.
+- Add only:
+
+```sh
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+```
+
+- Keep accepted SOTA settings:
+  - `N=32` for first diagnostic;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=8`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 2562a5b65
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7do_down_profile_repro.sh
+perl -0pi -e 's#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\$RUN/fallback-profile.csv\n#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\n#' /tmp/run_phase7do_down_profile_repro.sh
+chmod +x /tmp/run_phase7do_down_profile_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7do-down-batch-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7do_down_profile_repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- exit `0`;
+- cold start;
+- `memory.max=15899996160`;
+- `memory.swap.max=0`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- `down-batch-profile.csv` exists and is non-empty.
+
+Result handling:
+
+- Do not promote Phase 7DO as SOTA.
+- If profile overhead materially changes decode, record it as diagnostic only.
+- Use the profile to rank the next behavior-changing source probe.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
