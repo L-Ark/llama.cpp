@@ -3136,3 +3136,151 @@ Immediate direction:
 4. If down/MXFP4 correctness fails, abandon down-batch compute for the current SOTA path.
    - Return to cold-legal source/page-stall elimination or a different target-verified speculative design with a hard upper bound above `4.2 tok/s`.
    - Any new design must update this plan before implementation and must preserve RAM, correctness, and TTFT gates.
+
+### 2026-07-04 Corrected Down Batch Compare Design
+
+Correction to the previous rejection:
+
+- The `20260704_gate13312_downcache256_short` probe intentionally restored the up/gate temporary workspace guard, but it did not restore the known down compact dst guard.
+- Historical diagnostic `20260702-mxfp4-down-batch-dstrows-diagnostic-results` already identified the same failure mode: compact down batch writes `n_active` temporary rows (`tmp + j*ne01`), while the broken allocation/copy path used only `dst_cols=max_dst_id+1`. With top-k pruning, `dst_cols` can be smaller than `n_active`, causing overflow/repeated rows and wrong generation.
+- Therefore the latest wrong output is not enough to conclude MXFP4 down arithmetic itself is bad. The next experiment must restore the down `tmp_dst_rows=max(dst_cols,n_active)` fix and verify with CPU compare before any performance claim.
+
+Temporary source plan:
+
+- Patch `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+  - add `GGML_TYPE_MXFP4` to the batch-supported type list;
+  - add `GGML_TYPE_MXFP4` to compact MMVQ launcher support;
+  - optionally add `GGML_TYPE_MXFP4` to MMQ slot launcher only if the existing template instance compiles;
+  - in `ggml_cuda_moe_stream_batch()`, allocate/copy/zero down temporary `d_dst` and `h_dst` using `tmp_dst_rows=max(dst_cols,n_active)` rather than `dst_cols`.
+- Patch `ggml/src/ggml-cpu/ggml-cpu.c` default-off:
+  - after a successful `ggml_cuda_moe_stream_batch()` call and before clearing `matrix_row_counts`, call `ggml_moe_stream_compare_cpu_result()` for active experts when `GGML_MOE_STREAM_COMPARE_CPU_OUT` is set;
+  - add optional `GGML_MOE_STREAM_COMPARE_CPU_NAME_FILTER` so the compare hook can be scoped to `ffn_down_exps`.
+
+Diagnostic run:
+
+- Strict cold 16GB cgroup, short correctness/compare diagnostic, not a SOTA candidate.
+- Use the corrected batch-probe binary with:
+  - accepted SOTA gate envs;
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13312`;
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=256`;
+  - down top512 pack;
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_STREAM_COMPARE_CPU_OUT={case_dir}/compare_cpu.csv`;
+  - `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=32`;
+  - `GGML_MOE_STREAM_COMPARE_CPU_NAME_FILTER=ffn_down_exps`;
+  - keep runner default `-n 192` so the France correctness gate can pass; override only `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Decision rules:
+
+- If compare shows large numerical error, non-finite output, wrong text, RAM failure, or the same near-zero down-cache hit/stage regression pattern, reject and revert the source again.
+- If compare passes but performance/cache remains bad, reject as a correctness-only success and return to cache admission/staging design.
+- If compare passes and short performance/cache signals unexpectedly improve, update this plan before a full strict cold correctness run.
+- No source from this diagnostic may be committed unless it becomes part of a compliant new SOTA and passes pushed-source reproduction.
+
+### 2026-07-04 Corrected Down Batch Compare Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T195615Z-20260704_corrected_down_batch_compare_full/france-cpu40-vram0gb`
+
+Temporary source probe:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`: enabled MXFP4 for batch diagnostics and fixed down compact temporary dst allocation/copy/zero size to `tmp_dst_rows=max(dst_cols,n_active)`.
+- `ggml/src/ggml-cpu/ggml-cpu.c`: added default-off batch CPU compare after successful `ggml_cuda_moe_stream_batch()` and optional `GGML_MOE_STREAM_COMPARE_CPU_NAME_FILTER`.
+- Source was diagnostic-only and was reverted after the run.
+
+Config:
+
+- Strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`.
+- Accepted SOTA gate envs preserved except `GGML_MOE_STREAM_ONE_CACHE_MIB=13312`.
+- `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_MIB=256`, down top512 pack, `GGML_MOE_IO_BACKEND=iouring`, pinned staging with 4 slots, `GGML_MOE_BATCH_PROFILE=1`.
+- `GGML_MOE_STREAM_COMPARE_CPU_OUT={case_dir}/compare_cpu.csv`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=32`, `GGML_MOE_STREAM_COMPARE_CPU_NAME_FILTER=ffn_down_exps`.
+- Kept runner default `-n 192`; CLI override only `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Metrics:
+
+- `eval_tok_s=2.6`
+- `prompt_tok_s=1.5`
+- `TTFT=31759.606672 ms`
+- `elapsed_seconds=103.47`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15061602304`
+- `memory_max_events=20139`
+- `pgmajfault=224308`
+- `workingset_refault_file=2376126`
+- `ram_ok=true`, `oom_seen=false`, `ram_limit_killed=false`
+- `correctness_ok=true`, `correctness_reason=heuristic_pass_manual_review_required`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. Renowned for its art, fashion, cuisine, and landmarks like the Eiffel Tower, the Louvre, and the Palace of Versailles, France is a major center for culture and history. It is a democratic republic with a strong economy, being a leader in industries such as aerospace, automotive, and luxury goods. France is also famous for its wine regions, such as Bordeaux and Burgundy, and its iconic landmarks, including the Eiffel Tower and the Louvre Museum. The country is a popular tourist destination, attracting millions of visitors each year. France is also known for its cuisine, wine, and fashion, and is a leader in these industries. The country has a rich history and culture, and is a major player in the global economy. France is a founding member of
+```
+
+The answer is semantically about France, coherent, and passes the current correctness heuristic, though it is repetitive and ends mid-sentence due the fixed `-n 192` budget.
+
+Compare result:
+
+- `compare_cpu.csv` rows: `32` data rows.
+- `max_abs_max=1.1920929e-07`
+- `max_mean_abs=1.41827e-08`
+- `mean_of_mean_abs=5.27908e-09`
+- `max_rel=8.37862e-07`
+- Verdict: MXFP4 down batch is numerically correct after the down `tmp_dst_rows` fix, matching the earlier 2026-07-02 diagnosis.
+
+Counters:
+
+- Gate one-stream cache init: `13.0 GiB`, `3132` slots.
+- Down batch cache: requested `256 MiB`, actual `256 MiB`, `60` slots of `4.25 MiB`.
+- CUDA memory at report time: free about `164 MiB`.
+- Down batch expert pack: `hits=14360 misses=10529 read_failures=0 direct_reads=14360 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 entries=512`.
+- Down batch VRAM cache: `hits=1 misses=24889 preloads=0 hit_rate=0.0%`.
+- Down batch profile: `calls=7644 avg_active=3.26 stage=4.740 ms quant=0.000 ms kernel=0.031 ms d2h=0.005 ms scatter=0.008 ms total=4.786 ms/call wall=4.797 ms/call`.
+- Pinned staging: `copies=24889 waits=24885 fallbacks=0 slots=4 slot=4.25 MiB host_stage=34500.221 ms h2d=4193.746 ms`.
+- Gate one expert pack: `hits=5071 misses=1235 reads=5071 bytes=22598647808 failures=0 direct_reads=5071 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM cache: `hits=41562 misses=6306 hit_rate=86.8%`.
+
+Artifact hashes:
+
+- `summary.json`: `3a964083cbd3d0582f3075ffb8a61a766a84c568bfdd5cac149568c2ca5f13de`
+- `stdout.txt`: `6d6bdf42b0b1dc1d93c03a4f1f09a78103eba1aa0a4a3346ecc2fc7c4e682d4d`
+- `stderr.txt`: `fbf2467da71505c51909301e06440f2d018c87c34d4d59125261bd6a21cd6046`
+- `compare_cpu.csv`: `bee5bd2f15bd33eb3d21ed9ba2d6b1a1a8fa02818fb4f07a926fa9896a1a420d`
+
+Verdict:
+
+- Correctness success, performance rejected. This is not a SOTA and must not be promoted.
+- The arithmetic/root-cause question is resolved: the previous wrong output came from missing the down `tmp_dst_rows=max(dst_cols,n_active)` fix, not from inherent MXFP4 down arithmetic error.
+- The remaining bottleneck is staging/cache locality: the CUDA kernel is only `0.031 ms/call`, while stage is `4.740 ms/call`, and the 60-slot down cache still has effectively no reuse.
+- Gate behavior stayed healthy (`86.8%` hit rate), so the `13312MiB` gate-cache headroom is not the problem. The down cache admission/LRU policy and pack/source movement are the problem.
+
+Rollback:
+
+- Reverted `ggml/src/ggml-cpu/ggml-cpu.c` and `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Rebuilt clean `build-ds4-moe-stream-batch-probe`.
+- Post-rollback hashes:
+  - `build-ds4-moe-stream-batch-probe/bin/llama-cli`: `866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`
+  - `build-ds4-moe-stream-batch-probe/bin/libggml-cuda.so`: `93c83225fcdfd83aeddfe59238b1f8430cf285d0583c282b40dce1baf95c044b`
+  - `build-ds4-moe-stream-batch-probe/bin/libggml-cpu.so`: `57c7bd0544ae998a69c5f00f35b5a29a6147a811b10ea37083b022d13f878183`
+  - accepted `build-ds4-moe-stream/bin/llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- Worktree source was clean after rollback; only this plan document remained modified.
+
+### 2026-07-04 Next Plan After Corrected Down Batch Compare
+
+Current accepted SOTA:
+
+- Still `4.2 tok/s`; this run is only `2.6 tok/s`.
+- Down-batch correctness is now proven for the sampled MXFP4 routes, but down-batch performance is rejected.
+
+Next direction:
+
+1. Stop testing down-batch arithmetic. It is correct with the known `tmp_dst_rows` fix.
+2. Focus only on staging/cache locality if continuing down-batch:
+   - design a route-aware pinned/admission policy rather than 60-slot LRU;
+   - compute expected hit coverage from the actual down route trace before coding;
+   - require nonzero meaningful down-cache hit rate and stage time below `3.705 ms/call` in a short diagnostic before any full run.
+3. If a cache admission design cannot show a hard bound above `4.2 tok/s`, abandon down-batch and return to CPU fallback source/page-stall elimination.
+4. Before the next implementation, update this plan with the exact cache policy, expected covered calls/bytes, VRAM cost, gate hit impact, theoretical token-rate bound, and rejection criteria.
