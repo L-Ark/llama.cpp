@@ -13,14 +13,15 @@
 - 2026-07-04 top512 CPU blocking-touch prewarm 首跑观测到 `4.3 tok/s`，但从已 push source 清洁 rebuild 后只复现 `4.2 tok/s`，未超过当前 SOTA；该源码已回退，当前 head 为接受路径。
 - 2026-07-04 no-drop diagnostic 可达 `7.2 tok/s`，但不是 accepted cold-start，因为没有执行全局 `drop_caches`；它只能说明冷启动主要损失来自 CPU up/down fallback 的 page/source stall，不可作为 SOTA。
 - 2026-07-04 target-only `llama-lookahead` 已拒绝：两次 strict cold 机械诊断都在第一 token 后因 DeepSeek4 coupled-sequence/KV 路径失败，且 gate cache hit rate 从接受路径的 `86-87%` 塌到约 `11.5%`。
-- 当前最新计划是收口 no-draft `ngram-mod` target-verified speculative 诊断；若不超过 `4.2 tok/s` 或任一 gate 失败，立即回退该 probe source，只保留 rejected 记录。
 - 2026-07-04 no-draft `ngram-mod` 已拒绝：strict cold run 正确率/RAM/TTFT 通过，但 `decoded speed=2.879 tok/s`，低于当前 `4.2 tok/s` SOTA；probe source 已回退，accepted `llama-cli` hash 恢复。
+- 2026-07-04 gate cache headroom audit 已完成：`GGML_MOE_STREAM_ONE_CACHE_MIB=13312` 在 strict cold 16GB cgroup 下达到 `4.1 tok/s`，gate hit rate 仍为 `86.8%`，CUDA free 从约 `238MiB` 增至约 `492MiB`。该结果不是新 SOTA，但说明可以继续做一个很小的 down-cache 组合短诊断。
+- 当前最新计划：基于 gate cache `13312MiB` 的 headroom，做一次 default-off 的 `256MiB` down-cache + MXFP4 batch-probe 短诊断；只有短诊断证明 down cache 真正分配、gate hit rate 不塌、stage ms/call 明显下降，才允许进入 full strict cold。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `current_pushed_head`: `75ed51621` (`vendor-ds4: update post-prewarm optimization plan`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `4e525a91f` (`vendor-ds4: reject no-draft ngram diagnostic`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -62,20 +63,21 @@ Current measured bottleneck after O_DIRECT:
 
 Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 
-1. Treat `75ed51621` as the current pushed documentation/source baseline, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
+1. Treat `4e525a91f` as the current pushed documentation/source baseline before this plan update, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
 2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
 3. External draft/internal MTP is currently not viable: DS4 GGUF has no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors, and local model inventory has no tokenizer-compatible small DS4 draft model.
-4. The only active speculative diagnostic is no-draft `ngram-mod` through `llama-speculative-simple`, because it is target-verified and does not require an external draft model. This is a diagnostic, not accepted source, until strict cold metrics prove it.
-5. If no-draft `ngram-mod` fails, fall back to a combined CPU fallback + source elimination design. That design must first show a hard upper bound above `4.2 tok/s` and preferably toward `8-10 tok/s`; otherwise do not code.
-6. Do not resume pure compact-mmap, broad up/down hotset, down-batch staging, no-filter one-stream, ngram-simple, lookahead, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
+4. No speculative diagnostic is currently active. no-draft `ngram-mod`, ngram-simple, server partial fallback, and target-only lookahead are all rejected for this path.
+5. The active next candidate is a narrow cold-legal composition test: shrink gate cache to `13312MiB`, then test whether a real `256MiB` down-cache can allocate and reduce down fallback staging without destroying the accepted gate path.
+6. Do not resume pure compact-mmap, broad up/down hotset, large down-batch staging, no-filter one-stream, ngram-simple, lookahead, ngram-mod, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
 7. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
 
 ## Execution Plan
 
 ### Phase 0: Source/Remote Guard
 
-- Confirm local head is at least `75ed51621` and `ssd/vendor/deepseek-token-rate-16gb` points to the same or newer committed plan state.
-- If `examples/speculative-simple/speculative-simple.cpp` is dirty, it must be treated as the active no-draft `ngram-mod` probe only; do not commit it unless it produces a compliant new SOTA and passes pushed-source reproduction.
+- Confirm local head is at least `4e525a91f` and `ssd/vendor/deepseek-token-rate-16gb` points to the same or newer committed plan state.
+- If `examples/speculative-simple/speculative-simple.cpp` is dirty, repair it first; no speculative source probe is accepted or active.
+- If `ggml/src/ggml-cuda/moe_stream_batch.cu` is dirty, it must be treated as the active down-cache/MXFP4 batch-probe only; do not commit it unless it produces a compliant new SOTA and passes pushed-source reproduction.
 - Confirm the accepted SOTA runtime binary hash is still `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` after rollback rebuild.
 - If source or binary does not match the accepted state, stop and repair reproducibility before any optimization.
 
@@ -2766,14 +2768,18 @@ Acceptance/rejection:
 - Promote only if full strict-cold run exceeds `4.2 tok/s`, RAM/correctness/TTFT/gate counters pass, and pushed-source reproduction also exceeds `4.2 tok/s`.
 - Reject and revert the example source patch if throughput is `<=4.2`, correctness fails, target context rollback fails, RAM/TTFT gates fail, or accepted draft rate is too low to justify more work.
 
-### 2026-07-04 Current Latest Execution Plan
+### 2026-07-04 No-Draft Ngram-Mod Execution Plan (Historical)
+
+Status note:
+
+- This section records the plan that preceded the no-draft `ngram-mod` diagnostic. It is superseded by the `No-Draft Ngram-Mod Diagnostic Result`, `Gate Cache Headroom Audit Result`, and `Immediate Plan: Gate13312 + Down Cache256 Short Diagnostic` sections below.
 
 Current state:
 
 - Accepted cold-start SOTA remains `4.2 tok/s` from the strict 16GB cgroup vendor DeepSeek path.
 - Current pushed branch for all source/docs/artifacts remains `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
 - `llama-lookahead` is rejected and must not be swept further without a new design, because it fails mechanically on the current DeepSeek4 coupled-sequence path and collapses the gate-cache behavior.
-- The only active source probe is the no-draft `ngram-mod` enablement in `examples/speculative-simple/speculative-simple.cpp`. It is not accepted SOTA source yet.
+- At the time of this historical plan, the only active source probe was the no-draft `ngram-mod` enablement in `examples/speculative-simple/speculative-simple.cpp`. It has since been rejected and reverted.
 
 Immediate execution order:
 
@@ -2893,3 +2899,132 @@ Next optimization direction:
 4. Promotion protocol remains mandatory.
    - Any compliant new SOTA must be fully recorded, committed, and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
    - After push, rebuild from pushed source and rerun strict cold. Only the pushed-source rerun can replace the accepted SOTA.
+
+### 2026-07-04 Gate Cache Headroom Audit Design
+
+Reason:
+
+- The previous down-cache experiments failed mainly because accepted gate cache consumes almost all VRAM. With `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, the accepted path reports about `238MiB` CUDA free and `3192` gate slots.
+- A tiny `256MiB` down-cache while preserving the full gate cache could not allocate a useful buffer and produced `0%` down-cache hit rate.
+- Reducing context from `-c 256` to `-c 128` did not free useful VRAM. Therefore the only obvious VRAM knob is the gate cache itself.
+
+Diagnostic:
+
+- Run one no-source-change strict cold France audit with `GGML_MOE_STREAM_ONE_CACHE_MIB=13312`.
+- This reduces the gate pool by `256MiB`, about `60` slots at `4.25MiB/slot`, from `3192` slots to about `3132` slots.
+- All other accepted SOTA envs remain unchanged: same O_DIRECT gate expert pack, same gate admission profile, same top-k up/down pruning, same `cpu_moe=40`, same `--vram-cache-gb 0`, same `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold `drop_caches`, and 16GB cgroup.
+
+Theory and bound:
+
+- This run is not expected to exceed SOTA by itself. Its purpose is to test whether freeing about `256MiB` of VRAM materially hurts the accepted gate path.
+- If the gate hit rate stays near the accepted `86-87%` and eval remains in the `4.1-4.2 tok/s` class, the freed VRAM may justify a separate down-cache allocation probe.
+- If gate hit rate falls materially or throughput drops below the accepted class, then down-cache composition is rejected on paper because the slot tradeoff destroys the SOTA base path before adding any down benefit.
+
+Acceptance/rejection for this audit:
+
+- Continue to a down-cache design only if:
+  - RAM including page cache stays inside `16000000000` bytes;
+  - France output remains semantic, coherent, and complete;
+  - TTFT remains within the accepted 20% gate;
+  - one expert pack has no direct failures/fallbacks;
+  - gate VRAM hit rate stays close to the accepted `86.8%`;
+  - token rate remains at least SOTA-class (`>=4.1 tok/s`), preferably tied at `4.2 tok/s`.
+- Reject the gate-cache-shrink branch if this audit regresses throughput, correctness, RAM, TTFT, pack counters, or gate hit rate. Do not run a down-cache combination after a failed gate-only audit.
+
+### 2026-07-04 Gate Cache Headroom Audit Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T191757Z-20260704_gate_cache_13312_headroom_audit/france-cpu40-vram0gb`
+
+Config:
+
+- Same accepted SOTA runtime path and runner constraints: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `--vram-cache-gb 0`, O_DIRECT gate expert pack, current gate admission profile, and CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Only intentional change from accepted SOTA config: `GGML_MOE_STREAM_ONE_CACHE_MIB=13312` instead of `13568`.
+
+Metrics:
+
+- `eval_tok_s=4.1`
+- `prompt_tok_s=1.5`
+- `TTFT=29281.374145 ms`
+- `elapsed_seconds=62.33`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15103705088`
+- `pgmajfault=276959`
+- `workingset_refault_file=1724867`
+- `ram_ok=true`, `oom_seen=false`, `ram_limit_killed=false`
+- Correctness: `true`; France output is semantic, coherent, and complete.
+
+Counters and VRAM:
+
+- Gate one-stream cache init: `13.0 GiB`, `3132` slots.
+- CUDA free after model/cache allocation: about `492MiB`.
+- One expert pack counters: `hits=4639 misses=0 reads=4639 bytes=20673462272 failures=0 entries=4599 direct_enabled=1 direct_reads=4639 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM cache counters: `hits=30512 misses=4639 hit_rate=86.8%`.
+
+Artifact hashes:
+
+- `summary.json`: `4a89440340363f67623dd8b7d56232d8279d4367a616774d8689f57aca706e86`
+- `stderr.txt`: `569547c6aaaa9a8475908f08537148c1e1fd5a6f4751f5fe77f154852951cb26`
+- `stdout.txt`: `ebf9dae6b55d32c03fcc9ab6a806c95814cddc60fd515b075d610222f96ed638`
+
+Verdict:
+
+- Passed as a headroom audit, not a new SOTA. Throughput remains SOTA-class (`4.1 tok/s`) and all RAM, correctness, TTFT, pack, and gate-hit gates pass.
+- The gate hit rate did not regress from the accepted `86.8%`, while CUDA free increased enough to justify exactly one small down-cache composition probe.
+- Do not promote `13312MiB` gate cache by itself. It is only a prerequisite for the next short diagnostic.
+
+### 2026-07-04 Immediate Plan: Gate13312 + Down Cache256 Short Diagnostic
+
+Bottleneck being targeted:
+
+- Current accepted SOTA still spends the largest removable time in CPU up/down fallback: about `25.7s` total, about `18.1s` during decode.
+- Prior down-batch experiments showed the CUDA kernel itself is cheap (`~0.035 ms/call`), but host-to-device staging dominated (`~4.538 ms/call`) and the large down-cache displaced the gate cache, dropping gate hit rate to about `68.9%`.
+- The gate headroom audit shows that reducing the gate cache by only `256MiB` does not materially hurt gate hit rate. The next test asks whether that newly freed VRAM can support a useful down cache without repeating the prior large-cache regression.
+
+Theory and bound:
+
+- This is not expected to reach `10 tok/s` by itself. It is a narrow diagnostic to test whether down-cache allocation and staging can be made compatible with the accepted gate path.
+- A useful signal requires all of the following:
+  - `GGML_MOE_VRAM_CACHE_MIB=256` allocates a real cache instead of falling back to a tiny unusable allocation;
+  - down-cache hits are nonzero and meaningful on a short France run;
+  - gate hit rate remains near `86.8%`;
+  - down batch `stage ms/call` drops materially below the prior accepted-probe value `4.538 ms/call`, and preferably below the previous top512-down staging value `3.705 ms/call`;
+  - short-run throughput does not collapse below the SOTA class.
+- If the short diagnostic cannot meet these gates, the full run is rejected on paper because the hard bound remains below the current accepted `4.2 tok/s` once staging/gate-regression overhead is included.
+
+Implementation constraints:
+
+- Patch only `ggml/src/ggml-cuda/moe_stream_batch.cu`, default-off, for the short diagnostic.
+- Required temporary probe support:
+  - add `GGML_TYPE_MXFP4` to `moe_stream_type_supported()`;
+  - add `GGML_TYPE_MXFP4` to the compact MMVQ launcher type switch;
+  - if the MMQ slot launcher is reached, add `GGML_TYPE_MXFP4` there as well;
+  - preserve or restore the compact dst workspace correctness fix with `dst_tmp_rows=max(dst_cols,n_active)` where applicable.
+- Build only the batch-probe binary first: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli`.
+- Do not commit this source patch unless it produces a compliant new SOTA and then passes pushed-source reproduction.
+
+Short diagnostic command shape:
+
+- Binary: `build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Runner: `.Agent/run-tools/strict_ds4_runner.py`
+- Strict constraints: cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, France prompt, `cpu_moe=40`, `--vram-cache-gb 0`, `-n 32`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Keep accepted SOTA gate envs, except use `GGML_MOE_STREAM_ONE_CACHE_MIB=13312`.
+- Add:
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`
+  - `GGML_MOE_VRAM_CACHE_MIB=256`
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack`
+  - `GGML_MOE_IO_BACKEND=iouring`
+  - `GGML_MOE_STAGE_PINNED=1`
+  - `GGML_MOE_STAGE_PINNED_SLOTS=4`
+
+Required records:
+
+- Exact run path, full command/env, source diff, source head, build hash, model/profile/pack hashes, token rates, TTFT, elapsed time, RAM and file/page cache usage, OOM counters, exact France output prefix/full output, correctness verdict, gate pack counters, gate VRAM cache counters, down-cache allocation line, down-cache hit/miss counters, down-batch accept/decline counters, and stage/quant/kernel/D2H/scatter timings.
+
+Decision rules:
+
+- If the short diagnostic fails allocation, has zero/near-zero down-cache hits, collapses gate hit rate, exceeds RAM, fails correctness, triggers direct pack failures, or remains far below the accepted SOTA class, immediately revert `moe_stream_batch.cu`, rebuild clean, record rejection, and push only docs/artifacts.
+- If the short diagnostic passes all gates, update this plan before a full run, then run full strict cold France under the same constraints.
+- A full run may be promoted only if it exceeds `4.2 tok/s`, keeps TTFT within the accepted 20% gate, passes correctness and RAM including page cache, and has no pack/direct failures.
+- On any compliant new SOTA, stop exploration immediately, record complete reproducibility information, commit source/docs/profiles/artifacts, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild from pushed source and rerun strict cold before declaring it accepted.
