@@ -3733,6 +3733,143 @@ Decision:
   - or optimize Q4_0 CPU fallback separately, since 7DP shows Q4 layers are
     the only true `missing_tensor` group.
 
+## Phase 7DR: append blk.1/2 down tensors to expert pack
+
+Start time:
+
+- 2026-07-04T01:15:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DO/7DP show the largest accepted down-stage rows are:
+  - `blk.1.ffn_down_exps.weight`: about `0.72-0.76 s` stage on n32;
+  - `blk.2.ffn_down_exps.weight`: about `0.69-0.70 s` stage on n32.
+- Phase 7DQ proved those rows can be made cache-resident, but doing it from
+  ordinary current-down-overlap moved work into the up/gate tail and regressed.
+- A read-only pack-index diagnostic on
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  showed:
+  - `blk.1.ffn_down_exps.weight`: `0` pack entries;
+  - `blk.2.ffn_down_exps.weight`: `0` pack entries;
+  - `blk.4.ffn_down_exps.weight`: `202` pack entries, nbytes `7798784`;
+  - `blk.60.ffn_down_exps.weight`: `158` pack entries, nbytes `6307840`.
+- GGUF inspection showed:
+  - `blk.1.ffn_down_exps.weight`: `384` experts,
+    `6307840 bytes/expert`;
+  - `blk.2.ffn_down_exps.weight`: `384` experts,
+    `6307840 bytes/expert`;
+  - full append size is about
+    `2 * 384 * 6307840 = 4844421120 bytes = 4.51 GiB`.
+
+Hypothesis:
+
+- Build a new expert pack by appending all `blk.1/2` down experts to the
+  current Phase 7CC pack.
+- Keep SOTA code and runtime scheduling unchanged.
+- In normal down batch, misses for `blk.1/2` should use expert-pack
+  O_DIRECT/io_uring reads instead of GGUF mmap `src0_data` fallback.
+- This may reduce:
+  - `blk.1/2` down stage time;
+  - GGUF file-backed page-cache refaults;
+  - page-cache pollution from early down tensors.
+
+Why this can improve token rate:
+
+- Unlike Phase 7DQ, this does not add extra overlap work or extra current-token
+  prefetch jobs.
+- It changes the source of unavoidable `blk.1/2` misses from GGUF mmap pages to
+  the already optimized expert-pack path.
+- The runtime still reads only routed experts; adding all `blk.1/2` entries
+  increases disk footprint but not per-token bytes beyond actual misses.
+
+Theoretical upper bound:
+
+- Hard n32 bound from Phase 7DP target rows:
+  - `blk.1 + blk.2` stage = `724.731 + 685.826 = 1410.557 ms`.
+- The realistic bound is lower:
+  - pack reads still require SSD read, pinned staging, and H2D;
+  - only the GGUF mmap/page-cache fallback part can be removed;
+  - additional pack index size is negligible, but pack file size grows by
+    about `4.51 GiB`.
+- Expected n32 useful range: `0.2-0.8 s` if pack O_DIRECT is materially faster
+  than GGUF mmap fallback for these rows. If stage time stays the same or
+  expert-pack wait rises enough to offset it, reject.
+
+Implementation:
+
+- Artifact-only experiment; no source code change.
+- Create:
+
+```text
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v3-l1l2down.expert-pack
+```
+
+- Build it from:
+  - old pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - GGUF shards:
+    `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-*.gguf`;
+  - tensors:
+    `blk.1.ffn_down_exps.weight`,
+    `blk.2.ffn_down_exps.weight`;
+  - all experts `0..383`.
+- The build script must preserve pack format:
+  `GGMLMOEPACKv1`, 4096-byte aligned data, sorted/unique index by
+  `(tensor, expert, nbytes)`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard a95aaa10f
+python3 /tmp/build_phase7dr_l1l2_down_pack.py
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dr_repro.sh
+sed -i 's#kimi-iq3s-france-l12-upgate-v2.expert-pack#kimi-iq3s-france-l12-upgate-v3-l1l2down.expert-pack#g' /tmp/run_phase7dr_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv' /tmp/run_phase7dr_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dr-l1l2down-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dr_repro.sh
+```
+
+Acceptance gates:
+
+- Pack build:
+  - output pack exists;
+  - index contains `384` entries for `blk.1.ffn_down_exps.weight`;
+  - index contains `384` entries for `blk.2.ffn_down_exps.weight`;
+  - index has no duplicate `(tensor, expert, nbytes)` keys;
+  - pack size increases by about `4.51 GiB`.
+- Runtime hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Mechanism:
+  - stderr expert-pack path points to the v3 pack;
+  - expert-pack entries increase by `768`;
+  - down CSV shows lower `blk.1/2` stage than Phase 7DP:
+    - `blk.1` baseline stage `724.731 ms`;
+    - `blk.2` baseline stage `685.826 ms`;
+  - file-backed page-cache pressure should not increase.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats and mechanism is sane, run a second cold n32
+    confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- Artifact-only failure needs no source rollback.
+- If n32 regresses, quality fails, TTFT/RAM gates fail, or `blk.1/2` stage does
+  not improve, keep the v2 pack in SOTA and do not promote v3.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
