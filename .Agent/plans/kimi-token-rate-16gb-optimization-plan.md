@@ -27668,6 +27668,105 @@ Rollback:
   exceeds the cgroup cap, reject and keep the Q8_K-reference down path disabled
   in SOTA.
 
+Phase 7CG result - rejected:
+
+- result timestamp: 2026-07-03T13:28:41Z.
+- plan commit:
+  `30e13813b` (`docs: plan kimi phase7cg q3 down q8k`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-132841Z-n32-phase7cg-q3down-q8k-l1-2`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cg_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_STREAM_DOWN_Q8K=1\nGGML_MOE_STREAM_DOWN_Q8K_TYPES=q3\nGGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE=1-2\nEOF\n/' /tmp/run_phase7cg_repro.sh
+chmod +x /tmp/run_phase7cg_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-132841Z-n32-phase7cg-q3down-q8k-l1-2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cg_repro.sh
+```
+
+- activation:
+  - `env.txt` contains:
+    - `GGML_MOE_STREAM_DOWN_Q8K=1`;
+    - `GGML_MOE_STREAM_DOWN_Q8K_TYPES=q3`;
+    - `GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE=1-2`;
+  - stderr contains
+    `down Q3_K/IQ4_XS Q8_K-reference batch path active`;
+  - Q4_0 down tensors remain unsupported/fallback, as intended.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `77658.83 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - cold-start run through the Phase 7CC repro script.
+- output:
+  `France is a country in Western Europe known for its rich history, art, and culture. Its capital, Paris, is famous for landmarks like the Eiffel Tower`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `37541.24 ms / 31`, `0.83 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CG is slower by `4323.58 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15135580160`;
+  - `file=14886948864`;
+  - `inactive_file=2990149632`;
+  - `active_file=11896135680`;
+  - `kernel=243961856`;
+  - `anon=446464`.
+- mechanism:
+  - expert-pack hits/misses: `25755` / `1011`;
+  - expert-pack `iouring_bytes=65592246272`;
+  - expert-pack `iouring_wait_us=11810222`;
+  - main pinned staging `host_stage=21852.099 ms`, worse than the Phase 7CC
+    n32 confirmation host-stage;
+  - gate pinned staging `host_stage=2528.671 ms`;
+  - down profile `total=40.713 ms/call`, `cuda_batch=3.079 ms/call`,
+    `fallback_t0=37.576 ms/call`;
+  - layer 1 Q3_K down stayed batch-eligible and accepted in decode, but
+    `decode_total=22.625 ms/call`, not lower than the Phase 7CF diagnostic
+    reference `22.250 ms/call`;
+  - layer 2 Q3_K down stayed batch-eligible and accepted in decode, with
+    `decode_total=20.280 ms/call`, only slightly lower than the Phase 7CF
+    diagnostic reference `20.707 ms/call`;
+  - the small local layer 2 gain was erased by higher total down/staging
+    overhead and unchanged Q4_0 fallback-heavy layers.
+
+Gap analysis:
+
+- The theoretical upside was bounded by about `1.332 s` over n32 from the
+  visible layer 1/2 down rows. The measured run lost `4.324 s`, so the Q8_K
+  reference path did not attack the dominant wall-time source.
+- Layer 1 did not improve and layer 2 improved by only about `13.2 ms` over the
+  full n32 decode, far below the expected `0.2-0.7 s` practical target.
+- The aggregate IO/staging path regressed: main `host_stage` and expert-pack
+  `iouring_wait_us` are high, while the still-unsupported Q4_0 layers continue
+  to dominate fallback time.
+- This rules out the existing Q8_K-reference down path as a useful narrow
+  optimization for Q3_K layers 1-2 under the current cache/pack setup.
+
+Decision:
+
+- Reject Phase 7CG.
+- Do not run second n32 or n96.
+- Keep the down Q8_K-reference path disabled in SOTA.
+- Keep Phase 7CC as the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
