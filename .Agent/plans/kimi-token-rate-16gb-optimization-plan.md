@@ -27906,6 +27906,110 @@ Rollback:
   exceeds the cgroup cap, reject and keep Phase 7CC settings:
   `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `PINNED_SLOTS=8`.
 
+Phase 7CH result - rejected:
+
+- result timestamp: 2026-07-03T13:36:54Z.
+- plan commit:
+  `da626437d` (`docs: plan kimi phase7ch io depth slots`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-133654Z-n32-phase7ch-iodepth16-refill8-slots16`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ch_repro.sh
+perl -0pi -e 's/GGML_MOE_IO_DEPTH=8/GGML_MOE_IO_DEPTH=16/; s/GGML_MOE_IO_REFILL_BATCH=4/GGML_MOE_IO_REFILL_BATCH=8/' /tmp/run_phase7ch_repro.sh
+chmod +x /tmp/run_phase7ch_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-133654Z-n32-phase7ch-iodepth16-refill8-slots16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ch_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_IO_DEPTH=16`;
+  - `env.txt` contains `GGML_MOE_IO_REFILL_BATCH=8`;
+  - `env.txt` contains `GGML_MOE_STAGE_PINNED_SLOTS=16`;
+  - stderr reports expert-pack direct reads with `depth=16`;
+  - stderr reports pinned staging `slots=16`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `76492.01 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33518.12 ms / 31`, `0.92 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CH is slower by `300.46 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=14988038144`;
+  - `file=14746583040`;
+  - `inactive_file=6655954944`;
+  - `active_file=8090071040`;
+  - `kernel=236621824`;
+  - `anon=454656`.
+- mechanism:
+  - expert-pack iouring detail:
+    - `inflight_avg=2.96`;
+    - `inflight_max=8`;
+    - `batch_hist=1:308,2-4:2082,5-8:876,9-16:0,17-32:0,gt32:0`;
+  - main pinned iouring detail:
+    - `inflight_avg=3.02`;
+    - `inflight_max=8`;
+    - `batch_hist=1:123,2-4:1351,5-8:595,9-16:0,17-32:0,gt32:0`;
+  - gate pinned iouring detail:
+    - `inflight_avg=2.85`;
+    - `inflight_max=8`;
+    - `batch_hist=1:185,2-4:731,5-8:281,9-16:0,17-32:0,gt32:0`;
+  - current-down overlap remained capped by selected expert count:
+    - `max_jobs=8`;
+    - `batch_hist=1:40,2-4:525,5-8:331,9-16:0`.
+  - expert-pack wait increased to `iouring_wait_us=13051626`;
+  - main pinned `host_stage=17615.658 ms`;
+  - gate pinned `host_stage=1346.675 ms`;
+  - down profile `total=39.353 ms/call`;
+  - up_gate profile `total=12.799 ms/call`.
+
+Gap analysis:
+
+- The env activation worked, but the mechanism did not: no path produced
+  `9-16` inflight batches. Increasing `IO_DEPTH` above `8` cannot help while
+  the scheduler only submits up to the active selected experts per layer and
+  current-down overlap reports `max_jobs=8`.
+- The extra pinned slots did not reduce slot wait materially because slot wait
+  was already tiny (`53.001 ms` total main slot wait, `11.836 ms` gate slot
+  wait).
+- The run regressed slightly despite lower visible `host_stage` than 7CG,
+  because expert-pack wait increased and the actual per-layer concurrency
+  stayed capped at 8.
+- This rejects simple depth/refill/slot scaling. A future IO optimization must
+  change the scheduling unit, for example cross-layer or cross-token prefetch,
+  rather than only enlarging queue capacity.
+
+Decision:
+
+- Reject Phase 7CH.
+- Do not run second n32 or n96.
+- Keep Phase 7CC as current accepted SOTA:
+  - `IO_DEPTH=8`;
+  - `IO_REFILL_BATCH=4`;
+  - `PINNED_SLOTS=8`;
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
