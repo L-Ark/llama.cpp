@@ -28890,6 +28890,105 @@ Rollback:
   RAM/TTFT/read gates fail, or the smaller policy removes the hit-rate gain,
   reject and keep trace prefetch disabled in SOTA.
 
+Phase 7CL result - rejected:
+
+- result timestamp: 2026-07-03T14:10:28Z.
+- plan commit:
+  `dd7313b95` (`docs: plan kimi phase7cl minimal trace prefetch`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-141028Z-n32-phase7cl-trace-vram-prefetch-min`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cl_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv\nGGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64\nGGML_MOE_TRACE_PREFETCH_WINDOW=64\nGGML_MOE_TRACE_PREFETCH_MAX_LOADS=1\nEOF\n|' /tmp/run_phase7cl_repro.sh
+chmod +x /tmp/run_phase7cl_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-141028Z-n32-phase7cl-trace-vram-prefetch-min"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cl_repro.sh
+```
+
+- activation:
+  - `env.txt` contains all four trace-prefetch env vars;
+  - stderr reports:
+    `trace prefetch: loaded 42928 events ... window=64 max_loads=1 lead_events=64`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `78466.52 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`
+- quality:
+  fail; output is not semantically correct or coherent.
+- decode:
+  - `11656.28 ms / 31`, `2.66 tok/s`;
+  - not eligible for promotion because quality failed.
+- memory at finish:
+  - `memory.current.final=15141752832`;
+  - `file=14906576896`;
+  - `inactive_file=9182490624`;
+  - `active_file=5723484160`;
+  - `kernel=232353792`;
+  - `anon=446464`.
+- mechanism:
+  - trace alignment failed almost immediately:
+    - `calls=42928`;
+    - `matched=48`;
+    - `resync=0`;
+    - `cursor=48`;
+    - `prefetch_cursor=176/42928`;
+  - trace prefetch loaded only `111` events, but the run then diverged into a
+    degenerate output pattern;
+  - VRAM cache counters became abnormally high:
+    - global hit rate `97.1%`;
+    - down hit rate `98.4%`;
+    - upgate hit rate `96.6%`;
+  - expert-pack traffic collapsed:
+    - `iouring_bytes=963379200`;
+    - `iouring_wait_us=320834`;
+  - up_gate profile also collapsed to `4.643 ms/call`, consistent with a
+    degenerate route/output rather than a valid optimization.
+
+Gap analysis:
+
+- The apparent `2.66 tok/s` is invalid because the model output is wrong.
+- The key difference from Phase 7CK is that trace matching stopped after `48`
+  route events. Once the output diverged, the recorded Phase 7CJ trace no
+  longer represented the current run, and subsequent cache hits/low IO traffic
+  were measuring a broken generation path.
+- This means trace-driven VRAM prefetch is semantic-risky in the current
+  implementation. A future version would need stronger correctness guards:
+  - never prefetch into slots that can affect currently executing kernels;
+  - mark prefetched slots pending and synchronize exactly before use;
+  - disable prefetch immediately on route mismatch;
+  - or use it only for diagnostic replay, not SOTA optimization.
+
+Decision:
+
+- Reject Phase 7CL.
+- Do not run second n32 or n96.
+- Keep trace prefetch disabled in SOTA.
+- Stop env-only trace-prefetch sweeps; the next optimization should avoid
+  changing route/cache-visible semantics and instead target:
+  - narrow Q4_0 down fallback cleanup; or
+  - a source-level up/gate kernel/scheduling change with quality gates.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
