@@ -1395,6 +1395,99 @@ Decision:
   actual batch formation or compute-bound type18 kernels with a measurable
   per-layer/per-type profile before implementation.
 
+## Phase 7DG: IQ3_XXS Q8 activation pointer hoist micro-probe
+
+Timestamp: 2026-07-03T18:53:40Z.
+
+Status: planned before implementation.
+
+Current bottleneck:
+
+- Phase 7DC/7DD show the active type18 IQ3_XXS single-column MMVQ path is
+  compute-bound:
+  - type18 wall is almost all kernel time;
+  - active kernel resource baseline is `REG:52 STACK:0 SHARED:1408`.
+- Phase 7DE showed precomputing sign broadcasts is not a reproducible
+  improvement.
+- Phase 7DF showed deeper queues do not improve the accepted path.
+- The next low-risk type18 probe should avoid changing quantization math,
+  launch shape, VDR, or I/O/cache behavior.
+
+Selected source probe:
+
+- In `vec_dot_iq3_xxs_q8_1`, hoist the Q8 activation block pointer and its
+  `qs` int pointer once:
+
+```text
+const block_q8_1 * bq8 = bq8_1 + iqs/2;
+const int * q8 = (const int *) bq8->qs;
+```
+
+- Replace repeated `get_int_b4(bq8_1[iqs/2].qs, l0 + 0/1)` with:
+
+```text
+const int u0 = q8[l0 + 0];
+const int u1 = q8[l0 + 1];
+```
+
+- Replace the final scale read with `bq8->ds`.
+- Do not use `int2` or `uint64_t` vector loads:
+  - `block_q8_1.qs` starts after two `ggml_half` fields, i.e. at offset
+    `4` bytes;
+  - 8-byte alignment is therefore not guaranteed for `int2`;
+  - this probe must preserve the existing 32-bit aligned load assumption.
+
+Theory and bound:
+
+- This may reduce repeated address calculation and repeated structure indexing
+  inside the unrolled loop.
+- It may also be optimized away by the compiler already, producing no speed
+  change.
+- Expected effect is small:
+  - hard upper bound is still the Phase 7DC type18 wall bucket
+    `11152.518 ms`;
+  - realistic n96 gain is `0-300 ms`.
+- Because the expected effect is within cold-run noise, promotion requires
+  candidate plus n96 repeat, not n32.
+
+Execution:
+
+1. Commit and push this plan.
+2. Apply only the pointer-hoist patch in `vecdotq.cuh`.
+3. Build `build-cuda-batch`.
+4. Check resource usage for
+   `mul_mat_vec_q<type18,ncols=1,false,false,false>`.
+5. Run n96 cold-start candidate with the accepted Phase 7CC runner:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <source-commit>
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7dg-iq3-q8-pointer-hoist
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality pass on the France prompt;
+- TTFT <= `106331.72 ms`;
+- host RAM below the 16GB cgroup limit including page cache;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`;
+- if candidate passes, run one n96 repeat before promotion.
+
+Rollback:
+
+- If resource usage worsens materially, quality fails, or n96 decode is not
+  reproducibly faster than Phase 7CC, revert the source patch and record the
+  result.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
