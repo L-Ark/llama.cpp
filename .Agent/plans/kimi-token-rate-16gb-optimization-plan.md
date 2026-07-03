@@ -28142,6 +28142,102 @@ Rollback:
   are ineffective, or n32 is slower, reject and keep planned host prefetch
   disabled in SOTA.
 
+Phase 7CI result - rejected:
+
+- result timestamp: 2026-07-03T13:44:02Z.
+- plan commit:
+  `a3339d479` (`docs: plan kimi phase7ci planned host prefetch`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-134402Z-n32-phase7ci-planned-host-prefetch`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ci_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_PLANNED_HOST_PREFETCH=1\nGGML_MOE_HOST_PREFETCH_SLOTS=64\nGGML_MOE_HOST_PREFETCH_MAX_MIB=512\nEOF\n/' /tmp/run_phase7ci_repro.sh
+chmod +x /tmp/run_phase7ci_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-134402Z-n32-phase7ci-planned-host-prefetch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ci_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_PLANNED_HOST_PREFETCH=1`;
+  - `env.txt` contains `GGML_MOE_HOST_PREFETCH_SLOTS=64`;
+  - `env.txt` contains `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`;
+  - stderr contains
+    `host prefetch: loaded 0 events from (none) ... planned=1`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `79190.66 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34487.12 ms / 31`, `0.90 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - Phase 7CI is slower by `1269.46 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=14838411264`;
+  - `file=14597627904`;
+  - `inactive_file=6373728256`;
+  - `active_file=8223309824`;
+  - `kernel=236638208`;
+  - `anon=446464`.
+- mechanism:
+  - host prefetch:
+    - `submitted=5093`;
+    - `hits=80`;
+    - `misses=11721`;
+    - `evicted=4949`;
+    - `reserved_skips=160`;
+    - `planned_enqueued=5093`;
+    - `planned_dequeued=5093`;
+    - `planned_duplicate_skips=80`;
+    - `used=287.00 MiB`;
+  - useful host-prefetch hit rate is far too low to offset the extra worker,
+    pinned memory, and synchronization overhead;
+  - expert-pack `iouring_wait_us=13994932`, worse than Phase 7CH and worse than
+    the 7CC target region;
+  - main pinned `host_stage=17799.272 ms`;
+  - gate pinned `host_stage=1351.231 ms`;
+  - up_gate profile `total=13.189 ms/call`, not enough to compensate;
+  - down profile regressed to `41.267 ms/call`.
+
+Gap analysis:
+
+- The planned host-prefetch worker starts after up/gate jobs are known, which
+  is too late for most of the immediately consumed jobs. This explains the low
+  `80` hits versus `11721` misses and the high eviction count.
+- The path adds about `287 MiB` of pinned host memory and extra direct reads,
+  but does not materially reduce the synchronous io_uring path.
+- This confirms that a useful prefetch must predict farther ahead across
+  future layer/token events or be integrated with down/current-overlap planning;
+  same-step planned host prefetch is not sufficient.
+
+Decision:
+
+- Reject Phase 7CI.
+- Do not run second n32 or n96.
+- Keep planned host prefetch disabled in SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
