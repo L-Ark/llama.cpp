@@ -14,6 +14,7 @@
 - 2026-07-04 no-drop diagnostic 可达 `7.2 tok/s`，但不是 accepted cold-start，因为没有执行全局 `drop_caches`；它只能说明冷启动主要损失来自 CPU up/down fallback 的 page/source stall，不可作为 SOTA。
 - 2026-07-04 target-only `llama-lookahead` 已拒绝：两次 strict cold 机械诊断都在第一 token 后因 DeepSeek4 coupled-sequence/KV 路径失败，且 gate cache hit rate 从接受路径的 `86-87%` 塌到约 `11.5%`。
 - 当前最新计划是收口 no-draft `ngram-mod` target-verified speculative 诊断；若不超过 `4.2 tok/s` 或任一 gate 失败，立即回退该 probe source，只保留 rejected 记录。
+- 2026-07-04 no-draft `ngram-mod` 已拒绝：strict cold run 正确率/RAM/TTFT 通过，但 `decoded speed=2.879 tok/s`，低于当前 `4.2 tok/s` SOTA；probe source 已回退，accepted `llama-cli` hash 恢复。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
@@ -2805,3 +2806,90 @@ Next non-speculative candidate class after rejection:
 - Focus on cold page/source stalls without relying on warm global page cache.
 - Candidate designs must explicitly account for the 16GB cgroup including file cache and must avoid displacing the accepted gate pack/cache working set.
 - The most plausible next design is a narrow, measured source-elimination path for high-impact CPU up/down fallback reads, using O_DIRECT or bounded direct-read staging rather than buffered page-cache prewarm. Before coding, calculate covered bytes, per-call latency, expected removable time, cgroup memory impact, and the resulting token-rate upper bound.
+
+### 2026-07-04 No-Draft Ngram-Mod Diagnostic Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T190009Z-20260704_ngram_mod_no_draft_strict_cold/france-cpu40-vram0gb`
+
+Source/probe state:
+
+- Temporary source probe: `examples/speculative-simple/speculative-simple.cpp` allowed `--spec-type ngram-mod` without `--model-draft`.
+- Wrapper: `/root/lfz/runs/vendor-ds4-16gb/speculative-simple-filter-wrapper.sh`, filtering only the runner-only `--no-display-prompt` flag because `llama-speculative-simple` rejects it.
+- Config: accepted SOTA env unchanged (`cpu_moe=40`, `--vram-cache-gb 0`, gate one-stream `ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, accepted gate profile, O_DIRECT gate expert pack, top-k up/down policy, strict cold `drop_caches`, 16GB cgroup).
+- Speculative args: `--spec-type ngram-mod --spec-ngram-mod-n-match 4 --spec-ngram-mod-n-min 1 --spec-ngram-mod-n-max 8`.
+
+Metrics:
+
+- `decoded_speed=2.879 tok/s` (`decoded 193 tokens in 67.043 seconds`)
+- `common_perf_eval=3.25 tok/s` (`eval time = 54084.02 ms / 176 runs`)
+- `prompt_tok_s=3.10`
+- `encoded=8 tokens in 6.587 s`
+- `n_predict=193`
+- `n_draft=8`
+- `n_drafted=32`
+- `n_accept=12`
+- `accept=37.500%`
+- `TTFT=28386.843543 ms`
+- `load_ms=19727.96`
+- `prompt_eval_ms=20004.95`
+- `elapsed_seconds=96.13`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15036387328`
+- `pgmajfault=340518`
+- `workingset_refault_file=5578109`
+- `oom_seen=false`, `ram_limit_killed=false`, `ram_ok=true`
+- Correctness: `true`; France output is semantic, coherent, and complete.
+- One expert pack counters: `hits=5342 misses=2945 reads=5342 bytes=23806345216 failures=0 entries=4599 direct_enabled=1 direct_reads=5342 direct_failures=0 direct_fallbacks=0`
+- VRAM cache counters: `hits=47998 misses=8287 hit_rate=85.3%`
+
+Artifact hashes:
+
+- `summary.json`: `89d5f29f7e3e10c6d09840f68ad97967e5501bacd42c4a1cd7b6ad2c2d7b0b2e`
+- `stderr.txt`: `403e43bf035e5bd492f3bc7a03a3e061dce9e271b1d40afb5442aafa4d1af291`
+- `stdout.txt`: `427eb63070a31415fec532cdb70b1b6453b8bca7ef6956e0e8e97f9cc198ddae`
+
+France output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and iconic landmarks. It is known for its world-renowned cuisine, fine wines, and fashion. The country is also known for its art, literature, and philosophy. France is a popular tourist destination, with attractions such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. The country is also known for its natural beauty, with the French Alps, the Pyrenees, and the beautiful coastline of the French Riviera. Additionally, France is famous for its wine regions, such as Bordeaux, Burgundy, and Champagne, and its cuisine, including dishes like coq au vin and bouillabaisse. The country is also known for its rich history and culture, including the French Revolution and the Enlightenment period. Overall, France is a diverse and fascinating country with a rich cultural heritage and many attractions to explore.
+
+France is a country of unparalleled elegance, refined
+```
+
+Verdict:
+
+- Rejected. The run passes RAM, TTFT, and correctness gates, but throughput is below the accepted `4.2 tok/s` SOTA.
+- Gap analysis: `ngram-mod` did verify and accept tokens (`37.5%` of drafted tokens accepted), but it introduced extra target/checkpoint overhead and increased total expert activity. The pack reads rose from the accepted France path's `4623` direct reads to `5342`, and additional pack misses were observed for speculative branch traffic. The accepted-token gain was far too small to pay for the extra target work.
+- Action: revert `examples/speculative-simple/speculative-simple.cpp`, rebuild `llama-cli`, and do not continue sweeping no-draft ngram parameters without a new theory that changes the overhead/acceptance bound.
+- Post-revert accepted binary hashes:
+  - `llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+  - `libggml-cpu.so.0.10.0`: `a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`
+
+### 2026-07-04 Next Plan After Ngram-Mod Rejection
+
+Current accepted SOTA:
+
+- Still `4.2 tok/s` strict cold vendor DeepSeek under the 16GB cgroup with page cache included.
+- Source/runtime path is back to the accepted `llama-cli` state. No rejected speculative source remains staged or dirty.
+
+Next optimization direction:
+
+1. Return to cold-start bottleneck localization before coding.
+   - Use accepted SOTA trace/profile artifacts as the starting point and refresh only if required.
+   - Re-split decode time into CPU up/down fallback compute, CPU fallback source/page stalls, gate one-stream source load, sync, and scatter.
+   - The next design must identify removable time large enough to beat `4.2 tok/s` with margin. Small hotset or speculative sweeps are rejected on paper unless their hard bound changes.
+
+2. Focus on source/page-stall elimination that remains cold-start legal.
+   - The no-drop diagnostic at `7.2 tok/s` shows page/source stalls are real, but relying on global warm page cache is not accepted.
+   - The next viable class should use bounded direct-read/O_DIRECT staging or another cgroup-accounted cold-start method for high-impact CPU up/down fallback reads.
+   - Before implementation, calculate: covered entries, covered bytes, measured latency per miss/read, expected removable time, additional VRAM/RAM use, impact on accepted gate cache slots, and token-rate upper bound.
+
+3. Preserve accepted gate behavior.
+   - Keep `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, accepted gate frequency profile, O_DIRECT gate expert pack, and top-k up/down policy unless a slot-level tradeoff calculation proves a larger gain.
+   - Stop immediately if gate hit rate falls materially from the accepted `86-87%`, direct pack failures appear, RAM including file cache exceeds 16GB, TTFT exceeds the accepted gate, or France output quality fails.
+
+4. Promotion protocol remains mandatory.
+   - Any compliant new SOTA must be fully recorded, committed, and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+   - After push, rebuild from pushed source and rerun strict cold. Only the pushed-source rerun can replace the accepted SOTA.
