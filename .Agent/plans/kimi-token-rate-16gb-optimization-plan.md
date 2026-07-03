@@ -20265,6 +20265,154 @@ Rollback:
 - If accepted through n96 confirmation, commit and push source plus plan/result
   immediately.
 
+## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7BJ shows global thread tuning and Q4 arithmetic are not the main
+  remaining levers.
+- Code inspection of `expert_pack_iouring_copy_jobs()` shows the current path is
+  only partially batched:
+  - active experts are collected per layer;
+  - io_uring submits multiple reads in flight;
+  - after each CQE, the code still enqueues one `cudaMemcpyAsync()` per expert
+    into its VRAM cache slot.
+- The current SOTA profile still shows nontrivial pinned staging and H2D
+  accounting:
+  - Phase 7AS main pinned `host_stage=18631.890 ms`;
+  - Phase 7AS gate pinned `host_stage=2245.529 ms`;
+  - rejected phases that added extra staging consistently regressed, so the
+    next attempt must reduce enqueue/staging work rather than add another
+    worker stream.
+
+Hypothesis:
+
+Add a default-off env:
+
+```sh
+GGML_MOE_IO_URING_BATCH_H2D=1
+```
+
+For expert-pack io_uring jobs that miss RAM tier / host prefetch, read the
+selected active experts into one reusable pinned host batch buffer and then
+enqueue a coalesced `cudaMemcpy2DAsync()` for contiguous VRAM cache slot runs.
+
+Expected effect:
+
+- It keeps the existing VRAM cache layout and existing compact-batch compute
+  kernels unchanged: kernels still consume `slot_id` and `cache->pool`.
+- It reduces per-expert H2D enqueue overhead when active miss slots are
+  contiguous, especially for up/gate and current-down overlap batches where
+  `n_active` is usually 8 and `IO_DEPTH=8`.
+- It does not change model math, routing, quantization, cache keys, or fallback
+  semantics.
+- If the allocated cache slots are not contiguous, or if the batch has only one
+  SSD-read job, the implementation must fall back to the existing per-expert
+  H2D path.
+
+Theoretical upper bound:
+
+- This optimization cannot remove SSD read time or GPU matmul time.
+- It targets the CPU/CUDA launch overhead and H2D enqueue portion of pinned
+  staging.
+- If a typical token has about 8 active expert reads per up/gate/down stream,
+  a perfect contiguous run can reduce 8 H2D enqueues to 1 per stream. The hard
+  ceiling is bounded by:
+  - per-expert enqueue overhead;
+  - pinned staging `enqueue_ms`;
+  - part of `host_stage` that is currently spent per CQE/per enqueue;
+  - not by total `iouring_wait_us` or the CPU fallback filemap time.
+- Based on Phase 7AS, a realistic n32 upside is small but measurable
+  (`0.3-1.5 s`) if contiguous cache miss runs are common. Larger gains would
+  need evidence that H2D enqueue was a major hidden contributor.
+
+Implementation:
+
+- Add reusable pinned batch storage to `pinned_stage_ring`, guarded by an event
+  so the buffer is not overwritten before the async H2D copy completes.
+- In `expert_pack_iouring_copy_jobs()`:
+  - keep RAM tier and host prefetch checks first;
+  - collect remaining SSD-read jobs;
+  - when `GGML_MOE_IO_URING_BATCH_H2D=1`, `read_jobs.size() >= 2`, and the job
+    count is within `IO_DEPTH`, sort by destination VRAM address;
+  - submit io_uring reads into contiguous pinned batch offsets;
+  - group destination addresses into constant-stride contiguous runs;
+  - enqueue one `cudaMemcpy2DAsync()` per run instead of one
+    `cudaMemcpyAsync()` per expert;
+  - record activation/counters in stderr so results are reproducible.
+- Keep the default behavior unchanged when the env is absent or `0`.
+- If any alignment, io_uring, event, or H2D operation fails, return `false` so
+  the existing per-expert path can run.
+
+Experiment:
+
+- Build:
+
+```bash
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Create `/tmp/run_phase7bl_repro.sh` from `/tmp/run_phase7as_repro.sh` that
+  records:
+
+```sh
+GGML_MOE_IO_URING_BATCH_H2D=1
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bl-batched-h2d"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 BATCH_H2D=1 \
+      /tmp/run_phase7bl_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr shows `expert pack iouring batched H2D active`;
+  - stderr reports nonzero batched-H2D jobs/groups;
+  - `env.txt` contains `GGML_MOE_IO_URING_BATCH_H2D=1`;
+  - `command.txt` records `BATCH_H2D=1`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - batched-H2D groups/jobs must be nonzero;
+  - `iouring_h2d_enqueues` should drop relative to jobs served by the batched
+    path;
+  - pinned `enqueue_ms` and/or `host_stage` should drop without raising
+    `iouring_wait_us`, down `cuda_batch`, TTFT, or RAM peak.
+
+Rollback:
+
+- If build fails, activation is missing, quality fails, hard gates fail, or
+  first n32 is slower than Phase 7AS, reject immediately.
+- On rejection, revert the source patch and rebuild accepted Phase 7AS source
+  before continuing.
+- If accepted through n96 confirmation, commit and push source plus plan/result
+  immediately with exact reproduction commands and run directories.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
