@@ -1592,6 +1592,76 @@ Decision:
   - target batch formation/producer-side limits that Phase 7DF exposed
     (`inflight_max` stayed at 8 despite depth 16).
 
+## Phase 7DH: type18 SASS diff before the next micro-probe
+
+Timestamp: 2026-07-03T19:01:30Z.
+
+Status: planned before diagnostic execution.
+
+Reason:
+
+- Phase 7DE and 7DG both changed `vec_dot_iq3_xxs_q8_1` in ways that were
+  mathematically identical and resource-safe, but neither produced a
+  reproducible n96 improvement.
+- Phase 7DG kept active resource exactly unchanged:
+  `REG:52 STACK:0 SHARED:1408`, yet regressed n96 by `1498.26 ms`.
+- This means register/resource counters alone are too weak. The next type18
+  optimization must look at generated instructions and scheduling before
+  changing source again.
+
+Diagnostic plan:
+
+1. Build accepted source after rollback:
+   - commit: `830f1cd31`;
+   - source state includes `7e298761d` reverting the 7DG source patch.
+2. Dump SASS for the active kernel:
+   - symbol contains
+     `_Z13mul_mat_vec_qIL9ggml_type18ELi1ELb0ELb0ELb0`;
+   - artifact:
+     `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7dh-sass-baseline`.
+3. Build rejected 7DG source:
+   - commit: `895e317df`;
+   - artifact:
+     `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7dh-sass-7dg`.
+4. Compare:
+   - instruction counts;
+   - load instruction forms/counts;
+   - integer shift/logic instruction counts;
+   - dependency-relevant changes around Q8 loads and `dp4a`;
+   - resource usage for the same active symbol.
+
+Commands:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <commit>
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7dh-sass-<label>
+mkdir -p "$RUN"
+/usr/local/cuda-12.9/bin/cuobjdump --dump-resource-usage \
+  build-cuda-batch/bin/libggml-cuda.so > "$RUN/cuobjdump-resource.txt"
+/usr/local/cuda-12.9/bin/cuobjdump --dump-sass \
+  build-cuda-batch/bin/libggml-cuda.so > "$RUN/cuobjdump-sass.txt"
+```
+
+Acceptance:
+
+- This is diagnostic only. It cannot become SOTA and does not run model output.
+- It must produce reproducible artifacts and a written conclusion.
+- If SASS diff shows no meaningful instruction/scheduling difference, stop
+  doing source-level type18 cosmetic probes.
+- If SASS diff identifies a concrete instruction bottleneck, write the next
+  execution phase with:
+  - exact source change;
+  - theoretical bound;
+  - resource expectation;
+  - n96 cold-start acceptance gate.
+
+Rollback:
+
+- Diagnostic only. After dumping 7DG, reset server back to latest branch head
+  `830f1cd31` or newer documentation commit.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
