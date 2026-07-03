@@ -27534,6 +27534,140 @@ Decision:
 - Next plan should target decode CPU MoE/down fallback, starting from the top
   rows identified here rather than broad env sweeps.
 
+### Phase 7CG - narrow Q3_K down Q8_K-reference path for layers 1-2 on Phase 7CC
+
+Start time:
+
+- 2026-07-03T13:32:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CF exposed decode CPU split rows under Phase 7CC with
+  `GGML_KIMI_SPLIT_PROFILE_TOP=150`.
+- The top decode rows are not all Q4_0 fallback:
+  - layer 2 split: `35.035 ms/call`;
+  - layer 1 split: `31.087 ms/call`;
+  - layer 2 down name profile:
+    - `src0_type=11` (`Q3_K`);
+    - `batch_eligible=32`;
+    - `batch_accept=31`;
+    - `decode_total=20.707 ms/call`;
+    - `decode_fallback=0.002 ms/call`.
+  - layer 1 down name profile:
+    - `src0_type=11` (`Q3_K`);
+    - `batch_eligible=32`;
+    - `batch_accept=31`;
+    - `decode_total=22.250 ms/call`;
+    - `decode_fallback=0.002 ms/call`.
+- Therefore layers 1-2 are expensive even though they are already on the GPU
+  batch path; their cost is not CPU fallback. This makes them a better target
+  than another broad Q4_0 fallback retry.
+- The code already contains an opt-in down Q8_K-reference path:
+  - `GGML_MOE_STREAM_DOWN_Q8K`;
+  - `GGML_MOE_STREAM_DOWN_Q8K_TYPES`;
+  - `GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE`.
+- Prior down Q8_K experiments were quality-sensitive when enabled broadly, so
+  this phase must be narrow and must not touch Q4_0.
+
+Hypothesis:
+
+- Enable the existing Q8_K-reference path only for Q3_K down tensors in layers
+  `1-2`:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q8K=1
+GGML_MOE_STREAM_DOWN_Q8K_TYPES=q3
+GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE=1-2
+```
+
+- The path quantizes the down input reference to Q8_K and uses the Q8_K
+  reference kernel for Q3_K down. If that kernel is faster for these large early
+  layers, it may reduce the top layer 1/2 down split rows without changing
+  cache split, expert-pack layout, up/gate scheduling, current-down overlap, or
+  Q4_0 behavior.
+- Risk: even a narrow down math-path change may perturb logits and output
+  quality. It may also add quantization overhead or extra device buffers and
+  regress wall time.
+
+Theoretical upper bound:
+
+- Layer 1 and layer 2 down decode totals from Phase 7CF are:
+  - layer 1: `22.250 ms/call * 31 = 689.750 ms`;
+  - layer 2: `20.707 ms/call * 31 = 641.917 ms`;
+  - combined visible down row cost: about `1.332 s` over n32.
+- The absolute n32 upper bound for this experiment is therefore about `1.3 s`
+  if the layer 1/2 down cost disappeared, which is impossible because the Q8_K
+  path still does quantization and GPU work.
+- A realistic n32 upside is `0.2-0.7 s` if these two rows shrink materially.
+- If output quality changes or down totals do not fall, reject immediately.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7cg_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append the three Q8K env lines to the generated `env.txt`.
+- Keep every accepted Phase 7CC runtime setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cg_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_STREAM_DOWN_Q8K=1\nGGML_MOE_STREAM_DOWN_Q8K_TYPES=q3\nGGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE=1-2\nEOF\n/' /tmp/run_phase7cg_repro.sh
+chmod +x /tmp/run_phase7cg_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cg-q3down-q8k-l1-2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cg_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains all three Q8K env lines;
+  - stderr contains `down Q3_K/IQ4_XS Q8_K-reference batch path active`;
+  - Q4_0 down tensors remain unsupported/fallback; this phase must not activate
+    Q4_0 GPU coverage.
+- Performance:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - layer 1/2 down decode totals should fall if visible in name/split profile;
+  - aggregate down profile, expert-pack wait, and pinned host-stage must not
+    regress enough to erase the local gain.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If quality changes, activation is missing, n32 is slower, TTFT fails, or RAM
+  exceeds the cgroup cap, reject and keep the Q8_K-reference down path disabled
+  in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
