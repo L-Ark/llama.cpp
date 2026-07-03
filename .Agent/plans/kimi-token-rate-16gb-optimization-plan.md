@@ -2550,6 +2550,243 @@ Result handling:
 - Do not implement another combined up/gate staging variant unless this run
   shows a simpler synchronization model with a concrete numeric ceiling.
 
+Phase 7DL result:
+
+- Result timestamp:
+  - start: `2026-07-03T19:49:05+00:00`;
+  - end: `2026-07-03T19:52:03+00:00`.
+- Plan commit:
+  `f45fa5561` (`docs: plan kimi phase7dl bottleneck refresh`).
+- Source behavior:
+  - docs-only commit over `704a6928e`;
+  - no performance source change.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-194853Z-n96-phase7dl-post-rollback-bottleneck`.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard f45fa5561
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-194853Z-n96-phase7dl-post-rollback-bottleneck"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `80662.20 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- Quality:
+  pass; coherent and semantically correct.
+- Decode:
+  - `79415.78 ms / 77`, `0.97 tok/s`;
+  - this reproduces the Phase 7CC n96 confirmation level
+    `79008.37 ms / 77`, `0.97 tok/s`;
+  - do not promote because this is a diagnostic refresh.
+- Memory at finish:
+  - `memory.current.final=15127732224`;
+  - `file=14871064576`;
+  - `inactive_file=7220748288`;
+  - `active_file=7649718272`;
+  - `kernel=252145664`;
+  - `anon=450560`;
+  - `pgmajfault=1008183`;
+  - `workingset_refault_file=165303`.
+- VRAM:
+  - RTX 5090 total `32109 MiB`;
+  - free at report `822 MiB`;
+  - self `15313 MiB`;
+  - model `11153 MiB`;
+  - compute `4125 MiB`;
+  - unaccounted `15973 MiB`;
+  - VRAM cache requested and actual `15000 MiB`.
+- VRAM cache:
+  - total hits `55901`, misses `50659`, hit rate `52.5%`;
+  - down slots `806`, slot `7.44 MiB`, hits `23934`, misses `8690`,
+    preloads `9109`, hit rate `73.4%`;
+  - upgate slots `1679`, slot `5.36 MiB`, hits `31967`, misses `41969`,
+    hit rate `43.2%`;
+  - down prefetch useful rate `100.0%`.
+- Expert pack:
+  - hits `62651`, misses `1461`;
+  - `read_failures=0`;
+  - `iouring_reads=28899`;
+  - `iouring_bytes=168378384384`;
+  - `iouring_fallbacks=0`;
+  - `iouring_submit_us=164756`;
+  - `iouring_wait_us=30596459`;
+  - batch histogram `1:750,2-4:5168,5-8:2156,9-16:0`.
+- Pinned staging:
+  - main copies `49350`, waits `49326`;
+  - main `host_stage=43329.191 ms`, `h2d=10357.789 ms`;
+  - gate copies `10450`, waits `10434`;
+  - gate `host_stage=2782.399 ms`, `h2d=2324.825 ms`.
+- Up/gate profile:
+  - calls `2157`;
+  - total `9.148 ms/call`, wall `9.172 ms/call`;
+  - type18 calls `771`, wall `14.797 ms/call`, stage jobs zero;
+  - type22 calls `1386`, wall `6.043 ms/call`;
+  - combined stage-job histogram:
+    `0:772,2-4:134,5-8:532,9-16:719`.
+- Down profile:
+  - calls `4798`;
+  - total `18.712 ms/call`;
+  - CUDA batch `2.576 ms/call`;
+  - fallback `16.092 ms/call`;
+  - batch accepted `4082`;
+  - batch declined `52`.
+- CPU fallback pack mmap:
+  - enabled;
+  - hits `4286`;
+  - misses `26`;
+  - bytes `35391799296`;
+  - fallback GGUF `26`.
+
+7DL bottleneck ranking:
+
+1. Down CPU fallback is the largest directly exposed compressible component:
+   `16.092 ms/call` over `4798` calls.
+2. Expert-pack iouring wait is still large at `30.596 s`, but Phase 7DJ/7DK
+   showed that reducing wait by merging up/gate staging can lose more time in
+   host scheduling and type18 wall.
+3. Up/gate type22 stage jobs are real, but the combined-staging direction is
+   rejected until a lower-overhead sync model exists.
+4. VRAM cache split `60/40` remains the best tested local setting; both
+   upgate55 and upgate65 regressed.
+5. The next low-risk source probe should target a single unsupported down
+   fallback type, with n32 gate first.
+
+Decision:
+
+- Phase 7DL passes diagnostic gates.
+- Keep Phase 7CC as accepted SOTA.
+- Use Phase 7DL evidence to plan Phase 7DM: Q4_0 down batch support probe.
+
+## Phase 7DM: Q4_0 down batch support probe
+
+Start time:
+
+- 2026-07-04T00:00:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DL down profile:
+  - total `18.712 ms/call`;
+  - CUDA batch only `2.576 ms/call`;
+  - CPU fallback `16.092 ms/call`;
+  - batch accepted `4082`, declined `52`.
+- Name profile shows several high-cost down layers with `src0_type=2`
+  (`GGML_TYPE_Q4_0`) and `batch_eligible=0`, for example:
+  - `blk.8.ffn_down_exps.weight` decode fallback `9.093 ms/call`;
+  - `blk.15.ffn_down_exps.weight` decode fallback `7.098 ms/call`;
+  - `blk.10.ffn_down_exps.weight` decode fallback `7.613 ms/call`.
+- Code inspection:
+  - CPU down batch eligibility rejects Q4_0 in
+    `ggml_cuda_moe_stream_supports_down_batch`;
+  - CUDA MoE batch rejects Q4_0 through `moe_stream_type_supported`;
+  - `launch_moe_mmvq_compact_batch` also omits Q4_0;
+  - underlying CUDA `mmvq.cu` and `mmq` already have Q4_0 support, so a
+    limited down-only probe can reuse the existing MMVQ compact path.
+
+Hypothesis:
+
+- Add Q4_0 support only for down batch.
+- Do not add Q4_0 to the general up/gate stream type set.
+- Expected effect:
+  - Q4_0 down layers that currently CPU fallback become GPU batch candidates;
+  - CPU fallback/page-cache refault time should fall;
+  - VRAM cache and iouring/H2D traffic may rise because Q4_0 down experts are
+    now staged into the down cache.
+
+Theoretical upper bound:
+
+- The hard upper bound is the Q4_0 share of the `16.092 ms/call` down fallback
+  component.
+- Top visible Q4_0 layers alone contribute roughly:
+  - `blk.8`: `77 * 9.093 ms = 700 ms`;
+  - `blk.15`: `77 * 7.098 ms = 547 ms`;
+  - `blk.10`: `77 * 7.613 ms = 586 ms`;
+  - visible top-three subtotal about `1.83 s`.
+- More Q4_0 layers exist below the top view, so a plausible n96 ceiling is
+  `1-4 s` if GPU batch cost stays close to the existing CUDA batch path.
+- If staging bytes increase enough to add more than `1-4 s` of iouring/H2D or
+  cache churn, the probe will regress.
+
+Implementation:
+
+- Source patch, default behavior changed only by adding Q4_0 down batch
+  capability under the existing SOTA env where `GGML_MOE_STREAM_DOWN_BATCH=1`.
+- CPU:
+  - add `GGML_TYPE_Q4_0` to
+    `ggml_cuda_moe_stream_supports_down_batch`;
+  - keep `ggml_cuda_moe_stream_supports_type` unchanged so Q4_0 does not become
+    an up/gate stream type.
+- CUDA:
+  - add a down-only helper for supported batch types that includes Q4_0;
+  - use that helper in `ggml_cuda_moe_stream_batch`;
+  - add Q4_0 to `launch_moe_mmvq_compact_batch`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase7dm-source-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dm-q4-down-batch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- `memory.max=15899996160`;
+- `memory.swap.max=0`;
+- `oom=0`, `oom_kill=0`;
+- `memory.peak <= memory.max`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- activation evidence:
+  - Q4_0 down tensors no longer report `unsupported` eligibility;
+  - down batch accepted count increases, or Q4_0 down fallback time decreases;
+  - no unexpected Q4_0 up/gate batch activation.
+
+Promotion:
+
+- First n32 must beat Phase 7CC n32 confirmation
+  `33217.66 ms / 31`.
+- If first n32 beats and passes all gates, run a second cold n32 confirmation.
+- Only if both n32 runs reproduce the gain, run n96 candidate and confirmation.
+- n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+- A single lucky run is not SOTA.
+
+Rollback:
+
+- If build fails, output quality fails, TTFT exceeds the gate, host memory
+  exceeds 16GB, Q4_0 activation is absent, or n32 is slower, revert the source
+  patch immediately and record the rejection.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
