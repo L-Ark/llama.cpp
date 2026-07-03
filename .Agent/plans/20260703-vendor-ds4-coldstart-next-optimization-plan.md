@@ -3902,3 +3902,173 @@ Next direction:
   - maximum useful overlap from hot CPU math lower bound (`~3.0s` total after source touch);
   - anonymous staging memory required per thread/expert;
   - whether the expected saved time can exceed `4.2 tok/s` without TTFT violation.
+
+## 2026-07-04 Next Plan: Cold CPU Fallback O_DIRECT Staging
+
+Current accepted SOTA remains:
+
+- `eval_tok_s=4.2`
+- `prompt_tok_s=1.6`
+- `TTFT=28014.740620 ms`
+- strict cold `drop_caches`
+- 16GB cgroup including page cache
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15096049664`
+- France correctness pass
+- pushed source/docs branch: `ssd/vendor/deepseek-token-rate-16gb`
+
+This plan must continue from the accepted SOTA path. The accepted binary/source path must remain reproducible while any new diagnostic code is default-off.
+
+### Bottleneck From Latest Diagnostics
+
+The latest split trace and pack mmap probes show that the current bottleneck is not gate cache and not hot CPU math alone:
+
+- Gate one-stream VRAM cache is healthy:
+  - `VRAM cache hit_rate=86.8%`
+  - gate pack misses are zero in the accepted SOTA run.
+- CPU fallback still handles up/down misses.
+- Touch split profile showed hot CPU fallback math lower bound is about `3.0s` total, while source/page movement under cold 16GB pressure dominates.
+- Top128/top256 pack mmap worked functionally, but still faulted file-backed pages under the same cgroup page-cache pressure and regressed to `4.1`/`4.0 tok/s`.
+
+Therefore the next optimization should attack CPU fallback source movement, not another blind cache-size or top-k sweep.
+
+### Hard Bound Before Implementation
+
+Accepted generation time estimate:
+
+- `192 / 4.2 = 45.7s`
+
+Measured decode fallback coverage from the current SOTA up/down profile:
+
+| Candidate | Covered fallback time | Full-run direct read bytes observed or implied | Ideal token-rate bound |
+| --- | ---: | ---: | ---: |
+| top128 up/down | `3897.807 ms` | `44.79 GB` observed from mmap hits | about `4.6 tok/s` |
+| top256 up/down | `5646.756 ms` | `59.82 GB` observed from mmap hits | about `4.8 tok/s` |
+| top512 up/down | `7947.407 ms` | not yet safe to stage; footprint `2176 MiB` | about `5.1 tok/s` ideal only |
+
+The first diagnostic should use top128, not top256/top512:
+
+- top128 has the smallest footprint (`544 MiB`) and lowest direct-read pressure.
+- top256/top512 have better ideal bounds but likely read too many bytes without asynchronous overlap.
+- If top128 cannot beat `4.2`, larger synchronous staging is unlikely to be useful.
+
+Theoretical limitation:
+
+- A synchronous O_DIRECT top128 implementation may need to read about `44.79 GB` during the run.
+- Without overlap, this requires unrealistically high sustained effective IO bandwidth to save the full `3.9s`.
+- The expected value of the first implementation is diagnostic: prove whether avoiding page-cache pollution reduces refaults enough to offset direct-read cost.
+
+### Implementation Plan
+
+Implement a default-off CPU fallback direct staging path:
+
+- Add an exported CUDA-side pack API in `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+  - `ggml_cuda_moe_expert_pack_read(...)`
+  - use the existing batch expert pack lookup;
+  - reuse `GGML_MOE_IO_BACKEND=direct`;
+  - keep the existing no-batch stub returning false.
+- Add a CPU fallback staging path in `ggml/src/ggml-cpu/ggml-cpu.c` behind:
+  - `GGML_MOE_CPU_FALLBACK_PACK_DIRECT=1`
+- Scope the first run to decode fallback only:
+  - do not increase prompt/TTFT risk by staging prompt fallback first;
+  - keep prompt path on the current accepted behavior.
+- Use one bounded 4096-byte-aligned anonymous staging buffer:
+  - size is one expert tensor payload, about `4.25 MiB`;
+  - allocate it from existing op workspace, so it is charged inside the 16GB cgroup;
+  - add required workspace padding explicitly.
+- Add per-expert barriers around staging and compute:
+  - thread 0 reads one packed expert payload into the shared staging buffer;
+  - all CPU fallback threads consume that staged payload;
+  - all threads synchronize before the buffer is reused.
+- Add minimal counters to stderr:
+  - direct staging enabled;
+  - hits;
+  - misses/read failures;
+  - bytes staged;
+  - fallback-to-GGUF count.
+
+This is intentionally a simple synchronous diagnostic. Do not add async/prefetch until the synchronous result proves the page-cache model is worth pursuing.
+
+### Run Config
+
+Use the batch-enabled diagnostic binary so the expert-pack reader is available:
+
+- build target: `build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- strict runner: `.Agent/run-tools/strict_ds4_runner.py`
+- base SOTA env unchanged:
+  - `GGML_CUDA_DISABLE_GRAPHS=1`
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DONTNEED=1`
+  - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - current gate admit profile
+  - current gate O_DIRECT expert pack
+  - current top-k up/down pruning
+- added env:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack`
+  - `GGML_MOE_IO_BACKEND=direct`
+  - `GGML_MOE_CPU_FALLBACK_PACK_DIRECT=1`
+  - fallback/name profile outputs enabled
+- do not enable:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP`
+  - `GGML_MOE_STREAM_DOWN_BATCH`
+
+### Acceptance And Rejection
+
+Accept only if all are true:
+
+- strict cold run uses `drop_caches`;
+- host RAM cgroup including page cache stays within 16GB;
+- `MemorySwapMax=0`;
+- France output is semantic, correct, and coherent;
+- `TTFT <= 33617.688744 ms` (`28014.740620 * 1.20`);
+- `eval_tok_s > 4.2`;
+- source/docs are committed and pushed to `ssd/vendor/deepseek-token-rate-16gb`;
+- the promoted result is rerun from the pushed source and records binary/source hashes.
+
+Reject if any are true:
+
+- token rate ties or falls below `4.2`;
+- correctness fails;
+- RAM exceeds 16GB including page cache;
+- TTFT exceeds the accepted limit, unless explicitly recorded as a rejected high-TTFT diagnostic;
+- direct staging counters show most hits still fall back to GGUF;
+- major faults/refaults remain unchanged while token rate regresses.
+
+If rejected:
+
+- record full metrics, stdout correctness text, stderr counters, hashes, and verdict in this document;
+- revert the direct-staging source changes unless they are clearly useful default-off instrumentation for the next diagnostic;
+- keep the accepted 4.2 SOTA as the current rollback point.
+
+### Required Record And Push Discipline
+
+For every practice run before changing code:
+
+- update this plan with hypothesis, hard bound, exact run config, expected acceptance/rejection rule, and start time.
+
+For any new compliant SOTA:
+
+- immediately record exact reproduction info:
+  - commit hash;
+  - branch;
+  - binary path and sha256;
+  - model path and size/hash when available;
+  - all env vars;
+  - all CLI args;
+  - run directory;
+  - stdout correctness answer;
+  - token-rate metrics;
+  - TTFT;
+  - elapsed time;
+  - cgroup memory peak;
+  - file/page-cache bytes;
+  - relevant profiling counters and artifact hashes.
+- immediately commit and push source plus docs to:
+  - remote: `ssd` (`https://github.com/wici-ai/ssd-llama.git`)
+  - branch: `vendor/deepseek-token-rate-16gb`
+  - git identity: `L-Ark <fliangae@connect.ust.hk>`
+- rebuild and rerun from the pushed source before calling the result promoted/reproducible.
+
+Do not promote any unpushed local run as SOTA.
