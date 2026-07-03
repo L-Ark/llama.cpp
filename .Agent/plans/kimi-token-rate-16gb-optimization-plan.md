@@ -1399,7 +1399,7 @@ Decision:
 
 Timestamp: 2026-07-03T18:53:40Z.
 
-Status: planned before implementation.
+Status: rejected after n96; source patch reverted.
 
 Current bottleneck:
 
@@ -1487,6 +1487,110 @@ Rollback:
 - If resource usage worsens materially, quality fails, or n96 decode is not
   reproducibly faster than Phase 7CC, revert the source patch and record the
   result.
+
+Execution record:
+
+- Plan commit:
+  - `992ea7027 docs: plan kimi phase7dg q8 pointer hoist`
+- Source probe commit:
+  - `895e317df cuda: probe iq3 xxs q8 pointer hoist`
+- Rollback commit:
+  - `7e298761d Revert "cuda: probe iq3 xxs q8 pointer hoist"`
+- Source change:
+  - hoisted `const block_q8_1 * bq8 = bq8_1 + iqs/2`;
+  - hoisted `const int * q8 = (const int *) bq8->qs`;
+  - replaced repeated `get_int_b4(bq8_1[iqs/2].qs, ...)` with `q8[...]`;
+  - kept 32-bit loads; no `int2`/`uint64_t` unaligned vector load.
+
+Resource result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-185451Z-phase7dg-resource`
+- Active kernel:
+  `mul_mat_vec_q<type18,ncols=1,false,false,false>`
+- Baseline:
+  `REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+- Phase 7DG:
+  `REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+- Additional observation:
+  - `ncols=2` changed from `REG:85` to `REG:80`, but the accepted active path
+    remains `ncols=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 895e317df
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-185513Z-n96-phase7dg-iq3-q8-pointer-hoist
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+n96 result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-185513Z-n96-phase7dg-iq3-q8-pointer-hoist`
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `79640.73 ms`
+- decode: `80506.63 ms / 77`, `0.96 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15128244224`
+  - `file=14871244800`
+  - `inactive_file=489000960`
+  - `active_file=14381568000`
+- expert pack:
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+  - `iouring_wait_us=31658184`
+- up/gate profile:
+  - overall `wall=9.466 ms/call`;
+  - type18 `wall=15.123 ms/call`;
+  - type22 `wall=6.320 ms/call`.
+
+Comparison:
+
+- Accepted Phase 7CC n96 confirm:
+  `79008.37 ms / 77`, `0.97 tok/s`.
+- Phase 7DG:
+  `80506.63 ms / 77`, `0.96 tok/s`.
+- Phase 7DG is slower by `1498.26 ms`.
+
+Gap analysis:
+
+- Resource usage did not worsen, so the regression is not explained by
+  register pressure or spills.
+- The compiler likely already performed the intended address hoist in the
+  original code, while the explicit pointer version changed scheduling enough
+  to hurt the type18 wall time.
+- This confirms that small syntactic vec-dot changes without SASS-level
+  evidence are not a high-confidence path.
+
+Decision:
+
+- Reject Phase 7DG.
+- Source patch was reverted and pushed.
+- Keep Phase 7CC as accepted SOTA.
+- Next work should either:
+  - inspect SASS/instruction diff before another type18 micro-probe; or
+  - target batch formation/producer-side limits that Phase 7DF exposed
+    (`inflight_max` stayed at 8 despite depth 16).
 
 ## Phase 0: cold 16GB baseline
 
