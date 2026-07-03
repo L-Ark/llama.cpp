@@ -6194,6 +6194,120 @@ GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
 GGML_MOE_STAGE_PINNED_SLOTS=16
 ```
 
+## Phase 7EE: default-off Q4_0 down batch probe
+
+Start time:
+
+- 2026-07-04T07:28:00+08:00.
+
+Current bottleneck:
+
+- Current SOTA remains Phase 7EB:
+  - n32 `29599.64 ms / 31`;
+  - n96 `74201.57 ms / 77`.
+- Phase 7EB fallback-profile aggregation shows the remaining decode fallback
+  is concentrated in Q4_0 down tensors:
+  - `decode,type=2` count `4312`, fallback `4118.440 ms`,
+    bytes `8.067 GiB`.
+- Top decode Q4_0 down fallback tensors:
+  - `blk.6.ffn_down_exps.weight`: `790.712 ms`;
+  - `blk.8.ffn_down_exps.weight`: `651.840 ms`;
+  - `blk.9.ffn_down_exps.weight`: `603.728 ms`;
+  - `blk.7.ffn_down_exps.weight`: `580.192 ms`;
+  - `blk.10.ffn_down_exps.weight`: `553.880 ms`;
+  - `blk.15.ffn_down_exps.weight`: `491.640 ms`;
+  - `blk.18.ffn_down_exps.weight`: `446.448 ms`.
+- Code inspection:
+  - `moe_stream_type_supported()` currently excludes `GGML_TYPE_Q4_0`;
+  - `ggml_cuda_moe_stream_batch()` declines unsupported types before down
+    batch staging;
+  - `launch_moe_mmvq_compact_batch()` also excludes `GGML_TYPE_Q4_0`;
+  - generic CUDA MMVQ already supports Q4_0 via `mmvq.cu`
+    `ggml_cuda_moe_stream_mmvq_dev()`.
+
+Hypothesis:
+
+- Add a default-off env gate:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0=1
+```
+
+- When enabled only for `ggml_cuda_moe_stream_batch()` down tensors:
+  - permit `GGML_TYPE_Q4_0` through the down batch type check;
+  - allow `GGML_TYPE_Q4_0` in `launch_moe_mmvq_compact_batch()`;
+  - keep up/gate and preload allowlists unchanged;
+  - keep Q8_K down path unchanged.
+- This should move the seven decode Q4_0 down tensors from CPU fallback to
+  the existing GPU MMVQ compact down path.
+
+Theory and upper bound:
+
+- Hard n96 upper bound from current fallback is `4118.440 ms`.
+- Real gain is lower because GPU MMVQ Q4_0 adds:
+  - staging selected Q4_0 experts into VRAM cache;
+  - Q8_1 quantization of `src1`;
+  - MMVQ kernel time;
+  - D2H/scatter.
+- Plausible n32 gain is `0.8-1.8 s`; plausible n96 gain is `2-3.5 s`.
+- If decode is slower, likely causes:
+  - Q4_0 MMVQ GPU kernel is slower than CPU fallback for these small down
+    groups;
+  - added staging/VRAM cache traffic outweighs CPU fallback removal;
+  - numeric mismatch or output quality regression.
+
+Implementation:
+
+- Source patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add helper:
+  - `moe_down_q4_0_enabled()`;
+  - `moe_stream_down_type_supported(type)`.
+- Use the down-specific helper only in `ggml_cuda_moe_stream_batch()`.
+- Add `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()` switch.
+- Add one-time stderr activation line when Q4_0 down is enabled and used.
+- Default behavior without env must remain identical.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase7ee-source-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ee_repro.sh
+grep -q "GGML_MOE_STREAM_DOWN_Q4_0" /tmp/run_phase7ee_repro.sh || \
+  sed -i '/^GGML_MOE_STREAM_SERIAL_STAGE_BATCH=/a GGML_MOE_STREAM_DOWN_Q4_0=1' /tmp/run_phase7ee_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ee_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ee-q40-down"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ee_repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- France output coherent and semantically correct;
+- n32 decode beats Phase 7EA `29599.64 ms / 31`;
+- fallback evidence:
+  - `decode,type=2` fallback is materially lower than current SOTA;
+  - down batch accepts Q4_0 calls rather than CPU fallback.
+
+Result handling:
+
+- If accepted, run n96 confirmation.
+- If quality fails, build fails, or n32 is slower, revert the source patch or
+  leave it default-off only if it is useful for further diagnostic work; do not
+  promote `GGML_MOE_STREAM_DOWN_Q4_0`.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
