@@ -958,6 +958,21 @@ Baseline guard execution:
 - Gate/O_DIRECT counters: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
 - Verdict: baseline guard passed. This confirms the current pushed path remains reproducible at the `4.1 tok/s` repeated strict-cold line and is safe to use as the pre-candidate baseline. Accepted historical SOTA remains `4.2 tok/s`; this guard is not a promotion.
 
+
+CPU fallback fine trace design:
+
+- Goal: identify the next compressible CPU fallback component before any new optimization source change.
+- Source state: clean accepted SOTA binary; no source change.
+- Existing instrumentation: `GGML_MOE_CPU_CHUNK_TRACE_OUT={case_dir}/cpu_chunk_trace.csv` records per CPU fallback chunk `seq,tensor,type,expert,ith,nth,cne1,ir0_start,ir0_end,ir1_start,ir1_end,src0_bytes,ms`. `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, and `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-profile.csv` provide operation/name/expert aggregate timing.
+- Run shape: strict cold full France run with accepted gate O_DIRECT config, plus chunk trace/profile env vars. Use a high trace limit (`GGML_MOE_CPU_CHUNK_TRACE_LIMIT=800000`) to capture the full prompt+decode fallback path.
+- Required analysis after run:
+  - summarize fallback profile by prompt/decode and up/down;
+  - summarize chunk trace by tensor, phase-inferred shape (`cne1`), expert, thread, and row chunk ranges;
+  - estimate wall time, thread-sum time, max-thread tail, and imbalance for `cne1=1` decode-like work vs multi-row prompt-like work;
+  - compare RAM, page/refault, pack counters, gate cache counters, and France correctness against the baseline guard;
+  - decide whether the next candidate should target dot compute, tail imbalance, page/refault/source load, or setup/barrier.
+- Acceptance: this is diagnostic only. It cannot promote SOTA even if token rate ties/exceeds historical `4.2`; any optimization must be designed from the trace and run separately under the normal acceptance gates.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
