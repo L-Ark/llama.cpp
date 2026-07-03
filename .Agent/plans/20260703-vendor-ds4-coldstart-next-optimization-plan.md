@@ -1108,6 +1108,39 @@ Next required design step:
 - The harness must use representative DS4 shapes, report max/mean abs, warm speed, compile flags, CPU feature path, and must reject any variant that is numerically non-identical or below the configured speedup threshold.
 - Only after such a harness finds a real speedup should a default-off runtime source candidate be designed. Current accepted SOTA remains unchanged.
 
+
+MXFP4 dot harness artifact design:
+
+- Goal: make the microbench gate repeatable instead of relying on ad hoc `/tmp` snippets. This harness is not a runtime optimization and cannot promote SOTA by itself.
+- Artifacts:
+  - `.Agent/run-tools/mxfp4_dot_harness.cpp`: compares current row-wise `ggml_vec_dot_mxfp4_q8_0()` against the existing tested `ggml_gemv_mxfp4_8x8_q8_0()` repack kernel on DS4-like shapes.
+  - `.Agent/run-tools/run_mxfp4_dot_harness.sh`: compiles the harness against `build-ds4-moe-stream/bin` and runs it, printing CPU flags and the exact compile command.
+- Required output: per shape `repack_ms`, row-wise runtime, repack GEMV runtime, speedup, `max_abs`, `mean_abs`, and a checksum/sink to prevent dead-code elimination.
+- Interpretation rule: a future runtime candidate is allowed only if a variant is numerically exact or within a documented tolerance and has enough warm speedup to justify a strict cold model run under the 16GB gates.
+
+
+MXFP4 dot harness verification result:
+
+- Harness command: `.Agent/run-tools/run_mxfp4_dot_harness.sh 200`.
+- CPU feature path evidence: `/proc/cpuinfo` includes `avx2`, `fma`, `bmi1`, `bmi2`, `vaes`, and `vpclmulqdq`; no AVX512/VNNI flag is present. Compiler was `g++ 12.3.0` with `-O3 -march=native`.
+- Compile command was printed by the script and links against `build-ds4-moe-stream/bin/libggml-cpu` and `libggml-base` with rpath set to the same build directory.
+- Results:
+  - up-like `k=4096 rows=2048 iters=200`: `repack_ms=3.951`, `row_ms=88.242`, `repack_gemv_ms=62.221`, warm speedup `1.418x`, `max_abs=0`, `mean_abs=0`, `sink=4.098e-07`.
+  - down-like `k=2048 rows=4096 iters=200`: `repack_ms=2.920`, `row_ms=91.825`, `repack_gemv_ms=61.846`, warm speedup `1.485x`, `max_abs=0`, `mean_abs=0`, `sink=8.194e-07`.
+- Interpretation: the existing tested 8x8 repack GEMV path is numerically identical to row-wise `ggml_vec_dot_mxfp4_q8_0()` for these DS4-like shapes and is materially faster in a warm microbench. The earlier ad hoc native multi-row prototype is therefore not the right implementation direction; reuse of the existing tested repack kernel is the only credible MXFP4 kernel path seen so far.
+- Cold-start caveat: full-model hotset repack was historically rejected because persistent repack memory and cold conversion/read cost do not fit the current 16GB/page-cache/VRAM tradeoff. The harness result does not promote SOTA by itself. It only reopens a narrower design space: tiny, per-call or per-layer transient repack of the exact fallback rows, bounded by measured repack cost and without persistent host RAM growth.
+
+Latest next-step plan after harness verification:
+
+1. Design first, then execute: quantify a transient MXFP4 repack candidate before touching runtime source. Use the fine trace to estimate the maximum recoverable CPU fallback time and combine it with harness repack cost. A candidate is worth implementing only if the theoretical bound exceeds `1s` wall-clock and does not require additional persistent RAM inside the 16GB cgroup.
+2. Candidate shape: default-off transient repack for CPU fallback up/down rows selected by `mul_mat_id`, reusing existing `ggml_gemv_mxfp4_8x8_q8_0()` only where rows are naturally grouped in multiples of 8 or can be safely batched without changing selected experts or arithmetic semantics.
+3. Correctness gate before model run: add a short unit/microbench diagnostic that feeds the exact row groups through row-wise and transient-repack paths, requires `max_abs=0` or a documented bit-level explanation if not exact, and reports repack overhead separately from GEMV time.
+4. Memory gate before model run: prove from allocation sizes that transient buffers are bounded and freed inside the op/layer. No persistent expert repack cache is allowed unless its size is explicitly budgeted under cgroup `memory.current <= 16000000000` including page cache.
+5. Full strict-cold run only after gates pass: run France strict cold with the accepted SOTA config, `drop_caches`, `MemoryMax=16000000000`, O_DIRECT gate pack, same profile/pack hashes, and record output, TTFT, token rates, cgroup memory, page faults/refaults, gate counters, and pack counters.
+6. Acceptance remains strict: only `eval_tok_s > 4.2`, correctness pass, RAM pass including page cache, TTFT within `+20%`, and no O_DIRECT fallback can replace current SOTA. A TTFT-over-gate speedup may be committed only as `not accepted` and cannot become SOTA.
+7. Push discipline: when a compliant new SOTA appears, immediately commit source, plan, run metadata, command/env, hashes, and reproduction notes, then push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`. After push, clean rebuild from the pushed source and rerun strict cold before declaring it reproducible. Use git identity `L-Ark <fliangae@connect.ust.hk>`.
+8. If the transient repack bound is weak or correctness/memory gates fail, reject without full-model trial and return to bottleneck profiling. Current accepted SOTA remains the `4.2 tok/s` cold-start record.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
@@ -1133,4 +1166,4 @@ Rejected/tie handling:
 - This new plan file is the active next-stage plan; the long `20260701` plan remains the historical audit log.
 - `4.2 tok/s` remains the historical highest observed/current accepted record only when citing its original run.
 - `4.1 tok/s` is the currently repeated strict-cold reproduction line.
-- No source edits are included in this plan commit.
+- No runtime source edits are included in this plan commit; the added files are repeatable run-tool harness artifacts for future candidate gating.
