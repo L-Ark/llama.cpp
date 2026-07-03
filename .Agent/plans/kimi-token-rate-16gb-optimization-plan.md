@@ -21228,3 +21228,153 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BE - detached same-type current-down overlap probe
+
+Design timestamp: 2026-07-03 05:02 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-154750Z-n32-phase7as-iq2-upgate-parallel-confirm`;
+    decode `33471.59 ms / 31`, `0.93 tok/s`, TTFT `80106.15 ms`;
+    current-down overlap planned/completed `3664`, down hit rate `73.6%`;
+    type-18 wall `18.646 ms/call`, type-22 wall `7.048 ms/call`;
+    main pinned `host_stage=18631.890 ms`.
+  - n96 confirm:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm`;
+    decode `84173.24 ms / 77`, `0.91 tok/s`, TTFT `77844.70 ms`.
+- Phase 7BD proved that same-token down preload is useful but synchronized at
+  the wrong point:
+  - down cache hit rate reached `100%`;
+  - down `cuda_batch` improved from Phase 7AS `2.675 ms/call` to
+    `0.418 ms/call`;
+  - expert-pack wait fell from `11567536 us` to `10059770 us`;
+  - but decode regressed to `35677.79 ms / 31`, `0.87 tok/s`;
+  - type-18 wall rose to `28.241 ms/call`, type-22 wall to
+    `13.090 ms/call`;
+  - main pinned `host_stage` rose to `21208.193 ms`.
+- Therefore the bottleneck is not the existence of same-token down preload; it
+  is the scheduling/join placement and staging-resource contention.
+
+Hypothesis:
+
+Keep the Phase 7BD same-token down preload idea, but do not join the worker
+before the up/gate mixed branch returns. Instead, record the target down cache
+slot as pending and let the actual down op wait only if it consumes that slot.
+Use a dedicated nonblocking CUDA stream and a dedicated pinned staging ring for
+the down-overlap worker so it does not contend with the main up/gate staging
+ring.
+
+Why this can improve token rate:
+
+- The down op already calls `batch_cache_lookup_slot()`, which waits on
+  `slot_ready` for pending async prefetch slots. This is the correct dependency
+  point: wait only when the value is actually needed.
+- Phase 7BD showed the data movement is early enough to make all target down
+  tensors cache hits, but the explicit join moved that wait into the up/gate
+  critical path.
+- A dedicated down-overlap ring avoids racing or delaying the main up/gate
+  `stage_ring`, which was one reason Phase 7BD increased `host_stage`.
+- This is a scheduling-only probe; it must not change tensor math, routing, or
+  quantization.
+
+Theoretical upper bound:
+
+- Phase 7BD's best visible down-side gain relative to Phase 7AS is roughly:
+  - down `cuda_batch`: `2.675 - 0.418 = 2.257 ms/call`;
+  - n32 down calls were about `~992`, so an unrealistically perfect bound is
+    about `2.24 s` saved in n32.
+- Phase 7BD also reduced expert-pack wait by about `1.51 s`.
+- If the detached worker removes most of the Phase 7BD up/gate wait regression
+  while keeping the down-side benefit, expected n32 decode can improve by
+  `1-3 s` over Phase 7AS.
+- Bound for n32 is therefore around `30.5-32.5 s` decode, or `0.95-1.02 tok/s`.
+  Larger gains are suspect unless explained by measured IO/staging reductions.
+
+Implementation plan:
+
+- Add default-off env:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_DETACHED=1
+```
+
+- Keep existing Phase 7AS `GGML_MOE_CURRENT_DOWN_OVERLAP=1` behavior unchanged
+  when detached mode is off.
+- Add a dedicated `current_down_stream` and `stage_ring_current_down` to
+  `batch_ctx`.
+- Add a single in-flight detached worker guard:
+  - if a previous down-overlap worker is still running, skip the new detached
+    preload rather than blocking up/gate;
+  - at process exit, join any remaining worker before printing staging/cache
+    summaries.
+- Mark down cache slots as pending before returning from the worker and record
+  their `slot_ready` events on the dedicated stream.
+- If worker copy fails, synchronize only the dedicated stream, clear only the
+  slots it inserted, and increment failure counters. The default SOTA path must
+  remain unaffected.
+
+Experiment:
+
+- First commit this plan before source edits.
+- Implement the probe as default-off source.
+- Build on the server:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Smoke with strict cold n4:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n4-phase7be-detached-down-overlap-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      CURRENT_DOWN_OVERLAP_DETACHED=1 \
+      /tmp/run_phase7be_repro.sh
+```
+
+- Continue to n32 only if n4 passes all hard and quality gates.
+- n32 candidate must beat Phase 7AS n32 confirmation
+  `33471.59 ms / 31`, pass semantic quality, and show activation in logs.
+- If the first n32 beats Phase 7AS, run a second cold n32 confirmation with the
+  same script and env.
+- Promote only after n96 candidate and n96 confirmation both beat Phase 7AS n96
+  `84173.24 ms / 77` and pass semantic quality.
+
+Acceptance gates:
+
+- Host RAM remains below the cgroup peak gate `15899996160` bytes with
+  `oom=0`, `oom_kill=0`, and swap disabled.
+- Cold start is proven by `sync; echo 3 > /proc/sys/vm/drop_caches` in the run
+  script and recorded in `cold-start.txt`.
+- TTFT remains `<=106331.72 ms`.
+- `read_failures=0` and `iouring_fallbacks=0`.
+- France prompt output is coherent and semantically correct; automated quality
+  pass must be manually checked against `answer.txt`.
+- Activation evidence:
+  - `env.txt` contains `GGML_MOE_CURRENT_DOWN_OVERLAP_DETACHED=1`;
+  - stderr contains a detached overlap activation line;
+  - current-down overlap counters show planned/completed jobs;
+  - pinned staging report includes `current_down`.
+- Mechanism evidence:
+  - same-type down hit rate should approach Phase 7BD's `100%` without
+    increasing type-18/type-22 wall buckets above Phase 7AS;
+  - main pinned `host_stage` should not rise relative to Phase 7AS by more than
+    normal noise.
+
+Rollback:
+
+- If n4 quality, TTFT, memory, CUDA, or activation gates fail, reject and revert
+  source immediately.
+- If n32 is slower than Phase 7AS or quality is wrong, reject, revert source,
+  rebuild clean, and record the failure here.
+- If detached threading introduces a hang or missing atexit summaries, reject
+  and revert source.
+- Do not stack another optimization on top of a failed detached-overlap patch.
