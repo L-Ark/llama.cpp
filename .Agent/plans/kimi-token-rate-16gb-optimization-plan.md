@@ -20498,3 +20498,157 @@ Rollback:
   immediately and keep Phase 7AS as SOTA.
 - If n4 passes but n32 is slower or semantically wrong, reject and do not run
   n96.
+
+Phase 7BB result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- source status:
+  - head `a55f33c7b`;
+  - branch `vendor/kimi-moe-stream-on-vendor`;
+  - status clean at run start.
+- runner:
+  - `/tmp/run_phase7bb_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - records `GPU_HANDOFF=1` in `command.txt`;
+  - appends `GGML_MOE_GPU_HANDOFF=1` to `env.txt`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_GPU_HANDOFF=1
+```
+
+- all other accepted Phase 7AS settings were retained:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-041926Z-n4-phase7bb-gpu-handoff-smoke`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-041926Z-n4-phase7bb-gpu-handoff-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 GPU_HANDOFF=1 \
+      /tmp/run_phase7bb_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `77912.97 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr contains `GPU handoff consumed: ne00=2048 dst_cols=8`;
+  - stderr contains `IQ2_S parallel up/gate streams active`.
+- output:
+  `France is a Western`
+- metrics:
+  - automated `quality=fail`;
+  - decode `12849.47 ms / 3`, `0.23 tok/s`.
+- profile:
+  - down `calls=358`, total `217.086 ms/call`,
+    `fallback_t0=211.502 ms/call`, `cuda_batch=5.432 ms/call`;
+  - type-18 up/gate kernel `47.762 ms/call`;
+  - type-22 up/gate kernel `28.623 ms/call`.
+- interpretation:
+  - activation succeeded, but the prefix is incomplete and not strong enough to
+    pass the n4 semantic smoke;
+  - even at n4, down fallback becomes very expensive under handoff.
+
+n32 diagnostic:
+
+- Although n4 was already weak, an n32 run was executed to quantify the
+  failure mode before rejecting the mechanism.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-042210Z-n32-phase7bb-gpu-handoff`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-042210Z-n32-phase7bb-gpu-handoff"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 GPU_HANDOFF=1 \
+      /tmp/run_phase7bb_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `72855.12 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr contains `GPU handoff consumed: ne00=2048 dst_cols=8`;
+  - stderr contains `IQ2_S parallel up/gate streams active`.
+- output:
+  `France is a Western European Europe's largest States, largest in York City, the country. It France<|im_end|> [end of text]`
+- quality:
+  - automated `quality=pass`, but this is a false positive;
+  - manual semantic gate fails because the answer is incoherent and wrong.
+- decode:
+  - `133001.32 ms / 20`, `0.15 tok/s`;
+  - stopped early at `<|im_end|>`;
+  - compared with Phase 7AS n32 confirmation `33471.59 ms / 31`,
+    Phase 7BB is slower by `99529.73 ms` while producing fewer decode tokens.
+- expert pack:
+  - hits `14846`, misses `8248`;
+  - direct reads `12380`;
+  - iouring reads `1767`;
+  - iouring bytes `11208458240`;
+  - iouring wait `2418520 us`.
+- pinned staging:
+  - main `host_stage=116290.408 ms`, `h2d=3883.042 ms`;
+  - gate `host_stage=26702.509 ms`, `h2d=815.136 ms`.
+- profile:
+  - down `calls=1378`, total `68.694 ms/call`,
+    `fallback_t0=55.730 ms/call`, `cuda_batch=12.694 ms/call`;
+  - type-18 up/gate kernel `64.464 ms/call`;
+  - type-22 up/gate kernel `47.634 ms/call`,
+    `up_wait=44.890 ms/call`, `gate_wait=47.479 ms/call`.
+
+Interpretation:
+
+- GPU handoff is functionally activated, so this is not an env miss.
+- The mechanism is rejected for both correctness and performance:
+  - n32 output is semantically wrong;
+  - decode wall time regresses by about `99.5 s`;
+  - main pinned host-stage grows to `116.290 s`;
+  - gate pinned host-stage grows to `26.703 s`;
+  - down `cuda_batch` rises from the Phase 7AS n32 level around
+    `2.675 ms/call` to `12.694 ms/call`;
+  - type-18 and type-22 up/gate kernel/wait buckets are much worse than Phase
+    7AS.
+- The earlier handoff corruption risk still exists under the current Phase 7AS
+  runtime. Handoff must not be enabled until the device-side activation layout
+  and synchronization semantics are re-derived and tested independently.
+
+Decision:
+
+- Reject Phase 7BB.
+- Do not run n96.
+- No source rollback is needed because this was env-only.
+- Keep `GGML_MOE_GPU_HANDOFF` disabled in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
