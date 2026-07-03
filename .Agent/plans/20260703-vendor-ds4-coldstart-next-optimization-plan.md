@@ -439,6 +439,55 @@ Next direction after this rejection:
 2. Focus next on CPU fallback itself: profile the CPU up/down fallback inner loop by type/layer and check whether thread scheduling, row routing, or repeated conversion/barrier work can be reduced without changing math.
 3. Any CPU-side source candidate must be default-off, preserve exact France correctness, and show a measurable reduction in `fallback_t0` or name-profile totals before a full SOTA run.
 
+### 2026-07-03 CPU Willneed Probe On 4.2 SOTA
+
+Design:
+
+- Goal: retest the existing no-source `GGML_MOE_CPU_WILLNEED=1` switch on the current `4.2 tok/s` SOTA path.
+- Theory: current remaining bottleneck is CPU up/down fallback. `MADV_WILLNEED` on active CPU fallback expert pages may overlap cold page-in with compute and reduce page stalls. Risk is broad prefetch under the 16GB cgroup can increase reclaim/refault pressure.
+- Source state: clean accepted SOTA binary; no source change.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T045821Z-20260703T045821Z-odirect-sota-cpu-willneed-probe/france-cpu40-vram0gb`
+- Config delta from accepted SOTA: add `GGML_MOE_CPU_WILLNEED=1`; keep gate O_DIRECT config, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, strict cold 16GB cgroup, full France output.
+
+Result:
+
+- `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=29414.893158 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15103877120`, `pgmajfault=181560`, `workingset_refault_file=1579212`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true`; France answer was semantic and coherent.
+
+Counters and diagnosis:
+
+- Gate behavior stayed aligned with SOTA: one expert pack `hits=4623 misses=0`, direct failures `0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- CUDA memory shape stayed aligned with SOTA: `free=238MiB`, `model=17362MiB`, `unaccounted=14508MiB`.
+- The willneed prefetch did not convert into higher token rate and likely added page-cache/reclaim pressure: rounded generation fell from `4.2` to `4.0`.
+
+Verdict:
+
+- Rejected. Do not enable `GGML_MOE_CPU_WILLNEED=1` for current SOTA.
+- No rollback required because this was an env-only probe and source remained clean.
+
+### 2026-07-03 Narrow Thread Sweep Design
+
+Design:
+
+- Goal: verify whether the current `-t 20 -tb 20` point is still the best thread count for the accepted 4.2 SOTA path.
+- Existing evidence: historical no-source sweeps showed `24 -> 4.0 tok/s`, `28 -> 4.1 tok/s`, `32 -> 2.3 tok/s`, all below SOTA. Values just below and just above 20 were not checked on the current pushed 4.2 SOTA path.
+- Theory: CPU up/down fallback is a mix of compute, mmap page stalls, and thread scheduling. Slightly fewer threads may reduce memory pressure/context overhead; slightly more may help compute. Because the observed curve worsens above 20, only test narrow values `18` and `22`.
+- Source state: clean accepted SOTA binary; no source change.
+
+Planned runs:
+
+- `-t 18 -tb 18`, accepted gate O_DIRECT config, strict cold 16GB cgroup, full France output.
+- `-t 22 -tb 22`, same config, only if the `18` run does not reveal a reproducibility issue.
+
+Acceptance:
+
+- Promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and exact run metadata is recorded and pushed.
+- Reject/tie on `eval_tok_s <= 4.2` or any gate violation.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
