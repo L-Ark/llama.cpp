@@ -25467,3 +25467,109 @@ Decision:
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 - Do not continue the IQ3 pipeline family without a scheduler that reduces
   global iouring/pinned contention rather than only gating which calls pipeline.
+
+## Phase 7BV - retest lower pinned staging slots on Phase 7AS
+
+Design timestamp: 2026-07-03T11:35:27Z.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- The last three IQ3 pipeline phases all showed the same global failure mode:
+  - Phase 7BS improved local IQ3 type-18 wall but increased
+    `iouring_wait_us` to `14174309`;
+  - Phase 7BT avoided most IO explosion but added planning/cache churn;
+  - Phase 7BU removed cache churn but accepted enough calls to raise
+    `iouring_wait_us` to `12701001`.
+- Phase 7AP already showed increasing pinned slots from `8` to `16` regresses.
+  The untested opposite direction on the current Phase 7AS runtime is reducing
+  pinned slots to lower staging concurrency and IO pressure.
+
+Hypothesis:
+
+Reducing `GGML_MOE_STAGE_PINNED_SLOTS` from `8` to `4` may lower concurrent
+H2D/iouring staging pressure and reduce wall time if current decode is
+contention-bound rather than slot-starved. It may also regress by exposing waits
+if eight slots are required to keep down/upgate movement off the critical path.
+
+Why this can improve token rate:
+
+- This is env-only and does not change math, routing, cache size, prompt path,
+  or selected experts.
+- The repeated regression pattern after 7BS/7BT/7BU is excess global staging
+  pressure; lowering slots is the simplest way to test whether less concurrency
+  helps without adding any new copies.
+- If it helps, the evidence should be lower `iouring_wait_us`, lower pinned
+  `host_stage`, or lower wall gaps without a down hit-rate collapse.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 has:
+  - main pinned `host_stage=18631.890 ms`;
+  - gate pinned `host_stage=2245.529 ms`;
+  - expert-pack `iouring_wait_us=11567536`.
+- If slot pressure accounts for even `3-5%` of the decode wall, possible n32
+  improvement is `1.0-1.7 s`.
+- If four slots starve H2D or expose down staging, regression could be several
+  seconds, similar to disabling current-down overlap.
+
+Experiment:
+
+- Env-only; no source patch.
+- Create `/tmp/run_phase7bv_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Change only:
+
+```sh
+PINNED_SLOTS=4
+GGML_MOE_STAGE_PINNED_SLOTS=4
+```
+
+- Keep all other Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bv-pinned-slots4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=4 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bv_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `command.txt` records `PINNED_SLOTS=4`;
+  - `env.txt` contains `GGML_MOE_STAGE_PINNED_SLOTS=4`;
+  - stderr pinned staging report shows `slots=4`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower, reject and keep `PINNED_SLOTS=8` in SOTA.
