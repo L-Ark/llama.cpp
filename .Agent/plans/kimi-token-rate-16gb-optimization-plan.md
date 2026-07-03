@@ -27157,6 +27157,136 @@ Rollback:
 - Do not promote this run as SOTA even if wall time is faster; rerun without
   diagnostic env would be required for any promotion.
 
+Phase 7CE result - diagnostic complete:
+
+- result time:
+  - 2026-07-03T13:13:00Z.
+- source status:
+  - env-only diagnostic;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-130809Z-n32-phase7ce-7cc-graph-split-profile`.
+- runner:
+  - `/tmp/run_phase7ce_diag.sh`;
+  - copied from `/tmp/run_phase7cc_repro.sh`;
+  - appended graph/split diagnostic env to `env.txt`.
+- env delta over Phase 7CC:
+
+```sh
+LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=50
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `77431.42 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33008.82 ms / 31`, `0.94 tok/s`;
+  - this is diagnostic-only and is not promoted because graph/split profiling
+    env was enabled. A production rerun without diagnostic env is required
+    before treating this as a new timing point.
+- memory at finish:
+  - `memory.current.final=15121264640`;
+  - `file=14881316864`;
+  - `inactive_file=4356501504`;
+  - `active_file=10524286976`;
+  - `kernel=236453888`;
+  - `anon=454656`;
+  - `pgmajfault=1000136`;
+  - `workingset_refault_file=111250`.
+- expert pack:
+  - `hits=25134`;
+  - `misses=516`;
+  - `iouring_reads=11655`;
+  - `iouring_bytes=67926376448`;
+  - `iouring_wait_us=13162370`;
+  - `entries=30831`;
+  - `inflight_avg=2.97`, `inflight_max=8`.
+- pinned staging:
+  - main `host_stage=17297.625 ms`, `h2d=4148.031 ms`,
+    `slot_wait=48.493 ms`;
+  - gate `host_stage=1273.751 ms`, `h2d=918.004 ms`,
+    `slot_wait=10.682 ms`.
+- cache:
+  - down `slots=806`, `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+  - upgate `slots=1679`, `hits=13019`, `misses=16757`,
+    `hit_rate=43.7%`.
+- current down overlap:
+  - `planned_jobs=3664`;
+  - `completed_jobs=3664`;
+  - `missing_pack=36`;
+  - `worker_us=3448954`.
+- up/gate type profile:
+  - type `18`: `wall=15.001 ms/call`;
+  - type `22`: `wall=6.357 ms/call`.
+- CPU MoE profile:
+  - up_gate `12.662 ms/call`;
+  - down `38.557 ms/call`;
+  - down `fallback_t0=35.758 ms/call`;
+  - down `cuda_batch=2.747 ms/call`.
+- graph profile:
+  - submit `calls=32`, `total=109337.702 ms`, `avg=3416.803 ms/call`;
+  - sync `calls=192`, `total=24.569 ms`, `avg=0.128 ms/call`;
+  - decode sync `calls=31`, `decode_total=24.337 ms`,
+    `decode_avg=0.785 ms/call`;
+  - prompt sync `0.084 ms`.
+- split profile:
+  - total `signatures=242`, `calls=3904`, `wall=109320.598 ms`;
+  - top rows are CPU MoE backend splits.
+  - top prompt single-call rows:
+    - layer 39 `ffn_moe_gate-39` to `ffn_moe_down-39`:
+      `3454.983 ms`;
+    - layer 15: `2196.845 ms`;
+    - layer 35: `2049.209 ms`;
+    - layer 28: `1703.400 ms`;
+    - layer 50: `1690.661 ms`.
+  - decode rows visible within top 50:
+    - layer 2 `ffn_moe_swiglu-2` to `ffn_moe_down-2`:
+      `calls=31`, `1072.608 ms`, `34.600 ms/call`;
+    - layer 6 `ffn_moe_swiglu-6` to `ffn_moe_down-6`:
+      `calls=31`, `1040.010 ms`, `33.549 ms/call`.
+
+Interpretation:
+
+- CUDA graph sync overhead is too small to be the next primary bottleneck:
+  `0.785 ms/decode call`, about `24.337 ms` total for n32 decode.
+- The graph submit bucket is not pure overhead; it covers the whole submitted
+  evaluation span and tracks the existing CPU MoE/expert movement work.
+- The split profile top 50 is dominated by prompt single-call CPU MoE layers,
+  so `TOP=50` is not enough to expose all decode layers. A future diagnostic
+  should either use `GGML_KIMI_SPLIT_PROFILE_TOP=150` or add a decode-only
+  split filter.
+- The visible decode split rows are still CPU MoE down/swiglu ranges, matching
+  the standard counters: down `fallback_t0` remains about `35.758 ms/call`,
+  while graph sync and CUDA launch bookkeeping are small.
+- Next optimization should not target generic CUDA graph tuning. It should
+  target either:
+  - decode-only CPU MoE/down fallback source and scheduling; or
+  - reducing expert movement/staging without changing cache split or generic
+    refill/H2D batching.
+
+Decision:
+
+- Phase 7CE is a valid diagnostic and not a SOTA promotion.
+- Keep Phase 7CC as the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Next diagnostic, if needed, should use `GGML_KIMI_SPLIT_PROFILE_TOP=150` or a
+  decode-only split profile so prompt single-call rows do not hide decode
+  split rows.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
