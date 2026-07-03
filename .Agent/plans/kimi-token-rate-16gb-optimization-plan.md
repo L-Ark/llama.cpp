@@ -2187,7 +2187,7 @@ Decision:
 
 Timestamp: 2026-07-03T19:32:40Z.
 
-Status: planned before implementation.
+Status: rejected after n96; source patch reverted.
 
 Reason:
 
@@ -2315,6 +2315,120 @@ Rollback:
   constraint, revert the source patch and record the result.
 - If implementation complexity proves too high or introduces race risk, stop
   and record a diagnostic-only conclusion instead of shipping a fragile path.
+
+Execution record:
+
+- Plan commit:
+  - `543b8ab88 docs: plan kimi phase7dk async combined staging`
+- Source probe commit:
+  - `39b68a14a cuda: add async combined upgate staging probe`
+- Rollback commit:
+  - `18acdab7d Revert "cuda: add async combined upgate staging probe"`
+- Source design implemented:
+  - new env gate `GGML_MOE_STREAM_UP_GATE_COMBINED_ASYNC_STAGE=1`;
+  - new iouring helper that reads combined jobs through one ring;
+  - per-job H2D enqueued on either up or gate stream;
+  - worker thread signals up-ready and gate-ready separately.
+- Runner:
+  - `/tmp/run_phase7dk_async_combined_stage_repro.sh`
+  - copied from `/tmp/run_phase7cc_repro.sh`
+  - added:
+    `GGML_MOE_STREAM_UP_GATE_COMBINED_ASYNC_STAGE=1`
+- Activation evidence:
+  - `env.txt` contains `GGML_MOE_STREAM_UP_GATE_COMBINED_ASYNC_STAGE=1`
+  - stderr contains `[moe_stream] up/gate async combined CPU staging active`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 39b68a14a
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-193729Z-n96-phase7dk-async-combined-upgate-stage
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dk_async_combined_stage_repro.sh
+```
+
+n96 result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-193729Z-n96-phase7dk-async-combined-upgate-stage`
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its beautiful countryside, wine regions, and historic cities such as Lyon
+  and Marseille. It has played a major role in shaping European politics and
+  philosophy.`
+- TTFT: `78919.24 ms`
+- decode: `125167.55 ms / 79`, `0.63 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15090462720`
+  - `file=14791868416`
+  - `inactive_file=4434808832`
+  - `active_file=10356555776`
+- expert pack:
+  - `hits=62106`
+  - `misses=4009`
+  - `read_failures=0`
+  - `iouring_reads=26102`
+  - `iouring_bytes=152569675776`
+  - `iouring_fallbacks=0`
+  - `iouring_submit_us=147977`
+  - `iouring_wait_us=23313548`
+  - `inflight_avg=3.89`
+  - `inflight_max=8`
+  - `batch_hist=1:659,2-4:3800,5-8:1066,9-16:647,17-32:0,gt32:0`
+
+Profile:
+
+- Combined read effect still exists:
+  - `9-16` batches: `647`
+  - `inflight_avg=3.89`
+- But runtime regressed badly:
+  - accepted Phase 7CC n96: `79008.37 ms / 77`
+  - Phase 7DK: `125167.55 ms / 79`
+  - slower by about `46.16 s`
+- Main pinned staging:
+  - `host_stage=73268.188 ms`
+  - `h2d=11320.330 ms`
+  - this is far worse than Phase 7DI main `host_stage=42667.576 ms`.
+- Type18 path regressed despite having no stage jobs:
+  - Phase 7DK type18 wall: `20.890 ms/call`
+  - Phase 7DI type18 wall: `14.885 ms/call`
+- Type22:
+  - wall: `5.976 ms/call`, near Phase 7DI `5.885 ms/call`;
+  - not enough to compensate for type18 and global scheduling regression.
+
+Gap analysis:
+
+- The worker-thread design avoided the naive full gate wait, but created much
+  more host-side staging/scheduling overhead.
+- Using one shared pinned ring for per-job H2D across up/gate streams likely
+  increases slot reuse synchronization pressure and host-stage timing.
+- The severe type18 regression, even with zero type18 stage jobs, indicates
+  global stream/CPU scheduling perturbation rather than a local type22 win.
+- This makes the combined-staging direction unattractive unless redesigned at a
+  lower level with less worker/condition/ring overhead.
+
+Decision:
+
+- Reject Phase 7DK.
+- Source patch was reverted and pushed.
+- Do not continue combined up/gate staging in its current form.
+- Keep Phase 7DI diagnostic counters for visibility.
+- Next optimization should return to lower-risk movement reductions:
+  - reduce number of up/gate misses via better VRAM residency/profile policy;
+  - or target down/current fallback cost;
+  - avoid complex cross-stream combined staging until there is a simpler
+    synchronization model.
 
 ## Phase 0: cold 16GB baseline
 
