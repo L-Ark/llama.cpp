@@ -655,6 +655,27 @@ Acceptance:
 - If it ties or regresses, reject and keep the current SOTA unchanged.
 - No rollback is needed because this is a CLI-flag-only diagnostic.
 
+
+Result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T054431Z-20260703T054431Z-sota-no-repack-diagnostic/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: add CLI flag `--no-repack`; otherwise accepted gate O_DIRECT config, `cpu_moe=40`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold 16GB cgroup.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=29617.281870 ms`, `elapsed_seconds=63.11`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15084883968`, `pgmajfault=263322`, `workingset_refault_file=1707591`, `ram_ok=true`, `ram_limit_killed=false`, `oom_seen=false`.
+- Correctness: `correctness_ok=true`; France answer was semantic and coherent: it described France as a Western European country with rich history, culture, landmarks, cuisine, fashion, EU membership, economy, and global cultural/economic influence.
+- Gate/O_DIRECT counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- VRAM shape stayed aligned with accepted SOTA: CUDA0 `free=238MiB`, `model=17362MiB`, `unaccounted=14508MiB`.
+
+Diagnosis:
+
+- `--no-repack` does not expose a hidden performance lever on the current path. Token rate tied the repeated strict-cold reproduction line (`4.1`) and did not beat the historical accepted `4.2` SOTA.
+- The identical gate pack/cache counters show the accepted gate path was preserved; the remaining bottleneck is still CPU up/down fallback plus cold page-cache/refault behavior, not an avoidable full CPU_REPACK buffer.
+
+Verdict:
+
+- Rejected/tie. Keep current SOTA unchanged.
+- No rollback required because this was a CLI-flag-only diagnostic and source remained clean.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
