@@ -25573,3 +25573,80 @@ Rollback:
 
 - Env-only failure needs no source rollback.
 - If first n32 is slower, reject and keep `PINNED_SLOTS=8` in SOTA.
+
+Phase 7BV result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `021795b7d` (`docs: plan kimi phase7bv pinned slots4`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-113722Z-n32-phase7bv-pinned-slots4`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-113722Z-n32-phase7bv-pinned-slots4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=4 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bv_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77178.93 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- activation:
+  - command records `PINNED_SLOTS=4`;
+  - env contains `GGML_MOE_STAGE_PINNED_SLOTS=4`;
+  - stderr pinned staging reports `slots=4`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `37117.40 ms / 31`, `0.84 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BV is slower by `3645.81 ms`, so it fails the promotion gate.
+- mechanism:
+  - pinned slot wait increased sharply:
+    - main `slot_wait=311.944 ms` versus Phase 7AS `53.288 ms`;
+    - gate `slot_wait=116.507 ms` versus Phase 7AS about `12 ms`;
+  - main pinned `host_stage=21324.471 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - expert-pack `iouring_wait_us=12405651`, worse than Phase 7AS
+    `11567536`;
+  - effective iouring inflight max dropped to `4`, as expected;
+  - type-18 IQ3 wall regressed to `22.088 ms/call` versus Phase 7AS
+    `18.646 ms/call`;
+  - type-22 IQ2_S wall regressed to `7.624 ms/call` versus Phase 7AS
+    `7.048 ms/call`;
+  - down hit rate stayed `73.6%`, so the regression is from staging starvation
+    and up/gate wall, not down cache collapse.
+
+Gap analysis:
+
+- Lowering pinned slots did reduce effective in-flight concurrency, but that is
+  harmful in the accepted Phase 7AS schedule. The decode path is slot-starved at
+  four slots, not over-concurrent.
+- This also explains why simply throttling IQ3 pipeline with lower staging
+  concurrency is not a promising path: the accepted runtime needs enough slots
+  to hide required expert movement.
+
+Decision:
+
+- Reject Phase 7BV.
+- Do not run n96.
+- Keep `GGML_MOE_STAGE_PINNED_SLOTS=8` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
