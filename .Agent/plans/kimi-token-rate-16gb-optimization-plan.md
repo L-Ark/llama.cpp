@@ -24945,3 +24945,87 @@ Rollback:
 - If first n32 is slower, quality fails, TTFT rises above gate, read failures
   appear, or host RAM violates the 16GB cgroup limit, revert source patch and
   record the result.
+
+Phase 7BS result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `d3099c6e6` (`docs: plan kimi phase7bs iq3 pipeline`).
+- source patch:
+  - env-gated `GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1`;
+  - activated only for decode same-type IQ3_XXS up/gate;
+  - copied up experts first, copied gate experts on `bc.gate_stream` while up
+    MMVQ ran, then forced gate MMVQ to wait for up completion.
+- build:
+  - `cmake --build build-cuda-batch -j$(nproc) --target llama-completion`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-105458Z-n32-phase7bs-iq3-pipeline-copy`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-105458Z-n32-phase7bs-iq3-pipeline-copy"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bs_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `79068.68 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- activation:
+  - stderr contains `IQ3_XXS gate-copy/up-compute pipeline active`;
+  - env contains `GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33963.57 ms / 31`, `0.91 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BS is slower by `491.98 ms`, so it fails the promotion gate.
+- positive mechanism:
+  - decode IQ3_XXS type 18 improved materially:
+    `wall=14.708 ms/call` versus Phase 7AS `18.646 ms/call`;
+  - type-18 saved about `(18.646 - 14.708) * 311 ~= 1.22 s`;
+  - this confirms that gate-copy/up-compute overlap can compress the IQ3
+    up/gate local bucket without running two IQ3 compute kernels concurrently.
+- negative mechanism:
+  - expert-pack `iouring_wait_us=14174309`, worse than Phase 7AS
+    `11567536` by about `2.61 s`;
+  - iouring bytes increased to `81.64 GB`;
+  - main pinned `host_stage=15083.769 ms` improved versus Phase 7AS
+    `18631.890 ms`, but gate pinned stage added `3457.683 ms`;
+  - down CPU profile worsened to `40.761 ms/call` versus Phase 7AS
+    `39.272 ms/call`;
+  - IQ2_S type 22 regressed slightly to `7.530 ms/call` versus Phase 7AS
+    `7.048 ms/call`.
+
+Gap analysis:
+
+- The local IQ3 bucket improved, but the schedule moved more work onto the
+  iouring/pinned staging critical path. Under the strict 16GB cold-start run,
+  global IO contention erased the IQ3 gain.
+- This means a future IQ3 overlap must be selective: only overlap when the gate
+  jobs are already resident or cheap enough, or use a scheduler that does not
+  increase global expert-pack wait. Blindly adding another concurrent staging
+  stream is not acceptable.
+
+Decision:
+
+- Reject Phase 7BS.
+- Do not run n96.
+- Revert source patch.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Next candidate should preserve the successful IQ3 local overlap but avoid the
+  IO wait regression, for example by activating only when gate jobs are cache
+  hits or by measuring gate job count before deciding to pipeline.
