@@ -3444,3 +3444,89 @@ Mandatory record/push rule:
 - For every run, record full metrics and the exact output answer.
 - If a compliant new SOTA appears, immediately record all reproduction inputs, artifact hashes, run directory, command/env, correctness output, memory counters, and push source plus docs to `ssd/vendor/deepseek-token-rate-16gb`.
 - After pushing a new SOTA, clean rebuild/rerun from the pushed source before treating it as fully promoted.
+
+### 2026-07-04 Dense Mmap/Page-Pressure Diagnostic Result
+
+Result summary:
+
+| Run | Added env | eval tok/s | prompt tok/s | TTFT ms | elapsed s | memory peak | memory file | pgmajfault | refault file | correctness | verdict |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T201857Z-20260704_dense_mmap_after_prompt_sota_diag/france-cpu40-vram0gb` | `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1` | `4.1` | `1.6` | `29603.986984` | `63.05` | `16000000000` | `15107354624` | `271357` | `1757057` | pass | reject, below `4.2` |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T202101Z-20260704_dense_mmap_cache_after_prompt_sota_diag/france-cpu40-vram0gb` | `LLAMA_DROP_DENSE_MMAP_CACHE=1`, `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1` | `4.1` | `1.6` | `29968.404228` | `63.14` | `16000000000` | `15107481600` | `277572` | `1646116` | pass | reject, below `4.2` |
+
+Correctness output for both runs:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Counters:
+
+- Both runs kept the accepted gate-cache shape:
+  - `VRAM cache: 13.2 GiB, 3192 slots`
+  - `VRAM cache: hits=30528 misses=4623 hit_rate=86.8%`
+  - gate pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_reads=4623 direct_fallbacks=0`
+- `stderr.txt` did not show useful dense mmap drop evidence for either run under the current grep set.
+- Page-cache stayed charged inside the 16GB cgroup, and both runs hit exactly the configured `memory_peak_bytes=16000000000`.
+
+Artifact hashes:
+
+- `20260704_dense_mmap_after_prompt_sota_diag`:
+  - `summary.json`: `90ff4ed576c39d7eeb4f53c8951f41f91ef7707639c7998facb1dbb63b5af970`
+  - `stdout.txt`: `b97b5c2536dfa8ef9a956bc71f79282d58f826976a8406ab099650dd9413becb`
+  - `stderr.txt`: `48b469ec8e5f95c0379dbf3088909459fa78261543478fddf1c82c07c393775f`
+- `20260704_dense_mmap_cache_after_prompt_sota_diag`:
+  - `summary.json`: `60e89b29cfc0d6428df41288f5333542477bbd53ae5e4811b714c7b0b7cb92c2`
+  - `stdout.txt`: `7f1e7481fcd57cf77726a4ec59b6c76b1d0557284ca3d41429505fc5ec129d35`
+  - `stderr.txt`: `c5a7434a553f2814fe6e8ba785546a987ed5a96b8f2d95b6f02608f00ef5c93a`
+
+Decision:
+
+- Dense mmap/page-pressure env-only diagnostics are rejected. They preserve correctness/RAM/TTFT, but do not beat the accepted `4.2 tok/s`.
+- Stop sweeping dense-drop combinations.
+- Current accepted SOTA remains the strict cold `4.2 tok/s` run from `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`.
+
+### 2026-07-04 Next Plan: Fallback Split Trace Before Next Source Optimization
+
+Reason for pivot:
+
+- The no-drop diagnostic shows a large page/source-stall opportunity, but dense-drop does not recover it.
+- Small down-cache admission is hard-bound below SOTA.
+- The next source change must be based on a more precise split of the accepted run's remaining CPU fallback time.
+
+Trace requirements:
+
+1. Per fallback call, record at least:
+   - tensor role: `up`, `gate`, `down`, or other;
+   - layer and expert id when available;
+   - route count / active rows;
+   - total fallback wall time;
+   - time spent preparing source pointers / touching mmap pages;
+   - time spent copying or staging source data;
+   - time spent CPU matmul/math;
+   - pack/O_DIRECT read time if the path uses a pack;
+   - whether the source was mmap, gate pack, VRAM cache hit, or CPU fallback.
+2. Aggregate by:
+   - prompt vs decode;
+   - layer;
+   - tensor role;
+   - expert id;
+   - top route-frequency buckets.
+3. The trace must be low enough overhead for a full France strict run, or must support a short diagnostic whose overhead is separately measured.
+
+Theory and bound before coding:
+
+- If most accepted-run fallback time is source/page wait, the next candidate should be bounded async/O_DIRECT staging or route-ordered up+down pack/source layout.
+- If most fallback time is CPU math, source/layout work cannot reach `10 tok/s`; next candidate must target CPU kernel/layout or true GPU offload for the missed experts.
+- If pack/direct IO dominates only gate misses, it is already solved for the accepted run because gate pack misses are zero and gate hit rate is stable.
+- The next implementation is only justified if the measured removable bucket can plausibly save more than the gap from the current `4.2 tok/s` to a new strict SOTA.
+
+Immediate action:
+
+1. Inspect current vendor CPU fallback/profile code to find existing timing hooks and avoid duplicating instrumentation.
+2. Add a default-off fallback split trace guarded by env vars.
+3. Run one strict cold France profile with the accepted SOTA knobs and the trace enabled.
+4. Record the overhead, output correctness, RAM, TTFT, token rate, and split totals.
+5. Use the split totals to design the next optimization. Do not promote a trace run unless it accidentally improves token rate while satisfying all constraints.
