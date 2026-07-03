@@ -676,6 +676,42 @@ Verdict:
 - Rejected/tie. Keep current SOTA unchanged.
 - No rollback required because this was a CLI-flag-only diagnostic and source remained clean.
 
+
+### 2026-07-03 Profile-Gated Top64 Up/Down One-Stream Design
+
+Design:
+
+- Goal: test a compute/offload candidate that avoids the previous no-filter failure. Instead of letting every up/down expert enter the CUDA one-stream path, allow only admission-profile hits: existing gate hotset plus decode top64 up/down fallback experts. Non-profile up/down must continue directly to CPU fallback.
+- Bottleneck basis: current profile still shows CPU up/down fallback as the dominant cost (`24838.624 ms` total, `17378.123 ms` decode). The top64 decode up/down hotset covers `2340.235 ms` across `6382` calls with `0.266 GiB` unique payload.
+- Prior failure boundary: `one-stream-all-no-filter` regressed to `1.7 tok/s` because it removed the name filter and made non-admitted up/down tensors pay GPU single-path staging without useful cache residency. This candidate must not repeat that; the source change must be default-off and profile-gated before staging/allocation.
+- VRAM accounting: keep `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, so total cache allocation remains the accepted `~13.2 GiB / 3192 slots`. The top64 up/down profile entries need about `64` slots (`~272 MiB`), which displaces at most `~2.0%` of gate slots instead of increasing VRAM allocation. The current SOTA has about `238 MiB` free VRAM, so increasing cache size is not allowed.
+- Theoretical upper bound: if all top64 covered CPU fallback time were removed, the maximum wall saving is about `2.34s`; practical saving is lower because GPU kernel/D2H/sync and possible gate cache evictions remain. This is just above the plan's `~2s` threshold and is worth one narrow probe.
+
+Artifacts:
+
+- Admission profile: `.Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top64_updown.tsv`, sha256 `10c9fe0d77426f2118773f3cfd5eeb43a89b8b6212e52f075cc3b98d9ebb3bec`, entries `3377` = existing gate profile plus top64 decode up/down entries.
+- Hotset source: `/root/lfz/runs/vendor-ds4-16gb/20260703T034116Z-next-plan-phase1-hotsets/decode_top128_updown_meta.tsv`, first `64` rows, covered fallback `2340.235 ms`, calls `6382`, unique payload about `0.266 GiB`.
+
+Implementation plan:
+
+- Add a default-off env `GGML_MOE_STREAM_ONE_ALLOW_ADMIT_PROFILE=1` in `ggml/src/ggml-cuda/moe_stream.cu`.
+- When enabled, `moe_stream_one_type_allowed()` may allow a tensor/expert if either the existing name filter matches or the admission profile explicitly contains `(src0_name, expert_index)`.
+- This check must happen before one-stream staging/allocation, so non-profile up/down tensors return `false` and fall back to the existing CPU path.
+- Default behavior with env unset must remain identical to the current accepted SOTA.
+
+Practice plan:
+
+- Build `build-ds4-moe-stream` with the default-off patch.
+- First run strict cold France with accepted SOTA config plus `GGML_MOE_STREAM_ONE_ALLOW_ADMIT_PROFILE=1` and `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=.Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top64_updown.tsv`.
+- Keep gate O_DIRECT expert pack unchanged; it only contains gate experts, so top64 up/down cache inserts will read from the existing mapped model source.
+- Do not change cache budget, thread count, context, top-k policy, or RAM cgroup.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, gate pack counters remain direct-failure-free, and VRAM cache hit/miss counters show the profile-gated path did not collapse like no-filter.
+- If accepted, immediately commit source/profile/plan and push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean-rebuild/rerun from pushed source.
+- If `eval_tok_s <= 4.2` or any gate fails, revert runtime source, clean rebuild, record the rejection, and push only plan/profile/record as diagnostic artifacts.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
