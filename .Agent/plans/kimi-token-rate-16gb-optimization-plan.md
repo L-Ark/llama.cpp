@@ -21378,3 +21378,179 @@ Rollback:
 - If detached threading introduces a hang or missing atexit summaries, reject
   and revert source.
 - Do not stack another optimization on top of a failed detached-overlap patch.
+
+Phase 7BE result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `b5ec7dd1493630280242cd3e0e59fc91d5af9a52`
+  (`docs: plan kimi phase7be detached overlap`).
+- source status:
+  - implemented as an uncommitted default-off probe on top of `b5ec7dd14`;
+  - source changed only `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - remote build succeeded with commit shown as `b5ec7dd14-dirty`;
+  - after rejection, the source patch was reverted locally and on the server;
+  - server was rebuilt clean and build-info returned to `b5ec7dd14`.
+- implementation summary:
+  - added default-off env `GGML_MOE_CURRENT_DOWN_OVERLAP_DETACHED=1`;
+  - added a dedicated current-down CUDA stream and pinned staging ring;
+  - added a single in-flight detached worker guard;
+  - added async slot `preparing` / `failed` states so down lookup waits at
+    consumption time and failed async slots fall back to normal loading;
+  - called detached current-down overlap for same-type up/gate paths before
+    fuse/D2H.
+- runner:
+  `/tmp/run_phase7be_repro.sh`, copied from `/tmp/run_phase7as_repro.sh`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_DETACHED=1
+```
+
+- all accepted Phase 7AS env was retained:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-051052Z-n4-phase7be-detached-down-overlap-smoke`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-051052Z-n4-phase7be-detached-down-overlap-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      CURRENT_DOWN_OVERLAP_DETACHED=1 \
+      /tmp/run_phase7be_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `77591.35 ms`, under the `106331.72 ms` gate.
+- output:
+  `France is a country`.
+- quality:
+  - script marked `quality=fail` because n4 has fewer than 12 words;
+  - manual smoke passes because the prefix is coherent and semantically correct.
+- decode:
+  - `5277.27 ms / 3`, `0.57 tok/s`.
+- activation/mechanism:
+  - stderr contains `detached current down overlap active`;
+  - current-down overlap: `calls=181`, `planned_jobs=887`,
+    `completed_jobs=887`, `failed_batches=0`, `detached_submitted=159`,
+    `detached_skipped_busy=0`;
+  - down cache hit rate `100.0%`;
+  - async prepare waits `156`, failures `0`.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-051257Z-n32-phase7be-detached-down-overlap`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-051257Z-n32-phase7be-detached-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      CURRENT_DOWN_OVERLAP_DETACHED=1 \
+      /tmp/run_phase7be_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `memory.events max=32001`, `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `79603.91 ms`, under the `106331.72 ms` gate.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34551.40 ms / 31`, `0.90 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BE is slower by `1079.81 ms`, so it fails the promotion gate.
+- memory:
+  - final cgroup memory `15097298944`;
+  - `anon=446464`;
+  - `file=14853009408`;
+  - `kernel=239894528`;
+  - `inactive_file=5633589248`;
+  - `active_file=9218891776`.
+- mechanism metrics:
+  - current-down overlap: `calls=1861`, `planned_jobs=7149`,
+    `completed_jobs=7149`, `cache_hits=5995`, `failed_batches=0`,
+    `mark_failed=0`, `detached_submitted=1639`,
+    `detached_skipped_busy=0`, `worker_us=8663646`;
+  - down cache hit rate `100.0%`, with `preloads=7125`;
+  - async prepare waits `1636`, failures `0`;
+  - current-down staging: `copies=7149`, `host_stage=3062.626 ms`,
+    `h2d=1758.758 ms`;
+  - main staging: `host_stage=16697.398 ms`;
+  - gate staging: `host_stage=1176.843 ms`;
+  - expert pack: `iouring_bytes=65932984320`,
+    `iouring_wait_us=9820204`.
+- down profile:
+  - `calls=2038`, `total=42.610 ms/call`;
+  - `cuda_batch=4.669 ms/call`;
+  - `fallback_t0=37.890 ms/call`;
+  - compared with Phase 7AS down `cuda_batch` around `2.675 ms/call`,
+    the detached preload made down cache hits perfect but still worsened the
+    down CUDA batch bucket.
+- up/gate profile:
+  - type `18`: `wall=18.467 ms/call`, close to Phase 7AS `18.646 ms/call`;
+  - type `22`: `wall=7.460 ms/call`, slightly worse than Phase 7AS
+    `7.048 ms/call`;
+  - unlike Phase 7BD, the large type-18/type-22 wall regression was avoided.
+
+Gap analysis:
+
+- The detached design fixed Phase 7BD's main synchronization mistake:
+  - no worker failures;
+  - no busy skips;
+  - down cache hit rate reached `100%`;
+  - up/gate type buckets stayed near Phase 7AS instead of regressing badly.
+- However, the added same-type down preloads are not free:
+  - current-down staging added `3.063 s` host staging and `1.759 s` H2D;
+  - consumer-side async waits occurred `1636` times;
+  - down `cuda_batch` worsened to `4.669 ms/call`.
+- The measured result contradicts the theoretical expectation that moving the
+  wait to consumption would keep the down-side gain while removing the up/gate
+  regression. In practice, the extra down H2D/preload work competes with decode
+  resources and increases down execution cost more than it saves.
+
+Decision:
+
+- Reject Phase 7BE.
+- Do not run n96.
+- Revert the source patch locally and on the server.
+- Rebuild the server clean at `b5ec7dd14`.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Do not retry full same-type down overlap unless a narrower policy is designed
+  first, such as limiting preloads to layers/types where `cuda_batch` benefit
+  exceeds the added staging/H2D cost.
