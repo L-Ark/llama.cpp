@@ -527,6 +527,32 @@ Acceptance:
 - If accepted, commit source and plan immediately, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then rerun from pushed source.
 - If `eval_tok_s <= 4.2` or any gate fails, revert source and rebuild clean.
 
+Implementation:
+
+- Temporary default-off patch added `GGML_MOE_CPU_SKIP_FILTERED_STREAM_ONE=1` in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- When enabled, CPU `mul_mat_id` skips the one-stream single path if `GGML_MOE_STREAM_ONE_NAME_FILTER` is set and the tensor name does not contain that substring.
+- Default behavior remained unchanged when the env was unset.
+
+Runs:
+
+| Run | Profile | eval_tok_s | prompt_tok_s | TTFT ms | memory_peak | memory_file | correctness | Verdict |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T050751Z-20260703T050751Z-skip-filtered-stream-one-profile-probe/france-cpu40-vram0gb` | on | 4.2 | 1.6 | 28825.378866 | 16000000000 | 15107457024 | true | rejected/tie |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T050943Z-20260703T050943Z-skip-filtered-stream-one-noprofile-candidate/france-cpu40-vram0gb` | off | 4.1 | 1.6 | 29021.357026 | 16000000000 | 15092740096 | true | rejected |
+
+Counters and diagnosis:
+
+- The patch worked mechanically: profile run changed `single_decline` from the accepted profile's `38222` to `0`.
+- Gate path was preserved: one expert pack `hits=4623 misses=0`, direct failures `0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- The expected time saving did not materialize. Profile run still reported `cuda_single=0.419 ms/call`, close to the accepted profile's `0.429 ms/call`, so the coarse `cuda_single` time is dominated by accepted gate stream work rather than rejected up/down calls.
+- No-profile candidate regressed to `4.1 tok/s`, so this source patch cannot be promoted.
+
+Rollback:
+
+- Reverted `ggml/src/ggml-cpu/ggml-cpu.c` with `git restore`.
+- Clean rebuild completed: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- Source worktree clean after rollback.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
