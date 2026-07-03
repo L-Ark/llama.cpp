@@ -1471,6 +1471,23 @@ Next direction after chunk-size rejection:
 
 - Stop pursuing coarse chunk-size/scheduler-only changes. The next candidate needs to reduce actual per-dot or per-row cost while preserving memory locality, or move a targeted early up/down subset to a GPU/cache path without increasing page refaults.
 
+
+Existing DS4 hot-dispatch bound check:
+
+- Time: 2026-07-03 after chunk-size rejection commit `8e3cd0afc`.
+- Goal: evaluate the remaining plan direction "move a targeted early up/down subset to GPU/cache" using the existing `DS4_HOT_PROFILE_JSON` / `DS4_HOT_DISPATCH=1` implementation before running a risky full-model probe.
+- Source inspection: `src/llama-deepseek4-hot.cpp` extracts hot `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps` rows into GPU tensors. `src/models/deepseek4.cpp` then runs a hot GPU path and a cold CPU path. The cold CPU path remaps hot picks to a shared real cold sentinel and masks the output. Therefore the current implementation only reduces CPU unique rows when a token has multiple hot picks that collapse to one sentinel; a single hot pick still costs one CPU sentinel row while also adding the GPU hot path.
+- Bound artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/ds4-hot-route-vram-bound.json`, derived from accepted route trace `/root/lfz/runs/vendor-ds4-16gb/20260703T113716Z-20260703T-route-trace-accepted-diagnostic/france-cpu40-vram0gb/route_trace.csv` and model tensor sizes.
+- Memory model: DS4 hot allocates `k + P + 1` expert slots per tensor, with `P=6` selected experts. For this model, one layer at `k=16` costs about `293.25 MiB` of GPU memory for gate+up+down hot tensors and dummy slots. Current accepted SOTA has only about `238 MiB` CUDA free after the `13568 MiB` gate cache, so any meaningful hot profile would require shrinking the gate cache and risking extra gate misses.
+- Route/CPU-row bound: `k=1` saves `0` CPU rows for all early layers in the accepted France trace. For early layers `0-9`, `k=4` saves at most `10` CPU unique rows in one layer; `k=8` saves at most `17` rows in one layer. The best single-layer `k=16` cases across all layers save `41` CPU rows but require `~293 MiB` VRAM for that one layer.
+- Interpretation: the existing DS4 hot dispatch is not a good SOTA candidate under the current 16GB/VRAM budget. Its CPU-row reduction is weak unless `k` is large, while large `k` consumes enough VRAM to reduce the accepted gate cache. It also adds graph work and GPU hot matmuls, so the hard upper bound is not favorable.
+- Verdict: do not run a full strict-cold DS4 hot-dispatch probe with the current implementation. A future hot-path candidate would need a different cold-path mechanism that truly skips hot picks on CPU instead of replacing them with a real sentinel row, plus an explicit VRAM/cache budget.
+
+Next direction after DS4 hot bound check:
+
+- Existing broad levers are now rejected by measurement or bound: gate union packs hurt France, scheduler/chunk-size is not enough, transient repack causes refault pressure, and current DS4 hot dispatch has weak CPU-row savings per VRAM.
+- Continue with measurement-first work. The next useful diagnostic should target either page/refault source attribution for early up/down fallback or a correctness-preserving CPU special case that skips provably zero/sentinel work without changing selected expert outputs.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
