@@ -20093,3 +20093,85 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If first n32 is slower than Phase 7AS confirmation, reject immediately and
   keep Phase 7AS as SOTA.
+
+Phase 7AZ n32 result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-040551Z-n32-phase7az-7as-refill8`.
+- git:
+  - head `c24d512d5`;
+  - status clean at run start.
+- runner:
+  - `/tmp/run_phase7az_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - parameterizes `IO_REFILL_BATCH` and records it in `command.txt` and
+    `env.txt`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_IO_REFILL_BATCH=8
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_IO_REFILL_BATCH=8`;
+  - `env.txt` contains `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `env.txt` contains `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - stderr contains `IQ2_S parallel up/gate streams active`;
+  - stderr does not contain `up/gate split CPU staging active`.
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `75851.71 ms`, under the `106331.72 ms` gate.
+- decode: `35266.35 ms / 31`, `0.88 tok/s`.
+- comparison:
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7AZ regresses by `1794.76 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11297`;
+  - `iouring_bytes=66242985984`;
+  - `iouring_wait_us=12378645`.
+- pinned staging:
+  - main `host_stage=19864.299 ms`, `h2d=4146.171 ms`;
+  - gate `host_stage=2534.677 ms`, `h2d=920.389 ms`.
+- up/gate type profile:
+  - type `18` wall `19.353 ms/call`;
+  - type `22` wall `7.746 ms/call`;
+  - type `22` `up_wait=7.253 ms/call`;
+  - type `22` `gate_wait=7.524 ms/call`.
+- down profile:
+  - `calls=2038`;
+  - total `39.175 ms/call`;
+  - `fallback_t0=36.276 ms/call`;
+  - `cuda_batch=2.849 ms/call`.
+
+Interpretation:
+
+- The refill-batch setting activates correctly and all hard gates pass, but the
+  first n32 run is significantly slower than Phase 7AS.
+- The expected IO mechanism does not appear:
+  - expert-pack wait rises from 7AS n32 `11567536 us` to `12378645 us`;
+  - main pinned host stage rises from `18631.890 ms` to `19864.299 ms`;
+  - gate pinned host stage rises from `2241.251 ms` to `2534.677 ms`.
+- Up/gate profiles also regress:
+  - type `18` wall rises from `18.646 ms/call` to `19.353 ms/call`;
+  - type `22` wall rises from `7.048 ms/call` to `7.746 ms/call`.
+- Larger refill batches do not improve the 7AS queue. They slightly increase
+  wait/stage pressure and interfere with the already accepted IQ2 parallel path.
+
+Decision:
+
+- Reject Phase 7AZ.
+- No source rollback is needed because this was env-only.
+- Do not use `GGML_MOE_IO_REFILL_BATCH=8` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
