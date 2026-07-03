@@ -6144,6 +6144,56 @@ Result handling:
 - If accepted, run n96 confirmation.
 - If rejected, stop pinned-slot sweep at `16` and keep Phase 7EB as SOTA.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-231213Z-n32-phase7ed-slots24`;
+  - source/docs commit `1424f2821`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Correctness and hard gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - pinned staging reports `24` slots;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous`;
+  - quality `pass`;
+  - TTFT `77726.82 ms`, below `106331.72 ms`;
+  - decode `30607.49 ms / 31`, `1.01 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`.
+- Movement counters:
+  - expert-pack direct_reads `8707`, iouring_reads `15024`,
+    iouring_bytes `87082139648`, iouring_wait_us `15183789`;
+  - main pinned staging: slots `24`, host_stage `11762.749 ms`,
+    h2d `4149.918 ms`;
+  - gate pinned staging: slots `24`, host_stage `338.165 ms`,
+    h2d `935.808 ms`.
+- Operator profiles:
+  - upgate rows `869`, wall `6414.659 ms`, up `4890.587 ms`,
+    gate `1400.871 ms`, stage `36.834 ms`, kernel `6328.248 ms`,
+    up_jobs `4154`, gate_jobs `4154`;
+  - down rows `1644`, wall `5161.447 ms`, stage `4839.406 ms`,
+    kernel `192.588 ms`, jobs `3493`.
+- Comparison:
+  - slower than Phase 7EA n32 `29599.64 ms / 31` by `1007.85 ms`;
+  - slower than Phase 7EC n32 `30165.92 ms / 31`;
+  - down wall regresses materially versus Phase 7EA `4684.734 ms`.
+
+Decision:
+
+- Reject Phase 7ED.
+- Do not run n96.
+- Stop pinned-slot sweep at `16`.
+- Keep Phase 7EB as current SOTA:
+
+```sh
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
