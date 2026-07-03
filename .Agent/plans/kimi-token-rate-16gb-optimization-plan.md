@@ -975,6 +975,91 @@ type23 IQ4_XS  ncols=1: REG:62 STACK:0 SHARED:1792
   - Acceptance must use n96 quality and speed gates because Phase 7DA showed n32
     can give misleading signals.
 
+## Phase 7DE: IQ3_XXS sign-unpack precompute micro-probe
+
+Timestamp: 2026-07-03T18:26:02Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7DC proved type-18 IQ3_XXS up/gate is compute-bound, not staging-bound:
+  top type-18 layers have `up_stage_jobs=0`, `gate_stage_jobs=0`, and wall time
+  almost equal to kernel time.
+- Phase 7DD showed the active single-column IQ3_XXS MMVQ kernel is not obviously
+  register-bound:
+  `REG:52 STACK:0 SHARED:1408`.
+- Therefore the next probe should target instruction/dependency cost inside
+  `vec_dot_iq3_xxs_q8_1`, while preserving:
+  - `VDR_IQ3_XXS_Q8_1_MMVQ=2`;
+  - current launch shape;
+  - current cache and iouring settings.
+
+Selected source probe:
+
+- In `vec_dot_iq3_xxs_q8_1`, precompute the four 7-bit sign broadcasts outside
+  the unrolled `l0` loop:
+
+```text
+signs_l0 = unpack_ksigns(aux32 >> 0)
+signs_l2 = unpack_ksigns(aux32 >> 7)
+signs_l4 = unpack_ksigns(aux32 >> 14)
+signs_l6 = unpack_ksigns(aux32 >> 21)
+```
+
+- Then select the precomputed sign word inside each unrolled iteration.
+- The math is identical to the current `unpack_ksigns(aux32 >> (7*l0/2))`.
+- Do not change scaling, grid lookup, `get_int_b2/get_int_b4`, VDR, MMQ, or any
+  non-IQ3_XXS type.
+
+Theory and bound:
+
+- This may reduce repeated shift/popcount/xor dependency inside the inner vec
+  dot and allow better instruction scheduling after unroll.
+- It may also regress by increasing live temporaries/register count. Phase 7DD
+  leaves about 52 registers in the current active kernel, so a small register
+  increase is acceptable only if n96 speed improves.
+- Hard upper bound is the total type-18 bucket from Phase 7DC:
+  `11152.518 ms` wall.
+- Realistic bound is very small: if sign unpack is 2-5% of type-18 work, the
+  n96 gain is about `223-558 ms`. Anything outside that range needs evidence.
+
+Execution:
+
+1. Commit and push this plan.
+2. Apply only the IQ3_XXS sign precompute patch.
+3. Build the correct target:
+   `cmake --build build-cuda-batch -j$(nproc)`.
+4. Check resource usage for the active kernel:
+   `mul_mat_vec_q<type18,ncols=1,false,false,false>`.
+   - If registers jump substantially above current `REG:52`, expect regression.
+5. Run n96 cold-start candidate:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7de-iq3-sign-precompute \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- coherent France paragraph at n96;
+- TTFT <= `106331.72 ms`;
+- host RAM below 16GB including page cache;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`;
+- if candidate passes, run one n96 repeat before promotion.
+
+Rollback:
+
+- If resource usage obviously worsens, n96 quality fails, or n96 decode is not
+  faster than Phase 7CC, revert the source patch and record the result.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
