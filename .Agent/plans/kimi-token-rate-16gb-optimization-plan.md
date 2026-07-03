@@ -24595,3 +24595,129 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BR - serial IQ3_XXS up/gate stage attribution diagnostic
+
+Design timestamp: 2026-07-03T10:34:11Z.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Recent rejected probes narrowed the likely remaining wins:
+  - Phase 7BP `MADV_WILLNEED` moved cost but made iouring wait and pinned
+    staging worse;
+  - Phase 7BQ minimal profile still regressed, so the diagnostic envs are not
+    the main reason SOTA is below 1 tok/s;
+  - Phase 7BH prefetch depth 1 did not reduce down prefetch load counts and
+    regressed.
+- The biggest visible non-down bucket is same-type IQ3_XXS up/gate:
+  - Phase 7AS n32: type 18 IQ3_XXS `311 calls * 18.646 ms/call ~= 5.80 s`;
+  - Phase 7AS n96: type 18 IQ3_XXS `771 calls * 18.396 ms/call ~= 14.18 s`.
+- Existing up/gate type profile reports CUDA event times, but for the serial
+  non-parallel path the `up_stage_jobs` and `gate_stage_jobs` counters remain
+  zero because only the IQ2_S parallel planning path records miss job counts.
+  This makes it unclear whether IQ3_XXS is primarily slow because of:
+  - cache miss / expert staging pressure;
+  - compact MMVQ kernel compute;
+  - D2H/scatter/fuse overhead;
+  - synchronization wall gap.
+
+Hypothesis:
+
+Before attempting another IQ3_XXS kernel or scheduling change, add a narrow
+diagnostic that records stage-job counts for the serial up/gate path. If IQ3
+calls have near-zero miss jobs but still high `up/gate` CUDA time, the next
+optimization should be kernel-level. If the miss jobs are high and align with
+`host_stage`/`iouring_wait`, the next optimization should be cache residency or
+copy overlap, not another matmul kernel.
+
+Why this can improve token rate:
+
+- This phase does not claim a direct speedup; it reduces the search space before
+  touching a hot kernel again.
+- Prior IQ3 attempts failed because they changed execution without proving the
+  real split between staging and compute:
+  - same-type IQ3 parallel-stream probe regressed on n4;
+  - Q8_K decode reference path activated but made type-18 wall slower;
+  - compact batch MMVQ probe regressed under an older baseline.
+- A correct attribution should prevent another large n32/n96 run on the wrong
+  axis and identify whether the realistic next ceiling is bounded by PCIe/SSD
+  movement or by IQ3 arithmetic.
+
+Theoretical upper bound:
+
+- If all IQ3_XXS wall time were removable, n32 would improve by at most about
+  `5.80 s`, giving an absolute ceiling near:
+  `31 / (33.47159 - 5.80) ~= 1.12 tok/s`.
+- If only half of IQ3 wall is compressible, the ceiling is about:
+  `31 / (33.47159 - 2.90) ~= 1.01 tok/s`.
+- If the stage-job attribution shows IQ3 is mostly staging-bound and shares the
+  same pinned/io wait critical path as down, a local IQ3 kernel rewrite cannot
+  deliver those ceilings.
+
+Implementation:
+
+- Source patch only in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Keep behavior unchanged unless existing profiling is enabled.
+- Move `up_stage_jobs_count` and `gate_stage_jobs_count` into scope before the
+  serial staging lambdas.
+- Increment those counters when `stage_tensor()` or
+  `stage_tensor_slots_only()` inserts a missing up/gate expert into the VRAM
+  cache.
+- Leave the IQ2_S parallel planned-job accounting unchanged.
+- Do not change:
+  - selected experts;
+  - cache capacity;
+  - IO depth;
+  - pinned slots;
+  - CUDA stream order;
+  - model math.
+
+Reproducible experiment:
+
+- Build the diagnostic binary on the remote vendor checkout.
+- Create `/tmp/run_phase7br_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Keep the Phase 7AS runtime and diagnostic profile enabled:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7br-iq3-stage-attribution"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7br_repro.sh
+```
+
+Acceptance gates:
+
+- Diagnostic correctness gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France answer coherent and semantically correct.
+- Activation:
+  - type-profile output for decode IQ3_XXS type 18 has nonzero
+    `up_stage_jobs`/`gate_stage_jobs` if there are cache misses;
+  - IQ2_S type 22 counters remain comparable to Phase 7AS.
+- Performance guard:
+  - because this is profiling-only source code, n32 decode must not regress by
+    more than `3%` vs Phase 7AS n32 confirmation unless the regression is only
+    caused by diagnostic logging noise and the source is reverted after metrics
+    are captured.
+- Promotion:
+  - this phase cannot replace SOTA by itself unless it unexpectedly improves
+    decode while passing every hard gate twice.
+  - If it only adds diagnostic attribution, commit and push the result as a
+    diagnostic record, then use it to plan the next optimization phase.
+
+Rollback:
+
+- If the patch changes output quality, violates TTFT/RAM, causes read failures,
+  or materially changes SOTA runtime without a direct speed benefit, revert the
+  source patch after collecting the diagnostic data.
