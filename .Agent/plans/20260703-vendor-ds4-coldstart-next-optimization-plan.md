@@ -2259,3 +2259,36 @@ Gate:
 - It must complete with a coherent France answer before any speed discussion.
 - If it completes but is `<=4.2 tok/s`, incomplete, over RAM, or over TTFT gate, reject and revert source.
 - If it exceeds `4.2 tok/s` while satisfying correctness/RAM/TTFT, immediately record exact reproduction information, commit source plus records, push to `ssd/vendor/deepseek-token-rate-16gb`, and rerun from pushed source.
+
+### 2026-07-04 Server Partial Serial Fallback Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/server-spec-partial-fallback-result.json`.
+
+Runs:
+
+| Run | eval_tok_s | prompt_tok_s | TTFT ms | RAM | Correctness | Verdict |
+| --- | ---: | ---: | ---: | --- | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T165910Z-20260704_server_spec_partial_serial_fallback_trace/france-cpu40-vram0gb` | 3.7 | 1.5 | 30768.69734 | 16GB cgroup, no kill | manual pass | diagnostic only; trace on |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T170139Z-20260704_server_spec_partial_serial_fallback_notrace/france-cpu40-vram0gb` | 3.7 | 1.6 | 31082.537347 | 16GB cgroup, no kill | manual pass | rejected: below 4.2 SOTA |
+
+Trace conclusion:
+
+- `LLAMA_SERVER_SPEC_PARTIAL_SERIAL_FALLBACK=1` did fix the infinite replay: the trace run showed `serial_fallback=1` twice and `spec_skip=1` twice, then continued to a complete answer.
+- The root-cause trace is therefore confirmed: the previous all-output ngram-simple failure was a server full-checkpoint partial-replay loop, not a RAM or pack-cache failure.
+
+Manual correctness:
+
+- Both fallback runs produced a complete and coherent France answer. The answer names France, Western Europe, Paris/Eiffel/Louvre/Versailles, culture, cuisine, wine, fashion, economy, and ends cleanly.
+
+Performance verdict:
+
+- The no-trace run remains only `3.7 tok/s`, below the accepted `4.2 tok/s` cold-start SOTA.
+- TTFT is within the 20% gate and RAM is compliant, but speed is not.
+- Reject this source direction as a SOTA candidate and revert temporary source changes.
+
+Next direction:
+
+- Speculative ngram-simple is not a high-value path unless a draft source can produce much higher acceptance. The fallback makes it correct/progressing but does not create enough accepted tokens per target forward.
+- Return to bottleneck decomposition of the current `4.2 tok/s` SOTA and prioritize candidates with a hard upper bound materially above `4.2`, not small speculative plumbing changes.
