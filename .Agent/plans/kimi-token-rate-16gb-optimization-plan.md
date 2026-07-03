@@ -29292,6 +29292,108 @@ Rollback:
 - If the diagnostic succeeds, keep the instrumentation because it is
   default-preserving and useful for future reproducible profiling.
 
+Phase 7CN result - diagnostic accepted:
+
+- result timestamp: 2026-07-03 UTC.
+- source commit:
+  `600661d63` (`cpu: make kimi moe name profile top configurable`).
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-142746Z-n32-phase7cn-name-profile-top160`.
+- command:
+
+```bash
+ssh -p 51056 root@92.180.27.82 'set -e; cd /root/lfz/llama.cpp-vendor-kimi; git pull --ff-only wici vendor/kimi-moe-stream-on-vendor; cmake --build build-cuda-batch -j 32 --target llama-completion; cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cn_repro.sh; perl -0pi -e "s/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=160\nEOF\n/" /tmp/run_phase7cn_repro.sh; chmod +x /tmp/run_phase7cn_repro.sh; RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cn-name-profile-top160"; systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 /tmp/run_phase7cn_repro.sh; echo RUN=$RUN'
+```
+
+- activation:
+  - `env.txt` contains `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=160`;
+  - stderr contains `160` `kimi_cpu_moe_name_profile` rows and `160`
+    eligibility rows;
+  - top100/top160 rows are present.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77752.33 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33717.59 ms / 31`, `0.92 tok/s`;
+  - diagnostic-only, not promoted over Phase 7CC.
+- expert-pack counters:
+  - `iouring_bytes=67926376448`;
+  - `iouring_wait_us=13371252`;
+  - cache shape matches Phase 7CC/7CJ:
+    - global hit rate `52.9%`;
+    - down hit rate `73.6%`;
+    - upgate hit rate `43.7%`.
+- top decode fallback rows:
+  - `blk.6.ffn_down`, Q4_0, `16.709 ms/call`,
+    `16.669 ms/call` fallback, `31` unsupported calls;
+  - `blk.7.ffn_down`, Q4_0, `14.341 ms/call`,
+    `14.317 ms/call` fallback, `31` unsupported calls;
+  - `blk.9.ffn_down`, Q4_0, `13.322 ms/call`,
+    `13.299 ms/call` fallback, `31` unsupported calls;
+  - `blk.10.ffn_down`, Q4_0, `13.272 ms/call`,
+    `13.248 ms/call` fallback, `31` unsupported calls;
+  - `blk.18.ffn_down`, Q4_0, `11.571 ms/call`,
+    `11.549 ms/call` fallback, `31` unsupported calls;
+  - `blk.8.ffn_down`, Q4_0, `9.034 ms/call`,
+    `9.011 ms/call` fallback, `31` unsupported calls;
+  - `blk.15.ffn_down`, Q4_0, `8.835 ms/call`,
+    `8.814 ms/call` fallback, `31` unsupported calls.
+- top eligible decode rows:
+  - `blk.1.ffn_down`, Q3_K, `24.726 ms/call`, eligible `31`;
+  - `blk.2.ffn_down`, Q3_K, `22.456 ms/call`, eligible `31`;
+  - `blk.60.ffn_down`, Q3_K, `13.519 ms/call`, eligible `32`;
+  - `blk.4.ffn_down`, IQ4_XS, `12.619 ms/call`, eligible `31`;
+  - `blk.16.ffn_down`, IQ4_XS, `6.705 ms/call`, eligible `31`;
+  - `blk.25.ffn_down`, IQ4_XS, `6.299 ms/call`, eligible `31`;
+  - `blk.5.ffn_down`, Q3_K, `5.910 ms/call`, eligible `31`;
+  - `blk.24.ffn_down`, IQ4_XS, `5.889 ms/call`, eligible `31`.
+- top prompt-heavy rows:
+  - `blk.26.ffn_down`, IQ4_XS, prompt total `746.288 ms`;
+  - `blk.13.ffn_down`, Q3_K, prompt total `716.692 ms`;
+  - `blk.27.ffn_down`, Q3_K, prompt total `698.257 ms`;
+  - `blk.21.ffn_down`, IQ4_XS, prompt total `697.655 ms`;
+  - `blk.56.ffn_down`, Q3_K, prompt total `684.215 ms`;
+  - `blk.15.ffn_down`, Q4_0, prompt total `644.549 ms`;
+  - `blk.14.ffn_gate`, IQ3_XXS, prompt total `614.730 ms`;
+  - `blk.18.ffn_down`, Q4_0, prompt total `610.996 ms`.
+
+Interpretation:
+
+- The Q4_0 decode fallback is real but bounded: it is concentrated in seven
+  down tensors and is not large enough to explain the full gap to 5 tok/s.
+- The largest repeated decode rows include eligible GPU-path Q3_K down tensors
+  in layers `1`, `2`, and `60`, so simply adding more fallback support is not
+  sufficient.
+- Phase 7CG already tested a narrow Q3_K down Q8_K-reference path for layers
+  `1-2` and regressed badly, so the next target should not be another broad
+  alternate Q3_K kernel without first proving the schedule or memory path.
+- The next useful implementation should target exposed movement/scheduling
+  rather than unsupported fallback alone:
+  - make current-down overlap survive until the matching down op instead of
+    joining too early;
+  - or reduce per-token movement by changing admission/batching policy with a
+    stronger correctness guard than trace replay.
+
+Decision:
+
+- Accept Phase 7CN as diagnostic instrumentation.
+- Keep `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP` defaulting to `40`; SOTA behavior
+  is unchanged unless explicitly enabled.
+- Do not promote the 7CN run as SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
