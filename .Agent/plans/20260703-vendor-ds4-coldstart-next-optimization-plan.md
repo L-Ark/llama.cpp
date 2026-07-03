@@ -1697,3 +1697,56 @@ Verdict:
 - Rejected at microbench stage. Do not implement transient per-op MXFP4 repack in runtime source and do not run a full model candidate for this direction.
 - Current accepted SOTA remains historical `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
 - Remaining work requires a new mechanism beyond row-wise dot, persistent/hotset repack, and transient per-op repack.
+
+### 2026-07-03 Up/Down I/O Layout Feasibility Audit
+
+Goal:
+
+- Evaluate the remaining non-kernel direction: a broader up/down I/O or layout redesign that reduces cold page faults without consuming host RAM or disturbing the accepted gate O_DIRECT path.
+- This is an evidence audit only. It does not change runtime source and does not run a model candidate.
+
+Artifact:
+
+- `.Agent/runs/20260703-vendor-ds4-coldstart/updown-io-layout-feasibility-audit.json`.
+- Source profile: `/root/lfz/runs/vendor-ds4-16gb/20260703T100011Z-20260703T100011Z-cpu-fallback-fine-trace-limit2m/france-cpu40-vram0gb/fallback-profile.csv`.
+- Source fault analysis: `.Agent/runs/20260703-vendor-ds4-coldstart/fallback-fault-trace-current-sota-analysis.json`.
+
+Key numbers:
+
+| Scope | entries | calls | fallback_ms | unique payload | call-weighted reads | avg calls/entry |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| decode up | 2627 | 17940 | 9725.822 | 10.903 GiB | 74.458 GiB | 6.829 |
+| decode down | 2627 | 17940 | 9673.781 | 10.903 GiB | 74.458 GiB | 6.829 |
+| decode up+down | 5254 | 35880 | 19399.603 | 21.806 GiB | 148.916 GiB | 6.829 |
+| all up+down | 7030 | 38222 | 26972.399 | 29.177 GiB | 158.636 GiB | 5.437 |
+
+Decode top-N fallback coverage:
+
+| top N | fallback_ms | coverage | unique payload | call-weighted reads |
+| ---: | ---: | ---: | ---: | ---: |
+| 64 | 2709.990 | 13.97% | 0.266 GiB | 26.928 GiB |
+| 128 | 4262.371 | 21.97% | 0.531 GiB | 42.143 GiB |
+| 256 | 6131.527 | 31.61% | 1.062 GiB | 57.437 GiB |
+| 512 | 8506.409 | 43.85% | 2.125 GiB | 73.362 GiB |
+| 1024 | 11711.597 | 60.37% | 4.250 GiB | 89.478 GiB |
+| 2048 | 15698.329 | 80.92% | 8.500 GiB | 114.696 GiB |
+| 4096 | 18780.805 | 96.81% | 17.000 GiB | 143.081 GiB |
+
+Interpretation:
+
+- Faults are broad, not a tiny hotset: the fault trace distributes major faults across all layer bands (`0-2`, `3-9`, `10-19`, `20-29`, `30-39`) and both up/down kinds.
+- A mmap compact pack large enough to cover most decode fallback would itself consume many GiB of cgroup file cache, competing with the accepted 16GB page-cache budget. This matches earlier compact mmap top128/top256 tie/regression results.
+- O_DIRECT into temporary buffers would avoid file page cache, but it still has to read/copy tens to hundreds of GiB call-weighted data and does not remove MXFP4 dot compute. The transient repack harness already showed that adding source copy/temp writes can erase the GEMV benefit even in warm microbench.
+- Small hotsets are not enough: top128 covers only `21.97%` of decode fallback; top512 covers `43.85%` but needs `2.125 GiB` unique payload and still leaves most fallback work. Prior top512 down-pack short diagnostic reduced staging but remained far below SOTA because gate/cache and staging costs dominated.
+
+Verdict:
+
+- Reject broad up/down I/O/layout redesign as the next runtime candidate unless a future design changes the data movement model more fundamentally than mmap packs, O_DIRECT temp copies, or small hotsets.
+- Do not run another full strict-cold model candidate for I/O/layout alone. A future candidate needs a new microbench or short diagnostic proving it reduces either broad source scan cost or MXFP4 compute without adding cgroup page-cache pressure.
+- Current accepted SOTA remains `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
+
+Current completion state:
+
+- Kernel directions closed in this plan cycle: existing repack harness only, transient per-op repack, naive AVX2/prefetch/multi-row attempts from prior records.
+- I/O/page directions closed in this plan cycle: compact mmap packs, willneed/no-warmup/no-repack, down-pack staging, and now broad up/down I/O-layout feasibility.
+- No current mechanism has a defensible path above the `4.2 tok/s` promotion gate without a new algorithmic idea. The plan should remain open only for discovery of a new mechanism; do not keep launching full-model probes from already rejected classes.
