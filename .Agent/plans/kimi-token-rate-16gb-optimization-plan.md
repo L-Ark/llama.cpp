@@ -28783,6 +28783,113 @@ Decision:
   stricter prefetch admission/batching strategy using Phase 7CJ as input, or
   move to narrow Q4_0 down fallback cleanup.
 
+### Phase 7CL - minimal-admission trace VRAM prefetch
+
+Start time:
+
+- 2026-07-03T14:12:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CK proved that the Phase 7CJ trace aligns perfectly:
+  - `matched=42928`;
+  - `resync=0`.
+- It also proved that trace prefetch can improve VRAM hit rate:
+  - global hit rate `52.9% -> 57.5%`;
+  - down hit rate `73.6% -> 76.3%`;
+  - upgate hit rate `43.7% -> 49.2%`.
+- But it failed performance because the prefetch policy loaded too much:
+  - `loads=2404`;
+  - expert-pack `iouring_bytes` rose to `73917333504`;
+  - `iouring_wait_us` rose to `14595165`;
+  - many one-job batches appeared: `batch_hist=1:2513`;
+  - decode was `33554.47 ms / 31`, slower than 7CC by `336.81 ms`.
+
+Hypothesis:
+
+- Keep the same Phase 7CJ route trace but reduce prefetch admission to the
+  smallest useful setting:
+
+```sh
+GGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv
+GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64
+GGML_MOE_TRACE_PREFETCH_WINDOW=64
+GGML_MOE_TRACE_PREFETCH_MAX_LOADS=1
+```
+
+- `MAX_LOADS=1` and `WINDOW=64` should reduce extra prefetch reads sharply.
+- If the 7CK slowdown was mostly over-admission, a smaller policy may keep a
+  subset of the cache-hit improvement while avoiding the extra iouring wait.
+- If prefetch has too little selectivity, the run will either lose the hit-rate
+  gain or still add small-batch IO overhead and fail.
+
+Theoretical upper bound:
+
+- Phase 7CK lowered main pinned host stage by about `1.53 s` versus the 7CJ
+  diagnostic but increased expert-pack wait by about `1.63 s` and lost overall.
+- A minimal policy can at best retain part of the host-stage reduction while
+  removing most added prefetch wait.
+- Realistic upside is small, likely `0.1-0.6 s` n32. This is only worth testing
+  because it is env-only and may identify whether a future source-level
+  admission policy is worth implementing.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7cl_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append the four trace-prefetch env vars above.
+- Keep every accepted Phase 7CC runtime setting unchanged.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cl_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260703-135257Z-n32-phase7cj-7cc-route-trace/route-trace.csv\nGGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=64\nGGML_MOE_TRACE_PREFETCH_WINDOW=64\nGGML_MOE_TRACE_PREFETCH_MAX_LOADS=1\nEOF\n|' /tmp/run_phase7cl_repro.sh
+chmod +x /tmp/run_phase7cl_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cl-trace-vram-prefetch-min"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cl_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains all four trace-prefetch env vars;
+  - stderr contains `trace prefetch: loaded 42928 events`;
+  - final trace-prefetch report has nonzero `calls` and records the lower
+    `loads` count.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - `loads`, `iouring_bytes`, and `iouring_wait_us` must fall versus Phase 7CK;
+  - any decode gain must be explained by retained cache hit-rate improvement or
+    lower pinned staging/current-down overlap time.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, output quality changes, trace alignment is poor,
+  RAM/TTFT/read gates fail, or the smaller policy removes the hit-rate gain,
+  reject and keep trace prefetch disabled in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
