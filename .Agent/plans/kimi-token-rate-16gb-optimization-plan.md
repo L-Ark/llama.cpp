@@ -20175,3 +20175,116 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BA - retest current-down overlap necessity on Phase 7AS
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 6A introduced `GGML_MOE_CURRENT_DOWN_OVERLAP=1` and proved it was a
+  major win before the current Phase 7AS IQ2_S parallel up/gate path.
+- Phase 7X retested `GGML_MOE_DOWN_PARALLEL_STAGE=1` necessity after pack-mmap
+  and kept current-down overlap enabled; it did not isolate current-down overlap
+  itself.
+- Phase 7AY and 7AZ show that adding more IO/staging concurrency on top of 7AS
+  hurts by increasing wait/stage pressure. Therefore it is worth checking the
+  opposite direction: remove only current-down overlap while keeping the rest of
+  7AS intact.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+# remove from env.txt
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+- Keep all accepted Phase 7AS settings:
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_PREFETCH_DOWN=1`;
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`;
+  - pack-mmap CPU fallback;
+  - IQ2_S parallel up/gate and parallel stage;
+  - split VRAM cache `15000 MiB`, upgate pct `60`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - dense/expert mmap drops, pinned slots `8`, `THREADS=32`.
+- If current-down overlap is now causing too much contention with IQ2 up/gate
+  staging, disabling it may reduce iouring wait or up/gate wall time.
+- If current-down overlap is still essential, disabling it should expose down
+  staging in `call_down`, increase pinned host-stage, and regress wall decode.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 current-down-overlap counters planned `3664` current down jobs
+  and completed all of them before/around `call_down`.
+- Removing the overlap can at best eliminate contention from those jobs, bounded
+  by the incremental wait/stage pressure seen in 7AY/7AZ (`~0.5-1.8 s` n32).
+- The downside is larger: if even part of the `3664` down loads move back onto
+  the critical path, exposed host-stage can increase by multiple seconds.
+- Therefore this is a diagnostic A/B with a high rejection probability, but it
+  can clearly prove whether current-down overlap is still untouchable under
+  7AS.
+
+Experiment:
+
+- Env-only probe. Source remains clean at `d9175fecf` or later.
+- Create `/tmp/run_phase7ba_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  parameterize:
+
+```sh
+CURRENT_DOWN_OVERLAP=0
+```
+
+- The runner must omit `GGML_MOE_CURRENT_DOWN_OVERLAP=1` from `env.txt` when
+  `CURRENT_DOWN_OVERLAP=0`, and record the switch in `command.txt`.
+- Strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ba-no-current-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 CURRENT_DOWN_OVERLAP=0 \
+      /tmp/run_phase7ba_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - cold start with `drop_caches`;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer for
+    `Please introduce France in a short paragraph.`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - run directory includes `README.md`, `command.txt`, `env.txt`, `git.txt`,
+    `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`,
+    and `metrics.txt`.
+- Activation:
+  - `command.txt` must record `CURRENT_DOWN_OVERLAP=0`;
+  - `env.txt` must not contain `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - stderr must not contain `current down overlap active`;
+  - stderr must still contain `IQ2_S parallel up/gate streams active`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if it beats, run n32 confirmation;
+  - if both n32 runs beat and gates pass, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - if wall improves, counters must show lower iouring wait, lower up/gate wall,
+    or lower pinned host-stage that exceeds any down-stage regression;
+  - if wall regresses, compare pinned main host-stage and down profile to prove
+    the removed overlap was still hiding critical-path work.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower than Phase 7AS confirmation, reject immediately and
+  keep Phase 7AS as SOTA.
