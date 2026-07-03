@@ -20893,6 +20893,158 @@ Phase 7AS decode,type=2 was about 2630 ms for the same 13.351 GiB bucket
     - change scheduling so fallback file-backed work overlaps with otherwise
       idle time rather than contending with existing expert-pack reads.
 
+## Phase 7BQ - true Phase 7AS minimal-profile production retest
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains accepted SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Recent source-level attempts show the critical path is sensitive to CPU-side
+  scheduling and shared IO/staging contention:
+  - Phase 7BO source attribution added CSV overhead and slowed n32 to
+    `36307.96 ms / 31`;
+  - Phase 7BP moved fallback-local page faults out of the worker loop, but
+    increased shared `iouring_wait_us` and pinned `host_stage`;
+  - Phase 7AV removed only `GGML_MOE_BATCH_PROFILE=1` on 7AS and regressed.
+- What has not been tested on true Phase 7AS is removing all optional
+  diagnostic envs at once, while keeping the exact accepted runtime features:
+  up/gate parallel stage, current-down overlap, down parallel staging, SQPOLL,
+  split VRAM cache, and pack-mmap CPU fallback.
+
+Hypothesis:
+
+Remove diagnostic-only envs:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+```
+
+Keep all accepted Phase 7AS runtime envs:
+
+```sh
+GGML_MOE_EXPERT_PACK=...
+GGML_MOE_IO_BACKEND=iouring
+GGML_MOE_IO_BYTES=8388608
+GGML_MOE_IO_DEPTH=8
+GGML_MOE_IO_REFILL_BATCH=4
+GGML_MOE_IO_SORT_OFFSET=1
+GGML_MOE_IO_SQPOLL=1
+GGML_MOE_MMAP_DONTNEED=1
+GGML_MOE_PARALLEL_EXPERTS=1
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_STAGE_PINNED=1
+GGML_MOE_STAGE_PINNED_SLOTS=8
+GGML_MOE_STREAM=1
+GGML_MOE_STREAM_BATCH_ONLY=1
+GGML_MOE_STREAM_DOWN_BATCH=1
+GGML_MOE_STREAM_FUSED_UP_GATE=1
+GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=60
+GGML_MOE_DOWN_PARALLEL_STAGE=1
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+Why this can improve token rate:
+
+- It removes hot-path CUDA event timing, CPU profile aggregation, fallback CSV
+  row aggregation, name/eligibility profile maps, decline-debug logging checks,
+  and TTFT trace collection.
+- It does not change tensor bytes, routing, kernels, cache keys, memory tier,
+  io_uring policy, prompt, sampling, or generation settings.
+- It may slightly reduce CPU-side scheduling pressure around io_uring, pinned
+  staging, CUDA launch, and CPU fallback.
+
+Theoretical upper bound:
+
+- Previous profile-trim runs usually showed noise-sized single-run gains that
+  did not reproduce.
+- Because Phase 7AS already has CUDA graphs and optimized up/gate parallelism,
+  realistic upside is small: `0.1-0.8 s` on n32.
+- A larger gain must be confirmed by a second cold n32 and then n96; otherwise
+  it is cold-start variance.
+- Removing diagnostics will also remove some detailed profile counters. This is
+  acceptable only for this production-mode candidate because the mechanism is
+  explicit diagnostic overhead removal. Standard metrics, cache summaries,
+  expert-pack summaries, memory stats, and exact output still must be recorded.
+
+Experiment:
+
+- Env-only; no source change.
+- Create `/tmp/run_phase7bq_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Add parameter:
+
+```sh
+MIN_PROFILE=1
+```
+
+- When `MIN_PROFILE=1`, omit the diagnostic envs listed in the hypothesis.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bq-7as-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7bq_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `memory.swap.max=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `command.txt` records `MIN_PROFILE=1`;
+  - `env.txt` does not contain the diagnostic envs listed above;
+  - accepted runtime envs remain present, especially
+    `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`,
+    `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`,
+    `GGML_MOE_CURRENT_DOWN_OVERLAP=1`,
+    `GGML_MOE_DOWN_PARALLEL_STAGE=1`, and
+    `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower, reject immediately.
+- If n32 candidate improves but confirmation fails, reject as non-reproducible.
+- If accepted through n96 confirmation, commit/push the plan and update the
+  reproduction runner/config documentation immediately.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
