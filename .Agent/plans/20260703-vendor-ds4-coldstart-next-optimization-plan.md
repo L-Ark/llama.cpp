@@ -4970,3 +4970,70 @@ Verdict:
 - Current accepted strict cold SOTA remains `4.4 tok/s` from top3000 prefill.
 - Full-cache `3192` also has worse miss count than top3000 (`1980` vs `1886`), consistent with LRU eviction reducing the expected benefit.
 - Next optimization should avoid filling all slots blindly. Prefer a source-level cache policy change, such as preserving prefilled high-frequency entries from early eviction or reserving a small runtime-insert pool.
+
+### 2026-07-03T23:07Z Protected Prefill Cache Policy Design
+
+Goal:
+
+- Prevent runtime misses from evicting high-frequency prefilled gate experts when the prefill uses most or all VRAM cache slots.
+- Test whether protected top3192 prefill can convert the theoretical hit-rate headroom into a reproducible token-rate improvement.
+
+Bottleneck:
+
+- Current accepted top3000 SOTA: `4.4 tok/s`, `hits=33265 misses=1886 hit_rate=94.6%`.
+- Full-cache top3192 without protection was unstable and rejected:
+  - initial: `4.6 tok/s`, but pushed-source rerun: `4.3 tok/s`.
+  - rerun miss count: `1980`, worse than top3000.
+- This points to LRU eviction: filling all slots lets early runtime misses evict prefilled entries that have not yet been used.
+
+Hard-bound from trace/profile:
+
+Using the promoted top3000 trace and the same profile order, if prefilled entries are protected and runtime miss insertions cannot evict them:
+
+| Protected prefill set | Protected-hit upper bound | Misses without runtime insert | Hit rate upper bound | Repeated outside-profile occurrences |
+| ---: | ---: | ---: | ---: | ---: |
+| `3000` | `33239` | `1912` | `94.56%` | `626` |
+| `3072` | `33383` | `1768` | `94.97%` | `482` |
+| `3136` | `33511` | `1640` | `95.33%` | `354` |
+| `3192` | `33623` | `1528` | `95.65%` | `242` |
+
+Expected upper bound:
+
+- Protected top3192 can theoretically remove about `358` misses vs accepted top3000 (`1886 - 1528`) and about `452` misses vs unprotected top3192 rerun (`1980 - 1528`).
+- Average top3000 miss `src0_ms` is about `1.16 ms`, so the rough generation-side source saving is up to about `415 ms` vs top3000 before accounting for runtime insert losses and kernel overhead.
+- TTFT cost is unchanged from top3192 prefill and has passed the gate in both 3192 runs.
+
+Implementation plan:
+
+- Add a default-off env: `GGML_MOE_STREAM_ONE_PREFILL_PROTECT=1`.
+- Add per-slot protection state in the one-stream VRAM cache.
+- Prefill insertions mark slots protected only when the env is enabled.
+- Normal runtime insertions may use empty slots first and evict only unprotected slots. If all slots are protected, insertion fails and the call falls back to the existing per-slot staging buffer without caching that miss.
+- Fix cache miss accounting so failed insertions with `count_miss=true` still increment the miss counter.
+- Default behavior with the env unset must match the current accepted SOTA path.
+
+Practice config:
+
+- First build and run a default-off guard with accepted top3000 config to ensure no behavior regression.
+- Then run protected top3192 under strict cold `drop_caches`, 16GB cgroup, `cpu_moe=40`, gate O_DIRECT pack, and France prompt.
+- Candidate env delta:
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3192`
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROTECT=1`
+- Keep CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Acceptance gates:
+
+- Default-off guard must preserve correctness and stay in the `4.4 tok/s` class without RAM/TTFT regressions.
+- Protected top3192 promotes only if `eval_tok_s > 4.4` and a pushed-source rerun also exceeds `4.4`.
+- France output must be complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000`, page cache included.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+- Any accepted SOTA must be recorded with full reproduction info and immediately pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Rejection rules:
+
+- Reject if default-off guard regresses materially.
+- Reject if protected top3192 does not exceed `4.4 tok/s`, fails correctness, exceeds TTFT gate, breaks RAM gate, or shows pack direct failures/fallbacks.
+- If rejected, revert the source patch and push only documentation/artifact records.
