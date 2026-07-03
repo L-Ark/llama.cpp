@@ -1223,6 +1223,34 @@ Next direction after overpartition rejection:
 - Avoid CPU fallback changes that increase page faults even if they improve scheduling theory. Under 16GB, page-fault behavior dominates small CPU scheduling wins.
 - Remaining viable directions need a stronger mechanism than per-chunk scheduling or per-chunk repack: reduce misses before CPU fallback, move a bounded additional expert subset into VRAM without causing OOM, or change gate/admission so pack/cache counters remain aligned while CPU fallback calls decrease.
 
+
+Gate-only VRAM cache +32 slots candidate design:
+
+- Time: 2026-07-03 after overpartition rejection commit `f38603e26`.
+- Bottleneck focus: do not add CPU source scans or up/down one-stream traffic. Current accepted gate path is stable but has `3313` gate admission entries and only `3192` cache slots at `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, with final counters `hits=30528 misses=4623 hit_rate=86.8%`.
+- VRAM basis: accepted SOTA stderr reports `VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)` and CUDA0 free `238 MiB` at shutdown. Adding `32` slots costs about `136 MiB`, leaving a small safety margin without changing host RAM/page-cache behavior.
+- Candidate: no source change. Increase only `GGML_MOE_STREAM_ONE_CACHE_MIB` from `13568` to `13704`. Keep `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, current gate admission profile, O_DIRECT gate expert pack, top-k policy, `cpu_moe=40`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, drop_caches, and strict 16GB cgroup.
+- Theoretical upper bound: this can only reduce gate cache evictions/misses. If the extra 32 slots eliminate a small fraction of the `4623` misses, the possible gain is limited to avoided O_DIRECT pack reads/H2D for those misses; it cannot reduce CPU up/down fallback. This is a low-risk no-source probe because it uses otherwise free VRAM and should preserve correctness.
+- Risk: CUDA OOM or lower free VRAM may increase allocator pressure. If cudaMalloc fails, counters change unexpectedly, TTFT rises, or token rate does not exceed `4.2`, reject and keep `13568`.
+- Acceptance: promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and pack/cache counters show no direct failures. If accepted, record exact cache slot count/hash/run and push immediately; if rejected, record as env-only diagnostic.
+
+
+Gate-only VRAM cache +32 slots candidate result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T111601Z-20260703T-gate-cache13704-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: `GGML_MOE_STREAM_ONE_CACHE_MIB=13704` instead of `13568`; otherwise accepted gate-only one-stream/O_DIRECT pack config, top-k policy, `cpu_moe=40`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, drop_caches, and strict 16GB cgroup.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=30285.215928 ms`, `elapsed_seconds=63.36`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15094198272`, `pgmajfault=270283`, `workingset_refault_file=1661147`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: passed manual review. France answer was complete, semantic, and coherent.
+- VRAM/cache: cache initialized as `13.4 GiB, 3224 slots (4.25 MiB each)`, CUDA0 free dropped from accepted `238 MiB` to `102 MiB`. Gate pack counters stayed direct-failure-free: `hits=4615 misses=0 reads=4615 direct_failures=0`; VRAM cache `hits=30536 misses=4615 hit_rate=86.9%`.
+- Diagnosis: adding 32 slots reduced misses by only `8` (`4623 -> 4615`) and did not improve token rate. The remaining 102MiB free VRAM leaves little safety margin, so larger cache sizes have low upside and higher OOM/allocator-pressure risk.
+- Verdict: rejected/tie. Keep `GGML_MOE_STREAM_ONE_CACHE_MIB=13568` as the accepted configuration. Do not continue gate-cache-size expansion unless a future profile shows materially larger miss reduction per slot.
+
+Next direction after gate-cache expansion rejection:
+
+- Current accepted SOTA remains `4.2 tok/s`; no source/config improvement was accepted.
+- The stable gate path is already near its useful VRAM limit. Remaining work should focus on reducing CPU fallback calls or finding a correctness-preserving routing/cache change that does not alter gate cache shape or increase page faults.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
