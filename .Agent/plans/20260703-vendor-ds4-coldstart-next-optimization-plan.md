@@ -633,6 +633,28 @@ Microbench result:
 - Theoretical implication: top128 decode up/down coverage is about `3695 ms`; with `S=1.41-1.46`, the compute-only upper bound is roughly `1070-1170 ms`. Top256 coverage gives roughly `1680-1990 ms`, before repack memory, hotset lookup, page-cache effects, and integration overhead. This is below the threshold needed to reliably beat the `4.2 tok/s` SOTA under cold-run variance.
 - Verdict: reject hotset-local MXFP4 CPU repack integration for now. Existing repack kernels are mathematically exact and faster in warm compute, but not fast enough to justify adding a memory-consuming hotset path under the strict 16GB cold-start constraint.
 
+
+### 2026-07-03 Current SOTA `--no-repack` Diagnostic Design
+
+Design:
+
+- Goal: close the remaining loader/buffer ambiguity on the current accepted gate O_DIRECT SOTA path by testing `--no-repack` without changing source.
+- Source state: clean accepted SOTA binary; no runtime source change.
+- Current evidence: the MXFP4 microbench showed full/hotset CPU repack is not worth implementing under the 16GB cold-start constraint. The current SOTA logs also show cgroup memory dominated by file page cache, not an obvious CPU_REPACK anonymous buffer. However, there has not yet been a current-SOTA strict run with `--no-repack` alone.
+- Theory: if the accepted path is already effectively using mmap/default CPU buffers for the remaining CPU up/down fallback, `--no-repack` should tie and prove repack is not a hidden lever. If some implicit CPU_REPACK buffer is still active, `--no-repack` may reduce anonymous memory/page pressure but can also slow CPU GEMV. Because arithmetic and routing are unchanged, correctness should remain identical.
+- Hard upper bound: this switch can only affect loader/buffer placement and CPU GEMV layout; it cannot reduce the measured gate stream cost or expert pack direct-read volume. A speedup large enough to beat `4.2 tok/s` is unlikely unless there is hidden repack memory pressure.
+
+Planned run:
+
+- Strict cold France with accepted SOTA config plus `--no-repack`.
+- Preserve `cpu_moe=40`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate admission profile, gate O_DIRECT expert pack, `GGML_MOE_KEEP_TOPK_*`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, drop_caches, and 16GB cgroup.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and counters show the accepted gate path is preserved.
+- If it ties or regresses, reject and keep the current SOTA unchanged.
+- No rollback is needed because this is a CLI-flag-only diagnostic.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
