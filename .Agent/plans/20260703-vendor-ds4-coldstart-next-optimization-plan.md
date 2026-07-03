@@ -4622,3 +4622,66 @@ Next plan:
   - test a smaller prefill limit sweep (`2048`, `2560`, `2816`) to recover TTFT headroom and compare generation rate;
   - investigate whether remaining `1886` gate misses are concentrated in a small set that can be prefetched without exceeding the TTFT gate.
 - Any new practice run must first append its design, hard-bound, acceptance/rejection gates, and exact config to this plan. Any compliant SOTA must again be fully recorded and immediately pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+### 2026-07-03T22:19Z Prefill Limit Sweep Design
+
+Goal:
+
+- Continue from the promoted `4.4 tok/s` cold-start SOTA and search for a better gate-prefill point.
+- Reduce prefill TTFT cost while preserving enough gate cache hits to improve generation rate.
+- This is a no-source-change experiment from pushed source `cc42924ab`.
+
+Current bottleneck from promoted SOTA:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- `eval_tok_s=4.4`, `TTFT=32892.55329 ms`, TTFT headroom to +20% gate is only `725.135454 ms`.
+- Gate cache: `hits=33265 misses=1886 hit_rate=94.6%`.
+- Gate prefill: `3000` entries, `13369344000` bytes, `4485.962 ms`.
+- Measured prefill read/H2D throughput: about `2.98 GB/s`.
+- Remaining gate miss path still costs about `2187.637 ms` of `src0_ms`; reducing it would help generation, but adding more prefill would exceed the TTFT gate unless prefill is re-ranked or made faster.
+
+Hard-bound estimate:
+
+Use the measured `4456448` bytes per gate expert payload and observed prefill throughput from the promoted run. The profile is sorted by frequency, so these bounds estimate TTFT cost and profile frequency coverage for smaller top-N cuts.
+
+| Prefill limit | Payload GiB | Profile frequency coverage | Estimated prefill cost |
+| ---: | ---: | ---: | ---: |
+| `2048` | `8.50` | `91.31%` | `3062.4 ms` |
+| `2560` | `10.63` | `95.56%` | `3828.0 ms` |
+| `2816` | `11.69` | `97.07%` | `4210.8 ms` |
+| `3000` current | `12.45` | `98.16%` | `4486.0 ms` |
+
+Hypothesis:
+
+- `3000` may over-prefill marginal low-frequency entries and spend too much TTFT near the acceptance limit.
+- `2560` or `2816` may keep most of the cache benefit while reducing cold-start pressure and page/cache churn enough to equal or exceed `4.4 tok/s`.
+- `2048` is a lower-bound probe: if it drops generation rate significantly, the remaining misses are still costly and the next path should be better ranking rather than smaller limits.
+
+Practice config:
+
+- Use `strict_ds4_runner.py` with cold `drop_caches` before each case.
+- Use `MemoryMax=16000000000`, `MemorySwapMax=0`, `ram_kill_threshold_bytes=16000000000`.
+- Keep vendor DeepSeek only, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`.
+- Keep gate-only one-stream: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Keep gate cache size: `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- Keep O_DIRECT gate pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`.
+- Keep profile: `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`.
+- Sweep only `GGML_MOE_STREAM_ONE_PREFILL_LIMIT` over `2048`, `2560`, and `2816`.
+- Keep CLI extra args: `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Prompt remains: `Please introduce France in a short paragraph.`
+
+Acceptance gates:
+
+- Promote only if `eval_tok_s > 4.4`.
+- France output must be complete, coherent, and semantically correct by manual review.
+- `memory_peak_bytes <= 16000000000`, with page cache included in `memory_file_bytes`.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+- Source/docs/artifacts must be committed and pushed immediately to `ssd/vendor/deepseek-token-rate-16gb` for any accepted SOTA.
+
+Rejection rules:
+
+- Reject/tie if `eval_tok_s <= 4.4`.
+- Reject if correctness fails, TTFT exceeds the gate, cgroup kills the run, OOM occurs, or pack direct failures/fallbacks appear.
+- Record every run's metrics, answer, counters, run path, artifact hashes, and verdict in this plan even when rejected.
