@@ -1087,6 +1087,27 @@ Current SOTA `--no-warmup` diagnostic result:
 - Diagnosis: disabling warmup did not improve token rate and TTFT was higher than the pre-candidate baseline guard (`29406.374764 ms`). It does not reduce the current CPU fallback or page/refault bottleneck enough to matter.
 - Verdict: rejected/tie. Keep default warmup behavior for the accepted SOTA path.
 
+
+Page/refault lever audit after no-warmup:
+
+- Current accepted and guard runs already sit at the 16GB cgroup ceiling with about `15.0 GiB` file cache. Page-cache pressure is therefore real, but most simple page policy changes move cost between traced source time, TTFT, reclaim, and refaults rather than removing work.
+- Already rejected/tied current-path page/source levers:
+  - CPU fallback compact mmap top128/top256: worked mechanically but tied/regressed (`4.1` / `4.0`) because CPU math and sync remained dominant.
+  - CPU `MADV_WILLNEED`: reduced major faults but regressed to `4.0 tok/s`, consistent with extra reclaim/prefetch pressure.
+  - `--no-repack`: tied at `4.1 tok/s`, proving no hidden CPU_REPACK memory lever on the accepted path.
+  - `--no-warmup`: tied at `4.1 tok/s` and worsened TTFT.
+  - Down pack/iouring/staging probes: reduced short-run down staging in some cases but required reducing gate cache or had too little VRAM; full SOTA was unjustified.
+  - Early top-k pruning: changed output trajectory, increased gate misses/refaults, and failed correctness/completeness.
+- Historical page-policy evidence also rejects broad stream `DONTNEED=0`, op-wide stream `WILLNEED`, CPU fallback `DONTNEED_AFTER_EXPERT`, RAM-tier hotsets, and larger read-ahead/cache-size combinations under the same 16GB cgroup constraint.
+- Conclusion: there is no remaining no-source or simple page-advice candidate with a defensible `>1s` upper bound and acceptable risk. Running more variants of the same page policy class is unlikely to move beyond `4.2 tok/s` and risks consuming time without new information.
+
+Next required design step:
+
+- Do not run another full strict-cold SOTA candidate until a microbench or short diagnostic proves a new mechanism.
+- The next useful artifact should be a correctness-identical MXFP4 CPU kernel/unit-test harness that can compare any proposed dot/mul_mat_id variant against the exact runtime `ggml_vec_dot_mxfp4_q8_0()` path before model integration.
+- The harness must use representative DS4 shapes, report max/mean abs, warm speed, compile flags, CPU feature path, and must reject any variant that is numerically non-identical or below the configured speedup threshold.
+- Only after such a harness finds a real speedup should a default-off runtime source candidate be designed. Current accepted SOTA remains unchanged.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
