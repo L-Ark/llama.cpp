@@ -19186,3 +19186,65 @@ Rollback:
 - Env-only failure needs no source rollback.
 - Reject immediately if the first n32 is slower than Phase 7AS confirmation or
   if counters show the down miss increase dominates the upgate benefit.
+
+Phase 7AU n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-032613Z-n32-phase7au-7as-upgate65`.
+- git:
+  - head `b853e65c3`;
+  - status clean at run start.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=65
+```
+
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `78238.82 ms`, under the `106331.72 ms` gate.
+- decode: `35358.99 ms / 31`, `0.88 tok/s`.
+- comparison:
+  - Phase 7AS n32 candidate: `33811.07 ms / 31`;
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`;
+  - Phase 7AU regresses by `1887.40 ms` versus the confirmation threshold.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11854`;
+  - `iouring_bytes=70163136512`;
+  - `iouring_wait_us=12975277`.
+- pinned staging:
+  - main `host_stage=19672.627 ms`, `h2d=4186.839 ms`;
+  - gate `host_stage=2453.043 ms`, `h2d=943.906 ms`.
+- VRAM cache:
+  - down slots drop from `806` to `705`, hit rate `71.3%`;
+  - upgate slots increase from `1679` to `1819`, hit rate `45.3%`.
+
+Interpretation:
+
+- The split change mechanically shifts capacity to upgate and improves upgate
+  hit rate, but the down-cache loss dominates.
+- Compared with Phase 7AS n32 confirmation, expert-pack bytes and iouring wait
+  increase, main host stage increases, and gate host stage also increases.
+- The result confirms that the 7AS runtime still needs the accepted `60/40`
+  split; larger upgate allocation is not beneficial under the strict cold 16GB
+  gate.
+
+Decision:
+
+- Reject Phase 7AU.
+- No source rollback is needed because this was env-only.
+- Keep Phase 7AS as the current accepted SOTA:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - n96 confirm decode `84173.24 ms / 77`.
