@@ -553,6 +553,36 @@ Rollback:
 - Clean rebuild completed: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
 - Source worktree clean after rollback.
 
+### 2026-07-03 Single-Row CPU Fallback Chunk Probe Design
+
+Design:
+
+- Goal: test a narrowly scoped CPU fallback scheduling change on the current `4.1-4.2 tok/s` vendor DeepSeek cold-start path without changing model math, routing, gate cache policy, O_DIRECT expert pack, or accepted VRAM layout.
+- Bottleneck evidence: refreshed fallback profile reports `24838.624 ms` total CPU up/down fallback, including `17378.123 ms` decode fallback (`8625.536 ms` up, `8752.587 ms` down). Existing top128/top256 fallback mmap probes mechanically hit the compact pack but did not improve token rate, so the bottleneck is not just pointer/source locality.
+- Chunk evidence: current CPU chunk trace (`/root/lfz/runs/vendor-ds4-16gb/20260702T131703Z-20260702_phase1_sota_bottleneck_trace_post_kimi/france-cpu40-vram0gb/cpu_chunk_trace.csv`) shows the remaining fallback is dominated by `cne1=1` decode work: `448763.6 ms` thread-sum, estimated `32904.8 ms` wall, `22438.2 ms` ideal-at-20-threads, and about `10466.7 ms` tail imbalance. `cne1=1` accounts for most traced thread-sum and imbalance.
+- Current code behavior: for `nr1 == 1`, `mul_mat_id` sets `chunk_size=64`, then collapses to `nchunk0=nth` because `nchunk0*nchunk1 < nth*4`. With `nth=20`, this gives only 20 row chunks per active expert: roughly `103` rows/chunk for up and `205` rows/chunk for down. A single slow page/refault chunk can therefore dominate an expert op tail.
+- Historical boundary: prior `GGML_MOE_CPU_CHUNK_SIZE=24/32/64` tests only targeted multi-row/general fallback while explicitly preserving the current `nr1 == 1` behavior. They do not answer whether finer single-row decode chunking can reduce the current tail.
+
+Theory and upper bound:
+
+- A default-off `GGML_MOE_CPU_SINGLE_ROW_CHUNKS=<N>` can override only the `nr1 == 1 && nr0 > 1` chunk count after routing and before CPU fallback. Arithmetic, selected experts, output layout, and cache behavior remain unchanged.
+- Candidate `N=40` doubles single-row row chunks: up `~52` rows/chunk, down `~103` rows/chunk. This should reduce tail sensitivity while keeping enough work per chunk to avoid excessive atomic scheduling overhead.
+- Hard upper bound is the measured `cne1=1` imbalance estimate (`~10.5s` wall). Realistic gain is much lower because page faults, CPU vector dot arithmetic, graph barriers, and gate stream time remain. If the candidate recovers even `2-4s`, it may move the rounded `eval_tok_s` above `4.2`; otherwise it should tie or regress.
+- This probe must preserve O_DIRECT pack counters (`hits=4623 misses=0 direct_failures=0`), gate VRAM cache hit rate (`~86.8%`), 16GB cgroup including page cache, France correctness, and TTFT gate.
+
+Implementation plan:
+
+- Add a small default-off helper in `ggml/src/ggml-cpu/ggml-cpu.c` for `GGML_MOE_CPU_SINGLE_ROW_CHUNKS`.
+- In `ggml_compute_forward_mul_mat_id`, when `nr1 == 1 && nr0 > 1 && !disable_chunking && env > 0`, set `nchunk0=min(env,nr0)` and `nchunk1=1` instead of collapsing to `nth` chunks.
+- Default behavior must be bit-for-bit path compatible when the env is unset.
+- First test `GGML_MOE_CPU_SINGLE_ROW_CHUNKS=40` under strict cold France with the accepted SOTA config. Do not test broader values unless `40` shows a clear positive signal without gate/RAM/TTFT/correctness regression.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and counters confirm the accepted gate path is unchanged.
+- If accepted, immediately commit source and plan, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean-rebuild and strict-cold rerun from pushed source before declaring a new SOTA.
+- If `eval_tok_s <= 4.2` or any gate fails, revert `ggml/src/ggml-cpu/ggml-cpu.c`, clean rebuild, record the rejection, and push only the plan/record.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
