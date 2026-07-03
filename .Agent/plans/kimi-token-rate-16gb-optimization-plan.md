@@ -2430,6 +2430,126 @@ Decision:
   - avoid complex cross-stream combined staging until there is a simpler
     synchronization model.
 
+## Phase 7DL: post-rollback cold n96 bottleneck refresh
+
+Start time:
+
+- 2026-07-04T00:00:00+08:00.
+
+Purpose:
+
+- Re-establish the current bottleneck after rejecting and reverting Phase 7DK.
+- Do not change performance behavior in this phase.
+- Use the retained Phase 7DI stage-job histogram counters plus the accepted
+  Phase 7CC runtime settings to decide the next optimization.
+- This is required before further implementation because the last two
+  combined-staging probes showed that reducing iouring wait alone can still
+  regress global scheduling and type18 wall time.
+
+Current accepted SOTA:
+
+- Commit: `704a6928e`.
+- Branch: `vendor/kimi-moe-stream-on-vendor`.
+- n32 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-124021Z-n32-phase7cc-l12-upgate-pack-confirm`
+  with decode `33217.66 ms / 31`, `0.93 tok/s`.
+- n96 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-124705Z-n96-phase7cc-l12-upgate-pack-confirm`
+  with decode `79008.37 ms / 77`, `0.97 tok/s`.
+- Best observed n96 candidate remains diagnostic only:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-124316Z-n96-phase7cc-l12-upgate-pack`
+  with decode `77239.32 ms / 77`, `1.00 tok/s`.
+
+Bottleneck hypothesis to test:
+
+- Accepted 7CC is still movement-bound, but not by a single obvious queue:
+  - expert-pack iouring wait remains a major wall-time component;
+  - host staging/H2D remains significant for up/gate and current down;
+  - type18 compute/fallback wall can dominate if scheduling is perturbed;
+  - down/current movement may still be worth targeting, but previous down
+    hotset/preload/batch attempts failed without new evidence.
+- Therefore the next behavior-changing optimization must be selected only
+  after comparing current:
+  - decode wall;
+  - TTFT;
+  - memory peak and file cache split;
+  - expert-pack hits/misses, bytes, wait/submit, batch histogram;
+  - pinned host-stage/H2D timings;
+  - per-type up/gate/down wall;
+  - up/gate stage-job histogram.
+
+Theoretical ceiling:
+
+- This diagnostic has no speedup target and cannot become SOTA.
+- If the refreshed run matches 7CC within normal noise, the practical remaining
+  single-step ceiling is likely bounded by the largest remaining movable
+  component:
+  - reducing iouring wait without increasing host-stage/scheduling overhead;
+  - reducing H2D bytes by improving VRAM residency;
+  - or reducing CPU fallback/page-cache refaults.
+- Any next optimization must state its own numeric ceiling from the refreshed
+  counters before implementation.
+
+Implementation:
+
+- No source change.
+- Use existing binary from commit `704a6928e`, rebuilt on the server after the
+  Phase 7DK rollback.
+- Reuse `/tmp/run_phase7cc_repro.sh`; this script already records the accepted
+  env and includes `GGML_MOE_BATCH_PROFILE=1`, so the retained stage-job
+  histogram counters will print.
+- Use `build-cuda-batch/bin/llama-completion`.
+- Keep accepted settings:
+  - `N=96`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=8`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - expert pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 704a6928e
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7dl-post-rollback-bottleneck"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance gates for the diagnostic:
+
+- exit `0`;
+- cold start confirmed by `/tmp/run_phase7cc_repro.sh`;
+- `memory.max=15899996160` or lower effective cgroup memory limit;
+- `memory.swap.max=0`;
+- `oom=0`, `oom_kill=0`;
+- `memory.peak <= memory.max`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- output for `Please introduce France in a short paragraph.` is coherent,
+  semantically correct, and about France;
+- run directory contains enough artifacts to reproduce:
+  command/env, stdout/stderr, memory counters, binary/git version, model path,
+  expert-pack path, exact prompt, and profile logs.
+
+Result handling:
+
+- If the diagnostic fails a hard gate, fix the harness or rollback to the last
+  accepted setup before any optimization work.
+- If the diagnostic passes, record all metrics and rank the next optimization
+  by the largest compressible time component.
+- Do not promote Phase 7DL as SOTA because it is a measurement refresh.
+- Do not implement another combined up/gate staging variant unless this run
+  shows a simpler synchronization model with a concrete numeric ceiling.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
