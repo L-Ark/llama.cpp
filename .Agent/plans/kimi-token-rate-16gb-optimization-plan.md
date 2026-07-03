@@ -5908,6 +5908,105 @@ GGML_MOE_STAGE_PINNED_SLOTS=16
     attempted env override was superseded by the repro script's existing
     `GGML_MOE_IO_DEPTH=8` export.
 
+## Phase 7EC: true io depth 16 on slots16 SOTA
+
+Start time:
+
+- 2026-07-04T07:13:00+08:00.
+
+Current bottleneck:
+
+- Current SOTA is Phase 7EB:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`;
+  - env deltas: `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`,
+    `GGML_MOE_STAGE_PINNED_SLOTS=16`.
+- Phase 7EA attempted `GGML_MOE_IO_DEPTH=16`, but activation failed because
+  `/tmp/run_phase7ea_repro.sh` hard-coded `GGML_MOE_IO_DEPTH=8` inside the
+  script after the outer env was applied.
+- Phase 7EB confirms slots16 helps, but all io_uring histograms remain capped
+  at `5-8` and `inflight_max=8`.
+
+Hypothesis:
+
+- Replace the hard-coded script line:
+
+```sh
+GGML_MOE_IO_DEPTH=8
+```
+
+  with:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+```
+
+- Keep `PINNED_SLOTS=16` and all other SOTA settings unchanged.
+- If the iouring queue depth is the limiter, this should allow larger inflight
+  groups and move some histogram entries into `9-16`, reducing decode wall.
+- If per-layer job groups naturally top out at 8 due selected experts or stage
+  ring scheduling, depth16 will show no activation benefit and may be neutral
+  or slightly slower.
+
+Theory and upper bound:
+
+- Hard movement ceiling remains the Phase 7EB n96 expert-pack wait
+  `37009572 us` and main staging `30534.248 ms`.
+- Because Phase 7EB batch histograms are dominated by `2-4` and `5-8`, the
+  realistic gain is smaller than the full wait bucket.
+- Plausible n32 gain if depth is useful: `0.2-0.8 s`.
+- If `inflight_max` stays `8` and histogram `9-16` remains zero, this phase
+  proves depth is not the immediate limiter under the current batching shape.
+
+Implementation:
+
+- Env/script-only experiment; no source patch.
+- Use current branch HEAD.
+- Copy `/tmp/run_phase7eb_repro.sh` to `/tmp/run_phase7ec_repro.sh`.
+- Replace the hard-coded depth line with `GGML_MOE_IO_DEPTH=16`.
+- Keep `PINNED_SLOTS=16`.
+- Run n32 first; only run n96 if n32 beats current SOTA.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 055ef8300
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ec_repro.sh
+sed -i 's/^GGML_MOE_IO_DEPTH=8$/GGML_MOE_IO_DEPTH=16/' /tmp/run_phase7ec_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ec_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ec-depth16-slots16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ec_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- stderr reports expert-pack io depth `16`;
+- pinned staging reports `16` slots;
+- France output coherent and semantically correct;
+- n32 decode beats Phase 7EA `29599.64 ms / 31`;
+- mechanism evidence:
+  - iouring `inflight_max` can exceed `8`, or batch histogram gains `9-16`;
+  - if not, record that true depth16 is ineffective for current batching.
+
+Result handling:
+
+- If accepted, record result and run n96 confirmation.
+- If rejected or no true depth mechanism appears, keep Phase 7EB as current
+  SOTA and do not carry `GGML_MOE_IO_DEPTH=16`.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
