@@ -18,7 +18,7 @@ from pathlib import Path
 DEFAULT_BIN = Path("/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli")
 DEFAULT_MODEL = Path("/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf")
 DEFAULT_OUT_ROOT = Path("/root/lfz/runs/vendor-ds4-16gb")
-PROMPT = "Please introduce France in a short paragraph."
+DEFAULT_PROMPT = "Please introduce France in a short paragraph."
 MEMORY_MAX_BYTES = 16_000_000_000
 
 
@@ -113,10 +113,10 @@ def parse_memory_stat(text: str) -> dict[str, int]:
     return stats
 
 
-def extract_answer(stdout_text: str) -> str:
+def extract_answer(stdout_text: str, prompt: str) -> str:
     text = stdout_text.replace("\b", "").replace("\r", "\n").strip()
-    if PROMPT in text:
-        text = text.rsplit(PROMPT, 1)[-1]
+    if prompt in text:
+        text = text.rsplit(prompt, 1)[-1]
     split = re.split(r"\[\s*Prompt\s*:", text, maxsplit=1)
     if split:
         text = split[0].strip()
@@ -126,17 +126,20 @@ def extract_answer(stdout_text: str) -> str:
     return text
 
 
-def check_correctness(answer: str) -> tuple[bool, str]:
+def check_correctness(answer: str, prompt: str) -> tuple[bool, str]:
     lowered = answer.lower()
+    prompt_lowered = prompt.lower()
     failures: list[str] = []
-    if len(answer) < 160:
+    min_len = 160 if "france" in prompt_lowered else 80
+    if len(answer) < min_len:
         failures.append("too_short")
-    if "france" not in lowered:
-        failures.append("missing_france")
-    if "europe" not in lowered and "european" not in lowered:
-        failures.append("missing_europe")
-    if not any(term in lowered for term in ["paris", "culture", "history", "cuisine", "landmark", "art", "wine"]):
-        failures.append("missing_expected_context")
+    if "france" in prompt_lowered:
+        if "france" not in lowered:
+            failures.append("missing_france")
+        if "europe" not in lowered and "european" not in lowered:
+            failures.append("missing_europe")
+        if not any(term in lowered for term in ["paris", "culture", "history", "cuisine", "landmark", "art", "wine"]):
+            failures.append("missing_expected_context")
     if re.search(r"(?:!{3,}|#{3,}|\ufffd|\b(\w+)\s+\1\s+\1\b)", lowered):
         failures.append("degenerate_text")
     if re.search(r"\b(the the|of of|in the the)\b", lowered):
@@ -164,11 +167,12 @@ def build_case_script(
     env: dict[str, str],
     extra_args: list[str],
     ram_kill_threshold_bytes: int,
+    prompt: str,
 ) -> None:
     args = [
         str(binary),
         "-m", str(model),
-        "-p", PROMPT,
+        "-p", prompt,
         "-n", "192",
         "-c", "512",
         "-b", "64",
@@ -193,7 +197,7 @@ RUN_DIR={shlex.quote(str(case_dir))}
 mkdir -p "$RUN_DIR"
 cd "$RUN_DIR"
 cat > prompt.txt <<'EOF_PROMPT'
-{PROMPT}
+{prompt}
 EOF_PROMPT
 printf "/exit\\n" > stdin.txt
 cat > detect_answer_started.py <<'PY'
@@ -251,7 +255,7 @@ CMD_PID=$!
 MONITOR_PID=$!
 (
   while kill -0 "$CMD_PID" 2>/dev/null; do
-    if python3 detect_answer_started.py stdout.txt {shlex.quote(PROMPT)}; then
+    if python3 detect_answer_started.py stdout.txt {shlex.quote(prompt)}; then
       first_ns=$(date +%s%N)
       python3 - "$start_ns" "$first_ns" > first_answer_ms.txt <<'PY'
 import sys
@@ -290,12 +294,13 @@ def summarize_case(
     systemd_status: int,
     memory_max_bytes: int,
     ram_kill_threshold_bytes: int,
+    prompt: str,
 ) -> dict[str, object]:
     stdout_text = (case_dir / "stdout.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stdout.txt").exists() else ""
     stderr_text = (case_dir / "stderr.txt").read_text(encoding="utf-8", errors="replace") if (case_dir / "stderr.txt").exists() else ""
     combined = stdout_text + "\n" + stderr_text
-    answer = extract_answer(stdout_text)
-    correct, reason = check_correctness(answer)
+    answer = extract_answer(stdout_text, prompt)
+    correct, reason = check_correctness(answer, prompt)
     load_ms = parse_timing_ms(combined, "load time")
     prompt_ms = parse_timing_ms(combined, "prompt eval time")
     eval_ms = parse_timing_ms(combined, "eval time")
@@ -365,6 +370,8 @@ def main() -> int:
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--run-name", default="baseline")
+    parser.add_argument("--prompt", default=DEFAULT_PROMPT)
+    parser.add_argument("--case-name", default=None, help="Case directory prefix. Defaults to france.")
     parser.add_argument("--cpu-moe", type=int, action="append", required=True)
     parser.add_argument("--vram-cache-gb", type=int, default=2)
     parser.add_argument("--memory-max-bytes", type=int, default=MEMORY_MAX_BYTES)
@@ -402,10 +409,10 @@ def main() -> int:
         "memory_max_bytes": args.memory_max_bytes,
         "ram_kill_threshold_bytes": args.ram_kill_threshold_bytes,
         "drop_caches_before_case": args.drop_caches_before_case,
-        "prompt": PROMPT,
+        "prompt": args.prompt,
     }
     write_json(run_dir / "metadata.json", metadata)
-    (run_dir / "prompt.txt").write_text(PROMPT + "\n", encoding="utf-8")
+    (run_dir / "prompt.txt").write_text(args.prompt + "\n", encoding="utf-8")
 
     env = {
         "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "0"),
@@ -431,7 +438,8 @@ def main() -> int:
         extra_args.extend(shlex.split(item))
 
     for cpu_moe in args.cpu_moe:
-        case_dir = run_dir / f"france-cpu{cpu_moe}-vram{args.vram_cache_gb}gb"
+        case_name = args.case_name or "france"
+        case_dir = run_dir / f"{case_name}-cpu{cpu_moe}-vram{args.vram_cache_gb}gb"
         case_dir.mkdir()
         script = case_dir / "run_case.sh"
         build_case_script(
@@ -443,6 +451,7 @@ def main() -> int:
             env={**env, **{key: value.format(case_dir=str(case_dir)) for key, value in extra_env.items()}},
             extra_args=extra_args,
             ram_kill_threshold_bytes=args.ram_kill_threshold_bytes,
+            prompt=args.prompt,
         )
         unit = f"vendor-ds4-16gb-{utc_stamp()}-cpu{cpu_moe}.service"
         if args.drop_caches_before_case:
@@ -466,7 +475,7 @@ def main() -> int:
         (case_dir / "runner_elapsed_seconds.txt").write_text(f"{time.time() - start:.3f}\n", encoding="utf-8")
         subprocess.run(["systemctl", "show", unit], text=True, stdout=(case_dir / "unit.properties").open("w"), stderr=subprocess.DEVNULL)
         subprocess.run(["journalctl", "-u", unit, "--no-pager", "-n", "200"], text=True, stdout=(case_dir / "journal.log").open("w"), stderr=subprocess.DEVNULL)
-        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode, args.memory_max_bytes, args.ram_kill_threshold_bytes))
+        summaries.append(summarize_case(case_dir, cpu_moe, unit, proc.returncode, args.memory_max_bytes, args.ram_kill_threshold_bytes, args.prompt))
 
     write_json(run_dir / "summaries.json", summaries)
     with (run_dir / "results.tsv").open("w", encoding="utf-8") as f:

@@ -1364,6 +1364,57 @@ Next direction after routing trace:
 - Current evidence does not justify another top-k/pruning candidate. The biggest cost is early-layer up/down fallback, but early-layer changes are correctness-sensitive and route frequency is not enough to identify safe removals.
 - A defensible next candidate would need a prompt-set route/correctness study or a mechanism that reduces early-layer compute without changing selected experts. Without that new mechanism, current `4.2 tok/s` remains the effective accepted cold-start SOTA.
 
+
+Prompt-set cold SOTA portability study:
+
+- Time: 2026-07-03 after commit `8f9bc9a3d`.
+- Goal: test whether the current accepted France SOTA path is stable across a small prompt set before using prompt-specific routing/cache evidence for another optimization.
+- Tooling update: `.Agent/run-tools/strict_ds4_runner.py` now accepts `--prompt` and `--case-name`, preserving the same strict 16GB cgroup, drop-caches, memory summary, command/env capture, and answer extraction flow. This is runner/tooling only; runtime source was not changed.
+- Prompt set:
+  - France: `Please introduce France in a short paragraph.`
+  - Quantum: `Explain quantum computing briefly.`
+  - Fibonacci: `Write a short Python function for Fibonacci.`
+  - Japan: `Introduce Japan in a short paragraph.`
+  - Climate: `Summarize climate change in one paragraph.`
+- Config: current accepted SOTA env unchanged: `cpu_moe=40`, `vram_cache=0`, gate one-stream only, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, France gate admission profile, France gate expert pack with O_DIRECT, accepted top-k policy, `-c 256 -b 16 -ub 16`, strict cold `drop_caches`, and `MemoryMax=16000000000`.
+- Summary artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/promptset-current-sota-cold-summary.json`. Full run summaries are under `/root/lfz/runs/vendor-ds4-16gb/20260703T114755Z-20260703_promptset_current_sota_cold_france`, `...114903Z...quantum`, `...115132Z...fibonacci`, `...115412Z...japan`, and `...115534Z...climate`.
+
+Prompt-set cold SOTA portability result:
+
+- France: `eval_tok_s=4.1`, `prompt_tok_s=1.6`, `TTFT=28867.812469 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15090991104`, pack `hits=4623 misses=0`, VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`, correctness heuristic pass and manual semantic check pass.
+- Quantum: `eval_tok_s=1.7`, `prompt_tok_s=1.3`, `TTFT=30261.42291 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15007244288`, pack `hits=7522 misses=18330`, VRAM cache `hits=21793 misses=25852 hit_rate=45.7%`, correctness heuristic pass.
+- Fibonacci: `eval_tok_s=1.6`, `prompt_tok_s=1.3`, `TTFT=32572.315251 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14993739776`, pack `hits=7910 misses=23381`, VRAM cache `hits=16645 misses=31291 hit_rate=34.7%`, correctness heuristic pass. Output includes Python code, but manual review should be stricter before using this prompt for acceptance because the generated compact list variant is not ideal style.
+- Japan: `eval_tok_s=2.9`, `prompt_tok_s=1.4`, `TTFT=30494.691309 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15038717952`, pack `hits=5026 misses=3861`, VRAM cache `hits=25556 misses=8887 hit_rate=74.2%`, correctness heuristic pass.
+- Climate: `eval_tok_s=2.2`, `prompt_tok_s=1.4`, `TTFT=31588.658273 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043727360`, pack `hits=5897 misses=9019`, VRAM cache `hits=24329 misses=14916 hit_rate=62.0%`, correctness heuristic pass.
+- Interpretation: the accepted France SOTA is prompt-specialized. It is RAM-compliant across the prompt set, but non-France prompts trigger many France-pack misses and much lower VRAM cache hit rates, causing `1.6-2.9 tok/s` instead of the France `4.1-4.2 tok/s` line.
+- Decision: do not claim prompt-invariant `4.x tok/s`. Current accepted SOTA remains a France cold-start SOTA under the specified acceptance prompt.
+
+Prompt-set one-trace route/cache evidence:
+
+- Diagnostic config: same prompt-set/SOTA config plus `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`. This uses existing default-off trace support in `ggml/src/ggml-cuda/moe_stream.cu`; no runtime source patch was added.
+- Trace runs: `/root/lfz/runs/vendor-ds4-16gb/20260703T120439Z-20260703_promptset_current_sota_cold_trace_france`, `...120548Z...quantum`, `...120820Z...fibonacci`, `...121059Z...japan`, `...121223Z...climate`.
+- Trace metrics remained RAM-compliant: France `4.1`, Quantum `1.6`, Fibonacci `1.6`, Japan `2.8`, Climate `2.2` tok/s. These are diagnostic only because trace writing perturbs the run.
+- Union analysis artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/promptset-one-trace-union-analysis.json`.
+- Per-prompt unique cold gate miss pairs: France `4599`, Quantum `5549`, Fibonacci `5879`, Japan `4654`, Climate `5162`.
+- Union cold gate miss pairs across all five prompts: `8621` entries, estimated payload `38419038208 bytes` (`35.7805 GiB`).
+- Existing historical union pack already matches this scale: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack` is `38420348928 bytes`; historical union admission profiles are in `/root/lfz/runs/vendor-ds4-16gb/20260702T114356Z-20260702_promptset_union_trace_inputs/union-analysis/`.
+- Historical union-pack cold tests were reviewed rather than rebuilt because root disk has only about `7.1 GiB` free. The existing pack is enough for evidence.
+
+Union-pack historical result review:
+
+- Top6000 union profile run: `/root/lfz/runs/vendor-ds4-16gb/20260702T120943Z-20260702_promptset_union_pack_top6000_cold`.
+  - Quantum `2.2`, Fibonacci `2.0`, Japan `2.8`, Climate `2.5`, France `3.1` tok/s; all listed summaries were RAM/correctness heuristic pass.
+- Top5000 union profile run: `/root/lfz/runs/vendor-ds4-16gb/20260702T122316Z-20260702_promptset_union_pack_top5000_cold`.
+  - Quantum `2.1`, Fibonacci `2.1`, Japan `2.8`, Climate `2.5`, France `3.2` tok/s; all listed summaries were RAM/correctness heuristic pass.
+- Interpretation: union pack/profile improves the worst non-France prompts compared with the France-only pack, but it materially regresses the France acceptance prompt from `4.1-4.2` to `3.1-3.2`. Therefore it is rejected as a replacement for the current accepted SOTA.
+- Bottleneck conclusion after prompt-set study: gate pack/admission can explain prompt portability, but it does not create a France SOTA candidate. For the acceptance prompt, the remaining bottleneck is still CPU up/down fallback, especially early layers `0-9`.
+
+Next direction after prompt-set study:
+
+- Do not spend more time on broad union gate packs for the France SOTA path unless the objective changes to average prompt-set performance.
+- A valid next France-SOTA candidate must reduce early-layer up/down CPU fallback without changing selected experts or materially increasing page refaults. Candidate classes: CPU fallback microkernel/scheduling improvements, reducing per-call overhead for early `ffn_up_exps`/`ffn_down_exps`, or a correctness-preserving GPU assist for up/down rows.
+- Before implementing such a source candidate, design must include a hard upper bound from measured early-layer fallback time (`~10.08s` visible top40 fallback, `~2.013 ms/call` CPU MoE average with `~1.581 ms/call` fallback component) and a rollback rule if France output, RAM, TTFT, or counters regress.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:

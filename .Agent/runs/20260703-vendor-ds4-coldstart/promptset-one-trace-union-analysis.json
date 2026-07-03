@@ -1,0 +1,55 @@
+{
+  "per_prompt": [
+    {
+      "miss_rows": 4623,
+      "name": "france",
+      "rows": 35151,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T120439Z-20260703_promptset_current_sota_cold_trace_france/france-cpu40-vram0gb/one_trace.csv",
+      "trace_bytes": 4427242,
+      "unique_all": 4599,
+      "unique_miss": 4599
+    },
+    {
+      "miss_rows": 25852,
+      "name": "quantum",
+      "rows": 47645,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T120548Z-20260703_promptset_current_sota_cold_trace_quantum/quantum-cpu40-vram0gb/one_trace.csv",
+      "trace_bytes": 6015331,
+      "unique_all": 5549,
+      "unique_miss": 5549
+    },
+    {
+      "miss_rows": 31291,
+      "name": "fibonacci",
+      "rows": 47936,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T120820Z-20260703_promptset_current_sota_cold_trace_fibonacci/fibonacci-cpu40-vram0gb/one_trace.csv",
+      "trace_bytes": 6053704,
+      "unique_all": 5879,
+      "unique_miss": 5879
+    },
+    {
+      "miss_rows": 8887,
+      "name": "japan",
+      "rows": 34443,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T121059Z-20260703_promptset_current_sota_cold_trace_japan/japan-cpu40-vram0gb/one_trace.csv",
+      "trace_bytes": 4336934,
+      "unique_all": 4654,
+      "unique_miss": 4654
+    },
+    {
+      "miss_rows": 14916,
+      "name": "climate",
+      "rows": 39245,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T121223Z-20260703_promptset_current_sota_cold_trace_climate/climate-cpu40-vram0gb/one_trace.csv",
+      "trace_bytes": 4944405,
+      "unique_all": 5162,
+      "unique_miss": 5162
+    }
+  ],
+  "union_all_entries": 8621,
+  "union_all_payload_bytes": 38419038208,
+  "union_all_payload_gib": 35.780517578125,
+  "union_miss_entries": 8621,
+  "union_miss_payload_bytes": 38419038208,
+  "union_miss_payload_gib": 35.780517578125
+}

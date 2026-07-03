@@ -1,0 +1,152 @@
+[
+  {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T114755Z-20260703_promptset_current_sota_cold_france/france-cpu40-vram0gb",
+    "correctness_ok": true,
+    "eval_tok_s": 4.1,
+    "memory_file_bytes": 15090991104,
+    "memory_peak_bytes": 16000000000,
+    "name": "france",
+    "pack": {
+      "bytes": 20602159104,
+      "direct_failures": 0,
+      "direct_fallbacks": 0,
+      "direct_reads": 4623,
+      "entries": 4599,
+      "failures": 0,
+      "hits": 4623,
+      "misses": 0,
+      "reads": 4623
+    },
+    "pgmajfault": 271381,
+    "prompt_tok_s": 1.6,
+    "ram_ok": true,
+    "ttft_estimate_ms": 28867.812469,
+    "vram_cache": {
+      "hit_rate_pct": 86.8,
+      "hits": 30528,
+      "misses": 4623
+    },
+    "workingset_refault_file": 1751453
+  },
+  {
+    "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T114903Z-20260703_promptset_current_sota_cold_quantum/quantum-cpu40-vram0gb",
+    "correctness_ok": true,
+    "eval_tok_s": 1.7,
+    "memory_file_bytes": 15007244288,
+    "memory_peak_bytes": 16000000000,
+    "name": "quantum",
+    "pack": {
+      "bytes": 33521401856,
+      "direct_failures": 0,
+      "direct_fallbacks": 0,
+      "direct_reads": 7522,
+      "entries": 4599,
+      "failures": 0,
+      "hits": 7522,
+      "misses": 18330,
+      "reads": 7522
+    },
+    "pgmajfault": 442765,
+    "prompt_tok_s": 1.3,
+    "ram_ok": true,
+    "ttft_estimate_ms": 30261.42291,
+    "vram_cache": {
+      "hit_rate_pct": 45.7,
+      "hits": 21793,
+      "misses": 25852
+    },
+    "workingset_refault_file": 13982067
+  },
+  {
+    "answer": "that's a classic! Here's a short Python function that computes the Fibonacci sequence:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\n```\n\nThis is a generator function that yields Fibonacci numbers up to the nth term. It's memory-efficient and works well for large values of n.\n\nIf you prefer a more compact version that returns a list:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    return [a if i == 0 else a := b for i in range(n) for b in [a+b]][:n]\n```\n\nBut the generator version is generally preferred for its memory efficiency, especially when n is large.\n\nHere's a simpler version that returns a list:\n\n```python\ndef fib_list(n):\n    a, b = 0, 1",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T115132Z-20260703_promptset_current_sota_cold_fibonacci/fibonacci-cpu40-vram0gb",
+    "correctness_ok": true,
+    "eval_tok_s": 1.6,
+    "memory_file_bytes": 14993739776,
+    "memory_peak_bytes": 16000000000,
+    "name": "fibonacci",
+    "pack": {
+      "bytes": 35250503680,
+      "direct_failures": 0,
+      "direct_fallbacks": 0,
+      "direct_reads": 7910,
+      "entries": 4599,
+      "failures": 0,
+      "hits": 7910,
+      "misses": 23381,
+      "reads": 7910
+    },
+    "pgmajfault": 443113,
+    "prompt_tok_s": 1.3,
+    "ram_ok": true,
+    "ttft_estimate_ms": 32572.315251,
+    "vram_cache": {
+      "hit_rate_pct": 34.7,
+      "hits": 16645,
+      "misses": 31291
+    },
+    "workingset_refault_file": 14170999
+  },
+  {
+    "answer": "Japan is an island nation in East Asia, known for its unique blend of ancient traditions and cutting-edge modernity. It is renowned for its rich cultural heritage, including tea ceremonies, kimono, and traditional temples, alongside its technological advancements and bustling cities like Tokyo and Osaka. The country is famous for its cuisine, such as sushi and ramen, and its natural beauty, from Mount Fuji to cherry blossoms. With a strong economy and a high standard of living, Japan is also known for its politeness, efficiency, and innovation in fields like robotics and electronics. Its culture deeply values respect, honor, and community, making it a fascinating blend of old and new.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T115412Z-20260703_promptset_current_sota_cold_japan/japan-cpu40-vram0gb",
+    "correctness_ok": true,
+    "eval_tok_s": 2.9,
+    "memory_file_bytes": 15038717952,
+    "memory_peak_bytes": 16000000000,
+    "name": "japan",
+    "pack": {
+      "bytes": 22398107648,
+      "direct_failures": 0,
+      "direct_fallbacks": 0,
+      "direct_reads": 5026,
+      "entries": 4599,
+      "failures": 0,
+      "hits": 5026,
+      "misses": 3861,
+      "reads": 5026
+    },
+    "pgmajfault": 294293,
+    "prompt_tok_s": 1.4,
+    "ram_ok": true,
+    "ttft_estimate_ms": 30494.691309,
+    "vram_cache": {
+      "hit_rate_pct": 74.2,
+      "hits": 25556,
+      "misses": 8887
+    },
+    "workingset_refault_file": 2943425
+  },
+  {
+    "answer": "Climate change refers to the long-term, large-scale alteration of Earth's climate patterns, primarily driven by human activities such as burning fossil fuels, deforestation, and industrial processes that release greenhouse gases like carbon dioxide, methane, and nitrous oxide into the atmosphere. These gases trap heat, leading to a rise in global average temperatures, a phenomenon known as global warming. The consequences are far-reaching and include more frequent and severe weather events like hurricanes, droughts, and floods; rising sea levels; melting polar ice and glaciers; and disruptions to ecosystems and biodiversity. While natural factors have historically influenced the climate, the current rapid change is overwhelmingly attributed to human actions, and its effects are already being observed worldwide, threatening both natural environments and human societies with the challenges of adaptation and mitigation.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T115534Z-20260703_promptset_current_sota_cold_climate/climate-cpu40-vram0gb",
+    "correctness_ok": true,
+    "eval_tok_s": 2.2,
+    "memory_file_bytes": 15043727360,
+    "memory_peak_bytes": 16000000000,
+    "name": "climate",
+    "pack": {
+      "bytes": 26279673856,
+      "direct_failures": 0,
+      "direct_fallbacks": 0,
+      "direct_reads": 5897,
+      "entries": 4599,
+      "failures": 0,
+      "hits": 5897,
+      "misses": 9019,
+      "reads": 5897
+    },
+    "pgmajfault": 343262,
+    "prompt_tok_s": 1.4,
+    "ram_ok": true,
+    "ttft_estimate_ms": 31588.658273,
+    "vram_cache": {
+      "hit_rate_pct": 62.0,
+      "hits": 24329,
+      "misses": 14916
+    },
+    "workingset_refault_file": 6069942
+  }
+]
