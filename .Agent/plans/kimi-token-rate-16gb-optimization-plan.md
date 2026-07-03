@@ -19931,6 +19931,154 @@ Rollback:
   - n32 improvement does not reproduce;
   - n96 fails any gate.
 
+Phase 7BD result - rejected:
+
+- result timestamp: 2026-07-03 CST.
+- source:
+  - head `1f3f6ff34`;
+  - dirty experimental diff in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - diff stat: `39` lines changed, `34` insertions, `5` deletions.
+- implementation tested:
+  - added `current_down_overlap_same_type_enabled()` for
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE`;
+  - called the existing `start_current_down_overlap()` for same-type non-prompt
+    up/gate before the common fuse/D2H section;
+  - joined the worker before function exit;
+  - did not change math, quantization, cache sizes, routing, or expert-pack
+    format.
+- runner:
+  - `/tmp/run_phase7bd_repro.sh`;
+  - copied from `/tmp/run_phase7as_repro.sh`;
+  - records `SAME_TYPE_DOWN_OVERLAP=1` in `command.txt`;
+  - appends `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE=1` to `env.txt`.
+
+n4 smoke:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-045106Z-n4-phase7bd-sametype-down-overlap-smoke`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-045106Z-n4-phase7bd-sametype-down-overlap-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 SAME_TYPE_DOWN_OVERLAP=1 \
+      /tmp/run_phase7bd_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `76424.49 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr contains `same-type current down overlap active`;
+  - stderr contains `current down overlap active`;
+  - stderr still contains `IQ2_S parallel up/gate streams active`.
+- output:
+  `France is a country`
+- quality:
+  - automated `quality=fail` because n4 is too short for the full paragraph
+    rule;
+  - manual prefix inspection is coherent and not malformed.
+- decode:
+  - `6016.77 ms / 3`, `0.50 tok/s`.
+- mechanism:
+  - current-down overlap `calls=181`, `planned_jobs=887`,
+    `completed_jobs=887`, `cache_hits=385`, `worker_us=1509633`;
+  - down cache hit rate reached `100.0%`;
+  - down `cuda_batch=0.652 ms/call`;
+  - type `18` wall `62.188 ms/call`, wall gap `18.278 ms/call`;
+  - type `22` wall `20.087 ms/call`, wall gap `9.116 ms/call`.
+- interpretation:
+  - activation and hard gates passed;
+  - the mechanism did preload down aggressively, but the join moved overlap wait
+    into the up/gate wall. A single n32 candidate was run to quantify
+    end-to-end impact.
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-045338Z-n32-phase7bd-sametype-down-overlap`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-045338Z-n32-phase7bd-sametype-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 SAME_TYPE_DOWN_OVERLAP=1 \
+      /tmp/run_phase7bd_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `76453.13 ms`, under the `106331.72 ms` gate.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality: pass.
+- decode:
+  - `35677.79 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BD regresses by `2206.20 ms`.
+- mechanism:
+  - down cache hit rate reached `100.0%`;
+  - down misses fell to `0`;
+  - down `cuda_batch` improved from Phase 7AS `2.675 ms/call` to
+    `0.418 ms/call`;
+  - current-down overlap increased to `calls=1861`, `planned_jobs=7149`,
+    `completed_jobs=7149`, `cache_hits=5995`, `worker_us=8850313`;
+  - expert-pack wait fell from Phase 7AS n32 `11567536 us` to `10059770 us`;
+  - decode Q4_0 fallback fell to `2.232 s`.
+- regression:
+  - main pinned `host_stage` rose from Phase 7AS `18631.890 ms` to
+    `21208.193 ms`;
+  - type `18` wall rose from Phase 7AS `18.646 ms/call` to
+    `28.241 ms/call`;
+  - type `22` wall rose from Phase 7AS `7.048 ms/call` to
+    `13.090 ms/call`;
+  - the up/gate wall gaps show overlap wait moved onto the up/gate critical
+    path:
+    - type `18` wall gap `7.715 ms/call`;
+    - type `22` wall gap `5.572 ms/call`.
+
+Gap analysis:
+
+- The hypothesis partially worked: same-type down misses were eliminated and
+  down `cuda_batch` became much smaller.
+- The performance model failed because the added same-type overlap cannot be
+  fully hidden by the fuse/D2H window. The code joins the worker before
+  returning from up/gate, so the extra current-down work becomes up/gate wall
+  time.
+- The net result is a smaller down stage but a larger up/gate critical path,
+  and the latter is larger by about `2.2 s` on n32.
+- A future version would need a later join point or graph-level dependency that
+  lets same-type current-down preloads continue until the matching down op
+  actually needs the slot. The simple in-function join is not viable.
+
+Decision:
+
+- Reject Phase 7BD.
+- Do not run n32 confirmation or n96.
+- Revert the source diff in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Keep `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE` out of SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
 ## Phase 7BC - same-type IQ3 decode Q8_K up/gate probe
 
 Design timestamp: 2026-07-03 CST.
