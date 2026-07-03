@@ -39,6 +39,7 @@ const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { ret
 #include <cmath>
 #include <deque>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -578,6 +579,18 @@ struct current_down_overlap_profile {
 };
 
 static current_down_overlap_profile g_current_down_overlap;
+
+struct current_down_overlap_tensor_profile {
+    uint64_t calls = 0;
+    uint64_t planned_jobs = 0;
+    uint64_t cache_hits = 0;
+    uint64_t missing_tensor = 0;
+    uint64_t missing_pack = 0;
+    uint64_t completed_jobs = 0;
+};
+
+static std::mutex g_current_down_overlap_tensor_profile_mu;
+static std::unordered_map<std::string, current_down_overlap_tensor_profile> g_current_down_overlap_tensor_profile;
 
 struct expert_pack_entry {
     char tensor[128] = {};
@@ -2139,10 +2152,62 @@ static bool current_down_overlap_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool current_down_overlap_tensor_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void current_down_overlap_tensor_profile_record(
+        const char *tensor,
+        uint64_t calls,
+        uint64_t planned_jobs,
+        uint64_t cache_hits,
+        uint64_t missing_tensor,
+        uint64_t missing_pack,
+        uint64_t completed_jobs) {
+    if (!current_down_overlap_tensor_profile_enabled()) return;
+    const char *key = (tensor && tensor[0]) ? tensor : "<unknown>";
+    std::lock_guard<std::mutex> lk(g_current_down_overlap_tensor_profile_mu);
+    current_down_overlap_tensor_profile &p = g_current_down_overlap_tensor_profile[key];
+    p.calls += calls;
+    p.planned_jobs += planned_jobs;
+    p.cache_hits += cache_hits;
+    p.missing_tensor += missing_tensor;
+    p.missing_pack += missing_pack;
+    p.completed_jobs += completed_jobs;
+}
+
+static void current_down_overlap_tensor_profile_write() {
+    const char *path = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    std::lock_guard<std::mutex> lk(g_current_down_overlap_tensor_profile_mu);
+    if (g_current_down_overlap_tensor_profile.empty()) return;
+
+    FILE *f = std::fopen(path, "w");
+    if (!f) return;
+    std::fprintf(f, "tensor,calls,planned_jobs,cache_hits,missing_tensor,missing_pack,completed_jobs\n");
+    for (const auto &it : g_current_down_overlap_tensor_profile) {
+        const current_down_overlap_tensor_profile &p = it.second;
+        std::fprintf(f, "%s,%lu,%lu,%lu,%lu,%lu,%lu\n",
+                it.first.c_str(),
+                (unsigned long)p.calls,
+                (unsigned long)p.planned_jobs,
+                (unsigned long)p.cache_hits,
+                (unsigned long)p.missing_tensor,
+                (unsigned long)p.missing_pack,
+                (unsigned long)p.completed_jobs);
+    }
+    std::fclose(f);
+}
+
 static void current_down_overlap_report_atexit() {
     const uint64_t calls = g_current_down_overlap.calls.load();
     const uint64_t submitted = g_current_down_overlap.submitted_batches.load();
-    if (calls == 0 && submitted == 0) return;
+    if (calls == 0 && submitted == 0) {
+        current_down_overlap_tensor_profile_write();
+        return;
+    }
     std::fprintf(stderr,
         "[moe_stream_batch] current down overlap: calls=%lu planned_jobs=%lu completed_jobs=%lu "
         "cache_hits=%lu missing_tensor=%lu missing_pack=%lu submitted_batches=%lu failed_batches=%lu "
@@ -2164,6 +2229,7 @@ static void current_down_overlap_report_atexit() {
         g_current_down_overlap.batch_hist_9_16.load(),
         g_current_down_overlap.batch_hist_17_32.load(),
         g_current_down_overlap.batch_hist_gt32.load());
+    current_down_overlap_tensor_profile_write();
 }
 
 static void expert_pack_report_atexit() {
@@ -5597,6 +5663,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         char down_name[128] = {};
         if (!down_name_for_up_gate(src0_up_name, down_name, sizeof(down_name))) {
             ++g_current_down_overlap.missing_tensor;
+            current_down_overlap_tensor_profile_record(src0_up_name, 1, 0, 0, 1, 0, 0);
             return;
         }
 
@@ -5614,15 +5681,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         }
         if (!found || !rt.data || rt.expert_bytes == 0) {
             ++g_current_down_overlap.missing_tensor;
+            current_down_overlap_tensor_profile_record(down_name, 1, 0, 0, 1, 0, 0);
             return;
         }
 
         batch_vram_cache *down_cache = batch_cache_get(rt.expert_bytes);
         if (!down_cache) {
             ++g_current_down_overlap.missing_tensor;
+            current_down_overlap_tensor_profile_record(down_name, 1, 0, 0, 1, 0, 0);
             return;
         }
 
+        uint64_t local_cache_hits = 0;
+        uint64_t local_missing_pack = 0;
         std::vector<stage_copy_job> down_jobs;
         down_jobs.reserve((size_t)n_active);
         for (int j = 0; j < n_active; ++j) {
@@ -5631,6 +5702,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const uintptr_t key = batch_key_hash(rt.name, expert);
             if (batch_cache_find_slot(down_cache, key) >= 0) {
                 ++g_current_down_overlap.cache_hits;
+                ++local_cache_hits;
                 continue;
             }
             const char *expert_host = (const char *)rt.data + (size_t)expert * rt.nb02;
@@ -5646,14 +5718,20 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             job.pack_entry = expert_pack_lookup(rt.name, expert, rt.expert_bytes);
             if (!job.pack_entry) {
                 ++g_current_down_overlap.missing_pack;
+                ++local_missing_pack;
             }
             job.expert_idx = expert;
             std::snprintf(job.tensor, sizeof(job.tensor), "%s", rt.name);
             down_jobs.push_back(job);
         }
-        if (down_jobs.empty()) return;
+        if (down_jobs.empty()) {
+            current_down_overlap_tensor_profile_record(rt.name, 1, 0, local_cache_hits, 0, local_missing_pack, 0);
+            return;
+        }
 
         current_down_overlap_record_batch(down_jobs.size());
+        current_down_overlap_tensor_profile_record(
+            rt.name, 1, down_jobs.size(), local_cache_hits, 0, local_missing_pack, 0);
         static std::atomic<int> first_current_down_overlap{0};
         if (first_current_down_overlap.fetch_add(1) == 0) {
             std::fprintf(stderr,
@@ -5701,6 +5779,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 current_down_overlap_ok = false;
             } else {
                 g_current_down_overlap.completed_jobs.fetch_add(down_jobs.size());
+                current_down_overlap_tensor_profile_record(
+                    down_jobs.empty() ? "" : down_jobs[0].tensor, 0, 0, 0, 0, 0, down_jobs.size());
             }
 
             const auto worker_end = std::chrono::steady_clock::now();

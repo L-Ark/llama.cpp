@@ -3203,6 +3203,212 @@ Phase 7DO harness attempt 2 - rejected:
   - reject this as a 7DO diagnostic;
   - rerun with `sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a ...'`.
 
+Phase 7DO result - diagnostic accepted:
+
+- result timestamp: 2026-07-03T20:24:00Z.
+- plan/source commit:
+  `4436f857d` (`docs: fix kimi phase7do runner plan`).
+- source status:
+  - no behavior change;
+  - accepted SOTA runtime unchanged;
+  - only `GGML_MOE_DOWN_BATCH_PROFILE_OUT` enabled for this diagnostic.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-202224Z-n32-phase7do-down-batch-profile-sed`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 4436f857d
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7do_down_profile_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv' /tmp/run_phase7do_down_profile_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-202224Z-n32-phase7do-down-batch-profile-sed"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7do_down_profile_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `80279.26 ms`;
+  - decode `33262.15 ms / 31`, `0.93 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - cold start under the standard runner.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- artifacts:
+  - `down-batch-profile.csv`: `1645` lines, `1644` rows;
+  - `fallback-profile.csv`: `841 KiB`;
+  - `stderr.txt`: `291 KiB`.
+- expert movement:
+  - expert pack bytes `67926376448`;
+  - expert pack `iouring_wait_us=12456623`;
+  - main pinned `host_stage=17587.650 ms`, `h2d=4150.238 ms`;
+  - gate pinned `host_stage=1391.414 ms`, `h2d=922.241 ms`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`;
+  - current down overlap:
+    - calls `992`;
+    - planned/completed `3664`;
+    - cache hits `3528`;
+    - missing tensor `93`;
+    - missing pack `36`;
+    - max jobs `8`;
+    - worker time `3522172 us`.
+- down-batch CSV aggregate by type:
+  - type `11`: calls `1272`, active `10176`, hits `8385`, misses `1791`,
+    staged jobs `1791`, wall `3303.608 ms`, stage `3061.995 ms`,
+    kernel `159.828 ms`, D2H `23.611 ms`;
+  - type `23`: calls `372`, active `2976`, hits `1274`, misses `1702`,
+    staged jobs `1702`, wall `2279.535 ms`, stage `2196.828 ms`,
+    kernel `32.615 ms`, D2H `6.651 ms`.
+- top down stage rows:
+  - `blk.1.ffn_down_exps.weight`, type `11`:
+    wall `770.788 ms`, stage `764.875 ms`, hits `74`, misses `174`;
+  - `blk.2.ffn_down_exps.weight`, type `11`:
+    wall `703.337 ms`, stage `697.611 ms`, hits `98`, misses `150`;
+  - `blk.4.ffn_down_exps.weight`, type `23`:
+    wall `412.007 ms`, stage `380.396 ms`, hits `79`, misses `169`;
+  - `blk.60.ffn_down_exps.weight`, type `11`:
+    wall `312.104 ms`, stage `304.754 ms`, hits `86`, misses `170`.
+
+Conclusion:
+
+- Down batch accepted rows are still stage dominated:
+  - type `11` stage is `92.7%` of wall;
+  - type `23` stage is `96.4%` of wall.
+- Kernel/D2H are too small to explain the current decode ceiling.
+- Static preload/profile approaches for `blk.1/2` were already rejected by
+  Phase 7CU/7CV because they either collapse the cache or do not change
+  residency.
+- Before another behavior change, the next missing evidence is whether current
+  down overlap failures are concentrated in the same top movement rows or
+  scattered across layers.
+
+## Phase 7DP: current-down-overlap per-tensor profile
+
+Start time:
+
+- 2026-07-04T00:31:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DO shows accepted down batch time is dominated by stage/movement, not
+  kernels.
+- Existing current-down-overlap already prefetches same-token down entries from
+  the up/gate path and completes `3664` jobs in n32, but the log only reports
+  aggregate counters:
+  - `missing_tensor=93`;
+  - `missing_pack=36`;
+  - `cache_hits=3528`.
+- The aggregate counters are insufficient to choose a safe optimization:
+  - if `missing_tensor` is concentrated in `blk.1/2/4/60`, early down tensor
+    registration or a targeted metadata path could recover meaningful stage
+    time;
+  - if it is scattered, the upper bound is too small and source work should
+    target stage throughput instead.
+
+Hypothesis:
+
+- Add a default-off per-tensor CSV for current-down-overlap decisions:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv
+```
+
+- The CSV records, per tensor:
+  - calls;
+  - planned jobs;
+  - cache hits;
+  - missing tensor;
+  - missing pack;
+  - completed jobs.
+- This does not change scheduling, cache insertion, IO, H2D, or kernels.
+
+Why this can improve token rate later:
+
+- Phase 7DO's biggest directly compressible rows are down stage rows.
+- The only already-accepted overlap mechanism that changes down miss timing is
+  current-down-overlap; broad static preload and Q4 admission were rejected.
+- A per-tensor profile lets the next implementation target only rows with a
+  proven upper bound instead of adding broad contention.
+
+Theoretical upper bound:
+
+- Hard n32 upper bound from current-down-overlap aggregate misses:
+  - at most `93 + 36 = 129` extra candidate jobs could be recovered by better
+    tensor/pack coverage;
+  - down job stage cost from Phase 7DO is roughly
+    `(3061.995 + 2196.828) ms / (1791 + 1702) = 1.51 ms/job`;
+  - maximum gross n32 saving is therefore about `195 ms` if all failures are
+    recoverable and on the critical path.
+- If missing counters are concentrated in early large rows, an early metadata
+  fix may still help TTFT-neutral decode stability. If not, this path should be
+  abandoned.
+
+Implementation:
+
+- Source change, default-off:
+  - add a small mutex-protected per-tensor accumulator for
+    current-down-overlap;
+  - write `current-down-overlap-profile.csv` at process exit when
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT` is set;
+  - record translated down tensor names where available and the up/gate name
+    for name-translation failures.
+- Runner:
+  - copy `/tmp/run_phase7cc_repro.sh` to `/tmp/run_phase7dp_repro.sh`;
+  - insert:
+
+```sh
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dp_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv' /tmp/run_phase7dp_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dp-current-down-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dp_repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- exit `0`;
+- cold start;
+- host RAM under 16GB including page cache:
+  `MemoryMax=15900000000`, `MemorySwapMax=0`,
+  `memory.peak<=15899996160`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- `current-down-overlap-profile.csv` exists and has per-tensor rows;
+- `down-batch-profile.csv` exists for cross-check.
+
+Rollback:
+
+- If build fails, revert the source patch.
+- If the run fails quality, TTFT, RAM, cold-start, or artifact gates, fix or
+  revert before the next behavior change.
+- Because this is default-off instrumentation, it may remain only if it produces
+  reproducible artifacts without changing accepted SOTA behavior.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
