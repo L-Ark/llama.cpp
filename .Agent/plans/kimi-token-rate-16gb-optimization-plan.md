@@ -20917,6 +20917,127 @@ systemd-run --wait --collect --same-dir \
     - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
     - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Next roadmap after Phase 7BN - focus on fallback/page-fault and selective GPU offload
+
+Roadmap timestamp: 2026-07-03 UTC.
+
+Current conclusion:
+
+- Stop treating CUDA graph and generic H2D batching as the primary next
+  optimization direction.
+- Phase 7AS already uses CUDA graphs:
+  - `USE_GRAPHS = 1`;
+  - `graphs reused = 30`.
+- Phase 7BN proved that adding `GGML_CUDA_GRAPH_OPT=1` does not improve token
+  rate:
+  - Phase 7BN n32 decode `34427.80 ms / 31`, `0.90 tok/s`;
+  - Phase 7AS n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`.
+- Phase 7BL and Phase 7BM proved that reducing H2D enqueue count or coalescing
+  expert H2D copies is not sufficient:
+  - 7BL coalesced H2D broke the existing CQE-to-H2D streaming shape and slowed
+    n32 to `35625.08 ms / 31`;
+  - 7BM `cudaMemcpyBatchAsync()` reduced enqueue calls but still slowed n32 to
+    `35569.71 ms / 31`;
+  - both increased pinned host-stage and/or H2D timing.
+- The current SOTA bottleneck is still dominated by host/file-backed fallback,
+  page-cache/refault/reclaim behavior, pinned staging, and expert-pack wait.
+
+Priority 1 - execute Phase 7BK `MADV_RANDOM`:
+
+- Phase 7BK is the lowest-risk next experiment because it targets the perf
+  evidence directly:
+  - Phase 7BJ decode-window perf showed heavy `filemap_fault`,
+    `filemap_add_folio`, and memcg reclaim under CPU fallback;
+  - current expert-pack mmap fallback maps sparse expert data with no access
+    pattern advice.
+- Implement the already-planned default-off env:
+
+```sh
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_RANDOM=1
+```
+
+- Add `madvise(base, size, MADV_RANDOM)` after expert-pack mmap succeeds.
+- Optional when available: `MADV_NOHUGEPAGE`.
+- Acceptance remains strict:
+  - first cold n32 must beat `33471.59 ms / 31`;
+  - quality/RAM/TTFT/read-failure gates must pass;
+  - if it passes, confirm with a second n32 and then n96.
+
+Priority 2 - fallback-source profiling:
+
+- If 7BK does not beat SOTA, add a diagnostic phase that precisely attributes
+  CPU fallback source bytes and time.
+- The diagnostic must distinguish:
+  - GGUF mmap tensor pages;
+  - expert-pack mmap pages;
+  - RAM resident/tier buffers;
+  - page-cache refaults after prompt cache dropping;
+  - fallback paths that still read `src0->data`.
+- Required output:
+  - per fallback type/tensor/layer: bytes, calls, wall time, source kind;
+  - memory.stat before prompt, after prompt drop, and after decode;
+  - `inactive_file`, `active_file`, `pgmajfault`,
+    `workingset_refault_file`;
+  - exact France output and standard token-rate metrics.
+
+Priority 3 - remove file-backed random faults from CPU fallback:
+
+- Use fallback-source profiling to design a controlled fallback source path.
+- Candidate implementation directions:
+  - read fallback tensors from expert pack into a bounded reusable anonymous
+    buffer instead of random-faulting file-backed mmap pages;
+  - keep buffer size within the strict 16GB host-RAM cap;
+  - avoid new long-lived RAM tiers unless a measured hit model justifies them;
+  - preserve current expert-pack/io_uring streaming for GPU-staged experts.
+- Do not promote unless wall time improves and memory peak remains below
+  `15899996160`.
+
+Priority 4 - selective GPU fallback only where transfer cost is justified:
+
+- Do not retry full Q4_0 down GPU enablement by default.
+- Previous Q4_0 GPU/cache attempts removed CPU fallback but regressed wall time
+  because staging/H2D pressure dominated.
+- Instead, build a per-layer/per-tensor benefit model and only consider GPU
+  offload for hot fallback tensors where:
+  - cache hit probability is high;
+  - added H2D/staging is low;
+  - measured CPU fallback/page-fault time exceeds transfer + GPU compute cost;
+  - current-down/up-gate overlap is not harmed.
+
+Priority 5 - reduce pinned staging host-stage without adding generic batching:
+
+- Do not use generic H2D coalescing or `cudaMemcpyBatchAsync()` as a default
+  path.
+- Future staging work should target:
+  - slot reuse and slot wait;
+  - miss shape and cache policy;
+  - current-down overlap only for layers/types where it pays for itself;
+  - avoiding low-value preloads that increase host-stage or iouring wait.
+
+Explicitly deprioritized paths:
+
+- Do not move dense/attention layers to CPU just to free VRAM for experts unless
+  a dedicated probe proves the saved expert misses exceed the fixed CPU compute
+  and activation-transfer cost.
+- Do not enable `GGML_CUDA_GRAPH_OPT=1` in SOTA.
+- Do not pursue more generic CUDA graph tuning until the host/file-backed
+  fallback bottleneck is materially reduced.
+- Do not retry whole-model or whole-type Q4_0 GPU fallback without a selective
+  benefit model.
+
+Required rule for all roadmap experiments:
+
+- Before each implementation, write the phase plan with:
+  - bottleneck evidence;
+  - theoretical upper bound;
+  - exact env delta and reproduction command;
+  - hard gates and rejection rules.
+- Every valid improvement must be cold-start, reproducible, quality-correct, and
+  under the 16GB host-memory cap.
+- If a run improves and passes all gates, immediately commit and push.
+- If a run regresses, fails quality, exceeds TTFT, exceeds memory, or lacks
+  activation evidence, reject it, revert source if any, and record the result.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
