@@ -6007,6 +6007,143 @@ Result handling:
 - If rejected or no true depth mechanism appears, keep Phase 7EB as current
   SOTA and do not carry `GGML_MOE_IO_DEPTH=16`.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-230710Z-n32-phase7ec-depth16-slots16`;
+  - source/docs commit `44f72b820`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Correctness and hard gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous`;
+  - quality `pass`;
+  - TTFT `79221.01 ms`, below `106331.72 ms`;
+  - decode `30165.92 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`.
+- Activation and mechanism:
+  - expert-pack io_uring reports `depth=16`, so the script override worked;
+  - pinned staging reports `16` slots;
+  - expert-pack iouring still has `inflight_max=8`;
+  - pinned staging iouring still has `inflight_max=8`;
+  - batch histogram remains capped at `5-8`, with `9-16:0`;
+  - therefore true depth16 does not increase actual in-flight work under the
+    current batching shape.
+- Movement counters:
+  - expert-pack direct_reads `8707`, iouring_reads `15024`,
+    iouring_bytes `87082139648`, iouring_wait_us `14900367`;
+  - main pinned staging: slots `16`, host_stage `11712.676 ms`,
+    h2d `4156.346 ms`;
+  - gate pinned staging: slots `16`, host_stage `350.636 ms`,
+    h2d `927.180 ms`.
+- Operator profiles:
+  - upgate rows `869`, wall `6285.861 ms`, up `4784.942 ms`,
+    gate `1361.248 ms`, stage `43.466 ms`, kernel `6189.670 ms`,
+    up_jobs `4154`, gate_jobs `4154`;
+  - down rows `1644`, wall `4697.725 ms`, stage `4370.672 ms`,
+    kernel `190.839 ms`, jobs `3493`.
+- Comparison:
+  - slower than Phase 7EA n32 `29599.64 ms / 31` by `566.28 ms`;
+  - TTFT is worse than Phase 7EA `76528.98 ms`;
+  - no mechanism evidence of depth16 utilization.
+
+Decision:
+
+- Reject Phase 7EC.
+- Do not run n96.
+- Keep Phase 7EB as current SOTA.
+- Do not carry `GGML_MOE_IO_DEPTH=16` in SOTA; keep the script's
+  `GGML_MOE_IO_DEPTH=8`.
+
+## Phase 7ED: pinned slots 24 sweep
+
+Start time:
+
+- 2026-07-04T07:20:00+08:00.
+
+Current bottleneck:
+
+- Phase 7EB accepted `PINNED_SLOTS=16` with:
+  - n32 `29599.64 ms / 31`;
+  - n96 `74201.57 ms / 77`.
+- Phase 7EC proved true io depth 16 is not useful because actual batch
+  histograms remain capped at `5-8`.
+- The only validated queue-capacity win is pinned slot count. It reduced
+  decode on both n32 and n96, but the mechanism is small and may be near a
+  plateau.
+
+Hypothesis:
+
+- Increase only pinned slots again:
+
+```sh
+PINNED_SLOTS=24
+```
+
+- Keep io depth at the script default `8`.
+- If slots16 helped by reducing ring pressure or scheduler waits, slots24 may
+  provide a smaller additional win.
+- If the improvement was already saturated or noise, slots24 will be neutral
+  or slower.
+
+Theory and upper bound:
+
+- Phase 7EB n96 slot_wait is already small:
+  - main `117.591 ms`;
+  - gate `27.696 ms`.
+- Therefore a pure slot-count increase cannot plausibly save many seconds by
+  slot_wait alone.
+- Any additional win must come from second-order scheduling effects in host
+  staging or H2D overlap.
+- Plausible n32 ceiling is `0.1-0.4 s`; larger wins must be validated by
+  repeated confirmation and profile counters.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Use Phase 7EB SOTA script with `PINNED_SLOTS=24`.
+- Do not alter `GGML_MOE_IO_DEPTH`.
+- Run n32 only first.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 44f72b820
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ed_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ed_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ed-slots24"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=24 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ed_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- pinned staging reports `24` slots;
+- France output coherent and semantically correct;
+- n32 decode beats Phase 7EA `29599.64 ms / 31`.
+
+Result handling:
+
+- If accepted, run n96 confirmation.
+- If rejected, stop pinned-slot sweep at `16` and keep Phase 7EB as SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
