@@ -2070,3 +2070,69 @@ Verdict:
 - Reject this direction. Do not promote.
 - Temporary source patch `GGML_MOE_STREAM_DECLINE_UNADMITTED_UPDOWN` is reverted after recording this result. Keep only the rejected profile/design/result artifacts.
 - Current accepted SOTA remains `4.2 tok/s`; latest guard remains `4.0-4.1 tok/s` class depending on cold-start variance.
+
+### 2026-07-04 DeepSeek4 All-Output Batch Verification Probe Design
+
+Motivation:
+
+- Reaching `10 tok/s` from the accepted `4.2 tok/s` likely requires accepting multiple output tokens per expensive target forward pass.
+- Prior n-gram/speculative/lookahead attempts did not show this because DeepSeek4 currently batches only prefill-style single-sequence ubatches where `n_outputs != n_tokens`.
+- Speculative and lookup verification need logits for every draft token, so their target batch has `n_outputs == n_tokens`. In the current DeepSeek4 memory code this disables batched prefill and forces single-token ubatches, removing the main benefit of speculative verification.
+
+Source audit:
+
+- `src/llama-memory-deepseek4.cpp`: `batch_prefill_active = deepseek4_batch_prefill_enabled() && balloc.get_n_outputs() != balloc.get_n_tokens()`; otherwise split size is `1`.
+- `src/models/deepseek4.cpp`: `batch_prefill = deepseek4_batch_prefill_enabled() && n_outputs != n_tokens`; otherwise multi-token graph build uses `reserve_only` with `work_tokens=1`.
+- `examples/speculative-simple` and `examples/lookup` add draft tokens with `logits=true` for each token, so they require the `n_outputs == n_tokens` path to be batched to verify multiple target logits in one forward pass.
+
+Design:
+
+- Add a default-off env gate `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1` in both the DeepSeek4 memory and graph build files.
+- When enabled, single-sequence ubatches with `n_outputs == n_tokens` may use the existing batched prefill graph path (`work_tokens=n_tokens`) instead of the single-token decode path.
+- Do not change normal llama-cli greedy generation when no speculative/lookup draft batch exists; for ordinary decode `n_tokens=1`, behavior is equivalent.
+- Keep this as a temporary source probe until correctness and speed are proven. If it fails correctness, allocation, or performance, revert source and keep only rejected records.
+
+Theory and hard bound:
+
+- If all-output target verification works and draft acceptance is high, target forwards can verify `1 + n_draft` tokens per pass. To reach `10 tok/s` from `4.2 tok/s`, average accepted tokens per expensive pass must be at least `2.38` before overhead.
+- This source change alone does not create good draft tokens; it only removes the target-side batching blocker. First diagnostic uses ngram-simple because it is target-validated and requires no external draft artifact.
+- If ngram-simple still has low acceptance, this patch should be rejected for SOTA, but the audit still proves that future draft/MTP paths require this all-output batch capability.
+
+Practice plan:
+
+1. Implement `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1` behind default-off helpers in `src/llama-memory-deepseek4.cpp` and `src/models/deepseek4.cpp`.
+2. Build `build-ds4-moe-stream`.
+3. Run a default-off strict cold SOTA guard to ensure the patch does not perturb current behavior.
+4. Run one strict cold ngram-simple diagnostic with full accepted SOTA env plus `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1` and `LLAMA_DEEPSEEK4_BATCH_LOG=1`.
+5. Accept for further speculative work only if logs prove multi-token all-output ubatches (`n_tokens>1`, `n_outputs==n_tokens`, `work_tokens>1`) and France correctness/RAM/TTFT gates pass. Promote only if speed exceeds `4.2 tok/s`; otherwise reject or continue only as a blocker-removal diagnostic.
+
+### 2026-07-04 DeepSeek4 All-Output Batch Verification Current Status
+
+Implementation status:
+
+- Temporary source probe is applied locally and remains uncommitted: `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1` is implemented in `src/llama-memory-deepseek4.cpp` and `src/models/deepseek4.cpp`.
+- The gate is default-off. Ordinary SOTA greedy decode should behave as before when the env var is unset.
+- This is not an accepted SOTA change yet. It must either produce a compliant speedup and then be committed/pushed immediately, or be reverted after recording the rejected result.
+
+Default-off guard run:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T160818Z-20260704_batch_all_outputs_default_off_guard/france-cpu40-vram0gb`.
+- Config: full accepted SOTA env, strict cold `drop_caches`, 16GB cgroup, `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS` unset.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30591.20202 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15104200704`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true` by heuristic/manual-review-required runner gate.
+- Verdict: default-off guard passes as a behavior-preservation check, but it is below the accepted `4.2 tok/s` SOTA and must not replace the current SOTA.
+
+Immediate next experiment:
+
+1. Run one strict cold France diagnostic using full accepted SOTA env plus `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1` and `LLAMA_DEEPSEEK4_BATCH_LOG=1`.
+2. Use ngram-simple target-validated drafting: `--spec-type ngram-simple --spec-ngram-simple-size-n 3 --spec-ngram-simple-size-m 8 --spec-ngram-simple-min-hits 1`, with the normal SOTA llama-cli args `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+3. Inspect logs before judging speed. The run only proves the blocker is removed if logs contain multi-token all-output batches with `n_tokens>1`, `n_outputs==n_tokens`, and `work_tokens>1`.
+4. Manually review the France answer. If it is incomplete, incoherent, or semantically wrong, mark correctness failed even if the runner heuristic passes.
+5. Record all metrics: `eval_tok_s`, `prompt_tok_s`, `TTFT`, full answer text, memory peak/file bytes, cgroup kill status, page-cache accounting, pack counters, VRAM cache counters, and DeepSeek4 batch-log evidence.
+6. If the candidate exceeds `4.2 tok/s` and satisfies correctness, RAM, and TTFT gates, immediately update this plan with exact reproduction information, commit the source plus records, and push to `ssd/vendor/deepseek-token-rate-16gb` using the `L-Ark` git identity.
+7. If the candidate is not a compliant SOTA, revert the temporary source probe, rebuild clean, record the rejection, and push only the documentation/artifact update.
+
+Priority after this probe:
+
+- If all-output batching works but ngram-simple acceptance is too low, keep the finding as a blocker-removal diagnostic and design the next draft source around measured acceptance, not more cache hotset sweeps.
+- If all-output batching does not actually create `work_tokens>1`, stop speculative work and return to bottleneck decomposition of current SOTA decode time before designing another optimization.
+- Do not pursue broader up/down hotset caching unless a fresh bottleneck profile proves a hard upper bound above the current SOTA with enough margin; the top32 probe already showed the available upside is too small.
