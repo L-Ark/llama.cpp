@@ -30002,6 +30002,76 @@ Rollback:
 - If first n32 improves but confirmation fails, revert the source patch and
   record the non-reproducible result.
 
+Phase 7CQ result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `c2fe6b175` (`docs: plan kimi phase7cq l1 overlap`).
+- source commit tested:
+  `b5e8edfec` (`cuda: limit same type down overlap by layer`), a re-application
+  of the default-off Phase 7CP source patch.
+- source status:
+  - after first n32 failed promotion, reverted by commit
+    `f5babb1c6` (`Revert "cuda: limit same type down overlap by layer"`);
+  - revert pushed to `wici/vendor/kimi-moe-stream-on-vendor`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-151417Z-n32-phase7cq-sametype-overlap-l1`.
+- activation:
+  - `env.txt` contains
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1`;
+  - stderr contains
+    `layer-limited same-type current down overlap active: layers=1`;
+  - `down-batch-profile.csv` exists.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `78914.35 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33689.46 ms / 31`, `0.92 tok/s`;
+  - slower than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `471.80 ms`;
+  - fails promotion, so no confirmation or n96 was run.
+- mechanism:
+  - `blk.1` local objective succeeded:
+    - hits `248`, misses `0`, stage `2.546 ms`, wall `9.620 ms`;
+    - Phase 7CO baseline was stage `727.793 ms`, wall `734.186 ms`.
+  - `blk.2` remained miss-heavy:
+    - hits `98`, misses `150`, stage `632.888 ms`, wall `638.973 ms`.
+  - down cache improved slightly versus 7CC shape:
+    - hits `9825`, misses `3295`, hit rate `74.9%`;
+  - current-down overlap:
+    - calls `1023`, planned jobs `3838`, worker `4624630 us`;
+  - up_gate regressed to `13.250 ms/call`;
+  - main pinned host stage rose to `17954.518 ms`;
+  - expert-pack wait was `12747961 us`.
+
+Gap analysis:
+
+- Narrowing from `1-2` to `1` reduced overlap work, but the up_gate and staging
+  overhead still outweighed the single-layer down-stage gain.
+- The layer-local win is real, but this scheduling point is wrong: it shifts
+  movement into the up_gate critical path and broader staging system.
+- This rules out simple in-function same-type current-down overlap for layers
+  `1`, `2`, or `1-2`.
+
+Decision:
+
+- Reject Phase 7CQ.
+- Revert source patch and do not run n96.
+- Keep only Phase 7CO's default-off down batch CSV profiler.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
