@@ -25165,3 +25165,88 @@ Rollback:
 - If first n32 is slower, quality fails, TTFT rises above gate, read failures
   appear, or host RAM violates the 16GB cgroup limit, revert source patch and
   record the result.
+
+Phase 7BT result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `09c7cbe0d` (`docs: plan kimi phase7bt selective pipeline`).
+- source patch:
+  - env-gated `GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1`;
+  - added `GGML_MOE_STREAM_IQ3_PIPELINE_MAX_GATE_JOBS=2`;
+  - planned same-type IQ3_XXS up/gate jobs first;
+  - used the 7BS gate-copy/up-compute pipeline only when
+    `1 <= gate_jobs <= 2`;
+  - added exit counters for accepted/skipped/failure counts.
+- build:
+  - `cmake --build build-cuda-batch -j$(nproc) --target llama-completion`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-110844Z-n32-phase7bt-iq3-pipeline-gatejobs2`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-110844Z-n32-phase7bt-iq3-pipeline-gatejobs2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bt_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `76228.46 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- activation:
+  - stderr contains
+    `IQ3_XXS selective gate-copy pipeline active: max_gate_jobs=2`;
+  - exit counter:
+    `calls=311 accepted=20 skipped_gate_jobs=291 failures=0 up_jobs=1549 gate_jobs=1548 max_gate_jobs=8`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34870.79 ms / 31`, `0.89 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BT is slower by `1399.20 ms`, so it fails the promotion gate.
+- mechanism:
+  - selective policy accepted only `20 / 311` IQ3 calls, too few to recover
+    the added planning overhead;
+  - type-18 aggregate remained worse than Phase 7AS:
+    `wall=19.603 ms/call` versus Phase 7AS `18.646 ms/call`;
+  - type-22 IQ2_S also regressed slightly:
+    `wall=7.177 ms/call` versus Phase 7AS `7.048 ms/call`;
+  - expert-pack `iouring_wait_us=11848409`, close to Phase 7AS
+    `11567536`, so 7BT avoided the large 7BS IO explosion but did not improve
+    decode;
+  - upgate cache misses increased to `19780` because the skip path planned and
+    cleared slots before re-staging serially.
+
+Gap analysis:
+
+- The threshold policy was too conservative to capture enough of the 7BS local
+  IQ3 gain.
+- More importantly, planning then clearing skipped calls adds cache churn and
+  restaging overhead. A useful selective policy must decide without mutating the
+  cache, or must integrate thresholding into a non-mutating lookup/planning
+  pass.
+- Do not retry selective IQ3 pipeline by simply changing the threshold; that
+  would either keep the planning churn or move back toward 7BS IO contention.
+
+Decision:
+
+- Reject Phase 7BT.
+- Do not run n96.
+- Revert source patch.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Next candidate should avoid mutating cache state for skipped IQ3 calls, or
+  shift away from IQ3 overlap and target another bottleneck with lower global IO
+  coupling.
