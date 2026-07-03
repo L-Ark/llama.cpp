@@ -1796,6 +1796,11 @@ static bool current_down_overlap_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static const char *current_down_overlap_same_type_layers() {
+    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS");
+    return env && env[0] ? env : nullptr;
+}
+
 static void current_down_overlap_report_atexit() {
     const uint64_t calls = g_current_down_overlap.calls.load();
     const uint64_t submitted = g_current_down_overlap.submitted_batches.load();
@@ -5911,27 +5916,53 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (profile) cudaEventRecord(bc.ev_gate, st);
     }
 
+    bool same_type_current_down_overlap_started = false;
+    const char *same_type_overlap_layers = current_down_overlap_same_type_layers();
+    const bool same_type_overlap_enabled =
+        same_type_overlap_layers &&
+        current_down_overlap_enabled() &&
+        !mixed_types &&
+        !prompt_mode &&
+        !use_handoff &&
+        moe_tensor_layer_in_simple_range(src0_up_name, same_type_overlap_layers);
+    auto same_type_overlap_fail = [&]() -> bool {
+        if (same_type_current_down_overlap_started) {
+            (void)join_current_down_overlap();
+        }
+        return false;
+    };
+    if (same_type_overlap_enabled) {
+        static std::atomic<int> first_same_type_current_down_overlap{0};
+        if (first_same_type_current_down_overlap.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] layer-limited same-type current down overlap active: layers=%s\n",
+                same_type_overlap_layers);
+        }
+        start_current_down_overlap();
+        same_type_current_down_overlap_started = true;
+    }
+
     const char *prefuse_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE_PREFUSE_DUMP");
     const bool prefuse_dump = prefuse_env && prefuse_env[0] && prefuse_env[0] != '0';
     static std::atomic<int> prefuse_dump_count{0};
     if (prefuse_dump && prefuse_dump_count.fetch_add(1) == 0) {
-        if (cudaMemcpyAsync(bc.h_dst, bc.d_up, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
-        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_up, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return same_type_overlap_fail();
+        if (cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
         moe_stream_dump_prefuse_rows("up", (const float *)bc.h_dst, n_active, ne01);
-        if (cudaMemcpyAsync(bc.h_dst, bc.d_gate, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
-        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_gate, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return same_type_overlap_fail();
+        if (cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
         moe_stream_dump_prefuse_rows("gate", (const float *)bc.h_dst, n_active, ne01);
     }
 
     if (point_dump && point_active >= 0 && point_active < n_active && point_col >= 0 && point_col < ne01) {
-        if (cudaMemcpyAsync(bc.h_dst, bc.d_up, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
-        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_up, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return same_type_overlap_fail();
+        if (cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
         const float *point_tmp = (const float *)bc.h_dst;
         const float up_active = point_tmp[(size_t)point_active * (size_t)ne01 + (size_t)point_col];
         const float up_flat = point_flat >= 0 && point_flat < dst_cols ?
             point_tmp[(size_t)point_flat * (size_t)ne01 + (size_t)point_col] : 0.0f;
-        if (cudaMemcpyAsync(bc.h_dst, bc.d_gate, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
-        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (cudaMemcpyAsync(bc.h_dst, bc.d_gate, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return same_type_overlap_fail();
+        if (cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
         point_tmp = (const float *)bc.h_dst;
         const float gate_active = point_tmp[(size_t)point_active * (size_t)ne01 + (size_t)point_col];
         const float gate_flat = point_flat >= 0 && point_flat < dst_cols ?
@@ -5946,21 +5977,21 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     for (int j = 0; j < n_active; ++j) {
         bc.h_ids_dst[j] = prompt_mode ? j : flat_dst_ids[j];
     }
-    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+    if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return same_type_overlap_fail();
 
     dim3 block(256);
     dim3 grid((unsigned int)((ne01 + block.x - 1) / block.x), (unsigned int)n_active);
     moe_stream_up_gate_fuse_kernel<<<grid, block, 0, st>>>(
         (const float *)bc.d_up, (const float *)bc.d_gate, fused_d,
         bc.d_ids_dst, n_active, ne01, unary_op, limit, true);
-    if (cudaGetLastError() != cudaSuccess) return false;
+    if (cudaGetLastError() != cudaSuccess) return same_type_overlap_fail();
     if (profile) cudaEventRecord(bc.ev_kernel, st);
 
     if (use_handoff) {
         const char *handoff_sync_env = std::getenv("GGML_MOE_GPU_HANDOFF_SYNC");
         const bool sync_handoff = profile ||
             (handoff_sync_env && handoff_sync_env[0] && handoff_sync_env[0] != '0');
-        if (sync_handoff && cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (sync_handoff && cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
         g_handoff.host_ptr = dst;
         g_handoff.d_data = fused_d;
         g_handoff.bytes = dst_bytes;
@@ -6037,9 +6068,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         return true;
     }
 
-    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return false;
+    if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return same_type_overlap_fail();
     if (profile) cudaEventRecord(bc.ev_d2h, st);
-    if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+    if (cudaStreamSynchronize(st) != cudaSuccess) return same_type_overlap_fail();
+    if (same_type_current_down_overlap_started) {
+        (void)join_current_down_overlap();
+    }
 
     if (point_dump && point_active >= 0 && point_active < n_active && point_col >= 0 && point_col < ne01) {
         const float *point_tmp = (const float *)bc.h_dst;
