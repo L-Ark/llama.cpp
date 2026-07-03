@@ -20377,3 +20377,124 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BB - current-SOTA GPU handoff correctness smoke
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Recent env-only probes show the accepted IO/staging topology is tight:
+  - 7AY split up/gate staging regressed;
+  - 7AZ refill batch 8 regressed;
+  - 7BA disabling current-down overlap regressed badly.
+- The remaining meaningful source-adjacent mechanism is avoiding the
+  up/gate-to-down host round trip. The code already has env-gated GPU handoff:
+
+```sh
+GGML_MOE_GPU_HANDOFF=1
+```
+
+- Phase 2I rejected handoff because the n4 answer was corrupted
+  (`France isneedator`). That was before the current Phase 7AS runtime,
+  including current-down overlap, pack-mmap CPU fallback, dense/expert mmap
+  drops, and IQ2_S parallel up/gate.
+- Because handoff changes activation dataflow, this phase must be
+  correctness-first. It is not acceptable to run n32/n96 before a strict n4
+  smoke proves semantic output and activation.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_GPU_HANDOFF=1
+```
+
+- Keep all accepted Phase 7AS settings:
+  - IQ2_S parallel up/gate and parallel stage;
+  - current-down overlap;
+  - down parallel staging;
+  - pack-mmap CPU fallback;
+  - split VRAM cache `15000 MiB`, upgate pct `60`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - dense/expert mmap drops, pinned slots `8`, `THREADS=32`.
+- If the current code's pointer/shape guard is now sufficient, handoff should
+  print `GPU handoff consumed` and may reduce down source staging/H2D work.
+- If the old corruption remains, reject immediately after n4 and do not run n32.
+
+Theoretical upper bound:
+
+- Handoff does not reduce expert weight IO or the type-18 IQ3 up/gate kernel
+  bucket.
+- It can only reduce the activation path between up/gate and down:
+  - up/gate D2H/scatter;
+  - CPU copy into down `h_src1`;
+  - down `src1` H2D.
+- In Phase 7AS n32, down `cuda_batch` is `2.675 ms/call` and up/gate
+  d2h/scatter are small, so realistic n32 upside is likely below `1-2 s`.
+- The correctness risk is high because Phase 2I produced semantic corruption.
+
+Experiment:
+
+- Env-only probe. Source remains clean at `18e0b22f3` or later.
+- Create `/tmp/run_phase7bb_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  parameterize:
+
+```sh
+GPU_HANDOFF=1
+```
+
+- The runner must append `GGML_MOE_GPU_HANDOFF=1` to `env.txt` when
+  `GPU_HANDOFF=1`, and record `GPU_HANDOFF` in `command.txt`.
+- Strict cold n4 correctness smoke:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n4-phase7bb-gpu-handoff-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 GPU_HANDOFF=1 \
+      /tmp/run_phase7bb_repro.sh
+```
+
+Acceptance gates for n4:
+
+- Hard gates:
+  - cold start with `drop_caches`;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - exit `0`, no CUDA errors.
+- Activation:
+  - `env.txt` contains `GGML_MOE_GPU_HANDOFF=1`;
+  - stderr contains `GPU handoff consumed`;
+  - stderr still contains `IQ2_S parallel up/gate streams active`.
+- Correctness:
+  - the n4 prefix must be coherent English, for example `France is a country`;
+  - reject immediately on malformed text like the Phase 2I corruption
+    `France isneedator`;
+  - automated `quality=pass` is not enough; inspect the exact output text.
+- Continue to n32 only if all n4 gates pass.
+
+Acceptance gates for n32/n96, if reached:
+
+- n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31` and pass the full
+  France paragraph quality check.
+- If first n32 beats, run n32 confirmation.
+- If both n32 runs beat and pass, run n96 candidate and confirmation.
+- n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism should show lower down `cuda_batch`, lower down source staging/H2D,
+  or lower up/gate D2H/scatter without increasing IO wait or TTFT.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n4 output is corrupt, activation is missing, or hard gates fail, reject
+  immediately and keep Phase 7AS as SOTA.
+- If n4 passes but n32 is slower or semantically wrong, reject and do not run
+  n96.
