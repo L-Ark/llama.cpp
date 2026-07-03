@@ -25250,3 +25250,138 @@ Decision:
 - Next candidate should avoid mutating cache state for skipped IQ3 calls, or
   shift away from IQ3 overlap and target another bottleneck with lower global IO
   coupling.
+
+## Phase 7BU - non-mutating IQ3_XXS gate miss precheck before pipeline
+
+Design timestamp: 2026-07-03T11:19:41Z.
+
+Current bottleneck:
+
+- Phase 7BS showed a real local win:
+  - IQ3 type-18 wall improved from `18.646 ms/call` to `14.708 ms/call`;
+  - global run failed because iouring wait rose by about `2.61 s`.
+- Phase 7BT tried to avoid that with a `gate_jobs <= 2` threshold:
+  - accepted only `20 / 311` IQ3 calls;
+  - decode regressed to `34870.79 ms / 31`;
+  - important gap: skipped calls still planned, inserted, cleared, and then
+    re-staged, increasing upgate cache misses to `19780`.
+- The next attempt must decide whether to pipeline without mutating cache state
+  for skipped calls.
+
+Hypothesis:
+
+Use `batch_cache_lookup_slot()` to count gate misses for IQ3_XXS calls before
+planning. Only if the miss count is small enough should the code plan/insert
+slots and run the 7BS pipeline. Skipped calls should go straight to the original
+serial path with no pre-insert/clear churn.
+
+Why this can improve token rate:
+
+- It preserves the proven 7BS local overlap mechanism for selected calls.
+- It avoids the 7BT cache churn on skipped calls.
+- A threshold of `4` should accept more calls than 7BT's `20 / 311`, while still
+  avoiding the worst all-call IO contention from 7BS.
+
+Theoretical upper bound:
+
+- If threshold `4` accepts about one third of IQ3 calls and gets the 7BS local
+  improvement, expected local gain is:
+  `311 / 3 * 3.94 ms ~= 0.41 s`.
+- If it accepts half the calls, expected local gain is:
+  `311 / 2 * 3.94 ms ~= 0.61 s`.
+- Because skipped calls no longer mutate cache state, the overhead should be
+  much lower than 7BT. A realistic first-run target is beating Phase 7AS by
+  `0.2-0.5 s`; anything slower should be rejected.
+
+Implementation:
+
+- Source patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add env-gated path:
+
+```sh
+GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1
+GGML_MOE_STREAM_IQ3_PIPELINE_MAX_GATE_MISSES=4
+```
+
+- Activate only when:
+  - decode mode, not prompt;
+  - not mixed types;
+  - `src0_type == gate_type == GGML_TYPE_IQ3_XXS`;
+  - not exact prompt Q8_K;
+  - required streams/events exist;
+  - non-mutating gate miss count is `1..MAX_GATE_MISSES`.
+- If the gate miss count is `0` or above threshold, do not call `plan_tensor()`;
+  run the original serial `stage_tensor()` path directly.
+- For accepted calls, reuse the 7BS scheduling:
+  - plan up/gate jobs;
+  - copy up on `st`;
+  - copy gate on `bc.gate_stream`;
+  - compute up on `st`;
+  - make gate compute wait for up completion;
+  - compute gate on `bc.gate_stream`;
+  - return to existing fuse/D2H/scatter path.
+- Add exit counters:
+  - calls;
+  - accepted;
+  - skipped_zero;
+  - skipped_over_threshold;
+  - total gate misses;
+  - max gate misses;
+  - failures.
+- Do not change math, selected experts, VRAM cache size, pinned slots, IO depth,
+  down scheduling, or prompt behavior.
+
+Reproducible experiment:
+
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+```
+
+- Create `/tmp/run_phase7bu_repro.sh` from `/tmp/run_phase7as_repro.sh` and
+  append:
+
+```sh
+GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1
+GGML_MOE_STREAM_IQ3_PIPELINE_MAX_GATE_MISSES=4
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bu-iq3-pipeline-gatemiss4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bu_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr contains `IQ3_XXS prechecked gate-copy pipeline active`;
+  - stderr reports accepted/skipped counters.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- If first n32 is slower, quality fails, TTFT rises above gate, read failures
+  appear, or host RAM violates the 16GB cgroup limit, revert source patch and
+  record the result.
