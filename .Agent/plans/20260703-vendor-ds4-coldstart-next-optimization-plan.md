@@ -1332,6 +1332,38 @@ Next required evidence before another source candidate:
 - Compare accepted output path versus failed early/late pruning paths to identify whether any per-layer/per-expert rule can reduce CPU fallback while preserving France output and a small prompt set.
 - Until that evidence exists, current `4.2 tok/s` remains the effective vendor DeepSeek cold-start SOTA under the 16GB/page-cache/TTFT/correctness gates.
 
+
+Temporary routing trace diagnostic design:
+
+- Goal: collect routing evidence before any further pruning/top-k source candidate. Current profile shows early up/down fallback is the bottleneck, but prior early pruning broke output correctness/completeness.
+- Source handling: use a temporary default-off instrumentation patch only. Do not keep this runtime source change after the diagnostic; revert and rebuild clean before committing records.
+- Trace env: `GGML_MOE_ROUTE_TRACE_OUT={case_dir}/route_trace.csv`, optional limit `GGML_MOE_ROUTE_TRACE_LIMIT`.
+- Trace content: `seq,tensor,layer,token,rank,expert,pruned`, emitted in the `ith==0` routing loop before CPU fallback. It records selected expert ids and whether the current top-k policy prunes that rank for up/down.
+- Practice: run accepted SOTA config with route trace enabled under strict cold 16GB cgroup. The run is diagnostic only; because file I/O can perturb timing, it cannot replace SOTA even if rounded token rate looks good.
+- Analysis target: compare accepted route distribution and pruned ranks against failed pruning runs or future prompt-set traces. A future pruning candidate must be justified by this route evidence before execution.
+
+
+Temporary routing trace diagnostic result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T113716Z-20260703T-route-trace-accepted-diagnostic/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: temporary route-trace source patch plus `GGML_MOE_ROUTE_TRACE_OUT={case_dir}/route_trace.csv`, `GGML_MOE_ROUTE_TRACE_LIMIT=2000000`; otherwise accepted SOTA config.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30367.496493 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15093653504`, `pgmajfault=272872`, `workingset_refault_file=1652061`, `ram_ok=true`, `ram_limit_killed=false`.
+- Gate counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_failures=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Trace artifact: `route_trace.csv`, `109441` lines including header; analysis artifact: `route_trace_analysis.json` in the same run directory.
+- Route distribution: each of `gate`, `up`, and `down` has `36480` route records. Current top-k policy keeps `19760` up/down records and prunes `16720` up/down records. Gate records are all kept.
+- Band-level up/down kept/pruned counts:
+  - layers `0-2`: kept `1824` per kind, pruned `912` per kind.
+  - layers `3-9`: kept `4256` per kind, pruned `2128` per kind.
+  - layers `10-39`: kept `4560` per 10-layer band per kind, pruned `4560` per 10-layer band per kind.
+- Top route-frequency experts are mostly later layers, e.g. layer `37` expert `162`, layer `27` expert `152`, layer `24` expert `12`, layer `32` expert `124`. This shows route frequency alone does not match the early-layer fallback cost profile; early layers are expensive because each call is costlier, not because they dominate route count.
+- Interpretation: future pruning cannot rely only on route frequency. It must combine per-layer fallback cost, rank/pruned status, and output sensitivity. The accepted run already prunes many ranks, but further pruning in either early or late layers has repeatedly changed output/cache trajectory and failed speed or correctness.
+- Source handling: the route-trace source patch was reverted with `git restore ggml/src/ggml-cpu/ggml-cpu.c`; `cmake --build build-ds4-moe-stream -j 8 --target llama-cli` was rerun from clean source commit `87f1a7a98`.
+
+Next direction after routing trace:
+
+- Current evidence does not justify another top-k/pruning candidate. The biggest cost is early-layer up/down fallback, but early-layer changes are correctness-sensitive and route frequency is not enough to identify safe removals.
+- A defensible next candidate would need a prompt-set route/correctness study or a mechanism that reduces early-layer compute without changing selected experts. Without that new mechanism, current `4.2 tok/s` remains the effective accepted cold-start SOTA.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
