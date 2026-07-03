@@ -1516,6 +1516,27 @@ Next direction after fault attribution:
 
 - Do not pursue small hotset/page-hint candidates unless they include a hard model for broad fault reduction. Current evidence favors either a true compute kernel improvement with no extra source scan, or a deeper I/O layout change that reduces distributed up/down page faults while preserving the accepted gate pack/cache behavior.
 
+
+MXFP4 AVX2 dot microbench design:
+
+- Time: 2026-07-03 after fallback fault attribution commit `311ba4e22`.
+- Goal: test whether the scalar `ggml_vec_dot_mxfp4_q8_0()` has enough compute headroom for a no-extra-RAM runtime speedup. The host CPU is AMD EPYC 7B13 with AVX2 but no AVX512/VNNI, so the plausible SIMD path is AVX2 `pshufb` nibble lookup plus signed int16 multiply-add, not VNNI dot-product.
+- Candidate scope: standalone harness only, no runtime source change. Compare current scalar row-wise dot with an AVX2 implementation that decodes the 16 low and 16 high MXFP4 nibbles via `_mm_shuffle_epi8`, sign-extends MXFP4 and Q8 bytes to int16, multiplies/adds with `_mm256_madd_epi16`, and applies the same per-block scale.
+- Correctness gate: exact or near-exact equality to scalar for DS4-like shapes (`k=4096` up, `k=2048` down). Any nonzero diff must be explained before runtime integration.
+- Theoretical acceptance threshold: runtime integration is only worth considering if AVX2 row-wise dot is at least `1.2x` faster in warm compute. A smaller speedup cannot overcome distributed cold page faults and graph/stream overhead seen in the fault trace.
+
+
+MXFP4 AVX2 dot microbench result:
+
+- Source inspection result: the premise that `ggml_vec_dot_mxfp4_q8_0()` was scalar on this host was wrong. The active x86 implementation is `ggml/src/ggml-cpu/arch/x86/quants.c`, which already has an AVX2 path using `_mm_shuffle_epi8`, `mul_sum_i8_pairs_float`, and FMA accumulation. On newer hosts the same helper can lower to VNNI; this AMD EPYC host has AVX2 but no AVX512/VNNI.
+- A standalone scratch AVX2 harness was compiled to test a naive row-wise implementation. It produced incorrect values (`max_abs` in the tens of thousands) and was slower than the existing runtime symbol (`speedup=0.455` for `k=4096 rows=2048`, `0.474` for `k=2048 rows=4096`). The scratch file was removed and not committed because it is not a valid tool.
+- Interpretation: there is no low-risk row-wise AVX2 runtime patch to add; the repo already contains the optimized x86 path. Further compute-kernel gains would require improving the existing `mul_sum_i8_pairs_float`/repack kernels themselves, which is a deeper kernel project and not a small SOTA candidate under the current cold-start constraints.
+- Verdict: reject naive AVX2 row-wise dot direction. Current accepted SOTA remains `4.2 tok/s`.
+
+Next direction after AVX2 dot inspection:
+
+- Remaining viable work is now either a deeper existing-kernel optimization with its own microbench and correctness proof, or an I/O/layout redesign that reduces broad up/down page faults without consuming host RAM. Do not add another model-run candidate without a stronger bound than the rejected chunk/repack/hot/page probes.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
