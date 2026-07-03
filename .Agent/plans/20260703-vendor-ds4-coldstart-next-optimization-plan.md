@@ -16,13 +16,15 @@
 - 2026-07-04 no-draft `ngram-mod` 已拒绝：strict cold run 正确率/RAM/TTFT 通过，但 `decoded speed=2.879 tok/s`，低于当前 `4.2 tok/s` SOTA；probe source 已回退，accepted `llama-cli` hash 恢复。
 - 2026-07-04 gate cache headroom audit 已完成：`GGML_MOE_STREAM_ONE_CACHE_MIB=13312` 在 strict cold 16GB cgroup 下达到 `4.1 tok/s`，gate hit rate 仍为 `86.8%`，CUDA free 从约 `238MiB` 增至约 `492MiB`。该结果不是新 SOTA，但说明可以继续做一个很小的 down-cache 组合短诊断。
 - 2026-07-04 gate cache `13312MiB` + down cache `256MiB` + MXFP4 batch-probe 短诊断已拒绝：RAM 通过，但输出错误、`eval_tok_s=1.6`、down cache hit rate `0.0%`、gate hit rate 降到 `58.5%`、stage 增至 `5.922 ms/call`。probe source 已回退，不允许 full strict cold。
-- 当前最新计划：回到 accepted SOTA runtime，先做 down/MXFP4 数值正确性定位和 CPU compare trace 设计；任何 compute/offload 优化必须先证明输出正确，再谈 token rate。
+- 2026-07-04 corrected down-batch compare 已完成：恢复 `tmp_dst_rows=max(dst_cols,n_active)` 后，MXFP4 down batch 与 CPU compare 数值一致（`max_abs_max=1.1920929e-07`），但性能仍只有 `2.6 tok/s`，down-cache hit rate 约 `0.0%`，stage `4.740 ms/call`，因此性能方向拒绝，probe source 已回退。
+- 2026-07-04 CPU fallback top128 O_DIRECT staging 已拒绝：正确率/RAM/TTFT 通过，但同步 direct staging 读取 `44.79GB`，`eval_tok_s=2.9`，说明同步 O_DIRECT 不是可用 movement model。
+- 当前最新计划：回到 accepted SOTA runtime，尝试一个更高性价比的 gate one-stream VRAM cache prefill 诊断。该候选只移动已接受 gate path 的 source-load 时间，不改模型数学；如果不能超过 `4.2 tok/s`，立即回退。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `current_pushed_head_before_this_update`: `4e525a91f` (`vendor-ds4: reject no-draft ngram diagnostic`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `b1168731e` (`vendor-ds4: reject top128 direct staging probe`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -64,7 +66,7 @@ Current measured bottleneck after O_DIRECT:
 
 Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 
-1. Treat `4e525a91f` as the current pushed documentation/source baseline before this plan update, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
+1. Treat `b1168731e` as the current pushed documentation/source baseline before this plan update, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
 2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
 3. External draft/internal MTP is currently not viable: DS4 GGUF has no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors, and local model inventory has no tokenizer-compatible small DS4 draft model.
 4. No speculative diagnostic is currently active. no-draft `ngram-mod`, ngram-simple, server partial fallback, and target-only lookahead are all rejected for this path.
@@ -4262,3 +4264,143 @@ Next direction after this rejection:
   - coalesced multi-expert reads only if access order is predictable;
   - or a smaller correctness-preserving up/down cache/admission set with much lower byte volume.
 - Before coding another movement path, first measure whether there is enough per-expert CPU compute time to hide the next expert read. If not, move to a different bottleneck such as fewer CPU fallback calls or GPU-side up/down execution.
+
+## 2026-07-03T22:10Z Next Plan: Gate One-Stream VRAM Cache Prefill
+
+Current accepted SOTA remains:
+
+- `eval_tok_s=4.2`
+- strict cold `drop_caches`
+- 16GB cgroup including page cache
+- `MemorySwapMax=0`
+- France correctness pass
+- accepted gate one-stream cache `13568MiB`, `3192` slots, hit rate `86.8%`
+- accepted gate pack O_DIRECT path has `direct_failures=0`, `direct_fallbacks=0`
+
+### Bottleneck
+
+Phase B current-SOTA one-stream trace:
+
+- gate one-stream rows: `35151`
+- cache misses: `4623`
+- cache inserts: `3337`
+- one-stream `src0_ms_all=5236.633 ms`
+- one-stream miss `src0_ms=5214.433 ms`
+- inserted-cache `src0_ms=3792.307 ms`
+
+The accepted path spends about `5.2s` of generation time loading gate experts from the O_DIRECT pack/source into the VRAM cache. This is not a correctness-sensitive math path; it is movement time for the already accepted gate implementation.
+
+### Why This Is Different From Rejected Up/Down Hotsets
+
+- Rejected up/down hotsets tried to add new compute/offload behavior and disturbed CPU fallback or gate cache.
+- This candidate only preloads the same gate experts that the accepted path would later load into the same one-stream VRAM cache.
+- It does not increase the VRAM cache budget.
+- It does not use host buffered page cache; prefill uses the existing gate expert pack with O_DIRECT.
+- It shifts some existing generation source-load time into pre-decode/TTFT time. The accepted TTFT gate has headroom:
+  - accepted TTFT: `28014.740620 ms`
+  - 20% limit: `33617.688744 ms`
+  - headroom: about `5603 ms`
+
+### Hard Bound
+
+Using `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv` sorted by frequency against the Phase B one-stream trace:
+
+| Prefill top-N | payload | covered miss rows | covered `src0_ms` | generation-rate upper bound |
+| ---: | ---: | ---: | ---: | ---: |
+| `1024` | `4.25 GiB` | `1024` | `1155.704 ms` | about `4.3 tok/s` |
+| `2048` | `8.50 GiB` | `2061` | `2376.439 ms` | about `4.4 tok/s` |
+| `3000` | `12.45 GiB` | `3024` | `3448.563 ms` | about `4.55 tok/s` |
+| `3192` | `13.25 GiB` | `3216` | `3659.925 ms` | about `4.57 tok/s` |
+
+Use `top3000` for the first diagnostic:
+
+- It covers most removable gate source-load time without filling every slot.
+- It leaves about `192` slots for dynamic cache inserts.
+- Expected O_DIRECT prefill read volume is about `12.45GiB`.
+- Expected TTFT increase should be below the `5.6s` gate if O_DIRECT throughput is close to the current gate pack read path.
+
+This cannot reach `10 tok/s` by itself. It is a narrow SOTA-edge candidate that stacks with the accepted gate path and may establish a higher cold-start baseline before a larger fallback/speculative design.
+
+### Implementation Plan
+
+Add default-off support in `ggml/src/ggml-cuda/moe_stream.cu`:
+
+- `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=<tsv>`
+- `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+- When enabled, one-stream cache keys use a stable `(tensor, expert)` hash instead of host pointer keys. This allows prefilled pack entries to be found later by normal `ggml_cuda_moe_stream_one()` calls.
+- On first one-stream call after VRAM cache initialization:
+  - load the TSV profile;
+  - sort by third column frequency descending;
+  - read at most `limit` profile entries from `GGML_MOE_STREAM_ONE_EXPERT_PACK` using the existing O_DIRECT pack reader;
+  - insert them into the existing VRAM cache without incrementing normal miss counters;
+  - synchronize the prefill stream before returning to normal execution;
+  - print prefill counters: loaded entries, attempted, inserted, pack misses, read failures, bytes, elapsed ms.
+- Default behavior must remain identical when `GGML_MOE_STREAM_ONE_PREFILL_PROFILE` is unset.
+
+Implementation risk:
+
+- Named keys under the prefill env are a behavior change for cache lookup. This is allowed only for the diagnostic env and must be default-off.
+- Prefill can evict low-priority entries before use if the profile order is wrong. Sorting by frequency is the first conservative policy.
+- Prefill may increase TTFT too much. If TTFT exceeds `33617.688744 ms`, reject even if generation token rate improves.
+
+### Run Config
+
+Build:
+
+- `build-ds4-moe-stream/bin/llama-cli`
+
+Strict cold run:
+
+- strict runner `.Agent/run-tools/strict_ds4_runner.py`
+- `drop_caches`
+- `MemoryMax=16000000000`
+- `MemorySwapMax=0`
+- prompt: `Please introduce France in a short paragraph.`
+- accepted SOTA env unchanged:
+  - `GGML_CUDA_DISABLE_GRAPHS=1`
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DONTNEED=1`
+  - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
+  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
+- added env:
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+  - `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`
+- CLI override:
+  - `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+
+### Acceptance
+
+Accept only if all are true:
+
+- `eval_tok_s > 4.2`
+- France output is complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000` including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- gate pack direct path has no direct failures/fallbacks.
+- normal generation cache hit rate does not collapse after interpreting prefill counters.
+- source, docs, and artifacts are immediately committed and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- pushed-source rebuild/rerun also exceeds `4.2 tok/s` before promotion.
+
+Reject if any are true:
+
+- `eval_tok_s <= 4.2`
+- correctness fails or the answer ends incoherently.
+- TTFT exceeds the 20% gate for an accepted result.
+- RAM exceeds 16GB or the cgroup kills the run.
+- prefill counters show large pack read failures.
+- cache behavior collapses or pack direct fallbacks appear.
+
+If rejected:
+
+- record metrics, counters, answer, and artifact hashes;
+- revert the runtime source patch;
+- push only documentation/artifact records.
