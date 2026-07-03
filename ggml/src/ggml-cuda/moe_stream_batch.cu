@@ -1717,6 +1717,58 @@ static void expert_pack_record_iouring_batch(size_t jobs) {
     }
 }
 
+static bool down_batch_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void down_batch_profile_record(
+        const char *tensor,
+        ggml_type src0_type,
+        int n_active,
+        int cache_hits,
+        int cache_misses,
+        int staged_jobs,
+        float stage_ms,
+        float quant_ms,
+        float kernel_ms,
+        float d2h_ms,
+        double scatter_ms,
+        double wall_ms) {
+    const char *path = std::getenv("GGML_MOE_DOWN_BATCH_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,tensor,src0_type,n_active,cache_hits,cache_misses,staged_jobs,stage_ms,quant_ms,kernel_ms,d2h_ms,scatter_ms,wall_ms\n");
+        header_written = true;
+    }
+
+    static uint64_t seq = 0;
+    std::fprintf(f,
+            "%lu,%s,%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+            (unsigned long)++seq,
+            tensor ? tensor : "",
+            (int)src0_type,
+            n_active,
+            cache_hits,
+            cache_misses,
+            staged_jobs,
+            (double)stage_ms,
+            (double)quant_ms,
+            (double)kernel_ms,
+            (double)d2h_ms,
+            scatter_ms,
+            wall_ms);
+    std::fclose(f);
+}
+
 static void current_down_overlap_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
     uint64_t current = target.load(std::memory_order_relaxed);
     while (current < value &&
@@ -6276,6 +6328,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
+    int down_profile_cache_hits = 0;
+    int down_profile_cache_misses = 0;
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
@@ -6283,6 +6337,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         batch_route_profile_hit(src0_name, active_experts[j], src0_bytes);
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
         if (cache_slot < 0) {
+            ++down_profile_cache_misses;
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
                     nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
             if (down_parallel_stage && cache_slot >= 0) {
@@ -6302,6 +6357,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 }
             }
         } else {
+            ++down_profile_cache_hits;
             batch_ttft_trace_record("cache_hit", src0_name, active_experts[j], src0_bytes, true, false, false, 0.0);
         }
         if (cache_slot < 0) return decline("cache_insert");
@@ -6416,6 +6472,21 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_bprof.d2h_ms += d2h_ms;
         g_bprof.scatter_ms += scatter_ms;
         g_bprof.wall_ms += wall_ms;
+        if (down_batch_profile_enabled()) {
+            down_batch_profile_record(
+                    src0_name,
+                    src0_type,
+                    n_active,
+                    down_profile_cache_hits,
+                    down_profile_cache_misses,
+                    (int)(down_jobs_a.size() + down_jobs_b.size()),
+                    stage_ms,
+                    quant_ms,
+                    kernel_ms,
+                    d2h_ms,
+                    scatter_ms,
+                    wall_ms);
+        }
     }
     return true;
 }
