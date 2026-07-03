@@ -4298,6 +4298,87 @@ Rollback:
 - If n32 regresses or local stage gain is offset by expert-pack/pinned staging
   cost, keep Phase 7DS overlay as SOTA.
 
+Phase 7DT result - rejected:
+
+- result timestamp: 2026-07-04T01:36:00+08:00.
+- plan commit:
+  `2e603811f` (`docs: plan kimi phase7dt overlay v2`).
+- source status:
+  - no source patch;
+  - artifact-only experiment.
+- overlay artifact:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack`.
+- overlay build:
+  - main pack counts:
+    - `blk.1`: `0`;
+    - `blk.2`: `0`;
+    - `blk.4`: `202`;
+    - `blk.60`: `158`;
+  - overlay counts:
+    - `blk.1`: `384`;
+    - `blk.2`: `384`;
+    - `blk.4`: `182`;
+    - `blk.60`: `226`;
+  - total overlay entries `1176`;
+  - overlay size `7.161 GiB`;
+  - no duplicate key with main pack.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-213404Z-n32-phase7dt-l4-l60-overlay-v2`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `75625.16 ms`;
+  - decode `32056.74 ms / 31`, `0.97 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- comparison:
+  - slower than Phase 7DS n32 confirmation `31647.69 ms / 31` by
+    `409.05 ms`;
+  - fails the promotion gate, so no n32 repeat or n96 run.
+- mechanism:
+  - expert-pack entries increased to `32007`, as expected;
+  - expert-pack misses stayed `192`, unchanged from Phase 7DS n32;
+  - expert-pack bytes stayed `69970116608`, unchanged from Phase 7DS n32;
+  - main pinned host stage `16240.032 ms`, worse than Phase 7DS confirmation
+    `15807.853 ms`;
+  - `blk.4` stage `339.479 ms`, essentially unchanged versus Phase 7DS n32
+    confirmation `343.055 ms`;
+  - `blk.60` stage `307.943 ms`, worse than Phase 7DS n32 confirmation
+    `294.020 ms`;
+  - `blk.1` stage `151.165 ms`, close to Phase 7DS `147.441 ms`;
+  - `blk.2` stage `138.280 ms`, close to Phase 7DS `136.954 ms`.
+
+Gap analysis:
+
+- The pack-index diagnostic correctly found missing entries, but those missing
+  `blk.4/60` entries are not on the actual n32 runtime miss path for this
+  prompt/seed.
+- Runtime counters did not change:
+  - same expert-pack bytes;
+  - same expert-pack misses;
+  - same iouring read count.
+- Therefore the remaining `blk.4/60` stage is not caused by missing pack
+  coverage. It is dominated by reading/staging already-covered pack entries and
+  scheduling cost.
+
+Decision:
+
+- Reject Phase 7DT.
+- Keep Phase 7DS as accepted SOTA:
+  - commit `2ebf65e54` plus docs `4b0c234dd`;
+  - overlay pack
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`;
+  - n32 confirmation `31647.69 ms / 31`, `0.98 tok/s`;
+  - n96 confirmation `77839.21 ms / 77`, `0.99 tok/s`.
+- Do not add more entries to the overlay based only on static pack coverage.
+  Future pack work must prove that the missing entries are actually used by
+  runtime miss events, not just absent from the index.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
