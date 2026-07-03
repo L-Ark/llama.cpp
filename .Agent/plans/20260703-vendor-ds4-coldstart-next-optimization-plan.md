@@ -8,18 +8,23 @@
 
 - 历史最高观测：`4.2 tok/s`，run `/root/lfz/runs/vendor-ds4-16gb/20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun/france-cpu40-vram0gb`。
 - 2026-07-03 post-rollback strict cold guard 已复现 `4.2 tok/s`，run `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`。
-- 2026-07-03 多次 strict cold rerun 达到 `4.1-4.2 tok/s`，均满足：16GB cgroup 含 page cache、France 正确率、TTFT gate、O_DIRECT expert pack、VRAM cache counters。
+- 2026-07-03/2026-07-04 多次 strict cold rerun 达到 `4.1-4.2 tok/s`，均满足：16GB cgroup 含 page cache、France 正确率、TTFT gate、O_DIRECT expert pack、VRAM cache counters。
 - 2026-07-04 all-output ngram-simple 和 server speculative partial-serial fallback 均已验证并拒绝：前者会卡在同一 verification position，后者可保证正确推进但只有 `3.7 tok/s`。相关临时源码均已回退，当前有效 SOTA 仍是 `4.2 tok/s`。
+- 2026-07-04 top512 CPU blocking-touch prewarm 首跑观测到 `4.3 tok/s`，但从已 push source 清洁 rebuild 后只复现 `4.2 tok/s`，未超过当前 SOTA；该源码已回退，当前 head 为接受路径。
+- 2026-07-04 no-drop diagnostic 可达 `7.2 tok/s`，但不是 accepted cold-start，因为没有执行全局 `drop_caches`；它只能说明冷启动主要损失来自 CPU up/down fallback 的 page/source stall，不可作为 SOTA。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
+- 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `source_head`: `6b11e5ab514e7f7c48b62ef8142e6aa67d00f3ca`，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
-- `runtime_binary_build`: stdout reports `build : b14557-1e9b327d5`。
-- `runtime_source_note`: all-output/server-speculative probes after the accepted SOTA were reverted before commit; committed heads through `6b11e5ab5` contain records/rejected artifacts/plan updates and no promoted runtime-source change beyond the accepted SOTA path. Runtime binary hash remains the accepted SOTA binary hash below.
+- `source_head`: `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `runtime_binary_build`: clean rebuild after rollback reports ggml commit `5484a1806`。
+- `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
 - `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`。
+- `libggml_cpu_sha256`: `a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a` after rollback rebuild。
 - `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076` for `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`。
 - `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b` for `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`。
+- `updown_decode_top512_profile_sha256`: `45c35b2cb00faa4b37ad793e5e63e6008b68235064f5fdeb23a7e843c437084e` for `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top512.tsv`。
 - `model_file`: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`，`ls/du` both report `146G`。因此 cold-start 方案不得依赖整模型热 page cache；所有 page cache 都必须计入 16GB cgroup。
 - `accepted_config`: `cpu_moe=40`, `--vram-cache-gb 0`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`, strict cold `drop_caches`, 16GB `systemd-run` cgroup with `MemorySwapMax=0`, CLI extra args `-c 256 -b 16 -ub 16 -t 20 -tb 20`。
 
@@ -30,6 +35,8 @@ Fresh strict cold reproduction evidence:
 | `/root/lfz/runs/vendor-ds4-16gb/20260703T031923Z-20260703T031710Z-current-sota-strict-repro/france-cpu40-vram0gb` | 4.1 | 1.5 | 30470.663075 | 16000000000 | 15102509056 | true |
 | `/root/lfz/runs/vendor-ds4-16gb/20260703T032154Z-20260703T032138Z-current-sota-strict-repro-retry/france-cpu40-vram0gb` | 4.1 | 1.6 | 28857.563383 | 16000000000 | 15102316544 | true |
 | `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb` | 4.2 | 1.6 | 28014.740620 | 16000000000 | 15096049664 | true |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T172115Z-20260704_phaseA_clean_sota_guard_head4be08352/france-cpu40-vram0gb` | 4.1 | 1.5 | 29484.204486 | 16000000000 | 15101456384 | true |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T180612Z-20260704_cpu_prewarm_top512_touch_pushed_repro/france-cpu40-vram0gb` | 4.2 | 1.7 | 32212.962507 | 16000000000 | 15105830912 | true |
 
 These runs had `oom=0`, `oom_kill=0`, `ram_limit_killed=false`, one expert pack `hits=4623 misses=0 direct_reads=4623 direct_failures=0`, and VRAM cache `hits=30528 misses=4623 hit_rate=86.8%` with `3192` slots (`13.2GiB`).
 
@@ -42,59 +49,62 @@ Post-rollback guard France answer:
 Current measured bottleneck after O_DIRECT:
 
 - Gate O_DIRECT pack path is no longer dominant.
-- Gate miss source load is roughly `5.3s`.
-- CPU up/down fallback is the main target, about `26.8s` total, with decode up/down about `19.3s`.
+- 2026-07-04 current-SOTA profile: gate one-stream path total is about `7.0s`, including source load about `5.2s`; VRAM gate cache hit rate remains `86.8%`.
+- CPU up/down fallback remains the main target: profile total about `25.7s`, decode about `18.1s`, with up/down totals roughly `12.4s/13.4s`.
+- No-drop same-prompt diagnostic improves to `7.2 tok/s` and cuts fallback total by about `50%`, proving cold page/source stalls are important. It is not accepted because it relies on global warm page cache outside the strict cold-start rule.
+- Hard upper bounds from the refreshed profile: top512 up/down residency only reaches about `5.05 tok/s`; eliminating all CPU up/down fallback reaches about `8.86 tok/s`; eliminating CPU fallback plus all one-stream source load reaches about `13.36 tok/s`. Therefore a path to `10 tok/s` likely needs either multi-token speculative/MTP or a combined fallback+source elimination, not a small hotset tweak alone.
 - Large buffered down pack is rejected because it competes with model mmap/page cache and raises refault pressure under the 16GB cgroup.
-- Broad gate cache, global thread sweeps, and large buffered down-pack directions are deprioritized.
+- Broad gate cache, global thread sweeps, down batch, one-stream all-up/down, compact mmap, and CPU prewarm touch are deprioritized or rejected unless a new hard-bound analysis shows a materially better path.
 
-Latest optimization direction after the 2026-07-04 rejected probes:
+Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 
-1. Return to the accepted `4.2 tok/s` SOTA path before any new code change. Re-run one strict cold guard from current pushed head `b568e210f` and require SOTA-shaped counters: O_DIRECT pack `misses=0`, gate VRAM hit rate around the accepted `86-87%`, 16GB cgroup no kill, and a coherent France answer.
-2. Rebuild the current-SOTA bottleneck decomposition with existing tracing knobs only. The required split is per-token and per-component: gate O_DIRECT source load, gate CUDA/cache time, CPU up fallback, CPU down fallback, page faults/refaults, server/sampling overhead, and cgroup file/anon memory.
-3. Do not continue pure compact-mmap, broad up/down hotset, down-batch staging, or ngram-simple speculative sweeps unless the refreshed trace shows a hard upper bound materially above `4.2 tok/s`. These paths have already been rejected because they either do not remove CPU compute, displace the gate cache, add staging overhead, or lack enough draft acceptance.
-4. Prioritize candidates that remove actual CPU fallback time without sacrificing the accepted gate cache:
-   - CPU fallback compute/IO split: quantify how much of up/down time is CPU math vs major-fault/source-read stalls before changing layout again.
-   - protected small GPU residency: only test a top expert subset if VRAM accounting preserves the current gate cache slots and the theoretical covered fallback time is large enough to exceed run variance.
-   - async/direct prefetch: only useful if trace proves source-read stalls are still a large share of CPU fallback; it must use O_DIRECT or an explicitly bounded buffer and stay inside the 16GB cgroup.
-   - speculative/MTP: only resume with a higher-acceptance draft source. The all-output target batching blocker is understood, but ngram-simple with fallback is `3.7 tok/s`, so it is not a SOTA path by itself.
-5. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
+1. Treat `5484a1806` as the current accepted runtime source head. Before a new source change, verify the worktree is clean and the remote `ssd/vendor/deepseek-token-rate-16gb` contains this head.
+2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
+3. Prioritize a speculative/draft feasibility pass because small residency/prefetch/fallback-layout changes cannot plausibly reach `10 tok/s` by the current hard bounds. The DS4 GGUF initial tensor-name check found no internal `mtp`, `draft`, `eagle`, `spec`, or `next` tensors; only `hc_head_base`, `hc_head_fn`, `hc_head_scale`, and normal attention output tensors matched related terms. Therefore the next viable speculative path is likely an external compatible draft model, not internal MTP.
+4. If no compatible high-acceptance draft path exists, fall back to a combined CPU fallback + source elimination design. That design must first show a hard upper bound above `4.2 tok/s` and preferably toward `8-10 tok/s`; otherwise do not code.
+5. Do not resume pure compact-mmap, broad up/down hotset, down-batch staging, no-filter one-stream, ngram-simple, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
+6. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
 
 ## Execution Plan
 
-### Phase 0: Current Baseline Guard
+### Phase 0: Source/Remote Guard
 
-- Run one strict cold baseline from pushed head `cb5c74f09` before any source change.
-- Required result: `4.1 tok/s` class, `ram_ok=true`, `correctness_ok=true`, O_DIRECT pack counters unchanged.
-- If baseline falls below `4.0 tok/s` or counters differ, stop and debug reproducibility before optimization.
+- Confirm `git status --short` is clean, local head is `5484a1806`, and `ssd/vendor/deepseek-token-rate-16gb` points to the same or newer committed plan state.
+- Confirm the accepted SOTA runtime binary hash is still `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` after rollback rebuild.
+- If source or binary does not match the accepted state, stop and repair reproducibility before any optimization.
 
-### Phase 1: Trace/Profile Refresh
+### Phase 1: Speculative/MTP Feasibility
 
-- Run accepted config with one-stream trace and CPU fallback profile enabled.
-- Record:
-  - one-stream `src0_ms`, `kernel_ms`, `sync_ms`, total/span/gap;
-  - CPU fallback by prompt/decode, up/down, layer/expert;
-  - cgroup `memory.peak`, `memory.stat file/anon`, `pgmajfault`, `workingset_refault_file`;
-  - pack counters and VRAM cache counters;
-  - France answer text.
-- This trace run is diagnostic only and cannot replace the accepted SOTA metric.
+- Inspect the DS4 GGUF tensor list for `mtp`, `draft`, `eagle`, `spec`, and related head tensors. Record counts and exact tensor names.
+- Search local model directories for possible draft models with matching or compatible tokenizer/vocab.
+- For each candidate draft path, calculate before running:
+  - model size and host/VRAM footprint under the 16GB cgroup and current gate cache;
+  - expected draft cost per token;
+  - required acceptance rate to beat `4.2 tok/s` and to approach `10 tok/s`;
+  - whether the implementation verifies target logits without changing final output correctness.
+- If no compatible draft/MTP path exists, record that explicitly and do not spend more time on ngram-simple unless a new acceptance mechanism is designed.
 
-### Phase 2: Top-N Up/Down Candidate Design
+### Phase 2: Short Speculative Diagnostic
 
-- Build hotsets from fallback profile using normalized fallback contribution by `(tensor, layer, expert)`.
-- For each candidate, calculate before running:
-  - covered fallback ms;
-  - payload size;
-  - expected VRAM or page-cache cost;
-  - expected gate cache slot loss;
-  - theoretical upper bound on token rate.
-- Start with top `128` up/down pairs. Proceed to top `256` only if top `128` preserves current O_DIRECT/gate counters and does not regress token rate meaningfully.
+- Only run if Phase 1 finds a compatible draft model or internal MTP path.
+- Start with a short France diagnostic under strict 16GB cgroup and cold `drop_caches`.
+- Record acceptance rate, target forward count, draft forward count, TTFT, RAM/page cache, exact output, and whether target verification preserves correctness.
+- Reject immediately if output diverges, TTFT exceeds the 20% gate for an accepted result, or effective throughput is below the current SOTA class.
 
-### Phase 3: Candidate Practice
+### Phase 3: Combined Fallback/Source Design If Speculative Is Not Viable
 
-- Use default-off env flags for any new source path.
-- Preserve current gate O_DIRECT pack config unless the candidate explicitly measures its effect.
-- Run strict cold France under 16GB cgroup.
-- If a candidate exceeds `4.2 tok/s` and passes all gates, stop further exploration and complete SOTA promotion steps immediately.
+- Use existing 2026-07-04 trace artifacts to separate CPU fallback compute from page/source stalls more precisely before coding.
+- Any new CPU/GPU fallback candidate must calculate a hard upper bound from measured removable time. A candidate whose bound is near `4.2 tok/s` is not worth implementation.
+- Preserve the accepted gate cache (`13568MiB`, `3192` slots, `86-87%` hit rate) unless the plan explicitly proves that sacrificing slots is compensated by a larger measured saving.
+- Do not repeat rejected page-touch/top-N sweeps; top512 touch prewarm has already tied after pushed-source repro.
+
+### Phase 4: SOTA Promotion Protocol
+
+- If a candidate exceeds `4.2 tok/s` and passes RAM, correctness, TTFT, pack, and VRAM-cache gates, stop exploration immediately.
+- Record exact run path, command/env, source head, build metadata, binary hashes, model/profile/pack hashes, memory stats including page cache, counters, TTFT, token rates, and France output.
+- Commit and push source, plan, profiles, and artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+- Clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source rerun still exceeds `4.2 tok/s` and passes every gate.
+- If pushed-source rerun ties/regresses or violates a gate, revert runtime source to the accepted path and keep only rejected artifacts/docs.
 
 ## Execution Log
 
@@ -2613,3 +2623,43 @@ Rollback action:
 
 - Restore `ggml/src/ggml-cpu/ggml-cpu.c` from commit `41c60565c` and rebuild.
 - Commit/push this plan update, pushed-repro artifact, and runtime-source rollback to `ssd/vendor/deepseek-token-rate-16gb`.
+
+### 2026-07-04 Latest Plan After CPU Prewarm Rollback
+
+Current accepted state:
+
+- Accepted cold-start SOTA remains `4.2 tok/s`.
+- Accepted source path is restored and pushed as `5484a1806` on `ssd/vendor/deepseek-token-rate-16gb`.
+- The `4.3 tok/s` CPU touch-prewarm observation is rejected as unreproduced variance because pushed-source repro returned `4.2 tok/s`.
+- Strict constraints remain unchanged: host RAM including page cache must stay inside the 16GB cgroup, France output must be complete/coherent/semantic, TTFT cannot rise more than 20% for an accepted result, and every new SOTA must be committed/pushed plus reproduced from pushed source before promotion.
+
+Reason for changing direction:
+
+- The current hard-bound table shows that top-N up/down residency alone cannot reach the target region: top512 is only about `5.05 tok/s`.
+- Even eliminating all CPU up/down fallback is bounded around `8.86 tok/s`, below the long-term `10 tok/s` goal.
+- No-drop diagnostics reach `7.2 tok/s`, proving cold page/source stalls are large, but still not enough and not accepted under strict cold-start rules.
+- Therefore the next high-leverage path is speculative/MTP or another multi-token verification path. Small page-touch, compact-mmap, and down-cache variants have already failed or tied under the accepted gates.
+
+Immediate next steps:
+
+1. Verify source/remote/binary state:
+   - `git status --short` must be clean.
+   - local head and `ssd/vendor/deepseek-token-rate-16gb` must include `5484a1806` and this plan update.
+   - accepted SOTA binary hash must remain `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62` unless a new accepted source change is promoted.
+2. Inspect DS4 GGUF for internal speculative support:
+   - completed initial tensor-name check: `mtp=0`, `draft=0`, `eagle=0`, `spec=0`, `next=0`, `head=3` (`hc_head_base`, `hc_head_fn`, `hc_head_scale`), `output=88` normal `blk.*.attn_output_*` tensors;
+   - conclusion: no obvious internal MTP/draft/EAGLE tensors are present in the current GGUF, so internal MTP is not the immediate path.
+3. Search local model inventory for compatible external draft models:
+   - verify tokenizer/vocab compatibility before running;
+   - calculate model size, RAM/VRAM budget, expected draft cost, required acceptance rate, and acceptance needed to beat `4.2 tok/s` and approach `10 tok/s`.
+4. If a compatible draft/MTP path exists, run only a short strict-cold France diagnostic first:
+   - record acceptance rate, target/draft forward counts, TTFT, token rate, RAM/page cache, exact output, and correctness;
+   - reject immediately on output divergence, RAM violation, TTFT violation, or throughput below SOTA class.
+5. If no viable speculative path exists, return to fallback/source optimization only after a new hard-bound design proves a path above `4.2 tok/s`:
+   - split remaining CPU up/down fallback into compute vs source/page-stall cost;
+   - preserve the accepted gate cache unless a slot-level calculation proves the tradeoff is worthwhile;
+   - avoid repeating rejected pure hotset, touch-prewarm, broad one-stream, down-batch, and compact-mmap sweeps.
+
+Promotion rule for all next work:
+
+- When a compliant new SOTA appears, immediately record full reproducibility metadata, commit and push source/docs/artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, rebuild from pushed source, and rerun strict cold. Only the pushed-source rerun can become the new accepted SOTA.
