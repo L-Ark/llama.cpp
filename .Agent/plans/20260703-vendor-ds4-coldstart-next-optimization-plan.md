@@ -862,6 +862,27 @@ Acceptance:
 - Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and gate pack/cache counters remain aligned with accepted SOTA.
 - If it ties or regresses, reject and keep current SOTA unchanged. No runtime source rollback is needed.
 
+
+Result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T091200Z-20260703T091200Z-cuda-graphs-enabled-sota-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: strict runner binary was `.Agent/run-tools/llama-cli-cuda-graphs-enabled.sh`, which unsets `GGML_CUDA_DISABLE_GRAPHS` before execing the real `llama-cli`; otherwise accepted gate O_DIRECT config, cache budget, top-k, threads, and strict 16GB cold cgroup.
+- Evidence note: `environment.txt` still records runner-level `GGML_CUDA_DISABLE_GRAPHS=1`, but `exact_command.txt` shows the wrapper binary. The wrapper sha256 was `3e08e54173e404646f7cdbf269abb8e9bfa425e201eb881363ba74d7808310ee` and its only behavior is `unset GGML_CUDA_DISABLE_GRAPHS` followed by exec of the accepted `llama-cli`.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30535.957676 ms`, `elapsed_seconds=64.12`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15042371584`, `pgmajfault=272088`, `workingset_refault_file=1716820`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: `correctness_ok=true`; France answer was semantic, coherent, and complete.
+- Gate/O_DIRECT counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+
+Diagnosis:
+
+- CUDA graph did not improve the current O_DIRECT/gate-cache SOTA path. It tied the repeated strict-cold reproduction line (`4.1`) and did not exceed the accepted `4.2` threshold.
+- The unchanged gate/cache counters show the run exercised the same SOTA path; remaining bottleneck is still cold page/source behavior plus CPU up/down fallback, not CUDA launch overhead.
+
+Verdict:
+
+- Rejected/tie. Keep current accepted SOTA unchanged.
+- No runtime source rollback required.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
