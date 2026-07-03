@@ -29506,6 +29506,162 @@ Rollback:
 - If diagnostic succeeds, keep the instrumentation because it is default-off
   and directly supports reproducible bottleneck analysis.
 
+Phase 7CO result - diagnostic accepted:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `1ffed0d9a` (`docs: plan kimi phase7co down batch profile`).
+- source commit:
+  `7643ac4ed` (`cuda: add kimi down batch profile csv`).
+- source behavior:
+  - default unchanged unless `GGML_MOE_DOWN_BATCH_PROFILE_OUT` is set;
+  - CSV rows are written only for accepted CUDA down batch calls;
+  - no math, routing, cache, IO, or memory policy changes.
+
+Invalid activation attempts:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260703-144602Z-n32-phase7co-down-batch-profile`
+  passed hard gates but wrote CSV to `/down-batch-profile.csv` because the
+  runner injected `GGML_MOE_DOWN_BATCH_PROFILE_OUT=/down-batch-profile.csv`.
+  It is not used as the accepted diagnostic artifact.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260703-144947Z-n32-phase7co-down-batch-profile-v2`
+  had the same runner path bug and was stopped with SIGTERM after `47.156 s`.
+  It is not a valid experiment result.
+
+Accepted run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-145107Z-n32-phase7co-down-batch-profile-v3`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+perl -0pi -e 's#GGML_MOE_DOWN_BATCH_PROFILE_OUT=.*#GGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv#' /tmp/run_phase7co_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-145107Z-n32-phase7co-down-batch-profile-v3"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7co_repro.sh
+```
+
+- activation:
+  - `env.txt` contains
+    `GGML_MOE_DOWN_BATCH_PROFILE_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260703-145107Z-n32-phase7co-down-batch-profile-v3/down-batch-profile.csv`;
+  - `down-batch-profile.csv` exists in the run directory;
+  - CSV size: `1645` lines including header, `1644` accepted down batch rows;
+  - rows include `blk.1.ffn_down_exps.weight`,
+    `blk.2.ffn_down_exps.weight`, and `blk.60.ffn_down_exps.weight`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `76489.41 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `33492.97 ms / 31`, `0.93 tok/s`;
+  - diagnostic overhead is small and the result is near Phase 7CC n32
+    confirmation `33217.66 ms / 31`.
+- memory at finish:
+  - `memory.current.final=15108222976`;
+  - `file=14868119552`;
+  - `inactive_file=2021076992`;
+  - `active_file=12846477312`;
+  - `kernel=236388352`;
+  - `anon=450560`.
+- aggregate counters:
+  - expert-pack `iouring_bytes=67926376448`;
+  - expert-pack `iouring_wait_us=13062852`;
+  - main pinned `host_stage=17566.321 ms`;
+  - gate pinned `host_stage=1369.904 ms`;
+  - down cache: `hits=9659`, `misses=3461`, `preloads=3664`,
+    hit rate `73.6%`;
+  - upgate cache: `hits=13019`, `misses=16757`, hit rate `43.7%`;
+  - current-down overlap: `calls=992`, `planned_jobs=3664`,
+    `completed_jobs=3664`, `worker_us=3490981`;
+  - down profile: `cuda_batch=2.864 ms/call`,
+    `fallback_t0=37.015 ms/call`, `batch_accept=1644`,
+    `batch_decline=52`.
+
+Top down batch rows by wall time:
+
+- `blk.1.ffn_down_exps.weight`:
+  - calls `31`, active routes `248`;
+  - hits `74`, misses `174`, staged jobs `174`;
+  - stage `727.793 ms`, kernel `3.743 ms`, D2H `0.655 ms`,
+    scatter `1.317 ms`, wall `734.186 ms`.
+- `blk.2.ffn_down_exps.weight`:
+  - calls `31`, active routes `248`;
+  - hits `98`, misses `150`, staged jobs `150`;
+  - stage `697.773 ms`, kernel `3.642 ms`, D2H `0.651 ms`,
+    scatter `1.166 ms`, wall `703.975 ms`.
+- `blk.4.ffn_down_exps.weight`:
+  - calls `31`, active routes `248`;
+  - hits `79`, misses `169`, staged jobs `169`;
+  - stage `340.803 ms`, kernel `3.078 ms`, wall `371.977 ms`.
+- `blk.60.ffn_down_exps.weight`:
+  - calls `32`, active routes `256`;
+  - hits `86`, misses `170`, staged jobs `170`;
+  - stage `322.988 ms`, kernel `4.532 ms`, wall `331.326 ms`.
+
+Top miss rows:
+
+- `blk.5.ffn_down_exps.weight`: misses `190`, stage `171.704 ms`,
+  wall `177.594 ms`.
+- `blk.1.ffn_down_exps.weight`: misses `174`, stage `727.793 ms`,
+  wall `734.186 ms`.
+- `blk.60.ffn_down_exps.weight`: misses `170`, stage `322.988 ms`,
+  wall `331.326 ms`.
+- `blk.4.ffn_down_exps.weight`: misses `169`, stage `340.803 ms`,
+  wall `371.977 ms`.
+- `blk.3.ffn_down_exps.weight`: misses `165`, stage `155.908 ms`,
+  wall `161.823 ms`.
+
+Kernel interpretation:
+
+- The largest wall rows are not kernel-bound:
+  - layer `1` kernel is only `3.743 ms` out of `734.186 ms` wall;
+  - layer `2` kernel is only `3.642 ms` out of `703.975 ms` wall;
+  - layer `60` kernel is only `4.532 ms` out of `331.326 ms` wall.
+- Many fully cached later Q3_K layers have kernel around `4.0 ms` total over
+  `31` calls and wall around `8-9 ms`, so the compact Q3_K kernel itself is not
+  the primary bottleneck.
+- The high layer `1/2/60` rows are movement/stage dominated.
+- Layer `1/2` are especially expensive per staged miss:
+  - `blk.1`: about `4.18 ms` stage per miss;
+  - `blk.2`: about `4.65 ms` stage per miss;
+  - by contrast, `blk.5` has more misses but only about `0.90 ms` stage per
+    miss.
+
+Recommendation for next implementation:
+
+- Do not retry Q3_K alternate math kernels for layers `1-2` yet; the measured
+  kernel component is too small to pay for the risk.
+- Do not retry broad static hotset pinning; Phase 7CA already showed protected
+  slots damage the broader down working set.
+- The next optimization should target movement for a tiny set of early down
+  tensors without pinning hundreds of experts globally:
+  - candidate 7CP: limited lookahead/prefetch for `blk.1` and `blk.2` down
+    only, with a per-layer cap and no protected pins;
+  - acceptance requires lower `blk.1/blk.2` stage time without increasing
+    global down misses, upgate misses, or expert-pack wait.
+
+Decision:
+
+- Accept Phase 7CO as diagnostic instrumentation and evidence.
+- Keep the default-off CSV profiler in source.
+- Do not promote the diagnostic run as SOTA.
+- Keep Phase 7CC as current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
