@@ -18862,3 +18862,155 @@ Decision:
   - `GGML_MOE_IO_REFILL_BATCH=4`;
   - `GGML_MOE_VRAM_CACHE_MIB=15000`;
   - n96 best confirmed decode `88889.08 ms / 77`.
+
+## Phase 7AT - retest larger VRAM cache on Phase 7AS SOTA
+
+Design timestamp: 2026-07-03 CST.
+
+Baseline correction:
+
+- Phase 7AS is the current accepted SOTA, not Phase 7AE.
+- Accepted Phase 7AS reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7as-iq2-upgate-parallel-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- Confirmed Phase 7AS n96 result:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm`;
+  - quality: pass;
+  - TTFT: `77844.70 ms`;
+  - decode: `84173.24 ms / 77`, `0.91 tok/s`;
+  - host RAM: `memory.peak=15899996160`, `oom=0`;
+  - read path: `read_failures=0`, `iouring_fallbacks=0`;
+  - expert-pack bytes: `164569595904`;
+  - down cache: `806` slots, hit rate `73.4%`;
+  - upgate cache: `1679` slots, hit rate `43.2%`.
+
+Current bottleneck:
+
+- Phase 7AS successfully reduces same-type `IQ2_S` up/gate wall from about
+  `13.5 ms/call` to about `6.5-7.0 ms/call`.
+- The speedup is partly offset by more parallel gate-side staging:
+  - Phase 7AE n96 expert-pack iouring bytes: `109577273344`;
+  - Phase 7AS n96 expert-pack iouring bytes: `164569595904`;
+  - Phase 7AS gate staging copies rise to `10450`, with gate H2D around
+    `2348-2376 ms`;
+  - Phase 7AS main host stage is still about `48-49 s`.
+- The next cheap knob is to use slightly more VRAM for cache under the 7AS
+  runtime. Earlier `15100/15200 MiB` tests were under Phase 7AE and did not
+  reproduce; 7AS has a different IO/cache pressure profile, so it should be
+  retested against the true current SOTA before moving to source work.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_MIB=15100
+```
+
+- Keep the full accepted Phase 7AS runtime:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - split cache with `UPGATE_PCT=60`;
+  - pinned slots `8`;
+  - current down overlap and down parallel staging;
+  - pack mmap fallback and mmap cache drops;
+  - `THREADS=32`.
+
+Theoretical upper bound:
+
+- Adding `100 MiB` to the split VRAM cache can hold only a small number of
+  additional entries:
+  - about `13` down-sized slots at `7.44 MiB`, if all budget goes to down;
+  - about `18` upgate-sized slots at `5.36 MiB`, if all budget goes to upgate;
+  - fewer in the actual split-cache allocation.
+- If those slots hit hot experts in the 7AS parallel gate path, the best-case
+  direct saving is reduced expert-pack reads, pinned host staging, and H2D.
+- Because Phase 7AS iouring traffic is about `55 GiB` higher than Phase 7AE, the
+  upside is larger than the old 7AE VRAM sweep, but still bounded. Expected
+  useful gain is likely under `1-2 s` on n96 unless hit rate changes materially.
+- A valid improvement must therefore reproduce; a single faster cold run is
+  diagnostic only.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7as_repro.sh`.
+- First run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7at-7as-vram15100"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- Continue only if the first n32 run beats the Phase 7AS n32 confirmation
+  target:
+  - candidate: `33811.07 ms / 31`;
+  - confirmation: `33471.59 ms / 31`;
+  - acceptance threshold for this phase: beat `33471.59 ms / 31` on n32 before
+    spending n96 time.
+
+Reproducibility:
+
+- Cold start is mandatory:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- cgroup:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`.
+- Run directory must contain:
+  - `README.md`;
+  - `command.txt`;
+  - `env.txt`;
+  - `git.txt`;
+  - `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files;
+  - non-empty `fallback-profile.csv`;
+  - `metrics.txt`.
+
+Acceptance gates:
+
+- Host RAM:
+  - `memory.peak<=15899996160`;
+  - `oom=0`.
+- TTFT:
+  - `<=106331.72 ms`.
+- Quality:
+  - France prompt answer must be coherent and semantically correct.
+- IO/runtime:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no CUDA errors.
+- Performance:
+  - n32 must beat `33471.59 ms / 31` before confirmation;
+  - n32 confirmation must also beat `33471.59 ms / 31`;
+  - n96 candidate and n96 confirmation must both beat Phase 7AS n96 confirm
+    `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 does not beat Phase 7AS confirmation, reject immediately and keep
+  Phase 7AS as SOTA.
+- If n32 passes but confirmation or n96 fails, reject this env and keep Phase
+  7AS as SOTA.
