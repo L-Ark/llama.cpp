@@ -28989,6 +28989,123 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CM - retest 15100 MiB VRAM cache on Phase 7CC
+
+Start time:
+
+- 2026-07-03T14:22:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CC is the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`.
+- Phase 7CJ showed the current Phase 7CC cache pressure:
+  - global VRAM hit rate `52.9%`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`;
+  - expert-pack `iouring_bytes=67926376448`;
+  - expert-pack `iouring_wait_us=12966777`.
+- Phase 7AT previously tested `15100 MiB` on the older Phase 7AS SOTA and was
+  rejected by `426.77 ms`. That result should not be ignored, but Phase 7CC
+  changed the expert-pack/hotset balance by switching to the larger
+  `kimi-iq3s-france-l12-upgate-v2.expert-pack`.
+- Because the user explicitly requires using VRAM as fully as practical, one
+  small post-7CC retest is justified. Do not sweep larger sizes unless this
+  single step wins.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+VRAM_MIB=15100
+```
+
+- The extra `100 MiB` should add roughly:
+  - `18-19` upgate slots if allocated to upgate;
+  - `13` down slots if allocated to down;
+  - actual split follows the accepted `UPGATE_PCT=60`.
+- If the larger Phase 7CC expert pack makes the current cache slightly
+  capacity-limited, this may reduce enough misses to offset allocation/cache
+  overhead.
+- If Phase 7AT's regression was a general cache/timing effect, this will again
+  lose and should close this direction.
+
+Theoretical upper bound:
+
+- A `100 MiB` increase is small relative to the `15000 MiB` cache.
+- Even if all added slots avoid misses, the n32 upper bound is likely below
+  `0.5-0.8 s`.
+- A credible win must show lower `misses`, lower `iouring_bytes` or
+  `iouring_wait_us`, or lower pinned staging. A wall-time-only win without
+  counters should be treated as noise and require confirmation.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Reuse `/tmp/run_phase7cc_repro.sh`.
+- Keep every accepted Phase 7CC setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`;
+  - no trace prefetch, no host prefetch, no Q4 GPU changes.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cm-7cc-vram15100"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - command records `VRAM_MIB=15100`;
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_MIB=15100`;
+  - stderr reports actual VRAM cache budget `15100 MiB`.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - compare down/upgate slots and hit rates;
+  - compare expert-pack `iouring_bytes` and `iouring_wait_us`;
+  - compare pinned main/gate `host_stage`;
+  - if counters do not explain a gain, require an extra n32 confirmation before
+    any n96 run.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower, quality fails, activation is missing, TTFT/RAM/read
+  gates fail, or counters show higher IO pressure, reject immediately and keep
+  `VRAM_MIB=15000` in SOTA.
+- Do not test `15200` or larger unless `15100` is a clear, reproducible win.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
