@@ -29899,6 +29899,109 @@ Decision:
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
   - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
 
+### Phase 7CQ - layer-limited same-type current-down overlap for blk.1 only
+
+Start time:
+
+- 2026-07-03T15:36:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CO showed `blk.1` and `blk.2` down are stage-bound:
+  - `blk.1` stage `727.793 ms`, wall `734.186 ms`;
+  - `blk.2` stage `697.773 ms`, wall `703.975 ms`.
+- Phase 7CP with layers `1-2` proved the mechanism can remove those misses:
+  - first n32: `blk.1/2` both hit `248/248`, stage about `2 ms` each;
+  - second n32: same local effect reproduced.
+- Phase 7CP failed because the global schedule did not reproduce:
+  - first n32 decode `33047.08 ms / 31`, slightly faster;
+  - confirmation decode `34187.75 ms / 31`, slower;
+  - up_gate rose to `13.375-13.843 ms/call`;
+  - main pinned staging also increased.
+
+Hypothesis:
+
+- Reuse the same default-off layer-limited same-type overlap code, but enable it
+  only for `blk.1`:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1
+```
+
+- This halves the same-type overlap triggers relative to Phase 7CP and targets
+  the single largest stage-bound row.
+- If the up_gate regression scales roughly with the number of added overlap
+  calls, layer `1` alone may keep enough of the `~728 ms` local down-stage gain
+  while avoiding the unstable global contention seen with `1-2`.
+
+Theoretical upper bound:
+
+- Maximum n32 saving is bounded by Phase 7CO `blk.1` stage:
+  `727.793 ms`.
+- Realistic gain is likely `0.1-0.5 s` because some cost moves into up_gate or
+  pinned staging.
+- Any measured gain above `0.8 s` is suspicious unless supported by lower
+  `blk.1` stage without up_gate/main-stage regression.
+
+Implementation:
+
+- Re-apply the default-off source patch from Phase 7CP:
+  - helper `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS`;
+  - same-type overlap only when env matches the layer range;
+  - default behavior unchanged.
+- Run with layer range `1` only.
+- Keep Phase 7CO `GGML_MOE_DOWN_BATCH_PROFILE_OUT` enabled for mechanism
+  evidence.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7co_repro.sh /tmp/run_phase7cq_repro.sh
+perl -0pi -e 's#GGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv#GGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1#' /tmp/run_phase7cq_repro.sh
+chmod +x /tmp/run_phase7cq_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cq-sametype-overlap-l1"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cq_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_LAYERS=1`;
+  - stderr contains the layer-limited activation log;
+  - `down-batch-profile.csv` exists.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - `blk.1` stage should drop versus Phase 7CO `727.793 ms`;
+  - up_gate and main pinned staging must not regress enough to erase the gain;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, activation is missing, output is malformed, TTFT/RAM/read
+  gates fail, or first n32 is slower than Phase 7CC, revert the source patch and
+  record rejection.
+- If first n32 improves but confirmation fails, revert the source patch and
+  record the non-reproducible result.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
