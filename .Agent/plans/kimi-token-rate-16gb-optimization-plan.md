@@ -6435,7 +6435,7 @@ Reproduction command:
 
 ```bash
 cd /root/lfz/llama.cpp-vendor-kimi
-git reset --hard e1d12915a
+git reset --hard bf9b1918b
 cmake --build build-cuda-batch -j 32 --target llama-completion
 cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ef_repro.sh
 sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ef_repro.sh
@@ -6465,6 +6465,50 @@ Result handling:
 - If accepted, run n96 confirmation.
 - If rejected, keep `VRAM_MIB=15000` in SOTA and use the result as evidence
   when deciding whether a third Q4_0 pool can be afforded.
+
+Result:
+
+- End time: 2026-07-04T07:45:06+08:00.
+- Status: rejected; no n96 confirmation run.
+- Reproduction run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-234107Z-n32-phase7ef-vram15300`.
+- Actual command used the current plan commit:
+  - `git reset --hard bf9b1918b`;
+  - `N=32 VRAM_MIB=15300 THREADS=32 PINNED_SLOTS=16`;
+  - `UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1`;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Gates:
+  - exit `0`;
+  - memory peak `15899996160`, within the hard cgroup cap;
+  - TTFT `90442.24 ms`, within the `106331.72 ms` gate;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - actual cache budget line:
+    `requested=15300 MiB actual=15300 MiB free=15890 MiB total=32109 MiB`.
+- Performance:
+  - decode `31771.21 ms / 31`, `0.98 tok/s`;
+  - slower than Phase 7EA/7EB n32 SOTA `29599.64 ms / 31`, `1.05 tok/s`.
+- Cache and movement counters:
+  - down slots `822`, slot `7.44 MiB`, hit rate `73.7%`;
+  - upgate slots `1712`, slot `5.36 MiB`, hit rate `44.7%`;
+  - expert-pack iouring bytes `86184935424`;
+  - expert-pack wait `11802038 us`;
+  - main pinned host_stage `13333.310 ms`;
+  - gate host_stage `455.012 ms`;
+  - down profile: `1644` rows, wall `4615.877 ms`, stage `4217.936 ms`,
+    kernel `207.989 ms`, jobs `3489`;
+  - upgate profile: `869` rows, wall `5858.960 ms`, up `4383.051 ms`,
+    gate `1284.522 ms`, stage `42.827 ms`, kernel `5736.891 ms`.
+- Interpretation:
+  - 15300 MiB allocated successfully and increased cache capacity, but the
+    additional capacity did not reduce the dominant movement/staging path enough
+    to compensate for run-to-run and lower-headroom overhead.
+  - Since the strict n32 decode gate failed, keep the SOTA at `VRAM_MIB=15000`.
+  - The result also argues against spending more VRAM on the existing two-pool
+    cache layout before isolating mixed-size tensors such as Q4_0 into a
+    separate pool or layer-specific route.
 
 ## Phase 0: cold 16GB baseline
 
