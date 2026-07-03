@@ -21023,6 +21023,148 @@ Decision:
     `/root/lfz/runs/vendor-kimi-token-rate/20260703-124316Z-n96-phase7cc-l12-upgate-pack`,
     decode `77239.32 ms / 77`, token rate `1.00 tok/s`.
 
+### Phase 7CY - n96 full-profile bottleneck refresh for Phase 7CC
+
+Start time:
+
+- 2026-07-03T17:20:00Z.
+
+Current bottleneck and reason:
+
+- Phase 7CC remains the accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`;
+  - n96 confirmation decode `79008.37 ms / 77`;
+  - best observed n96 candidate decode `77239.32 ms / 77`.
+- Phase 7CX showed short n32 can improve by cold-run variance, but n96
+  confirmation failed. This means future work must optimize the longer n96
+  critical path, not only n32 noise-sized effects.
+- The authoritative route trace Phase 7CJ is n32-only. It is useful for local
+  experiments, but the promotion gate is n96, where:
+  - expert-pack bytes are `168.38 GB`;
+  - iouring wait is about `31-32 s`;
+  - main pinned host stage is about `42 s`;
+  - upgate/down hit rates stay low enough that miss traffic dominates.
+- Many guessed optimizations have been rejected:
+  - larger VRAM cache without policy;
+  - VRAM split changes;
+  - static protected hotsets;
+  - Q4_0 shared-cache GPU path;
+  - mmap advice and WILLNEED;
+  - same-step host prefetch;
+  - H2D batching;
+  - IQ3 pipeline variants.
+- Therefore the next cycle should refresh n96 bottleneck attribution with
+  per-call profiles before adding another source change.
+
+Hypothesis:
+
+- A strict cold n96 run with all existing default-off diagnostic profiles can
+  identify the next actually compressible n96 bucket:
+  - route/profile event distribution;
+  - per-call down stage/kernel/D2H/scatter/wall;
+  - per-call up/gate stage/quant/kernel/D2H/scatter/wall;
+  - CPU fallback bytes/time by phase/type;
+  - memory.stat/page-cache behavior at the end of decode.
+- The output should tell whether the next implementation should target:
+  - dynamic cache admission/eviction;
+  - trace-driven prefetch with a longer lead window;
+  - selective Q4_0 handling outside the shared down cache;
+  - IQ3/upgate staging policy;
+  - or no local code change until expert-pack layout is regenerated.
+
+Theoretical upper bound:
+
+- This diagnostic itself has no token-rate upside.
+- Based on Phase 7CC n96 confirmation, hard upper bounds for future work are:
+  - expert-pack wait: about `31.99 s`;
+  - main pinned host stage: about `42.48 s`;
+  - gate pinned host stage: about `2.99 s`;
+  - visible Q4_0 decode fallback: about `5.3 s` on the older n96 fallback
+    profile and likely similar under 7CC;
+  - upgate type `18/22` aggregate wall: tens of seconds, but only part is
+    compressible without adding IO contention.
+- A credible future optimization must reduce one of those measured buckets and
+  reproduce at n96. If Phase 7CY shows the same low hit rates and the same
+  small-batch IO histograms, pure queue-depth/copy-API work remains ruled out.
+
+Implementation:
+
+- Env-only diagnostic; no source patch.
+- Use the rebuilt, clean Phase 7CC source at commit `865ab8cf3` or later
+  documentation-only commits.
+- Create `/tmp/run_phase7cy_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append these diagnostic envs to the script's `env.txt` block:
+
+```sh
+GGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+```
+
+- Keep all accepted Phase 7CC runtime settings unchanged:
+  - l12 up/gate v2 expert pack;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=8`;
+  - `IO_DEPTH=8`;
+  - `IO_REFILL_BATCH=4`;
+  - SQPOLL and `IO_SORT_OFFSET=1`;
+  - current-down overlap and up/gate parallel staging enabled.
+
+Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cy_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_BATCH_PROFILE_OUT=\$RUN/route-profile.csv\nGGML_MOE_ROUTE_TRACE_OUT=\$RUN/route-trace.csv\nGGML_MOE_TTFT_TRACE_OUT=\$RUN/ttft-trace.csv\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv\nGGML_MOE_UP_GATE_PROFILE_OUT=\$RUN/up-gate-profile.csv\nEOF\n|' /tmp/run_phase7cy_repro.sh
+chmod +x /tmp/run_phase7cy_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7cy-full-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cy_repro.sh
+```
+
+Diagnostic gates:
+
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `MemorySwapMax=0`, `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- all five diagnostic CSV files exist and are non-empty.
+
+Required analysis:
+
+- Record line counts and sizes for:
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`;
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `fallback-profile.csv`.
+- Aggregate:
+  - route-trace by kind/type and routed GiB;
+  - down batch top tensors by wall/stage/miss count;
+  - up/gate top type pairs by wall/stage/wait/kernel;
+  - fallback by phase/type and top decode Q4_0 layers;
+  - cache hit/miss and iouring batch histograms;
+  - memory.stat final file/active_file/inactive_file/pgmajfault/refaults.
+- Use the analysis to write the next implementation phase. Do not promote this
+  diagnostic run as SOTA because CSV tracing adds overhead.
+
+Rollback:
+
+- Env-only diagnostic has no source rollback.
+- If activation is missing or files are empty, mark the diagnostic invalid and
+  rerun with fixed script injection before making source decisions.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
