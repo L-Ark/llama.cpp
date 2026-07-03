@@ -15,7 +15,8 @@
 - 2026-07-04 target-only `llama-lookahead` 已拒绝：两次 strict cold 机械诊断都在第一 token 后因 DeepSeek4 coupled-sequence/KV 路径失败，且 gate cache hit rate 从接受路径的 `86-87%` 塌到约 `11.5%`。
 - 2026-07-04 no-draft `ngram-mod` 已拒绝：strict cold run 正确率/RAM/TTFT 通过，但 `decoded speed=2.879 tok/s`，低于当前 `4.2 tok/s` SOTA；probe source 已回退，accepted `llama-cli` hash 恢复。
 - 2026-07-04 gate cache headroom audit 已完成：`GGML_MOE_STREAM_ONE_CACHE_MIB=13312` 在 strict cold 16GB cgroup 下达到 `4.1 tok/s`，gate hit rate 仍为 `86.8%`，CUDA free 从约 `238MiB` 增至约 `492MiB`。该结果不是新 SOTA，但说明可以继续做一个很小的 down-cache 组合短诊断。
-- 当前最新计划：基于 gate cache `13312MiB` 的 headroom，做一次 default-off 的 `256MiB` down-cache + MXFP4 batch-probe 短诊断；只有短诊断证明 down cache 真正分配、gate hit rate 不塌、stage ms/call 明显下降，才允许进入 full strict cold。
+- 2026-07-04 gate cache `13312MiB` + down cache `256MiB` + MXFP4 batch-probe 短诊断已拒绝：RAM 通过，但输出错误、`eval_tok_s=1.6`、down cache hit rate `0.0%`、gate hit rate 降到 `58.5%`、stage 增至 `5.922 ms/call`。probe source 已回退，不允许 full strict cold。
+- 当前最新计划：回到 accepted SOTA runtime，先做 down/MXFP4 数值正确性定位和 CPU compare trace 设计；任何 compute/offload 优化必须先证明输出正确，再谈 token rate。
 - 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
@@ -67,7 +68,7 @@ Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
 3. External draft/internal MTP is currently not viable: DS4 GGUF has no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors, and local model inventory has no tokenizer-compatible small DS4 draft model.
 4. No speculative diagnostic is currently active. no-draft `ngram-mod`, ngram-simple, server partial fallback, and target-only lookahead are all rejected for this path.
-5. The active next candidate is a narrow cold-legal composition test: shrink gate cache to `13312MiB`, then test whether a real `256MiB` down-cache can allocate and reduce down fallback staging without destroying the accepted gate path.
+5. The latest narrow gate-cache/down-cache composition test is rejected. The next active work is correctness-first diagnosis for down/MXFP4 offload: use CPU compare traces or an equivalent deterministic harness to locate the numerical/output divergence before any more down-batch performance runs.
 6. Do not resume pure compact-mmap, broad up/down hotset, large down-batch staging, no-filter one-stream, ngram-simple, lookahead, ngram-mod, or page-touch prewarm sweeps unless the plan is updated with a new bottleneck measurement and a better theoretical upper bound.
 7. Stop a candidate immediately if gate cache hit rate drops materially, expert pack direct fallbacks appear, RAM exceeds 16GB including page cache, TTFT rises more than 20% for an accepted result, or the France output is incomplete/incoherent.
 
@@ -3028,3 +3029,110 @@ Decision rules:
 - If the short diagnostic passes all gates, update this plan before a full run, then run full strict cold France under the same constraints.
 - A full run may be promoted only if it exceeds `4.2 tok/s`, keeps TTFT within the accepted 20% gate, passes correctness and RAM including page cache, and has no pack/direct failures.
 - On any compliant new SOTA, stop exploration immediately, record complete reproducibility information, commit source/docs/profiles/artifacts, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild from pushed source and rerun strict cold before declaring it accepted.
+
+### 2026-07-04 Gate13312 + Down Cache256 Short Diagnostic Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T194034Z-20260704_gate13312_downcache256_short/france-cpu40-vram0gb`
+
+Temporary source probe:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` only, never committed.
+- Added `GGML_TYPE_MXFP4` to `moe_stream_type_supported()`.
+- Added `GGML_TYPE_MXFP4` to compact MMVQ launcher support and MMQ slot launcher switch.
+- Restored the up/gate temporary workspace guard by sizing `d_up`, `d_gate`, and related debug copies with `tmp_dst_rows=max(dst_cols,n_active)`.
+- Built only `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli`.
+
+Config:
+
+- Strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`.
+- `cpu_moe=40`, `--vram-cache-gb 0`.
+- Accepted SOTA gate envs preserved except `GGML_MOE_STREAM_ONE_CACHE_MIB=13312`.
+- Added `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_MIB=256`, `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_STAGE_PINNED=1`, `GGML_MOE_STAGE_PINNED_SLOTS=4`, `GGML_MOE_BATCH_PROFILE=1`, `GGML_MOE_STREAM_DECLINE_DEBUG=1`.
+- Short run args: `-n 32 -c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Metrics:
+
+- `eval_tok_s=1.6`
+- `prompt_tok_s=1.5`
+- `TTFT=32025.669104 ms`
+- `elapsed_seconds=48.77`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15087927296`
+- `memory_max_events=8456`
+- `pgmajfault=149689`
+- `workingset_refault_file=166949`
+- `ram_ok=true`, `oom_seen=false`, `ram_limit_killed=false`
+- `correctness_ok=false`
+- `correctness_reason=too_short,missing_europe,missing_expected_context`
+
+Output:
+
+```text
+and each paragraph should be approximately 30 words, and in English. Summarize with a conclusion that includes 3 key takeaways.
+
+**France: A Brief
+```
+
+This is not a valid France answer. Even ignoring the `-n 32` truncation, the generated text is semantically wrong for the requested prompt.
+
+Counters:
+
+- Gate one-stream cache init: `13.0 GiB`, `3132` slots.
+- Down batch cache allocation succeeded: requested `256 MiB`, actual `256 MiB`, `60` slots of `4.25 MiB`.
+- CUDA memory at report time: free about `164 MiB`, self/model about `17362 MiB`, unaccounted about `14582 MiB`.
+- Down batch expert pack: `hits=815 misses=3262 read_failures=0 direct_reads=815 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 entries=512`.
+- Down batch VRAM cache: `hits=1 misses=4077 preloads=0 hit_rate=0.0%`.
+- Down batch profile: `calls=1243 avg_active=3.28 stage=5.922 ms quant=0.000 ms kernel=0.032 ms d2h=0.005 ms scatter=0.008 ms total=5.968 ms/call wall=5.981 ms/call`.
+- Gate one expert pack: `hits=2679 misses=1237 reads=2679 bytes=11938824192 failures=0 direct_reads=2679 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM cache: `hits=5512 misses=3916 hit_rate=58.5%`.
+
+Artifact hashes:
+
+- `summary.json`: `bf3b78ff06c1e6ab59e3d229a569f7e2ecaf9fa0a7e9c6d3ac9d8ea4c3315bfd`
+- `stdout.txt`: `ec222664cdcb04ee875702033800815f1a5830657d504b7d07094ee3e8eac1f6`
+- `stderr.txt`: `6351e5c2e20c1f7092dc9a6afacdce2b12c75e635465937342c845b983cb821a`
+
+Verdict:
+
+- Rejected. Do not run full strict cold for this candidate.
+- Although the `256MiB` down cache allocated, it provided effectively no reuse (`0.0%` hit rate), made staging slower than previous down-batch probes (`5.922 ms/call` vs prior `4.538 ms/call` and top512-down `3.705 ms/call`), and destroyed the accepted gate-cache behavior (`58.5%` vs accepted `86.8%`).
+- Correctness failed. This candidate cannot be considered an optimization even as an unaccepted TTFT-over-gate result.
+- The likely failure modes are: too-small down cache causing LRU churn, down pack coverage too sparse for the short generation route, and/or unresolved MXFP4 down numerical mismatch. The next step must isolate correctness before any performance run.
+
+Rollback:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` was reverted with `git restore`.
+- `build-ds4-moe-stream-batch-probe` was rebuilt from clean source.
+- Post-rollback hashes:
+  - `build-ds4-moe-stream-batch-probe/bin/llama-cli`: `866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`
+  - `build-ds4-moe-stream-batch-probe/bin/libggml-cuda.so`: `d451bf606ade4a6a868283d6796dfe9dad9f577151be593b095c400b80d423da`
+  - accepted `build-ds4-moe-stream/bin/llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- Worktree source was clean after rollback.
+
+### 2026-07-04 Next Plan After Down Cache256 Rejection
+
+Current accepted SOTA:
+
+- Still `4.2 tok/s` from the strict cold vendor DeepSeek path with accepted gate O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, and 16GB cgroup including page cache.
+- No rejected runtime source remains active. The latest down-cache/MXFP4 probe source was reverted.
+
+Immediate direction:
+
+1. Correctness-first down/MXFP4 diagnosis before any more down performance runs.
+   - Use existing CPU compare trace support (`GGML_MOE_STREAM_COMPARE_CPU_OUT`, `GGML_MOE_STREAM_COMPARE_CPU_LIMIT`, and related block trace support) or a narrow deterministic harness to compare CPU fallback vs CUDA down-batch outputs on the same MXFP4 down experts and source rows.
+   - Start with a very small limit under the 16GB cgroup and accepted SOTA envs. The goal is not token rate; the goal is to prove whether MXFP4 down batch is numerically correct route by route.
+   - Record max absolute error, mean error, bad/non-finite counts, tensor name, expert id, row id, source row metadata, and whether the first wrong generation token aligns with a bad down result.
+
+2. Reject performance experiments until correctness is proven.
+   - Do not re-enable `GGML_MOE_STREAM_DOWN_BATCH=1` for generation as an optimization candidate unless the compare harness shows acceptable numerical agreement and the France output is semantic and coherent.
+   - Do not repeat the `256MiB` down-cache composition without a new cache admission/pinning design; its measured hit rate was `0.0%`.
+
+3. If down/MXFP4 correctness is proven later, redesign cache admission before a full run.
+   - A useful down-cache design must pin a small route-aware hotset instead of relying on 60-slot LRU churn.
+   - It must preserve gate hit rate near `86.8%`, show nonzero down-cache hit rate in short diagnostics, and keep stage time below prior rejected values before any full strict cold run.
+
+4. If down/MXFP4 correctness fails, abandon down-batch compute for the current SOTA path.
+   - Return to cold-legal source/page-stall elimination or a different target-verified speculative design with a hard upper bound above `4.2 tok/s`.
+   - Any new design must update this plan before implementation and must preserve RAM, correctness, and TTFT gates.
