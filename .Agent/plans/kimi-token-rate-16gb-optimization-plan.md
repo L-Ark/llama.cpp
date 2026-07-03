@@ -21701,3 +21701,105 @@ Rollback:
   record the result as rejected.
 - Do not stack another fallback scheduling change on top of a failed overchunk
   patch.
+
+Phase 7BF result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `025e8cd2b74d417249251d2a957612bba90a6e6f`
+  (`docs: plan kimi phase7bf q4 overchunk`).
+- source status:
+  - implemented as an uncommitted default-off probe on top of `025e8cd2b`;
+  - source changed only `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - remote build succeeded with commit shown as `025e8cd2b-dirty`;
+  - after rejection, the source patch was reverted locally and on the server;
+  - server was rebuilt clean and build-info returned to `025e8cd2b`.
+- implementation summary:
+  - added default-off env `GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK`;
+  - parsed factor in CPU fallback code, clamped to `[2,16]`;
+  - for Q4_0 decode fallback only, overrode chunking after the generic
+    rechunk step to `nth * factor` chunks;
+  - emitted one activation log with factor, `nth`, `nr0`, `nr1`, and final
+    chunk counts.
+- runner:
+  `/tmp/run_phase7bf_repro.sh`, copied from `/tmp/run_phase7as_repro.sh`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK=4
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-052235Z-n32-phase7bf-q4-overchunk4`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-052235Z-n32-phase7bf-q4-overchunk4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 Q4_OVERCHUNK=4 \
+      /tmp/run_phase7bf_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `72789.52 ms`, under the `106331.72 ms` gate.
+- activation:
+  - stderr contains:
+    `Q4_0 decode overchunk active: factor=4 nth=32 nr0=7168 nr1=1 nchunk0=128 nchunk1=1`;
+  - `env.txt` contains `GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK=4`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `35816.41 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BF is slower by `2344.82 ms`.
+- fallback:
+  - aggregate down profile `fallback_t0=35.715 ms/call`, slightly lower than
+    Phase 7AS `36.549 ms/call`;
+  - however fallback CSV `decode,type=2` worsened from Phase 7AS `2.630 s` to
+    `3.374 s`;
+  - Q4 per-tensor decode fallback remained concentrated in the same seven Q4_0
+    down tensors.
+- other mechanism metrics:
+  - expert-pack iouring wait increased to `12566177 us`, compared with Phase
+    7AS `11567536 us`;
+  - main pinned host staging increased to `20114.447 ms`, compared with Phase
+    7AS `18631.890 ms`;
+  - down `cuda_batch=2.815 ms/call`, slightly worse than Phase 7AS
+    `2.675 ms/call`.
+
+Gap analysis:
+
+- The activation worked and the local aggregate `fallback_t0` moved in the
+  expected direction, but the measured decode fallback CSV and total wall time
+  regressed.
+- Overchunking likely adds too much atomic scheduling/cache overhead for this
+  narrow Q4_0 shape (`nr1=1`) and also perturbs IO/staging timing enough to
+  erase any local CPU benefit.
+- This confirms that Q4_0 fallback scheduling is not an easy remaining win
+  through generic chunking.
+
+Decision:
+
+- Reject Phase 7BF.
+- Do not run n96.
+- Revert the source patch locally and on the server.
+- Rebuild the server clean at `025e8cd2b`.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Do not retry Q4 fallback chunking without first measuring inside the Q4 vec-dot
+  kernel or designing a tensor-specific kernel/path.
