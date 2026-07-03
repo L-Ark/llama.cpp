@@ -3324,3 +3324,123 @@ Decision:
 - Do not implement a 60-slot or top128 pinned/admission down cache. Its hard upper bound is below the accepted `4.2 tok/s` SOTA.
 - Do not spend more runs on small down-cache admission policies unless the design changes the amount of removable stage time, not merely which `255-544 MiB` subset is cached.
 - The next implementation must target a larger bottleneck class: either combined up+down fallback elimination with a new movement model, or cold-legal CPU fallback source/page-stall reduction that does not trade away gate cache.
+
+### 2026-07-04 Latest Plan: Cold-Legal Page-Pressure Diagnostic, Then Larger Fallback Movement
+
+Current accepted SOTA remains:
+
+- `eval_tok_s=4.2`
+- strict cold `drop_caches`
+- 16GB cgroup including page cache
+- `MemorySwapMax=0`
+- `correctness_ok=true`
+- `TTFT=28014.740620 ms`
+- accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T040442Z-20260703T040442Z-post-local-mmap-revert-guard/france-cpu40-vram0gb`
+- accepted binary hash: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- source/record branch for all accepted and rejected work: `ssd/vendor/deepseek-token-rate-16gb`
+
+Latest bottleneck refresh:
+
+| Metric | Cold current-SOTA profile | No-drop diagnostic | Difference |
+| --- | ---: | ---: | ---: |
+| eval tok/s | `4.1` | `7.2` | diagnostic-only upside |
+| prompt tok/s | `1.5` | `2.0` | faster prompt with warm external cache |
+| TTFT ms | `29663.442807` | `26654.802489` | `-3008.640318` |
+| fallback total ms | `25743.677` | `12952.670` | `-12791.007` |
+| fallback up ms | `12387.490` | `5873.231` | `-6514.259` |
+| fallback down ms | `13356.187` | `7079.439` | `-6276.748` |
+| prompt fallback ms | `7654.397` | `5351.252` | `-2303.145` |
+| decode fallback ms | `18089.280` | `7601.418` | `-10487.862` |
+
+Diagnostic sources:
+
+- Cold current-SOTA profile: `/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb/fallback-profile.csv`
+- No-drop diagnostic profile: `/root/lfz/runs/vendor-ds4-16gb/20260703T173550Z-20260704_phaseC_nodrop_profile_io_compute_split_head6b11e5a/france-cpu40-vram0gb/fallback-profile.csv`
+
+Interpretation:
+
+- CPU fallback is still the dominant accepted-run bottleneck. In the cold profile it accounts for about `25.7s`, split almost evenly between up and down.
+- The no-drop diagnostic proves that cold source/page stalls are real: fallback time drops by about `12.8s`, and decode fallback drops by about `10.5s`.
+- The no-drop result is not acceptable as SOTA because it relies on globally warm page cache prepared outside the strict cold run. It is only a ceiling/proof of where time is being lost.
+- Page/source-stall reduction alone cannot get to `10 tok/s`. For `-n 192`, `4.2 tok/s` implies about `45.7s` generation time, while `10 tok/s` would require about `19.2s`; the no-drop gap explains only about half of the required saving.
+- Small down-cache admission is rejected by hard bound. The next accepted improvement must avoid stealing meaningful gate-cache capacity and must reduce either broad fallback source stalls or the fallback movement model itself.
+
+Immediate experiment design: cold-legal dense mmap/page-cache pressure control.
+
+Hypothesis:
+
+- The accepted cold run keeps about `15.1GB` of file-backed pages in the 16GB cgroup. Even with expert mmap pages dropped after model load, dense mmap pages may compete with later up/down fallback pages during decode.
+- Dropping dense mmap pages after prompt processing is cold-legal because it happens inside the same strict run/cgroup and does not rely on external warm cache.
+- If dense pages are causing reclaim/refault pressure, `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1` should reduce decode fallback stalls without reducing gate VRAM cache size.
+
+Run plan:
+
+1. Run one strict full France prompt diagnostic from the accepted SOTA env, with only this added env:
+   - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`
+2. If the log shows no dense-drop activity or no measurable change, run a second strict diagnostic with:
+   - `LLAMA_DROP_DENSE_MMAP_CACHE=1`
+   - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`
+3. Keep all accepted SOTA knobs unchanged:
+   - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+   - current gate admit profile
+   - current gate expert pack with direct IO
+   - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
+   - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`
+   - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
+   - `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+4. Collect:
+   - token rates
+   - TTFT
+   - elapsed seconds
+   - full France answer
+   - cgroup `memory_peak_bytes`, `memory_file_bytes`, OOM/kill flags
+   - `pgmajfault`, `workingset_refault_file`
+   - gate cache hit/miss/hit rate
+   - pack direct-read counters
+   - fallback profile totals if enabled
+   - stderr evidence for dense/expert mmap drops
+
+Hard upper bound:
+
+- Absolute ceiling for this class is the no-drop diagnostic at about `7.2 tok/s`, because dense-drop only tries to recover part of the cold/page-stall gap.
+- Expected practical upside is smaller than `12.8s`, since dense-drop cannot make all up/down source pages resident and cannot remove CPU fallback math.
+- This experiment is worth one or two no-source diagnostics because it is low-risk, preserves VRAM distribution, and directly tests a current bottleneck without another down-cache implementation.
+
+Acceptance criteria:
+
+- `memory_peak_bytes <= 16000000000` and page cache is charged inside the same 16GB cgroup.
+- No swap and no cgroup kill.
+- France output is semantic, coherent, and not a correctness regression.
+- TTFT must stay within `20%` of the current accepted SOTA TTFT unless explicitly recorded as rejected:
+  - conservative limit: `28014.740620 * 1.20 = 33617.688744 ms`
+- `eval_tok_s` must be strictly above the accepted `4.2 tok/s` before promotion.
+- If the gain is only a tie, record it as useful diagnostic/headroom evidence but do not promote it as SOTA.
+
+Rejection criteria:
+
+- Any RAM, OOM, correctness, or TTFT violation rejects the run.
+- Any token-rate regression rejects the run.
+- If fallback/profile counters show no reduction in major faults/refaults/fallback time, stop this class; do not keep sweeping dense-drop combinations.
+
+Fallback plan if dense-drop diagnostics reject:
+
+1. Return to design mode before any new source change.
+2. Add or use instrumentation that splits fallback time into:
+   - source/page-fault wait;
+   - tensor staging/copy;
+   - CPU math;
+   - pack/direct-IO read time;
+   - per-layer/per-expert route frequency.
+3. Use that split to compute a hard upper bound for a larger movement-model change. The next source implementation must show a bound above `4.2 tok/s` before coding.
+4. Candidate larger movement classes:
+   - route-ordered up+down expert pack that reduces random fallback source movement for both tensors, not only down;
+   - bounded async/O_DIRECT staging that overlaps source reads with current compute while staying inside the 16GB cgroup;
+   - a fused up/gate/down fallback path only if the math and dataflow show real parallelism or eliminated movement, not merely a CUDA kernel speedup with the same source stalls;
+   - CPU fallback kernel/layout improvements only after page/source stalls are proven secondary.
+
+Mandatory record/push rule:
+
+- Before every implementation run, update this plan with the exact hypothesis, bound, run config, and rejection criteria.
+- For every run, record full metrics and the exact output answer.
+- If a compliant new SOTA appears, immediately record all reproduction inputs, artifact hashes, run directory, command/env, correctness output, memory counters, and push source plus docs to `ssd/vendor/deepseek-token-rate-16gb`.
+- After pushing a new SOTA, clean rebuild/rerun from the pushed source before treating it as fully promoted.
