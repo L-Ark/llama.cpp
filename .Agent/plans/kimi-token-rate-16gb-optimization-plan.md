@@ -19787,3 +19787,112 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7AY - IQ2 parallel up/gate split staging probe
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- Phase 7AS is still the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- The accepted improvement in 7AS came from enabling the existing IQ2_S
+  parallel up/gate path:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_PARALLEL=1
+GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1
+```
+
+- In the 7AS n32 confirmation, the type profile shows:
+  - `type=22` (`IQ2_S`) wall `7.048 ms/call`;
+  - `up_stage_jobs=4.67`, `gate_stage_jobs=4.67`;
+  - `up_wait=6.451 ms/call`, `gate_wait=6.838 ms/call`;
+  - `up_compute=0.172 ms/call`, `gate_compute=0.116 ms/call`.
+- Therefore the accepted IQ2 path is no longer compute-bound. It is mainly
+  waiting on staging/copy work before the tiny compute kernels can launch.
+- Existing code has an unused env-gated split staging branch:
+
+```sh
+GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1
+```
+
+It splits planned up/gate copy jobs across the main and auxiliary copy streams
+and their pinned staging rings. No prior run artifacts show this env enabled.
+
+Hypothesis:
+
+- Enabling split staging only on top of the 7AS IQ2 parallel path may reduce
+  `up_wait` / `gate_wait` and shorten type-22 wall time.
+- It does not change math, routing, cache keys, quantization, output layout, or
+  prompt behavior.
+- Risk:
+  - extra host threads and copy streams may contend with io_uring, current-down
+    overlap, or CPU fallback;
+  - extra staging parallelism may increase wall time even if local wait
+    counters improve.
+
+Theoretical upper bound:
+
+- 7AS n32 type-22 has `558` calls at `7.048 ms/call`.
+- If split staging could reduce exposed wait by `20-30%`, the local saving is
+  about `0.8-1.2 s` on n32.
+- Perfectly removing all type-22 staging wait is impossible because H2D and
+  ordering remain, but the absolute upper bound is the whole type-22 wall bucket:
+  `558 * 7.048 ms ~= 3.9 s`.
+- n96 scaled upper bound is roughly `2-3 s` for a realistic `20-30%` wait
+  reduction, enough to matter only if the extra staging does not increase
+  iouring wait, host_stage, down fallback, or TTFT.
+
+Experiment:
+
+- Env-only probe. Source remains clean at `ac1731193` or later.
+- Create a temporary runner from `/tmp/run_phase7as_repro.sh` that appends the
+  split-staging env to `env.txt` when `IQ2_UPGATE_STAGE_SPLIT=1`, so the run
+  directory is self-contained and reproducible.
+- Strict cold n32 command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ay-iq2-upgate-stage-split"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IQ2_UPGATE_STAGE_SPLIT=1 \
+      /tmp/run_phase7ay_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - cold start with `drop_caches`;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer for
+    `Please introduce France in a short paragraph.`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - run directory includes `README.md`, `command.txt`, `env.txt`, `git.txt`,
+    `script.sh`, stdout/stderr, cgroup memory files, `fallback-profile.csv`,
+    and `metrics.txt`.
+- Activation:
+  - `env.txt` must contain `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1`;
+  - stderr must contain `up/gate split CPU staging active`;
+  - stderr must still contain `IQ2_S parallel up/gate streams active`.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if it beats, run n32 confirmation;
+  - if both n32 runs beat and gates pass, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+- Mechanism:
+  - type-22 wall time should drop from 7AS n32 `7.048 ms/call`, or any wall
+    improvement is not considered explained;
+  - if type-22 improves but wall regresses, compare iouring wait, main/gate
+    host_stage, current-down overlap, and down fallback before deciding next.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, quality fails, TTFT fails, RAM fails, or activation is
+  missing, reject immediately and keep Phase 7AS as SOTA.
