@@ -5841,6 +5841,73 @@ Result handling:
 - If rejected, keep `PINNED_SLOTS=8` in SOTA and plan a separate true-depth
   experiment.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm`;
+  - source/docs commit `06af8d2bb`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Correctness and gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - pinned staging reports `16` slots for all active rings;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous for landmarks like the Eiffel Tower and the Louvre Museum.
+    France is also known for its diverse landscapes, from the vineyards of
+    Bordeaux to the beaches of the Riviera, and plays a major role in European
+    and global affairs.<|im_end|> [end of text]`;
+  - quality `pass`;
+  - TTFT `77123.35 ms`, below `106331.72 ms`;
+  - decode `74201.57 ms / 77`, `1.04 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`.
+- Activation details:
+  - expert-pack io_uring still reports `depth=8`;
+  - iouring inflight max remains `8`;
+  - batch histogram remains capped at `5-8`;
+  - therefore the accepted SOTA delta is `PINNED_SLOTS=16` only.
+- Movement counters:
+  - expert-pack direct_reads `22113`, iouring_reads `37080`,
+    iouring_bytes `214923018240`, iouring_wait_us `37009572`;
+  - main pinned staging: slots `16`, host_stage `30534.248 ms`,
+    h2d `10344.570 ms`, slot_wait `117.591 ms`;
+  - gate pinned staging: slots `16`, host_stage `1121.220 ms`,
+    h2d `2315.286 ms`, slot_wait `27.696 ms`.
+- Operator profiles:
+  - upgate rows `2157`, wall `16604.603 ms`, up `12406.867 ms`,
+    gate `3919.419 ms`, stage `79.437 ms`, kernel `16421.955 ms`,
+    up_jobs `10449`, gate_jobs `10449`;
+  - down rows `4082`, wall `11365.667 ms`, stage `10648.390 ms`,
+    kernel `474.646 ms`, jobs `8722`.
+- Comparison:
+  - beats Phase 7DZB n96 `74693.07 ms / 77` by `491.50 ms`;
+  - token rate improves from `1.03 tok/s` to `1.04 tok/s`;
+  - n32 was `29599.64 ms / 31`, beating Phase 7DZA by `686.47 ms`;
+  - TTFT improves from Phase 7DZB `79924.70 ms` to `77123.35 ms`.
+
+Decision:
+
+- Accept Phase 7EB as current SOTA.
+- Required current SOTA env deltas over Phase 7DS:
+
+```sh
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
+- Current SOTA run set:
+  - n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-225526Z-n32-phase7ea-depth16-slots16`;
+  - n96:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm`.
+- Next step:
+  - plan a separate true `GGML_MOE_IO_DEPTH=16` activation test because the
+    attempted env override was superseded by the repro script's existing
+    `GGML_MOE_IO_DEPTH=8` export.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
