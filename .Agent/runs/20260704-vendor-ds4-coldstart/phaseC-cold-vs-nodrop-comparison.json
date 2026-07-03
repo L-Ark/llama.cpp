@@ -1,0 +1,118 @@
+{
+  "cold_case": "/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb",
+  "cpu_chunk": {
+    "cold": {
+      "by_kind": {
+        "down": {
+          "ms": 174922.64200009976,
+          "rows": 277048
+        },
+        "up": {
+          "ms": 153310.28700001253,
+          "rows": 222952
+        }
+      },
+      "max_thread_ms": 17238.911999999775,
+      "median_thread_ms": 16389.567999999592,
+      "sum_chunk_ms": 328232.92900026374
+    },
+    "nodrop": {
+      "by_kind": {
+        "down": {
+          "ms": 96556.92299998035,
+          "rows": 277048
+        },
+        "up": {
+          "ms": 81394.59299999863,
+          "rows": 222952
+        }
+      },
+      "max_thread_ms": 9093.163999999631,
+      "median_thread_ms": 8889.13899999991,
+      "sum_chunk_ms": 177951.5160001945
+    }
+  },
+  "diagnostic_only": true,
+  "metrics": {
+    "eval_tok_s": {
+      "cold": 4.1,
+      "delta": 3.1000000000000005,
+      "nodrop": 7.2,
+      "pct_delta": 75.609756097561
+    },
+    "fallback_decode_ms": {
+      "cold": 18089.280000000068,
+      "delta": -10487.862000000076,
+      "nodrop": 7601.417999999992,
+      "pct_delta": -57.97832749562192
+    },
+    "fallback_down_ms": {
+      "cold": 13356.187000000038,
+      "delta": -6276.748000000021,
+      "nodrop": 7079.439000000017,
+      "pct_delta": -46.99505929349449
+    },
+    "fallback_prompt_ms": {
+      "cold": 7654.396999999998,
+      "delta": -2303.1450000000095,
+      "nodrop": 5351.251999999989,
+      "pct_delta": -30.089176195068145
+    },
+    "fallback_total_ms": {
+      "cold": 25743.677,
+      "delta": -12791.007,
+      "nodrop": 12952.67,
+      "pct_delta": -49.68601416184642
+    },
+    "fallback_up_ms": {
+      "cold": 12387.489999999994,
+      "delta": -6514.259,
+      "nodrop": 5873.230999999994,
+      "pct_delta": -52.587400676004606
+    },
+    "memory_file_bytes": {
+      "cold": 15102832640,
+      "delta": 1347584,
+      "nodrop": 15104180224,
+      "pct_delta": 0.00892272351897028
+    },
+    "one_src0_ms": {
+      "cold": 5236.633000004192,
+      "delta": 123.76699999997709,
+      "nodrop": 5360.400000004169,
+      "pct_delta": 2.363484322844049
+    },
+    "one_total_ms": {
+      "cold": 6986.810000000334,
+      "delta": 104.30999999981759,
+      "nodrop": 7091.120000000152,
+      "pct_delta": 1.4929560128272072
+    },
+    "pgmajfault": {
+      "cold": 265548,
+      "delta": -145447,
+      "nodrop": 120101,
+      "pct_delta": -54.772395197855005
+    },
+    "prompt_tok_s": {
+      "cold": 1.5,
+      "delta": 0.5,
+      "nodrop": 2.0,
+      "pct_delta": 33.33333333333333
+    },
+    "ttft_ms": {
+      "cold": 29663.442807,
+      "delta": -3008.640317999998,
+      "nodrop": 26654.802489,
+      "pct_delta": -10.142586407030329
+    },
+    "workingset_refault_file": {
+      "cold": 1671406,
+      "delta": 5902153,
+      "nodrop": 7573559,
+      "pct_delta": 353.12503365430064
+    }
+  },
+  "nodrop_case": "/root/lfz/runs/vendor-ds4-16gb/20260703T173550Z-20260704_phaseC_nodrop_profile_io_compute_split_head6b11e5a/france-cpu40-vram0gb",
+  "reason_not_promotable": "no drop_caches; may use external/global hot page cache not charged as cold-start setup"
+}

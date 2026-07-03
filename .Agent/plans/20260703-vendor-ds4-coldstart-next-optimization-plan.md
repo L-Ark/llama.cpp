@@ -14,9 +14,9 @@
 
 ## Current Baseline
 
-- `source_head`: `4be08352fd0416b4933f8522c997ef4ed8badf54`，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `source_head`: `6b11e5ab514e7f7c48b62ef8142e6aa67d00f3ca`，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `runtime_binary_build`: stdout reports `build : b14557-1e9b327d5`。
-- `runtime_source_note`: all-output/server-speculative probes after the accepted SOTA were reverted before commit; committed heads through `4be08352f` contain records/rejected artifacts/plan updates and no promoted runtime-source change beyond the accepted SOTA path. Runtime binary hash remains the accepted SOTA binary hash below.
+- `runtime_source_note`: all-output/server-speculative probes after the accepted SOTA were reverted before commit; committed heads through `6b11e5ab5` contain records/rejected artifacts/plan updates and no promoted runtime-source change beyond the accepted SOTA path. Runtime binary hash remains the accepted SOTA binary hash below.
 - `binary_sha256`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`。
 - `pack_sha256`: `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076` for `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`。
 - `profile_sha256`: `8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b` for `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`。
@@ -2440,3 +2440,54 @@ Next diagnostic plan:
 3. If no-drop greatly reduces fallback ms and major faults, prioritize O_DIRECT/bounded async prefetch for CPU fallback source loads.
 4. If no-drop does not materially reduce fallback ms, treat CPU fallback math as dominant and deprioritize IO/layout work; then design either CPU kernel/fusion changes or a higher-acceptance speculative/MTP source.
 5. Do not promote the no-drop result regardless of speed; it is diagnostic only.
+
+### 2026-07-04 Phase C No-Drop Diagnostic Result And Next Candidate
+
+Phase C no-drop diagnostic:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T173550Z-20260704_phaseC_nodrop_profile_io_compute_split_head6b11e5a/france-cpu40-vram0gb`.
+- Artifacts:
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseC-nodrop-profile-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseC-nodrop-bottleneck-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseC-nodrop-cpu-chunk-analysis.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseC-nodrop-name-profile-analysis.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/phaseC-cold-vs-nodrop-comparison.json`
+- Result: `eval_tok_s=7.2`, `prompt_tok_s=2.0`, `TTFT=26654.802489 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15104180224`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: manual pass. The France answer is complete, coherent, and semantically correct.
+- Not promotable: this run intentionally skipped `drop_caches`; it may use global/external hot page cache that is not a valid cold-start setup, even though the process itself stayed in the 16GB cgroup.
+
+Cold vs no-drop comparison:
+
+| Metric | Cold Phase B | No-drop Phase C | Change |
+| --- | ---: | ---: | ---: |
+| `eval_tok_s` | `4.1` | `7.2` | `+75.6%` |
+| `TTFT ms` | `29663.443` | `26654.802` | `-10.1%` |
+| `pgmajfault` | `265548` | `120101` | `-54.8%` |
+| CPU fallback total | `25743.677 ms` | `12952.670 ms` | `-49.7%` |
+| CPU fallback decode | `18089.280 ms` | `7601.418 ms` | `-58.0%` |
+| CPU fallback up | `12387.490 ms` | `5873.231 ms` | `-52.6%` |
+| CPU fallback down | `13356.187 ms` | `7079.439 ms` | `-47.0%` |
+| CPU chunk max thread | `17238.912 ms` | `9093.164 ms` | `-47.3%` |
+| one-stream `src0_ms` | `5236.633 ms` | `5360.400 ms` | `+2.4%` |
+
+Diagnosis:
+
+- The main cold-start limiter is CPU up/down fallback source/page-fault stall, not gate O_DIRECT or gate VRAM cache. No-drop roughly halves fallback time while preserving gate counters.
+- Existing broad `GGML_MOE_CPU_WILLNEED=1` remains rejected: it reduced major faults but regressed to `4.0 tok/s` on the current SOTA path, likely because it prefetches every active expert just before compute and adds reclaim/synchronization pressure.
+- The next source candidate must be bounded and profile-guided. It should warm a small fixed set once after model mmap is available, not repeatedly advise all active experts inside every fallback op.
+
+Next candidate design: profile-guided one-time CPU up/down prewarm.
+
+- `attempt_id`: `20260704-cpu-prewarm-top512-profile`
+- `attempt_kind`: `implementation/default-off/cold-page-stall-reduction`
+- `hypothesis`: A one-time top512 up/down expert prewarm, driven by the Phase B fallback profile, can move the most valuable cold pages into the 16GB cgroup page cache before decode without repeatedly prefetching every active expert. This targets the exact cold/no-drop gap while avoiding the rejected broad WILLNEED behavior.
+- `profile`: `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top512.tsv`, created from Phase B fallback profile and sorted by decode fallback contribution. It contains `512` unique up/down `(tensor, expert)` entries, `7947.407 ms` decode fallback coverage, and `2176 MiB` payload.
+- `implementation`: add a default-off env path in `ggml/src/ggml-cpu/ggml-cpu.c`:
+  - `GGML_MOE_CPU_PREWARM_PROFILE=<tsv>`;
+  - optional `GGML_MOE_CPU_PREWARM_LIMIT=512`;
+  - on first CPU fallback encounter for each tensor, thread 0 reads matching `(tensor, expert)` rows from the profile and calls existing `ggml_moe_cpu_willneed_pages()` once per listed expert;
+  - record counters at exit: enabled, loaded entries, advised entries, bytes, misses/skipped.
+- Hard upper bound from Phase B decode-only top512 profile: covers `7947.407 ms` decode fallback with `2176 MiB` unique payload; ideal upper bound is about `5.37 tok/s`. This candidate cannot reach `10 tok/s` alone. It is a bounded proof of whether page-stall reduction can beat `4.2` without relying on external warm cache.
+- TTFT risk: prewarming `~2.1 GiB` can add startup/prompt latency. Accepted only if TTFT remains within the 20% gate relative to the accepted SOTA.
+- Acceptance gate: promote only if strict cold `drop_caches` run exceeds `4.2 tok/s`, RAM including page cache stays `<=16000000000`, France answer is manually correct/complete/coherent, gate pack remains `misses=0 direct_failures=0`, gate VRAM hit rate stays accepted-like, and TTFT is within gate.
+- Rollback: if it ties/regresses, fails correctness/RAM/TTFT, or counters show gate-cache disruption, revert runtime source and keep only records/artifacts.
