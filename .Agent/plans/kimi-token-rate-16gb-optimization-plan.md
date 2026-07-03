@@ -26203,6 +26203,120 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep Phase 7AS without any
   profile preload/protect envs.
 
+Phase 7CA result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `cd53bc4e3` (`docs: plan kimi phase7ca q4down hotset`).
+- source status:
+  - env/profile-file experiment;
+  - no source patch;
+  - no source rollback required.
+- generated profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv`.
+- profile size:
+  - `281` lines including header;
+  - `280` profile entries;
+  - top `40` decode Q4_0 down experts from each of seven tensors.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-121636Z-n32-phase7ca-q4down-hotset`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-121636Z-n32-phase7ca-q4down-hotset"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv \
+      GGML_MOE_VRAM_PROFILE_PROTECT=1 \
+      GGML_MOE_VRAM_PROFILE_RESERVE_PCT=65 \
+      GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=7 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- activation:
+  - stderr reports:
+    `profile preload: loaded 280 entries from .../phase7ca-q4down-top40-profile.csv`;
+  - down cache report shows `preloads=282`, `pinned=282`;
+  - upgate cache remains unchanged at `slots=1679`, `preloads=0`,
+    `pinned=0`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `75870.88 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `36115.41 ms / 31`, `0.86 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7CA is slower by `2643.82 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15136993280`;
+  - `file=14892732416`;
+  - `inactive_file=1435521024`;
+  - `active_file=13456646144`;
+  - `kernel=239665152`;
+  - `anon=442368`.
+- decode fallback profile:
+  - type `2` Q4_0 remains the only decode fallback type;
+  - `1736` expert uses;
+  - `2.631 s` fallback_us;
+  - `13.351 GiB` logical expert bytes;
+  - this is effectively unchanged from Phase 7AS n32
+    `2.630 s`, `13.351 GiB`.
+- cache and staging:
+  - down cache hit rate collapsed:
+    - Phase 7AS: `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+    - Phase 7CA: `hits=5553`, `misses=7567`, `hit_rate=42.3%`;
+  - upgate cache was unchanged:
+    `hits=13019`, `misses=16757`, `hit_rate=43.7%`;
+  - expert-pack `iouring_wait_us=16152476`, much worse than Phase 7AS
+    `11567536`;
+  - expert-pack bytes increased from `66242985984` to `71139246080`;
+  - main pinned `host_stage=19519.029 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - gate pinned copies increased from `4160` to `6030`, with gate
+    `host_stage=2490.025 ms`;
+  - down profile regressed to `42.009 ms/call`, driven by higher
+    `cuda_batch=4.736 ms/call`.
+- current-down overlap:
+  - Phase 7AS:
+    `planned_jobs=3664`, `completed_jobs=3664`, `worker_us=3244613`;
+  - Phase 7CA:
+    `planned_jobs=282`, `completed_jobs=282`, `worker_us=303991`;
+  - the protected hotset made most current-down overlap loads appear as cache
+    hits or miss scheduling no longer planned, but the net cache hit rate and
+    wall time were much worse.
+
+Gap analysis:
+
+- The narrow Q4_0 hotset did not reduce the measured Q4_0 CPU fallback bucket;
+  it remained about `2.63 s`.
+- Protecting `282` down slots damaged the broader down-cache working set:
+  misses more than doubled, total cache hit fell, and iouring wait increased by
+  about `4.58 s`.
+- This confirms that the down cache's value comes from flexible LRU reuse across
+  many down tensors, not from pinning the hottest Q4_0 fallback experts.
+- Future placement work must be dynamic and byte/critical-path aware. Static
+  protected profiles are too rigid even when narrowly targeted.
+
+Decision:
+
+- Reject Phase 7CA.
+- Do not run second n32 or n96.
+- Keep Phase 7AS without profile preload/protect envs.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
