@@ -1192,6 +1192,104 @@ Decision:
   - best observed diagnostic/candidate `77239.32 ms / 77`, `1.00 tok/s`, not
     promoted because it lacks repeat promotion.
 
+## Phase 7DF: deeper io_uring and pinned staging queue
+
+Timestamp: 2026-07-03T18:43:20Z.
+
+Status: planned before implementation.
+
+Current bottleneck:
+
+- Phase 7DE confirmed that the tiny IQ3_XXS sign-unpack compute probe is not a
+  reproducible improvement.
+- The remaining accepted n96 path still has substantial movement wait:
+  - expert pack iouring repeat:
+    `iouring_wait_us=31659917`;
+  - expert pack detail:
+    `inflight_avg=2.99`, `inflight_max=8`;
+  - pinned staging:
+    `slots=8`, `slot=7.44 MiB`;
+  - type22 up/gate profile:
+    `up_wait=5.807 ms`, `gate_wait=6.056 ms`, while type18 has no stage jobs.
+- `inflight_max=8` exactly matches the current `GGML_MOE_IO_DEPTH=8`, so the
+  queue may be capped during bursts.
+
+Hypothesis:
+
+- Increase queue capacity and pinned slots together:
+  - `GGML_MOE_IO_DEPTH=16`;
+  - `GGML_MOE_IO_REFILL_BATCH=8`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`.
+- This may reduce iouring wait during bursty expert-pack reads and reduce slot
+  wait when current/down/upgate staging overlaps.
+- The math and routing are unchanged, so correctness risk is low; the main
+  risks are:
+  - higher pinned host memory;
+  - more in-flight I/O causing contention or worse scheduling;
+  - TTFT increase.
+
+Theoretical bound:
+
+- Extra pinned staging memory is small relative to the 16GB host limit:
+  - main slots: `8 * 7.44 MiB ~= 59.5 MiB` extra;
+  - gate slots: another `~59.5 MiB` if separately allocated;
+  - expected total extra pinned memory is roughly `120 MiB`, plus small queue
+    bookkeeping.
+- Hard speed bound is the wait component visible in Phase 7DE repeat:
+  - expert-pack wait: `31.66 s`;
+  - type22 up/gate wait is around `5.8-6.1 ms/call` for `1386` calls.
+- Realistic gain is much smaller because some wait overlaps useful compute:
+  - target improvement: `0.3-1.5 s` on n96;
+  - anything larger needs confirmation from profile counters.
+
+Execution:
+
+1. Commit and push this plan before running.
+2. Create a reproducible runner copied from `/tmp/run_phase7cc_repro.sh` with
+   only these env changes:
+
+```text
+GGML_MOE_IO_DEPTH=16
+GGML_MOE_IO_REFILL_BATCH=8
+GGML_MOE_STAGE_PINNED_SLOTS=16
+```
+
+3. Keep all accepted Phase 7CC settings unchanged:
+   - `VRAM_MIB=15000`;
+   - `UPGATE_PCT=60`;
+   - `IQ2_UPGATE_PARALLEL=1`;
+   - cold start;
+   - 16GB cgroup guard.
+4. Run n96 candidate:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e19d2f626
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7df-io16-pinned16
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7df_io16_repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality pass on the France prompt;
+- TTFT <= `106331.72 ms`;
+- host RAM below the 16GB cgroup limit including page cache;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`;
+- if candidate passes, run one n96 repeat before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n96 is slower, quality fails, TTFT regresses too much, or memory exceeds
+  the cgroup behavior, reject Phase 7DF and keep Phase 7CC as SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
