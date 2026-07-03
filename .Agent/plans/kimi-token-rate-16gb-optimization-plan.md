@@ -19429,3 +19429,109 @@ Decision:
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
   - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
   - n96 confirm decode `84173.24 ms / 77`.
+
+## Phase 7AW - retest 40 CPU threads on Phase 7AS residual fallback
+
+Design timestamp: 2026-07-03 CST.
+
+Reason:
+
+- The current accepted Phase 7AS runtime has two remaining visible decode
+  buckets:
+  - same-type `IQ3_XXS` up/gate compute: about `18.4 ms/call`;
+  - residual down CPU fallback, mostly Q4_0 decode fallback.
+- Phase 7AS n96 fallback-pack mmap report:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - hits `4286`, misses `26`;
+  - bytes served from expert-pack mmap `35391799296`;
+  - therefore the residual decode down fallback is mostly CPU compute over
+    expert-pack mmap, not GGUF page-fault IO.
+- Phase 7T showed lowering CPU threads to `24` or `16` worsened decode under
+  Phase 7P. It did not test increasing threads under the Phase 7AS runtime.
+- Earlier old-architecture `THREADS=40` tests were before the current
+  expert-pack mmap fallback, SQPOLL, prompt-after mmap drops, and IQ2 parallel
+  up/gate SOTA. They are not authoritative for the current bottleneck.
+
+Current bottleneck:
+
+- Phase 7AS n96 confirmation:
+  - decode `84173.24 ms / 77`;
+  - down profile `fallback_t0=16.178 ms/call`;
+  - fallback CSV `decode,type=2`: `4312` calls, `8.067 GiB`, `5.291 s`;
+  - `kimi_cpu_fallback_pack_mmap`: hits `4286`, misses `26`.
+- Phase 7AS n32 confirmation:
+  - decode `33471.59 ms / 31`;
+  - fallback CSV `decode,type=2`: `1736` calls, `4.399 GiB`, `2.630 s`.
+
+Hypothesis:
+
+- Change only:
+
+```sh
+THREADS=40
+```
+
+- This changes `-t` and `-tb` from `32` to `40`.
+- Keep every accepted Phase 7AS runtime env unchanged:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - SQPOLL, IO depth `8`, refill batch `4`;
+  - pinned slots `8`;
+  - current down overlap, down parallel staging, pack mmap fallback, mmap drops.
+
+Theoretical upper bound:
+
+- If the residual Q4_0 CPU fallback scales from 32 to 40 threads, the CPU
+  fallback portion could improve by at most `32/40 = 0.8x`.
+- For the n32 `decode,type=2` fallback bucket (`2.630 s`), a perfect scaling
+  upper bound saves about `0.526 s`.
+- For n96 (`5.291 s`), the upper bound saves about `1.06 s`.
+- This is a small but relevant gain. It can be erased if the extra CPU threads
+  compete with io_uring completion, pinned staging, CUDA launch scheduling, or
+  memory bandwidth.
+
+Experiment:
+
+- No source change.
+- Use `/tmp/run_phase7as_repro.sh`.
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7aw-7as-threads40"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=40 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Same hard gates as Phase 7AS:
+  - cold start;
+  - `memory.peak<=15899996160`, `oom=0`;
+  - TTFT `<=106331.72 ms`;
+  - coherent France answer;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - non-empty `fallback-profile.csv`;
+  - standard reproduction artifacts.
+- Performance:
+  - first n32 must beat Phase 7AS n32 confirmation `33471.59 ms / 31`;
+  - n32 confirmation must also beat `33471.59 ms / 31`;
+  - n96 candidate and confirmation must both beat Phase 7AS n96 confirmation
+    `84173.24 ms / 77`.
+- Mechanism:
+  - fallback CSV `decode,type=2` time should drop or the improvement is not
+    considered explained;
+  - if decode improves but fallback time does not, inspect whether prompt/TTFT,
+    iouring wait, or staging changed before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If the first n32 is slower than Phase 7AS confirmation, reject immediately and
+  keep Phase 7AS as SOTA.
