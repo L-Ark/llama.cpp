@@ -20589,6 +20589,135 @@ Decision:
   - generate a per-token route lookahead schedule that prefetches only entries
     proven to be used soon without pinning them.
 
+### Phase 7CW - default-off Q4_0 down batch allowlist smoke
+
+Start time:
+
+- 2026-07-03T16:38:54Z.
+
+Current bottleneck:
+
+- Phase 7CU and 7CV ruled out static down-cache profile preload:
+  - broad protected preload collapsed down hit rate;
+  - tiny non-protected preload improved n32 by noise but failed n96.
+- Phase 7BE ruled out broad detached same-type down overlap:
+  - it reached `100%` down hit rate but added enough staging/H2D work to slow
+    n32.
+- Phase 7CK/7CL ruled out current trace-prefetch env sweeps:
+  - broad trace prefetch improved cache hits but added IO;
+  - minimal trace prefetch broke output semantics.
+- The remaining independent bucket from Phase 7CJ is decode Q4_0 fallback:
+  - total decode type `2` fallback time `2.597 s` over n32;
+  - top layers:
+    - layer `18`: `485.512 ms`;
+    - layer `6`: `417.400 ms`;
+    - layer `9`: `415.376 ms`;
+    - layer `8`: `367.208 ms`;
+    - layer `7`: `359.144 ms`;
+    - layer `10`: `322.672 ms`;
+    - layer `15`: `229.480 ms`.
+
+Hypothesis:
+
+- CUDA already has Q4_0 MMVQ/MMQ support, but `moe_stream_batch.cu` currently
+  excludes `GGML_TYPE_Q4_0` from the MoE stream allowlist.
+- Add a default-off, down-only allowlist:
+
+```sh
+GGML_MOE_STREAM_Q4_0_DOWN=1
+GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE=6-10,15,18
+```
+
+- Only `ggml_cuda_moe_stream_batch()` for `ffn_down_exps` should accept Q4_0
+  when the env is enabled and the tensor layer matches the range.
+- Up/gate Q4_0 should remain unsupported unless a separate future phase proves
+  it safe.
+
+Why this can improve token rate:
+
+- Moving Q4_0 down rows from CPU fallback to the existing GPU/cache/pack path
+  should reduce the Phase 7CJ `2.597 s` decode fallback bucket.
+- It avoids the failed residency/preload mechanisms and uses the existing
+  selected-expert routing and cache infrastructure.
+- The change is default-off and layer-scoped, so failures can be isolated.
+
+Theoretical upper bound:
+
+- n32 hard upper bound is the full Q4_0 decode fallback bucket:
+  `2.597 s`.
+- The scoped layer set covers all top Q4_0 decode fallback rows from Phase 7CJ,
+  so ideal local upper bound is close to the full bucket.
+- Realistic gain is lower because GPU staging, H2D, and D2H are not free. A
+  first successful n32 might save `0.3-1.2 s`.
+- If Q4_0 MMVQ is slower than CPU fallback or increases cache pressure, decode
+  will regress.
+
+Implementation:
+
+- Source change, default-off:
+  - add `q4_0_down_stream_enabled()`;
+  - add `q4_0_down_layer_allowed(src0_name)`;
+  - keep `moe_stream_type_supported()` unchanged for up/gate;
+  - in `ggml_cuda_moe_stream_batch()`, accept Q4_0 only if:
+    - tensor is `ffn_down_exps`;
+    - `GGML_MOE_STREAM_Q4_0_DOWN=1`;
+    - layer is in `GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE`;
+  - add `GGML_TYPE_Q4_0` to `launch_moe_mmvq_compact_batch()` only for the down
+    launch path.
+- Do not change cache size, split, IO depth, pinned slots, prompt, or sampling.
+
+Reproduction:
+
+1. Build and n4 smoke:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7cw_repro.sh
+# append Q4 env, down CSV, and fallback CSV outputs to env.txt
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n4-phase7cw-q4down-smoke"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cw_repro.sh
+```
+
+2. If n4 passes prefix quality and activation, run n32 with the same script.
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`,
+    `memory.peak<=15899996160`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_STREAM_Q4_0_DOWN=1`;
+  - `env.txt` contains `GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE=6-10,15,18`;
+  - stderr shows a Q4_0 down stream activation line;
+  - fallback profile shows decode type `2` rows/time lower than Phase 7CJ;
+  - down CSV shows type `2` rows for the scoped layers accepted by CUDA batch.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - both n96 runs must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, revert source.
+- If n4 output is wrong, Q4 activation is missing, or CUDA errors occur, revert
+  immediately.
+- If n32 is slower, quality fails, TTFT/RAM/read gates fail, or fallback type
+  `2` is not reduced, reject and revert unless the code is useful as a
+  default-off diagnostic probe.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
