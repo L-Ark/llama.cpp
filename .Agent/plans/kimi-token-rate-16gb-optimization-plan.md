@@ -26046,6 +26046,163 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+### Phase 7CA - narrow protected Q4_0 down hotset preload
+
+Start time:
+
+- 2026-07-03T12:13:53Z.
+
+Current bottleneck and evidence:
+
+- The global split experiments `55`, `62`, and `65` all failed. The next
+  optimization must be narrower than a whole-cache upgate/down split.
+- Phase 7AS fallback profile shows decode CPU fallback is concentrated in
+  Q4_0 down tensors:
+  - n32 decode fallback total:
+    - type `2` only;
+    - `1736` expert uses;
+    - `2.630 s` fallback_us;
+    - `13.351 GiB` logical expert bytes.
+  - n96 decode fallback total:
+    - type `2` only;
+    - `4312` expert uses;
+    - `5.291 s` fallback_us;
+    - `33.161 GiB` logical expert bytes.
+- The n96 fallback rows are concentrated in seven Q4_0 down tensors:
+  - `blk.6.ffn_down_exps.weight`;
+  - `blk.7.ffn_down_exps.weight`;
+  - `blk.8.ffn_down_exps.weight`;
+  - `blk.9.ffn_down_exps.weight`;
+  - `blk.10.ffn_down_exps.weight`;
+  - `blk.15.ffn_down_exps.weight`;
+  - `blk.18.ffn_down_exps.weight`.
+- Broad profile preload was rejected in Phase 7AD because it loaded `13996`
+  entries and perturbed both down and upgate. This phase intentionally avoids
+  broad preload.
+
+Hypothesis:
+
+- Generate a narrow profile from the accepted Phase 7AS n96
+  `fallback-profile.csv`:
+  - keep only `phase=decode`, `src0_type=2`, `ffn_down_exps` rows;
+  - select top `40` experts by count from each of the seven Q4_0 down tensors;
+  - output at most `280` profile entries in the runtime profile-file format.
+- Enable profile protection with a high reserve:
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`;
+  - `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=65`.
+- For the down cache with `806` slots, reserve `~524` slots for normal LRU and
+  allow only `~282` protected profile slots. This should pin the narrow Q4_0
+  hotset without consuming the whole down pool.
+- Keep `GGML_MOE_VRAM_CACHE_POLICY` unset so eviction remains the accepted LRU
+  policy for unprotected slots.
+
+Theoretical upper bound:
+
+- The n32 Q4_0 decode fallback local profile is `2.630 s`; eliminating all of
+  it is impossible because some work is CPU fallback and some bytes still need
+  first-use movement.
+- Pinning the top `~280` Q4_0 down experts can at best reduce repeated reloads
+  for these seven layers.
+- A realistic n32 ceiling is `0.3-1.0 s`, only if the protected hotset reduces
+  fallback or staging more than it harms the unprotected down cache.
+- If the protected hotset displaces useful non-Q4 down experts, decode will
+  regress through higher main pinned host-stage or higher expert-pack wait.
+
+Implementation:
+
+- Env/profile-file only; no source patch.
+- Generate:
+  `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv`
+  from:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm/fallback-profile.csv`.
+- Profile generation command:
+
+```bash
+mkdir -p /root/lfz/runs/vendor-kimi-token-rate/profiles
+python3 - <<'PY'
+import csv, collections
+src = "/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm/fallback-profile.csv"
+dst = "/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv"
+by_tensor = collections.defaultdict(list)
+with open(src) as f:
+    for r in csv.DictReader(f):
+        if r["phase"] != "decode": continue
+        if r["src0_type"] != "2": continue
+        if "ffn_down_exps" not in r["tensor"]: continue
+        by_tensor[r["tensor"]].append(r)
+rows = []
+for tensor in sorted(by_tensor):
+    selected = sorted(by_tensor[tensor], key=lambda r: int(r["count"]), reverse=True)[:40]
+    rows.extend(selected)
+rows.sort(key=lambda r: int(r["count"]), reverse=True)
+cum = 0
+with open(dst, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["rank","count","expert_bytes","cumulative","tensor_base","expert_idx","tensor"])
+    for rank, r in enumerate(rows, 1):
+        count = int(r["count"])
+        expert_bytes = int(r["expert_bytes"])
+        cum += count
+        w.writerow([rank, count, expert_bytes, cum, "0x0", int(r["expert_idx"]), r["tensor"]])
+print(dst, len(rows))
+PY
+```
+
+- Run strict cold n32 with only these env deltas over Phase 7AS:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_RESERVE_PCT=65
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=7
+GGML_MOE_VRAM_CACHE_POLICY=
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ca-q4down-hotset"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ca-q4down-top40-profile.csv \
+      GGML_MOE_VRAM_PROFILE_PROTECT=1 \
+      GGML_MOE_VRAM_PROFILE_RESERVE_PCT=65 \
+      GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=7 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - profile file exists and has `281` lines including header;
+  - `env.txt` contains the five profile env deltas;
+  - stderr reports profile preload loaded entries only for the Q4_0 down
+    hotset;
+  - down cache report shows nonzero `pinned` and not more than about `282`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env/profile-file failure needs no source rollback.
+- If n32 is slower or fails a hard gate, reject and keep Phase 7AS without any
+  profile preload/protect envs.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
