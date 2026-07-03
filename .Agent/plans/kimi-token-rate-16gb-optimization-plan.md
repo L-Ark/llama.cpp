@@ -21554,3 +21554,150 @@ Decision:
 - Do not retry full same-type down overlap unless a narrower policy is designed
   first, such as limiting preloads to layers/types where `cuda_batch` benefit
   exceeds the added staging/H2D cost.
+
+## Phase 7BF - Q4_0 decode fallback overchunk probe
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- The only decode GGUF/CPU fallback bucket in the Phase 7AS n32 confirmation is
+  Q4_0 down fallback:
+
+```text
+decode,type=2 count=1736 calls=1736 bytes=13.351 GiB fallback=2.630 s
+```
+
+- It is concentrated in seven Q4_0 down tensors, each with `248` decode expert
+  rows:
+  - `blk.6.ffn_down_exps.weight`;
+  - `blk.7.ffn_down_exps.weight`;
+  - `blk.8.ffn_down_exps.weight`;
+  - `blk.9.ffn_down_exps.weight`;
+  - `blk.10.ffn_down_exps.weight`;
+  - `blk.15.ffn_down_exps.weight`;
+  - `blk.18.ffn_down_exps.weight`.
+- Phase 7AW with `THREADS=40` slightly reduced local fallback time
+  (`fallback_t0` around `35.371 ms/call` versus Phase 7AS `36.549 ms/call`),
+  but total decode regressed because the global thread count hurt the rest of
+  the runtime.
+- Phase 7AX chunk-size `128` was rejected. Re-reading the code explains why a
+  simple chunk-size change is not the right lever:
+  - Q4 decode fallback has `nr1` usually `1`, so default `chunk_size=64`;
+  - for `THREADS=32`, `nchunk0*nchunk1` is less than `nth*4`;
+  - the generic fallback logic then discards the chunk-size plan and sets
+    `nchunk0=nth`, giving one chunk per thread;
+  - therefore chunk sizes `32`, `64`, and `128` all tend to collapse back to
+    the same one-chunk-per-thread schedule.
+
+Hypothesis:
+
+For Q4_0 decode fallback only, keep the global runtime at `THREADS=32`, but
+override the fallback chunk plan after the generic rechunk condition to create
+more chunks than threads, for example `nchunk0 = min(nr0, nth * 4)`. This should
+allow dynamic work stealing via `atomic_current_chunk` and capture some of the
+local fallback benefit seen with `THREADS=40` without increasing global CPU
+contention during up/gate, IO, or prompt.
+
+Why this can improve token rate:
+
+- The residual Q4_0 fallback is CPU compute over expert-pack mmap data; read
+  misses are already rare, so scheduling/load balance is the plausible lever.
+- The current one-chunk-per-thread fallback leaves no opportunity for a fast
+  thread to take more work after finishing its assigned row range.
+- Overchunking only Q4_0 decode fallback is narrower than increasing all
+  runtime threads and should not alter GPU scheduling or prompt behavior.
+
+Theoretical upper bound:
+
+- Phase 7AS n32 Q4 decode fallback is `2.630 s`.
+- Phase 7AW suggests extra parallelism can reduce local fallback by roughly
+  `3%` (`36.549 -> 35.371 ms/call`) while hurting global runtime.
+- A work-stealing overchunk probe with the same 32 threads should therefore have
+  a realistic n32 upside around `0.1-0.4 s`.
+- Absolute upper bound is the full Q4 fallback bucket, `2.630 s`, but any result
+  claiming more than about `0.5 s` must be explained by separate changes in IO,
+  staging, or cache behavior.
+
+Implementation plan:
+
+- Add a default-off env var:
+
+```sh
+GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK=4
+```
+
+- Scope:
+  - only inside `ggml_compute_forward_mul_mat_id`;
+  - only when `src0->type == GGML_TYPE_Q4_0`;
+  - only when `ids->ne[1] <= 1`, i.e. decode, not prompt;
+  - only when the parsed factor is greater than `1`.
+- Apply after the generic rechunk fallback, setting:
+
+```text
+nchunk0 = min(nr0, nth * factor)
+nchunk1 = 1
+```
+
+  when `nr0 > nr1`; otherwise use the symmetric `nchunk1` path.
+- Emit a one-time activation log with type, factor, `nth`, `nr0`, `nr1`,
+  `nchunk0`, and `nchunk1`.
+
+Experiment:
+
+- Commit this plan before source edits.
+- Implement the default-off probe.
+- Build on the server:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+- Use a Phase 7BF runner derived from `/tmp/run_phase7as_repro.sh` that records
+  `GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK=4` in `env.txt`, `command.txt`, and
+  `script.sh`.
+- Run strict cold n32 first:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bf-q4-overchunk4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 Q4_OVERCHUNK=4 \
+      /tmp/run_phase7bf_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates same as Phase 7AS:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr contains the Q4 overchunk activation line;
+  - `env.txt` contains `GGML_KIMI_Q4_0_FALLBACK_OVERCHUNK=4`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - fallback CSV `decode,type=2` should drop below Phase 7AS `2.630 s`, or the
+    wall improvement must be explained by another measured bucket;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- If n32 is slower, activation is missing, fallback does not improve, quality
+  fails, TTFT fails, or memory exceeds the gate, revert source immediately and
+  record the result as rejected.
+- Do not stack another fallback scheduling change on top of a failed overchunk
+  patch.
