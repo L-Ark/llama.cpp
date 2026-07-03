@@ -20040,6 +20040,35 @@ Perf evidence:
     `ggml_vec_dot_iq3_xxs_q8_K`, and `ggml_vec_dot_q4_0_q8_0`;
   - the dominant cost is page-cache insertion/readahead/reclaim spinlock under
     the strict 16GB cgroup, not the arithmetic self-time of the Q4 function.
+- Decode-window analysis:
+  - derived from the same `perf.data` using the TTFT boundary:
+    `perf report --time 662151.45,662206.60`;
+  - additional artifacts:
+    `perf-report-decode-flat-nochildren.txt` and
+    `perf-report-decode-flat-children.txt`;
+  - decode-window samples: `135K`, lost samples `0`;
+  - flat self-time:
+    - `51.27%` `libgomp.so.1.0.0` worker/wait symbol;
+    - `29.51%` `[kernel] __pv_queued_spin_lock_slowpath`;
+    - `6.08%` `[kernel] io_sq_thread`;
+    - `0.43%` `ggml_vec_dot_q4_0_q8_0`;
+    - `0.32%` `ggml_vec_dot_iq3_xxs_q8_K`;
+    - `0.12%` `ggml_vec_dot_q3_K_q8_K`;
+    - `0.10%` `ggml_vec_dot_iq2_s_q8_K`.
+  - flat children-time:
+    - `51.67%` children / `51.27%` self in the libgomp worker/wait symbol;
+    - `36.30%` children in `asm_exc_page_fault`;
+    - `35.37%` children in `filemap_fault`;
+    - `33.80%` children in `filemap_add_folio`;
+    - `29.65%` self/children in `__pv_queued_spin_lock_slowpath`;
+    - `17.27%` children in `try_to_free_mem_cgroup_pages`;
+    - `6.10%` children / `0.43%` self in `ggml_vec_dot_q4_0_q8_0`;
+    - `5.10%` children / `0.10%` self in `ggml_vec_dot_iq2_s_q8_K`;
+    - `3.12%` children / `0.04%` self in `ggml_vec_dot_iq4_xs_q8_K`.
+  - This confirms the full-run perf report was partly prompt-contaminated, but
+    the decode-only window still shows the same file-backed page-fault/memcg
+    problem. It also shows that libgomp wait/imbalance is a larger decode
+    self-time bucket than Q4 arithmetic.
 
 Interpretation:
 
