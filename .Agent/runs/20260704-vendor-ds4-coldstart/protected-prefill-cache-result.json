@@ -1,0 +1,161 @@
+{
+  "artifact": "protected-prefill-cache-result",
+  "date_utc": "2026-07-03T23:17:00Z",
+  "status": "rejected_no_new_sota_source_reverted",
+  "source_head_before_patch": "2d8d69e5c",
+  "current_sota_eval_tok_s": 4.4,
+  "implementation": {
+    "env": "GGML_MOE_STREAM_ONE_PREFILL_PROTECT=1",
+    "default_off": true,
+    "source_reverted_after_rejection": true
+  },
+  "runs": {
+    "default_off_guard": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T230647Z-20260704_prefill_protect_default_off_guard/france-cpu40-vram0gb",
+      "eval_tok_s": 4.3,
+      "prompt_tok_s": 1.8,
+      "ttft_ms": 32714.155432,
+      "elapsed_seconds": 64.41,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15084904448,
+      "memory_max_events": 17025,
+      "pgmajfault": 272839,
+      "workingset_refault_file": 1696576,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "manual_correctness_ok": true,
+      "prefill": {
+        "limit": 3000,
+        "attempted": 3000,
+        "inserted": 3000,
+        "bytes": 13369344000,
+        "elapsed_ms": 4505.345,
+        "pack_misses": 0,
+        "read_failures": 0
+      },
+      "pack": {
+        "hits": 4886,
+        "misses": 0,
+        "reads": 4886,
+        "bytes": 21774204928,
+        "direct_reads": 4886,
+        "direct_failures": 0,
+        "direct_fallbacks": 0
+      },
+      "vram_cache": {
+        "hits": 33265,
+        "misses": 1886,
+        "hit_rate": 94.6,
+        "protected_slots": 0
+      },
+      "trace": {
+        "all_gate": {
+          "rows": 35151,
+          "src0_ms": 6721.699,
+          "total_ms": 8078.077
+        },
+        "gate_hits": {
+          "rows": 33265,
+          "src0_ms": 4540.922,
+          "total_ms": 5549.124
+        },
+        "gate_misses": {
+          "rows": 1886,
+          "src0_ms": 2180.777,
+          "total_ms": 2528.953
+        },
+        "cache_inserts": {
+          "rows": 600,
+          "src0_ms": 709.509,
+          "total_ms": 820.281
+        }
+      },
+      "hashes": {
+        "summary_json": "2f3fcad00d27b8b8fa551de0ea582f6a11fc009c8e913e9661214d900a8d524c",
+        "stdout_txt": "55ec23f41df6a6e1d416e6a43535cfa6cb8f92e7a230c3ce497b0a30c02ee587",
+        "stderr_txt": "7b3a96edb9cba09c4c898e19e3553492c757cb705a7856b16050236ba6f143fe",
+        "environment_txt": "5bacc636a877b3e49e6948605a7fd83ff6340aa750c70b7ace5c64250bc9b1c3",
+        "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+        "one_trace_csv": "5f6216726a888754d90507117fe54bf2e5dacd32a757a1189dd25120c7707017"
+      },
+      "verdict": "guard passed correctness/RAM/TTFT, same hit/miss shape as SOTA, but measured 4.3 tok/s due to run variance"
+    },
+    "protected_3192": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T230900Z-20260704_prefill_protect_3192_candidate/france-cpu40-vram0gb",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 1.8,
+      "ttft_ms": 31898.253672,
+      "elapsed_seconds": 63.35,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15101079552,
+      "memory_max_events": 16977,
+      "pgmajfault": 272037,
+      "workingset_refault_file": 1718029,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "manual_correctness_ok": true,
+      "prefill": {
+        "limit": 3192,
+        "attempted": 3192,
+        "inserted": 3192,
+        "bytes": 14224982016,
+        "elapsed_ms": 4813.064,
+        "pack_misses": 0,
+        "read_failures": 0
+      },
+      "pack": {
+        "hits": 4720,
+        "misses": 0,
+        "reads": 4720,
+        "bytes": 21034434560,
+        "direct_reads": 4720,
+        "direct_failures": 0,
+        "direct_fallbacks": 0
+      },
+      "vram_cache": {
+        "hits": 33623,
+        "misses": 1528,
+        "hit_rate": 95.7,
+        "protected_slots": 3192
+      },
+      "trace": {
+        "all_gate": {
+          "rows": 35151,
+          "src0_ms": 6648.259,
+          "total_ms": 7930.953
+        },
+        "gate_hits": {
+          "rows": 33623,
+          "src0_ms": 4851.826,
+          "total_ms": 5852.773
+        },
+        "gate_misses": {
+          "rows": 1528,
+          "src0_ms": 1796.433,
+          "total_ms": 2078.18
+        },
+        "cache_inserts": {
+          "rows": 0,
+          "src0_ms": 0,
+          "total_ms": 0
+        }
+      },
+      "hashes": {
+        "summary_json": "e220528e502e87042e132b6d1938d61bee80ca96ec57ff580f56cb6afd4390cd",
+        "stdout_txt": "d46478e3064f967037f23332bfc197dd06ddcd780757bd3b1d39f3385681ccc3",
+        "stderr_txt": "db403ec91aff34a457f91e5d8140d3af69d4597d8914460e8620c16d15d0e527",
+        "environment_txt": "a95f7c1f092d668200e818d5ff19183e0b096fb48c5dfbc895282eaefb103863",
+        "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+        "one_trace_csv": "bcac798a3efb37116d7406639933f0b5a0d53069c1e0786cc36a4a03d4f95aaf"
+      },
+      "verdict": "rejected/tie: hit-rate target achieved, but eval_tok_s only equals 4.4 and does not exceed SOTA"
+    }
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "manual_correctness_verdict": "pass for both runs",
+  "conclusion": "Protected prefill reaches the predicted 95.7% hit rate and 1528 misses, but no token-rate improvement appears. The source patch was reverted. Next work should optimize the miss path cost or preserve a small runtime insert pool rather than fully disabling runtime cache inserts."
+}

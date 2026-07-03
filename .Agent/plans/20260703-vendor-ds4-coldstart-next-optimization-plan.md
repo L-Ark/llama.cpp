@@ -5037,3 +5037,62 @@ Rejection rules:
 - Reject if default-off guard regresses materially.
 - Reject if protected top3192 does not exceed `4.4 tok/s`, fails correctness, exceeds TTFT gate, breaks RAM gate, or shows pack direct failures/fallbacks.
 - If rejected, revert the source patch and push only documentation/artifact records.
+
+### 2026-07-03T23:17Z Protected Prefill Cache Policy Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/protected-prefill-cache-result.json`
+- artifact sha256: `5838dc88d1fb47d8b930b81ea88f5afd9bd52451c12f3998d1da139b949084cb`
+
+Source status:
+
+- Source patch was reverted after rejection.
+- No protected-prefill source change is retained in the final worktree.
+
+Results:
+
+| Run | eval tok/s | prompt tok/s | TTFT ms | memory peak | memory file | cache hit rate | protected slots | verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| default-off top3000 guard | `4.3` | `1.8` | `32714.155432` | `16000000000` | `15084904448` | `94.6%` | `0` | guard shape ok |
+| protected top3192 | `4.4` | `1.8` | `31898.253672` | `16000000000` | `15101079552` | `95.7%` | `3192` | rejected/tie |
+
+Run paths:
+
+- default-off guard: `/root/lfz/runs/vendor-ds4-16gb/20260703T230647Z-20260704_prefill_protect_default_off_guard/france-cpu40-vram0gb`
+- protected top3192: `/root/lfz/runs/vendor-ds4-16gb/20260703T230900Z-20260704_prefill_protect_3192_candidate/france-cpu40-vram0gb`
+
+Correctness:
+
+- Both runs produced the same complete, coherent France answer and passed manual correctness review.
+
+Key counters:
+
+- default-off top3000: `hits=33265 misses=1886 hit_rate=94.6% protected=0`, pack `direct_failures=0 direct_fallbacks=0`.
+- protected top3192: `hits=33623 misses=1528 hit_rate=95.7% protected=3192`, pack `direct_failures=0 direct_fallbacks=0`.
+- protected top3192 had `cache_inserts=0`, as intended.
+
+Trace:
+
+| Run | all gate src0 ms | all gate total ms | miss rows | miss src0 ms |
+| --- | ---: | ---: | ---: | ---: |
+| default-off top3000 | `6721.699` | `8078.077` | `1886` | `2180.777` |
+| protected top3192 | `6648.259` | `7930.953` | `1528` | `1796.433` |
+
+Artifact hashes:
+
+- default-off `summary.json`: `2f3fcad00d27b8b8fa551de0ea582f6a11fc009c8e913e9661214d900a8d524c`
+- default-off `stdout.txt`: `55ec23f41df6a6e1d416e6a43535cfa6cb8f92e7a230c3ce497b0a30c02ee587`
+- default-off `stderr.txt`: `7b3a96edb9cba09c4c898e19e3553492c757cb705a7856b16050236ba6f143fe`
+- default-off `one_trace.csv`: `5f6216726a888754d90507117fe54bf2e5dacd32a757a1189dd25120c7707017`
+- protected `summary.json`: `e220528e502e87042e132b6d1938d61bee80ca96ec57ff580f56cb6afd4390cd`
+- protected `stdout.txt`: `d46478e3064f967037f23332bfc197dd06ddcd780757bd3b1d39f3385681ccc3`
+- protected `stderr.txt`: `db403ec91aff34a457f91e5d8140d3af69d4597d8914460e8620c16d15d0e527`
+- protected `one_trace.csv`: `bcac798a3efb37116d7406639933f0b5a0d53069c1e0786cc36a4a03d4f95aaf`
+
+Conclusion:
+
+- Rejected. Protected prefill achieved the predicted miss reduction (`1528` misses) but did not improve token rate beyond `4.4`.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+- This suggests the next bottleneck is not only miss count; the remaining source movement, sync/scatter overhead, or loss of runtime insert reuse matters.
+- Next source-level direction should preserve a small runtime insert pool or reduce miss-path H2D/sync cost, rather than fully disabling runtime cache insertions.
