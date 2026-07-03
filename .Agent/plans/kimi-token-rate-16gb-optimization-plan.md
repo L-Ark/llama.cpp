@@ -1771,7 +1771,7 @@ Next direction:
 
 Timestamp: 2026-07-03T19:12:10Z.
 
-Status: planned before implementation.
+Status: completed; diagnostic counters kept for now.
 
 Reason:
 
@@ -1857,6 +1857,116 @@ Rollback:
 - If overhead is negligible and the added report is useful, the counters may
   remain because they are profile-only and default to the existing
   `GGML_MOE_BATCH_PROFILE` path.
+
+Execution record:
+
+- Plan commit:
+  - `01b08e9b2 docs: plan kimi phase7di stage job hist`
+- Diagnostic source commit:
+  - `4c4a26938 cuda: add upgate stage job histogram profile`
+- Source change:
+  - extended `batch_profile` with max and histogram counters for up, gate, and
+    combined stage jobs;
+  - updated counters in `up_gate_profile_add`;
+  - printed overall and type-level histograms from
+    `up_gate_profile_report_atexit`;
+  - no behavior change to staging, streams, cache, iouring, or kernels.
+- Build:
+  - server: `/root/lfz/llama.cpp-vendor-kimi`;
+  - target: `build-cuda-batch`;
+  - command: `cmake --build build-cuda-batch -j$(nproc)`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 4c4a26938
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-191320Z-n96-phase7di-stage-job-hist
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+n96 result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-191320Z-n96-phase7di-stage-job-hist`
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `77640.28 ms`
+- decode: `78531.73 ms / 77`, `0.98 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15127916544`
+  - `file=14870859776`
+  - `inactive_file=1162354688`
+  - `active_file=13707870208`
+- expert pack:
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+  - `iouring_wait_us=29620731`
+  - `inflight_avg=2.97`
+  - `inflight_max=8`
+  - `batch_hist=1:750,2-4:5168,5-8:2156,9-16:0,17-32:0,gt32:0`
+
+Stage-job histogram:
+
+- Overall:
+  - `max_up=8`
+  - `max_gate=8`
+  - `max_combined=16`
+  - up: `0:772,1:28,2-4:638,5-8:719,9-16:0,17-32:0,gt32:0`
+  - gate: `0:772,1:28,2-4:638,5-8:719,9-16:0,17-32:0,gt32:0`
+  - combined: `0:772,1:0,2-4:134,5-8:532,9-16:719,17-32:0,gt32:0`
+- Type18:
+  - `calls=771`
+  - all stage jobs are zero.
+- Type22:
+  - `calls=1386`
+  - `max_up=8`
+  - `max_gate=8`
+  - `max_combined=16`
+  - up: `0:1,1:28,2-4:638,5-8:719,9-16:0,17-32:0,gt32:0`
+  - gate: `0:1,1:28,2-4:638,5-8:719,9-16:0,17-32:0,gt32:0`
+  - combined: `0:1,1:0,2-4:134,5-8:532,9-16:719,17-32:0,gt32:0`
+
+Interpretation:
+
+- Phase 7DF's `IO_DEPTH=16` did not help because each individual iouring copy
+  call still had at most 8 read jobs.
+- Phase 7DI proves there is real combined up+gate producer work:
+  - 719 type22 calls would have `9-16` combined stage jobs;
+  - max combined stage jobs is exactly `16`.
+- Therefore a future behavior-changing probe should target up+gate combined
+  staging, not larger global depth alone.
+- The risk is that current scheduling can launch up compute as soon as up copy
+  completes while gate copy continues; naive combined staging could lose this
+  overlap.
+
+Decision:
+
+- Keep the diagnostic counters for now because:
+  - they are profile-only;
+  - n96 passed all correctness and memory gates;
+  - this run did not show measurable overhead.
+- Do not promote the diagnostic run as SOTA because it is a measurement run
+  with new profile output and lacks repeat confirmation.
+- Next phase should plan an env-gated up+gate combined staging probe with a
+  clear rollback path.
 
 ## Phase 0: cold 16GB baseline
 
