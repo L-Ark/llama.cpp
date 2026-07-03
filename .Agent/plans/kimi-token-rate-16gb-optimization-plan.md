@@ -526,6 +526,73 @@ France is a country in Western Europe known for its rich history, culture, and i
     crash precheck, and only accepts the change if the n96 answer is coherent
     and the speedup is reproduced.
 
+## Phase 7DB: IQ3_XXS VDR=4 direct n96 semantic validation
+
+Timestamp: 2026-07-03T17:48:19Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7DA found a real n32 speed candidate for `VDR_IQ3_XXS_Q8_1_MMVQ=4`:
+  `32235.16 ms / 31`, which is `2.96%` faster than Phase 7CC n32
+  `33217.66 ms / 31`.
+- Phase 7DA was rejected because n32 truncated the France paragraph. That is a
+  validation-length failure, not proof that VDR=4 corrupts the model.
+- The user's target is stable n96 semantic output. Therefore the next valid
+  test for this source probe is n96, not another n32 repeat.
+
+Selected change:
+
+- Re-apply only:
+  `VDR_IQ3_XXS_Q8_1_MMVQ=4`.
+- Keep:
+  `VDR_IQ3_XXS_Q8_1_MMQ=2`.
+- No other source, cache, RAM, VRAM, iouring, prompt, seed, or runner changes.
+
+Theory:
+
+- Same bottleneck and bound as Phase 7CY/7CZ/7DA:
+  - n96 type-18 IQ3_XXS up/gate compute bucket: `11834.778 ms` wall.
+  - Hard upper bound if the entire bucket disappeared: `11.835 s`.
+  - Realistic target: 5-10% of that bucket, `0.59-1.18 s` n96.
+- Phase 7DA's n32 speed candidate was `982.50 ms` over 31 decode runs. If this
+  scales to n96, expected n96 decode may improve by about `2-3 s`; if it was
+  noise or prompt/decode mix, n96 may not reproduce.
+
+Acceptance gate:
+
+- Run n96 cold-start candidate under the same cgroup and runner:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7db-iq3-vdr4 \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- Required:
+  - exit `0`;
+  - coherent France short paragraph, no truncated final clause;
+  - TTFT <= `106331.72 ms`;
+  - host RAM below 16GB including page cache;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`.
+- If the candidate passes, run one n96 repeat with the same recipe. The source
+  is accepted only if the repeat also passes quality and remains faster than
+  Phase 7CC n96.
+- If candidate or repeat fails any gate, revert the source probe immediately,
+  commit and push rollback, and record results here.
+
+Reproducibility:
+
+- Record exact commit, branch, remote, build command, model, expert pack, prompt,
+  seed, env, cgroup, cold-start method, output, memory, vram, and MoE counters.
+- A candidate without repeat is diagnostic only.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
