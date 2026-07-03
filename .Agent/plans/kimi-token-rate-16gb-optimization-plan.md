@@ -20859,6 +20859,123 @@ Next implication:
   or prove that the CPU fallback cost has grown enough to dominate the slot-size
   penalty.
 
+### Phase 7CX - post-Q4 rollback standard 7CC reproducibility retest
+
+Start time:
+
+- 2026-07-03T17:01:38Z.
+
+Purpose:
+
+- After rejecting Phase 7CW-v2, the server binary had to be rebuilt from the
+  rollback commit to ensure no Q4_0 down batch code remained active.
+- This is not a new source optimization. It retests the accepted Phase 7CC
+  standard runtime after rollback:
+  - same runner `/tmp/run_phase7cc_repro.sh`;
+  - same strict cold start;
+  - same 16GB cgroup;
+  - same VRAM/pinned/upgate settings.
+
+Source and build:
+
+- Branch:
+  `vendor/kimi-moe-stream-on-vendor`.
+- Commit:
+  `e02b54aa9` (`revert q4 down batch regression`).
+- Remote server pulled and rebuilt:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cc-post-q4rollback-verify"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+n32 candidate:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-170138Z-n32-phase7cc-post-q4rollback-verify`.
+- Hard gates:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `76191.54 ms`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+- Decode:
+  - `32870.58 ms / 31`;
+  - token rate `0.94 tok/s`.
+
+n32 confirmation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-170415Z-n32-phase7cc-post-q4rollback-verify-confirm`.
+- Hard gates:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `76281.92 ms`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+- Decode:
+  - `32603.24 ms / 31`;
+  - token rate `0.95 tok/s`.
+- Standard 7CC activation shape is preserved:
+  - down slots `806`, slot `7.44 MiB`, hit rate `73.6%`;
+  - upgate slots `1679`, slot `5.36 MiB`, hit rate `43.7%`;
+  - no Q4_0 down activation line;
+  - expert-pack bytes `67926376448`.
+
+Interpretation:
+
+- Both n32 runs beat the previous Phase 7CC n32 confirmation
+  `33217.66 ms / 31` without changing runtime env or source behavior.
+- The improvement appears to come from lower cold-run IO/staging variance after
+  rebuild, not from a new algorithm:
+  - candidate main host stage `17205.772 ms`;
+  - confirmation main host stage `17386.481 ms`;
+  - both are lower than the older Phase 7CO/7CC-shaped `17566+ ms` class.
+- Because the result is reproducible on two n32 cold starts, run n96 candidate
+  and confirmation before changing accepted SOTA documentation.
+
+n96 plan:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7cx-post-q4rollback-verify"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+Promotion:
+
+- n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+  `79008.37 ms / 77`.
+- All strict gates remain required:
+  - host RAM under 16GB including page cache;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
