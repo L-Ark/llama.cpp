@@ -26648,6 +26648,172 @@ Rollback:
   appear, or RAM violates the 16GB cgroup cap, reject and keep the original
   `kimi-iq3s-france.expert-pack` in SOTA.
 
+Phase 7CC result - accepted as new SOTA:
+
+- result time:
+  - 2026-07-03T12:57:00Z.
+- accepted env delta over Phase 7AS:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - all other Phase 7AS runtime settings remain unchanged.
+- reproducible runner:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7as_repro.sh /tmp/run_phase7cc_repro.sh
+sed -i 's#kimi-iq3s-france.expert-pack#kimi-iq3s-france-l12-upgate-v2.expert-pack#g' /tmp/run_phase7cc_repro.sh
+```
+
+- n32 candidate reproduction:
+
+```bash
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cc-l12-upgate-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n32 confirmation reproduction:
+
+```bash
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cc-l12-upgate-pack-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n96 candidate reproduction:
+
+```bash
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7cc-l12-upgate-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n96 confirmation reproduction:
+
+```bash
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7cc-l12-upgate-pack-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n32 candidate:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-123717Z-n32-phase7cc-l12-upgate-pack`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - quality: pass;
+  - TTFT `75245.22 ms`;
+  - decode `33238.54 ms / 31`, `0.93 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - expert pack:
+    `hits=25134 misses=516 read_failures=0 iouring_reads=11655 iouring_bytes=67926376448 iouring_fallbacks=0 iouring_wait_us=13288270 entries=30831`;
+  - main pinned host stage `17462.910 ms`;
+  - gate pinned host stage `1337.567 ms`.
+- n32 confirmation:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124021Z-n32-phase7cc-l12-upgate-pack-confirm`;
+  - quality: pass;
+  - TTFT `79381.18 ms`;
+  - decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - expert pack:
+    `hits=25134 misses=516 read_failures=0 iouring_reads=11655 iouring_bytes=67926376448 iouring_fallbacks=0 iouring_wait_us=12673556 entries=30831`;
+  - main pinned host stage `17392.245 ms`;
+  - gate pinned host stage `1343.540 ms`.
+- n96 candidate:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124316Z-n96-phase7cc-l12-upgate-pack`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - quality: pass;
+  - TTFT `80242.76 ms`;
+  - decode `77239.32 ms / 77`, `1.00 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - expert pack:
+    `hits=62651 misses=1461 read_failures=0 iouring_reads=28899 iouring_bytes=168378384384 iouring_fallbacks=0 iouring_wait_us=29286039 entries=30831`;
+  - main pinned host stage `41761.888 ms`;
+  - gate pinned host stage `2939.617 ms`.
+- n96 confirmation:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124705Z-n96-phase7cc-l12-upgate-pack-confirm`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - quality: pass;
+  - TTFT `80040.07 ms`;
+  - decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - expert pack:
+    `hits=62651 misses=1461 read_failures=0 iouring_reads=28899 iouring_bytes=168378384384 iouring_fallbacks=0 iouring_wait_us=31993861 entries=30831`;
+  - expert pack io_uring:
+    `batches=8074 submit_calls=8074 wait_calls=23559 cqes=28899 inflight_avg=2.99 inflight_max=8`;
+  - main pinned host stage `42483.097 ms`, H2D `10331.188 ms`;
+  - gate pinned host stage `2987.401 ms`, H2D `2296.917 ms`;
+  - current down overlap:
+    `planned_jobs=9109 completed_jobs=9109 missing_pack=99 worker_us=8458138`;
+  - up/gate type profile:
+    - type `18`: `wall=14.776 ms/call`;
+    - type `22`: `wall=6.391 ms/call`;
+  - CPU MoE profile:
+    - up_gate `12.538 ms/call`;
+    - down `19.204 ms/call`.
+
+Comparison against Phase 7AS:
+
+- n32 confirmation improved from `33471.59 ms / 31` to
+  `33217.66 ms / 31`, a `253.93 ms` decode gain.
+- n96 confirmation improved from `84173.24 ms / 77` to
+  `79008.37 ms / 77`, a `5164.87 ms` decode gain.
+- n96 candidate improved even more, to `77239.32 ms / 77`.
+- n32 expert-pack misses dropped from `1179` to `516`.
+- n96 expert-pack misses dropped from `3102` to `1461`.
+- The bigger pack also reduced upgate exposed staging cost:
+  - n96 gate pinned host stage improved from Phase 7AS `4945.195 ms` to
+    `2939.617-2987.401 ms`;
+  - n96 main pinned host stage improved from Phase 7AS `48189.734 ms` to
+    `41761.888-42483.097 ms`.
+
+Gap analysis:
+
+- The n32 gain is small because total decode is already dominated by mandatory
+  expert movement and residual down CPU fallback, while the removed pack misses
+  are a minority of all selected experts.
+- The n96 gain is large and reproducible because the longer decode amplifies
+  fewer pack misses and substantially lower exposed host staging for upgate.
+- iouring wait itself did not universally drop; the improvement comes from
+  reducing fallback/missing-pack exposure and shortening pinned host-stage
+  critical-path time, not from a raw SSD bandwidth increase.
+
+Decision:
+
+- Accept Phase 7CC as the new SOTA.
+- Production SOTA must use:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `UPGATE_PCT=60`, `IQ2_UPGATE_PARALLEL=1`.
+- Current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
