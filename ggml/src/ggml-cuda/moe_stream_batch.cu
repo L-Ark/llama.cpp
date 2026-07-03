@@ -6197,39 +6197,72 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     return parallel_fail();
                 }
             } else {
-                bool up_copy_ok = true;
-                bool gate_copy_ok = true;
-                std::thread up_thread([&]() {
-                    up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
-                });
-                std::thread gate_thread([&]() {
-                    gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
-                });
+                const bool combined_stage = expert_pack_env_bool("GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE", false) &&
+                    bc.ev_up_copy_aux_done;
+                static std::atomic<int> first_combined_stage{0};
+                if (combined_stage && first_combined_stage.fetch_add(1) == 0) {
+                    std::fprintf(stderr, "[moe_stream] up/gate combined CPU staging active\n");
+                }
+                if (combined_stage) {
+                    std::vector<stage_copy_job> combined_jobs;
+                    combined_jobs.reserve(up_jobs.size() + gate_jobs.size());
+                    combined_jobs.insert(combined_jobs.end(), up_jobs.begin(), up_jobs.end());
+                    combined_jobs.insert(combined_jobs.end(), gate_jobs.begin(), gate_jobs.end());
+                    if (!copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)) {
+                        clear_stage_jobs(up_jobs);
+                        clear_stage_jobs(gate_jobs);
+                        return parallel_fail();
+                    }
+                    if (cudaEventRecord(bc.ev_up_copy_aux_done, bc.up_stream) != cudaSuccess ||
+                            cudaStreamWaitEvent(bc.gate_stream, bc.ev_up_copy_aux_done, 0) != cudaSuccess) {
+                        return parallel_fail();
+                    }
+                    if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
+                    if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                        return parallel_fail();
+                    }
+                    if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
 
-                up_thread.join();
-                if (!up_copy_ok) {
-                    gate_thread.join();
-                    clear_stage_jobs(up_jobs);
-                    clear_stage_jobs(gate_jobs);
-                    return parallel_fail();
-                }
-                if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
-                if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
-                    gate_thread.join();
-                    return parallel_fail();
-                }
-                if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+                    if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+                    if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
+                    if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                        return parallel_fail();
+                    }
+                } else {
+                    bool up_copy_ok = true;
+                    bool gate_copy_ok = true;
+                    std::thread up_thread([&]() {
+                        up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
+                    });
+                    std::thread gate_thread([&]() {
+                        gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
+                    });
 
-                if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
-                gate_thread.join();
-                if (!gate_copy_ok) {
-                    clear_stage_jobs(up_jobs);
-                    clear_stage_jobs(gate_jobs);
-                    return parallel_fail();
-                }
-                if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
-                if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
-                    return parallel_fail();
+                    up_thread.join();
+                    if (!up_copy_ok) {
+                        gate_thread.join();
+                        clear_stage_jobs(up_jobs);
+                        clear_stage_jobs(gate_jobs);
+                        return parallel_fail();
+                    }
+                    if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
+                    if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                        gate_thread.join();
+                        return parallel_fail();
+                    }
+                    if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+                    if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+                    gate_thread.join();
+                    if (!gate_copy_ok) {
+                        clear_stage_jobs(up_jobs);
+                        clear_stage_jobs(gate_jobs);
+                        return parallel_fail();
+                    }
+                    if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
+                    if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                        return parallel_fail();
+                    }
                 }
             }
         } else {
