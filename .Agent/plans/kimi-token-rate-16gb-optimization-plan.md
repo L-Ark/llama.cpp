@@ -25650,3 +25650,123 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+### Phase 7BW - reduce iouring refill burst from 4 to 2
+
+Start time:
+
+- 2026-07-03T11:44:45Z.
+
+Current accepted SOTA baseline:
+
+- Phase 7AS n32 confirmation:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-154750Z-n32-phase7as-iq2-upgate-parallel-confirm`;
+  - decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - TTFT `80106.15 ms`;
+  - quality pass on `Please introduce France in a short paragraph.`;
+  - memory peak `15899996160`;
+  - expert-pack `iouring_wait_us=11567536`;
+  - main pinned `host_stage=18631.890 ms`, `slot_wait=53.288 ms`;
+  - gate pinned `host_stage=2245.529 ms`.
+- Phase 7AS n96 confirmation:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm`;
+  - decode `84173.24 ms / 77`, `0.91 tok/s`;
+  - TTFT `77844.70 ms`;
+  - quality pass.
+
+Bottleneck diagnosis:
+
+- The accepted SOTA is still dominated by expert movement/staging rather than
+  arithmetic:
+  - expert-pack iouring wait is about `11.57 s` in the n32 confirmation;
+  - main pinned host staging is about `18.63 s`;
+  - down cache hit rate is only about `73.6%`, so many selected experts still
+    cross SSD -> host/pinned -> GPU during decode.
+- Phase 7BV proved that reducing pinned slots from 8 to 4 makes the runtime
+  slot-starved:
+  - main slot wait increased from `53.288 ms` to `311.944 ms`;
+  - main host staging increased from `18631.890 ms` to `21324.471 ms`;
+  - decode regressed by `3645.81 ms`.
+- Phase 7AZ showed that increasing refill burst to 8 is also harmful. The
+  remaining untested side is whether a smaller refill batch can reduce iouring
+  burst contention while keeping the eight pinned slots available.
+
+Hypothesis:
+
+- Keep `GGML_MOE_STAGE_PINNED_SLOTS=8`, but reduce
+  `GGML_MOE_IO_REFILL_BATCH` from `4` to `2`.
+- This may reduce queue burstiness and tail wait in the shared expert-pack
+  path without starving pinned slot availability.
+- It should not affect math, selected experts, cache layout, quantization, or
+  prompt/decode semantics.
+
+Theoretical upper bound:
+
+- This only changes refill pacing. It cannot remove the mandatory bytes moved
+  for cache misses, so the ceiling is limited to queueing/tail latency.
+- With Phase 7AS n32 expert-pack wait at `11.57 s`, a plausible best case is
+  reducing `5-10%` of that wait, or about `0.6-1.2 s`.
+- If refill batch 2 underfills iouring, the regression should show as higher
+  `iouring_wait_us`, higher pinned `host_stage`, or lower effective inflight.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7bw_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Change only:
+
+```sh
+GGML_MOE_IO_REFILL_BATCH=2
+```
+
+- Keep the accepted Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bw-refill2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bw_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_IO_REFILL_BATCH=2`;
+  - stderr expert-pack report reflects the new refill setting if printed.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If the first n32 is slower or fails any hard gate, reject and keep
+  `GGML_MOE_IO_REFILL_BATCH=4` in SOTA.
