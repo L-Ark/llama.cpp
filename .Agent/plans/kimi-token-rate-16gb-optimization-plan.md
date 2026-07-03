@@ -19907,6 +19907,133 @@ Rollback:
 - Because the code is default-off, an accepted diagnostic commit may remain even
   if the profiled run is slower.
 
+Phase 7CT result - diagnostic accepted:
+
+- result timestamp: 2026-07-03T16:10:00Z.
+- plan commit:
+  `b5a7356f3` (`docs: plan kimi phase7ct upgate profile`).
+- source commit:
+  `fadadea70` (`cuda: add kimi upgate profile csv`).
+- source status:
+  - default-off code path;
+  - enabled only by `GGML_MOE_UP_GATE_PROFILE_OUT`;
+  - no SOTA runtime env change.
+- build:
+  - remote build succeeded:
+    `cmake --build build-cuda-batch -j 32 --target llama-completion`;
+  - only existing warning class remained.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-160653Z-n32-phase7ct-upgate-profile`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-160653Z-n32-phase7ct-upgate-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ct_repro.sh
+```
+
+- activation:
+  - `GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv`;
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv`;
+  - `up-gate-profile.csv`: `870` lines, `869` data rows;
+  - `down-batch-profile.csv`: `1645` lines, `1644` data rows.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `72590.19 ms`;
+  - decode `33025.25 ms / 31`, `0.94 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - cold start under the standard runner.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- memory at finish:
+  - `memory.current.final=15141941248`;
+  - `file=14901178368`;
+  - `inactive_file=3510706176`;
+  - `active_file=11389841408`;
+  - `kernel=236568576`;
+  - `anon=446464`.
+- expert movement:
+  - expert pack `iouring_reads=11655`;
+  - expert pack `iouring_bytes=67926376448`;
+  - expert pack `iouring_wait_us=13202330`;
+  - pinned main `host_stage=17318.082 ms`, `h2d=4154.188 ms`;
+  - pinned gate `host_stage=1307.184 ms`, `h2d=913.639 ms`;
+  - down cache hit rate `73.6%`;
+  - upgate cache hit rate `43.7%`.
+
+Top up/gate findings:
+
+- Up/gate movement/stage is not the primary bottleneck:
+  - largest per-layer total `stage_ms` is only about `1.27 ms` for the whole
+    n32 run;
+  - many rows with high miss counts still have tiny `stage_ms`;
+  - therefore targeting up/gate stage/movement cannot plausibly yield the next
+    large token-rate gain.
+- Top up/gate `wall_ms` is kernel/compute dominated for IQ3_XXS cached layers:
+  - `blk.60` type `18/18`: wall `644.846 ms`, kernel `633.753 ms`,
+    up/gate misses `0/0`;
+  - `blk.5` type `18/18`: wall `542.494 ms`, kernel `539.988 ms`,
+    up/gate misses `0/0`;
+  - `blk.3` type `18/18`: wall `477.846 ms`, kernel `475.141 ms`,
+    up/gate misses `0/0`;
+  - `blk.4` type `18/18`: wall `475.956 ms`, kernel `473.366 ms`,
+    up/gate misses `0/0`.
+- Top IQ2_S up/gate wait/compute rows are smaller than down movement:
+  - `blk.1` type `22/22`: wall `234.201 ms`, kernel `231.483 ms`,
+    up/gate misses `179/179`;
+  - `blk.10` type `22/22`: wall `221.177 ms`, kernel `218.559 ms`,
+    up/gate misses `168/168`;
+  - `blk.16` type `22/22`: high wait but total remains far below the top down
+    movement rows.
+
+Top down comparison from the same run:
+
+- Down remains the largest directly compressible movement bucket:
+  - `blk.1.ffn_down_exps.weight`, type `11`:
+    stage `696.971 ms`, wall `702.384 ms`, hits `74`, misses `174`;
+  - `blk.2.ffn_down_exps.weight`, type `11`:
+    stage `658.877 ms`, wall `664.098 ms`, hits `98`, misses `150`;
+  - `blk.4.ffn_down_exps.weight`, type `23`:
+    stage `368.159 ms`, wall `396.839 ms`, hits `79`, misses `169`;
+  - `blk.60.ffn_down_exps.weight`, type `11`:
+    stage `362.158 ms`, wall `368.986 ms`, hits `86`, misses `170`.
+
+Gap analysis:
+
+- The earlier hypothesis that up/gate could hide a large movement bottleneck is
+  not supported by per-call CSV.
+- Current up/gate work is either:
+  - already cache-resident and kernel dominated, especially IQ3_XXS layers; or
+  - miss-heavy but much smaller in total wall time than the largest down rows.
+- The best next target is still down movement for a small set of layers, but it
+  must avoid the contention that made Phase 7CP/7CQ non-reproducible.
+
+Decision:
+
+- Accept Phase 7CT as diagnostic instrumentation.
+- Keep source commit `fadadea70` because it is default-off and produced the
+  required reproducible artifacts.
+- Do not promote any runtime env from this phase to SOTA.
+- Keep Phase 7CC as current SOTA.
+- Next plan should target down movement for `blk.1`, `blk.2`, then optionally
+  `blk.4`/`blk.60`, using a design that does not steal CPU/IO resources from
+  up/gate on the same critical path. Candidate directions:
+  - true detached prefetch with bounded outstanding jobs and no synchronous join
+    inside current up/gate;
+  - post-prompt/pre-decode seed of only the recurring early down experts if it
+    can be done before TTFT gate is exceeded;
+  - or a down-cache residency policy that protects these rows without broad
+    trace prefetch.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
