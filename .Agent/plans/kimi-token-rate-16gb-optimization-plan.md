@@ -4379,6 +4379,105 @@ Decision:
   Future pack work must prove that the missing entries are actually used by
   runtime miss events, not just absent from the index.
 
+## Phase 7DU: current SOTA full-profile refresh after overlay pack
+
+Start time:
+
+- 2026-07-04T01:45:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DS changed the SOTA by moving `blk.1/2` down reads from GGUF-backed
+  staging to expert-pack overlay reads.
+- Phase 7DT showed that static pack coverage alone is not enough for the next
+  step:
+  - adding missing `blk.4/60` entries did not change runtime expert-pack bytes
+    or misses;
+  - decode regressed.
+- The Phase 7DS accepted runs did not include:
+  - up-gate CSV;
+  - route trace;
+  - TTFT trace.
+- Therefore the next optimization must start with a fresh bottleneck
+  breakdown under the actual Phase 7DS SOTA.
+
+Purpose:
+
+- Run one n32 cold-start diagnostic with Phase 7DS SOTA env and extra profiling.
+- Identify the largest current compressible bucket:
+  - up/gate kernel/compute;
+  - up/gate stage/wait;
+  - down stage by tensor;
+  - Q4_0 CPU fallback;
+  - expert-pack iouring wait;
+  - pinned staging/H2D;
+  - page-cache refaults.
+
+Hypothesis:
+
+- After `blk.1/2` overlay, remaining large stage rows are no longer simple pack
+  coverage misses. The next useful target is likely one of:
+  - up/gate type `18` compute/kernel;
+  - Q4_0 CPU fallback layers;
+  - pack staging scheduling for already-covered down rows.
+
+Implementation:
+
+- No source patch.
+- Use current accepted commit and env:
+  - commit `2ebf65e54` or later docs commit containing the same source;
+  - main pack v2;
+  - Phase 7DS overlay pack.
+- Copy `/tmp/run_phase7ds_repro.sh` to `/tmp/run_phase7du_repro.sh`.
+- Add:
+
+```sh
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv
+GGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv
+GGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 0e12b0d31
+cp /tmp/run_phase7ds_repro.sh /tmp/run_phase7du_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\nGGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv\nGGML_MOE_BATCH_PROFILE_OUT=$RUN/route-profile.csv\nGGML_MOE_ROUTE_TRACE_OUT=$RUN/route-trace.csv\nGGML_MOE_TTFT_TRACE_OUT=$RUN/ttft-trace.csv' /tmp/run_phase7du_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7du-sota-profile-refresh"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7du_repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- required artifacts exist:
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`;
+  - `fallback-profile.csv`.
+
+Result handling:
+
+- Do not promote this diagnostic even if decode is faster.
+- Record top bottleneck rows and totals in this plan.
+- The next behavior-changing phase must target the largest measured bucket and
+  include a hard upper-bound estimate from Phase 7DU data.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
