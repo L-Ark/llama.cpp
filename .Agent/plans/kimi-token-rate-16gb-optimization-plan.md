@@ -20415,6 +20415,180 @@ Rollback:
 - If n32 regresses, quality fails, TTFT/RAM gates fail, or mechanism shows no
   reduction in `blk.1/2` misses/stage, reject and do not run n96.
 
+Phase 7CV result - rejected:
+
+- result timestamp: 2026-07-03T16:36:00Z.
+- plan commit:
+  `0f870b412` (`docs: plan kimi phase7cv top16 down preload`).
+- source status:
+  - env/data-only experiment;
+  - no source patch;
+  - no source rollback required.
+- generated profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cv-l1-l2-down-top16-profile.csv`.
+- profile generation:
+  - source:
+    `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cr-l1-l2-down-profile.csv`;
+  - `33` lines total:
+    - header;
+    - `16` rows for `blk.1.ffn_down_exps.weight`;
+    - `16` rows for `blk.2.ffn_down_exps.weight`;
+  - sorted by `count` descending per tensor;
+  - no protected pinning.
+- runtime env delta:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7cv-l1-l2-down-top16-profile.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=0
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-162621Z-n32-phase7cv-top16-l1-l2-down`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `75932.74 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `32667.71 ms / 31`, `0.95 tok/s`;
+  - faster than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `549.95 ms`.
+- activation/mechanism:
+  - profile preload loaded `32` entries;
+  - down cache pinned `0`;
+  - down cache hit rate unchanged at `73.6%`;
+  - expert pack bytes unchanged versus 7CC/7CT shape:
+    `67926376448`;
+  - expert pack `iouring_wait_us=12795155`;
+  - main pinned `host_stage=17221.654 ms`;
+  - gate pinned `host_stage=1198.506 ms`.
+- target rows:
+  - `blk.1`: stage `679.355 ms`, wall `685.281 ms`,
+    hits `74`, misses `174`;
+  - `blk.2`: stage `539.748 ms`, wall `545.342 ms`,
+    hits `98`, misses `150`;
+  - `blk.4`: stage `333.478 ms`, wall `361.229 ms`,
+    hits `79`, misses `169`;
+  - `blk.60`: stage `328.408 ms`, wall `335.467 ms`,
+    hits `86`, misses `170`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-162913Z-n32-phase7cv-top16-l1-l2-down-confirm`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `74005.06 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `32881.64 ms / 31`, `0.94 tok/s`;
+  - faster than Phase 7CC n32 confirmation by `336.02 ms`.
+- activation/mechanism:
+  - down cache hit rate unchanged at `73.6%`;
+  - down cache pinned `0`;
+  - expert pack bytes unchanged at `67926376448`;
+  - expert pack `iouring_wait_us=13083922`;
+  - main pinned `host_stage=17285.792 ms`;
+  - gate pinned `host_stage=1316.696 ms`.
+- target rows:
+  - `blk.1`: stage `682.829 ms`, wall `688.340 ms`,
+    hits `74`, misses `174`;
+  - `blk.2`: stage `691.008 ms`, wall `696.319 ms`,
+    hits `98`, misses `150`;
+  - `blk.4`: stage `379.012 ms`, wall `411.239 ms`,
+    hits `79`, misses `169`;
+  - `blk.60`: stage `348.990 ms`, wall `355.958 ms`,
+    hits `86`, misses `170`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-163156Z-n96-phase7cv-top16-l1-l2-down`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `77593.47 ms`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- decode:
+  - `80342.78 ms / 77`, `0.96 tok/s`;
+  - slower than Phase 7CC n96 confirmation `79008.37 ms / 77` by
+    `1334.41 ms`;
+  - fails promotion.
+- activation/mechanism:
+  - down cache hit rate `73.4%`, same as 7CC shape;
+  - down cache pinned `0`;
+  - expert pack bytes `168378384384`, same as 7CC shape;
+  - expert pack `iouring_wait_us=31712114`;
+  - main pinned `host_stage=43503.328 ms`;
+  - gate pinned `host_stage=2772.723 ms`.
+- target rows:
+  - `blk.1`: stage `1146.672 ms`, wall `1161.130 ms`,
+    hits `180`, misses `436`;
+  - `blk.2`: stage `1323.254 ms`, wall `1336.891 ms`,
+    hits `224`, misses `392`;
+  - `blk.4`: stage `689.588 ms`, wall `726.182 ms`,
+    hits `181`, misses `435`;
+  - `blk.60`: stage `585.402 ms`, wall `600.056 ms`,
+    hits `244`, misses `380`.
+
+Gap analysis:
+
+- The tiny non-protected top16 hotset avoided Phase 7CU's cache collapse:
+  - pinned stayed `0`;
+  - down hit rate stayed at the 7CC/7CT shape.
+- However, it did not change hit/miss counts or expert-pack bytes. The n32
+  improvement came from lower observed wait/stage noise, not from a robust
+  residency mechanism.
+- The n96 run shows the mechanism does not scale:
+  - hit/miss counts remained unchanged;
+  - expert-pack bytes stayed unchanged;
+  - decode regressed by `1.33 s`.
+- Therefore top16 non-protected profile preload is not a valid SOTA path.
+
+Decision:
+
+- Reject Phase 7CV.
+- Do not run n96 confirmation.
+- Do not use the phase7cv top16 profile in SOTA.
+- Keep Phase 7CC as accepted SOTA:
+  - n32 confirmation `33217.66 ms / 31`;
+  - n96 confirmation `79008.37 ms / 77`.
+- Keep Phase 7CT default-off diagnostic profiler.
+- Next optimization should stop relying on static profile preload for
+  `blk.1/2` under the current shared down cache. The evidence now says:
+  - broad protected preload collapses cache;
+  - tiny non-protected preload does not alter residency;
+  - same-type overlap can alter residency but adds contention.
+- Next candidate should either:
+  - implement a truly detached prefetch path with bounded jobs and no join in
+    the current token's up/gate path; or
+  - target compute/kernel rows rather than residency; or
+  - generate a per-token route lookahead schedule that prefetches only entries
+    proven to be used soon without pinning them.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
