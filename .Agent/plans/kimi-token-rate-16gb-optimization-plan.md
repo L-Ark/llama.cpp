@@ -1596,7 +1596,7 @@ Decision:
 
 Timestamp: 2026-07-03T19:01:30Z.
 
-Status: planned before diagnostic execution.
+Status: completed; SASS unavailable, PTX/resource/ELF diagnostic recorded.
 
 Reason:
 
@@ -1661,6 +1661,111 @@ Rollback:
 
 - Diagnostic only. After dumping 7DG, reset server back to latest branch head
   `830f1cd31` or newer documentation commit.
+
+Execution record:
+
+- Plan commit:
+  - `daa669116 docs: plan kimi phase7dh sass diff`
+- Server tool limitation:
+  - `/usr/local/cuda-12.9/bin/cuobjdump --dump-sass` failed because
+    `nvdisasm` is not installed on the server;
+  - `PATH` and `NVDISASM_PATH` cannot fix this without the binary;
+  - fallback diagnostics used PTX, ELF metadata, resource usage, and symbol
+    text size.
+
+Baseline artifacts:
+
+- Source:
+  - `daa669116`, whose source state includes the rollback
+    `7e298761d Revert "cuda: probe iq3 xxs q8 pointer hoist"`.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-190249Z-phase7dh-ptx-baseline`
+- Files:
+  - `cuobjdump-resource.txt`
+  - `cuobjdump-ptx.txt`
+  - `cuobjdump-elf.txt`
+  - `nm-demangled.txt`
+  - `type18-resource.txt`
+
+Phase 7DG artifacts:
+
+- Source:
+  - `895e317df cuda: probe iq3 xxs q8 pointer hoist`
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-190353Z-phase7dh-ptx-7dg`
+- Files:
+  - `cuobjdump-resource.txt`
+  - `cuobjdump-ptx.txt`
+  - `cuobjdump-elf.txt`
+  - `nm-demangled.txt`
+  - `type18-resource.txt`
+
+Comparison artifacts:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-190353Z-phase7dh-ptx-compare`
+- Files:
+  - `type18-resource.diff`
+  - `baseline-type18.ptx`
+  - `7dg-type18.ptx`
+  - `baseline-type18.norm.ptx`
+  - `7dg-type18.norm.ptx`
+  - `type18-ptx.diff`
+  - `type18-ptx-summary.txt`
+
+Key results:
+
+- Active `type18,ncols=1` resource is identical:
+  - baseline: `REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+  - Phase 7DG: `REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+- `type18,ncols=2` resource changed:
+  - baseline: `REG:85`
+  - Phase 7DG: `REG:80`
+  - but the accepted active path remains `ncols=1`, so this does not explain
+    n96 behavior.
+- ELF metadata for the active symbol:
+  - baseline `.text` size: `0x1200`
+  - Phase 7DG `.text` size: `0x1200`
+  - register count: `52` in both.
+- PTX extraction for active symbol:
+  - baseline lines: `418`, normalized lines: `378`
+  - Phase 7DG lines: `418`, normalized lines: `378`
+  - opcode counts: no differences.
+- Top PTX ops in both:
+  - `and.b32 34`
+  - `xor.b32 28`
+  - `add.s64 22`
+  - `add.s32 21`
+  - `or.b32 21`
+  - `ld.global.nc.u32 18`
+  - `ld.param.u32 15`
+  - `shr.u32 11`
+  - `prmt.b32 8`
+  - `dp4a.s32.s32 8`
+- The normalized diff is dominated by register-number and temporary-order
+  changes, not opcode-count or code-size changes.
+
+Conclusion:
+
+- Phase 7DG did not create a meaningful PTX-level instruction reduction for
+  the active kernel.
+- The n96 regression is therefore best treated as noise or ptxas scheduling
+  sensitivity, not as evidence for a useful source direction.
+- Stop doing cosmetic source-level type18 probes unless a future diagnostic
+  provides SASS-level or PTX-level evidence for a concrete instruction change.
+- Because `nvdisasm` is missing, a true SASS diff is currently unavailable on
+  this server. Installing CUDA disassembly tools could improve future kernel
+  diagnostics, but it is not necessary for the next optimization direction.
+
+Next direction:
+
+- Move away from type18 cosmetic micro-probes.
+- Focus on producer/batch-formation limits observed in Phase 7DF:
+  - increasing `GGML_MOE_IO_DEPTH` to `16` did not raise effective
+    `inflight_max` above `8`;
+  - batch histograms still stop at `5-8`;
+  - therefore the cap is likely in refill/batch formation or dependency order,
+    not the global io_uring queue depth.
 
 ## Phase 0: cold 16GB baseline
 
