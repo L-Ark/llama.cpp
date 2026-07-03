@@ -21803,3 +21803,123 @@ Decision:
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 - Do not retry Q4 fallback chunking without first measuring inside the Q4 vec-dot
   kernel or designing a tensor-specific kernel/path.
+
+## Phase 7BG - retest io_uring depth 16 on Phase 7AS SOTA
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-154750Z-n32-phase7as-iq2-upgate-parallel-confirm`;
+    decode `33471.59 ms / 31`, `0.93 tok/s`, TTFT `80106.15 ms`.
+  - n96 confirm:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260702-155422Z-n96-phase7as-iq2-upgate-parallel-confirm`;
+    decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Phase 7AS n32 still has a large expert-pack wait bucket:
+  - `iouring_wait_us=11567536`;
+  - `iouring_bytes=66242985984`;
+  - `iouring_reads=11297`;
+  - `inflight_avg=2.91`;
+  - `inflight_max=8`, exactly the current `GGML_MOE_IO_DEPTH=8`.
+- Earlier Phase 7AM tested `IO_DEPTH=16`, but it was before Phase 7AS added the
+  IQ2_S parallel up/gate path and before the current IO/cache traffic shape.
+  Therefore it is not authoritative for the current SOTA.
+- Recent source probes failed because they added compute/staging work. This
+  candidate is env-only and should not alter math, routing, cache policy, or
+  output quality.
+
+Hypothesis:
+
+Increasing `GGML_MOE_IO_DEPTH` from `8` to `16` on the current Phase 7AS runtime
+may reduce read wait when the queue reaches the old depth cap. Because the
+current run reports `inflight_max=8`, the queue is at least sometimes limited by
+the depth setting. If the SSD and io_uring path can use more outstanding work,
+token rate may improve without changing GPU kernels or output semantics.
+
+Why this can improve token rate:
+
+- Current n32 expert-pack wait is `11.57 s`, which is large enough that even a
+  small percentage reduction can matter.
+- This does not increase pinned slots, RAM tier, VRAM cache size, or CPU thread
+  count, so host RAM and TTFT risk should be low.
+- If the true limiter is pinned-slot count, staging order, or H2D rather than
+  io_uring depth, the run should show the same `inflight_avg/max` and no token
+  rate gain; that makes it a clean diagnostic.
+
+Theoretical upper bound:
+
+- Absolute upper bound is the full Phase 7AS n32 expert-pack wait bucket:
+  `11.57 s`, but eliminating all wait is impossible because reads feed H2D and
+  compute dependencies.
+- If depth is the limiter for only the tail of batched reads, a realistic upside
+  is `0.3-1.0 s` on n32.
+- n32 decode lower bound for this env-only probe is therefore roughly
+  `32.5-33.2 s`, or `0.93-0.95 tok/s`.
+- If the run improves by more than `1 s`, mechanism evidence must show lower
+  iouring wait or fewer staging waits; otherwise treat it as noise until a
+  repeat confirms it.
+
+Experiment:
+
+- Env-only; no source patch.
+- Create `/tmp/run_phase7bg_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Parameterize and record:
+
+```sh
+GGML_MOE_IO_DEPTH=16
+```
+
+- Keep all other Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+- Run strict cold n32 first:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bg-7as-depth16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 IO_DEPTH=16 \
+      /tmp/run_phase7bg_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates same as Phase 7AS:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `command.txt` records `IO_DEPTH=16`;
+  - `env.txt` contains `GGML_MOE_IO_DEPTH=16`;
+  - stderr shows `depth=16`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - expert-pack `iouring_wait_us` or staging wait should drop relative to Phase
+    7AS n32, or the wall gain must be explained by another measured bucket;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower or mechanism counters show no credible improvement,
+  reject immediately and keep Phase 7AS as SOTA.
+- Do not test deeper queues such as `32` unless depth16 improves n32 and the
+  mechanism clearly shows lower io_uring wait.
