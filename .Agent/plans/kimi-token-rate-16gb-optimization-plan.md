@@ -25385,3 +25385,85 @@ Rollback:
 - If first n32 is slower, quality fails, TTFT rises above gate, read failures
   appear, or host RAM violates the 16GB cgroup limit, revert source patch and
   record the result.
+
+Phase 7BU result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `121a062ec` (`docs: plan kimi phase7bu prechecked pipeline`).
+- source patch:
+  - env-gated `GGML_MOE_STREAM_IQ3_PIPELINE_COPY=1`;
+  - added `GGML_MOE_STREAM_IQ3_PIPELINE_MAX_GATE_MISSES=4`;
+  - used `batch_cache_contains_slot()` for a non-mutating gate miss precheck;
+  - only planned/inserted up/gate slots for accepted IQ3 calls;
+  - added exit counters for accepted/skipped/failure counts.
+- build:
+  - `cmake --build build-cuda-batch -j$(nproc) --target llama-completion`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-112502Z-n32-phase7bu-iq3-pipeline-gatemiss4`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-112502Z-n32-phase7bu-iq3-pipeline-gatemiss4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bu_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `74506.47 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- activation:
+  - stderr contains
+    `IQ3_XXS prechecked gate-copy pipeline active: max_gate_misses=4`;
+  - exit counter:
+    `calls=311 accepted=124 skipped_zero=0 skipped_over_threshold=187 failures=0 gate_misses=1543 max_gate_misses=8`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `35428.88 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BU is slower by `1957.29 ms`, so it fails the promotion gate.
+- mechanism:
+  - non-mutating precheck avoided the 7BT cache churn:
+    upgate cache misses returned to `16757`, matching Phase 7AS;
+  - threshold 4 accepted `124 / 311` IQ3 calls, much more than 7BT's `20`;
+  - aggregate IQ3 type-18 still worsened:
+    `wall=19.512 ms/call` versus Phase 7AS `18.646 ms/call`;
+  - expert-pack `iouring_wait_us=12701001`, worse than Phase 7AS
+    `11567536` by about `1.13 s`;
+  - iouring bytes rose to `70.21 GB`;
+  - type-22 IQ2_S regressed to `7.374 ms/call` versus Phase 7AS
+    `7.048 ms/call`.
+
+Gap analysis:
+
+- The non-mutating precheck fixed the specific 7BT mistake, but accepting 124
+  calls still adds enough gate staging concurrency to raise global iouring wait.
+- The aggregate IQ3 wall did not improve because accepted-call local gains were
+  diluted by the extra synchronization/staging pressure and skipped calls still
+  use the original serial path.
+- The sequence 7BS/7BT/7BU establishes that IQ3 gate-copy overlap is locally
+  valid but globally blocked by IO/staging contention under the 16GB cold-start
+  constraints.
+
+Decision:
+
+- Reject Phase 7BU.
+- Do not run n96.
+- Revert source patch.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Do not continue the IQ3 pipeline family without a scheduler that reduces
+  global iouring/pinned contention rather than only gating which calls pipeline.
