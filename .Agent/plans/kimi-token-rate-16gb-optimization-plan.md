@@ -4020,6 +4020,168 @@ Rollback:
   not lower `blk.1/2` stage, reject the overlay runtime and keep overlay env out
   of SOTA.
 
+Phase 7DS result - accepted as new SOTA:
+
+- result timestamp: 2026-07-04T01:36:00+08:00.
+- source/plan commit:
+  `2ebf65e54` (`cuda: support overlay expert pack`).
+- source status:
+  - pushed to `wici/vendor/kimi-moe-stream-on-vendor`;
+  - overlay support is default-off unless `GGML_MOE_EXPERT_PACK_OVERLAY` is set.
+- overlay artifact:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- overlay build:
+  - entries `768`;
+  - `blk.1.ffn_down_exps.weight`: `384` entries;
+  - `blk.2.ffn_down_exps.weight`: `384` entries;
+  - bytes `4844421120`, `4.511719 GiB`;
+  - pack size on disk `4.6G`;
+  - header: `GGMLMOEPACKv1`, version `1`, header size `40`,
+    entries `768`, data start `118784`.
+- production SOTA env delta:
+
+```sh
+GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-211340Z-n32-phase7ds-l1l2-overlay-pack`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `78455.77 ms`;
+  - decode `31673.93 ms / 31`, `0.98 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- mechanism:
+  - expert-pack entries `31599`, up from `30831`;
+  - expert-pack misses `192`, down from Phase 7DP/7CC shape `516`;
+  - main pinned host stage `15997.381 ms`, down from Phase 7DP
+    `17636.744 ms`;
+  - `blk.1` stage `147.867 ms`, down from Phase 7DP `724.731 ms`;
+  - `blk.2` stage `138.303 ms`, down from Phase 7DP `685.826 ms`.
+- comparison:
+  - faster than Phase 7CC n32 confirmation `33217.66 ms / 31` by
+    `1543.73 ms`.
+
+n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-211712Z-n32-phase7ds-l1l2-overlay-pack-confirm`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `78620.85 ms`;
+  - decode `31647.69 ms / 31`, `0.98 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- mechanism:
+  - expert-pack entries `31599`;
+  - expert-pack misses `192`;
+  - main pinned host stage `15807.853 ms`;
+  - `blk.1` stage `147.441 ms`;
+  - `blk.2` stage `136.954 ms`.
+- comparison:
+  - faster than Phase 7CC n32 confirmation by `1569.97 ms`.
+
+n96 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-212003Z-n96-phase7ds-l1l2-overlay-pack`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `77695.88 ms`;
+  - decode `77305.28 ms / 77`, `1.00 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- mechanism:
+  - expert-pack entries `31599`;
+  - expert-pack misses `633`, down from Phase 7CC n96 shape `1461`;
+  - expert-pack bytes `173601275904`;
+  - main pinned host stage `40496.752 ms`;
+  - `blk.1` stage `375.662 ms`;
+  - `blk.2` stage `363.140 ms`.
+- comparison:
+  - faster than Phase 7CC n96 confirmation `79008.37 ms / 77` by
+    `1703.09 ms`.
+
+n96 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-212329Z-n96-phase7ds-l1l2-overlay-pack-confirm`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `75089.55 ms`;
+  - decode `77839.21 ms / 77`, `0.99 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- mechanism:
+  - expert-pack entries `31599`;
+  - expert-pack misses `633`;
+  - main pinned host stage `40800.489 ms`;
+  - down profile total `18.412 ms/call`;
+  - `blk.1` stage `366.583 ms`;
+  - `blk.2` stage `354.713 ms`.
+- comparison:
+  - faster than Phase 7CC n96 confirmation by `1169.16 ms`.
+
+Gap analysis:
+
+- The improvement matches the 7DR/7DS hypothesis:
+  - missing `blk.1/2` down pack coverage was causing expensive GGUF-backed
+    staging;
+  - adding a small overlay pack moved those reads to the expert-pack direct
+    path without adding overlap contention.
+- The measured n32 gain `~1.55 s` is close to the hard `blk.1+blk.2` stage
+  bound `~1.41 s` because the run also reduces pack misses and main host stage
+  elsewhere.
+- The n96 gain is smaller but reproducible, `1.17-1.70 s`, and passes quality,
+  TTFT, cold-start, and 16GB host RAM gates.
+- Expert-pack bytes increase because `blk.1/2` now come from the pack instead
+  of GGUF mmap. This is acceptable because decode wall time and page-cache
+  refault pressure improve, and host RAM remains under the cgroup limit.
+
+Decision:
+
+- Accept Phase 7DS as the new SOTA.
+- Current accepted SOTA:
+  - commit `2ebf65e54`;
+  - main pack
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - overlay pack
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`;
+  - n32 confirmation `31647.69 ms / 31`, `0.98 tok/s`;
+  - n96 confirmation `77839.21 ms / 77`, `0.99 tok/s`.
+- Next optimization should apply the same pack-coverage method to other high
+  stage rows that still lack pack coverage, but only after a pack-index
+  diagnostic proves the target is missing and the expected gain exceeds the
+  extra expert-pack read cost.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
