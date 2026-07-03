@@ -1968,3 +1968,105 @@ Next pivot:
 
 - Do not repeat lookahead, n-gram, compact mmap, transient repack, down-batch staging, or CUDA graph probes from already rejected classes.
 - The next candidate must be a different high-bound mechanism with a microbench or short diagnostic gate first. Acceptable classes are: a real compatible DeepSeek draft/MTP artifact, a GGUF/runtime path with actual DeepSeek MTP heads, or a GPU-resident up/down compute path whose staging and compute savings are proven before any full strict-cold France run.
+
+### 2026-07-03 Gate Plus Decode Top32 Up/Down Admission Probe Design
+
+Artifact:
+
+- `.Agent/runs/20260703-vendor-ds4-coldstart/gate-plus-top32-updown-admit-design.json`.
+- Candidate profile: `.Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top32_updown.tsv`, sha256 `928ef314442f25bcfd13bf97d0ba5847883b4aa12b4be1b3730d3fd4456b23d7`.
+
+Design:
+
+- This is an env-only diagnostic using the existing one-stream VRAM cache path. No runtime source change is planned.
+- Preserve the current gate admission profile, then admit only the decode fallback top32 up/down expert tensors from the Phase 1 fallback profile.
+- Set `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_` so the existing substring filter allows gate/up/down names, while the admission profile restricts actual cache insertion to current gate entries plus top32 up/down entries.
+- Keep `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, the current O_DIRECT gate expert pack, top-k policy, `cpu_moe=40`, strict cold `drop_caches`, and 16GB cgroup.
+
+Theory and hard bound:
+
+- Accepted SOTA generation estimate: `gen_time_s=32.875`, `tokens~=138.08`, `eval_tok_s=4.2`.
+- Decode top32 up/down coverage: `1383.3 ms`, payload `0.133 GiB`, equivalent to about `32` current gate cache slots.
+- If every covered fallback millisecond disappeared with zero overhead and zero gate-cache loss, hard upper bound is only `4.38 tok/s`.
+- Therefore this candidate cannot move toward `10 tok/s` by itself. It is allowed only as a one-run low-risk SOTA edge test because it might slightly exceed `4.2 tok/s` if gate cache behavior remains stable.
+
+Accept/reject gates:
+
+- Accept only if strict cold France exceeds `4.2 tok/s`, `correctness_ok=true`, host RAM remains <=16GB including page cache, TTFT is not over the accepted gate by more than 20%, OOM counters stay zero, and gate/pack counters do not show a material regression.
+- Reject immediately if `eval_tok_s <= 4.2`, correctness fails, RAM/TTFT fails, or VRAM cache/gate pack behavior regresses enough to explain a gap.
+- Do not sweep larger top-N values blindly: top64 upper bound is still only about `4.52 tok/s`, while top512 needs about `2.125 GiB` and top2048 still only reaches about `7.35 tok/s` before gate loss. Larger hotsets are not a path to `10 tok/s` under current VRAM constraints.
+
+### 2026-07-03 Gate Plus Decode Top32 Up/Down Env-Only Result
+
+Runs:
+
+- Invalid config: `/root/lfz/runs/vendor-ds4-16gb/20260703T153908Z-20260703_gate_plus_top32_updown_admit/france-cpu40-vram0gb`.
+- Valid strict-cold SOTA-env diagnostic: `/root/lfz/runs/vendor-ds4-16gb/20260703T154249Z-20260703_gate_plus_top32_updown_admit_sotaenv/france-cpu40-vram0gb`.
+
+Result:
+
+- Invalid config omitted the accepted SOTA one-stream DS4/pack/top-k env and did not use cold `drop_caches`; it is not a SOTA diagnostic.
+- Valid config used full SOTA env plus `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_` and the gate+top32 up/down admission profile. It produced `eval_tok_s=1.9`, `prompt_tok_s=1.1`, `TTFT=34390.930213 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, no OOM kill.
+- Manual correctness is rejected despite the runner heuristic passing: the answer ended mid-phrase (`with a thriving economy and`), so it is incomplete for the required France correctness gate.
+- Counters: one expert pack `hits=5334 misses=48878 direct_reads=5334`; VRAM cache `hits=45651 misses=54212 hit_rate=45.7%`; file inputs `204492184`; `workingset_refault_file=6174886`.
+
+Diagnosis:
+
+- Env-only admission is not selective compute. Setting `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_` makes all gate/up/down tensors enter the one-stream GPU path. The admission profile only controls whether an expert is inserted into the VRAM cache; when an up/down expert is not admitted, the code still copies it to the temporary GPU buffer and computes it on GPU.
+- Therefore the valid run measured broad uncached up/down GPU streaming, not top32-only GPU caching. That explains the huge pack misses, low VRAM hit rate, increased file input, slower TTFT, and `1.9 tok/s` regression.
+- This run is rejected and must not be promoted.
+
+### 2026-07-03 Selective Up/Down Admission Gate Probe Design
+
+Design:
+
+- Add a narrow default-off source gate in `ggml/src/ggml-cuda/moe_stream.cu` controlled by `GGML_MOE_STREAM_DECLINE_UNADMITTED_UPDOWN=1`.
+- When enabled, and only for `ffn_up_exps` / `ffn_down_exps`, call the existing admission profile check before entering one-stream execution. If the up/down tensor is not admitted, return `false` so the existing CPU fallback path handles it. Gate tensors keep the current SOTA behavior and are not declined.
+- Keep `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_` and use `.Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top32_updown.tsv`, so gate entries behave as before while only top32 up/down entries can enter one-stream GPU/cache.
+- This patch must be default-off. A default-off guard run is required after rebuild before any candidate run.
+
+Theory and hard bound:
+
+- The top32 decode up/down coverage remains only `1383.3 ms`, with a hard upper bound of about `4.38 tok/s` if all covered time is removed with zero overhead and zero gate loss.
+- This cannot move toward `10 tok/s`; it is only a controlled check of whether tiny selective GPU residency can edge past the `4.2 tok/s` SOTA.
+- Because the margin is small, any extra admission lookup, H2D insert, CUDA scheduling, source page fault, or numerical output drift is enough to reject.
+
+Accept/reject gates:
+
+- First run a default-off guard with current SOTA env. It must remain in the `4.1-4.2 tok/s` class, preserve correctness, and keep pack/cache counters aligned.
+- Then run one strict cold selective-top32 candidate with `GGML_MOE_STREAM_DECLINE_UNADMITTED_UPDOWN=1`.
+- Accept only if it exceeds `4.2 tok/s`, produces a complete coherent France answer, keeps host RAM <=16GB including page cache, TTFT is within the 20% gate, and gate pack/cache counters do not materially regress.
+- Reject and revert the source patch if the candidate is `<=4.2 tok/s`, answer is incomplete/incoherent, RAM/TTFT fails, or counters show broad up/down streaming instead of selective top32 execution.
+
+### 2026-07-03 Selective Top32 Up/Down Admission Result
+
+Artifact:
+
+- `.Agent/runs/20260703-vendor-ds4-coldstart/selective-top32-updown-admit-result.json`.
+
+Runs and results:
+
+| Run | eval_tok_s | prompt_tok_s | TTFT ms | RAM | Correctness | Verdict |
+| --- | ---: | ---: | ---: | --- | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T153908Z-20260703_gate_plus_top32_updown_admit/france-cpu40-vram0gb` | 1.4 | 1.1 | 30792.712491 | 16GB cgroup, no kill | true by heuristic | invalid config: missing SOTA env and cold flag |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T154249Z-20260703_gate_plus_top32_updown_admit_sotaenv/france-cpu40-vram0gb` | 1.9 | 1.1 | 34390.930213 | 16GB cgroup, no kill | manual fail: incomplete answer | rejected |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T155219Z-20260703_selective_updown_default_off_guard/france-cpu40-vram0gb` | 4.0 | 1.6 | 29542.273375 | 16GB cgroup, no kill | true | default-off guard passed counters but not SOTA |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T155425Z-20260703_selective_top32_updown_admit/france-cpu40-vram0gb` | 3.7 | 1.5 | 28952.413959 | 16GB cgroup, no kill | true | rejected |
+
+Counter evidence:
+
+- Default-off guard preserved SOTA-shaped counters: pack `hits=4623 misses=0 direct_reads=4623`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Env-only run proved admission is not selective compute: pack `hits=5334 misses=48878`; VRAM cache `hits=45651 misses=54212 hit_rate=45.7%`; it broadly streamed up/down and regressed to `1.9 tok/s` with an incomplete answer.
+- Selective source-gated run avoided broad streaming but still regressed: pack `hits=4889 misses=1040 direct_reads=4889`; VRAM cache `hits=41298 misses=5929 hit_rate=87.4%`; file inputs `167396552`; `workingset_refault_file=3072103`; `eval_tok_s=3.7`.
+
+Gap analysis:
+
+- The top32 hard bound was only `4.38 tok/s`, so the available upside was tiny.
+- Even when unadmitted up/down returned to CPU fallback, the admitted top32 path added cache admission overhead, extra source reads/page pressure, and some gate-cache churn. The extra misses/refaults outweighed the small covered fallback time.
+- Larger top-N values are not justified: top64/top128 still have low hard upper bounds, while top512+ consumes GiB of VRAM and would materially displace the accepted gate cache. Top2048 cannot reach `10 tok/s` even before gate loss.
+
+Verdict:
+
+- Reject this direction. Do not promote.
+- Temporary source patch `GGML_MOE_STREAM_DECLINE_UNADMITTED_UPDOWN` is reverted after recording this result. Keep only the rejected profile/design/result artifacts.
+- Current accepted SOTA remains `4.2 tok/s`; latest guard remains `4.0-4.1 tok/s` class depending on cold-start variance.

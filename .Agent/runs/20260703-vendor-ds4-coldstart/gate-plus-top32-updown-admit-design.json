@@ -1,0 +1,244 @@
+{
+  "accepted_sota_eval_tok_s": 4.2,
+  "accepted_sota_generation_time_s_estimate": 32.87525938,
+  "accepted_sota_generation_tokens_estimate": 138.07608939600001,
+  "base_gate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+  "base_gate_profile_sha256": "8134c320730e0ba236d103ba4a0b53505b3bab16e69d8bdc2a08607ecfcc274b",
+  "candidate": "gate_plus_decode_top32_updown_admission_env_only",
+  "candidate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top32_updown.tsv",
+  "candidate_profile_sha256": "928ef314442f25bcfd13bf97d0ba5847883b4aa12b4be1b3730d3fd4456b23d7",
+  "decode_fallback_coverage_ms": 1383.2800000000002,
+  "gate_slot_equivalent": 32.0,
+  "hard_upper_eval_tok_s_if_all_top32_decode_fallback_removed": 4.384484307254745,
+  "payload_gib": 0.1328125,
+  "risk": "Hard upper bound is low; any gate-cache eviction, source page faults, or cache insertion overhead can erase the gain. One strict cold run only; reject if <=4.2 tok/s or any gate fails.",
+  "source_head": "70d8d7f21f08f04916aa9adbcff1d3d33c3f082b",
+  "timestamp_utc": "2026-07-03T15:38:16Z",
+  "top32_entries": [
+    {
+      "bytes": 4456448,
+      "calls": 134,
+      "expert": 162,
+      "fallback_ms": 66.593,
+      "tensor": "blk.37.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 117,
+      "expert": 253,
+      "fallback_ms": 58.508,
+      "tensor": "blk.30.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 128,
+      "expert": 124,
+      "fallback_ms": 58.076,
+      "tensor": "blk.32.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 101,
+      "expert": 101,
+      "fallback_ms": 57.0,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 128,
+      "expert": 135,
+      "fallback_ms": 54.229,
+      "tensor": "blk.25.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 106,
+      "expert": 251,
+      "fallback_ms": 46.936,
+      "tensor": "blk.36.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 127,
+      "expert": 24,
+      "fallback_ms": 46.68,
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 127,
+      "expert": 24,
+      "fallback_ms": 46.577,
+      "tensor": "blk.27.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 101,
+      "expert": 66,
+      "fallback_ms": 45.918,
+      "tensor": "blk.22.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 134,
+      "expert": 162,
+      "fallback_ms": 45.638,
+      "tensor": "blk.37.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 117,
+      "expert": 253,
+      "fallback_ms": 44.804,
+      "tensor": "blk.30.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 101,
+      "expert": 66,
+      "fallback_ms": 44.296,
+      "tensor": "blk.22.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 101,
+      "expert": 101,
+      "fallback_ms": 44.114,
+      "tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 125,
+      "expert": 56,
+      "fallback_ms": 43.87,
+      "tensor": "blk.29.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 128,
+      "expert": 124,
+      "fallback_ms": 42.703,
+      "tensor": "blk.32.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 95,
+      "expert": 3,
+      "fallback_ms": 41.264,
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 118,
+      "expert": 246,
+      "fallback_ms": 41.059,
+      "tensor": "blk.34.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 116,
+      "expert": 152,
+      "fallback_ms": 39.898,
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 116,
+      "expert": 152,
+      "fallback_ms": 39.366,
+      "tensor": "blk.27.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 125,
+      "expert": 184,
+      "fallback_ms": 38.189,
+      "tensor": "blk.24.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 124,
+      "expert": 12,
+      "fallback_ms": 37.969,
+      "tensor": "blk.24.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 74,
+      "expert": 166,
+      "fallback_ms": 37.936,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 99,
+      "expert": 93,
+      "fallback_ms": 37.803,
+      "tensor": "blk.17.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 106,
+      "expert": 251,
+      "fallback_ms": 37.674,
+      "tensor": "blk.36.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 118,
+      "expert": 246,
+      "fallback_ms": 37.47,
+      "tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 125,
+      "expert": 184,
+      "fallback_ms": 37.449,
+      "tensor": "blk.24.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 99,
+      "expert": 93,
+      "fallback_ms": 37.066,
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 69,
+      "expert": 60,
+      "fallback_ms": 35.987,
+      "tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 100,
+      "expert": 146,
+      "fallback_ms": 35.958,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 72,
+      "expert": 111,
+      "fallback_ms": 35.001,
+      "tensor": "blk.6.ffn_down_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 128,
+      "expert": 135,
+      "fallback_ms": 33.893,
+      "tensor": "blk.25.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 4456448,
+      "calls": 83,
+      "expert": 141,
+      "fallback_ms": 33.356,
+      "tensor": "blk.12.ffn_up_exps.weight"
+    }
+  ],
+  "topn": 32
+}
