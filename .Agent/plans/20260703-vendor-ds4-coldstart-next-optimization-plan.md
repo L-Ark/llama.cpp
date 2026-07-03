@@ -1075,6 +1075,18 @@ Current SOTA `--no-warmup` diagnostic design:
 - Practice: run strict cold full France with accepted SOTA config plus CLI `--no-warmup`. Preserve `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate admission profile, gate O_DIRECT pack, top-k policy, threads, context, drop_caches, and 16GB cgroup.
 - Acceptance: promote only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and gate pack/cache counters remain aligned with accepted SOTA. If it ties/regresses or any gate fails, reject. No source rollback is needed.
 
+
+Current SOTA `--no-warmup` diagnostic result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T103043Z-20260703T103043Z-current-sota-no-warmup-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: added CLI `--no-warmup`; otherwise accepted gate O_DIRECT config, top-k policy, threads, context, drop_caches, and strict 16GB cgroup.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30784.612204 ms`, `elapsed_seconds=63.84`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15094276096`, `pgmajfault=272537`, `workingset_refault_file=1658322`, `ram_ok=true`, `ram_limit_killed=false`, `oom_seen=false`.
+- Correctness: passed. France answer was semantic, coherent, and complete.
+- Gate/O_DIRECT counters stayed aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; gate VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- Diagnosis: disabling warmup did not improve token rate and TTFT was higher than the pre-candidate baseline guard (`29406.374764 ms`). It does not reduce the current CPU fallback or page/refault bottleneck enough to matter.
+- Verdict: rejected/tie. Keep default warmup behavior for the accepted SOTA path.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
