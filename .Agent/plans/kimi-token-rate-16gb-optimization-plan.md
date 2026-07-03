@@ -227,7 +227,7 @@ path, and cgroup/cold-start notes is rejected even if its token rate is higher.
 
 Timestamp: 2026-07-03T17:33:51Z.
 
-Status: planned before implementation.
+Status: rejected and rolled back.
 
 Reason for this phase:
 
@@ -320,6 +320,68 @@ Rollback criteria:
 - Revert immediately if n32 decode is slower than `33217.66 ms / 31`, TTFT
   exceeds `106331.72 ms`, host RAM reaches or exceeds 16GB, output quality
   fails, or the run cannot be reproduced from its artifacts.
+
+Result:
+
+- Plan commit: `02de4866a`.
+- Probe commit: `98a105ca5` (`VDR_IQ3_XXS_Q8_1_MMVQ=4`,
+  `VDR_IQ3_XXS_Q8_1_MMQ=2`).
+- Rollback commit: `6eef42414`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Build command:
+  `cmake --build build-cuda -j$(nproc)`.
+- n4 smoke run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-173816Z-n4-phase7cz-iq3-vdr4-smoke`.
+- Reproduction command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-173816Z-n4-phase7cz-iq3-vdr4-smoke \
+      N=4 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- n4 smoke metrics:
+  - exit: `0`;
+  - TTFT: `77133.35 ms`;
+  - decode: `4981.60 ms / 3`, `0.60 tok/s`;
+  - memory.max: `15899996160`;
+  - memory.peak: `15899996160`;
+  - memory.current.final: `15153598464`;
+  - expert pack: `hits=3023`, `misses=52`, `read_failures=0`,
+    `iouring_reads=1444`, `iouring_bytes=8426815488`,
+    `iouring_fallbacks=0`;
+  - down cache: `slots=806`, `hits=844`, `misses=404`,
+    `hit_rate=67.6%`;
+  - upgate cache: `slots=1679`, `hits=884`, `misses=2012`,
+    `hit_rate=30.5%`.
+- Exact n4 output:
+
+```text
+France is a country
+```
+
+- Decision:
+  - Reject. The process and CUDA path completed, but the n4 smoke did not
+    satisfy the recorded quality gate because the output was only a fragment,
+    not a coherent short paragraph.
+  - Per rollback criteria, n32/n96 were not run on this source commit.
+  - The source probe was reverted immediately by `6eef42414` and pushed.
+- Gap analysis:
+  - This n4 run is too short to prove the final France paragraph quality gate,
+    but the plan explicitly made n4 quality a hard precondition. Therefore the
+    correct action is rollback, not reinterpretation after the fact.
+  - The run also did not show a smoke-level speed signal worth relaxing the
+    gate: decode was `0.60 tok/s` for three decode runs, with normal cold-start
+    memory pressure and no iouring failures.
+- Next direction:
+  - Do not continue the VDR=4 line without rewriting the plan first.
+  - The next phase should use a validation length that can actually satisfy the
+    fixed semantic paragraph gate, likely n32 as the minimum correctness smoke,
+    while keeping n4 only as a CUDA-crash precheck if explicitly labelled
+    non-promotional.
 
 ## Phase 0: cold 16GB baseline
 
