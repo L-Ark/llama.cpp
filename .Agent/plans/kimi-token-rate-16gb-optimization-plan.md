@@ -20791,6 +20791,74 @@ Rollback:
 - If activation works but n4/n32 quality, RAM, TTFT, or decode time regresses,
   revert immediately and record the exact run directory and failure reason.
 
+Result:
+
+- Source commits tested:
+  - `de55a747e` (`cuda: gate q4_0 down stream batch`);
+  - `ab50c4e6f` (`cpu: allow gated q4 down stream batch`).
+- n4 smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-165150Z-n4-phase7cw-v2-q4down-smoke`
+  - exit `0`;
+  - TTFT `77416.12 ms` class and under gate;
+  - decode `4554.00 ms / 3`, faster than the prior no-activation smoke
+    `4844.78 ms / 3`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - stderr contained
+    `[moe_stream_batch] Q4_0 down batch path active: tensor=blk.6.ffn_down_exps.weight`;
+  - output prefix `France is a country`; n4 quality script failed only because
+    the sample was too short.
+- n32 candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-165450Z-n32-phase7cw-v2-q4down`
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`;
+  - TTFT `77416.12 ms`;
+  - decode `43471.48 ms / 31`, token rate `0.71 tok/s`;
+  - memory peak `15899996160`;
+  - expert pack `read_failures=0`, `iouring_fallbacks=0`;
+  - Q4_0 decode fallback was removed:
+    `fallback_decode_type2_count=0`, `fallback_ms=0.000`;
+  - Q4_0 down batch rows:
+    `down_type2_rows=217`, `stage_ms=2071.983`,
+    `kernel_ms=18.337`, `wall_ms=2126.551`.
+
+Decision:
+
+- Reject Phase 7CW-v2 and revert source.
+- Although the implementation correctly activated Q4_0 down GPU batch and
+  removed decode type `2` CPU fallback, n32 decode regressed by
+  `10253.82 ms` versus Phase 7CC n32 confirmation
+  `33217.66 ms / 31`.
+- The core gap is cache/IO geometry:
+  - Q4_0 down raises the down cache slot size to `7.88 MiB`;
+  - effective down slots drop from the accepted Phase 7CC `806` class to `761`;
+  - candidate down hit rate is only `64.1%`;
+  - candidate expert-pack io_uring bytes rise to `77.99 GB`;
+  - pinned staging reports `22332` copies and `28440.358 ms` host staging.
+- Removing the small Q4_0 CPU fallback bucket is not enough to offset larger
+  down slots, lower residency, and extra staging/H2D traffic.
+
+Rollback status:
+
+- Reverted the Q4_0 source commits with `git revert --no-commit` and committed
+  the rollback with this result record.
+- SOTA remains Phase 7CC:
+  - n32 confirmation
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124021Z-n32-phase7cc-l12-upgate-pack-confirm`,
+    decode `33217.66 ms / 31`, token rate `0.93 tok/s`;
+  - n96 confirmation
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124705Z-n96-phase7cc-l12-upgate-pack-confirm`,
+    decode `79008.37 ms / 77`, token rate `0.97 tok/s`.
+
+Next implication:
+
+- Do not retry Q4_0 down in the shared down cache.
+- Any future Q4_0 attempt must isolate Q4_0 from the accepted down cache geometry
+  or prove that the CPU fallback cost has grown enough to dominate the slot-size
+  penalty.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.

@@ -4385,11 +4385,6 @@ static bool moe_stream_type_supported(ggml_type type) {
         type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
-static bool q4_0_down_stream_enabled() {
-    const char *env = std::getenv("GGML_MOE_STREAM_Q4_0_DOWN");
-    return env && env[0] && env[0] != '0';
-}
-
 static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
     if (!range || !range[0]) return true;
     if (!name) return false;
@@ -4414,15 +4409,6 @@ static bool moe_tensor_layer_in_simple_range(const char *name, const char *range
         r = (*next == ',') ? next + 1 : next;
     }
     return false;
-}
-
-static bool q4_0_down_layer_allowed(const char *name) {
-    return moe_tensor_layer_in_simple_range(name, std::getenv("GGML_MOE_STREAM_Q4_0_DOWN_LAYER_RANGE"));
-}
-
-static bool moe_down_stream_type_supported(ggml_type type, const char *name) {
-    if (moe_stream_type_supported(type)) return true;
-    return type == GGML_TYPE_Q4_0 && q4_0_down_stream_enabled() && q4_0_down_layer_allowed(name);
 }
 
 static bool init_batch_once() {
@@ -4721,7 +4707,6 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
-        case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
@@ -6341,7 +6326,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     };
     if (!init_batch_once()) return decline("init_batch_once");
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
-    if (!moe_down_stream_type_supported(src0_type, src0_name)) return decline("unsupported_type");
+    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
@@ -6361,12 +6346,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
 
     static std::atomic<int> first_batch{0};
-    static std::atomic<int> first_q4_down{0};
     const int batch_call = first_batch.fetch_add(1);
-    if (src0_type == GGML_TYPE_Q4_0 && first_q4_down.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream_batch] Q4_0 down batch path active: tensor=%s\n",
-                     src0_name ? src0_name : "");
-    }
     const char *trace_env = std::getenv("GGML_MOE_BATCH_TRACE");
     if (batch_call == 0) {
         std::fprintf(stderr, "[moe_stream] batched decode path active: experts=%d ne01=%ld ne00=%ld\n",
