@@ -853,7 +853,7 @@ rank  layer  calls  wall_ms   kernel_ms  wall_per_call_ms
 
 Timestamp: 2026-07-03T18:20:41Z.
 
-Status: planned before implementation.
+Status: completed; no source performance change.
 
 Reason for this phase:
 
@@ -912,6 +912,68 @@ Next decision rule:
   preserving `VDR=2`.
 - If register pressure is not high, focus on reducing lookup/sign unpack
   instruction cost or improving memory access grouping.
+
+Result:
+
+- Plan commit: `4f73272d4`.
+- Diagnostic run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-182219Z-phase7dd-iq3-kernel-resource`.
+- Correct CUDA tools:
+  - `/usr/local/cuda-12.9/bin/cuobjdump`;
+  - `/usr/local/cuda-12.9/bin/ptxas`.
+- Build target:
+  `build-cuda-batch/bin/libggml-cuda.so`.
+- Artifacts:
+  - `cuobjdump-resource.txt`;
+  - `cuobjdump-symbols.txt`;
+  - `nm-demangled.txt`;
+  - `iq3-type18-resource-blocks.txt`.
+- Initial tool issue:
+  - `cuobjdump` and `nvdisasm` were not in PATH;
+  - reran with `/usr/local/cuda-12.9/bin/cuobjdump`.
+- Relevant current MoE MMVQ single-column kernel:
+
+```text
+Function _Z13mul_mat_vec_qIL9ggml_type18ELi1ELb0ELb0ELb0EE...
+  REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040
+```
+
+- Related IQ3_XXS kernels:
+
+```text
+mul_mat_vec_q<type18,ncols=8,false,false,false>: REG:156 STACK:64 SHARED:3072
+mul_mat_vec_q<type18,ncols=7,false,false,false>: REG:146 STACK:56 SHARED:2816
+mul_mat_vec_q<type18,ncols=6,false,false,false>: REG:135 STACK:48 SHARED:2560
+mul_mat_vec_q<type18,ncols=5,false,false,false>: REG:127 STACK:40 SHARED:2304
+mul_mat_vec_q<type18,ncols=4,false,false,false>: REG:111 STACK:32 SHARED:4096
+mul_mat_vec_q<type18,ncols=3,false,false,false>: REG:96  STACK:0  SHARED:3328
+mul_mat_vec_q<type18,ncols=2,false,false,false>: REG:85  STACK:0  SHARED:2560
+mul_mat_vec_q<type18,ncols=1,false,false,false>: REG:52  STACK:0  SHARED:1408
+mul_mat_vec_q_moe<type18,c_rows_per_block=2>:    REG:64  STACK:0  SHARED:0
+```
+
+- Comparison with other active single-column MMVQ kernels:
+
+```text
+type18 IQ3_XXS ncols=1: REG:52 STACK:0 SHARED:1408
+type22 IQ2_S   ncols=1: REG:50 STACK:0 SHARED:1408
+type11 Q3_K    ncols=1: REG:80 STACK:0 SHARED:1408
+type23 IQ4_XS  ncols=1: REG:62 STACK:0 SHARED:1792
+```
+
+- Decision:
+  - Register pressure is not the primary suspect for the accepted MoE IQ3_XXS
+    path. The active single-column IQ3_XXS kernel uses only 52 registers, no
+    stack spill, and modest shared memory.
+  - Do not prioritize a register-reduction specialization.
+  - Focus next on instruction/lookup cost inside `vec_dot_iq3_xxs_q8_1`,
+    especially `iq3xxs_grid[...]`, `unpack_ksigns(...)`, and repeated
+    `get_int_b2/get_int_b4` extraction.
+- Next direction:
+  - Write a plan for a tiny IQ3_XXS vec-dot micro-probe that preserves `VDR=2`
+    and attempts to reduce sign unpack or lookup overhead.
+  - Acceptance must use n96 quality and speed gates because Phase 7DA showed n32
+    can give misleading signals.
 
 ## Phase 0: cold 16GB baseline
 
