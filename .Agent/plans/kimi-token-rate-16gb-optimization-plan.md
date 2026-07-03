@@ -5100,6 +5100,248 @@ Result handling:
 - The next behavior-changing phase must target the largest measured 7DY sub
   bucket and include a hard upper-bound calculation.
 
+Phase 7DY result - diagnostic accepted:
+
+- End time: 2026-07-04T06:23:00+08:00.
+- Plan commit before source:
+  `6b200fc60` (`docs: plan kimi phase7dy copy breakdown`).
+- Source commit:
+  `863feaf4b` (`cuda: add moe copy profile csv`).
+- Build:
+  `cmake --build build-cuda-batch -j 32 --target llama-completion` passed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-221844Z-n32-phase7dy-copy-breakdown`.
+- Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 863feaf4b
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7du_repro.sh /tmp/run_phase7dy_repro.sh
+grep -q "GGML_MOE_COPY_PROFILE_OUT" /tmp/run_phase7dy_repro.sh || \
+  sed -i '/^GGML_MOE_TTFT_TRACE_OUT=/a GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv' /tmp/run_phase7dy_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dy-copy-breakdown"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dy_repro.sh
+```
+
+- Exit: `0`, systemd result `success`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT: `82185.93 ms`, below cap.
+- Decode: `32330.60 ms / 31`, `0.96 tok/s`.
+- Memory:
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- Expert pack:
+  - `hits=25458`, `misses=192`;
+  - `read_failures=0`;
+  - `iouring_reads=11979`;
+  - `iouring_bytes=69970116608`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=13399542`;
+  - `entries=31599`.
+- VRAM cache:
+  - down `slots=806`, `hit_rate=73.6%`;
+  - upgate `slots=1679`, `hit_rate=43.7%`.
+- `copy-profile.csv`:
+  - size `2.8 MiB`;
+  - header:
+    `seq,op,tensor,expert_idx,bytes,pack_hit,ram_hit,iouring,slot_wait_ms,host_ms,io_wait_ms,enqueue_ms,h2d_ms,wall_ms`.
+
+Copy-profile aggregate:
+
+- `runtime_load`:
+  - rows `20250`;
+  - bytes `102.523 GiB`;
+  - wall `51999.644 ms`;
+  - slot wait `33.697 ms`;
+  - direct host/read `15579.857 ms`;
+  - io_uring per-job wait/wall `36088.900 ms`;
+  - enqueue `401.632 ms`;
+  - io_uring rows `8484`;
+  - pack-hit rows `20103`.
+- `current_down_overlap`:
+  - rows `3664`;
+  - bytes `21.525 GiB`;
+  - wall `11482.309 ms`;
+  - slot wait `0.990 ms`;
+  - direct host/read `595.620 ms`;
+  - io_uring per-job wait/wall `10880.740 ms`;
+  - enqueue `64.773 ms`;
+  - io_uring rows `3495`;
+  - pack-hit rows `3628`.
+
+Important caveat:
+
+- The `io_wait_ms` column is per job from submit time to CQE/H2D enqueue.
+  It is useful for tensor ranking, but summing it over jobs over-counts
+  overlapped reads relative to global `iouring_wait_us`.
+- The direct host/read `host_ms` column is not overlapped in the same way and
+  explains the existing `direct_reads=11752` path.
+
+Top copy-profile tensors:
+
+- `runtime_load,blk.1.ffn_up_exps.weight`:
+  `1042.546 ms`, `179` rows, all io_uring;
+- `runtime_load,blk.1.ffn_gate_exps.weight`:
+  `1037.571 ms`, `179` rows, all io_uring;
+- `runtime_load,blk.60.ffn_down_exps.weight`:
+  `798.149 ms`, `170` rows, all io_uring;
+- `runtime_load,blk.4.ffn_down_exps.weight`:
+  `794.015 ms`, `169` rows, all io_uring;
+- `runtime_load,blk.10.ffn_up_exps.weight`:
+  `789.129 ms`, with `14.786 ms` direct host/read and `774.151 ms`
+  io_uring.
+
+Interpretation:
+
+- Slot wait is not a meaningful bottleneck: `33.697 ms` for runtime loads and
+  `0.990 ms` for current-down overlap.
+- H2D enqueue is not a meaningful bottleneck: `401.632 ms` runtime-load
+  enqueue and `64.773 ms` current-down enqueue.
+- The dominant instrumented sub-buckets are:
+  - io_uring read/wait for already batched copy jobs;
+  - direct per-expert pack reads in `batch_cache_insert_slot()`.
+- Because `runtime_load` still has `15579.857 ms` direct host/read time and the
+  global counters show `direct_reads=11752`, the next source-level optimization
+  should first convert serial same-type up/gate staging from per-expert direct
+  pack reads into same-tensor batched io_uring staging, without adding new
+  compute overlap or broader prefetch.
+
+Decision:
+
+- Keep the copy profiler source because it is default-off and produced useful
+  attribution.
+- Do not promote 7DY as SOTA.
+- Proceed to Phase 7DZ.
+
+## Phase 7DZ: serial same-type up/gate batched staging
+
+Start time:
+
+- 2026-07-04T06:32:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DY shows runtime-load direct host/read time `15579.857 ms`.
+- This path comes largely from serial same-type up/gate staging:
+  `stage_tensor()` calls `batch_cache_insert_slot(... do_copy=true ...)`,
+  which copies each missing expert immediately.
+- The existing `plan_tensor()` + `copy_stage_jobs()` path can batch misses for
+  one tensor through `expert_pack_iouring_copy_jobs()`, but it is currently used
+  by the IQ2 parallel up/gate path, not the serial same-type path.
+
+Hypothesis:
+
+- Add a default-off env gate:
+
+```sh
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+```
+
+- In the non-parallel same-type up/gate branch, keep the existing serial compute
+  order but replace per-expert direct staging with per-tensor planned staging:
+  - plan up tensor miss jobs;
+  - copy up jobs with `copy_stage_jobs(up_jobs, st, stage_ring)`;
+  - launch up compute on `st`;
+  - plan gate tensor miss jobs;
+  - copy gate jobs with `copy_stage_jobs(gate_jobs, st, stage_ring)`;
+  - launch gate compute on `st`;
+  - continue existing fuse/D2H/scatter.
+- This is intentionally not the Phase 7BS/7BU IQ3 pipeline:
+  - no gate-copy/up-compute overlap;
+  - no extra copy stream;
+  - no concurrent IQ3 kernels;
+  - no cache mutation on skipped calls.
+
+Why this can improve token rate:
+
+- It targets the 7DY direct host/read bucket without adding new concurrency.
+- It should turn several same-tensor direct reads into one io_uring batch with
+  offset sorting and SQPOLL.
+- It preserves math, selected experts, VRAM cache capacity, IO depth, pinned
+  slot count, and compute order.
+
+Theory and upper bound:
+
+- Hard n32 upper bound from 7DY direct runtime-load host/read:
+  `15579.857 ms`.
+- Only the serial same-type subset is targeted; the realistic upper bound is
+  much smaller.
+- If this removes `10-20%` of direct host/read exposure without increasing
+  global `iouring_wait_us`, expected n32 saving is roughly `0.5-1.5 s`.
+- A larger measured gain must be explained by:
+  - lower `direct_reads`;
+  - lower `runtime_load host_ms`;
+  - no material increase in global `iouring_wait_us`;
+  - no up/gate/down wall regression.
+
+Implementation:
+
+- Source patch in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add default-off env helper.
+- Activate only when:
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - not mixed types;
+  - not `parallel_up_gate`;
+  - not exact prompt Q8_K;
+  - decode path preferred first; prompt behavior may stay on the old path if
+    needed for risk control.
+- Reuse existing `plan_tensor()`, `copy_stage_jobs()`, and `launch_tensor()`.
+- Add a one-time stderr activation line.
+- Keep all existing fallback behavior: if planning/copy fails, return through
+  the existing decline/failure path for the experiment.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase7dz-source-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7du_repro.sh /tmp/run_phase7dz_repro.sh
+sed -i '/^GGML_MOE_TTFT_TRACE_OUT=/a GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv\nGGML_MOE_STREAM_SERIAL_STAGE_BATCH=1' /tmp/run_phase7dz_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dz-serial-stage-batch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dz_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- exit `0`;
+- cold start;
+- `memory.peak<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+- Activation line appears in stderr.
+- n32 decode must beat Phase 7DU diagnostic `31343.27 ms / 31` or at least
+  beat Phase 7DS confirmation `31647.69 ms / 31` with clear mechanism evidence.
+- Mechanism evidence:
+  - direct reads decrease versus `11752`;
+  - `runtime_load host_ms` decreases versus `15579.857 ms`;
+  - global `iouring_wait_us` does not increase enough to erase the direct-read
+    reduction;
+  - up/gate and down profile totals do not regress materially.
+
+Result handling:
+
+- If n32 passes, run n32 confirmation without copy-profile overhead.
+- If both n32 runs pass, run n96 confirmation.
+- If n32 is slower, quality fails, TTFT/RAM/read gates fail, or mechanism
+  shows only shifted cost into `iouring_wait_us`, reject and revert the source
+  patch unless the default-off implementation remains useful for a narrower
+  follow-up.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
