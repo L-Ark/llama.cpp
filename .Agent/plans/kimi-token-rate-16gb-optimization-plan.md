@@ -25960,6 +25960,95 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
 
+Phase 7BY result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `38191ac4c` (`docs: plan kimi phase7by upgate65`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-115727Z-n32-phase7by-upgate65`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-115727Z-n32-phase7by-upgate65"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=65 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+- activation:
+  - command records `UPGATE_PCT=65`;
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_UPGATE_PCT=65`;
+  - stderr reports:
+    - upgate pool `9.5 GiB`, `1819` slots;
+    - down pool `5.1 GiB`, `705` slots.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77080.56 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34406.12 ms / 31`, `0.90 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BY is slower by `934.53 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15137521664`;
+  - `file=14893944832`;
+  - `inactive_file=3436601344`;
+  - `active_file=11456794624`;
+  - `kernel=239849472`;
+  - `anon=450560`.
+- mechanism:
+  - upgate pool increased from `1679` to `1819` slots;
+  - upgate misses improved from `16757` to `16286`;
+  - down pool decreased from `806` to `705` slots;
+  - down misses worsened from `3461` to `3767`;
+  - up_gate profile improved to `13.275 ms/call`, better than the 7BW
+    comparable run `13.757 ms/call`;
+  - down profile regressed to `40.359 ms/call`, worse than the 7BW comparable
+    run `38.790 ms/call`;
+  - main pinned `host_stage=18877.647 ms`, slightly worse than Phase 7AS
+    `18631.890 ms`;
+  - gate pinned `host_stage=2360.949 ms`, worse than Phase 7AS
+    `2245.529 ms`;
+  - expert-pack `iouring_wait_us=12539599`, worse than Phase 7AS
+    `11567536`;
+  - iouring bytes increased to `70163136512`.
+
+Gap analysis:
+
+- More upgate VRAM did reduce upgate misses and up_gate wall, but the smaller
+  down pool added `306` down misses and increased total expert-pack bytes.
+- The down miss penalty and extra iouring traffic outweighed the upgate gain.
+- Combined with Phase 7BX, the current 60/40 split is a local optimum among
+  the tested coarse splits:
+  - 55% upgate: too many upgate misses;
+  - 65% upgate: too many down misses and bytes;
+  - 60% remains fastest.
+
+Decision:
+
+- Reject Phase 7BY.
+- Do not run second n32 or n96.
+- Keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
 Phase 7BX result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
