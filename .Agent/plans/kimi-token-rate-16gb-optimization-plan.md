@@ -28010,6 +28010,138 @@ Decision:
   - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
   - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`.
 
+### Phase 7CI - planned host prefetch for up/gate stage jobs
+
+Start time:
+
+- 2026-07-03T13:44:00Z.
+
+Current bottleneck and evidence:
+
+- Phase 7CH showed that simply increasing queue capacity is not enough:
+  - `IO_DEPTH=16` and `PINNED_SLOTS=16` activated;
+  - expert-pack `inflight_max` still stayed at `8`;
+  - all `9-16` histograms remained `0`;
+  - decode regressed to `33518.12 ms / 31`.
+- Therefore the next test should change overlap timing, not just queue size.
+- The existing code already supports `GGML_MOE_PLANNED_HOST_PREFETCH=1`.
+- In the up/gate parallel path, after `up_jobs` and `gate_jobs` are planned,
+  the code calls:
+  - `submit_planned_host_prefetch(up_jobs)`;
+  - `submit_planned_host_prefetch(gate_jobs)`.
+- `host_prefetch_copy_h2d()` is checked before falling back to io_uring inside
+  `expert_pack_iouring_copy_jobs()`.
+- This path currently covers planned up/gate stage jobs. It does not cover down
+  current-overlap jobs, so any gain should show up mostly in up/gate staging,
+  not in Q4_0 down fallback.
+
+Hypothesis:
+
+- Enable planned host prefetch without a route trace:
+
+```sh
+GGML_MOE_PLANNED_HOST_PREFETCH=1
+GGML_MOE_HOST_PREFETCH_SLOTS=64
+GGML_MOE_HOST_PREFETCH_MAX_MIB=512
+```
+
+- The host prefetch worker will read planned up/gate jobs from the expert pack
+  into pinned host memory. If the worker gets ahead before the staging copy
+  reaches those jobs, `host_prefetch_copy_h2d()` can avoid some synchronous
+  io_uring waits and reduce up/gate `stage`, `up_wait`, or `gate_wait`.
+- RAM risk is bounded by `512 MiB` plus slot metadata and remains enforced by
+  the 16GB cgroup. If this displaces useful file cache or competes with the
+  existing iouring path, it may regress.
+
+Theoretical upper bound:
+
+- Phase 7CH up_gate profile was `12.799 ms/call` over `1861` calls, but only
+  part of that is host staging and waiting.
+- The up/gate type profile still shows IQ2 up/gate wait around `5.822-6.061
+  ms/call` for `558` decode calls. Perfectly hiding only that visible wait
+  would bound the n32 gain to roughly `3.2 s`, but the host worker starts late
+  and only sees planned jobs after routing, so the realistic n32 upside is
+  `0.2-1.0 s`.
+- If host prefetch hits are near zero or submitted jobs are mostly evicted,
+  reject and do not expand this path.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7ci_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Append:
+
+```sh
+GGML_MOE_PLANNED_HOST_PREFETCH=1
+GGML_MOE_HOST_PREFETCH_SLOTS=64
+GGML_MOE_HOST_PREFETCH_MAX_MIB=512
+```
+
+- Keep every accepted Phase 7CC setting unchanged:
+  - larger `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ci_repro.sh
+perl -0pi -e 's/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n/LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_PLANNED_HOST_PREFETCH=1\nGGML_MOE_HOST_PREFETCH_SLOTS=64\nGGML_MOE_HOST_PREFETCH_MAX_MIB=512\nEOF\n/' /tmp/run_phase7ci_repro.sh
+chmod +x /tmp/run_phase7ci_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ci-planned-host-prefetch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ci_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache and pinned host
+    prefetch buffers;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_PLANNED_HOST_PREFETCH=1`;
+  - stderr contains `host prefetch: loaded 0 events from (none) ... planned=1`;
+  - stderr host prefetch report has nonzero `planned_enqueued`.
+- Performance:
+  - first n32 must beat Phase 7CC n32 confirmation
+    `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat and output is correct, run n96 candidate and
+    confirmation;
+  - n96 candidate and confirmation must both beat Phase 7CC n96 confirmation
+    `79008.37 ms / 77`.
+- Mechanism:
+  - host prefetch `hits` must be nonzero and the hit rate must be high enough
+    to explain any decode gain;
+  - up/gate `stage`, `up_wait`, or `gate_wait` should fall versus Phase 7CC
+    comparable runs;
+  - if decode improves but host prefetch hits remain low, treat as noise and
+    require another confirmation before promotion.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If quality changes, RAM/TTFT fails, activation is missing, host prefetch hits
+  are ineffective, or n32 is slower, reject and keep planned host prefetch
+  disabled in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
