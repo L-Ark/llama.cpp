@@ -25770,3 +25770,87 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If the first n32 is slower or fails any hard gate, reject and keep
   `GGML_MOE_IO_REFILL_BATCH=4` in SOTA.
+
+Phase 7BW result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `a704c43b6` (`docs: plan kimi phase7bw refill2`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-114629Z-n32-phase7bw-refill2`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-114629Z-n32-phase7bw-refill2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bw_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_IO_REFILL_BATCH=2`;
+  - `env.txt` contains `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `80700.68 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `35103.55 ms / 31`, `0.88 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BW is slower by `1631.96 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15084113920`;
+  - `file=14840365056`;
+  - `inactive_file=10835664896`;
+  - `active_file=4004298752`;
+  - `kernel=239800320`;
+  - `anon=450560`.
+- mechanism:
+  - expert-pack `iouring_wait_us=12381973`, worse than Phase 7AS
+    `11567536`;
+  - main pinned `host_stage=19741.785 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - main pinned `slot_wait=47.763 ms`, similar to Phase 7AS `53.288 ms`;
+  - gate pinned `host_stage=2272.726 ms`, similar/slightly worse than
+    Phase 7AS `2245.529 ms`;
+  - iouring effective inflight stayed near Phase 7AS:
+    `inflight_avg=2.91`, `inflight_max=8`;
+  - down and upgate cache hit rates are unchanged:
+    - down `73.6%`;
+    - upgate `43.7%`.
+
+Gap analysis:
+
+- Smaller refill did not reduce queue tail. It increased expert-pack wait by
+  about `0.81 s` and main host staging by about `1.11 s`.
+- Since slot wait did not materially improve and hit rates are identical, the
+  regression is from under-batching/refill overhead and worse IO pacing rather
+  than cache behavior or correctness.
+- The current accepted refill batch `4` remains the best observed point:
+  - `8` was previously rejected;
+  - `2` is now rejected;
+  - pinned slots must remain `8`.
+
+Decision:
+
+- Reject Phase 7BW.
+- Do not run n96.
+- Keep `GGML_MOE_IO_REFILL_BATCH=4` in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
