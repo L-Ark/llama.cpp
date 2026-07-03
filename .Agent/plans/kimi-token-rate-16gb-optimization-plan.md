@@ -19535,3 +19535,71 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If the first n32 is slower than Phase 7AS confirmation, reject immediately and
   keep Phase 7AS as SOTA.
+
+Phase 7AW n32 result - rejected:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-033847Z-n32-phase7aw-7as-threads40`.
+- git:
+  - head `59b4dd6c9`;
+  - status clean at run start.
+- env delta over Phase 7AS:
+
+```sh
+THREADS=40
+```
+
+- quality:
+  - pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `77600.52 ms`, under the `106331.72 ms` gate.
+- decode: `97405.94 ms / 31`, `0.32 tok/s`.
+- comparison:
+  - Phase 7AS n32 confirmation: `33471.59 ms / 31`;
+  - Phase 7AW regresses by `63934.35 ms`.
+- host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`.
+- expert pack:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - `iouring_reads=11297`;
+  - `iouring_bytes=66242985984`;
+  - `iouring_wait_us=14601447`.
+- pinned staging:
+  - main `host_stage=24662.628 ms`, `h2d=4117.830 ms`;
+  - gate `host_stage=2703.847 ms`, `h2d=897.394 ms`.
+- down profile:
+  - `calls=2038`;
+  - total `45.977 ms/call`;
+  - `route_barrier=1.929 ms/call`;
+  - `post_cuda_barrier=2.102 ms/call`;
+  - `fallback_t0=35.371 ms/call`.
+
+Interpretation:
+
+- Increasing threads to `40` reduces the local fallback bucket compared with
+  the Phase 7AV/7AS-like n32 fallback time (`~37-38 ms/call`), but the global
+  decode path regresses badly.
+- The added CPU parallelism introduces heavy route/barrier and scheduling
+  overhead, increases iouring wait, and raises main/gate host staging time.
+- The result confirms that simple thread-count scaling is not viable. Future
+  residual fallback work must be local to the Q4_0 fallback loop, for example
+  chunk/tile tuning or a narrower compute kernel, without increasing global
+  threadpool contention.
+
+Decision:
+
+- Reject Phase 7AW.
+- No source rollback is needed because this was env-only.
+- Keep Phase 7AS as the current accepted SOTA:
+  - `THREADS=32`;
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - n96 confirm decode `84173.24 ms / 77`.
