@@ -1,0 +1,83 @@
+{
+  "accepted_previous_sota_eval_tok_s": 4.2,
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "environment": "CUDA_VISIBLE_DEVICES=0\nGGML_CUDA_DISABLE_GRAPHS=1\nGGML_MOE_CPU_PREWARM_LIMIT=512\nGGML_MOE_CPU_PREWARM_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_updown_decode_top512.tsv\nGGML_MOE_CPU_PREWARM_TOUCH=1\nGGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39\nGGML_MOE_KEEP_TOPK_LAYER_VALUE=3\nGGML_MOE_KEEP_TOPK_UPDOWN=4\nGGML_MOE_STREAM=1\nGGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv\nGGML_MOE_STREAM_DONTNEED=1\nGGML_MOE_STREAM_ONE_CACHE_MIB=13568\nGGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1\nGGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack\nGGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct\nGGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps\nGGML_MOE_VRAM_CACHE_GB=0\nINVOCATION_ID=b5edac5b66bd49548685e66627c0898e\nJOURNAL_STREAM=8:124218345\nLANG=C.UTF-8\nOLDPWD=/\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin\nPWD=/root/lfz/runs/vendor-ds4-16gb/20260703T180612Z-20260704_cpu_prewarm_top512_touch_pushed_repro/france-cpu40-vram0gb\nSHLVL=0\nSYSTEMD_EXEC_PID=3579701\n_=/usr/bin/env\n",
+  "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -t 20 -tb 20\n",
+  "hashes": {
+    "libggml_cpu": "47b65df770d26a7de1c4b7176d58ab77eff1ffe689de544c4c33fed1c148b2a5",
+    "llama_cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62"
+  },
+  "manual_correctness_ok": true,
+  "pack_counters": {
+    "bytes": "20602159104",
+    "direct_enabled": "1",
+    "direct_failures": "0",
+    "direct_fallbacks": "0",
+    "direct_reads": "4623",
+    "entries": "4599",
+    "failures": "0",
+    "hits": "4623",
+    "misses": "0",
+    "reads": "4623"
+  },
+  "prewarm_counters": {
+    "advised": "512",
+    "bytes": "2281701376",
+    "checksum": "66057597",
+    "enabled": "1",
+    "entries": "512",
+    "skipped": "0"
+  },
+  "reason": "pushed-source strict cold rerun reached 4.2 tok/s, tying but not exceeding accepted 4.2 SOTA; initial 4.3 was not reproduced as a new SOTA",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T180612Z-20260704_cpu_prewarm_top512_touch_pushed_repro/france-cpu40-vram0gb",
+  "source_commit": "b1fb6e7a5df7884c33a5525cedba1f5e78640f69",
+  "status": "pushed_repro_tie_not_promoted",
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T180612Z-20260704_cpu_prewarm_top512_touch_pushed_repro/france-cpu40-vram0gb",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "cpu_moe": 40,
+    "elapsed_seconds": 64.96,
+    "eval_ms": null,
+    "eval_tok_s": 4.2,
+    "exit_status": 0,
+    "first_answer_ms": 32212.962507,
+    "load_ms": null,
+    "max_rss_kb": 15595132,
+    "memory_file_bytes": 15105830912,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 17554,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 10611445760,
+      "anon": 1142784,
+      "file": 15105830912,
+      "file_mapped": 253952,
+      "inactive_file": 4494381056,
+      "kernel": 112472064,
+      "pgfault": 2327557,
+      "pgmajfault": 246384,
+      "slab": 111878936,
+      "workingset_activate_file": 731363,
+      "workingset_refault_file": 1843088,
+      "workingset_restore_file": 731055
+    },
+    "oom_seen": false,
+    "pgmajfault": 246384,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.7,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 32212.962507,
+    "unit": "vendor-ds4-16gb-20260703T180612Z-cpu40.service",
+    "workingset_refault_file": 1843088
+  },
+  "vram_cache_counters": {
+    "hit_rate": "86.8",
+    "hits": "30528",
+    "misses": "4623"
+  }
+}

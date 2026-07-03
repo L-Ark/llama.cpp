@@ -2576,3 +2576,40 @@ Immediate promotion steps:
 3. Rerun strict cold with the same env and `drop_caches`.
 4. Promote only if the pushed-source rerun remains `>4.2 tok/s` and passes RAM, correctness, TTFT, and counter gates.
 5. If pushed-source rerun fails, demote this to candidate-only and decide whether to keep source as rejected/default-off or revert runtime source.
+
+### 2026-07-04 Pushed-Source Repro Result For Touch Prewarm
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-prewarm-top512-touch-pushed-repro-result.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T180612Z-20260704_cpu_prewarm_top512_touch_pushed_repro/france-cpu40-vram0gb`
+- Source commit: `b1fb6e7a5df7884c33a5525cedba1f5e78640f69`
+- Build metadata: `b14632-b1fb6e7a5`
+
+Result:
+
+- `eval_tok_s=4.2`
+- `prompt_tok_s=1.7`
+- `TTFT=32212.962507 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15105830912`
+- `ram_ok=true`, `ram_limit_killed=false`
+- Correctness: manual pass. France answer is complete, coherent, and semantically correct.
+- Prewarm counters: `enabled=1 entries=512 advised=512 skipped=0 bytes=2281701376 checksum=66057597`.
+- Gate pack counters: `hits=4623 misses=0 direct_failures=0 direct_fallbacks=0`.
+- Gate VRAM counters: `hits=30528 misses=4623 hit_rate=86.8%`.
+
+Verdict:
+
+- Not promoted. The pushed-source rerun tied the accepted `4.2 tok/s` SOTA but did not exceed it.
+- The initial `4.3 tok/s` observation is treated as run variance until reproduced.
+- Runtime source must be reverted to the accepted path. Keep the profile and artifacts as diagnostic evidence only.
+- Current accepted cold-start SOTA remains `4.2 tok/s`.
+
+Rollback action:
+
+- Restore `ggml/src/ggml-cpu/ggml-cpu.c` from commit `41c60565c` and rebuild.
+- Commit/push this plan update, pushed-repro artifact, and runtime-source rollback to `ssd/vendor/deepseek-token-rate-16gb`.
