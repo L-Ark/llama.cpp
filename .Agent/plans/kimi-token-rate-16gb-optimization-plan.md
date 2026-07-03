@@ -2787,6 +2787,94 @@ Rollback:
   exceeds 16GB, Q4_0 activation is absent, or n32 is slower, revert the source
   patch immediately and record the rejection.
 
+Phase 7DM result - rejected:
+
+- Result timestamp:
+  `2026-07-03T19:58:59Z`.
+- Plan/result base commit:
+  `fa6a537b4` (`docs: record kimi phase7dl and plan q4 down batch`).
+- Source probe commit:
+  `df8456722` (`cuda: probe q4 down batch support`).
+- Source rollback:
+  `f8b3c0cdc` (`Revert "cuda: probe q4 down batch support"`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-195859Z-n32-phase7dm-q4-down-batch`.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard df8456722
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-195859Z-n32-phase7dm-q4-down-batch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `78134.98 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- Output:
+  `France is a country in Western Europe known for its rich history, art, and
+  culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- Decode:
+  - `43178.97 ms / 31`, `0.72 tok/s`;
+  - Phase 7CC n32 confirmation is `33217.66 ms / 31`, `0.93 tok/s`;
+  - regression: `9961.31 ms`, so Phase 7DM fails the promotion gate.
+- Activation:
+  - Q4_0 down activation succeeded:
+    - `blk.6.ffn_down_exps.weight src0_type=2 eligible=32`;
+    - `blk.18.ffn_down_exps.weight src0_type=2 eligible=32`;
+    - `blk.10.ffn_down_exps.weight src0_type=2 eligible=32`;
+    - `blk.15.ffn_down_exps.weight src0_type=2 eligible=32`;
+  - type2 decode fallback became approximately `0.001-0.002 ms/call`.
+- Regression mechanism:
+  - Down cache slot size increased from `7.44 MiB` to `7.88 MiB`;
+  - down slots dropped from `806` to `761`;
+  - down hit rate dropped from the 7DL n96 reference `73.4%` to `64.1%`;
+  - down misses were `5327` for n32, too high for the shorter decode;
+  - main pinned staging rose to `host_stage=28356.014 ms`;
+  - gate pinned staging rose to `host_stage=4015.680 ms`;
+  - expert-pack bytes were `77.99 GB` for n32;
+  - up/gate wall regressed to `11.866 ms/call`.
+- Down profile:
+  - calls `2038`;
+  - total `41.202 ms/call`;
+  - CUDA batch `4.750 ms/call`;
+  - fallback `36.379 ms/call`;
+  - batch accepted `1861`;
+  - batch declined `59`.
+- Gap analysis:
+  - The original hypothesis was correct that Q4_0 could be made eligible and
+    offloaded to GPU, but the cost model was incomplete.
+  - Q4_0 down experts are larger than the previous down batch set, so enabling
+    them changed the down-cache slot class and reduced resident capacity.
+  - The added H2D/iouring/cache churn was much larger than the CPU fallback
+    time removed from Q4_0 layers.
+  - This is why hit rate fell and decode became slower even though Q4_0
+    fallback itself disappeared.
+
+Decision:
+
+- Reject Phase 7DM.
+- Do not run n96.
+- Do not enable Q4_0 down batch globally.
+- Keep Phase 7CC as accepted SOTA.
+- Future Q4_0 work must be selective:
+  - only a small layer/expert subset;
+  - or a separate Q4_0 pool that does not enlarge the main down slot size;
+  - or only when a profile proves the selected Q4_0 experts will not evict
+    higher-value down experts.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
