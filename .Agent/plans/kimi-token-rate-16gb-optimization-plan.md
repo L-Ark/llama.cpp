@@ -20791,6 +20791,108 @@ Rollback:
   - record the full result here;
   - keep Phase 7AS as SOTA.
 
+Phase 7BP result - rejected:
+
+- Time recorded: 2026-07-03 10:10:58 UTC run start.
+- Plan commit:
+  `4958d0841` (`docs: plan kimi phase7bp pack mmap willneed`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-101058Z-n32-phase7bp-pack-mmap-willneed`.
+- Source state during experiment:
+  - temporary default-off patch in `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - added `GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED`;
+  - when enabled, active decode pack-mmap fallback experts called
+    `madvise(page_aligned_ptr, page_aligned_len, MADV_WILLNEED)`;
+  - added `willneed_*` counters to the existing
+    `[kimi_cpu_fallback_pack_mmap]` summary;
+  - no math, routing, GPU cache, io_uring staging, pinned staging, VRAM split,
+    prompt drop, or source pointer changes.
+- Build:
+  - remote `build-cuda-batch` compiled successfully with the dirty source;
+  - only the pre-existing `GGML_OP_LIGHTNING_INDEXER` switch warning appeared.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bp-pack-mmap-willneed"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PACK_MMAP_WILLNEED=1 \
+      /tmp/run_phase7bp_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - quality pass;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `83855.27 ms`, below the `106331.72 ms` gate;
+  - memory peak `15899996160`, within the cgroup cap;
+  - `memory.swap.max=0`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Activation:
+  - `env.txt` contains `GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED=1`;
+  - `command.txt` records `PACK_MMAP_WILLNEED=1`;
+  - stderr summary:
+    `willneed=1 willneed_calls=1727 willneed_bytes=14260764672 willneed_failures=0`.
+- Performance:
+  - decode `35639.55 ms / 31`, `0.87 tok/s`;
+  - Phase 7AS n32 confirmation remains `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BP is slower by `2167.96 ms`.
+- Mechanism evidence:
+  - Targeted `MADV_WILLNEED` did move cost out of the measured fallback CSV:
+
+```text
+Phase 7BP decode,type=2 count=1736 calls=1736 us=384344 GiB=13.351
+Phase 7AS decode,type=2 was about 2630 ms for the same 13.351 GiB bucket
+```
+
+  - Down aggregate fallback also improved locally:
+    - Phase 7BP `fallback_t0=35.110 ms/call`;
+    - Phase 7AS was about `36.549 ms/call`.
+  - However total wall decode regressed because the cost reappeared in shared
+    IO/page-cache/staging buckets:
+    - Phase 7BP `iouring_wait_us=12557951`;
+    - Phase 7AS `iouring_wait_us=11567536`;
+    - Phase 7BP main pinned `host_stage=19940.653 ms`;
+    - Phase 7AS main pinned `host_stage=18631.890 ms`;
+    - Phase 7BP gate pinned `host_stage=2382.712 ms`;
+    - Phase 7AS gate pinned `host_stage=2245.529 ms`.
+  - Page-fault counters did not improve enough:
+    - `pgmajfault=1024796`;
+    - `workingset_refault_file=263549`.
+- Analysis:
+  - The hypothesis was partially correct: targeted `MADV_WILLNEED` can reduce
+    worker-visible fallback time for the active decode pack-mmap experts.
+  - It is not a token-rate improvement because it shifts the file-backed work
+    earlier into the same constrained cgroup and competes with expert-pack
+    io_uring/H2D staging.
+  - The critical path is not just the accounting location of pack-mmap faults;
+    it is total file-backed memory pressure plus shared staging/IO contention.
+  - A future fallback-buffer attempt must avoid both failure modes seen so far:
+    - Phase 7Z: long-lived anonymous cache and first-load memcpy pressure;
+    - Phase 7BP: page-cache readahead shifting cost into shared IO/staging.
+- Decision:
+  - Reject Phase 7BP.
+  - Do not run n96.
+  - Reverted the source patch locally and on the server.
+  - Rebuilt remote `build-cuda-batch/bin/llama-completion` from clean accepted
+    source after the experiment.
+  - Do not use `GGML_MOE_CPU_FALLBACK_PACK_MMAP_WILLNEED=1` in SOTA.
+  - Keep Phase 7AS as accepted SOTA:
+    - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+    - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- Next direction:
+  - Do not use mmap advice as the main path.
+  - The next valid optimization needs either:
+    - reduce the number of decode fallback experts by selective GPU support
+      without increasing H2D/staging, or
+    - change scheduling so fallback file-backed work overlaps with otherwise
+      idle time rather than contending with existing expert-pack reads.
+
 ## Phase 7BL - coalesced GPU H2D batch for expert-pack misses
 
 Design timestamp: 2026-07-03 UTC.
