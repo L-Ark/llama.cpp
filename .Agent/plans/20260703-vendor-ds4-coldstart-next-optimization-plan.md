@@ -712,6 +712,31 @@ Acceptance:
 - If accepted, immediately commit source/profile/plan and push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean-rebuild/rerun from pushed source.
 - If `eval_tok_s <= 4.2` or any gate fails, revert runtime source, clean rebuild, record the rejection, and push only plan/profile/record as diagnostic artifacts.
 
+
+Implementation and result:
+
+- Temporary default-off source patch added `GGML_MOE_STREAM_ONE_ALLOW_ADMIT_PROFILE=1` in `ggml/src/ggml-cuda/moe_stream.cu`.
+- The patch allowed one-stream execution when either the existing `GGML_MOE_STREAM_ONE_NAME_FILTER` matched or the strict admission profile explicitly contained `(src0_name, expert_index)`. Profile-miss up/down tensors returned before staging/allocation and fell back to CPU.
+- Dirty candidate build completed. Candidate CUDA lib hash was `54546f2fe665deb0853946183135230aecd1d86841046736cb6c524e32a53a8f`; `llama-cli` hash remained `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`.
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T060115Z-20260703T060115Z-profile-gated-top64-updown-stream/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: `GGML_MOE_STREAM_ONE_ALLOW_ADMIT_PROFILE=1` and `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_plus_decode_top64_updown.tsv`; otherwise accepted gate O_DIRECT config, cache budget, top-k, threads, and strict 16GB cold cgroup.
+- Metrics: `eval_tok_s=3.4`, `prompt_tok_s=1.5`, `TTFT=30582.986899 ms`, `elapsed_seconds=86.99`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15064596480`, `pgmajfault=334517`, `workingset_refault_file=4314651`, `ram_ok=true`, `ram_limit_killed=false`.
+- Manual correctness: rejected. The answer was mostly semantic but ended incomplete at `from its language`, so it does not satisfy the coherent complete France-output requirement.
+- Counters: admission profile loaded `3377` entries; one expert pack `hits=5234 misses=1760 reads=5234 bytes=23325048832 failures=0 direct_reads=5234 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=49772 misses=6994 hit_rate=87.7%`.
+
+Gap analysis:
+
+- The profile gate worked mechanically and avoided the previous no-filter collapse, but it still changed the generation/cache trajectory. Relative to accepted SOTA, pack reads increased (`4623 -> 5234`), VRAM cache misses increased (`4623 -> 6994`), and file refault pressure increased sharply (`~1.7M -> 4.31M`).
+- The top64 hotset's optimistic `2.34s` covered fallback was outweighed by one-stream GPU kernel/D2H/sync overhead, extra up/down source page pressure, gate cache churn, and a longer/incomplete output trajectory.
+- This closes small profile-gated up/down one-stream as a SOTA path under the current shared cache/staging design. Any future up/down offload would need a separate cache/staging path with stronger proof that it does not perturb gate cache and output trajectory.
+
+Rollback:
+
+- Reverted `ggml/src/ggml-cuda/moe_stream.cu` with `git restore` and clean rebuilt `build-ds4-moe-stream`.
+- Clean hashes after rollback: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`, `libggml-cuda=bc5f8d943233bd73b46c6df8307f42f2399bac269d4c69e1179a7b80f10e492e`.
+- Verdict: rejected. Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold line remains `4.1 tok/s`.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
