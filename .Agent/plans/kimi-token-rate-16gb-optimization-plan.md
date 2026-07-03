@@ -6374,6 +6374,98 @@ Decision:
 - Future Q4_0 work should only be reconsidered with a separate Q4_0 down pool
   or layer-specific routing that does not inflate the common down slot size.
 
+## Phase 7EF: VRAM cache 15300 MiB check on slots16 SOTA
+
+Start time:
+
+- 2026-07-04T07:42:00+08:00.
+
+Current bottleneck:
+
+- Current SOTA remains Phase 7EB:
+  - n32 `29599.64 ms / 31`;
+  - n96 `74201.57 ms / 77`.
+- The remaining bottleneck is still expert movement/staging:
+  - Phase 7EB n96 main pinned host_stage `30534.248 ms`;
+  - h2d `10344.570 ms`;
+  - expert-pack iouring bytes `214923018240`.
+- Phase 7EE showed that adding Q4_0 to the existing down pool is bad because
+  it inflates the common down slot size and reduces down capacity.
+- Before designing a third Q4_0 pool, verify whether a small amount of extra
+  VRAM cache is available and useful under the same 16GB host RAM gate.
+
+Hypothesis:
+
+- Increase only the VRAM cache budget:
+
+```sh
+VRAM_MIB=15300
+```
+
+- Keep current SOTA deltas unchanged:
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - `PINNED_SLOTS=16`;
+  - `UPGATE_PCT=60`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - same expert packs and overlay.
+- If the GPU has enough free VRAM, the split cache should gain about:
+  - upgate: `180 MiB`, roughly `33` more 5.36 MiB slots;
+  - down: `120 MiB`, roughly `16` more 7.44 MiB slots.
+- This may slightly improve hit rate and reduce staging traffic.
+
+Theory and upper bound:
+
+- Added capacity is small relative to the existing pools:
+  - upgate slots `1679`;
+  - down slots `806`.
+- A realistic n32 gain is at most a few hundred ms.
+- If cuda allocation succeeds but decode regresses, likely causes are:
+  - cache repartition noise;
+  - lower remaining VRAM headroom increasing allocator/runtime pressure;
+  - no meaningful hit-rate improvement.
+- If cuda allocation fails or auto-clamp reduces the budget, reject.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Use current SOTA script.
+- Run n32 first.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e1d12915a
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ef_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ef_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ef-vram15300"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15300 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ef_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- France output coherent and semantically correct;
+- stderr reports actual cache budget at least `15300 MiB` or explains clamp;
+- n32 decode beats Phase 7EA `29599.64 ms / 31`.
+
+Result handling:
+
+- If accepted, run n96 confirmation.
+- If rejected, keep `VRAM_MIB=15000` in SOTA and use the result as evidence
+  when deciding whether a third Q4_0 pool can be afforded.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
