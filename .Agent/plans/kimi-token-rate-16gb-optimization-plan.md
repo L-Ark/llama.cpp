@@ -26317,6 +26317,124 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+### Phase 7CB - disable empty upgate profile preload checks
+
+Start time:
+
+- 2026-07-03T12:25:38Z.
+
+Current bottleneck and evidence:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- Recent attempts show the main IO/cache topology is tight:
+  - global VRAM split changes failed;
+  - static protected hotsets failed;
+  - pinned/refill/depth knobs failed;
+  - IQ3 copy overlap has a local win but raises global staging pressure.
+- Code inspection shows the up/gate path always enters the profile preload
+  section unless disabled:
+
+```cpp
+const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
+const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
+if (profile_upgate) {
+    preload_profile_for_tensor(up_key_name, ...);
+    preload_profile_for_tensor(gate_key_name, ...);
+}
+```
+
+- In the accepted SOTA no `GGML_MOE_VRAM_PROFILE` is set, so this path should
+  be a no-op after `load_profile_once()`, but it still executes getenv checks,
+  function calls, and `batch_cache_get()`/profile checks on every up/gate call.
+
+Hypothesis:
+
+- Set:
+
+```sh
+GGML_MOE_VRAM_PROFILE_UPGATE=0
+```
+
+- This skips the empty up/gate profile-preload path entirely.
+- It does not change selected experts, math, cache capacity, IO depth, pinned
+  slots, down overlap, current-down prefetch, or output semantics.
+
+Theoretical upper bound:
+
+- This is a micro-optimization. It cannot reduce expert-pack bytes, H2D bytes,
+  or GPU compute.
+- The only possible saving is CPU overhead on `1861` n32 up/gate calls and
+  `4621` n96 up/gate calls.
+- Realistic n32 upside is at most `0.1-0.4 s`. If the run beats SOTA by more
+  than that, require a second cold confirmation before accepting it as real.
+- If wall time is dominated by IO variance, this may show no improvement or a
+  small regression.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Create `/tmp/run_phase7cb_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Append to the runner env:
+
+```sh
+GGML_MOE_VRAM_PROFILE_UPGATE=0
+```
+
+- Keep all accepted Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`;
+  - `UPGATE_PCT=60`, `IQ2_UPGATE_PARALLEL=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7as_repro.sh /tmp/run_phase7cb_repro.sh
+# Add GGML_MOE_VRAM_PROFILE_UPGATE=0 to the env block and env.txt recording.
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cb-profile-upgate0"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cb_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_UPGATE=0`;
+  - no profile preload lines appear for up/gate tensors.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - because the theoretical gain is small, if first n32 beats by less than
+    `0.5 s`, run two additional cold n32 confirmations before n96;
+  - only if all n32 confirmations beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower or fails a hard gate, reject and keep
+  `GGML_MOE_VRAM_PROFILE_UPGATE` unset in SOTA.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
