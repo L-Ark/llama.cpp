@@ -737,6 +737,32 @@ Rollback:
 - Clean hashes after rollback: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `libggml-cpu=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`, `libggml-cuda=bc5f8d943233bd73b46c6df8307f42f2399bac269d4c69e1179a7b80f10e492e`.
 - Verdict: rejected. Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold line remains `4.1 tok/s`.
 
+
+### 2026-07-03 CPU Affinity `taskset 0-19` Diagnostic Design
+
+Design:
+
+- Goal: test whether pinning the 20 CPU fallback threads to a fixed 20-vCPU set reduces scheduler migration noise and improves the accepted SOTA path without changing model math, routing, cache policy, or source code.
+- Topology evidence: `lscpu` reports `61` online vCPUs, `Thread(s) per core=1`, and a single NUMA node (`0-60`). Therefore NUMA memory binding is not useful, but scheduler migration across 61 vCPUs can still add cache/TLB variability for the CPU up/down fallback loop.
+- Bottleneck basis: remaining bottleneck is CPU up/down fallback plus cold file-page/refault behavior. Existing source-level chunking, mmap pack, repack, willneed, and up/down one-stream candidates either tied or regressed. A no-source affinity probe is lower risk and can identify whether OS scheduling is part of the `4.1-4.2` variance.
+- Theory: with `-t 20 -tb 20`, pinning to exactly CPUs `0-19` may reduce thread migration and improve cache locality. It can also regress if the scheduler currently benefits from spreading work over more vCPUs or if CPUs `0-19` are noisier. It cannot change arithmetic correctness.
+- Hard upper bound: this can only recover scheduler/cache locality overhead, not the full `~24.8s` fallback compute or gate direct-read cost. Expected benefit is at most a small rounded-boundary move; accept only above `4.2 tok/s` with all gates.
+
+Artifact:
+
+- Wrapper: `.Agent/run-tools/llama-cli-taskset-0-19.sh`, sha256 `a391003fd8b44104d3964319ecf7f083572a11dab8b180ab07104c971c63fe43`. It executes `/usr/bin/taskset -c 0-19 /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli "$@"`.
+
+Practice plan:
+
+- Run strict cold France with `--binary .Agent/run-tools/llama-cli-taskset-0-19.sh` and otherwise accepted SOTA config.
+- Preserve gate O_DIRECT pack, admission profile, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, top-k policy, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, drop_caches, and 16GB cgroup.
+- Compare token rate, TTFT, cgroup file/refault counters, pack counters, and manual France correctness against current accepted SOTA and repeated `4.1` line.
+
+Acceptance:
+
+- Accept only if `eval_tok_s > 4.2`, RAM/correctness/TTFT/O_DIRECT gates pass, and exact wrapper/source/command metadata are recorded and pushed.
+- If it ties or regresses, reject and keep current SOTA unchanged. No runtime source rollback is needed.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
