@@ -1609,7 +1609,36 @@ Next optimization focus:
 
 Next concrete checklist:
 
-- [ ] Verify worktree cleanliness and `ssd/vendor/deepseek-token-rate-16gb` push state before the next experiment.
-- [ ] Run or extend `.Agent/run-tools/mxfp4_dot_harness.cpp` so the harness is the canonical gate for MXFP4 CPU fallback kernel ideas.
+- [x] Verify worktree cleanliness and `ssd/vendor/deepseek-token-rate-16gb` push state before the next experiment.
+- [x] Run `.Agent/run-tools/mxfp4_dot_harness.cpp` as the canonical gate for MXFP4 CPU fallback kernel ideas; latest result recorded below.
 - [ ] If a kernel candidate passes the harness threshold, write a new plan subsection with theory and upper bound before touching runtime source.
-- [ ] Otherwise record that no current mechanism has a defensible path beyond `4.2 tok/s` and stop full-model candidate runs until a new bottleneck mechanism is identified.
+- [x] Record that no current mechanism has a defensible path beyond `4.2 tok/s`; stop full-model candidate runs until a new bottleneck mechanism is identified.
+
+### 2026-07-03 MXFP4 Harness Execution Result
+
+Purpose:
+
+- Execute the committed MXFP4 harness after the post-diagnostics plan update, before considering any new runtime source candidate.
+- This is a repeatable microbench gate only; it cannot promote SOTA by itself and does not change runtime source.
+
+Artifacts:
+
+- Harness: `.Agent/run-tools/mxfp4_dot_harness.cpp`, sha256 `b742633e5203454d1008b5aadf37d02d7e4879cccfe08ce05af2317374c24da1`.
+- Runner: `.Agent/run-tools/run_mxfp4_dot_harness.sh`, sha256 `e8b0752dea4a62f34bb42571736df2295d57ae03c6db8da8e054fe01349f4943`.
+- Raw log: `.Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-dot-harness-20260703T-latest.log`, sha256 `5709577a57b4f15a7af181b01006ff333f75dd4bfac781d9f49fb5a43347c835`.
+- Versioned summary: `.Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-dot-harness-latest-summary.json`.
+- Compile command: `g++ -O3 -march=native -std=c++17 -Iggml/include -Iggml/src -Iggml/src/ggml-cpu .Agent/run-tools/mxfp4_dot_harness.cpp -L/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -lggml-cpu -lggml-base -Wl,-rpath,/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -pthread -ldl -lm -o /tmp/mxfp4_dot_harness`.
+
+Results with `iters=300`:
+
+| Shape | k | rows | row_ms | repack_gemv_ms | speedup | max_abs | mean_abs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| up-like | 4096 | 2048 | 132.533 | 92.976 | 1.425x | 0 | 0 |
+| down-like | 2048 | 4096 | 139.103 | 92.770 | 1.499x | 0 | 0 |
+
+Decision:
+
+- The harness is valid and repeatable: the existing tested `ggml_gemv_mxfp4_8x8_q8_0()` repack kernel is numerically exact against row-wise `ggml_vec_dot_mxfp4_q8_0()` on these DS4-like shapes.
+- This does not justify a new strict-cold model candidate because it is the already-evaluated repack direction. The warm speedup is not enough to overcome the strict 16GB cold-start constraints once repack memory, hotset lookup, page-cache displacement, and integration overhead are included.
+- Current accepted SOTA remains unchanged at historical `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
+- Next runtime source work requires a new correctness-identical kernel/layout idea with a stronger hard upper bound than the existing repack path. Until then, do not run another full model SOTA candidate.
