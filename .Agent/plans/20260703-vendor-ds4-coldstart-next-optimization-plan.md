@@ -2206,3 +2206,56 @@ Gate:
 
 - This diagnostic is not a SOTA candidate. The required output is a clear root-cause trace and a complete record.
 - Do not leave trace/all-output source changes in the committed tree unless a later run exceeds `4.2 tok/s` and passes correctness, RAM, and TTFT gates.
+
+### 2026-07-04 Server Speculative Trace Result And Partial Fallback Design
+
+Trace run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T164911Z-20260704_server_spec_fprintf_trace_ngram_simple/france-cpu40-vram0gb`.
+- Config: full accepted SOTA env plus `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1`, `LLAMA_SERVER_SPEC_TRACE=1`, and ngram-simple `N=3 M=8 min_hits=1`.
+- The run was manually terminated after trace proved the loop. It is not a SOTA candidate and has no valid final `eval_tok_s` or RAM peak.
+
+Trace evidence:
+
+- Before the loop, ngram-simple often produced empty drafts and normal prompt positions advanced one token at a time.
+- At the failure point, the trace repeated:
+  - `update_batch_entry sampled=305 prompt_size=181 pos_next=181 spec_draft=1 n_draft_max=8`
+  - `reuse_draft sampled=305 prompt_size=181 pos_next=181 spec_draft=1 ckpt_n_tokens=181 ckpt_pos=[0,180]`
+  - `update_batch_exit sampled=305 prompt_size=183 pos_next=183 inserted_draft=1 batch_tokens=2`
+  - `verify n_draft=1 accepted=1 prompt_size=183 pos_next=183 ckpt_n_tokens=181 ckpt_pos=[0,180]`
+  - `partial_restore n_draft=1 replay_draft=1 trim_from=181 trim_ok=1 prompt_size=181 pos_next=181 sampled=305`
+- This repeated without advancing `prompt_size`, `pos_next`, checkpoint range, or `sampled`.
+
+Diagnosis:
+
+- `accepted=1` with `n_draft=1` means the first draft token was rejected and the target produced exactly one replacement token.
+- For `COMMON_CONTEXT_SEQ_RM_TYPE_FULL`, server restores the checkpoint and reuses the replacement token as `spec_draft`. That replay should usually finish on the next pass, but with DeepSeek4 all-output batched verification it repeats at the same checkpoint and never commits progress.
+- Therefore the blocker is not just low ngram acceptance; it is the full-checkpoint partial-replay path interacting badly with DeepSeek4 all-output verification.
+
+Next candidate design:
+
+1. Add a temporary default-off env gate, e.g. `LLAMA_SERVER_SPEC_PARTIAL_SERIAL_FALLBACK=1`.
+2. Add a slot-local `spec_skip_once` flag.
+3. On `COMMON_CONTEXT_SEQ_RM_TYPE_FULL` partial acceptance, when the fallback gate is enabled:
+   - restore the checkpoint,
+   - trim memory after the checkpoint as before,
+   - keep prompt tokens at `ckpt.n_tokens`,
+   - restore the sampler state,
+   - clear `spec_draft`,
+   - set `spec_skip_once=true`,
+   - `continue`.
+4. In the next `update_batch()`, if `spec_skip_once` is true, force `n_draft_max=0` for exactly one step. This re-evaluates the last `sampled` token through the normal single-token path, recomputes the rejected replacement token without all-output replay, and should allow progress.
+5. Keep the all-output batch gate default-off and enable it only for this diagnostic.
+
+Theory:
+
+- Correctness should be preserved because every rejected/partial speculative step falls back to a normal target-model decode from the restored checkpoint.
+- Speed upper bound depends on ngram acceptance. Fully accepted drafts can still use all-output verification; rejected first-draft cases pay one extra serial decode and likely do not help throughput.
+- This is mainly a progress/correctness unblocker. Promote only if it unexpectedly exceeds `4.2 tok/s` under all gates; otherwise record and revert.
+
+Gate:
+
+- First run a strict cold diagnostic with `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1`, `LLAMA_SERVER_SPEC_PARTIAL_SERIAL_FALLBACK=1`, and compact trace.
+- It must complete with a coherent France answer before any speed discussion.
+- If it completes but is `<=4.2 tok/s`, incomplete, over RAM, or over TTFT gate, reject and revert source.
+- If it exceeds `4.2 tok/s` while satisfying correctness/RAM/TTFT, immediately record exact reproduction information, commit source plus records, push to `ssd/vendor/deepseek-token-rate-16gb`, and rerun from pushed source.
