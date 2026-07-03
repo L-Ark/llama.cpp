@@ -4685,3 +4685,79 @@ Rejection rules:
 - Reject/tie if `eval_tok_s <= 4.4`.
 - Reject if correctness fails, TTFT exceeds the gate, cgroup kills the run, OOM occurs, or pack direct failures/fallbacks appear.
 - Record every run's metrics, answer, counters, run path, artifact hashes, and verdict in this plan even when rejected.
+
+### 2026-07-03T22:31Z Prefill Limit Sweep Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/prefill-limit-sweep-result.json`
+- artifact sha256: `8d524edfb8814f8efe21da600fdfcd1a22178a296aeb2bc1ec6bf17d47871628`
+
+Source/repro status:
+
+- Source HEAD during sweep: `d08537fa9`
+- Runtime source baseline: `503d75cd7`
+- This was a no-source-change sweep after the promoted `4.4 tok/s` SOTA.
+- Current SOTA remains the top3000 prefill run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+
+Results:
+
+| Prefill limit | eval tok/s | prompt tok/s | TTFT ms | memory peak | memory file | cache hit rate | prefill ms | verdict |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `2048` | `4.3` | `1.7` | `32477.655528` | `16000000000` | `15097073664` | `92.6%` | `3232.749` | rejected, below SOTA |
+| `2560` | `4.4` | `1.8` | `32990.806385` | `16000000000` | `15104090112` | `93.9%` | `4058.883` | tie, not promoted |
+| `2816` | `4.3` | `1.8` | `32176.267438` | `16000000000` | `15087149056` | `94.4%` | `4488.403` | rejected, below SOTA |
+
+Run paths:
+
+- `2048`: `/root/lfz/runs/vendor-ds4-16gb/20260703T222454Z-20260704_prefill_limit_2048_sweep/france-cpu40-vram0gb`
+- `2560`: `/root/lfz/runs/vendor-ds4-16gb/20260703T222634Z-20260704_prefill_limit_2560_sweep/france-cpu40-vram0gb`
+- `2816`: `/root/lfz/runs/vendor-ds4-16gb/20260703T222811Z-20260704_prefill_limit_2816_sweep/france-cpu40-vram0gb`
+
+Correctness output for all three runs:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass for all three runs. The France answer is complete, coherent, and semantically correct.
+
+Gate/pack checks:
+
+- `2048`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=32553 misses=2598`.
+- `2560`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=33024 misses=2127`.
+- `2816`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=33179 misses=1972`.
+
+Trace summary:
+
+| Prefill limit | all gate src0 ms | all gate total ms | miss rows | miss src0 ms |
+| ---: | ---: | ---: | ---: | ---: |
+| `2048` | `6285.951` | `7745.597` | `2598` | `3021.203` |
+| `2560` | `6589.900` | `7981.713` | `2127` | `2496.265` |
+| `2816` | `6863.720` | `8227.456` | `1972` | `2339.834` |
+
+Artifact hashes:
+
+- `2048 summary.json`: `8086e6d8b812738cf6c418882477e1a69059586aedd099b69fba7dfe87578e5a`
+- `2048 stdout.txt`: `04767f2f5708cb57b103c4df7f1d0ba3b07a5eec117bc8ed7c5d610ec7d76f3e`
+- `2048 stderr.txt`: `e346043efbd7e0a71f059d814e40e0603214984909f560d33d7be4852e6fe22b`
+- `2048 one_trace.csv`: `d4ed7d5c7ec633d6ae3816f5aa467a525531e772fbfe8e11470ea9ca3d3c37fc`
+- `2560 summary.json`: `4deb79c535540af31f524ce4904f6218590c5a4d49c2450a446926d5daa20141`
+- `2560 stdout.txt`: `03453cbb0a00975ef7ca4dee8d02d75b8170df18026af5f3c9bfb9d877112eb9`
+- `2560 stderr.txt`: `64969996e2cea21e94f262ca13cef39dcc08e19e2c14596a0e15eda182ccb2c2`
+- `2560 one_trace.csv`: `ff9f2438cc7f1792d49cabcd8e7b7b320403dcef34eac4888c7b998074da0588`
+- `2816 summary.json`: `d07e27385544de3b354091f4213ac72a4b71877426785b5f8271d9cdf5be3899`
+- `2816 stdout.txt`: `c0dca6b2f181cf6ccc2276c38ceea841d0c0a6be5cb8c8e51378631a0aba4c65`
+- `2816 stderr.txt`: `01d46b6cd61321ccbb98d2bfb8a4e76dc4ede4707bd74a9f67530650d6763f3f`
+- `2816 one_trace.csv`: `8756a4b0d95a26cba7ba67bc07ea7cd4faca1c734fbaa02ac8d8407ff94cc335`
+
+Conclusion:
+
+- No new SOTA. Current accepted SOTA remains `4.4 tok/s` with top3000 prefill.
+- The limit-only sweep shows that simply reducing top-N does not unlock more token rate.
+- `2560` is a useful fallback/tie point with lower prefill bytes, but it is not promotable because it does not exceed `4.4 tok/s`.
+- Next optimization should re-rank prefill entries by measured/predicted saved miss cost or target the remaining misses directly, instead of sweeping raw frequency top-N.
