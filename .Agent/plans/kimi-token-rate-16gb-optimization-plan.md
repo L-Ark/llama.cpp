@@ -26435,6 +26435,98 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_PROFILE_UPGATE` unset in SOTA.
 
+Phase 7CB result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `eac20656b` (`docs: plan kimi phase7cb disable upgate profile checks`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- runner:
+  `/tmp/run_phase7cb_repro.sh`, copied from `/tmp/run_phase7as_repro.sh`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-122750Z-n32-phase7cb-profile-upgate0`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-122750Z-n32-phase7cb-profile-upgate0"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cb_repro.sh
+```
+
+- activation:
+  - `env.txt` contains `GGML_MOE_VRAM_PROFILE_UPGATE=0`;
+  - no `profile preload` lines appear for up/gate tensors;
+  - the temporary runner also printed
+    `GGML_MOE_VRAM_PROFILE_UPGATE=0` to stdout before model output. This did
+    not affect the model prompt or stderr counters, but it should be avoided in
+    future runner edits by appending only to `env.txt`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `76867.04 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `35848.56 ms / 31`, `0.86 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7CB is slower by `2376.97 ms`, so it fails the promotion gate.
+- memory at finish:
+  - `memory.current.final=15137587200`;
+  - `file=14893842432`;
+  - `inactive_file=7477006336`;
+  - `active_file=7416274944`;
+  - `kernel=239808512`;
+  - `anon=446464`.
+- mechanism:
+  - cache behavior is identical to Phase 7AS:
+    - down `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+    - upgate `hits=13019`, `misses=16757`, `hit_rate=43.7%`;
+  - expert-pack bytes are identical to Phase 7AS:
+    `66242985984`;
+  - expert-pack `iouring_wait_us=12699446`, worse than Phase 7AS
+    `11567536`;
+  - main pinned `host_stage=20101.383 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - gate pinned `host_stage=2319.036 ms`, worse than Phase 7AS
+    `2245.529 ms`;
+  - IQ3 type-18 wall is `20.060 ms/call`, worse than Phase 7AS
+    `18.646 ms/call`;
+  - IQ2 type-22 wall is `7.599 ms/call`, worse than Phase 7AS
+    `7.048 ms/call`;
+  - down profile `39.667 ms/call`, slightly worse than Phase 7AS
+    `39.272 ms/call`.
+
+Gap analysis:
+
+- Disabling the empty upgate profile-preload entry point does not change cache
+  hit rates, expert bytes, selected experts, or output.
+- The measured regression comes from worse iouring and pinned host-stage
+  buckets, not from the profile check itself.
+- This proves the profile-upgate no-op overhead is not a meaningful bottleneck
+  under Phase 7AS; it is dominated by IO/staging variance and expert movement.
+
+Decision:
+
+- Reject Phase 7CB.
+- Do not run additional n32 confirmations or n96.
+- Keep `GGML_MOE_VRAM_PROFILE_UPGATE` unset in SOTA.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
