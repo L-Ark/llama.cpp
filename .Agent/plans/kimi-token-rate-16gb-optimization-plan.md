@@ -26042,6 +26042,161 @@ Decision:
 - Reject Phase 7BZ.
 - Do not run second n32 or n96.
 - Keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+
+### Phase 7CS - Phase 7CC production minimal-profile retest
+
+Start time:
+
+- 2026-07-03T15:47:22Z.
+
+Current SOTA and bottleneck:
+
+- Accepted SOTA remains Phase 7CC with the larger l12 up/gate expert pack:
+  - n32 confirmation:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124021Z-n32-phase7cc-l12-upgate-pack-confirm`,
+    decode `33217.66 ms / 31`, `0.93 tok/s`, TTFT `79381.18 ms`;
+  - n96 confirmation:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-124705Z-n96-phase7cc-l12-upgate-pack-confirm`,
+    decode `79008.37 ms / 77`, `0.97 tok/s`, TTFT `80040.07 ms`;
+  - best observed n96 candidate was `77239.32 ms / 77`, but it is not the
+    reproducible acceptance baseline.
+- Phase 7CO shows decode is still dominated by expert movement/staging rather
+  than CUDA graph overhead:
+  - `blk.1` down stage `727.793 ms`, wall `734.186 ms`;
+  - `blk.2` down stage `697.773 ms`, wall `703.975 ms`;
+  - kernels are only about `3-5 ms` for these rows.
+- Phase 7CP/7CQ proved same-type current-down overlap can remove those misses
+  locally, but the added contention regressed reproducibility.
+- Therefore the next safe implementation step should not move dense/attention
+  to CPU and should not target generic CUDA graph tuning. Dense/attention are
+  already VRAM-resident, CPU execution would free some VRAM only by adding a
+  large per-token compute penalty. CUDA graph sync/submit was already measured
+  as too small compared with expert staging.
+
+Hypothesis:
+
+- Re-test production minimal-profile on the current Phase 7CC SOTA, not on the
+  older Phase 7AS/7AE baselines.
+- Remove optional diagnostic-only envs:
+
+```sh
+GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=<run>/fallback-profile.csv
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_STREAM_DECLINE_DEBUG=1
+GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
+```
+
+- Keep the accepted Phase 7CC runtime unchanged:
+  - l12 up/gate expert pack
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `GGML_MOE_IO_BACKEND=iouring`, `IO_BYTES=8388608`, `IO_DEPTH=8`,
+    `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`, `IO_SQPOLL=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`,
+    `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`, split cache max `6 MiB`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - dense/expert mmap drop controls;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+
+Why this can improve token rate:
+
+- It removes hot-path diagnostic bookkeeping: CUDA event timing, profile map
+  aggregation, fallback CSV formatting, name/eligibility maps, decline-debug
+  checks, and TTFT trace collection.
+- It does not change tensor math, selected experts, quantization, sampling,
+  model files, VRAM budget, IO policy, CPU threads, pinned slots, or prompt.
+- Because Phase 7CC already improved the expert pack relative to Phase 7AS,
+  previous minimal-profile rejections do not fully rule out a small production
+  win on the current SOTA.
+
+Theoretical upper bound:
+
+- Previous profile-trim attempts usually produced noise-sized wins or
+  non-reproducible gains. Expect `0.1-0.8 s` on n32 if this helps.
+- The hard upper bound is small because Phase 7CO shows the largest visible
+  buckets are still expert stage/movement, not instrumentation.
+- Any larger single-run improvement must be treated as cold-start variance until
+  confirmed by a second n32 and two n96 cold runs.
+
+Implementation:
+
+- Env-only experiment; no source change.
+- Create `/tmp/run_phase7cs_repro.sh` from `/tmp/run_phase7cc_repro.sh`.
+- Add `MIN_PROFILE=1`.
+- When `MIN_PROFILE=1`, omit the diagnostic envs listed above.
+- Keep exact reproduction artifacts even with minimal profiling:
+  - `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`;
+  - stdout/stderr;
+  - cgroup memory files and final `memory.stat`;
+  - `metrics.txt` with output, quality, TTFT, decode time, token rate,
+    `memory.peak`, file/active/inactive page-cache counters, expert-pack
+    counters, and VRAM cache summaries when printed.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7cs-7cc-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7cs_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start via `sync; echo 3 > /proc/sys/vm/drop_caches`;
+  - host RAM under 16GB including page cache:
+    `MemoryMax=15900000000`, `MemorySwapMax=0`,
+    `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output for `Please introduce France in a short paragraph.` must be
+    coherent and semantically correct.
+- Activation:
+  - `command.txt` records `MIN_PROFILE=1`;
+  - `env.txt` does not contain the removed diagnostic envs;
+  - accepted runtime envs remain present, especially the l12 pack,
+    up/gate parallel stage, current-down overlap, down parallel stage,
+    pack-mmap fallback, and 15GB VRAM cache.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - both n96 runs must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If performance is slower, quality fails, TTFT rises above gate, RAM exceeds
+  the cap, or activation is incomplete, reject Phase 7CS and keep Phase 7CC as
+  SOTA.
+
+Next optimization direction if Phase 7CS is rejected:
+
+- Add a default-off per-call up/gate CSV profiler matching Phase 7CO's down
+  CSV to identify which layers/types have high stage/wall time.
+- Use that evidence to target narrow movement scheduling or residency for
+  specific up/gate or down tensors.
+- Do not prioritize:
+  - moving dense/attention to CPU, because it trades VRAM capacity for a large
+    per-token compute regression;
+  - generic CUDA graph work, because measured graph overhead is much smaller
+    than expert staging;
+  - broad trace prefetch, because previous trace-prefetch phases improved hit
+    rate but regressed correctness or wall time.
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
