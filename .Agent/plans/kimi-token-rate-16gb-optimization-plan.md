@@ -223,6 +223,104 @@ state, or undocumented environment variables. A result that cannot be rerun from
 its `script.sh`, `command.txt`, `env.txt`, git commit, model path, expert-pack
 path, and cgroup/cold-start notes is rejected even if its token rate is higher.
 
+## Phase 7CZ: IQ3_XXS MMVQ compute parameter probe
+
+Timestamp: 2026-07-03T17:33:51Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7CY full-profile diagnostic shows the largest clarified non-IO decode
+  bucket is IQ3_XXS up/gate compute:
+  - `up-gate-profile.csv`, type 18 / IQ3_XXS:
+    `771` calls, `6168` active experts, `11768.544 ms` kernel time,
+    `11834.778 ms` wall time.
+  - This is about `15350 us/call` and is not explained by expert-pack wait in
+    the current profile rows.
+- Previously rejected alternatives must not be repeated blindly:
+  - Vendor MMQ up/gate was much slower in Phase 2K.
+  - IQ3 Q8_K decode path regressed in Phase 7BC.
+  - True compact-batch IQ3 MMVQ regressed in Phase 7V.
+  - IQ3 gate-copy/up-compute pipeline improved local type-18 time but hurt
+    global iouring/staging in Phases 7BS/7BT/7BU.
+- Current code still executes compact MoE MMVQ as one
+  `ggml_cuda_moe_stream_mmvq_dev()` call per active expert. Since the true batch
+  path was already rejected, this phase targets the single-expert IQ3_XXS MMVQ
+  kernel work split instead of launch batching.
+
+Selected change:
+
+- Probe `VDR_IQ3_XXS_Q8_1_MMVQ` in `ggml/src/ggml-cuda/vecdotq.cuh`.
+- First candidate: change only MMVQ VDR from `2` to `4`.
+- Leave `VDR_IQ3_XXS_Q8_1_MMQ` unchanged at `2`; this phase is only for the
+  current accepted MMVQ path, not the rejected MMQ path.
+- No cache policy, VRAM, RAM tier, iouring queue-depth, mmap advice, Q4 down
+  batch, static hotset, or same-type overlap changes are allowed in this phase.
+
+Theory:
+
+- In `mul_mat_vec_q`, `blocks_per_iter = vdr * nwarps * warp_size / qi`.
+  Raising IQ3_XXS MMVQ `vdr` from `2` to `4` changes how much quantized work is
+  consumed per thread iteration. For IQ3_XXS, the vec-dot function already
+  consumes two adjacent 2-bit groups per call. The `vdr=4` probe can reduce loop
+  iteration overhead and alter memory instruction grouping.
+- The expected benefit is bounded by the Phase 7CY measured type-18 bucket.
+  If only IQ3_XXS kernel time changes, the n96 maximum possible gain is
+  `11.835 s` decode wall, which is an absolute upper bound and not realistic.
+- A realistic first-pass target is a 5-10% reduction of the type-18 bucket:
+  about `0.59-1.18 s` on n96, or roughly `0.007-0.015 tok/s` at the current
+  77-token decode. Larger gains require evidence from kernel timing.
+- The main risk is higher register pressure, lower occupancy, worse memory
+  coalescing, or an invalid implicit assumption about `qi/vdr`. If any of these
+  happen, n4 smoke or n32 validation should regress and the patch must be
+  reverted immediately.
+
+Execution order:
+
+1. Commit and push this plan before source changes.
+2. Patch only `VDR_IQ3_XXS_Q8_1_MMVQ` from `2` to `4`.
+3. Push the source probe so the server can build exactly the tested commit.
+4. Cold-start n4 smoke under the same 16GB cgroup, model, expert pack, prompt,
+   and runner family as Phase 7CC/7CY. Required pass:
+   - exit code `0`;
+   - no CUDA error;
+   - output remains semantically about France;
+   - `read_failures=0` and `iouring_fallbacks=0`;
+   - host RAM below 16GB.
+5. Cold-start n32 validation with the standard Phase 7CC recipe:
+   - `N=32`, `VRAM_MIB=15000`, `THREADS=32`, `PINNED_SLOTS=8`,
+     `UPGATE_PCT=60`, `IQ2_UPGATE_PARALLEL=1`;
+   - `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+     -p MemorySwapMax=0`;
+   - runner must drop caches at start.
+6. If n32 beats the accepted Phase 7CC n32 decode gate
+   `33217.66 ms / 31` while satisfying all quality, RAM, TTFT, cold-start, and
+   reproducibility gates, run one n32 repeat.
+7. If the repeat confirms the gain, run n96 validation and compare against the
+   accepted Phase 7CC n96 gate `79008.37 ms / 77` and the best observed
+   diagnostic `77239.32 ms / 77`.
+8. If any gate fails or n32 does not improve, revert the source probe, commit
+   and push the rollback, and record the failed metrics here.
+
+Reproducibility requirements:
+
+- Every run directory must contain `README.md`, `command.txt`, `script.sh`,
+  `env.txt`, `stdout.txt`, `stderr.txt`, `answer.txt`, `metrics.json`,
+  `memory.txt`, `vram.txt`, `system.txt`, `cold-start.txt`, `moe.txt`, and
+  `quality.txt`.
+- The source commit, branch, remote, CUDA build command, model path, expert-pack
+  path, prompt, seed, cgroup limit, and cold-start method must be recorded.
+- A speedup is not accepted unless it has a second cold-start repeat with the
+  same recipe.
+
+Rollback criteria:
+
+- Revert immediately if the n4 smoke fails quality or CUDA correctness.
+- Revert immediately if n32 decode is slower than `33217.66 ms / 31`, TTFT
+  exceeds `106331.72 ms`, host RAM reaches or exceeds 16GB, output quality
+  fails, or the run cannot be reproduced from its artifacts.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
