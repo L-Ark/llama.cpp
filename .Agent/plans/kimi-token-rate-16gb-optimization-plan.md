@@ -1968,6 +1968,123 @@ Decision:
 - Next phase should plan an env-gated up+gate combined staging probe with a
   clear rollback path.
 
+## Phase 7DJ: env-gated naive combined up/gate staging probe
+
+Timestamp: 2026-07-03T19:20:10Z.
+
+Status: planned before implementation.
+
+Reason:
+
+- Phase 7DI proves there is real combined producer work for type22:
+  - individual up/gate stage jobs never exceed 8;
+  - combined stage jobs reach 16;
+  - type22 has 719 calls in the combined `9-16` bucket.
+- Phase 7DF showed merely increasing `IO_DEPTH` does not help because each
+  current copy call submits at most 8 read jobs.
+- Therefore the next behavior-changing probe should test whether combining
+  up+gate stage jobs into one iouring copy can improve decode.
+
+Naive probe design:
+
+- Add env gate:
+  - `GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE=1`
+- Apply only in the existing `parallel_up_gate && parallel_stage` path when
+  stage split is not active.
+- After planning `up_jobs` and `gate_jobs`, build a combined vector:
+
+```text
+combined_jobs = up_jobs + gate_jobs
+copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)
+record bc.ev_up_copy_aux_done on bc.up_stream
+bc.gate_stream waits on bc.ev_up_copy_aux_done
+launch up on bc.up_stream
+launch gate on bc.gate_stream
+```
+
+- Do not change:
+  - active expert selection;
+  - cache keys;
+  - VRAM cache size/split;
+  - expert pack format;
+  - quantization kernels.
+
+Expected benefit:
+
+- Combined copy can submit up to 16 jobs in one `expert_pack_iouring_copy_jobs`
+  call for the 719 type22 calls identified in Phase 7DI.
+- This can increase batch histogram from `5-8` to `9-16` for those calls and
+  may reduce iouring submit/wait overhead.
+
+Risk:
+
+- This naive version serializes up and gate staging through one stream/ring.
+- Current baseline can start up compute after up copy completes while gate copy
+  is still running. The naive combined version may delay up compute until gate
+  staging is also done.
+- If this regresses, the result still informs a future more complex design:
+  combined iouring read submission with per-job H2D streams.
+
+Theoretical bound:
+
+- Upper bound is the non-overlapped type22 staging wait:
+  - Phase 7DI type22:
+    `up_wait=5.423 ms`, `gate_wait=5.657 ms`, `calls=1386`;
+  - only part of that is recoverable because current overlap already hides some
+    gate work.
+- Realistic outcome:
+  - naive combined may be slower;
+  - a positive result would likely be `0.3-1.5 s` on n96.
+
+Execution:
+
+1. Commit and push this plan.
+2. Implement env-gated combined stage in the non-split parallel up/gate path.
+3. Build `build-cuda-batch`.
+4. First run n96 with the env enabled:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <source-commit>
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-n96-phase7dj-combined-upgate-stage
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      EXTRA_ENV_GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE=1 \
+      /tmp/run_phase7dj_combined_stage_repro.sh
+```
+
+Runner requirement:
+
+- Because `/tmp/run_phase7cc_repro.sh` does not pass arbitrary extra env vars,
+  create `/tmp/run_phase7dj_combined_stage_repro.sh` from it with this added to
+  `env.txt`:
+
+```text
+GGML_MOE_STREAM_UP_GATE_COMBINED_STAGE=1
+```
+
+Acceptance:
+
+- exit `0`;
+- quality pass on the France prompt;
+- TTFT <= `106331.72 ms`;
+- 16GB cgroup including page cache;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode faster than accepted Phase 7CC n96 `79008.37 ms / 77`;
+- if candidate passes, run one n96 repeat before promotion.
+
+Rollback:
+
+- If n96 is slower, quality fails, TTFT regresses, or memory violates the
+  constraint, revert the source patch and record the result.
+- If naive combined is slower but histograms show `9-16` iouring batches, plan a
+  future per-job-stream combined read design instead of discarding the idea
+  entirely.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
