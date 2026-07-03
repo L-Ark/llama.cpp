@@ -5342,6 +5342,130 @@ Result handling:
   patch unless the default-off implementation remains useful for a narrower
   follow-up.
 
+Result:
+
+- Source commit:
+  - `a96932f31 cuda: batch serial moe staging`;
+  - accidentally reverted as `5e8c11d58` during first strict comparison against
+    Phase 7DU diagnostic;
+  - restored as `745b15979 Reapply "cuda: batch serial moe staging"` after
+    re-checking the written promotion rule that also allows beating Phase 7DS
+    confirmation with clear mechanism evidence.
+- Build:
+  - passed remotely with existing warnings only.
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-223252Z-n32-phase7dz-serial-stage-batch`;
+  - source commit for run: `a96932f31`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`;
+  - env delta:
+    - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+    - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`;
+    - `N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 UPGATE_PCT=60
+      IQ2_UPGATE_PARALLEL=1`.
+- Correctness and gates:
+  - exit `0`;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous`;
+  - quality `pass`;
+  - TTFT `82499.29 ms`, below `106331.72 ms`;
+  - decode `31553.41 ms / 31`, `0.98 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - expert pack:
+    - hits `25458`, misses `192`, read_failures `0`;
+    - direct_reads `8707`, down from Phase 7DY `11752`;
+    - iouring_reads `15024`, iouring_bytes `87082139648`;
+    - iouring_fallbacks `0`;
+    - iouring_wait_us `11188565`, lower than Phase 7DU `12815733` and
+      Phase 7DY `13399542`.
+- Copy-profile mechanism:
+  - `runtime_load`: count `20250`, bytes `102.523 GiB`,
+    wall `46321.225 ms`, host `13020.565 ms`, io `33062.533 ms`,
+    iouring rows `11529`, pack rows `20103`;
+  - compared with Phase 7DY `runtime_load host_ms=15579.857 ms`, host direct
+    exposure improved by `2559.292 ms`;
+  - `current_down_overlap`: count `3664`, bytes `21.525 GiB`,
+    wall `9547.153 ms`, host `640.851 ms`, io `8896.678 ms`.
+- Operator profiles:
+  - upgate rows `869`, wall `5537.582 ms`, up `4113.884 ms`,
+    gate `1261.144 ms`, stage `47.923 ms`, kernel `5431.341 ms`,
+    up_jobs `4154`, gate_jobs `4154`;
+  - down rows `1644`, wall `4202.138 ms`, stage `3847.455 ms`,
+    kernel `198.397 ms`, jobs `3493`.
+- Comparison:
+  - versus Phase 7DS accepted n32 confirmation:
+    `31647.69 ms / 31`, 7DZ diagnostic is faster by `94.28 ms` despite
+    copy-profile overhead;
+  - versus Phase 7DU diagnostic:
+    `31343.27 ms / 31`, 7DZ diagnostic is slower by `210.14 ms`;
+  - mechanism is positive on the bottleneck counters, so treat 7DZ as a
+    candidate requiring non-diagnostic confirmation rather than immediately
+    promoting it as SOTA.
+
+Decision:
+
+- Keep the default-off source implementation for confirmation.
+- Run Phase 7DZA without `GGML_MOE_COPY_PROFILE_OUT`.
+- Promote only if no-profile n32 confirmation beats Phase 7DS n32
+  `31647.69 ms / 31` and passes all hard gates.
+
+## Phase 7DZA: no-profile confirmation for serial same-type staging
+
+Start time:
+
+- 2026-07-04T06:39:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DZ reduced direct staging reads and upgate/down profile totals, but
+  the diagnostic run had copy-profile overhead and did not beat Phase 7DU's
+  diagnostic decode time.
+
+Hypothesis:
+
+- Removing `GGML_MOE_COPY_PROFILE_OUT` should remove CSV logging overhead.
+- If the mechanism is real, n32 decode should be below Phase 7DS confirmation
+  `31647.69 ms / 31`, and ideally closer to or below Phase 7DU diagnostic
+  `31343.27 ms / 31`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 745b15979
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7du_repro.sh /tmp/run_phase7dza_repro.sh
+grep -q "GGML_MOE_STREAM_SERIAL_STAGE_BATCH" /tmp/run_phase7dza_repro.sh || \
+  sed -i '/^GGML_MOE_TTFT_TRACE_OUT=/a GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1' /tmp/run_phase7dza_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7dza_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dza-serial-stage-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dza_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- France output coherent and semantically correct;
+- n32 decode beats Phase 7DS confirmation `31647.69 ms / 31`.
+
+Result handling:
+
+- If accepted, run n96 confirmation.
+- If rejected, revert `745b15979` and keep Phase 7DS as SOTA.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
