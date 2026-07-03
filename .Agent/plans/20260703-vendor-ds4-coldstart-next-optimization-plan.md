@@ -401,6 +401,44 @@ Next direction after this rejection:
 4. If the unaccounted memory includes avoidable allocator reserve or duplicate buffers, reclaim that first and rerun a strict cold SOTA guard before testing down batch again.
 5. Any next source candidate must first show either nonzero down-cache hit rate without reducing gate hit rate, or direct reduction of `stage ms/call` below the top512 probe's `3.705 ms/call`; otherwise reject at short diagnostic stage.
 
+### 2026-07-03 One-Stream No-Filter Up/Down Diagnostic
+
+Design:
+
+- Goal: test whether the existing one-stream path can improve up/down fallback without adding an independent down batch cache.
+- Theory: removing `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` lets the same one-stream GPU path accept gate, up, and down experts. If CPU up/down compute were the only dominant cost, this should reduce CPU fallback time. The risk is that one-stream single-expert GPU execution is staging/synchronization heavy and that up/down calls pollute the gate cache.
+- Source state: clean accepted SOTA binary; no source change. The gate admission profile was kept, so only current gate profile entries are admitted to the long-lived cache, while up/down still execute through the GPU single path without cache insertion.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T044912Z-20260703T044912Z-one-stream-all-no-filter-gate-admit-short/france-cpu40-vram0gb`
+- Config delta: no `GGML_MOE_STREAM_ONE_NAME_FILTER`, keep `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, keep gate admission profile and O_DIRECT gate pack, short `-n 32`, strict cold 16GB cgroup.
+
+Result:
+
+- `eval_tok_s=1.7`, `prompt_tok_s=1.0`, `TTFT=34927.553761 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15148027904`, `pgmajfault=5568`, `workingset_refault_file=33746`, `ram_ok=true`, `ram_limit_killed=false`
+- `correctness_ok=true` for a short prefix; output: `Here is a short paragraph introducing France: France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and`
+
+Counters and diagnosis:
+
+- One-stream accepted all single calls: `single_accept=19863 single_decline=0`, so the no-filter path did remove CPU fallback for those ops.
+- It was much slower than CPU fallback: `cuda_single=7.556 ms/call`, `fallback_t0=0.001 ms/call`, down total `7.624 ms/call`.
+- Cache behavior collapsed: one-stream cache `hits=6511 misses=13352 hit_rate=32.8%`; the accepted SOTA gate-only run has `hits=30528 misses=4623 hit_rate=86.8%`.
+- Gate pack reads changed to `hits=2923 misses=10429`, confirming that unrestricted up/down traffic substantially disturbed the accepted gate path.
+- VRAM shape stayed the same as accepted SOTA: `free=236MiB`, `model=17362MiB`, `unaccounted=14510MiB`.
+
+Verdict:
+
+- Rejected. Full one-stream GPU coverage of up/down is not viable; it replaces CPU fallback with a slower staging/sync path and damages gate cache locality.
+- Do not pursue a broad multi-filter one-stream patch. A future source candidate would need a selective early-return mechanism that only sends an op to one-stream when the expected GPU path is cheaper than CPU fallback. Current evidence says down single is not cheaper.
+
+Next direction after this rejection:
+
+1. Deprioritize one-stream up/down compute. The existing one-stream kernel path is suitable for the accepted gate stream, not broad up/down replacement.
+2. Focus next on CPU fallback itself: profile the CPU up/down fallback inner loop by type/layer and check whether thread scheduling, row routing, or repeated conversion/barrier work can be reduced without changing math.
+3. Any CPU-side source candidate must be default-off, preserve exact France correctness, and show a measurable reduction in `fallback_t0` or name-profile totals before a full SOTA run.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
