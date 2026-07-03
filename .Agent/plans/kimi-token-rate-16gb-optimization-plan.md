@@ -3125,7 +3125,7 @@ git fetch wici vendor/kimi-moe-stream-on-vendor
 git reset --hard 2562a5b65
 cmake --build build-cuda-batch -j 32 --target llama-completion
 cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7do_down_profile_repro.sh
-perl -0pi -e 's#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\$RUN/fallback-profile.csv\n#GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\\$RUN/fallback-profile.csv\nGGML_MOE_DOWN_BATCH_PROFILE_OUT=\\$RUN/down-batch-profile.csv\n#' /tmp/run_phase7do_down_profile_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv' /tmp/run_phase7do_down_profile_repro.sh
 chmod +x /tmp/run_phase7do_down_profile_repro.sh
 RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7do-down-batch-profile"
 systemd-run --wait --collect --same-dir \
@@ -3180,8 +3180,28 @@ Phase 7DO harness attempt - rejected:
     Perl variable and expanded it to empty.
 - Decision:
   - reject this as a 7DO diagnostic because required artifacts are missing;
-  - fix the runner command by escaping `$RUN` as `\$RUN` in the replacement;
+  - do not use Perl replacement for this runner, because `$RUN` in replacement
+    strings is easy to expand incorrectly;
+  - fix the runner command by using `sed -i` to insert only the new down-profile
+    line while leaving the original fallback-profile line unchanged;
   - rerun Phase 7DO.
+
+Phase 7DO harness attempt 2 - rejected:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-201848Z-n32-phase7do-down-batch-profile-fixed`.
+- Failure:
+  - the runner was still wrong before launch;
+  - grep showed:
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=\/fallback-profile.csv`;
+    - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=\/down-batch-profile.csv`;
+  - this again cannot produce run-local profile artifacts.
+- Root cause:
+  - attempting to escape `$RUN` inside a Perl replacement over SSH is too
+    error-prone.
+- Decision:
+  - reject this as a 7DO diagnostic;
+  - rerun with `sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a ...'`.
 
 ## Phase 0: cold 16GB baseline
 
