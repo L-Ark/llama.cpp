@@ -22125,3 +22125,86 @@ Rollback:
   depth 2 as SOTA.
 - Do not test depth 3 unless depth 1 shows that depth sensitivity still matters
   on the current Phase 7AS runtime.
+
+Phase 7BH result - rejected:
+
+- result timestamp: 2026-07-03 UTC.
+- plan commit:
+  `02181093b` (`docs: plan kimi phase7bh prefetch depth1`).
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no rollback or rebuild required.
+- runner:
+  `/tmp/run_phase7bh_repro.sh`, copied from `/tmp/run_phase7as_repro.sh`.
+- env delta over Phase 7AS:
+
+```sh
+GGML_MOE_PREFETCH_DOWN_DEPTH=1
+```
+
+n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-053523Z-n32-phase7bh-7as-prefetch-depth1`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-053523Z-n32-phase7bh-7as-prefetch-depth1"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PREFETCH_DOWN_DEPTH=1 \
+      /tmp/run_phase7bh_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - TTFT `75903.93 ms`, under the `106331.72 ms` gate.
+- activation:
+  - `command.txt` records `PREFETCH_DOWN_DEPTH=1`;
+  - `env.txt` contains `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `34585.51 ms / 31`, `0.90 tok/s`;
+  - Phase 7AS n32 confirmation is `33471.59 ms / 31`, `0.93 tok/s`;
+  - Phase 7BH is slower by `1113.92 ms`.
+- mechanism:
+  - down prefetch remained `loads=3664`, `hits=3664`,
+    `evicted_unused=0`, `useful_rate=100.0%`, same as Phase 7AS;
+  - down cache hit rate stayed `73.6%`;
+  - expert-pack `iouring_wait_us=12469295`, worse than Phase 7AS
+    `11567536`;
+  - main pinned `host_stage=19367.326 ms`, worse than Phase 7AS
+    `18631.890 ms`;
+  - down `cuda_batch=2.731 ms/call`, slightly worse than Phase 7AS
+    `2.675 ms/call`.
+
+Gap analysis:
+
+- The env was recorded correctly, but the observed prefetch load/hit counts were
+  unchanged. In the current Phase 7AS runtime, `PREFETCH_DOWN_DEPTH` is not a
+  useful control lever for the active down prefetch/current-overlap behavior.
+- Lowering the depth did not remove staging pressure and did not improve wall
+  time. The small TTFT improvement is not relevant because decode regressed.
+
+Decision:
+
+- Reject Phase 7BH.
+- Do not run n96.
+- Keep `GGML_MOE_PREFETCH_DOWN_DEPTH=2` in SOTA.
+- Do not run depth 3 without a source-level explanation of why depth 1 did not
+  change prefetch load counts.
+- Keep Phase 7AS as the current accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
