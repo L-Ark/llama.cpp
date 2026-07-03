@@ -2875,6 +2875,113 @@ Decision:
   - or only when a profile proves the selected Q4_0 experts will not evict
     higher-value down experts.
 
+## Phase 7DN: Q4_0 isolated-pool feasibility diagnostic
+
+Start time:
+
+- 2026-07-04T00:00:00+08:00.
+
+Purpose:
+
+- Decide whether Q4_0 down GPU batching is worth revisiting after Phase 7DM.
+- Do not change runtime behavior in this phase.
+- Use existing Phase 7DL and Phase 7DM artifacts to estimate:
+  - how much Q4_0 fallback time is actually recoverable;
+  - how many Q4_0 experts would need residency;
+  - how much VRAM an isolated Q4_0 pool would require;
+  - whether the required VRAM can be taken without hurting the accepted
+    upgate/down pools.
+
+Current evidence:
+
+- Phase 7DM proved Q4_0 down GPU batch activation is technically possible:
+  - Q4_0 down tensors became eligible;
+  - decode fallback for those tensors dropped to about `0.001-0.002 ms/call`.
+- Phase 7DM also proved global Q4_0 admission is not acceptable:
+  - down slot grew from `7.44 MiB` to `7.88 MiB`;
+  - down slots dropped from `806` to `761`;
+  - down hit rate dropped from `73.4%` to `64.1%`;
+  - n32 decode regressed from `33217.66 ms / 31` to
+    `43178.97 ms / 31`.
+- Therefore any Q4_0 retry must keep the main down pool at the old `7.44 MiB`
+  slot class.
+
+Hypothesis:
+
+- A separate small Q4_0 down pool could allow selected high-value Q4_0 layers
+  to use GPU batch without resizing or evicting the main down pool.
+- This only helps if the selected Q4_0 fallback savings exceed:
+  - the isolated-pool VRAM taken from free/safety/upgate/down capacity;
+  - extra iouring/H2D cost;
+  - extra CUDA batch kernel and D2H cost.
+- If the required pool is larger than the available slack or if the useful
+  Q4_0 set is too diffuse, reject Q4_0 for now.
+
+Theoretical ceiling calculation:
+
+- Use Phase 7DL as accepted baseline:
+  - n96 decode `79415.78 ms / 77`;
+  - down fallback `16.092 ms/call`;
+  - down slots `806`, slot `7.44 MiB`;
+  - upgate slots `1679`, slot `5.36 MiB`.
+- Use Phase 7DM as activation proof:
+  - Q4_0 decode fallback disappeared;
+  - Q4_0 GPU batch decode totals for type2 layers are visible in
+    `kimi_cpu_moe_name_profile`.
+- Compute an optimistic bound:
+  - for each Q4_0 layer, baseline decode fallback time per call from Phase 7DL;
+  - subtract Phase 7DM decode total per call for the same layer;
+  - multiply by decode calls;
+  - cap by total Q4_0 fallback time and by added H2D/iouring estimates.
+- Compute the isolated-pool cost:
+  - `pool_mib = selected_q4_slots * q4_slot_mib`;
+  - use Q4_0 slot size from Phase 7DM: `7.88 MiB`;
+  - budget candidates: `128`, `256`, `384`, `512`, `768`, `1024 MiB`.
+- Reject implementation unless the estimate shows at least `1.0 s` n32
+  recoverable or `2.0 s` n96 recoverable after subtracting conservative
+  staging cost.
+
+Diagnostic implementation:
+
+- No model run required for the first diagnostic.
+- Pull from existing artifacts:
+  - Phase 7DL stderr:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-194853Z-n96-phase7dl-post-rollback-bottleneck/stderr.txt`;
+  - Phase 7DL fallback profile:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-194853Z-n96-phase7dl-post-rollback-bottleneck/fallback-profile.csv`;
+  - Phase 7DM stderr:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-195859Z-n32-phase7dm-q4-down-batch/stderr.txt`;
+  - Phase 7DM fallback profile:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-195859Z-n32-phase7dm-q4-down-batch/fallback-profile.csv`.
+- Write a local/temporary parser if needed, but do not commit tooling unless it
+  becomes reusable.
+- Record:
+  - top Q4_0 layers by fallback time;
+  - estimated savings per selected layer;
+  - required Q4_0 slot count and MiB;
+  - whether the pool can fit without changing `VRAM_MIB=15000` or shrinking
+    accepted main pools;
+  - final decision.
+
+Acceptance for moving to an implementation probe:
+
+- The diagnostic must show a plausible positive upper bound with margin:
+  - expected n32 improvement `>=1.0 s`, or expected n96 improvement `>=2.0 s`;
+  - no change to host RAM limit;
+  - no change to TTFT-critical cold-start path;
+  - no main down slot-size change;
+  - no upgate pool shrink unless the estimate explicitly accounts for the
+    missed upgate cost.
+- If this is not proven, reject implementation and continue with another
+  bottleneck.
+
+Result handling:
+
+- If isolated Q4_0 pool is not promising, record rejection without source
+  changes.
+- If promising, write Phase 7DO before source edits.
+- Phase 7DO must be default-off or tightly scoped, and must run n32 first.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
