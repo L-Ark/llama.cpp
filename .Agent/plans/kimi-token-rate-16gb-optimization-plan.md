@@ -979,7 +979,7 @@ type23 IQ4_XS  ncols=1: REG:62 STACK:0 SHARED:1792
 
 Timestamp: 2026-07-03T18:26:02Z.
 
-Status: planned before implementation.
+Status: rejected after n96 repeat; source patch reverted.
 
 Reason for this phase:
 
@@ -1059,6 +1059,138 @@ Rollback:
 
 - If resource usage obviously worsens, n96 quality fails, or n96 decode is not
   faster than Phase 7CC, revert the source patch and record the result.
+
+Execution record:
+
+- Plan commit:
+  - `66d3954cf docs: plan kimi phase7de iq3 sign precompute`
+- Source probe commit:
+  - `d99071e1f cuda: probe iq3 xxs sign precompute`
+- Rollback commit:
+  - `4710c2b96 Revert "cuda: probe iq3 xxs sign precompute"`
+- Server build:
+  - repository: `/root/lfz/llama.cpp-vendor-kimi`;
+  - target: `build-cuda-batch`;
+  - source commit under test: `d99071e1f`;
+  - command: `cmake --build build-cuda-batch -j$(nproc)`.
+
+Resource result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-183218Z-phase7de-resource`
+- Active kernel:
+  `mul_mat_vec_q<type18,ncols=1,false,false,false>`
+- Baseline Phase 7DD:
+  `REG:52 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+- Phase 7DE probe:
+  `REG:53 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1040`
+- Interpretation:
+  - register pressure increased only by one register;
+  - no stack spill appeared;
+  - resource usage did not by itself block the n96 test.
+
+n96 candidate:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-183234Z-n96-phase7de-iq3-sign-precompute`
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard d99071e1f
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-183234Z-n96-phase7de-iq3-sign-precompute
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `75949.29 ms`
+- decode: `78762.03 ms / 77`, `0.98 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15125917696`
+  - `inactive_file=14333480960`
+  - `active_file=535941120`
+- expert pack:
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+- first-run comparison:
+  - faster than accepted Phase 7CC n96 `79008.37 ms / 77` by `246.34 ms`;
+  - required one n96 repeat before promotion because the expected effect is
+    below normal cold-run variance.
+
+n96 repeat:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-183614Z-n96-phase7de-iq3-sign-precompute-repeat`
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard d99071e1f
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260703-183614Z-n96-phase7de-iq3-sign-precompute-repeat
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=$RUN N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7cc_repro.sh
+```
+
+- exit: `0`
+- quality: pass
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+  landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+  for its diverse landscapes, from the vineyards of Bordeaux to the beaches of
+  the Riviera, and plays a major role in European and global affairs.`
+- TTFT: `79754.59 ms`
+- decode: `79038.22 ms / 77`, `0.97 tok/s`
+- memory:
+  - `memory.max=15899996160`
+  - `memory.peak=15899996160`
+  - `memory.current.final=15127396352`
+  - `inactive_file=246882304`
+  - `active_file=14623035392`
+- expert pack:
+  - `hits=62651`
+  - `misses=1461`
+  - `read_failures=0`
+  - `iouring_reads=28899`
+  - `iouring_bytes=168378384384`
+  - `iouring_fallbacks=0`
+
+Decision:
+
+- Reject Phase 7DE.
+- Reason:
+  - first n96 was only `246.34 ms` faster than Phase 7CC;
+  - repeat n96 was `29.85 ms` slower than Phase 7CC;
+  - therefore the improvement is not reproducible under the cold-start n96 gate.
+- The sign-unpack precompute likely changes scheduling/register allocation
+  enough to land inside noise rather than producing a stable kernel reduction.
+- Source patch was reverted immediately and pushed.
+- Current accepted SOTA remains Phase 7CC:
+  - n96 confirm decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed diagnostic/candidate `77239.32 ms / 77`, `1.00 tok/s`, not
+    promoted because it lacks repeat promotion.
 
 ## Phase 0: cold 16GB baseline
 
