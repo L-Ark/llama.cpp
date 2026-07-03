@@ -982,6 +982,22 @@ Fine trace first attempt:
 - Problem: `cpu_chunk_trace.csv` has exactly `800001` lines including header, so the `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=800000` limit was hit and the trace is incomplete.
 - Action: rerun the same diagnostic with `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=2000000` before drawing bottleneck conclusions. The first attempt is useful only as a guard that profiling does not disturb RAM/correctness/gate counters; it is not sufficient for phase-trace analysis.
 
+
+Fine trace completed and early-layer top3 candidate design:
+
+- Complete trace run: `/root/lfz/runs/vendor-ds4-16gb/20260703T100011Z-20260703T100011Z-cpu-fallback-fine-trace-limit2m/france-cpu40-vram0gb`.
+- Metrics: `eval_tok_s=4.0`, `prompt_tok_s=1.5`, `TTFT=29526.174987 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15104675840`, `pgmajfault=259065`, `workingset_refault_file=1642262`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`.
+- Trace completeness: `cpu_chunk_trace.csv` has `909953` lines including header, below the `2000000` limit. `fallback-profile.csv` has `7031` lines.
+- Analysis artifacts: `cpu_fallback_fine_trace_analysis.json` and `cpu_fallback_fine_trace_analysis.txt` in the run directory.
+- Fallback profile: total up/down fallback `26972.399 ms`; decode up `9725.822 ms`, decode down `9673.781 ms`, prompt up `3317.296 ms`, prompt down `4255.500 ms`.
+- Chunk trace thread-sum: up/down `506468.184 ms`; divided by 20 threads gives about `25323.4 ms`, close to the fallback profile wall total. This points to MXFP4 dot/source scanning as the dominant cost, not a large recoverable scheduling-tail component.
+- Shape split: cne1=1 decode-like thread-sum is `423997.611 ms` (`~21199.9 ms / 20`), while cne1>1 prompt-like thread-sum is `82470.573 ms` (`~4123.5 ms / 20`). Decode-like work is the main residual CPU fallback cost.
+- Layer fallback concentration: layers `0-9` account for `9928.306 ms` (`36.8%`) of total up/down fallback; layers `0-2` account for `4304.726 ms` (`16.0%`). The current accepted config leaves layers `0-9` at top4 while layers `10-39` use top3.
+- Candidate: run a no-source strict cold probe with `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39` and `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, keeping all other accepted SOTA config unchanged. This reduces early layers from top4 to top3 as well.
+- Theory and upper bound: if selected experts have roughly similar CPU fallback cost, reducing layers `0-9` from top4 to top3 can save at most about `25% * 9928.306 ms ~= 2482 ms`; layers `0-2` alone bound about `1076 ms`. This is enough to test because the current SOTA boundary is close, but it is not guaranteed because routing distribution is uneven and output quality may degrade.
+- Risk: top-k pruning changes model math and may reduce answer quality or truncate/alter the output. This probe is acceptable only if France remains semantic, coherent, and complete. It must preserve 16GB cgroup, TTFT gate, gate pack direct failures `0`, and gate cache behavior.
+- Acceptance: promote only if `eval_tok_s > 4.2` with RAM/correctness/TTFT/O_DIRECT gates passing. If `eval_tok_s <= 4.2` or correctness degrades, reject as diagnostic and keep accepted SOTA unchanged. No source rollback is needed because this is env-only.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
