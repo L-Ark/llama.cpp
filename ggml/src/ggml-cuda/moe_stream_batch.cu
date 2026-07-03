@@ -362,6 +362,7 @@ struct up_gate_layer_profile_entry {
 };
 
 static bool g_up_gate_layer_profile_enabled = false;
+static std::atomic<uint64_t> g_up_gate_layer_profile_records{0};
 static std::mutex g_up_gate_layer_profile_mu;
 static up_gate_layer_profile_entry g_up_gate_layer_profiles[256];
 
@@ -471,6 +472,7 @@ static void up_gate_layer_profile_add(
     if (!g_up_gate_layer_profile_enabled || !up_tensor || !gate_tensor) {
         return;
     }
+    ++g_up_gate_layer_profile_records;
 
     std::lock_guard<std::mutex> lk(g_up_gate_layer_profile_mu);
     up_gate_layer_profile_entry *free_entry = nullptr;
@@ -712,6 +714,9 @@ static void up_gate_layer_profile_report_atexit() {
     if (!g_up_gate_layer_profile_enabled) {
         return;
     }
+    std::fprintf(stderr,
+        "[moe_stream_batch] up/gate layer profile summary: records=%lu\n",
+        (unsigned long)g_up_gate_layer_profile_records.load(std::memory_order_relaxed));
 
     up_gate_layer_profile_entry entries[256];
     size_t n_entries = 0;
@@ -725,6 +730,7 @@ static void up_gate_layer_profile_report_atexit() {
     }
 
     if (n_entries == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] up/gate layer profile: no entries recorded\n");
         return;
     }
 
@@ -4625,6 +4631,9 @@ static bool init_batch_once() {
         const char *prof_env = std::getenv("GGML_MOE_BATCH_PROFILE");
         const char *layer_prof_env = std::getenv("GGML_MOE_UP_GATE_LAYER_PROFILE");
         g_up_gate_layer_profile_enabled = layer_prof_env && layer_prof_env[0] && layer_prof_env[0] != '0';
+        if (g_up_gate_layer_profile_enabled) {
+            std::fprintf(stderr, "[moe_stream_batch] up/gate layer profile enabled\n");
+        }
         g_bprof.enabled = prof_env && prof_env[0] && prof_env[0] != '0';
         g_uprof.enabled = g_bprof.enabled || up_gate_profile_csv_enabled() || g_up_gate_layer_profile_enabled;
         if (g_batch.stream && (g_bprof.enabled || g_uprof.enabled)) {
