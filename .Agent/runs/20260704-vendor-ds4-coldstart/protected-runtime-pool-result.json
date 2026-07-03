@@ -1,0 +1,102 @@
+{
+  "artifact": "protected-runtime-pool-result",
+  "date_utc": "2026-07-03T23:30:00Z",
+  "status": "rejected_no_new_sota_source_reverted",
+  "source_head_before_patch": "fb08ca933",
+  "current_sota_eval_tok_s": 4.4,
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T232143Z-20260704_prefill_protect_3136_pool_candidate/france-cpu40-vram0gb",
+  "config": {
+    "framework": "vendor DeepSeek",
+    "drop_caches": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "gate_cache_mib": 13568,
+    "name_filter": "ffn_gate_exps",
+    "gate_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "gate_pack_io": "direct",
+    "gate_profile": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "prefill_limit": 3136,
+    "prefill_protect": true,
+    "runtime_pool_slots": 56,
+    "cli_extra_args": "-c 256 -b 16 -ub 16 -t 20 -tb 20",
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "manual_correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 34502.12893,
+    "ttft_limit_ms": 33617.688744,
+    "elapsed_seconds": 65.51,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15104081920,
+    "memory_max_events": 17128,
+    "pgmajfault": 274448,
+    "workingset_refault_file": 1691025,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "exit_status": 0
+  },
+  "prefill": {
+    "loaded": 3313,
+    "limit": 3136,
+    "attempted": 3136,
+    "inserted": 3136,
+    "bytes": 13975420928,
+    "elapsed_ms": 5128.371,
+    "pack_misses": 0,
+    "read_failures": 0
+  },
+  "pack": {
+    "hits": 4663,
+    "misses": 0,
+    "reads": 4663,
+    "bytes": 20780417024,
+    "entries": 4599,
+    "direct_reads": 4663,
+    "direct_failures": 0,
+    "direct_fallbacks": 0
+  },
+  "vram_cache": {
+    "hits": 33624,
+    "misses": 1527,
+    "hit_rate": 95.7,
+    "protected_slots": 3136
+  },
+  "trace": {
+    "all_gate": {
+      "rows": 35151,
+      "src0_ms": 6939.244,
+      "total_ms": 8218.065
+    },
+    "gate_hits": {
+      "rows": 33624,
+      "src0_ms": 5162.197,
+      "total_ms": 6157.414
+    },
+    "gate_misses": {
+      "rows": 1527,
+      "src0_ms": 1777.047,
+      "total_ms": 2060.651
+    },
+    "cache_inserts": {
+      "rows": 241,
+      "src0_ms": 299.524,
+      "total_ms": 344.429
+    }
+  },
+  "hashes": {
+    "summary_json": "644fe8757aebaeb7999d2323a6e8c83a5db90016ed6c8c8afaeb06895bf1e94a",
+    "stdout_txt": "6449d83b8bb4720dc9762696716cae20fcafdba10de4481bd6513a5c350155c9",
+    "stderr_txt": "fceb68c46ca89118d8dea1ac5eaae65d15f98c8e2eb1839476928a1b16e99035",
+    "environment_txt": "9e2ae12d003f0005e538364a5afc85789cfa1266d2ffce9b59f913b5d95652c9",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace_csv": "33205a16c7cc142dc65886359fdee46659d37fb2cf8c9715df4f6faba9941c3f"
+  },
+  "verdict": "rejected: hit-rate target and runtime pool behavior were achieved, but eval_tok_s only tied 4.4 and TTFT exceeded the 20% gate; source patch was reverted"
+}

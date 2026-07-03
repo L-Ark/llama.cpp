@@ -5158,3 +5158,75 @@ Rejection rules:
 
 - Reject if `eval_tok_s <= 4.4`, correctness fails, TTFT exceeds the gate, RAM gate fails, or pack direct failures/fallbacks appear.
 - If rejected, revert source and push only docs/artifacts.
+
+### 2026-07-03T23:30Z Protected Prefix Plus Runtime Pool Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/protected-runtime-pool-result.json`
+- artifact sha256: `6cdc2b25cffe0eadc677b58ef1b68cc94df093bbe51fa3699edda1bebdd3befd`
+
+Source status:
+
+- Source patch was reverted after rejection.
+- No protected/runtime-pool source change is retained in the final worktree.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T232143Z-20260704_prefill_protect_3136_pool_candidate/france-cpu40-vram0gb`
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=34502.12893 ms`
+- TTFT gate: fail (`34502.12893 > 33617.688744`)
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15104081920`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass. The answer is complete, coherent, and semantically correct.
+
+Counters:
+
+- prefill: `attempted=3136 inserted=3136 bytes=13975420928 elapsed_ms=5128.371 pack_misses=0 read_failures=0`
+- pack: `hits=4663 misses=0 reads=4663 bytes=20780417024 direct_reads=4663 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=33624 misses=1527 hit_rate=95.7% protected=3136`
+- runtime pool activity: `cache_inserts=241`
+
+Trace:
+
+| Slice | rows | src0_ms | total_ms |
+| --- | ---: | ---: | ---: |
+| all gate | `35151` | `6939.244` | `8218.065` |
+| gate hits | `33624` | `5162.197` | `6157.414` |
+| gate misses | `1527` | `1777.047` | `2060.651` |
+| cache inserts | `241` | `299.524` | `344.429` |
+
+Artifact hashes:
+
+- `summary.json`: `644fe8757aebaeb7999d2323a6e8c83a5db90016ed6c8c8afaeb06895bf1e94a`
+- `stdout.txt`: `6449d83b8bb4720dc9762696716cae20fcafdba10de4481bd6513a5c350155c9`
+- `stderr.txt`: `fceb68c46ca89118d8dea1ac5eaae65d15f98c8e2eb1839476928a1b16e99035`
+- `environment.txt`: `9e2ae12d003f0005e538364a5afc85789cfa1266d2ffce9b59f913b5d95652c9`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `33205a16c7cc142dc65886359fdee46659d37fb2cf8c9715df4f6faba9941c3f`
+
+Verdict:
+
+- Rejected. The hit-rate target and runtime-pool behavior were achieved, but token rate only tied `4.4` and TTFT exceeded the acceptance gate.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+- This path suggests cache-hit count alone is no longer the dominant bottleneck. Next work should reduce miss-path and hit-path overhead directly, especially H2D/sync/scatter cost and prefill TTFT cost.
