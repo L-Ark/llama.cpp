@@ -19788,6 +19788,125 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+### Phase 7CT - per-call up/gate CSV profile for Phase 7CC
+
+Start time:
+
+- 2026-07-03T16:01:46Z.
+
+Current bottleneck:
+
+- Phase 7CS confirmed that removing diagnostics gives a small n32 gain but does
+  not improve n96, so the dominant long-run bottleneck remains expert movement.
+- Phase 7CO gives per-call visibility for down batches and showed top down rows
+  are movement/stage-bound.
+- Up/gate still has only aggregate and type-level profile output. That is not
+  enough to choose a narrow next optimization because it hides:
+  - which layer names dominate up/gate stage time;
+  - whether up or gate misses dominate;
+  - whether the expensive calls use parallel up/gate staging;
+  - whether the call uses GPU handoff to down.
+
+Hypothesis:
+
+- Add a default-off CSV sink:
+
+```sh
+GGML_MOE_UP_GATE_PROFILE_OUT=<run>/up-gate-profile.csv
+```
+
+- The CSV should record one row per accepted up/gate batch with:
+  - mode: prompt/decode;
+  - up and gate tensor names;
+  - up/gate quant types;
+  - `n_active`;
+  - up/gate cache hits and misses;
+  - up/gate staged job counts;
+  - stage, quant, up, gate, wait, compute, fuse, kernel, d2h, scatter, wall;
+  - whether GPU handoff, parallel up/gate, and parallel stage were active.
+
+Why this can improve future token rate:
+
+- This phase is diagnostic and should not be promoted as SOTA.
+- It identifies the next specific movement target. A valid next optimization
+  should be chosen only after ranking per-layer up/gate time against Phase 7CO
+  down time.
+- The next implementation can then avoid broad scheduling changes that already
+  failed in Phase 7CP/7CQ and broad trace prefetch phases.
+
+Theoretical upper bound:
+
+- The profiler itself should not improve token rate. Any speedup in the run is
+  noise and must not be promoted.
+- The bound for the next optimization will be computed from the CSV:
+  - for a layer/type where `stage_ms` dominates, maximum gain is bounded by the
+    per-run sum of `stage_ms` and by the bytes moved divided by SSD/H2D
+    bandwidth;
+  - for a layer/type where `up_compute_ms` or `gate_compute_ms` dominates,
+    maximum gain is bounded by the measured compute subtotal;
+  - if `wall_ms` is near zero because GPU handoff avoids D2H sync, use event
+    subtotals rather than wall for ranking.
+
+Implementation:
+
+- Source change, default-off.
+- Reuse the existing `GGML_MOE_BATCH_PROFILE=1` event timing path.
+- Add `up_gate_profile_enabled()` and `up_gate_profile_record()` analogous to
+  Phase 7CO's down CSV writer.
+- In `ggml_cuda_moe_stream_up_gate_batch()`:
+  - count up cache hits as `n_active - up_stage_jobs_count`;
+  - count gate cache hits as `n_active - gate_stage_jobs_count`;
+  - record CSV rows in both the GPU handoff path and the D2H/scatter path;
+  - do not change routing, cache insertion, IO, streams, or tensor math.
+- Runner:
+  - copy `/tmp/run_phase7cc_repro.sh` to `/tmp/run_phase7ct_repro.sh`;
+  - append `GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv`;
+  - keep `GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv` so the
+    same run can compare up/gate and down.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7ct_repro.sh
+# append GGML_MOE_UP_GATE_PROFILE_OUT and GGML_MOE_DOWN_BATCH_PROFILE_OUT to env.txt
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ct-upgate-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ct_repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- exit `0`;
+- host RAM under 16GB including page cache:
+  `MemoryMax=15900000000`, `MemorySwapMax=0`,
+  `memory.peak<=15899996160`;
+- cold start;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct;
+- `up-gate-profile.csv` exists and has a header plus rows;
+- `down-batch-profile.csv` exists and has a header plus rows;
+- plan records:
+  - all standard metrics;
+  - top up/gate rows by total `stage_ms`, `up_compute_ms`,
+    `gate_compute_ms`, and event subtotal;
+  - comparison against Phase 7CO down rows;
+  - explicit next implementation target.
+
+Rollback:
+
+- If the source fails to build, revert the patch.
+- If output quality fails, TTFT/RAM gates fail, or CSV activation fails, revert
+  or fix before any next optimization.
+- Because the code is default-off, an accepted diagnostic commit may remain even
+  if the profiled run is slower.
+
 ## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
 
 Design timestamp: 2026-07-03 UTC.
