@@ -25854,3 +25854,108 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+### Phase 7BX - shift VRAM pool from upgate to down, upgate pct 55
+
+Start time:
+
+- 2026-07-03T11:50:36Z.
+
+Current bottleneck:
+
+- Phase 7AS n32 accepted SOTA still spends most decode time in movement and
+  staging:
+  - expert-pack `iouring_wait_us=11567536`;
+  - main pinned `host_stage=18631.890 ms`;
+  - down CUDA batch path total `38.790 ms/call` in the 7BW comparable run,
+    with `fallback_t0` dominating at `35.996 ms/call`;
+  - down hit rate `73.6%`, upgate hit rate `43.7%`.
+- Upgate pool currently receives 60% of the 15GB VRAM cache budget:
+  - upgate: about `8.8 GiB`, `1679` slots of `5.36 MiB`;
+  - down: about `5.9 GiB`, `806` slots of `7.44 MiB`.
+- A down miss moves a larger tensor and sits directly on the current-down
+  overlap path. Reducing down misses may be worth more than the additional
+  upgate misses caused by a slightly smaller upgate pool.
+
+Hypothesis:
+
+- Set `GGML_MOE_VRAM_CACHE_UPGATE_PCT=55`, keeping total VRAM budget at 15GB.
+- This shifts about `0.75 GiB` from upgate to down:
+  - expected down capacity gain: roughly `0.75 GiB / 7.44 MiB`, about `100`
+    more down slots;
+  - expected upgate capacity loss: roughly `0.75 GiB / 5.36 MiB`, about `140`
+    fewer upgate slots.
+- If the hot expert distribution is more valuable for down, decode should show
+  lower down misses, lower main pinned host staging, and lower expert-pack wait.
+- If upgate misses are more expensive than expected, the run will show worse
+  upgate hit rate and type-18/type-22 wall time.
+
+Theoretical upper bound:
+
+- The only possible win is avoiding miss transfers and pinned staging for
+  experts that newly fit in the down pool.
+- If the extra `~100` down slots remove `5-10%` of the 3461 down misses from
+  the n32 run, the avoided movement could plausibly save `0.8-2.0 s`.
+- The hard upper bound is lower than the full `18.6 s` host-stage time because
+  most transfers still remain mandatory and overlap is already active.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Reuse `/tmp/run_phase7as_repro.sh`.
+- Change only the runtime argument:
+
+```sh
+UPGATE_PCT=55
+```
+
+- Keep all other accepted Phase 7AS settings:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bx-upgate55"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=55 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7as_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit, including page cache;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - command records `UPGATE_PCT=55`;
+  - `env.txt` contains `GGML_MOE_VRAM_CACHE_UPGATE_PCT=55`;
+  - stderr VRAM cache reports a larger down pool and smaller upgate pool than
+    Phase 7AS.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower or fails a hard gate, reject and keep
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
