@@ -1037,6 +1037,16 @@ Next direction after top-k rejection:
 - Already rejected kernel/layout options: MXFP4 prefetch, hotset repack integration, compact mmap hotsets, broad one-stream up/down, down-batch cache under current VRAM budget.
 - Before the next source candidate, inspect the current MXFP4 dot and `mul_mat_id` inner loop for a very narrow default-off optimization that changes scheduling or memory access without changing selected experts. If no plausible >1s upper bound can be calculated, do not run a full strict cold candidate.
 
+
+Native MXFP4 multi-row dot microbench design:
+
+- Source inspection: `ggml_compute_forward_mul_mat_id_one_chunk()` currently calls `vec_dot()` once per output row. For cne1=1 decode-like work, the same quantized activation row (`block_q8_0 * y`) is reused for many MXFP4 expert rows, but `ggml_vec_dot_mxfp4_q8_0()` reloads `y` for every row.
+- Fine trace basis: cne1=1 decode-like up/down thread-sum is `423997.611 ms`, or about `21199.9 ms` at 20 threads. This dominates the remaining fallback path.
+- Candidate idea: benchmark a native-layout multi-row MXFP4 dot that computes 4 rows for one shared `y` at a time. It should not require repacking, extra persistent RAM, changed routing, or changed selected experts. It only attempts to reuse loaded Q8 activation blocks and reduce per-row loop overhead.
+- Theoretical upper bound: if sharing `y` and loop overhead improves the cne1=1 dot path by `S`, the decode-like bound is `21199.9*(1-1/S) ms`. A modest `1.10x` speedup gives about `1.93s`; `1.20x` gives about `3.53s`. This is enough to justify a microbench-first check.
+- Practice: write a scratch microbench outside committed runtime source comparing current `ggml_vec_dot_mxfp4_q8_0()` row-wise calls against a prototype native multi-row implementation on representative up/down row counts. Verify max/mean abs against baseline.
+- Acceptance for source implementation: proceed to a default-off source candidate only if the scratch benchmark shows at least `>=8%` warm compute speedup with exact or negligible numerical difference and no persistent memory requirement. Otherwise reject at microbench stage and do not run a full model candidate.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
