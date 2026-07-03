@@ -5444,3 +5444,116 @@ Verdict:
 - Rejected/tie. Skipping no-trace timing and trace-lock overhead did not exceed the current `4.4 tok/s` SOTA.
 - Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
 - The next bottleneck is likely actual per-expert GPU/D2H/sync/scatter work, not trace instrumentation.
+
+### 2026-07-04T00:20Z Next Plan: Deferred Per-Expert Stream Sync
+
+Current accepted SOTA baseline:
+
+- `eval_tok_s=4.4`
+- strict cold start with `drop_caches`
+- 16GB cgroup limit, including page cache
+- `cpu_moe=40`
+- `GGML_MOE_VRAM_CACHE_GB=0`
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+- gate-only one-stream cache with `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+- `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+- gate O_DIRECT pack:
+  `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- run:
+  `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- accepted TTFT gate remains `<= 33617.688744 ms`
+- accepted SOTA commit is already pushed to `ssd/vendor/deepseek-token-rate-16gb`
+
+Mandatory source/documentation rule:
+
+- Before every new experiment, update this plan with the bottleneck hypothesis, expected upper bound, exact config, acceptance gates, rejection rules, and rollback behavior.
+- When a new compliant SOTA appears, immediately record complete reproduction information, commit the source and artifacts, and push to the `ssd-llama` remote branch `vendor/deepseek-token-rate-16gb`.
+- A promoted SOTA must be reproducible from the pushed branch. Promotion requires a pushed-source rerun with the same gates.
+- Rejected experiments must still be recorded in this document and in `.Agent/runs/20260704-vendor-ds4-coldstart/`, but any rejected source patch must be reverted before push.
+- Git author/committer for this work must be `L-Ark <fliangae@connect.ust.hk>`.
+
+Bottleneck hypothesis:
+
+- The previous no-trace and trace-disabled fast-path experiments tied or regressed, so trace file writing, trace mutex entry, and timestamp scaffolding are not the dominant remaining bottleneck.
+- Cache hit-rate experiments showed that increasing protected runtime hits can improve counters without improving token rate, which means the hot path is likely dominated by actual per-expert GPU launch/synchronization, D2H copy, scatter, and CPU miss-side work.
+- Current `ggml_cuda_moe_stream_one` has an existing deferred mode controlled by `GGML_MOE_STREAM_DEFER`. In non-deferred mode, each expert invocation can synchronize and scatter immediately. Deferred mode records the scatter work and lets `ggml_cuda_moe_stream_sync()` synchronize/scatter later at the CPU MoE boundary.
+- This may reduce per-expert synchronization fragmentation and allow more outstanding CUDA stream work before a global boundary.
+
+Hard-bound / expected upper limit:
+
+- The France SOTA path has about `35151` gate expert invocations.
+- If immediate per-expert synchronization/scatter contributes only `5 us` per invocation, the maximum gain is roughly `176 ms`, likely too small to move token rate materially.
+- If synchronization fragmentation costs `20-50 us` per invocation under 20 CPU threads, the upper bound is roughly `0.7-1.8 s`.
+- Given current eval throughput around `4.4 tok/s`, a realistic successful result would be `4.5-4.8 tok/s`; anything near or above `5.0 tok/s` would indicate that per-expert synchronization was a major bottleneck.
+- If `GGML_MOE_STREAM_DEFER=1` changes ordering, cache-slot lifetime, or scatter timing incorrectly, correctness may fail even if throughput improves. Correctness must therefore be checked before any promotion.
+
+Experiment design:
+
+- First run a no-source-change strict cold candidate with `GGML_MOE_STREAM_DEFER=1`.
+- Keep the accepted top3000 SOTA environment unchanged except for adding:
+  `GGML_MOE_STREAM_DEFER=1`.
+- Keep trace output enabled for the first diagnostic run so that counters and artifact parity are available, unless the run itself shows trace interaction with deferred mode.
+- Do not change model, prompt, CLI batch settings, cgroup limit, pack path, cache size, prefill profile, or top-k settings.
+
+Exact candidate command shape:
+
+```bash
+python3 .Agent/run-tools/strict_ds4_runner.py \
+  --out-root /root/lfz/runs/vendor-ds4-16gb \
+  --run-name 20260704_stream_defer_top3000_candidate \
+  --case-name france \
+  --cpu-moe 40 \
+  --vram-cache-gb 0 \
+  --memory-max-bytes 16000000000 \
+  --ram-kill-threshold-bytes 16000000000 \
+  --drop-caches-before-case \
+  --env CUDA_VISIBLE_DEVICES=0 \
+  --env GGML_CUDA_DISABLE_GRAPHS=1 \
+  --env GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39 \
+  --env GGML_MOE_KEEP_TOPK_LAYER_VALUE=3 \
+  --env GGML_MOE_KEEP_TOPK_UPDOWN=4 \
+  --env GGML_MOE_STREAM=1 \
+  --env GGML_MOE_STREAM_DEFER=1 \
+  --env GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv \
+  --env GGML_MOE_STREAM_DONTNEED=1 \
+  --env GGML_MOE_STREAM_ONE_CACHE_MIB=13568 \
+  --env GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1 \
+  --env GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack \
+  --env GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct \
+  --env GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps \
+  --env GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000 \
+  --env GGML_MOE_STREAM_ONE_PREFILL_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv \
+  --env GGML_MOE_STREAM_ONE_TRACE_OUT='{case_dir}/one_trace.csv' \
+  --extra-arg=-c --extra-arg=256 \
+  --extra-arg=-b --extra-arg=16 \
+  --extra-arg=-ub --extra-arg=16 \
+  --extra-arg=-t --extra-arg=20 \
+  --extra-arg=-tb --extra-arg=20
+```
+
+Acceptance gates:
+
+- `eval_tok_s > 4.4` on the first candidate.
+- If the first candidate exceeds `4.4`, immediately commit/push docs/artifacts and rerun from the pushed source/branch before promotion.
+- Final promoted SOTA must also have `eval_tok_s > 4.4` on pushed-source rerun.
+- France answer must be semantically correct, coherent, and complete.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`, and `ram_ok=true`.
+- `TTFT <= 33617.688744 ms`.
+- O_DIRECT pack must remain clean: `direct_failures=0` and `direct_fallbacks=0`.
+
+Rejection rules:
+
+- Reject if throughput is `<= 4.4`, correctness fails, TTFT exceeds the gate, cgroup RAM limit is violated, the process is killed by the RAM guard, CUDA/OOM appears, or direct pack failures/fallbacks appear.
+- Because this first attempt is config-only, rejection does not require a source revert.
+- Record full metrics, prompt output, counters, artifact hashes, and final verdict in this document.
+- Push the updated plan and rejection artifact to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Next actions after this experiment:
+
+- If deferred sync improves throughput and passes all gates, inspect its trace/counters to decide whether to tune stream count, slot reuse, or deferred scatter batching.
+- If deferred sync ties or regresses, treat synchronization deferral as not sufficient and move to deeper bottleneck localization:
+  - split CPU miss-side read/dequant/compute time from GPU hit-side launch/D2H/scatter time;
+  - quantify per-layer and per-expert latency distribution;
+  - prioritize a true batched gate path only if the measured H2D/D2H/scatter cost dominates;
+  - otherwise focus on CPU fallback miss path and pack read scheduling.
