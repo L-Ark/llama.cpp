@@ -3409,6 +3409,227 @@ Rollback:
 - Because this is default-off instrumentation, it may remain only if it produces
   reproducible artifacts without changing accepted SOTA behavior.
 
+Phase 7DP result - diagnostic accepted:
+
+- result timestamp: 2026-07-03T20:39:00Z.
+- source/plan commit:
+  `04a382d8b` (`cuda: profile current down overlap by tensor`).
+- source status:
+  - default-off instrumentation;
+  - pushed to `wici/vendor/kimi-moe-stream-on-vendor`;
+  - no accepted SOTA runtime env change.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-203701Z-n32-phase7dp-current-down-profile`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 04a382d8b
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dp_repro.sh
+sed -i "/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=\$RUN/down-batch-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=\$RUN/current-down-overlap-profile.csv" /tmp/run_phase7dp_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260703-203701Z-n32-phase7dp-current-down-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dp_repro.sh
+```
+
+- artifact note:
+  - runner wrote `metrics.txt`, not `metrics.json`;
+  - required profile artifacts exist:
+    - `current-down-overlap-profile.csv`: `1.6 KiB`;
+    - `down-batch-profile.csv`: `157 KiB`;
+    - `fallback-profile.csv`: `841 KiB`.
+- hard gates:
+  - exit `0`;
+  - quality pass;
+  - TTFT `74812.14 ms`;
+  - decode `33367.78 ms / 31`, `0.93 tok/s`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- memory at finish:
+  - `memory.current.final=15137275904`;
+  - `file=14895628288`;
+  - `inactive_file=5249441792`;
+  - `active_file=9645506560`;
+  - `kernel=236478464`;
+  - `anon=454656`.
+- current-down-overlap aggregate:
+  - calls `992`;
+  - planned jobs `3664`;
+  - completed jobs `3664`;
+  - cache hits `3528`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - max jobs `8`;
+  - worker time `3509094 us`.
+- current-down-overlap per-tensor findings:
+  - all `missing_tensor=93` is concentrated in Q4_0 fallback layers:
+    - `blk.7.ffn_down_exps.weight`: `31`;
+    - `blk.8.ffn_down_exps.weight`: `31`;
+    - `blk.9.ffn_down_exps.weight`: `31`;
+  - missing-pack is small and scattered:
+    - largest row `blk.55`: `6`;
+    - remaining rows are `1-3` each.
+  - top planned overlap rows are late layers, not the top down-stage rows:
+    - `blk.29`: `166`;
+    - `blk.28`: `164`;
+    - `blk.51`: `148`;
+    - `blk.32`: `146`;
+    - `blk.31/33`: `143`.
+- down-batch comparison:
+  - type `11`: calls `1272`, hits `8385`, misses `1791`,
+    stage `3063.413 ms`, kernel `158.712 ms`, wall `3281.754 ms`;
+  - type `23`: calls `372`, hits `1274`, misses `1702`,
+    stage `2248.050 ms`, kernel `32.818 ms`, wall `2323.306 ms`.
+- top down stage rows in the same run:
+  - `blk.1`, type `11`: stage `724.731 ms`, wall `730.022 ms`,
+    hits `74`, misses `174`;
+  - `blk.2`, type `11`: stage `685.826 ms`, wall `691.049 ms`,
+    hits `98`, misses `150`;
+  - `blk.4`, type `23`: stage `385.195 ms`, wall `415.425 ms`,
+    hits `79`, misses `169`;
+  - `blk.60`, type `11`: stage `329.749 ms`, wall `336.463 ms`,
+    hits `86`, misses `170`.
+
+Gap analysis:
+
+- The original 7DP hypothesis was only partly right:
+  - `missing_tensor` is concentrated, but in Q4_0 layers `blk.7/8/9`;
+  - Q4_0 down GPU admission was already rejected in Phase 7DM/7DN, so this is
+    not a useful next target.
+- The more important discovery is coverage:
+  - current-down-overlap does not cover the largest down-stage rows
+    `blk.1/2/4/60`;
+  - the first active overlap row is still `blk.14`;
+  - current code starts overlap only from the mixed up/gate branch, so ordinary
+    fused/handoff upgate rows do not trigger same-token down staging.
+- Therefore early tensor registration is not the right next step. The next
+  source probe should extend current-down-overlap coverage to the ordinary
+  fused/upgate handoff path and verify whether the top down-stage rows gain
+  planned jobs without adding more IO contention than they hide.
+
+Decision:
+
+- Accept Phase 7DP instrumentation as default-off diagnostic infrastructure.
+- Keep Phase 7CC as accepted SOTA.
+- Plan Phase 7DQ as a behavior probe; do not promote unless n32 and n96 repeat
+  gates pass.
+
+## Phase 7DQ: extend current-down-overlap to ordinary up/gate path
+
+Start time:
+
+- 2026-07-04T00:50:00+08:00.
+
+Current bottleneck:
+
+- Phase 7DP proves current-down-overlap coverage misses the largest down stage
+  rows:
+  - `blk.1`: stage `724.731 ms`;
+  - `blk.2`: stage `685.826 ms`;
+  - `blk.4`: stage `385.195 ms`;
+  - `blk.60`: stage `329.749 ms`.
+- Existing overlap only starts in the mixed-type up/gate branch. The normal
+  fused/handoff branch computes up/gate and then proceeds to fuse/handoff
+  without starting current-token down staging.
+
+Hypothesis:
+
+- Start `start_current_down_overlap()` in the ordinary non-mixed up/gate path
+  after up/gate staging/compute is complete and before the fuse/handoff/D2H
+  tail.
+- Join at existing synchronization/return points.
+- This should let the top movement-bound down rows receive same-token preloads
+  during fuse/D2H/handoff tail time instead of waiting until the down op.
+
+Why this can improve token rate:
+
+- Phase 7DP's top four uncovered down rows have about
+  `724.731 + 685.826 + 385.195 + 329.749 = 2125.501 ms` stage time on n32.
+- The overlap window is smaller than the full stage time, so this cannot remove
+  all of it. It can help only to the extent that down jobs finish before the
+  subsequent down batch checks the cache.
+- It uses existing expert-pack/io_uring and VRAM cache mechanics, so it avoids
+  the rejected broad static preload and Q4 admission paths.
+
+Theoretical upper bound:
+
+- Hard n32 bound: `2.13 s` from the uncovered top four rows.
+- Practical bound:
+  - only the fuse/handoff tail can be overlapped;
+  - some jobs may still be in flight and must be waited on by down batch;
+  - extra IO contention may slow up/gate staging or expert-pack reads.
+- Expected useful range: `0.2-1.0 s` n32 if the top rows gain planned jobs and
+  down stage drops without increasing `iouring_wait_us` materially.
+
+Implementation:
+
+- Source change under the existing accepted env
+  `GGML_MOE_CURRENT_DOWN_OVERLAP=1`.
+- Do not introduce a new default-on knob.
+- In `ggml_cuda_moe_stream_up_gate_batch()`:
+  - keep the existing mixed branch behavior unchanged;
+  - in the ordinary path, call `start_current_down_overlap()` after up/gate work
+    is staged/launched and after `d_ids_dst` is copied, immediately before the
+    fuse kernel;
+  - join before returning handoff success and before D2H/scatter;
+  - join on any failure after the start point.
+- Keep 7DP CSV enabled during the run to prove coverage changed.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git pull --ff-only wici vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7cc_repro.sh /tmp/run_phase7dq_repro.sh
+sed -i '/^GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/a GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv' /tmp/run_phase7dq_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7dq-ordinary-current-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7dq_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - `memory.peak<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Mechanism:
+  - `current-down-overlap-profile.csv` contains planned jobs for `blk.1`,
+    `blk.2`, `blk.4`, and/or `blk.60`;
+  - down CSV shows lower stage for those rows or lower total stage than Phase
+    7DP/7DO without a larger opposing increase elsewhere.
+- Promotion:
+  - first n32 must beat Phase 7CC n32 confirmation `33217.66 ms / 31`;
+  - if first n32 beats and mechanism is sane, run a second cold n32
+    confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7CC n96 confirmation `79008.37 ms / 77`.
+
+Rollback:
+
+- If build fails, revert.
+- If n32 regresses, quality fails, TTFT/RAM gates fail, or the mechanism does
+  not add planned jobs for the top rows, revert the behavior change before
+  continuing.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
