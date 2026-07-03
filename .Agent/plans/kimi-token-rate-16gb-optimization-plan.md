@@ -5735,6 +5735,112 @@ Result handling:
 - If n32 fails or slows down, reject the env-only experiment and keep Phase
   7DZB as current SOTA.
 
+Result:
+
+- Run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260703-225526Z-n32-phase7ea-depth16-slots16`;
+  - source/docs commit `e404479ac`;
+  - cold start under `systemd-run --wait --collect --same-dir
+    -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Correctness and gates:
+  - exit `0`;
+  - activation line present:
+    `[moe_stream] serial same-type batched staging active`;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris,
+    is famous`;
+  - quality `pass`;
+  - TTFT `76528.98 ms`, below `106331.72 ms`;
+  - decode `29599.64 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`, swap max `0`, no OOM;
+  - expert pack read_failures `0`, iouring_fallbacks `0`.
+- Activation details:
+  - pinned staging reports `16` slots for all active rings;
+  - expert-pack io_uring still reports `depth=8`, not `16`;
+  - no iouring batch histogram entries above `8`;
+  - therefore this run proves `PINNED_SLOTS=16`, but does not prove true
+    `GGML_MOE_IO_DEPTH=16`.
+- Movement counters:
+  - expert-pack direct_reads `8707`, iouring_reads `15024`,
+    iouring_bytes `87082139648`, iouring_wait_us `14937514`;
+  - main pinned staging: slots `16`, host_stage `11573.190 ms`,
+    h2d `4146.268 ms`, slot_wait `48.030 ms`;
+  - gate pinned staging: slots `16`, host_stage `366.627 ms`,
+    h2d `931.691 ms`, slot_wait `11.653 ms`.
+- Operator profiles:
+  - upgate rows `869`, wall `6336.757 ms`, up `4844.483 ms`,
+    gate `1366.642 ms`, stage `27.958 ms`, kernel `6259.132 ms`,
+    up_jobs `4154`, gate_jobs `4154`;
+  - down rows `1644`, wall `4684.734 ms`, stage `4393.082 ms`,
+    kernel `190.330 ms`, jobs `3493`.
+- Comparison:
+  - beats Phase 7DZA n32 `30286.11 ms / 31` by `686.47 ms`;
+  - token rate improves from `1.02 tok/s` to `1.05 tok/s`;
+  - TTFT also improves versus Phase 7DZA `78140.39 ms`.
+
+Decision:
+
+- Treat Phase 7EA as a `PINNED_SLOTS=16` n32 candidate, not as a true
+  `IO_DEPTH=16` proof.
+- Run n96 confirmation with the actual proven env delta:
+
+```sh
+PINNED_SLOTS=16
+```
+
+- Do not include `GGML_MOE_IO_DEPTH=16` in the confirmation command until a
+  separate phase verifies how to override the script's existing depth setting.
+
+## Phase 7EB: n96 confirmation for pinned slots 16
+
+Start time:
+
+- 2026-07-04T07:06:00+08:00.
+
+Hypothesis:
+
+- The n32 win from `PINNED_SLOTS=16` should carry to n96 by reducing staging
+  pressure and improving scheduling slack without changing math or selected
+  experts.
+- Since true io depth remained `8`, the confirmation isolates pinned slot
+  capacity only.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e404479ac
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7ea_repro.sh /tmp/run_phase7eb_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7eb_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7eb-slots16-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- activation line appears in stderr;
+- pinned staging reports `16` slots;
+- France output coherent and semantically correct;
+- n96 decode beats Phase 7DZB `74693.07 ms / 77`.
+
+Result handling:
+
+- If accepted, commit and push the result docs immediately and promote
+  `PINNED_SLOTS=16` into SOTA.
+- If rejected, keep `PINNED_SLOTS=8` in SOTA and plan a separate true-depth
+  experiment.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
