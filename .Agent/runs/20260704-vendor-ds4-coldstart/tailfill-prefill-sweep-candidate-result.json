@@ -1,0 +1,226 @@
+{
+  "artifact": "tailfill-prefill-sweep-candidate-result",
+  "date_utc": "2026-07-03T22:51:00Z",
+  "status": "initial_candidate_requires_pushed_source_repro",
+  "source_head": "e25d3164a",
+  "runtime_source_baseline": "503d75cd7",
+  "previous_sota_eval_tok_s": 4.4,
+  "candidate_eval_tok_s": 4.6,
+  "candidate_limit": 3192,
+  "common_config": {
+    "framework": "vendor DeepSeek",
+    "drop_caches": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "gate_cache_mib": 13568,
+    "name_filter": "ffn_gate_exps",
+    "gate_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "gate_pack_io": "direct",
+    "gate_profile": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "cli_extra_args": "-c 256 -b 16 -ub 16 -t 20 -tb 20",
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "runs": {
+    "3072": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T224237Z-20260704_tailfill_prefill_3072/france-cpu40-vram0gb",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 1.8,
+      "ttft_ms": 31962.598706,
+      "elapsed_seconds": 63.24,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15105937408,
+      "memory_max_events": 16963,
+      "pgmajfault": 268980,
+      "workingset_refault_file": 1788562,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "manual_correctness_ok": true,
+      "prefill": {
+        "attempted": 3072,
+        "inserted": 3072,
+        "bytes": 13690208256,
+        "elapsed_ms": 4816.666,
+        "pack_misses": 0,
+        "read_failures": 0
+      },
+      "pack": {
+        "hits": 4974,
+        "misses": 0,
+        "reads": 4974,
+        "bytes": 22166372352,
+        "direct_reads": 4974,
+        "direct_failures": 0,
+        "direct_fallbacks": 0
+      },
+      "vram_cache": {
+        "hits": 33249,
+        "misses": 1902,
+        "hit_rate": 94.6
+      },
+      "trace": {
+        "all_gate": {
+          "rows": 35151,
+          "src0_ms": 7034.576,
+          "total_ms": 8384.945
+        },
+        "gate_hits": {
+          "rows": 33249,
+          "src0_ms": 4857.453,
+          "total_ms": 5857.141
+        },
+        "gate_misses": {
+          "rows": 1902,
+          "src0_ms": 2177.123,
+          "total_ms": 2527.804
+        }
+      },
+      "hashes": {
+        "summary_json": "b6a45dfbd643a4030cc5ed8b9f98a3543336fe558117cbace559435bcaf36920",
+        "stdout_txt": "51c265161b8ae19d6ca44c7affcdc75d28714c008f60deea3a3d951bde0b5b7c",
+        "stderr_txt": "564be65671ceef5024542e9beccfeb046dea4e91e907fac2d7ac28933612d65a",
+        "environment_txt": "0999c8a62046e98d9fc4f0b8a041db79b981c12c85cc164157eeba3daab6659b",
+        "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+        "one_trace_csv": "21bac916e220d122983bfe7a90d0b85df1a91ced75b6c9abcb224e1e51d564d8"
+      },
+      "verdict": "tie/rejected: equals 4.4 tok/s but does not exceed SOTA"
+    },
+    "3136": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T224414Z-20260704_tailfill_prefill_3136/france-cpu40-vram0gb",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 1.9,
+      "ttft_ms": 31694.987578,
+      "elapsed_seconds": 62.83,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15073787904,
+      "memory_max_events": 16805,
+      "pgmajfault": 272422,
+      "workingset_refault_file": 1872666,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "manual_correctness_ok": true,
+      "prefill": {
+        "attempted": 3136,
+        "inserted": 3136,
+        "bytes": 13975420928,
+        "elapsed_ms": 4895.631,
+        "pack_misses": 0,
+        "read_failures": 0
+      },
+      "pack": {
+        "hits": 5068,
+        "misses": 0,
+        "reads": 5068,
+        "bytes": 22585278464,
+        "direct_reads": 5068,
+        "direct_failures": 0,
+        "direct_fallbacks": 0
+      },
+      "vram_cache": {
+        "hits": 33219,
+        "misses": 1932,
+        "hit_rate": 94.5
+      },
+      "trace": {
+        "all_gate": {
+          "rows": 35151,
+          "src0_ms": 7158.054,
+          "total_ms": 8502.376
+        },
+        "gate_hits": {
+          "rows": 33219,
+          "src0_ms": 4931.383,
+          "total_ms": 5917.452
+        },
+        "gate_misses": {
+          "rows": 1932,
+          "src0_ms": 2226.671,
+          "total_ms": 2584.924
+        }
+      },
+      "hashes": {
+        "summary_json": "f5898ed6f3eb250b15e9e52e3fc5528e7caa7fffe388245051cffb21d095fd4c",
+        "stdout_txt": "51be9c7fcb25e706e3355ac19cad80161b8c2cfed90236c99d755bbe29eb7d3d",
+        "stderr_txt": "e48d0d6538a34dad4290dd322f7704b0949a89915cefd1896f1f247476b7db08",
+        "environment_txt": "9bd70c9972fe33c6a43b252ca164bf1d1f13d55641be96183e86564da2f411d5",
+        "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+        "one_trace_csv": "3898384c05ebecd0a461edbaf891994ed9d47d2231be01498129e86f88be0e88"
+      },
+      "verdict": "tie/rejected: equals 4.4 tok/s but does not exceed SOTA"
+    },
+    "3192": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T224550Z-20260704_tailfill_prefill_3192/france-cpu40-vram0gb",
+      "eval_tok_s": 4.6,
+      "prompt_tok_s": 1.9,
+      "ttft_ms": 30430.329319,
+      "ttft_limit_ms": 33617.688744,
+      "elapsed_seconds": 60.56,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15097688064,
+      "memory_max_events": 17026,
+      "pgmajfault": 272974,
+      "workingset_refault_file": 1699564,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "manual_correctness_ok": true,
+      "prefill": {
+        "attempted": 3192,
+        "inserted": 3192,
+        "bytes": 14224982016,
+        "elapsed_ms": 4818.177,
+        "pack_misses": 0,
+        "read_failures": 0
+      },
+      "pack": {
+        "hits": 5172,
+        "misses": 0,
+        "reads": 5172,
+        "bytes": 23048749056,
+        "direct_reads": 5172,
+        "direct_failures": 0,
+        "direct_fallbacks": 0
+      },
+      "vram_cache": {
+        "hits": 33171,
+        "misses": 1980,
+        "hit_rate": 94.4
+      },
+      "trace": {
+        "all_gate": {
+          "rows": 35151,
+          "src0_ms": 7043.107,
+          "total_ms": 8391.671
+        },
+        "gate_hits": {
+          "rows": 33171,
+          "src0_ms": 4851.965,
+          "total_ms": 5834.635
+        },
+        "gate_misses": {
+          "rows": 1980,
+          "src0_ms": 2191.142,
+          "total_ms": 2557.036
+        }
+      },
+      "hashes": {
+        "summary_json": "4b0ab80b00c9648f2d6892b4bf363131090e297498018ab460b8b6177c1e26c2",
+        "stdout_txt": "007de1579611f81264f4f625688fc5db5250eda259afb45012756db104f12cdf",
+        "stderr_txt": "ac895d8c585af78ef4c0a6dd50f74e63ac1330f2209896105474c1cd1e8746c0",
+        "environment_txt": "ce9fd137af2362fa80401864b36e6ad76e6e21f6e69d744d117c2faf1c407c83",
+        "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+        "one_trace_csv": "ee4d9ef08a78b76e47a603985a9cfaec2035e3a4380f6c5e53f89e5abb972ab5"
+      },
+      "verdict": "initial SOTA candidate: exceeds 4.4 tok/s and passes RAM/correctness/TTFT; requires pushed-source rerun before promotion"
+    }
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "manual_correctness_verdict": "pass for all three runs; answer is complete, coherent, and semantically correct",
+  "next_action": "commit and push this candidate record, then rerun limit 3192 strict cold from the pushed state before promotion"
+}

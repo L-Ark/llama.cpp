@@ -4828,3 +4828,78 @@ Rejection rules:
 - Reject/tie if `eval_tok_s <= 4.4`.
 - Reject if correctness fails, TTFT exceeds the gate, cgroup kills the run, OOM occurs, or pack direct failures/fallbacks appear.
 - If `3192` regresses despite higher hit potential, inspect whether full-cache LRU eviction is the cause before designing a source change.
+
+### 2026-07-03T22:51Z Tail-Fill Prefill Sweep Initial Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/tailfill-prefill-sweep-candidate-result.json`
+- artifact sha256: `54a93532ae82721ce9fff91171a18693fee44dd336eeef345794d67c754ac2bf`
+
+Source/repro status:
+
+- Source HEAD during sweep: `e25d3164a`
+- Runtime source baseline: `503d75cd7`
+- This was a no-source-change sweep after the promoted `4.4 tok/s` SOTA.
+- `3192` is an initial SOTA candidate only. It must be rerun from the pushed state before promotion.
+
+Results:
+
+| Prefill limit | eval tok/s | prompt tok/s | TTFT ms | memory peak | memory file | cache hit rate | prefill ms | verdict |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `3072` | `4.4` | `1.8` | `31962.598706` | `16000000000` | `15105937408` | `94.6%` | `4816.666` | tie, not promoted |
+| `3136` | `4.4` | `1.9` | `31694.987578` | `16000000000` | `15073787904` | `94.5%` | `4895.631` | tie, not promoted |
+| `3192` | `4.6` | `1.9` | `30430.329319` | `16000000000` | `15097688064` | `94.4%` | `4818.177` | initial SOTA candidate |
+
+Run paths:
+
+- `3072`: `/root/lfz/runs/vendor-ds4-16gb/20260703T224237Z-20260704_tailfill_prefill_3072/france-cpu40-vram0gb`
+- `3136`: `/root/lfz/runs/vendor-ds4-16gb/20260703T224414Z-20260704_tailfill_prefill_3136/france-cpu40-vram0gb`
+- `3192`: `/root/lfz/runs/vendor-ds4-16gb/20260703T224550Z-20260704_tailfill_prefill_3192/france-cpu40-vram0gb`
+
+Correctness output for all three runs:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Manual correctness verdict:
+
+- Pass for all three runs. The France answer is complete, coherent, and semantically correct.
+
+Gate/pack checks:
+
+- `3072`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=33249 misses=1902`.
+- `3136`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=33219 misses=1932`.
+- `3192`: pack `direct_failures=0`, `direct_fallbacks=0`, prefill `pack_misses=0`, `read_failures=0`, gate cache `hits=33171 misses=1980`.
+
+Trace summary:
+
+| Prefill limit | all gate src0 ms | all gate total ms | miss rows | miss src0 ms |
+| ---: | ---: | ---: | ---: | ---: |
+| `3072` | `7034.576` | `8384.945` | `1902` | `2177.123` |
+| `3136` | `7158.054` | `8502.376` | `1932` | `2226.671` |
+| `3192` | `7043.107` | `8391.671` | `1980` | `2191.142` |
+
+Artifact hashes:
+
+- `3072 summary.json`: `b6a45dfbd643a4030cc5ed8b9f98a3543336fe558117cbace559435bcaf36920`
+- `3072 stdout.txt`: `51c265161b8ae19d6ca44c7affcdc75d28714c008f60deea3a3d951bde0b5b7c`
+- `3072 stderr.txt`: `564be65671ceef5024542e9beccfeb046dea4e91e907fac2d7ac28933612d65a`
+- `3072 one_trace.csv`: `21bac916e220d122983bfe7a90d0b85df1a91ced75b6c9abcb224e1e51d564d8`
+- `3136 summary.json`: `f5898ed6f3eb250b15e9e52e3fc5528e7caa7fffe388245051cffb21d095fd4c`
+- `3136 stdout.txt`: `51be9c7fcb25e706e3355ac19cad80161b8c2cfed90236c99d755bbe29eb7d3d`
+- `3136 stderr.txt`: `e48d0d6538a34dad4290dd322f7704b0949a89915cefd1896f1f247476b7db08`
+- `3136 one_trace.csv`: `3898384c05ebecd0a461edbaf891994ed9d47d2231be01498129e86f88be0e88`
+- `3192 summary.json`: `4b0ab80b00c9648f2d6892b4bf363131090e297498018ab460b8b6177c1e26c2`
+- `3192 stdout.txt`: `007de1579611f81264f4f625688fc5db5250eda259afb45012756db104f12cdf`
+- `3192 stderr.txt`: `ac895d8c585af78ef4c0a6dd50f74e63ac1330f2209896105474c1cd1e8746c0`
+- `3192 one_trace.csv`: `ee4d9ef08a78b76e47a603985a9cfaec2035e3a4380f6c5e53f89e5abb972ab5`
+
+Initial verdict:
+
+- `3192` produced `4.6 tok/s`, above the current accepted `4.4 tok/s`, and passed RAM, TTFT, correctness, and pack gates.
+- It is not yet promoted because the cache-hit and trace metrics do not clearly explain the speedup; it may include run-to-run variance.
+- Immediate action: commit and push this source/docs/artifact state, then rerun `3192` strict cold from the pushed state. Promote only if the rerun remains `>4.4 tok/s` and all gates pass.
