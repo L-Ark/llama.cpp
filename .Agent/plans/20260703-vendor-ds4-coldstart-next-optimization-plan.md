@@ -583,6 +583,18 @@ Acceptance:
 - If accepted, immediately commit source and plan, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then clean-rebuild and strict-cold rerun from pushed source before declaring a new SOTA.
 - If `eval_tok_s <= 4.2` or any gate fails, revert `ggml/src/ggml-cpu/ggml-cpu.c`, clean rebuild, record the rejection, and push only the plan/record.
 
+Implementation and result:
+
+- Temporary default-off patch added `GGML_MOE_CPU_SINGLE_ROW_CHUNKS` to `ggml/src/ggml-cpu/ggml-cpu.c` and changed only the `mul_mat_id` `nr1 == 1 && nr0 > 1` chunk split when the env is set.
+- Build succeeded. Dirty experimental hashes: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `build-ds4-moe-stream/bin/libggml-cpu.so.0.10.0=75bf2d565669ef2821804515678d45fb97c11c9fea5c10e16ddf5d020c5583a7`.
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T052405Z-20260703T052405Z-single-row-chunks40-candidate/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: `GGML_MOE_CPU_SINGLE_ROW_CHUNKS=40`; otherwise accepted O_DIRECT gate-pack config, `cpu_moe=40`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold 16GB cgroup.
+- Result: `eval_tok_s=4.0`, `prompt_tok_s=1.6`, `TTFT=29651.842642 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15089168384`, `pgmajfault=295997`, `workingset_refault_file=589338`, `ram_ok=false`, `ram_limit_killed=true`, `correctness_ok=true` by heuristic but answer was truncated by the RAM kill.
+- Counters: one expert pack `hits=4015 misses=0 reads=4015 bytes=17892638720 failures=0 direct_reads=4015 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=20336 misses=4015 hit_rate=83.5%`.
+- Diagnosis: finer single-row chunks did not improve token rate and violated the RAM gate. It also changed generation length/termination under kill and reduced observed gate cache/pack activity versus accepted SOTA (`4623` pack hits and `86.8%` VRAM cache hit rate), so this cannot be promoted. The assumed tail-imbalance recovery was outweighed by extra scheduling/page-cache pressure.
+- Verdict: rejected. Do not continue increasing single-row chunk count. Any future variant would need a much smaller value and a profile-only justification first, but this direction is deprioritized because it failed both speed and RAM gates.
+- Rollback: reverted `ggml/src/ggml-cpu/ggml-cpu.c` with `git restore` and clean rebuilt. Clean hashes after rollback: `build-ds4-moe-stream/bin/llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `build-ds4-moe-stream/bin/libggml-cpu.so.0.10.0=a6a3ea2d52fd8001716b56bb2703b686438d485253779079eb7f728494541f2a`.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
