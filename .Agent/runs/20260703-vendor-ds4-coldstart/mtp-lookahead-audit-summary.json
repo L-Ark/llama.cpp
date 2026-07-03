@@ -1,0 +1,74 @@
+{
+  "status": "rejected",
+  "mtp_nextn_audit": {
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "gguf_metadata": "llama-gguf r n shows n_kv=50, n_tensors=1328, no nextn/mtp/nextn_predict_layers keys or tensors",
+    "code_state": "NextN/MTP tensors are preserved but marked reserved/unused in src/llama-arch.cpp and not implemented for DeepSeek runtime graph",
+    "draft_model": "No compatible small DeepSeek draft GGUF under /root/lfz/models; GLM GGUF is not compatible."
+  },
+  "lookahead_runs": {
+    "lookahead_no_display_invalid": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T150241Z-20260703_lookahead_decode_probe/france-cpu40-vram0gb",
+      "exit_status": 1,
+      "eval_tok_s": null,
+      "ttft_estimate_ms": null,
+      "elapsed_seconds": 1.01,
+      "memory_peak_bytes": 296173568,
+      "memory_file_bytes": 183730176,
+      "ram_ok": true,
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_france,missing_europe,missing_expected_context",
+      "answer": "",
+      "diagnostic_lines": [
+        "error: invalid argument: --no-display-prompt"
+      ]
+    },
+    "lookahead_wrapper_b16": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T150424Z-20260703_lookahead_decode_probe_wrapper/france-cpu40-vram0gb",
+      "exit_status": 1,
+      "eval_tok_s": null,
+      "ttft_estimate_ms": 24829.511782,
+      "elapsed_seconds": 25.74,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15170945024,
+      "ram_ok": true,
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_europe,missing_expected_context",
+      "answer": "France",
+      "diagnostic_lines": [
+        "llama_context: n_seq_max     = 31",
+        "llama_context: n_batch       = 16",
+        "llama_context: n_ubatch      = 16",
+        "init: sequence 1 is coupled to 0 in the input batch, but have divereged",
+        "decode: failed to initialize batch",
+        "main: llama_decode failed - increase KV cache size",
+        "[moe_stream] one expert pack: hits=986 misses=178 reads=986 bytes=4394057728 failures=0 entries=4599 direct_enabled=1 direct_reads=986 direct_failures=0 direct_fallbacks=0",
+        "[moe_stream] VRAM cache: hits=151 misses=1164 hit_rate=11.5%"
+      ]
+    },
+    "lookahead_wrapper_b256": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T150625Z-20260703_lookahead_decode_probe_b256/france-cpu40-vram0gb",
+      "exit_status": 1,
+      "eval_tok_s": null,
+      "ttft_estimate_ms": 25037.200892,
+      "elapsed_seconds": 25.79,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15169466368,
+      "ram_ok": true,
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_europe,missing_expected_context",
+      "answer": "France",
+      "diagnostic_lines": [
+        "llama_context: n_seq_max     = 31",
+        "llama_context: n_batch       = 256",
+        "llama_context: n_ubatch      = 64",
+        "init: sequence 1 is coupled to 0 in the input batch, but have divereged",
+        "decode: failed to initialize batch",
+        "main: llama_decode failed - increase KV cache size",
+        "[moe_stream] one expert pack: hits=986 misses=178 reads=986 bytes=4394057728 failures=0 entries=4599 direct_enabled=1 direct_reads=986 direct_failures=0 direct_fallbacks=0",
+        "[moe_stream] VRAM cache: hits=151 misses=1164 hit_rate=11.5%"
+      ]
+    }
+  },
+  "decision": "Reject MTP/NextN/lookahead as current SOTA path. MTP/draft artifacts are unavailable, and built lookahead cannot complete a valid DeepSeek run under current vendor constraints."
+}

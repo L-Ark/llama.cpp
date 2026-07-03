@@ -1836,3 +1836,111 @@ Verdict:
 - Rejected. Do not promote and do not sweep n-gram parameters blindly.
 - Future speculative work needs either a real compatible draft model, implemented MTP/NextN support, or instrumentation proving a high accepted-draft rate before another strict cold model candidate.
 - Current accepted SOTA remains `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
+
+### 2026-07-03 MTP/NextN And Lookahead Decode Audit Design
+
+MTP/NextN availability audit:
+
+- Motivation: reaching `10 tok/s` from `4.2 tok/s` likely requires reducing full target forward passes per committed token, not another small CPU fallback optimization.
+- Code inspection: `src/llama-model.cpp` and `src/llama-arch.cpp` can preserve NextN/MTP tensors, but comments mark these tensors as reserved/unused. The model graph code does not implement DeepSeek MTP decoding.
+- GGUF metadata audit: `llama-gguf ... r n` for `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf` shows `n_kv=50`, `n_tensors=1328`, and no `nextn`, `mtp`, or `nextn_predict_layers` keys/tensors. The model is `deepseek4.*` metadata, not a GGUF with exposed NextN heads.
+- Draft model audit: `/root/lfz/models` has no compatible small DeepSeek draft GGUF; the other large GGUF set is GLM and is not a compatible draft for DeepSeek tokenization/architecture.
+- Conclusion: real MTP/speculative-with-draft is unavailable in the current artifacts. It cannot be the next runtime candidate without a new model artifact or implementing and validating DeepSeek MTP heads.
+
+Lookahead candidate:
+
+- `llama-lookahead` is built and uses target-model sampling plus verification n-grams. Code inspection shows tokens are sampled from the target context and candidate n-grams are kept only when token IDs match, so this is more correctness-safe than unvalidated approximation.
+- Risk: the example hardcodes `W=15`, `N=5`, `G=15` and sets `n_parallel = W + G + 1 = 31`. This may increase KV/compute memory and CPU fallback work enough to regress or OOM, especially because the accepted SOTA has only about `238 MiB` free VRAM after the gate cache.
+- Theoretical bound: to reach `10 tok/s`, lookahead must accept about `2.38` committed tokens per expensive decode step with low overhead. With 31 parallel sequences, the overhead is likely high unless `n_accept` is substantial.
+
+Practice plan:
+
+- Run one strict cold France diagnostic with `llama-lookahead` as the binary and the current accepted SOTA env/config.
+- Keep the 16GB cgroup, gate O_DIRECT pack, gate cache, top-k policy, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, and deterministic sampling.
+- Because `llama-lookahead` prints its own `decoded ... speed` and `n_accept` counters, parse those manually after the run. Promote only if France answer is complete/coherent, RAM/TTFT/gates pass, and effective decoded speed exceeds `4.2 tok/s`; continue only if `n_accept` proves a path toward the `10 tok/s` target.
+- If it OOMs, cannot allocate, fails correctness, or regresses/ties, reject lookahead under current 16GB/vendor SOTA constraints.
+
+Lookahead invocation adjustment:
+
+- First lookahead invocation `/root/lfz/runs/vendor-ds4-16gb/20260703T150241Z-20260703_lookahead_decode_probe/france-cpu40-vram0gb` exited before model execution because `llama-lookahead` does not accept `--no-display-prompt`, which the strict runner always passes.
+- This is not a model result. Use wrapper `.Agent/run-tools/llama-lookahead-strip-no-display-prompt.sh` for the actual diagnostic; it removes only `--no-display-prompt` and execs the built `llama-lookahead` binary.
+
+Lookahead first result and one allowed follow-up:
+
+- Direct strict-runner invocation failed because `llama-lookahead` does not accept `--no-display-prompt`; wrapper `.Agent/run-tools/llama-lookahead-strip-no-display-prompt.sh` removes only that flag.
+- Wrapper run `/root/lfz/runs/vendor-ds4-16gb/20260703T150424Z-20260703_lookahead_decode_probe_wrapper/france-cpu40-vram0gb` loaded the model under the 16GB cgroup but failed before a valid answer: `decode: failed to initialize batch`, `llama_decode failed - increase KV cache size`, output only `France`, correctness failed.
+- Diagnosis: the hardcoded lookahead batch (`W=15`, `N=5`, `G=15`, `n_parallel=31`) is incompatible with the accepted SOTA `-b 16 -ub 16` diagnostic shape. One follow-up run with `-b 256 -ub 64` is allowed to determine whether lookahead can run at all under the 16GB/page-cache constraints.
+- This follow-up is still diagnostic only. It may be considered for promotion only if it completes a correct France answer, reports useful `n_accept`, stays within RAM/TTFT gates, and beats `4.2 tok/s` effective decoded speed. If it fails allocation, correctness, RAM, or speed, reject lookahead for the current SOTA path.
+
+MTP/NextN and lookahead audit result:
+
+- Artifact: `.Agent/runs/20260703-vendor-ds4-coldstart/mtp-lookahead-audit-summary.json`.
+- MTP/NextN: unavailable for the current DeepSeek GGUF. `llama-gguf ... r n` reports `n_kv=50`, `n_tensors=1328`, and no `nextn`, `mtp`, or `nextn_predict_layers` metadata/tensors. Code inspection shows NextN/MTP tensors are preserved/reserved but not implemented in the DeepSeek runtime graph.
+- Draft model: unavailable. `/root/lfz/models` contains no compatible small DeepSeek draft GGUF; GLM GGUF files are not compatible DeepSeek draft models.
+
+Lookahead runs:
+
+| Run | Result | Key evidence |
+| --- | --- | --- |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T150241Z-20260703_lookahead_decode_probe/france-cpu40-vram0gb` | invalid invocation | `llama-lookahead` rejected strict runner flag `--no-display-prompt`; not a model result |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T150424Z-20260703_lookahead_decode_probe_wrapper/france-cpu40-vram0gb` | rejected | wrapper removed `--no-display-prompt`, but decode failed with `sequence 1 is coupled to 0 ... diverged`, `decode: failed to initialize batch`; output only `France`; correctness failed |
+| `/root/lfz/runs/vendor-ds4-16gb/20260703T150625Z-20260703_lookahead_decode_probe_b256/france-cpu40-vram0gb` | rejected | even with `n_batch=256`, `n_ubatch=64`, decode failed with the same coupled-sequence/diverged error; output only `France`; correctness failed |
+
+Lookahead diagnosis:
+
+- The failure is not just the accepted SOTA `-b 16 -ub 16` setting. The larger `-b 256 -ub 64` diagnostic still fails before a valid answer.
+- Both wrapper runs stayed within the 16GB cgroup but failed correctness and produced no usable `decoded speed` or `n_accept` counters.
+- The error appears to come from model/context sequence coupling under this DeepSeek architecture and lookahead's 31 parallel verification sequences. This makes the built lookahead example incompatible with the current vendor DeepSeek SOTA path without deeper source work.
+
+Verdict:
+
+- Reject MTP/NextN/lookahead as a current no-source path to `10 tok/s`.
+- Future work in this class requires either a compatible draft model artifact, a GGUF with real MTP/NextN heads plus implemented graph support, or source-level changes to make lookahead compatible with DeepSeek's coupled sequence behavior. None is available as an immediate SOTA candidate.
+- Current accepted SOTA remains `4.2 tok/s`; repeated strict-cold reproduction remains `4.1 tok/s`.
+
+### 2026-07-03 Next Plan After MTP/Lookahead Rejection
+
+Current state:
+
+- Accepted vendor DeepSeek cold-start SOTA remains `4.2 tok/s` with strict 16GB cgroup including page cache, correct France output, TTFT within gate, O_DIRECT gate expert pack, and current gate VRAM cache config.
+- Latest strict guard remains `4.1 tok/s`; this is within observed cold-start variance but does not replace the accepted `4.2 tok/s` record.
+- No runtime source changes are active after the rejected n-gram, MTP/NextN, and lookahead no-source probes. The worktree may contain only plan/record artifacts until the next explicitly gated source experiment.
+- Target `10 tok/s` requires an algorithmic improvement. From `4.2 tok/s`, the hard lower bound is about `2.38` accepted output tokens per expensive target forward pass, or an equivalent reduction in broad CPU up/down fallback compute. Previously tested I/O-only, compact mmap, transient repack, CUDA graph, n-gram, and no-source lookahead paths do not provide that.
+
+Mandatory reproducibility and push rule for all future SOTA candidates:
+
+- Before every practice step, update this plan with bottleneck, theory, hard upper bound, expected RAM/VRAM cost, expected TTFT risk, and explicit accept/reject gates.
+- If a candidate produces a compliant new SOTA, immediately record exact run path, source commit, binary hash, model hash or model path, pack/profile hashes, env vars, CLI args, cgroup settings, prompt text, full output text, token rates, TTFT, elapsed time, cgroup `memory.peak`, `memory.stat file/anon`, page/refault counters, OOM status, expert-pack counters, VRAM-cache counters, and correctness judgment.
+- Immediately commit and push the source, plan, and result metadata to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using git identity `L-Ark <fliangae@connect.ust.hk>`.
+- After pushing a compliant SOTA, clean rebuild or otherwise verify the pushed source, then rerun the strict cold France reproduction from the pushed commit before declaring the result reproducible. If this rerun fails correctness, RAM, TTFT, or speed gates, revert the SOTA claim and record the failure as rejected.
+- Results that regress speed, fail correctness, exceed RAM, OOM, or violate the TTFT gate may be committed as rejected diagnostics, but must be clearly marked `rejected` and must not replace the accepted SOTA.
+
+Next bottleneck focus:
+
+- The remaining high-impact path is reducing target forward passes per committed token, because CPU up/down fallback and gate/cache I/O micro-optimizations have not shown enough headroom toward `10 tok/s`.
+- Real DeepSeek MTP/NextN is unavailable in the current GGUF and runtime graph, and there is no compatible draft model. Therefore the next viable speculative direction is source-level lookahead compatibility, not another no-source parameter sweep.
+- The immediate failure to explain is in `src/llama-batch.cpp`: lookahead creates coupled sequences by assigning a token to multiple sequence IDs, then the memory module reports those coupled sequences have diverged. Increasing `n_batch`/`n_ubatch` did not fix this, so the next step must inspect and, if defensible, modify the lookahead sequence/KV handling.
+
+Phase A: Source-level lookahead compatibility design, no model SOTA run yet:
+
+- Inspect `examples/lookahead/lookahead.cpp`, `src/llama-batch.cpp`, and DeepSeek memory/KV code to determine why `llama_memory_seq_cp(mem, 0, s, -1, -1)` plus later lookahead batch construction leaves coupled sequence positions divergent.
+- Make the lookahead dimensions configurable behind default-off CLI/env knobs rather than hardcoded `W=15`, `N=5`, `G=15`; the first compatibility probe should use a tiny shape such as `W=2`, `N=3`, `G=2` only to prove correctness and counters, not to claim SOTA.
+- Before running the probe, calculate batch-token cost for the selected shape. For the current hardcoded shape, one decode step can contain roughly `1 + W*(W-1)/2 + (N-2)*W + G*(N-1)` target tokens, which is far too expensive unless `n_accept` is high. A tiny compatibility shape has lower overhead but cannot plausibly reach `10 tok/s`; it is only a gate to decide whether source-level lookahead is technically usable.
+- Preserve target validation: committed tokens must come only from verified target-model samples. Any approximation that bypasses target validation is rejected before model testing.
+
+Phase B: Tiny lookahead compatibility probe:
+
+- Implement only default-off instrumentation/configurability needed to run tiny lookahead under the accepted SOTA env, 16GB cgroup, strict cold `drop_caches`, and France prompt.
+- Acceptance for continuing: run completes, France output is coherent for the requested length, RAM stays within 16GB including page cache, TTFT is within the allowed diagnostic window or clearly marked over-gate, and logs expose `decoded speed` plus `n_accept`.
+- Rejection: any coupled-sequence failure, incomplete output, bad answer, OOM, RAM limit kill, or no measurable `n_accept` signal. If rejected, revert runtime source and record/push only the rejected diagnostic.
+
+Phase C: Only if Phase B passes, scale lookahead with hard bounds:
+
+- Sweep small shapes in increasing cost order and compute required acceptance before each run. A shape may proceed only if its theoretical accepted-token/pass bound can beat `4.2 tok/s` without excessive extra target tokens, KV pressure, or CPU fallback calls.
+- Promote only if the strict cold France run beats `4.2 tok/s`, passes correctness, keeps host RAM under 16GB including page cache, and TTFT does not exceed the accepted gate by more than 20%.
+- If a shape beats token rate but TTFT is over gate, record and push it as `not accepted / TTFT over gate`, then plan a separate TTFT recovery step before promotion.
+
+Fallback if source-level lookahead is rejected:
+
+- Do not repeat closed full-model probes from compact mmap packs, transient repack, down batch staging, CUDA graph, n-gram speculative decoding, or no-source lookahead.
+- The next plan must introduce a genuinely new mechanism with a microbench or short diagnostic gate first, such as a real compatible draft model, a GGUF/runtime path with actual DeepSeek MTP heads, or a GPU-resident up/down compute path whose staging cost is proven lower than current CPU fallback before a full strict-cold run.
