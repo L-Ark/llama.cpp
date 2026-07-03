@@ -1,0 +1,98 @@
+{
+  "artifact": "batch-all-outputs-ngram-result",
+  "date_utc": "2026-07-03T16:18:42Z",
+  "verdict": "rejected",
+  "accepted_sota_eval_tok_s": 4.2,
+  "run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260703T161842Z-20260704_batch_all_outputs_ngram_simple",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T161842Z-20260704_batch_all_outputs_ngram_simple/france-cpu40-vram0gb",
+    "unit": "vendor-ds4-16gb-20260703T161843Z-cpu40.service",
+    "systemd_result": "success",
+    "main_process": "code=killed/status=TERM",
+    "service_runtime": "6min 1.705s",
+    "cpu_time": "1h 47min 8.638s",
+    "termination": "manual kill after stdout stopped advancing and stderr repeated the same start_pos=181 all-output verification loop"
+  },
+  "config": {
+    "framework": "vendor llama.cpp DeepSeek4",
+    "cpu_moe": 40,
+    "vram_cache_gb_arg": 0,
+    "strict_cgroup_memory_max_bytes": 16000000000,
+    "drop_caches_before_case": true,
+    "prompt": "Please introduce France in a short paragraph.",
+    "llama_args": "-n 192 -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts --spec-type ngram-simple --spec-ngram-simple-size-n 3 --spec-ngram-simple-size-m 8 --spec-ngram-simple-min-hits 1",
+    "sota_env": {
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
+    },
+    "probe_env": {
+      "LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS": "1",
+      "LLAMA_DEEPSEEK4_BATCH_LOG": "1"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": null,
+    "prompt_tok_s": null,
+    "ttft_estimate_ms": 30915.400473,
+    "memory_peak_bytes": null,
+    "memory_file_bytes": null,
+    "memory_max_events": 0,
+    "ram_ok": false,
+    "ram_limit_killed": false,
+    "runner_correctness_ok": true,
+    "manual_correctness_ok": false
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical heritage, cultural vibranry, and natural scenic beauty, France is a country that captivates and inspires visitors worldwide. From the iconic Eiffel Tower to the stunning French Riviera, France offers a unique blend of history, culture, and",
+  "correctness_rejection_reason": "The answer ends mid-sentence after 'and'. The runner heuristic passed only because it saw enough France-related terms; manual review overrides it as required.",
+  "batch_log_evidence": {
+    "all_output_batches_seen": true,
+    "counts": {
+      "n_tokens=2 n_outputs=2": 1964,
+      "n_tokens=1 n_outputs=1": 160,
+      "n_tokens=9 n_outputs=9": 5,
+      "n_tokens=8 n_outputs=0": 1,
+      "n_tokens=4 n_outputs=1": 1,
+      "n_tokens=3 n_outputs=3": 1,
+      "n_tokens=2 n_outputs=1": 1
+    },
+    "work_token_counts": {
+      "n_tokens=2 reserve_only=0 work_tokens=2 start_pos=181": 1961,
+      "n_tokens=16 reserve_only=0 work_tokens=16 start_pos=0": 4,
+      "n_tokens=9 reserve_only=0 work_tokens=9 start_pos=181": 1
+    },
+    "diagnosis": "The source probe did remove the graph-side work_tokens=1 blocker, but ngram-simple repeatedly verified at the same start_pos=181 without producing more stdout."
+  },
+  "moe_stream_counters": {
+    "expert_pack": {
+      "hits": 32791,
+      "misses": 56954,
+      "reads": 32791,
+      "bytes": 146131386368,
+      "failures": 0,
+      "entries": 4599,
+      "direct_enabled": true,
+      "direct_reads": 32791,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "vram_cache": {
+      "hits": 722495,
+      "misses": 89745,
+      "hit_rate": 0.89
+    }
+  },
+  "gap_analysis": [
+    "The all-output batch gate reached multi-token graph builds such as work_tokens=9 and work_tokens=2, so the target-side batching blocker is partially removed.",
+    "The ngram-simple driver repeatedly re-entered n_tokens=2 n_outputs=2 at start_pos=181. stdout did not grow for a 15 second sample while stderr continued growing, so the decode loop was not making useful progress.",
+    "Because the run was manually terminated, final eval token rate and memory peak are unavailable and cannot satisfy the SOTA gates.",
+    "Correctness fails manually because the France answer is incomplete."
+  ],
+  "action": "Reject this probe as a SOTA candidate. Revert the temporary source changes and keep only this artifact plus the plan record. Future speculative work must debug the repeated start_pos=181 acceptance/progress loop before any further performance run."
+}

@@ -2136,3 +2136,41 @@ Priority after this probe:
 - If all-output batching works but ngram-simple acceptance is too low, keep the finding as a blocker-removal diagnostic and design the next draft source around measured acceptance, not more cache hotset sweeps.
 - If all-output batching does not actually create `work_tokens>1`, stop speculative work and return to bottleneck decomposition of current SOTA decode time before designing another optimization.
 - Do not pursue broader up/down hotset caching unless a fresh bottleneck profile proves a hard upper bound above the current SOTA with enough margin; the top32 probe already showed the available upside is too small.
+
+### 2026-07-04 DeepSeek4 All-Output Batch Verification Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/batch-all-outputs-ngram-result.json`.
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T161842Z-20260704_batch_all_outputs_ngram_simple/france-cpu40-vram0gb`.
+- Config: full accepted SOTA env plus `LLAMA_DEEPSEEK4_BATCH_ALL_OUTPUTS=1`, `LLAMA_DEEPSEEK4_BATCH_LOG=1`, and `--spec-type ngram-simple --spec-ngram-simple-size-n 3 --spec-ngram-simple-size-m 8 --spec-ngram-simple-min-hits 1`.
+- Strict cold `drop_caches`, 16GB cgroup, `cpu_moe=40`.
+
+Observed result:
+
+- The run was manually terminated after `6min 1.705s` because stdout stopped advancing and stderr kept repeating the same all-output verification position.
+- No valid final `eval_tok_s` or memory peak is available after termination. It is therefore not a compliant candidate.
+- TTFT before first answer was `30915.400473 ms`, but final speed and RAM gates cannot be accepted because the run did not complete.
+- Runner heuristic marked correctness true, but manual correctness fails: the answer ended mid-sentence after `France offers a unique blend of history, culture, and`.
+
+Batch evidence:
+
+- Multi-token all-output batches did occur: `n_tokens=9 n_outputs=9` appeared 5 times, and `n_tokens=2 n_outputs=2` appeared 1964 times.
+- Graph build logs confirmed `reserve_only=0 work_tokens=9` and `reserve_only=0 work_tokens=2`, so the source probe did remove the previous graph-side `work_tokens=1` blocker.
+- Failure mode: `n_tokens=2 reserve_only=0 work_tokens=2 start_pos=181` repeated 1961 times while stdout size stayed fixed during a 15 second sample. This suggests the ngram-simple verification/progress loop is rechecking the same position instead of committing progress.
+
+Verdict:
+
+- Reject as SOTA candidate.
+- Revert the temporary source probe after recording this result. Do not commit all-output source changes.
+- Keep only the artifact and plan record.
+- Current accepted SOTA remains `4.2 tok/s` from the established vendor DeepSeek cold-start path.
+
+Next optimization direction:
+
+- Do not continue performance sweeps on this exact ngram-simple setup until the repeated `start_pos=181` progress bug is understood.
+- If speculative batching remains the priority, inspect the ngram-simple/target verification loop and its interaction with DeepSeek4 memory positions before another strict run. The next proof must show monotonically advancing positions, a complete France answer, and a completed timing summary.
+- Otherwise return to current-SOTA bottleneck decomposition and select the next candidate only if the hard upper bound has enough margin beyond `4.2 tok/s`.
