@@ -1212,11 +1212,6 @@ static bool profile_preload_evict_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
-static bool profile_exact_tensor_enabled() {
-    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_EXACT_TENSOR");
-    return env && env[0] && env[0] != '0';
-}
-
 static uint64_t batch_key_hash(const char *name, int expert_idx) {
     uint64_t h = 1469598103934665603ULL;
     if (name) {
@@ -3602,18 +3597,13 @@ static void preload_profile_entries_for_tensor(
     int loaded = 0;
     const size_t preload_budget = scan_budget > 0 ? scan_budget : profile_preload_slot_budget(cache);
     const int cache_id = batch_cache_id_for_size(src0_bytes);
-    const bool exact_tensor = profile_exact_tensor_enabled();
-    const bool use_lookup = !exact_tensor && !profile_has_tensor_locked(entries, tensor_name);
+    const bool use_lookup = !profile_has_tensor_locked(entries, tensor_name);
     size_t seen_for_cache = 0;
     for (size_t ip = 0; ip < entries.size(); ++ip) {
         const profile_entry &e = entries[ip];
         if (e.expert_bytes != 0 && batch_cache_id_for_size(e.expert_bytes) != cache_id) continue;
         if (seen_for_cache++ >= preload_budget) break;
-        if (exact_tensor) {
-            if (std::strcmp(e.tensor, tensor_name) != 0) continue;
-        } else if (std::strcmp(e.tensor, tensor_name) != 0 && std::strcmp(e.tensor, lookup_name) != 0) {
-            continue;
-        }
+        if (std::strcmp(e.tensor, tensor_name) != 0 && std::strcmp(e.tensor, lookup_name) != 0) continue;
         if (!use_lookup && std::strcmp(e.tensor, tensor_name) != 0) continue;
         if (e.expert_idx < 0 || e.expert_idx >= n_as) continue;
         const uintptr_t key = batch_key_hash(tensor_name, e.expert_idx);
