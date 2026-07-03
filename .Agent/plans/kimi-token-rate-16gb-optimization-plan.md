@@ -19788,6 +19788,150 @@ Decision:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
 
+## Phase 7BJ - perf sample Q4 fallback and IQ3 upgate hotspots on Phase 7AS
+
+Design timestamp: 2026-07-03 UTC.
+
+Purpose:
+
+- This is a bottleneck-location experiment, not a SOTA promotion candidate.
+- Do not change model math, cache policy, IO policy, thread count, VRAM budget,
+  prompt, generation settings, or source code.
+- Use Linux `perf` around the accepted Phase 7AS command to identify where the
+  remaining CPU time is actually spent before trying another Q4_0 fallback or
+  IQ3_XXS up/gate source change.
+
+Why this is required:
+
+- Phase 7BF ended with a hard constraint:
+  do not retry Q4 fallback chunking without first measuring inside the Q4
+  vec-dot path.
+- Phase 7BI and Phase 7AW closed global thread-count tuning:
+  - `THREADS=40` makes wall decode much worse;
+  - `THREADS=28` also makes wall decode worse;
+  - `THREADS=32` remains the useful global setting.
+- Q4_0 GPU/cache attempts removed `decode,type=2` fallback but regressed wall
+  time because staging/H2D/launch pressure dominated.
+- Same-type IQ3 attempts also regressed:
+  - true compact-batch MMVQ;
+  - parallel IQ3 up/gate streams;
+  - IQ3 Q8_K decode path.
+- Therefore the next source change needs evidence from sampled hotspots rather
+  than another broad concurrency/cache knob.
+
+Current accepted baseline:
+
+- Phase 7AS remains SOTA:
+  - n32 confirmation `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation `84173.24 ms / 77`, `0.91 tok/s`.
+- n32 visible residual buckets:
+  - Q4_0 decode fallback `decode,type=2`: `1736` calls, `13.351 GiB`,
+    `2.630 s`;
+  - same-type IQ3_XXS up/gate: about `18.646 ms/call`;
+  - expert-pack wait `11567536 us`;
+  - main pinned host stage `18631.890 ms`.
+
+Hypothesis:
+
+- `perf record` at low sampling frequency can identify whether the residual
+  CPU time is dominated by:
+  - Q4_0 vec-dot/dequant functions;
+  - threadpool/barrier/atomic chunk scheduling;
+  - memcpy/page-fault/mmap paths in fallback;
+  - io_uring/SQPOLL/kernel wait;
+  - CUDA launch/runtime overhead;
+  - profile/diagnostic accounting.
+- The result should tell whether the next source-level work should target:
+  - a Q4_0 CPU micro-kernel or row/tile layout;
+  - a narrower CPU fallback scheduler change;
+  - a CUDA IQ3 kernel path;
+  - reduced instrumentation/accounting;
+  - or no local CPU path at all because IO/staging remains dominant.
+
+Experiment:
+
+- Env-only diagnostic; no source patch.
+- Copy `/tmp/run_phase7as_repro.sh` to `/tmp/run_phase7bj_perf_repro.sh`.
+- Keep the exact Phase 7AS runtime env and llama args, including:
+  - `THREADS=32`;
+  - `PINNED_SLOTS=8`;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - current-down overlap, down parallel staging, pack mmap fallback, mmap drops.
+- Replace only the final execution wrapper with:
+
+```bash
+/usr/bin/time -v perf record -F 99 --call-graph fp \
+  -o "$RUN/perf.data" -- "${LLAMA_ARGS[@]}"
+```
+
+- After the command exits, generate:
+
+```bash
+perf report -i "$RUN/perf.data" --stdio --no-children \
+  --sort dso,symbol > "$RUN/perf-report-nochildren.txt"
+perf report -i "$RUN/perf.data" --stdio --children \
+  --sort dso,symbol > "$RUN/perf-report-children.txt"
+perf script -i "$RUN/perf.data" --header > "$RUN/perf-script-header.txt"
+```
+
+- Run strict cold n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bj-7as-perf"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7bj_perf_repro.sh
+```
+
+Reproducibility requirements:
+
+- Cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+- Run directory must include all standard Phase 7AS artifacts plus:
+  - `perf.data`;
+  - `perf-report-nochildren.txt`;
+  - `perf-report-children.txt`;
+  - `perf-script-header.txt`.
+- `git.txt` must show clean source at run start.
+- `command.txt` must record that perf wraps the llama command.
+- The answer to `Please introduce France in a short paragraph.` must still be
+  coherent and semantically correct.
+- The hard resource gates still apply even though perf adds overhead:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `oom=0`, `oom_kill=0`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - TTFT `<=106331.72 ms`.
+
+Interpretation rules:
+
+- Do not compare perf-wrapped wall decode directly against Phase 7AS for SOTA
+  promotion, because sampling overhead changes timing.
+- Use the normal metrics only to verify the run was valid and comparable enough
+  for hotspot interpretation.
+- Record:
+  - top self-time symbols from `perf-report-nochildren.txt`;
+  - top children-time stacks from `perf-report-children.txt`;
+  - whether Q4 fallback functions appear prominently;
+  - whether CUDA/runtime/io_uring/kernel wait dominates;
+  - whether profile/accounting functions are material.
+- The next optimization must cite this perf evidence before changing code.
+
+Rollback:
+
+- Env-only diagnostic needs no source rollback.
+- If perf artifacts are missing, source is dirty, output quality fails, memory
+  exceeds the cgroup, read path fails, or TTFT exceeds the gate, mark the run
+  invalid and do not use it for source decisions.
+- Keep Phase 7AS as accepted SOTA regardless of perf-wrapped timing.
+
 ## Phase 7BI - retest lower CPU thread count 28 on Phase 7AS SOTA
 
 Design timestamp: 2026-07-03 UTC.
