@@ -1019,6 +1019,24 @@ Narrow layer 0-2 top3 candidate design:
 - Risk: even layers `0-2` can influence the output trajectory and gate profile. Reject if France answer is incomplete or incoherent, if gate misses/direct behavior changes materially, if TTFT violates gate, if RAM exceeds 16GB, or if `eval_tok_s <= 4.2`.
 - Acceptance: same SOTA gates as usual; no source rollback needed because this is env-only.
 
+
+Narrow layer 0-2 top3 probe result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T101357Z-20260703T101357Z-narrow-layer0-2-top3-probe/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: `GGML_MOE_KEEP_TOPK_UPDOWN=3`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=3-9`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=4`; otherwise accepted gate O_DIRECT config, strict cold 16GB cgroup.
+- Metrics: `eval_tok_s=3.6`, `prompt_tok_s=1.5`, `TTFT=29360.514084 ms`, `elapsed_seconds=81.14`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15060041728`, `pgmajfault=329907`, `workingset_refault_file=4023978`, `ram_ok=true`, `ram_limit_killed=false`.
+- Manual correctness: rejected. The answer was semantic but incomplete, ending at `and the`, so it fails the complete coherent France-output requirement.
+- Gate/cache counters changed materially: one expert pack `hits=5077 misses=1619 direct_failures=0`; gate VRAM cache `hits=41184 misses=6696 hit_rate=86.0%`. This remains significantly different from the accepted SOTA trace shape.
+- Diagnosis: even pruning only layers `0-2` changes the output trajectory enough to lengthen/truncate the answer and increase gate misses/refault pressure. The rough compute saving did not convert into token-rate improvement.
+- Verdict: rejected. Deprioritize further top-k pruning on early layers unless a future candidate includes a stronger correctness-preserving routing argument and a prompt-set validation plan.
+
+Next direction after top-k rejection:
+
+- The fine trace plus pruning probes indicate that the remaining CPU fallback cost is real MXFP4 dot/source scan work. Correctness-preserving math/kernel changes are preferred over additional routing/top-k changes.
+- Already rejected kernel/layout options: MXFP4 prefetch, hotset repack integration, compact mmap hotsets, broad one-stream up/down, down-batch cache under current VRAM budget.
+- Before the next source candidate, inspect the current MXFP4 dot and `mul_mat_id` inner loop for a very narrow default-off optimization that changes scheduling or memory access without changing selected experts. If no plausible >1s upper bound can be calculated, do not run a full strict cold candidate.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
