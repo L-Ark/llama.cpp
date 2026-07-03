@@ -22007,3 +22007,121 @@ Decision:
 - Keep Phase 7AS as the current accepted SOTA:
   - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
   - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+
+## Phase 7BH - retest down prefetch depth 1 on Phase 7AS SOTA
+
+Design timestamp: 2026-07-03 UTC.
+
+Current bottleneck:
+
+- Phase 7AS remains the accepted SOTA:
+  - n32 confirm decode `33471.59 ms / 31`, `0.93 tok/s`;
+  - n96 confirm decode `84173.24 ms / 77`, `0.91 tok/s`.
+- The accepted runtime uses:
+
+```sh
+GGML_MOE_PREFETCH_DOWN=1
+GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_CURRENT_DOWN_OVERLAP=1
+```
+
+- Phase 7AS n32 current-down/down-prefetch evidence:
+  - down cache hit rate `73.6%`;
+  - current-down overlap planned/completed `3664`;
+  - `down prefetch` useful hits were previously recorded as `loads=3664`,
+    `hits=3664`, `evicted_unused=0` in the Phase 7AS result section;
+  - main pinned host staging is still `18631.890 ms`;
+  - expert-pack iouring wait is still `11567536 us`.
+- Phase 7BA showed disabling current-down overlap is bad. Phase 7BE showed
+  full same-token down preload is also bad. This leaves a narrower policy lever:
+  throttle existing down prefetch depth rather than removing it or expanding it.
+- Depth `1` was tested in earlier Phase 3, but not after the Phase 7AS IQ2_S
+  parallel up/gate runtime changed the IO/staging balance.
+
+Hypothesis:
+
+Changing `GGML_MOE_PREFETCH_DOWN_DEPTH` from `2` to `1` may reduce prefetch
+staging pressure and expert-pack IO wait while preserving enough down cache hits
+for the fixed France decode. If depth 2 is overfetching relative to the current
+up/gate/down schedule, depth 1 should lower host staging and iouring wait.
+
+Why this can improve token rate:
+
+- Phase 7BE and 7BG both showed that extra staging pressure can dominate even
+  when hit rates improve.
+- Depth 1 does not change math, GPU kernels, CPU thread count, VRAM budget,
+  pinned slots, or host RAM tier.
+- A smaller depth can only help if the saved staging/IO pressure exceeds the
+  lost down cache hits; the mechanism is directly measurable through down hit
+  rate, `down prefetch` useful rate, pinned staging, and iouring wait.
+
+Theoretical upper bound:
+
+- Phase 7AS main pinned host staging is `18.63 s`, but most of that is required
+  expert movement, not waste.
+- If depth 1 removes only redundant prefetch pressure, realistic upside is
+  `0.3-1.0 s` on n32.
+- If depth 1 loses useful hits, the likely result is a regression similar to
+  no-current-overlap Phase 7BA. The first n32 run is enough to reject.
+
+Experiment:
+
+- Env-only; no source patch.
+- Create `/tmp/run_phase7bh_repro.sh` from `/tmp/run_phase7as_repro.sh`.
+- Parameterize and record:
+
+```sh
+GGML_MOE_PREFETCH_DOWN_DEPTH=1
+```
+
+- Keep all other Phase 7AS settings unchanged:
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+  - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - SQPOLL, `IO_DEPTH=8`, `IO_REFILL_BATCH=4`, `IO_SORT_OFFSET=1`;
+  - `THREADS=32`, `PINNED_SLOTS=8`.
+- Run strict cold n32 first:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7bh-7as-prefetch-depth1"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=8 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 PREFETCH_DOWN_DEPTH=1 \
+      /tmp/run_phase7bh_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates same as Phase 7AS:
+  - exit `0`;
+  - host RAM under the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `command.txt` records `PREFETCH_DOWN_DEPTH=1`;
+  - `env.txt` contains `GGML_MOE_PREFETCH_DOWN_DEPTH=1`.
+- Promotion:
+  - first n32 must beat Phase 7AS n32 confirmation
+    `33471.59 ms / 31`;
+  - mechanism should show lower pinned host staging or lower expert-pack wait
+    without a large down hit-rate collapse;
+  - if first n32 beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7AS n96 confirmation `84173.24 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If first n32 is slower or down hit rate collapses, reject immediately and keep
+  depth 2 as SOTA.
+- Do not test depth 3 unless depth 1 shows that depth sensitivity still matters
+  on the current Phase 7AS runtime.
