@@ -3689,3 +3689,216 @@ Next optimization plan:
    - expected saved milliseconds;
    - RAM/VRAM cost;
    - correctness and TTFT rejection criteria.
+
+### 2026-07-04 Immediate Experiment Design: CPU Fallback Pack Mmap For Up/Down Top256
+
+Observed implementation state:
+
+- Accepted stream-only build has `GGML_CUDA_MOE_STREAM_BATCH=OFF`; in that build `ggml_cuda_moe_expert_pack_mmap_ptr()` is a stub, so CPU fallback cannot use pack mmap.
+- Batch-enabled build `build-ds4-moe-stream-batch-probe/bin/llama-cli` has:
+  - sha256 `866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc`;
+  - `GGML_CUDA_MOE_STREAM=ON`;
+  - `GGML_CUDA_MOE_STREAM_BATCH=ON`;
+  - real `GGML_MOE_EXPERT_PACK` plus `GGML_MOE_CPU_FALLBACK_PACK_MMAP` implementation.
+- Do not enable `GGML_MOE_STREAM_DOWN_BATCH` for this experiment. The only intended behavior change is CPU fallback source selection from model GGUF mmap to pack mmap for matching up/down entries.
+
+Pack candidates from `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top512.tsv`:
+
+| Pack | Coverage ms | Calls | Payload | File |
+| --- | ---: | ---: | ---: | --- |
+| top128 up/down | `3897.807` | `10027` | `544.0 MiB` | `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack` |
+| top256 up/down | `5646.756` | `13727` | `1088.0 MiB` | `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack` |
+| top512 up/down | `7947.407` | `17248` | `2176.0 MiB` | not selected for first run |
+
+Pack hashes:
+
+- top128: `f57ff2426647514c0145bb4b367b750f7a1753837b2ead22df091e9645483894`
+- top256: `a6eb88346b2a4719f85db804b4c6bf71ad58ec6ca3719c4292d8c9a11767161d`
+
+Theory:
+
+- The split trace shows hot CPU fallback math is much smaller than cold fallback source movement.
+- Pack mmap should reduce random source movement if the top up/down experts are clustered in a smaller route-ordered file instead of being pulled from the large GGUF mapping.
+- The pack pages are still file-backed and counted inside the 16GB cgroup, so this is cold-legal if run under strict `drop_caches`.
+- This does not consume VRAM and should preserve the accepted gate VRAM cache (`13.2GiB`, `3192` slots, `86.8%` hit rate).
+
+Hard bound:
+
+- Accepted generation time estimate: `192 / 4.2 = 45.7s`.
+- Ideal top256 coverage saving: `5.65s`.
+- Best-case generation time: about `40.1s`, or about `4.8 tok/s`.
+- If mmap locality is weaker than expected or pack pages displace useful model pages, the run may tie or regress.
+
+Run config:
+
+- Binary: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Accepted SOTA env unchanged:
+  - gate one-stream cache `13568MiB`;
+  - current gate admit profile;
+  - current gate expert pack with direct IO;
+  - top-k up/down pruning;
+  - `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Added env:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack`
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback-packmmap-profile.csv`
+
+Acceptance/rejection:
+
+- Accept only if RAM/correctness pass, TTFT stays within `33617.688744 ms`, and `eval_tok_s > 4.2`.
+- If it ties or regresses, record mmap hit counters and profile data, then reject.
+- If it improves, immediately rebuild the batch-enabled binary from current pushed source, rerun from that source, record all hashes and push.
+
+### 2026-07-04 CPU Fallback Pack Mmap Top256 Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T205623Z-20260704_cpu_fallback_packmmap_top256_updown/france-cpu40-vram0gb`
+- Binary: `build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack`
+- Env delta:
+  - `GGML_MOE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack`
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`
+  - profile envs enabled
+
+Metrics:
+
+- `eval_tok_s=4.0`
+- `prompt_tok_s=1.6`
+- `TTFT=30381.522449 ms`
+- `elapsed_seconds=64.52`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15101743104`
+- `pgmajfault=273403`
+- `workingset_refault_file=1738482`
+- `ram_ok=true`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Pack and gate counters:
+
+- Batch expert pack loaded `256` entries.
+- Pack mmap enabled: `1088.04 MiB`.
+- `expert pack: hits=13423 misses=22457`.
+- `kimi_cpu_fallback_pack_mmap: enabled=1 hits=13423 misses=22457 bytes=59818901504 fallback_gguf=22457`.
+- Gate one-stream remained healthy:
+  - gate pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_reads=4623 direct_fallbacks=0`
+  - `VRAM cache: hits=30528 misses=4623 hit_rate=86.8%`
+
+Fallback profile aggregate:
+
+| Phase/role | count | calls | fallback_us |
+| --- | ---: | ---: | ---: |
+| prompt/up | `1820` | `1171` | `3304729` |
+| prompt/down | `1820` | `1171` | `4261299` |
+| decode/up | `17940` | `17940` | `9280655` |
+| decode/down | `17940` | `17940` | `9466350` |
+| total | `39520` | `38222` | `26313033` |
+
+Artifact hashes:
+
+- `summary.json`: `d0979da52cdff27e96f50596eb249bdc98f98ca084bd601a7d7eff2909ffc6d3`
+- `stdout.txt`: `20f88a45b7867e45a9fa7a83a32582bbe32ae784822a69ba01db0a4a3eea1dcd`
+- `stderr.txt`: `d2a67a7868373768c28e395204bf421bf4fe76fbd159da675bf629c1886e9ed3`
+- `fallback-packmmap-profile.csv`: `f4bceab1a04e5363033e4501f9d83ac616ba5cbec16164233dcffc524cc696e7`
+
+Verdict:
+
+- Rejected. Correctness/RAM/TTFT pass, but token rate regressed below `4.2`.
+- The pack mmap path works and hits, but it does not reduce page faults or fallback time:
+  - major faults remain about the same as accepted cold;
+  - `workingset_refault_file` is worse than the default-off guard;
+  - fallback total is about `26.3s`, not better than the previous cold profile.
+- Likely cause: pack mmap changes source location but still faults file-backed pages under the same 16GB pressure; the `1.1GiB` pack also competes with useful GGUF/model pages.
+
+Immediate follow-up: one smaller-footprint top128 diagnostic.
+
+- Rationale: top256 proves pack mmap functionality but may be too large. Top128 uses `544MiB`, covers `3897.807 ms`, and has a best-case bound around `4.6 tok/s`.
+- Run only one strict cold top128 pack mmap diagnostic.
+- Accept only if it beats `4.2` with RAM/correctness/TTFT pass.
+- If top128 also ties/regresses, stop pack-mmap mmap-only experiments and move to an overlapped/direct staging design or a different movement model.
+
+### 2026-07-04 CPU Fallback Pack Mmap Top128 Result
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T210008Z-20260704_cpu_fallback_packmmap_top128_updown/france-cpu40-vram0gb`
+- Binary: `build-ds4-moe-stream-batch-probe/bin/llama-cli`
+- Pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack`
+
+Metrics:
+
+- `eval_tok_s=4.1`
+- `prompt_tok_s=1.6`
+- `TTFT=29132.34718 ms`
+- `elapsed_seconds=62.33`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15100948480`
+- `pgmajfault=273460`
+- `workingset_refault_file=1648407`
+- `ram_ok=true`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Pack and gate counters:
+
+- Batch expert pack loaded `128` entries.
+- Pack mmap enabled: `544.02 MiB`.
+- `expert pack: hits=10051 misses=25829`.
+- `kimi_cpu_fallback_pack_mmap: enabled=1 hits=10051 misses=25829 bytes=44791758848 fallback_gguf=25829`.
+- Gate one-stream remained healthy:
+  - gate pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_reads=4623 direct_fallbacks=0`
+  - `VRAM cache: hits=30528 misses=4623 hit_rate=86.8%`
+
+Fallback profile aggregate:
+
+| Phase/role | count | calls | fallback_us |
+| --- | ---: | ---: | ---: |
+| prompt/up | `1820` | `1171` | `3109396` |
+| prompt/down | `1820` | `1171` | `4277033` |
+| decode/up | `17940` | `17940` | `9512016` |
+| decode/down | `17940` | `17940` | `9244851` |
+| total | `39520` | `38222` | `26143296` |
+
+Artifact hashes:
+
+- `summary.json`: `768e29c9c3c00608d447b6ed1412487f66cd280b30a4cd835cbbab6b8d500e76`
+- `stdout.txt`: `fd4afe007672a0210d160ad2e9d8643fef9870d8128148d495eba1a10dc29a5d`
+- `stderr.txt`: `225f352d03de4a4002feb3191486bf554e18e5b153863e23e78edc7bc249c383`
+- `fallback-packmmap-profile.csv`: `adb3854dae80c5854f31cba1a73c1f523232a12c225dc2f0160a099e37fc938c`
+
+Verdict:
+
+- Rejected. Correctness/RAM/TTFT pass, but token rate is below the accepted `4.2`.
+- Top128 has smaller footprint than top256 but still does not reduce major faults or fallback total.
+- Stop mmap-only CPU fallback pack experiments. The source file changed, but the kernel still services file-backed random pages inside the same 16GB pressure envelope.
+
+Next direction:
+
+- The next source movement design must avoid relying on page-cache locality alone.
+- Candidate to design next:
+  - O_DIRECT pack read into a bounded anonymous/aligned staging buffer for CPU fallback, so source bytes do not enter the file page cache;
+  - overlap next expert direct read with current hot CPU math where possible;
+  - keep staging memory bounded and charged as anonymous memory inside the same 16GB cgroup;
+  - preserve gate VRAM cache and current gate O_DIRECT pack.
+- Before coding, compute:
+  - direct read bytes per token from top128/top256/top512 coverage;
+  - maximum useful overlap from hot CPU math lower bound (`~3.0s` total after source touch);
+  - anonymous staging memory required per thread/expert;
+  - whether the expected saved time can exceed `4.2 tok/s` without TTFT violation.
