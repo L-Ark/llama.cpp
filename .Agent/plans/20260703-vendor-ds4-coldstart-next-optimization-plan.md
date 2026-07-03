@@ -1280,6 +1280,34 @@ Next direction after late-layer pruning rejection:
 - Do not continue top-k pruning unless a future candidate includes a stronger correctness-preserving routing model and prompt-set validation before full SOTA claims.
 - Remaining optimization space is now very narrow: accepted gate cache is near optimal, CPU scheduling/repack/page-policy/top-k/updown one-stream have all been rejected. Next work should be measurement-first, not another source change: identify any untested no-source configuration with a hard upper bound, or produce a new bottleneck trace under the exact current clean binary to see whether the repeated line has shifted.
 
+
+Current clean SOTA profile guard design:
+
+- Time: 2026-07-03 after late-layer pruning rejection commit `1cb55fc5f`.
+- Goal: stop blind source/config changes and refresh bottleneck evidence under the current clean binary after several rejected candidates.
+- Source state: clean runtime source; no candidate patch. Accepted SOTA config is used unchanged except enabling CPU MoE profiling envs.
+- Config delta: add `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, and `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1` to the accepted gate O_DIRECT SOTA config. Preserve cache `13568`, gate name filter, admission profile, expert pack, top-k policy, `cpu_moe=40`, strict 16GB cgroup, and full France prompt.
+- Purpose: record whether remaining wall time is still dominated by CPU up/down fallback, rejected one-stream eligibility, or another bucket. This run is diagnostic and cannot replace SOTA unless it unexpectedly exceeds `4.2` while all gates pass.
+- Acceptance/handling: if it ties/regresses, record as a profile guard only. If it unexpectedly improves above `4.2`, rerun without profiling overhead before any SOTA claim.
+
+
+Current clean SOTA profile guard result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T112700Z-20260703T-current-clean-profile-guard/france-cpu40-vram0gb`.
+- Config delta from accepted SOTA: profiling envs `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`; otherwise accepted SOTA config.
+- Metrics: `eval_tok_s=4.1`, `prompt_tok_s=1.5`, `TTFT=30186.611077 ms`, `elapsed_seconds=63.18`.
+- RAM/cgroup: `memory_peak_bytes=16000000000`, `memory_file_bytes=15099514880`, `pgmajfault=272573`, `workingset_refault_file=1653573`, `ram_ok=true`, `ram_limit_killed=false`.
+- Correctness: passed manual review. France answer was complete, semantic, and coherent.
+- Gate path stayed exactly aligned with accepted SOTA: one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 direct_failures=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`.
+- CPU MoE profile: `calls=16920 total=2.013 ms/call`, with `cuda_single=0.419 ms/call` and `fallback_t0=1.581 ms/call`. The top fallback names are still early up/down tensors: `blk.1.ffn_down_exps`, `blk.1.ffn_up_exps`, `blk.2.ffn_down_exps`, `blk.0.ffn_up_exps`, `blk.0.ffn_down_exps`, and `blk.2.ffn_up_exps`, each around `5.1-5.5 ms/call` total/fallback.
+- Interpretation: current bottleneck remains CPU up/down fallback, especially early layers. This also explains why late-layer top2 and gate cache expansion did not help. Earlier attempts to prune early layers failed correctness/completeness, so any future early-layer reduction requires a stronger correctness model or broader prompt-set validation before it can be trusted.
+- Status: diagnostic only. It ties the repeated strict-cold line and does not replace the accepted `4.2 tok/s` SOTA.
+
+Next direction after profile guard:
+
+- Do not start another source candidate without a new mechanism that can attack early-layer up/down fallback while preserving output quality and gate/cache counters.
+- Plausible next work is offline analysis of routing/output sensitivity: compare accepted vs failed pruning traces and identify whether a safer per-layer/per-expert pruning rule exists. Without that, continue treating current `4.2 tok/s` as the effective cold-start SOTA.
+
 ## Acceptance Rules
 
 A new result can be promoted only if all conditions pass:
