@@ -849,6 +849,70 @@ rank  layer  calls  wall_ms   kernel_ms  wall_per_call_ms
     `2665.045 ms` n96 wall. A realistic first target is 5-10% of those two
     layers, about `133-267 ms` n96, which is small but measurable with repeats.
 
+## Phase 7DD: IQ3_XXS MMVQ kernel resource diagnostic
+
+Timestamp: 2026-07-03T18:20:41Z.
+
+Status: planned before implementation.
+
+Reason for this phase:
+
+- Phase 7DC shows type-18 IQ3_XXS decode up/gate is compute-bound:
+  - top 10 type-18 layers: `11152.518 ms` wall, `11089.154 ms` kernel;
+  - `up_stage_jobs=0`, `gate_stage_jobs=0` for all type-18 top rows.
+- VDR=4 was rejected in Phase 7DB, so the next kernel work should preserve
+  `VDR=2`.
+- Before writing a new kernel specialization, inspect the compiled kernel's
+  resource usage to understand whether the current path is likely limited by:
+  - register pressure / low occupancy;
+  - shared memory usage;
+  - launch shape / warp count;
+  - instruction count and lookup/sign-unpack complexity.
+
+Selected diagnostic:
+
+- No source behavior change.
+- Use the accepted `build-cuda-batch` build artifact from commit `22b56c2e1`.
+- Extract symbols and resource usage for `mul_mat_vec_q` / MMVQ kernels related
+  to `GGML_TYPE_IQ3_XXS`.
+- Record:
+  - exact binary path;
+  - CUDA tools used;
+  - demangled symbol names;
+  - register count;
+  - shared memory;
+  - constant memory;
+  - any occupancy-relevant launch-bound data visible from the tool output.
+
+Commands:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 22b56c2e1
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7dd-iq3-kernel-resource
+mkdir -p "$RUN"
+cuobjdump --dump-resource-usage build-cuda-batch/bin/libggml-cuda.so > "$RUN/cuobjdump-resource.txt"
+cuobjdump --dump-elf-symbols build-cuda-batch/bin/libggml-cuda.so > "$RUN/cuobjdump-symbols.txt"
+nm -D -C build-cuda-batch/bin/libggml-cuda.so > "$RUN/nm-demangled.txt"
+```
+
+Acceptance:
+
+- Diagnostic is accepted if it identifies the IQ3_XXS MMVQ kernel symbols and
+  resource usage, or if it proves the current binary strips the needed metadata
+  and documents the fallback inspection method.
+- This phase does not change SOTA token rate.
+
+Next decision rule:
+
+- If IQ3_XXS MMVQ uses high registers per thread or low occupancy, plan a
+  specialization that reduces live temporaries in `vec_dot_iq3_xxs_q8_1` while
+  preserving `VDR=2`.
+- If register pressure is not high, focus on reducing lookup/sign unpack
+  instruction cost or improving memory access grouping.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
