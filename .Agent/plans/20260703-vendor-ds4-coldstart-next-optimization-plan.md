@@ -5331,3 +5331,55 @@ Verdict:
 - Rejected. Removing `GGML_MOE_STREAM_ONE_TRACE_OUT` did not improve token rate.
 - Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
 - Trace file output is not the bottleneck at this point; next work should focus on compute/synchronization/H2D path costs rather than instrumentation output.
+
+### 2026-07-03T23:43Z Trace-Disabled Fast Path Design
+
+Goal:
+
+- Remove trace instrumentation overhead when `GGML_MOE_STREAM_ONE_TRACE_OUT` is not set.
+- Keep full trace behavior unchanged when trace output is requested.
+
+Bottleneck:
+
+- The no-trace guard still ran through the timing/trace scaffolding:
+  - several `std::chrono::steady_clock::now()` calls per expert invocation;
+  - `one_trace_write()` call on every invocation;
+  - mutex acquisition inside `one_trace_write()` before returning because no file is open.
+- That means the previous no-trace experiment removed file output but not the hot-path timing/lock overhead.
+
+Hard-bound:
+
+- There are `35151` gate expert invocations in the France run.
+- If timing + mutex overhead is only `1-5 us` per invocation, the upper bound is about `35-175 ms`.
+- If contention from many CPU worker threads on the trace mutex is higher, the benefit could be larger. The test is low-risk because it is instrumentation-only when trace is disabled.
+
+Implementation plan:
+
+- Add a cached `one_trace_requested()` helper that checks `GGML_MOE_STREAM_ONE_TRACE_OUT`.
+- In `ggml_cuda_moe_stream_one`, only take `steady_clock::now()` timing checkpoints and call `one_trace_write()` when trace is requested.
+- Preserve all existing compute, H2D, D2H, sync, scatter, cache, pack, and correctness behavior.
+- Preserve current trace behavior when `GGML_MOE_STREAM_ONE_TRACE_OUT` is set.
+
+Practice config:
+
+- Build source candidate.
+- Run strict cold no-trace top3000 SOTA config:
+  - no `GGML_MOE_STREAM_ONE_TRACE_OUT`;
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`;
+  - same gate O_DIRECT pack, cache size, top-k policy, `cpu_moe=40`, 16GB cgroup, and CLI args.
+- If it exceeds `4.4`, commit/push source/docs/artifacts and rerun from pushed source before promotion.
+- If it does not exceed `4.4`, revert source and record rejection.
+
+Acceptance gates:
+
+- Promote only if `eval_tok_s > 4.4`, and a pushed-source rerun also exceeds `4.4`.
+- France output must be complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`.
+- `TTFT <= 33617.688744 ms`.
+- Pack direct path must have `direct_failures=0` and `direct_fallbacks=0`.
+
+Rejection rules:
+
+- Reject if `eval_tok_s <= 4.4`, correctness fails, RAM gate fails, TTFT exceeds the gate, or pack direct failures/fallbacks appear.
+- If rejected, revert the source patch and push only docs/artifacts.
