@@ -27404,6 +27404,136 @@ Rollback:
 - Do not promote this run as SOTA even if wall time is faster; any promotion
   requires a clean production rerun without diagnostic env.
 
+Phase 7CF result - diagnostic complete:
+
+- result time:
+  - 2026-07-03T13:21:00Z.
+- source status:
+  - env-only diagnostic;
+  - no source patch;
+  - no source rollback required.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-131607Z-n32-phase7cf-7cc-split-top150`.
+- runner:
+  - `/tmp/run_phase7cf_diag.sh`;
+  - copied from `/tmp/run_phase7cc_repro.sh`;
+  - appended graph/split diagnostic env to `env.txt`.
+- env delta over Phase 7CC:
+
+```sh
+LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=150
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - TTFT `82293.22 ms`, under the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct.
+- decode:
+  - `32704.98 ms / 31`, `0.95 tok/s`;
+  - diagnostic-only; not promoted because graph/split profiling env was enabled.
+- memory at finish:
+  - `memory.current.final=15141941248`;
+  - `file=14901104640`;
+  - `inactive_file=1645436928`;
+  - `active_file=13255135232`;
+  - `kernel=236388352`;
+  - `anon=446464`;
+  - `pgmajfault=1001526`;
+  - `workingset_refault_file=112536`.
+- expert pack:
+  - `hits=25134`;
+  - `misses=516`;
+  - `iouring_reads=11655`;
+  - `iouring_bytes=67926376448`;
+  - `iouring_wait_us=13117074`;
+  - `entries=30831`;
+  - `inflight_avg=2.97`, `inflight_max=8`.
+- pinned staging:
+  - main `host_stage=17093.406 ms`, `h2d=4134.941 ms`,
+    `slot_wait=49.488 ms`;
+  - gate `host_stage=1278.352 ms`, `h2d=918.346 ms`,
+    `slot_wait=11.588 ms`.
+- cache:
+  - down `slots=806`, `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+  - upgate `slots=1679`, `hits=13019`, `misses=16757`,
+    `hit_rate=43.7%`.
+- current down overlap:
+  - `planned_jobs=3664`;
+  - `completed_jobs=3664`;
+  - `missing_pack=36`;
+  - `worker_us=3529479`.
+- up/gate type profile:
+  - type `18`: `wall=14.351 ms/call`;
+  - type `22`: `wall=6.311 ms/call`.
+- CPU MoE profile:
+  - up_gate `12.483 ms/call`;
+  - down `40.050 ms/call`;
+  - down `fallback_t0=37.261 ms/call`;
+  - down `cuda_batch=2.735 ms/call`.
+- graph profile:
+  - submit `calls=32`, `total=113647.227 ms`, `avg=3551.476 ms/call`;
+  - sync `calls=192`, `total=24.739 ms`, `avg=0.129 ms/call`;
+  - decode sync `calls=31`, `decode_total=24.527 ms`,
+    `decode_avg=0.791 ms/call`;
+  - prompt sync `0.087 ms`.
+- split profile:
+  - total `signatures=242`, `calls=3904`, `wall=113631.707 ms`;
+  - `TOP=150` exposed `83` rows with `calls=31`;
+  - CPU decode MoE rows dominate decode split cost;
+  - the visible `calls=31` rows sum to `32540.524 ms`;
+  - top CPU decode rows:
+    - layer 2: `ffn_moe_swiglu-2` to `ffn_moe_down-2`,
+      `1086.075 ms`, `35.035 ms/call`;
+    - layer 6: `1080.749 ms`, `34.863 ms/call`;
+    - layer 1: `963.683 ms`, `31.087 ms/call`;
+    - layer 9: `912.271 ms`, `29.428 ms/call`;
+    - layer 7: `877.275 ms`, `28.299 ms/call`;
+    - layer 4: `871.993 ms`, `28.129 ms/call`;
+    - layer 8: `801.815 ms`, `25.865 ms/call`;
+    - layer 10: `734.070 ms`, `23.680 ms/call`;
+    - layer 5: `730.320 ms`, `23.559 ms/call`;
+    - layer 55: `707.465 ms`, `22.821 ms/call`;
+    - layer 3: `700.053 ms`, `22.582 ms/call`.
+  - CUDA decode weighted/norm rows are tiny by comparison:
+    - typical `ffn_moe_weighted-*` to `ffn_norm-*` rows are about
+      `0.085-0.094 ms/call`.
+
+Interpretation:
+
+- Phase 7CF confirms the current decode bottleneck is not CUDA graph sync and
+  not CUDA weighted/norm work after MoE.
+- The decode wall is dominated by CPU MoE `ffn_moe_swiglu-*` to
+  `ffn_moe_down-*` split rows, especially early Q4_0/down-heavy layers
+  `1-10` plus a smaller long-tail of later layers.
+- The next implementation should be designed around decode CPU MoE/down
+  fallback:
+  - either reduce fallback source/page-cache cost;
+  - or selectively move only high-value decode rows/layers to a GPU path whose
+    staging cost is proven lower than the CPU split row cost;
+  - or add a layer-aware current-down/fallback policy.
+- Generic CUDA graph tuning and CUDA weighted/norm work are explicitly
+  deprioritized by this diagnostic.
+
+Decision:
+
+- Phase 7CF is a valid diagnostic and not a SOTA promotion.
+- Keep Phase 7CC as the current accepted SOTA:
+  - n32 confirmation decode `33217.66 ms / 31`, `0.93 tok/s`;
+  - n96 confirmation decode `79008.37 ms / 77`, `0.97 tok/s`;
+  - best observed n96 candidate decode `77239.32 ms / 77`, `1.00 tok/s`.
+- Next plan should target decode CPU MoE/down fallback, starting from the top
+  rows identified here rather than broad env sweeps.
+
 ### Phase 7BZ - fine-grained VRAM split, upgate pct 62
 
 Start time:
