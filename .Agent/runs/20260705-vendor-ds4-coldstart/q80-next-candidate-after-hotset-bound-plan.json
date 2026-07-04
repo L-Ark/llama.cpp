@@ -1,0 +1,37 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: next candidate after source-resident topN hard-bound rejection",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "rejected_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json",
+    "correctness_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-updown-validation.json",
+    "reason": "Raw source-resident topN does not reach 10 tok/s under current VRAM shape unless it can hold 12.75-17.0 GiB of up/down payload in addition to gate behavior."
+  },
+  "next_design_options": [
+    {
+      "name": "intermediate top768 resident batched SOTA candidate",
+      "purpose": "Potentially improve above 4.4 tok/s, not a 10 tok/s route.",
+      "required_precondition": "Write a separate bound for TTFT, cpu_moe/VRAM tradeoff, kernel overhead, and expected eval_tok_s after gate-cache impact."
+    },
+    {
+      "name": "exact CPU fallback batching/microkernel bound",
+      "purpose": "Reduce the 19.029s decode up/down fallback without requiring raw resident payload for thousands of experts.",
+      "required_precondition": "Measure how much time is source/page fault versus arithmetic/thread scheduling in the current CPU fallback and prove an upper bound above the 4.4 SOTA gate."
+    },
+    {
+      "name": "compressed/shared resident representation",
+      "purpose": "Fit a top3072+ equivalent hotset into available VRAM.",
+      "required_precondition": "Show an exact or top1-stable representation with at least 4x effective footprint reduction and decode overhead under 1.642s. Generic zstd-like compression is already rejected."
+    }
+  ],
+  "immediate_next_step": "Write and execute a hard-bound for exact CPU fallback batching/microkernel, because it is the only listed path that does not first require impossible VRAM expansion.",
+  "rules": {
+    "no_runtime_code_before_bound": true,
+    "correctness_gate_before_performance": "fixed-text llama-results top1 must pass for any numerical or scheduling change that can alter outputs",
+    "sota_promotion": "If a compliant >4.4 tok/s result appears, immediately record full reproduction data, commit and push to ssd/vendor/deepseek-token-rate-16gb, then reproduce from pushed source."
+  }
+}
