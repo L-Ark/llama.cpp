@@ -41499,3 +41499,114 @@ Rollback:
 - Env-only failure needs no source rollback.
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
+
+## Phase 7ER: current Phase 7EB bottleneck refresh before next implementation
+
+Start time:
+
+- 2026-07-04T00:00:00Z.
+
+Reason for this phase:
+
+- The current authoritative SOTA is Phase 7EB, not the older historical phase
+  text above:
+  - n32: `/root/lfz/runs/vendor-kimi-token-rate/20260703-225526Z-n32-phase7ea-depth16-slots16`,
+    decode `29599.64 ms / 31`, `1.05 tok/s`, TTFT `76528.98 ms`;
+  - n96: `/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm`,
+    decode `74201.57 ms / 77`, `1.04 tok/s`, TTFT `77123.35 ms`.
+- The last implementation attempts, Phase 7EP and Phase 7EQ, showed that
+  same-type current-down overlap can reduce local `blk.4/60` down movement but
+  either:
+  - slows the up/gate critical path through shared staging/cache contention; or
+  - becomes unsafe when gate staging reuses the same staging resources.
+- Therefore the next implementation must not be another blind same-type overlap
+  variant. It must first refresh the current critical path under the accepted
+  Phase 7EB runtime and identify which bucket can still be compressed.
+
+Current hypothesis:
+
+- The remaining n32/n96 gap is still dominated by selected-expert movement and
+  staging exposure, not dense/attention compute.
+- The most plausible future speedup requires one of:
+  - safer staging-resource isolation for current-down overlap;
+  - lower exposed host-stage time for up/gate and down copies;
+  - a cache-residency change that reduces movement without stealing too much
+    capacity from up/gate.
+- CUDA graph, broad Q4 down GPU enablement, larger VRAM cache, larger RAM tier,
+  and same-type overlap without resource isolation have already been rejected.
+
+Design-stage experiment:
+
+- Run one strict cold-start n32 bottleneck refresh on the exact Phase 7EB SOTA
+  recipe.
+- Enable diagnostic outputs needed to attribute per-token time:
+  - route/profile CSV;
+  - down batch/profile CSV;
+  - up/gate batch/profile CSV;
+  - fallback bytes by type;
+  - TTFT CSV;
+  - memory cgroup snapshots including file/anon/kernel/inactive_file/active_file;
+  - pinned staging and expert-pack counters from stderr.
+- Keep the same hard constraints as production runs:
+  - `systemd-run --wait --collect --same-dir`;
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - cold start;
+  - host RAM below 16GB including page cache;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France answer must be coherent and semantically correct.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7er-sota-bottleneck-refresh"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Expected output artifacts:
+
+- `env.txt`, `cmd.txt`, `stdout.txt`, `stderr.txt`;
+- `memory.current.*`, `memory.stat.*`, `memory.events.*`;
+- route/down/upgate/fallback/TTFT CSVs if the runner emits them;
+- parsed summary appended to this plan with:
+  - decode time and token rate;
+  - TTFT;
+  - exact France output;
+  - memory peak and final file/anon/kernel split;
+  - top down-stage tensors by wall/stage time;
+  - top up/gate tensors by wall/stage/kernel time;
+  - expert-pack read count, bytes, wait time, and batch histogram;
+  - pinned host-stage/H2D totals.
+
+How the result will guide implementation:
+
+- If down staging is still the largest exposed bucket and concentrated in a few
+  tensors, plan Phase 7ES as a default-off source change that adds separate
+  staging ownership for current-down overlap before any same-type overlap is
+  re-enabled.
+- If up/gate staging or H2D is larger than down, do not work on down overlap;
+  instead plan a copy-path change that reduces up/gate staging exposure.
+- If page-cache or CPU fallback dominates after prompt, plan a memory/drop or
+  fallback-source change only if it reduces decode movement without increasing
+  TTFT or exceeding the 16GB cgroup.
+- If the refresh shows only normal run-to-run variance and no compressible
+  bucket, do not implement a speculative source patch; run a second diagnostic
+  or update the bottleneck model first.
+
+Promotion and rollback:
+
+- Phase 7ER is diagnostic only and cannot become SOTA by itself.
+- No runtime env change is accepted from this phase.
+- No source rollback is needed unless the diagnostic run requires a dirty patch;
+  in that case the patch must be reverted unless a later confirmed phase passes
+  all promotion gates.
+- The next implementation phase must be written into this plan before editing
+  source code.
