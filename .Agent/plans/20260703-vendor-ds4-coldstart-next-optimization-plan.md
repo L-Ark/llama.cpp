@@ -7219,3 +7219,45 @@ Current next practical direction:
   - start with a deterministic short compare that verifies complete France output for a smaller/hotter up/down set;
   - require exact output correctness before any performance run;
   - do not promote if semantic correctness drifts, even if per-op numeric error is small.
+
+### 2026-07-04T02:28Z Next Plan: GPU Up/Down Output Drift Audit
+
+Goal:
+
+- Determine why GPU up/down offload paths are not promotable despite small sampled per-op numerical differences.
+- Use existing recorded runs first; do not run another strict cold model pass until the old evidence is exhausted.
+
+Inputs:
+
+- accepted SOTA output:
+  `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- full no-filter up/down GPU stream rejected run:
+  `/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb`
+- profile-gated hot up/down64 rejected run:
+  `/root/lfz/runs/vendor-ds4-16gb/20260704T005617Z-20260704_hot_updown64_require_profile_candidate/france-cpu40-vram0gb`
+- sampled GPU-vs-CPU numerical compare:
+  `.Agent/runs/20260704-vendor-ds4-coldstart/updown-gpu-compare-result.json`
+
+Questions to answer:
+
+1. Does output drift appear as a harmless wording change, semantic error, or incomplete generation?
+2. Do rejected GPU up/down runs share a common counter signature:
+   - more gate pack reads/misses;
+   - lower gate cache hit rate;
+   - extra file inputs/refaults;
+   - TTFT pressure;
+   - role-specific up/down stream misses?
+3. Is there evidence that per-op numerical error is too small to explain drift alone, implying generation trajectory sensitivity or changed gate/cache/source behavior?
+4. Is any already-tested GPU up/down class worth another run?
+
+Acceptance for the audit:
+
+- This is an offline diagnostic artifact only.
+- It cannot promote SOTA.
+- It must produce a concrete next action:
+  - either a new narrow correctness experiment with a hard bound;
+  - or close GPU up/down offload for now and require new model/artifact support before continuing.
+
+Deliverable:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json`
