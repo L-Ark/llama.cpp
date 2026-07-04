@@ -1,0 +1,91 @@
+{
+  "date": "2026-07-05",
+  "title": "Accepted-path VRAM footprint snapshot and top4096 reconciliation",
+  "result": "vram_recovery_alone_rejected_for_top4096_exact_hotset",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "6acbe3c7cd9ec86fdb53c242b80617dd29e1513d",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "run": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T234742Z-vram-footprint-snapshot/accepted-n1",
+    "systemd_unit": "vendor-ds4-vram-snapshot-234742.service",
+    "systemd_result": "success",
+    "cgroup": {
+      "MemoryMax": 16000000000,
+      "MemorySwapMax": 0
+    },
+    "note": "Diagnostic run only. It produced the needed stderr memory breakdown; stdout grew unexpectedly with blank output and was deleted because it was not used as correctness or performance evidence."
+  },
+  "accepted_env": {
+    "GGML_MOE_STREAM": 1,
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": 13568,
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": 1,
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_VRAM_CACHE_GB": 0,
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": 3000,
+    "cpu_moe": 40,
+    "cli": "-n 1 -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts"
+  },
+  "fresh_stderr_extract": {
+    "gpu_total_mib": 32109,
+    "cuda_memory_breakdown_mib": {
+      "free": 238,
+      "self": 17362,
+      "model": 17339,
+      "context": 18,
+      "compute": 4,
+      "unaccounted": 14508
+    },
+    "gate_cache": {
+      "reported_gib": 13.2,
+      "slots": 3192,
+      "slot_mib": 4.25,
+      "slot_payload_mib": 13566,
+      "prefill_attempted": 3000,
+      "prefill_inserted": 3000,
+      "prefill_bytes": 13369344000,
+      "prefill_elapsed_ms": 4810.585
+    },
+    "stderr_sha256": "4ff238ed809b921d786028171166a73e6fc13b79223eb2cc41c73442ffd4d602",
+    "run_sh_sha256": "7dad86b8b93dd82cc5d8b36b5ef834f5c4c3cdd812bee9047af70e45f451637a"
+  },
+  "topn_payload_requirement": {
+    "top3072_payload_gib": 12.75,
+    "top3072_payload_mib": 13056,
+    "top3072_zero_overhead_tok_s": 9.946,
+    "top3072_slack_to_10_ms": -73.955,
+    "top4096_payload_gib": 17.0,
+    "top4096_payload_mib": 17408,
+    "top4096_zero_overhead_tok_s": 10.797,
+    "top4096_slack_to_10_ms": 1008.842
+  },
+  "reconciliation": {
+    "accepted_free_mib": 238,
+    "cpu_moe_41_recovered_mib_from_prior_fit_probe": 3264,
+    "accepted_gate_slot_payload_mib": 13566,
+    "free_plus_cpu41_mib": 3502,
+    "free_plus_entire_gate_payload_mib": 13804,
+    "free_plus_cpu41_plus_entire_gate_payload_mib": 17068,
+    "top4096_shortfall_after_free_plus_cpu41_plus_entire_gate_payload_mib": 340,
+    "workspace_and_allocator_overhead_mib": "not included in the 340 MiB shortfall; real fit margin is therefore worse",
+    "top3072_gate_payload_to_steal_with_cpu41_mib": 9554,
+    "top3072_gate_payload_remaining_with_cpu41_mib": 4012,
+    "top3072_decision": "Even if it fit by sacrificing most gate cache, it misses 10 tok/s before overhead and would add gate miss/TTFT penalty.",
+    "top4096_decision": "Even the unrealistic free + cpu_moe41 + entire gate payload budget is short before workspace. VRAM recovery alone is not a viable top4096 route."
+  },
+  "decision": {
+    "vram_recovery_alone": "rejected",
+    "gate_cache_sacrifice_for_top3072": "rejected",
+    "gate_cache_sacrifice_for_top4096": "rejected",
+    "required_next_class": "exact payload reduction or a model/runtime representation that changes the hotset footprint by about 4.0x-5.33x while preserving top1 correctness",
+    "next_step": "Audit exact hotset payload-reduction feasibility before any runtime code."
+  }
+}

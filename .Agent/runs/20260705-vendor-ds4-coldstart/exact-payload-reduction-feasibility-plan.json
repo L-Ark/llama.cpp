@@ -1,0 +1,43 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: exact hotset payload-reduction feasibility audit",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "vram_snapshot": ".Agent/runs/20260705-vendor-ds4-coldstart/vram-footprint-snapshot-reconciliation.json",
+    "top3072_payload_gib": 12.75,
+    "top4096_payload_gib": 17.0,
+    "measured_extra_pool_that_fits_gib": 3.188,
+    "required_exact_reduction_ratio_top3072": 4.0,
+    "required_exact_reduction_ratio_top4096": 5.33
+  },
+  "audit_scope": [
+    {
+      "check": "Top4096 hotset manifest construction",
+      "purpose": "Identify exact tensor/expert entries and byte offsets needed for the first positive 10 tok/s raw hotset bound.",
+      "reject_if": "Manifest cannot be generated reproducibly from fallback_profile and GGUF tensor metadata."
+    },
+    {
+      "check": "Lossless byte-level compression",
+      "purpose": "Measure zstd/lz4-like entropy limits on the top3072/top4096 raw payload, not just small samples.",
+      "reject_if": "Ratio is far below 4x for top3072 and 5.33x for top4096."
+    },
+    {
+      "check": "Exact block-level deduplication",
+      "purpose": "Count duplicate MXFP4 blocks, duplicate rows, and duplicate experts within the hotset.",
+      "reject_if": "Dedup ratio plus metadata overhead cannot approach the required ratios."
+    },
+    {
+      "check": "Exact structured representation",
+      "purpose": "Look for shared scale/nibble patterns or dictionary structure that can be decoded exactly or computed directly without changing logits.",
+      "reject_if": "Representation is lossy, requires dequantization that changes top1, or decompression/workspace exceeds the 1008 ms top4096 slack."
+    }
+  ],
+  "correctness_gate": {
+    "before_performance": "Any representation used for compute must pass fixed-text llama-results top1 equality and coherent France output before strict cold benchmark.",
+    "not_required_for_audit_only": "Pure offline compression/dedup measurement does not change logits and does not need a model run."
+  },
+  "immediate_next_action": "Generate or locate the top4096 hotset manifest from the current fallback profile and GGUF metadata, then run a bounded offline compression/dedup audit. Do not edit runtime code until a ratio near 4x-5.33x is measured."
+}
