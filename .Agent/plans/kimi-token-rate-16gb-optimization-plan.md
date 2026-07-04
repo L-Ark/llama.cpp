@@ -55745,3 +55745,169 @@ Decision rule:
 - Treat this run as diagnostic, not SOTA.
 - Do not proceed to source-level cache-policy changes until this phase provides
   evidence that cache policy can reduce repeated `runtime_load` misses.
+
+Result: accepted diagnostic instrumentation; do not change accepted runtime.
+
+- Source commit:
+  `97299af61` (`cuda: add cache eviction profile`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)`.
+- Diagnostic run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-184014Z-n32-phase7hz-cache-evict-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-184014Z-n32-phase7hz-cache-evict-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CACHE_EVICT_PROFILE_OUT=$RUN/cache-evict-profile.csv
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76931.00 ms`;
+  - decode `30581.71 ms / 31`, `1.01 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15074635776`;
+  - swap max `0`;
+  - anon `466944`;
+  - file `14836056064`;
+  - kernel `234663936`;
+  - inactive file `6064156672`;
+  - active file `8771256320`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert/cache counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14957948`;
+  - global iouring batches `4002`, wait calls `11699`, CQEs `15024`,
+    inflight avg `3.11`, max `8`;
+  - batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - current-down overlap jobs `3664`, cache hits `3528`,
+    missing tensor `93`, missing pack `36`, worker `3489065 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Profile artifacts:
+  - `cache-evict-profile.csv`: `21398` lines, `21397` rows;
+  - `copy-profile.csv`: `23915` lines;
+  - `io-batch-profile.csv`: `4003` lines.
+- Eviction summary:
+  - total evictions recorded: `21397`;
+  - victims with nonzero prior hits: `8209`;
+  - victim hit sum: `17468`;
+  - average victim hits: `0.816`;
+  - victim profile-count nonzero: `0` because no profile policy was enabled.
+- Top victim tensors by eviction count:
+  - `blk.5.ffn_up_exps.weight`: `180`;
+  - `blk.5.ffn_gate_exps.weight`: `180`;
+  - `blk.5.ffn_down_exps.weight`: `166`;
+  - `blk.1.ffn_up_exps.weight`: `165`;
+  - `blk.1.ffn_gate_exps.weight`: `165`;
+  - `blk.4.ffn_up_exps.weight`: `160`;
+  - `blk.4.ffn_gate_exps.weight`: `160`;
+  - `blk.10.ffn_up_exps.weight`: `155`;
+  - `blk.10.ffn_gate_exps.weight`: `155`;
+  - `blk.60.ffn_up_exps.weight`: `154`;
+  - `blk.60.ffn_gate_exps.weight`: `154`.
+- Top victim tensors by prior-hit sum:
+  - `blk.51.ffn_down_exps.weight`: `222`;
+  - `blk.29.ffn_down_exps.weight`: `221`;
+  - `blk.30.ffn_down_exps.weight`: `220`;
+  - `blk.55.ffn_down_exps.weight`: `220`;
+  - `blk.33.ffn_down_exps.weight`: `217`;
+  - `blk.28.ffn_down_exps.weight`: `216`;
+  - `blk.52.ffn_down_exps.weight`: `215`;
+  - `blk.54.ffn_down_exps.weight`: `215`;
+  - `blk.53.ffn_down_exps.weight`: `212`;
+  - `blk.48.ffn_down_exps.weight`: `210`.
+- Phase 7HY focus tensors are eviction victims:
+  - `blk.60.ffn_down_exps.weight`: evict `144`, hit sum `78`,
+    nonzero-hit victims `33`;
+  - `blk.4.ffn_down_exps.weight`: evict `148`, hit sum `60`,
+    nonzero-hit victims `31`;
+  - `blk.1.ffn_up_exps.weight`: evict `165`, hit sum `65`,
+    nonzero-hit victims `36`;
+  - `blk.1.ffn_gate_exps.weight`: evict `165`, hit sum `65`,
+    nonzero-hit victims `36`;
+  - `blk.10.ffn_gate_exps.weight`: evict `155`, hit sum `77`,
+    nonzero-hit victims `33`;
+  - `blk.10.ffn_up_exps.weight`: evict `155`, hit sum `77`,
+    nonzero-hit victims `33`;
+  - `blk.24.ffn_gate_exps.weight`: evict `146`, hit sum `66`,
+    nonzero-hit victims `32`;
+  - `blk.24.ffn_up_exps.weight`: evict `146`, hit sum `66`,
+    nonzero-hit victims `32`;
+  - `blk.24.ffn_down_exps.weight`: evict `145`, hit sum `67`,
+    nonzero-hit victims `33`;
+  - `blk.5.ffn_down_exps.weight`: evict `166`, hit sum `50`,
+    nonzero-hit victims `28`.
+- Default-unset verification run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-184347Z-n32-phase7hz-default-unset-check`.
+- Default-unset reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-184347Z-n32-phase7hz-default-unset-check
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Default-unset gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73004.80 ms`;
+  - decode `28774.37 ms / 31`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15077605376`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no profile CSV files were emitted.
+- Default-unset cache counters match accepted behavior:
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`;
+  - current-down overlap jobs `3664`, cache hits `3528`,
+    missing tensor `93`, missing pack `36`;
+  - expert pack hits `25458`, misses `192`;
+  - iouring batches `4002`, batch hist
+    `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`.
+- Decision:
+  - Keep the default-off diagnostic instrumentation because unset behavior
+    passes all gates and preserves counters.
+  - Do not claim SOTA from the diagnostic run.
+  - Do not retry broad cache policies:
+    - Phase 7GQ `lfu_lru` was rejected for speed and semantic quality;
+    - historical `profile_lfu_lru` / hybrid profile policies damaged prefetch
+      behavior;
+    - Phase 7FI admit-after scratch reduced cache pollution but still copied
+      `59.317 GiB` and regressed decode.
+  - The useful conclusion is narrower:
+    - cache churn exists;
+    - reducing churn only helps if it also removes or overlaps the actual
+      expert-pack copy;
+    - policies that merely redirect the same copy volume are not promising.
+  - Next optimization should target call-boundary-limited `runtime_load`
+    scheduling/batching without increasing total copy bytes or disturbing the
+    proven current-down overlap path.
