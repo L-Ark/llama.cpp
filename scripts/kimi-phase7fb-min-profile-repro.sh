@@ -205,6 +205,7 @@ patterns = [
     (r"expert pack: hits=([^\n]+)", "expert_pack"),
     (r"expert pack iouring detail: ([^\n]+)", "expert_pack_iouring"),
     (r"pinned staging([^\n]+)", "pinned_staging"),
+    (r"current down overlap: ([^\n]+)", "current_down_overlap"),
     (r"kimi_cpu_moe_profile\] down ([^\n]+)", "down_profile"),
     (r"VRAM cache down: ([^\n]+)", "vram_down"),
     (r"VRAM cache upgate: ([^\n]+)", "vram_upgate"),

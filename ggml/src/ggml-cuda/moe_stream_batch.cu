@@ -5004,6 +5004,7 @@ static bool init_batch_once() {
         }
         g_bprof.enabled = prof_env && prof_env[0] && prof_env[0] != '0';
         g_uprof.enabled = g_bprof.enabled || up_gate_profile_csv_enabled() || g_up_gate_layer_profile_enabled;
+        std::atexit(current_down_overlap_report_atexit);
         if (g_batch.stream && (g_bprof.enabled || g_uprof.enabled)) {
             cudaEventCreate(&g_batch.ev_start);
             cudaEventCreate(&g_batch.ev_stage);
@@ -5019,7 +5020,6 @@ static bool init_batch_once() {
             cudaEventCreate(&g_batch.ev_gate);
             if (g_bprof.enabled) {
                 std::atexit(batch_profile_report_atexit);
-                std::atexit(current_down_overlap_report_atexit);
             }
             if (g_uprof.enabled) {
                 std::atexit(up_gate_profile_report_atexit);

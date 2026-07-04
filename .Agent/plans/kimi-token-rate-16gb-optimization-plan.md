@@ -47271,6 +47271,66 @@ Result: n32 ablation completed; current-down overlap is important.
   - Candidate next step: make current-down overlap cover more useful misses or
     reduce direct fallback inside the overlap worker while preserving its
     ability to hide reads behind up/gate compute.
+
+## Phase 7GD: always report current-down overlap counters
+
+Start time: 2026-07-04T17:53:00+08:00.
+
+Goal:
+
+- Make current-down overlap metrics available in normal `MIN_PROFILE=1` runs
+  without enabling full `GGML_MOE_BATCH_PROFILE`.
+- Capture those metrics in `metrics.txt` for every reproduction run.
+- Use the low-overhead counters to guide the next real down-overlap
+  optimization.
+
+Why this is needed:
+
+- Phase 7GC showed current-down overlap is worth about `2.3-3.0 s` on n32.
+- The code already increments `g_current_down_overlap` counters during normal
+  runs, but the atexit report is only registered inside the batch-profile path.
+- Enabling batch profile just to get these counters adds unnecessary overhead
+  and changes timing.
+
+Implementation plan:
+
+- Register `current_down_overlap_report_atexit` unconditionally during batch
+  init, not only under `GGML_MOE_BATCH_PROFILE`.
+- Remove the profile-only registration to avoid duplicate reports.
+- Add a runner regex for:
+  - `current down overlap: ...`
+- Default inference behavior is unchanged; only final stderr/metrics reporting
+  changes.
+
+Experiment: n32 default runtime with low-overhead report
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gd-current-down-report"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode overhead <= 5% versus current rebuilt baseline range.
+
+Decision rule:
+
+- If metrics are captured and overhead is acceptable, keep the instrumentation
+  and use its counters to plan the next down-overlap optimization.
+- If overhead or output regresses, revert the instrumentation.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
