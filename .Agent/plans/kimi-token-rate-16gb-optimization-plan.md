@@ -36006,6 +36006,137 @@ Decision:
 - Future optimization must reduce actual expert movement or critical-path
   staging, not only diagnostic/bookkeeping overhead.
 
+## Phase 7EP: early same-type current-down overlap for blk.4 and blk.60
+
+Start time:
+
+- 2026-07-04T02:10Z.
+
+Current bottleneck and evidence:
+
+- Phase 7EO proved diagnostic removal is not a reproducible SOTA path because
+  it does not reduce compulsory movement.
+- Phase 7EN/Phase 7EB current down CSV shows the largest remaining down-stage
+  rows after the l1/l2 overlay are:
+  - repro-a:
+    - `blk.4.ffn_down_exps.weight`: stage `446.009 ms`,
+      wall `472.699 ms`, staged jobs `169`;
+    - `blk.60.ffn_down_exps.weight`: stage `459.255 ms`,
+      wall `466.608 ms`, staged jobs `170`;
+  - repro-b:
+    - `blk.4.ffn_down_exps.weight`: stage `429.866 ms`,
+      wall `454.616 ms`;
+    - `blk.60.ffn_down_exps.weight`: stage `387.463 ms`,
+      wall `393.858 ms`.
+- Combined n32 down-stage target is therefore about `0.82-0.91 s`.
+- Phase 7DT already showed that adding static missing `blk.4/60` overlay
+  entries does not reduce runtime bytes or stage time.
+- Phase 7CP/7CQ showed that starting same-type current-down overlap after
+  up/gate compute can eliminate local down misses but often moves cost into
+  up_gate/main staging and fails to reproduce.
+
+Hypothesis:
+
+- Add a new default-off early overlap env:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_EARLY_LAYERS=4,60
+```
+
+- For non-mixed same-type decode calls whose up/gate tensor layer is in the
+  env list, start `start_current_down_overlap()` immediately after up/gate
+  expert staging is complete and before launching up/gate compute.
+- This differs from Phase 7CP:
+  - Phase 7CP started overlap after up/gate compute and could only hide work
+    behind fuse/D2H/scatter;
+  - Phase 7EP starts overlap before compute, so `blk.4/60` down staging can
+    overlap with the long same-type up/gate compute bucket.
+- Keep the join before returning from the up/gate function so correctness and
+  cache slot readiness semantics remain conservative.
+
+Why this can improve token rate:
+
+- `blk.4` and `blk.60` are current movement-bound down rows.
+- Their corresponding up/gate rows have nontrivial compute time, especially
+  `blk.60`, giving an overlap window that Phase 7CP did not use.
+- The layer list is tiny (`4,60`), so added current-down work is limited to
+  about `63` decode calls rather than all same-type calls.
+
+Theoretical upper bound:
+
+- Hard n32 upper bound is the combined current down stage for `blk.4/60`,
+  about `0.82-0.91 s`.
+- Realistic upper bound is `0.2-0.6 s`, because some staging may contend with
+  up/gate H2D or compute and the join may still expose residual wait.
+- Because Phase 7EN measured `0.626 s` baseline n32 spread, one n32 win is not
+  enough. The first n32 must beat `29599.64 ms / 31`, and confirmation must
+  reproduce before n96.
+
+Implementation:
+
+- Modify only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add helper:
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_EARLY_LAYERS`.
+- In the non-mixed same-type up/gate path:
+  - after expert slots for up/gate have been staged;
+  - before `launch_tensor()` starts up/gate compute;
+  - if the env matches `src0_up_name`, call `start_current_down_overlap()`.
+- Ensure every error exit after starting the worker joins it.
+- Print one-time activation:
+  `[moe_stream_batch] early same-type current down overlap active: layers=...`.
+- Keep default behavior unchanged when the env is unset.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ep_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_EARLY_LAYERS=4,60\nEOF\n|' /tmp/run_phase7ep_repro.sh
+chmod +x /tmp/run_phase7ep_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ep-early-sametype-overlap-l4-l60"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ep_repro.sh
+```
+
+Hard gates:
+
+- build succeeds;
+- exit `0`;
+- strict cold start;
+- `memory.peak <= 15900000000`;
+- `oom=0`, `oom_kill=0`, `memory.swap.max=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Mechanism gates:
+
+- activation log appears;
+- current-down overlap planned jobs increase only for the selected layers;
+- `down-batch-profile.csv` shows lower `blk.4/60` stage than Phase 7EN:
+  - `blk.4` target below about `430 ms`;
+  - `blk.60` target below about `390 ms`;
+- up/gate wall, main pinned host-stage, and expert-pack wait must not rise
+  enough to erase the local down-stage gain.
+
+Promotion:
+
+- first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+- if first n32 beats, run a second strict cold n32 confirmation;
+- only if both n32 runs beat, run n96 candidate and confirmation;
+- both n96 runs must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- If build fails or first n32 fails any gate or is slower than SOTA, revert the
+  source patch immediately and record rejection.
+- If first n32 passes but confirmation fails, revert the source patch and record
+  rejection, as in Phase 7EL.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
