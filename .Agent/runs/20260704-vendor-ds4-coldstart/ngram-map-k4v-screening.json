@@ -1,0 +1,59 @@
+{
+  "acceptance_gate": {
+    "manual_france_correctness_required": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "min_eval_tok_s_for_promotion": 4.4,
+    "must_push_and_reproduce_if_new_sota": true,
+    "strict_cold_drop_caches": true,
+    "ttft_max_ms_for_accepted_sota": 33617.688744
+  },
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "artifact": "ngram-map-k4v-screening",
+  "candidate": {
+    "config_delta": {
+      "--seed": "1",
+      "--spec-ngram-map-k4v-min-hits": "1",
+      "--spec-ngram-map-k4v-size-m": "8",
+      "--spec-ngram-map-k4v-size-n": "4",
+      "--spec-type": "ngram-map-k4v",
+      "--temp": "0",
+      "--top-k": "1",
+      "--top-p": "1"
+    },
+    "exactness_model": "The target model still verifies drafted tokens; promotion still requires final France output correctness and the normal RAM/TTFT gates.",
+    "name": "no-source ngram-map-k4v strict cold probe",
+    "risk": "The same speculative verification loop family previously produced low speed or progress bugs for ngram-simple/ngram-mod. RuntimeMaxSec will cap the run; incomplete output or lower token rate rejects the candidate.",
+    "why_n4_m8": "n=4 is less collision-prone than the rejected ngram-simple n=3/m=8 probe while still short enough to produce matches in the France answer. m=8 caps target verification bursts and limits replay risk.",
+    "why_not_already_closed": "algorithmic-support-inspection closes ngram-simple, ngram-mod, lookahead, and draftless speculative without compatible draft for known failures, but no artifact records a strict cold ngram-map-k4v run. k4v uses value statistics and accept feedback, unlike ngram-simple, so it is a distinct no-source exact speculative candidate."
+  },
+  "created_utc": "2026-07-04T07:12:23Z",
+  "decision_before_run": "Run one no-source strict cold probe because it is a distinct exact speculative implementation and does not require runtime source changes. Reject immediately if it times out, is incomplete, falls below 4.4 tok/s, violates RAM/TTFT, or produces an incorrect France answer.",
+  "reference_artifacts": {
+    "algorithmic_support": {
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/algorithmic-support-inspection.json",
+      "sha256": "b9f62ac35891d87d65e1b40ff94b1a2b626718e08a98e66e5ee7fa1083c59f6d"
+    },
+    "batch_all_outputs_ngram": {
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/batch-all-outputs-ngram-result.json",
+      "sha256": "5e797081edb72b8cb0b782086494f66ceae8d567b1ed3a69ba750cbeea107a56"
+    },
+    "post_prefetch_bound": {
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/post-prefetch-bottleneck-hard-bound.json",
+      "sha256": "f0474f3d66e5fb6ec22d7b0e86f727f06bb17f377deab4174daab1837b333c7f"
+    },
+    "server_spec_partial": {
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/server-spec-partial-fallback-result.json",
+      "sha256": "55029a2183a5cb968f495e93b4d56b38ab7f7528414c8d1920b61e2caee63dec"
+    }
+  },
+  "source_head": "9b6373fca6a2c4b55c0b01c835b04621dce9ec6e",
+  "source_status_short": ""
+}

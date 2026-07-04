@@ -8580,3 +8580,34 @@ Updated next direction:
    - use a verification/correction mechanism that guarantees token-level output correctness while still saving enough wall time.
 3. Since source movement and existing GPU up/down classes are closed, the next design step should re-open bottleneck analysis at the algorithm level: full or near-full decode fallback removal, not top-N hotsets or page-cache tricks.
 4. Any new source probe must start from clean head `767533259` or newer pushed head and must keep accepted gate-only SOTA behavior unchanged by default.
+
+### 2026-07-04 Ngram-Map-K4V No-Source Probe Design
+
+Screening artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-screening.json`
+- Artifact sha256: `beb4bd63a700e8b53c8fdf5d124a53376712a0d98c6739a39d71b571bd06354a`
+
+Why this candidate is still worth one probe:
+
+- `algorithmic-support-inspection.json` closed `ngram-simple`, `ngram-mod`, lookahead, and draft-model speculation without a compatible draft, but no artifact records a strict cold `ngram-map-k4v` run.
+- `ngram-map-k4v` is not the same as `ngram-simple`: it tracks up to four m-gram values per key and updates `n_accepted` through `common_ngram_map_accept()`, so it may avoid some repeated bad drafts.
+- It is a no-source probe and still uses target verification, so it cannot become SOTA unless output correctness and all system gates pass.
+
+Probe config:
+
+- Base accepted SOTA env remains unchanged: vendor DeepSeek, `cpu_moe=40`, gate-only O_DIRECT one-stream, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, current accepted top-k/profile settings, strict cold `drop_caches`, and 16GB cgroup including page cache.
+- CLI delta:
+  - `--spec-type ngram-map-k4v`
+  - `--spec-ngram-map-k4v-size-n 4`
+  - `--spec-ngram-map-k4v-size-m 8`
+  - `--spec-ngram-map-k4v-min-hits 1`
+  - `--temp 0 --top-k 1 --top-p 1 --seed 1`
+- Reason for `n=4,m=8`: less collision-prone than the rejected `ngram-simple n=3,m=8` while still short enough to produce matches in the France answer; `m=8` limits replay/verification burst cost.
+
+Acceptance / rejection:
+
+- Accept only if `eval_tok_s > 4.4`, France output is complete and semantically correct, `TTFT<=33617.688744 ms`, RAM stays within the 16GB cgroup including page cache, no OOM/OOM kill, and cache/pack counters are explainable.
+- If accepted, stop, record full reproducibility metadata, commit/push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from pushed source before promotion.
+- Reject if the run times out, loops/stalls, output is incomplete/incorrect, token rate is `<=4.4`, TTFT exceeds the accepted SOTA gate, or RAM/cgroup limits fail.
+- Since this is no-source, rejection does not require runtime source rollback; keep artifacts and plan only.
