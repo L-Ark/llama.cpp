@@ -1,0 +1,42 @@
+{
+  "artifact": "q80-scalar-duplicate-audit",
+  "created_utc": "2026-07-04T13:13:30Z",
+  "status": "rejected_without_run",
+  "reason": "The planned scalar MXFP4 x Q8_0 CUDA one-stream probe duplicated an already rejected historical probe recorded in the plan.",
+  "historical_rejection": {
+    "plan_section": "2026-07-04 Q8_0 Scalar CUDA Probe Result",
+    "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/q80-up-top1-probe-result.json",
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T064953Z-20260704_q80_up_top1_probe/split-up-only-q80-top1",
+    "same_top1": "136/145",
+    "first_mismatch_pos": 4,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "compare_probe_result": "timeout around 7 minutes; far beyond the 1.64s total overhead budget for a 10 tok/s class implementation",
+    "decision": "Do not repeat naive/scalar MXFP4 x Q8_0 CUDA up/down path."
+  },
+  "this_turn_actions": {
+    "brief_duplicate_source_prototype_created": true,
+    "verifier_run_performed": false,
+    "token_rate_run_performed": false,
+    "source_reverted_before_run": true,
+    "build_after_revert": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 16"
+  },
+  "clean_state_after_revert": {
+    "source_head": "46a23c0cd2d70ee8a030df711abbc26cd741865f",
+    "git_status_short": "",
+    "binary_sha256": {
+      "build-ds4-moe-stream/bin/llama-cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+      "build-ds4-moe-stream/bin/llama-results": "d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9",
+      "build-ds4-moe-stream/bin/libggml-cpu.so.0.10.0": "b7d0a3a7a65adac0e8ff2a83ce7bcbbeef8a5ce38ddd173cf8bd6b75abe9ed39",
+      "build-ds4-moe-stream/bin/libggml-cuda.so.0.10.0": "fada47dc0b5565224f7914ab3b077740474ea9b54cd850edd7224041d9572691"
+    }
+  },
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ram_ok": true,
+    "correctness_ok": true,
+    "ttft_ms": 32892.55329
+  },
+  "next_required_work": "Rebuild a hard-bound candidate table that excludes scalar Q8_0, same-op touch, direct staging, top-N residency/hotsets, and existing Q8_1 up/down stream."
+}

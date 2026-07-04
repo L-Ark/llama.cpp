@@ -8925,3 +8925,45 @@ Validation sequence:
 Immediate next concrete work item:
 
 - Implement the default-off `GGML_MOE_STREAM_ONE_MXFP4_Q80=1` verifier probe and run fixed-text top1 before any token-rate measurement.
+
+## 2026-07-04T13:13:30Z Correction: Do Not Repeat Scalar Q8_0 CUDA Probe
+
+This section supersedes the immediate work item in `2026-07-04T12:54:58Z Next Plan`.
+
+Audit result:
+
+- While preparing the Q8_0 probe, the existing historical section `2026-07-04 Q8_0 Scalar CUDA Probe Result` was found in this same plan.
+- That historical probe already implemented a default-off scalar MXFP4 x Q8_0 CUDA path with comma-list filter support.
+- It was rejected before any token-rate benchmark:
+  - `same_top1=136/145`
+  - `first_mismatch_pos=4`
+  - `memory_peak_bytes=16000000000`
+  - `oom_seen=false`
+  - compare probe timed out at about `7min`, far beyond the `1.64s` total overhead budget needed for a 10 tok/s class implementation
+  - per-op up error was small, so the failure was accumulated drift plus unusable scalar-kernel speed, not a gross arithmetic bug
+- Repeating the same scalar Q8_0 implementation is therefore closed and should not be run again.
+
+What happened in this turn:
+
+- A duplicate default-off Q8_0 scalar source prototype was briefly implemented locally after the new plan update.
+- Before running verifier, the historical rejection above was found.
+- The source prototype was reverted immediately.
+- `build-ds4-moe-stream` was rebuilt on clean source.
+- No Q8_0 verifier or token-rate run was performed for the duplicate prototype.
+
+Current clean state after revert:
+
+- Source head: `46a23c0cd2d70ee8a030df711abbc26cd741865f`
+- `git status --short`: clean
+- `llama-cli` sha256: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+- `llama-results` sha256: `d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9`
+- `libggml-cpu.so.0.10.0` sha256: `b7d0a3a7a65adac0e8ff2a83ce7bcbbeef8a5ce38ddd173cf8bd6b75abe9ed39`
+- `libggml-cuda.so.0.10.0` sha256: `fada47dc0b5565224f7914ab3b077740474ea9b54cd850edd7224041d9572691`
+
+Updated next concrete work item:
+
+- Do not implement or run another scalar MXFP4 x Q8_0 CUDA one-stream probe.
+- Rebuild the candidate list around non-duplicate paths:
+  - an optimized MXFP4 x Q8_0 kernel only if it first has a hard performance model showing total decode overhead can plausibly fit below `1.64s`, then must pass fixed-text top1 before any benchmark;
+  - or a correctness-preserving algorithmic/offload path that removes near-full decode up/down fallback and also reduces gate/source stall enough to make `10 tok/s` plausible.
+- The next action is a design/bound step, not a source patch: produce a hard-bound candidate table that explicitly excludes scalar Q8_0, same-op touch, direct staging, top-N residency/hotsets, and existing Q8_1 up/down stream.
