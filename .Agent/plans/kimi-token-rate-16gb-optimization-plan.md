@@ -7449,6 +7449,76 @@ GGML_MOE_VRAM_CACHE_TRACE_POLICY_WINDOW=1
 - If the window=1 run is still slower, revert the source patch and commit the
   rejection record.
 
+Phase 7EJ run 2 result - rejected and rolled back:
+
+- result time: 2026-07-04T00:56:00Z.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-005204Z-n32-phase7ej-trace-policy-w1`.
+- source status:
+  - same dirty trace cache policy source patch as run 1;
+  - after this result, the patch was reverted locally and on the server with
+    the worktree reset to `32b1710f6`;
+  - no source commit was made.
+- command difference from run 1:
+
+```sh
+GGML_MOE_VRAM_CACHE_TRACE_POLICY_WINDOW=1
+```
+
+- hard resource gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - TTFT `79064.58 ms`, under the gate;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - OOM counters all `0`.
+- output:
+  `France is a country in Western Europe known to for after to the the.phe-ayal. sense, 5.  a 6.`
+- quality:
+  - manual fail;
+  - the answer is not semantically correct or coherent, even though the metrics
+    script labeled it pass.
+- decode:
+  - `170586.08 ms / 31`, `0.18 tok/s`;
+  - much slower than Phase 7EB n32 SOTA `29599.64 ms / 31`.
+- counters:
+  - trace-policy calls `42928`;
+  - matched `5489`;
+  - resync `0`;
+  - unmatched `37439`;
+  - cursor `5489/42928`;
+  - evictions `37249`;
+  - evicted_no_future `26321`;
+  - inserted_no_future `26006`;
+  - down hit rate `25.6%`;
+  - upgate hit rate `18.7%`;
+  - expert-pack iouring bytes `37263622144`;
+  - main pinned host_stage `145382.683 ms`;
+  - gate pinned host_stage `31852.899 ms`.
+
+Final Phase 7EJ decision:
+
+- Reject the trace-cache-policy implementation.
+- Rollback completed:
+  - local worktree clean at `32b1710f6` plus this documentation update;
+  - remote server worktree reset to `32b1710f6`;
+  - no source patch remains active.
+- Reason:
+  - the theoretical Belady hit-rate gap is real, but using a full prompt route
+    trace as an online eviction oracle is not robust under tiny decode
+    divergence;
+  - when broad resync is enabled, cache hits improve but CPU/staging overhead
+    erases the benefit;
+  - when broad resync is disabled, the policy desynchronizes, destroys cache
+    locality, and can affect output quality.
+- Do not retry prompt-specific route-trace eviction unless the design can prove
+  deterministic route alignment without per-access scanning and without changing
+  numerical/output behavior.
+- Next optimization should return to trace-independent movement reductions:
+  - reduce main/gate pinned host_stage directly;
+  - improve iouring batching depth/inflight for runtime loads;
+  - or target CPU fallback/page-cache behavior without using generated-token
+    route traces as an oracle.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
