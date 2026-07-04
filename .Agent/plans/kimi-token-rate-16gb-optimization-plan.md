@@ -52785,3 +52785,47 @@ Acceptance gates:
   before any n96 run;
 - if memory reaches the cap with instability or decode still regresses, reject
   coalescer slot scaling and do not commit the source optimization.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-153802Z-n32-phase7hh-coalesce-slots24`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `68013.82 ms`;
+  - decode `29648.78 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Aggregate profile:
+  - overall io_uring wait `12608.876 ms`;
+  - overall inflight avg `3.77`;
+  - `runtime_load_coalesced`: calls `539`, jobs `5005`, wait
+    `2354.486 ms`, wall `2622.017 ms`, weighted inflight avg `5.606`, slot
+    wait `216.928 ms`, hist `2-4:61,5-8:203,9-16:275`;
+  - remaining `runtime_load`: calls `2055`, jobs `6362`, wait
+    `7512.495 ms`, wall `7857.820 ms`;
+  - `current_down_overlap`: calls `863`, jobs `3510`, wait `2747.518 ms`,
+    wall `2812.166 ms`.
+- Comparison:
+  - Phase 7HE v2 baseline decode `29258.34 ms`;
+  - Phase 7HF slots12 decode `29700.44 ms`;
+  - Phase 7HH slots24 decode `29648.78 ms`.
+- Decision:
+  - Reject multi-stream coalescer implementation as a performance optimization.
+  - Increasing shared staging slots did not convert the lower io wait into lower
+    wall decode, and coalesced slot wait remained high.
+  - Do not run n96.
+  - Revert the uncommitted coalescer source changes and keep only the
+    default-off io batch diagnostics from Phase 7HE.
+  - Root-cause update: wider read batches are real, but the current host-side
+    coalescer adds enough synchronization, shared-ring slot reuse, and stream
+    submission overhead that it loses on wall time. A future coalescer would need
+    to be lower-level, likely integrated with the existing per-stream copy
+    functions or use persistent read queues, not a per-call host thread wrapper.
