@@ -1962,8 +1962,7 @@ static bool expert_pack_env_bool(const char *name, bool default_value) {
 }
 
 static bool stage_granularity_profile_enabled() {
-    static const bool enabled = expert_pack_env_bool("GGML_MOE_STAGE_GRANULARITY_PROFILE", false);
-    return enabled;
+    return expert_pack_env_bool("GGML_MOE_STAGE_GRANULARITY_PROFILE", false);
 }
 
 static size_t expert_pack_io_bytes() {
@@ -2176,16 +2175,8 @@ static bool current_down_overlap_enabled() {
 }
 
 static bool current_down_overlap_early_enabled() {
-    static const bool enabled = []() {
-        const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY");
-        return env && env[0] && env[0] != '0';
-    }();
-    return enabled;
-}
-
-static bool up_gate_combined_stage_enabled() {
-    static const bool enabled = expert_pack_env_bool("GGML_MOE_UP_GATE_COMBINED_STAGE", false);
-    return enabled;
+    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY");
+    return env && env[0] && env[0] != '0';
 }
 
 static bool current_down_overlap_tensor_profile_enabled() {
@@ -2519,7 +2510,7 @@ static void current_down_missing_profile_record(
         const char *tensor_name,
         const int *active_experts,
         int n_active) {
-    static const char *path = std::getenv("GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT");
+    const char *path = std::getenv("GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT");
     if (!path || !path[0] || !tensor_name || !tensor_name[0]) return;
 
     static std::mutex mu;
@@ -6554,7 +6545,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 std::fprintf(stderr, "[moe_stream] up/gate split CPU staging active\n");
             }
             const bool combined_stage = !stage_split &&
-                up_gate_combined_stage_enabled() &&
+                expert_pack_env_bool("GGML_MOE_UP_GATE_COMBINED_STAGE", false) &&
                 bc.ev_up_copy_aux_done;
             static std::atomic<int> first_combined_stage{0};
             if (combined_stage && first_combined_stage.fetch_add(1) == 0) {
