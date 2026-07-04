@@ -42123,3 +42123,46 @@ Decision rule:
   diagnostic variance.
 - In either case, the next implementation phase must still be justified by a
   concrete bottleneck, not by the fast observation alone.
+
+Phase 7EU result - production recheck, diagnostic only:
+
+- End time: 2026-07-04T03:15:00Z.
+- Commit: `c50fea8ec` (`docs: plan kimi phase7eu production recheck`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-031310Z-n32-phase7eu-production-sota-recheck`.
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `72318.84 ms`, below the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality: pass.
+- Decode:
+  - `30123.62 ms / 31`, `1.03 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31` by `523.98 ms`;
+  - slower than Phase 7ET diagnostic `29348.56 ms / 31` by `775.06 ms`.
+- Counters:
+  - expert pack `iouring_wait_us=14973701`;
+  - main pinned `host_stage=11827.792 ms`, `h2d=4151.051 ms`;
+  - gate pinned `host_stage=319.000 ms`, `h2d=930.601 ms`;
+  - down/upgate cache counts unchanged from SOTA;
+  - current-down overlap `planned_jobs=3664`, `worker_us=3455871`.
+
+Interpretation:
+
+- The production recheck returns to the normal `29.6-30.3 s` n32 band.
+- Phase 7ET's faster decode was not caused by a production runtime improvement.
+- Do not lower the SOTA gate or implement a source patch from the 7ET fast
+  observation.
+
+Decision:
+
+- Treat Phase 7ET/7EU together as variance evidence.
+- Keep Phase 7EB as accepted SOTA.
+- Continue only with changes that reduce measured movement/copy work or expose
+  a new concrete bottleneck.
