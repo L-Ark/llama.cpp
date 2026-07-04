@@ -8856,3 +8856,72 @@ Next concrete work item:
 - Rebuild the candidate list again from the current hard-bound table after closing same-op pre-touch.
 - If source/page work is revisited, it must be predictive overlap before the consuming `mul_mat_id` op/layer, not same-op pre-touch.
 - Otherwise move to a different exact compute path that can remove near-full decode up/down fallback while passing fixed-text top1 before any token-rate benchmark.
+
+## 2026-07-04T12:54:58Z Next Plan: MXFP4 x Q8_0 CUDA Exact-Offload Probe
+
+Latest pushed head before this plan update: `24a7407a487effcba15c4c40458220e244191e78` (`vendor-ds4: reject parallel fallback touch`) on `ssd/vendor/deepseek-token-rate-16gb`.
+
+Current accepted SOTA remains:
+
+- `eval_tok_s=4.4`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Config: vendor DeepSeek strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream cache, O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Promotion TTFT gate remains `<=33617.688744 ms`.
+
+Bottleneck after closing same-op touch:
+
+- Same-op serial and parallel page touch are closed. They move page-fault time but regress wall time.
+- Source movement / direct staging variants remain closed by `.Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json`.
+- Existing Q8_1 CUDA up/down stream remains closed by token-level top1 mismatch.
+- The current hard-bound table shows the only still-relevant high-ceiling class is exact compute/offload of decode up/down fallback:
+  - decode up fallback removable: `9697.125 ms`, no-overhead ceiling about `6.40 tok/s`
+  - decode down fallback removable: `9332.332 ms`, no-overhead ceiling about `6.29 tok/s`
+  - all decode up/down fallback removable: `19029.457 ms`, no-overhead ceiling about `11.37 tok/s`
+  - required for `10 tok/s`: save about `17.3866s` from the current decode window, leaving only about `1.6429s` total overhead if all decode up/down fallback is removed.
+
+Why this probe can improve correctness versus the rejected CUDA up/down path:
+
+- CPU MXFP4 fallback uses `ggml_vec_dot_mxfp4_q8_0` and quantizes F32 activations into `params->wdata` as Q8_0.
+- Existing CUDA one-stream MMVQ uses `quantize_row_q8_1_cuda` and `vec_dot_mxfp4_q8_1`.
+- Prior up/down GPU output drift was numerically small, but fixed-text top1 still failed. The next candidate must therefore use the same Q8_0 activation semantics as CPU fallback before any performance run.
+
+Theory and upper bound:
+
+- If the new path removes all decode up/down CPU fallback with no extra overhead, the measured ceiling is about `11.37 tok/s`.
+- To meet `10 tok/s`, the combined Q8_0 row copy, CUDA kernel, D2H, scatter, sync, and any cache/source overhead must stay under about `1.64s` across the decode window.
+- A naive CUDA kernel may pass correctness but fail performance; that is still useful because it validates or rejects the exact-Q8_0 math path before optimization.
+
+Implementation plan:
+
+1. Add a default-off env gate: `GGML_MOE_STREAM_ONE_MXFP4_Q80=1`.
+2. Add a separate CUDA entry point instead of changing the current accepted path:
+   - `ggml_cuda_moe_stream_one_q80(...)`
+   - only accepts `GGML_TYPE_MXFP4`, `src1` converted to CPU Q8_0 in `params->wdata`, `cne1 <= MMVQ_MAX_BATCH_SIZE`, and existing name filters.
+3. In `ggml_compute_forward_mul_mat_id()`, pass `params->wdata`, Q8_0 row size, Q8_0 row strides, and row mappings to the Q8_0 entry point only when the env is set. With the env unset, current SOTA behavior must be bit-for-bit unchanged at source-routing level.
+4. In `ggml/src/ggml-cuda/moe_stream.cu`, stage only the selected Q8_0 rows to a device Q8_0 buffer and run an MXFP4 x Q8_0 row kernel.
+5. The first kernel may be simple and verifier-oriented, but it must use the CPU formula:
+   - per MXFP4 block: `scale = GGML_E8M0_TO_FP32_HALF(x.e) * fp16_to_fp32(q8_0.d)`
+   - sum low and high nibbles against `q8_0.qs[0..31]`
+   - output `sum(scale * integer_dot)` as F32.
+6. Reuse the current VRAM expert cache and one-pack source path. Do not add persistent host caches. Do not shrink the accepted gate cache unless a later bounded experiment proves a reason.
+
+Validation sequence:
+
+1. Build `llama-cli` and `llama-results`.
+2. Run `git diff --check`.
+3. Run the existing fixed-text top1 verifier under the 16GB cgroup with `GGML_MOE_STREAM_ONE_MXFP4_Q80=1` and an up/down name filter candidate.
+4. If any top1 mismatch appears, reject immediately; do not run token-rate benchmark.
+5. If top1 passes, run strict cold France benchmark with all normal gates:
+   - 16GB cgroup including page cache
+   - `MemorySwapMax=0`
+   - `drop_caches` before case
+   - `TTFT<=33617.688744 ms` for promotion
+   - semantic, coherent, complete France output
+   - all token rate, TTFT, RAM/page-cache, answer, command, env, source head, binary hash, and artifact hash recorded.
+6. If a strict cold result beats `4.4 tok/s`, immediately commit and push source plus reproducibility records to `ssd/vendor/deepseek-token-rate-16gb`, then reproduce from the pushed source before accepting it as new SOTA.
+7. If correctness fails, performance regresses, RAM exceeds 16GB, or TTFT violates promotion gate, revert runtime source, rebuild accepted path, and commit/push only the rejected artifact/docs.
+
+Immediate next concrete work item:
+
+- Implement the default-off `GGML_MOE_STREAM_ONE_MXFP4_Q80=1` verifier probe and run fixed-text top1 before any token-rate measurement.
