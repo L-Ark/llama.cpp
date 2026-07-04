@@ -35502,6 +35502,107 @@ Rollback:
 - If n32 is slower or fails a hard gate, reject and keep
   `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60` in SOTA.
 
+## Phase 7EN: strict SOTA reproducibility refresh before next source change
+
+Start time:
+
+- 2026-07-04T01:39:24Z.
+
+Reason for this phase:
+
+- Phase 7EL produced one apparently strong n32 candidate
+  (`28055.21 ms / 31`) but failed its strict cold-start confirmation
+  (`30215.97 ms / 31`).
+- Phase 7EM improved io_uring batching counters but still regressed decode
+  (`30577.34 ms / 31`).
+- This means the next optimization must first separate true bottleneck movement
+  from n32 cold-start variance. Otherwise a small apparent speedup can be a
+  false positive and cannot satisfy the user's reproducibility requirement.
+
+Current accepted SOTA to reproduce:
+
+- Phase 7EB / slots16 accepted SOTA:
+  - n32: `/root/lfz/runs/vendor-kimi-token-rate/20260703-225526Z-n32-phase7ea-depth16-slots16`,
+    decode `29599.64 ms / 31`, `1.05 tok/s`, TTFT `76528.98 ms`;
+  - n96: `/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm`,
+    decode `74201.57 ms / 77`, `1.04 tok/s`, TTFT `77123.35 ms`.
+
+Design step:
+
+- Run two strict cold-start n32 reproductions using the exact accepted SOTA
+  runtime recipe:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=16`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - existing Phase 7EB expert-pack and overlay pack;
+  - no new source patch and no additional diagnostic CSV that changes timing.
+- Record full metrics for both runs:
+  - decode time and token rate;
+  - TTFT;
+  - France answer text and manual semantic pass/fail;
+  - cgroup `memory.peak`, `memory.current`, `file`, `inactive_file`,
+    `active_file`, `anon`, `kernel`;
+  - expert-pack `read_failures`, `iouring_fallbacks`, bytes, wait time and
+    in-flight depth;
+  - VRAM cache hit/miss for upgate and down;
+  - pinned staging host/H2D totals when already available in the SOTA logs.
+
+Theoretical expectation:
+
+- There is no intentional speedup in Phase 7EN. The expected result is a
+  reproducibility band for the current SOTA.
+- If both n32 reproductions remain near or below `29599.64 ms / 31`, use
+  `29599.64 ms` as the hard n32 promotion target.
+- If both reproductions are materially slower but pass all hard gates, do not
+  lower the SOTA bar automatically. Treat the spread as variance evidence and
+  require any future optimization to beat both:
+  - the historical accepted n32 target `29599.64 ms`; and
+  - the faster of the two Phase 7EN reproduction runs.
+- If one reproduction is fast and the other slow, any later candidate must pass
+  at least two consecutive n32 confirmations before n96.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7en-sota-repro-a"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Run a second copy with suffix `n32-phase7en-sota-repro-b`.
+
+Hard gates for each run:
+
+- exit code `0`;
+- strict cold start via the runner's cache drop;
+- `memory.peak <= 15900000000`;
+- `oom=0`, `oom_kill=0`, `memory.swap.max=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France prompt output must be coherent, semantically correct, and specifically
+  answer: `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- Phase 7EN cannot promote a new SOTA because it does not change source or env.
+- If reproduction fails hard gates, stop and debug baseline correctness/RAM
+  before any optimization.
+- If reproduction passes, use the observed band to choose the next execution
+  phase. The current priority remains movement/staging:
+  - avoid static protected hotsets, trace eviction and fixed down-threshold
+    staging because Phases 7EJ-7EM rejected those paths;
+  - prefer a mechanism that reduces compulsory expert movement or removes
+    CPU/GGUF fallback without adding first-use overhead;
+  - require immediate commit and push only when a changed implementation passes
+    the gates and reproduces.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
