@@ -914,8 +914,20 @@ struct batch_vram_cache {
     uint64_t async_prefetch_waits = 0;
 };
 
-static batch_vram_cache g_bcaches[2];
-static bool g_bcache_inited[2] = {};
+static constexpr int BATCH_VRAM_CACHE_COUNT = 3;
+static constexpr int BATCH_VRAM_CACHE_UPGATE = 1;
+static constexpr int BATCH_VRAM_CACHE_Q40_DOWN = 2;
+
+static batch_vram_cache g_bcaches[BATCH_VRAM_CACHE_COUNT];
+static bool g_bcache_inited[BATCH_VRAM_CACHE_COUNT] = {};
+
+static const char * batch_cache_label(int cid) {
+    switch (cid) {
+        case BATCH_VRAM_CACHE_UPGATE: return "upgate";
+        case BATCH_VRAM_CACHE_Q40_DOWN: return "q4_0_down";
+        default: return "down";
+    }
+}
 
 struct cache_policy_diag {
     std::atomic<uint64_t> profile_count_lookups{0};
@@ -1409,11 +1421,11 @@ static void batch_cache_report_atexit() {
         std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
                      hits, misses, preloads, 100.0 * hits / total);
     }
-    for (int ic = 0; ic < 2; ++ic) {
+    for (int ic = 0; ic < BATCH_VRAM_CACHE_COUNT; ++ic) {
         const batch_vram_cache &c = g_bcaches[ic];
         const uint64_t c_total = c.hits + c.misses;
         if (c_total == 0) continue;
-        const char *label = ic == 1 ? "upgate" : "down";
+        const char *label = batch_cache_label(ic);
         std::fprintf(stderr,
             "[moe_stream_batch] VRAM cache %s: slots=%d slot=%.2f MiB "
             "hits=%lu misses=%lu preloads=%lu pinned=%lu hit_rate=%.1f%%\n",
@@ -1638,11 +1650,24 @@ static int batch_cache_id_for_size(size_t expert_sz) {
     return 0;
 }
 
+static size_t batch_cache_q40_budget_mib() {
+    const char *env = std::getenv("GGML_MOE_VRAM_CACHE_Q40_MIB");
+    if (!env || !env[0]) return 0;
+    size_t mib = (size_t)std::strtoull(env, nullptr, 10);
+    if (mib > 2048) mib = 2048;
+    return mib;
+}
+
 static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
     const bool fused = fused_env && fused_env[0] && fused_env[0] != '0';
     const char *split_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT");
     const bool split = fused && split_env && split_env[0] && split_env[0] != '0';
+    const size_t q40_mib = batch_cache_q40_budget_mib();
+
+    if (cid == BATCH_VRAM_CACHE_Q40_DOWN) {
+        return q40_mib;
+    }
 
     if (split) {
         const char *pct_env = std::getenv("GGML_MOE_VRAM_CACHE_UPGATE_PCT");
@@ -1650,11 +1675,13 @@ static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
         if (upgate_pct < 1) upgate_pct = 1;
         if (upgate_pct > 99) upgate_pct = 99;
         const size_t upgate_mib = (budget_mib * (size_t)upgate_pct) / 100ULL;
-        if (cid == 1) return upgate_mib > 0 ? upgate_mib : 1;
-        return budget_mib > upgate_mib ? budget_mib - upgate_mib : 1;
+        if (cid == BATCH_VRAM_CACHE_UPGATE) return upgate_mib > 0 ? upgate_mib : 1;
+        size_t down_mib = budget_mib > upgate_mib ? budget_mib - upgate_mib : 1;
+        if (q40_mib > 0 && down_mib > q40_mib + 1) down_mib -= q40_mib;
+        return down_mib;
     }
 
-    if (fused && budget_mib > 8192 && cid == 1) {
+    if (fused && budget_mib > 8192 && cid == BATCH_VRAM_CACHE_UPGATE) {
         return 8192;
     }
     return budget_mib;
@@ -1706,8 +1733,8 @@ static size_t batch_cache_effective_budget_mib(size_t requested_mib) {
     return effective_mib;
 }
 
-static batch_vram_cache * batch_cache_get(size_t expert_sz) {
-    const int cid = batch_cache_id_for_size(expert_sz);
+static batch_vram_cache * batch_cache_get_for_id(size_t expert_sz, int cid) {
+    if (cid < 0 || cid >= BATCH_VRAM_CACHE_COUNT) return nullptr;
     if (g_bcache_inited[cid]) {
         batch_vram_cache *c = &g_bcaches[cid];
         if (c->pool && expert_sz <= c->slot_sz) return c;
@@ -1780,19 +1807,23 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         }
         if (alloc_err != cudaSuccess) {
             std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc retry failed; disabling %s cache\n",
-                         cid == 1 ? "upgate" : "down");
+                         batch_cache_label(cid));
             c->n_slots = 0;
             g_bcache_inited[cid] = true;
             return nullptr;
         }
         c->n_slots = alloc_slots;
     }
-    std::fprintf(stderr, "[moe_stream_batch] VRAM cache: %.1f GiB, %d slots (%.2f MiB each)\n",
-                 alloc / (1024.0*1024.0*1024.0), c->n_slots,
-                 expert_sz / (1024.0*1024.0));
+    std::fprintf(stderr, "[moe_stream_batch] VRAM cache %s: %.1f GiB, %d slots (%.2f MiB each)\n",
+                 batch_cache_label(cid), alloc / (1024.0*1024.0*1024.0),
+                 c->n_slots, expert_sz / (1024.0*1024.0));
     std::atexit(batch_cache_report_atexit);
     g_bcache_inited[cid] = true;
     return c;
+}
+
+static batch_vram_cache * batch_cache_get(size_t expert_sz) {
+    return batch_cache_get_for_id(expert_sz, batch_cache_id_for_size(expert_sz));
 }
 
 static bool batch_cache_wait_slot_ready(batch_vram_cache *c, int slot) {
@@ -5227,6 +5258,7 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
+        case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
@@ -6946,7 +6978,13 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     };
     if (!init_batch_once()) return decline("init_batch_once");
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
-    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
+    const char *down_q40_env = std::getenv("GGML_MOE_STREAM_DOWN_Q4_0");
+    const char *down_q40_layer_range = std::getenv("GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE");
+    const bool down_q40_requested =
+        down_q40_env && down_q40_env[0] && down_q40_env[0] != '0' &&
+        src0_type == GGML_TYPE_Q4_0 &&
+        moe_tensor_layer_in_simple_range(src0_name, down_q40_layer_range);
+    if (!moe_stream_type_supported(src0_type) && !down_q40_requested) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
@@ -6992,6 +7030,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     static std::atomic<int> first_down_parallel_stage{0};
     if (down_parallel_stage && first_down_parallel_stage.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down parallel CPU staging active\n");
+    }
+    if (down_q40_requested && !down_parallel_stage) {
+        return decline("q40_requires_parallel_stage");
     }
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
@@ -7042,10 +7083,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (down_q8k_requested && first_down_q8k.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down Q3_K/IQ4_XS Q8_K-reference batch path active\n");
     }
+    static std::atomic<int> first_down_q40{0};
+    if (down_q40_requested && first_down_q40.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] down Q4_0 isolated cache MMVQ path active: range=%s\n",
+                     down_q40_layer_range ? down_q40_layer_range : "");
+    }
 
-    batch_vram_cache *cache = batch_cache_get(src0_bytes);
+    batch_vram_cache *cache = down_q40_requested ?
+        batch_cache_get_for_id(src0_bytes, BATCH_VRAM_CACHE_Q40_DOWN) :
+        batch_cache_get(src0_bytes);
     if (!cache) return decline("cache_get");
-    preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
+    if (!down_q40_requested) {
+        preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
+    }
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 
@@ -7150,11 +7200,13 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
         bool copy_a_ok = true;
         bool copy_b_ok = true;
+        pinned_stage_ring &down_ring_a = down_q40_requested ? bc.stage_ring_up_aux : bc.stage_ring;
+        pinned_stage_ring &down_ring_b = down_q40_requested ? bc.stage_ring_gate_aux : bc.stage_ring_gate;
         std::thread copy_a([&]() {
-            copy_a_ok = copy_down_stage_jobs(down_jobs_a, bc.up_stream, bc.stage_ring);
+            copy_a_ok = copy_down_stage_jobs(down_jobs_a, bc.up_stream, down_ring_a);
         });
         std::thread copy_b([&]() {
-            copy_b_ok = copy_down_stage_jobs(down_jobs_b, bc.gate_stream, bc.stage_ring_gate);
+            copy_b_ok = copy_down_stage_jobs(down_jobs_b, bc.gate_stream, down_ring_b);
         });
         copy_a.join();
         copy_b.join();

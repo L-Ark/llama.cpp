@@ -171,9 +171,61 @@ static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_t
            (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
 }
 
+static bool ggml_kimi_moe_tensor_layer_in_simple_range(const char * name, const char * range) {
+    if (range == NULL || range[0] == '\0') {
+        return true;
+    }
+    if (name == NULL) {
+        return false;
+    }
+    const char * p = strstr(name, "blk.");
+    if (p == NULL) {
+        return false;
+    }
+    p += 4;
+    char * end = NULL;
+    const long layer = strtol(p, &end, 10);
+    if (end == p) {
+        return false;
+    }
+
+    const char * r = range;
+    while (*r != '\0') {
+        char * next = NULL;
+        const long lo = strtol(r, &next, 10);
+        if (next == r) {
+            break;
+        }
+        long hi = lo;
+        if (*next == '-') {
+            r = next + 1;
+            hi = strtol(r, &next, 10);
+            if (next == r) {
+                break;
+            }
+        }
+        if (layer >= lo && layer <= hi) {
+            return true;
+        }
+        r = next;
+        while (*r == ',' || *r == ';' || *r == ' ') {
+            ++r;
+        }
+    }
+    return false;
+}
+
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
     if (!name || !strstr(name, "ffn_down_exps")) {
         return false;
+    }
+    const char * down_q40_env = getenv("GGML_MOE_STREAM_DOWN_Q4_0");
+    const bool down_q40_requested =
+        down_q40_env != NULL && down_q40_env[0] != '\0' && down_q40_env[0] != '0' &&
+        type == GGML_TYPE_Q4_0 &&
+        ggml_kimi_moe_tensor_layer_in_simple_range(name, getenv("GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE"));
+    if (down_q40_requested) {
+        return true;
     }
 
     return ggml_cuda_moe_stream_supports_type(type) ||
