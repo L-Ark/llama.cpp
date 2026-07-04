@@ -58014,6 +58014,133 @@ Decision rule:
   controlled experiments; rejected runtime envs must not be added to the
   accepted runner.
 
+### 7JA implementation and result
+
+Timestamp: 2026-07-05.
+
+Source commits tested:
+
+- `00b757691` (`cuda: add exact expert cache pinning`);
+- `160cc0606` (`cuda: count only matching exact pin tensors`);
+- `91de6e0c8` (`cuda: size exact pin cache slots upfront`).
+
+Build command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 91de6e0c8
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+```
+
+Debug notes before the valid run:
+
+- `n32` loaded the exact profile but had `attempts=0`, `pinned=0` because
+  `GGML_MOE_VRAM_EXACT_PIN_MAX_TENSORS=2` was consumed by non-matching tensors.
+  Fixed by counting only tensors that actually match the exact profile.
+- `n32b` still had `attempts=0`, `pinned=0` because the hand-written profile
+  used the wrong `expert_bytes`.
+- `n32c` loaded `16` entries but ended with only `pinned=8` because `blk.60`
+  initialized the down cache with smaller `6.02 MiB` slots and `blk.4` later
+  reinitialized it with `7.44 MiB` slots, clearing the first eight pins.
+  Fixed by sizing the exact-pin cache slot upfront to the maximum exact-profile
+  expert size for that cache id.
+
+Valid reproduction run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ja-exact-cold-down-pin-n32d`
+
+Profile:
+
+- copied from:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iy-full-cold-down-preload/cold-down-full-profile.csv`;
+- contains:
+  - `blk.60.ffn_down_exps.weight` experts
+    `23,41,49,135,161,240,298,320` at `6307840` bytes each;
+  - `blk.4.ffn_down_exps.weight` experts
+    `79,127,139,141,159,214,311,335` at `7798784` bytes each.
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ja-exact-cold-down-pin-n32d
+rm -rf "$RUN"
+mkdir -p "$RUN"
+cp /root/lfz/runs/vendor-kimi-token-rate/20260705-7iy-full-cold-down-preload/cold-down-full-profile.csv \
+   "$RUN/cold-down-full-profile.csv"
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_EXACT_PIN_PROFILE=$RUN/cold-down-full-profile.csv
+GGML_MOE_VRAM_EXACT_PIN_MAX_TENSORS=2
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79697.99 ms`, below `106331.72 ms`;
+- decode `29750.57 ms / 31`, `1.04 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15057154048` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Exact-pin counters:
+
+- exact profile loaded `16` entries;
+- `blk.60.ffn_down_exps.weight loaded=8 cached=0 failed=0`;
+- `blk.4.ffn_down_exps.weight loaded=8 cached=0 failed=0`;
+- summary: `tensors=2 attempts=16 loaded=16 cached=0 failed=0`;
+- down cache: `slots=766`, `slot=7.44 MiB`, `pinned=16`,
+  `hit_rate=73.7%`.
+
+Observed effect:
+
+- The target cold-down runtime rows disappeared; the target rows in
+  `copy-profile.csv` are only `preload_load` rows.
+- The first exact preload rows still cost:
+  - `blk.60` expert `23`: `87.770 ms`;
+  - `blk.4` expert `79`: `123.499 ms`.
+- The exposed long waits moved to other tensors, e.g.
+  `blk.16.ffn_down_exps.weight` experts `302,196,136,27` at about
+  `128.8-128.9 ms`.
+- Total iouring wait did not improve:
+  - valid exact-pin run: `14960026 us`;
+  - accepted pct62 n32 repeat 7IM: `14849100 us`;
+  - 7IW foreground attribution baseline: `11965832 us` in batch-level profile
+    mode, not directly comparable to min-profile counters.
+- Decode is slower than accepted pct62 n32 repeat:
+  - 7IM: `29348.93 ms / 31`, `1.06 tok/s`;
+  - 7JA valid run: `29750.57 ms / 31`, `1.04 tok/s`.
+
+Decision:
+
+- Reject exact-key cold down pinning as a runtime optimization.
+- Do not repeat n32 and do not run n96.
+- Reason:
+  - It passes correctness, RAM, swap, TTFT, and expert-pack gates.
+  - It proves the mechanism can pin the exact target keys without broad
+    profile protect.
+  - It does not improve token rate; the cold-read cost is diffuse and moves to
+    other first-use tensors.
+  - It slightly increases preloads/copies and keeps iouring wait flat to worse.
+- Per rollback rule, revert the source implementation commits and keep this
+  phase only as documented evidence. Do not add any exact-pin env to the
+  accepted runner.
+
 ### Result
 
 Timestamp: 2026-07-05.
