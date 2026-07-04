@@ -1,0 +1,83 @@
+{
+  "timestamp_utc": "2026-07-04T16:59:54Z",
+  "status": "passed_but_synchronous_prefill_ttft_risk",
+  "purpose": "cpu41 direct_pool3264 full prefill768 timing only; not a token-rate result and not a SOTA candidate",
+  "source_head": "8711218cb4c50568a49a0c94843393254503d6a7",
+  "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T165954Z-cpu41-directpool3264-prefill768-timing/short-cpu41",
+  "config": {
+    "n_cpu_moe": 41,
+    "prompt": "Hi",
+    "n_predict": 1,
+    "context": 64,
+    "batch": 16,
+    "ubatch": 16,
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": 13568,
+    "GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB": 3264,
+    "GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT": 768,
+    "GGML_MOE_STREAM_ONE_DIRECT_IO": "direct",
+    "gate_prefill_profile": "disabled",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0
+  },
+  "result": {
+    "exit_status": 0,
+    "memory_peak_bytes": 792145920,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "service_runtime_seconds": 7.792,
+    "cpu_time": "29.859s"
+  },
+  "direct_hot_pool": {
+    "allocated_mib": 3264.0,
+    "slots": 768,
+    "slot_sz": 4456448,
+    "pool_sz": 3422552064,
+    "attempted": 768,
+    "inserted": 768,
+    "read_failures": 0,
+    "copy_failures": 0,
+    "bytes": 3422552064,
+    "elapsed_ms": 1723.238,
+    "effective_gib_per_s": 1.850
+  },
+  "direct_manifest": {
+    "entries": 768,
+    "manifest_bytes": 3422552064,
+    "reads": 768,
+    "bytes": 3422552064,
+    "failures": 0,
+    "direct_enabled": true,
+    "direct_reads": 768,
+    "direct_failures": 0,
+    "direct_fallbacks": 0
+  },
+  "gate_vram_cache": {
+    "reported_gib": 13.2,
+    "slots": 3192,
+    "hits": 277,
+    "misses": 885,
+    "hit_rate_pct": 23.8
+  },
+  "vram_resource_sample_peak": {
+    "gpu_mem_used_mib": 31866,
+    "gpu_mem_free_mib": 245
+  },
+  "ttft_risk": {
+    "accepted_ttft_slack_ms": 725.135454,
+    "previous_serial_estimate_ms": 1148.0,
+    "measured_sync_prefill_ms": 1723.238,
+    "over_slack_ms": 998.102546,
+    "decision": "A synchronous full top768 prefill is not promotable under the TTFT gate unless overlapped, made asynchronous, reduced, or otherwise hidden."
+  },
+  "hashes": {
+    "run_case_sha256": "297435db7077eb89f51449848f9d5d193daecdf8e5e135b56b3afe4732520981",
+    "environment_sha256": "c6da4606792f07847f64ea1066151a03b897d1c24d894378148d6b8bc4f67b47",
+    "exact_command_sha256": "f0525b9835da70ea11cddc1438e35528ca6943c339677503ca3c2c4bf3a411b9",
+    "stderr_sha256": "ac0b1c57204ecd814e62f3bd9c208688f69c1896510053cc209855608abf4932",
+    "resource_samples_sha256": "610d5ccd3bac69eb22265cb7a81acf712a63950b59cc8d1924db351d920ab1f1"
+  },
+  "decision": "Keep the source path, but do not promote or long-benchmark the synchronous full-prefill form. The next plan must either make direct prefill overlapped/async or move to correctness scaffolding while accounting for this TTFT gap."
+}

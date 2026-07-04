@@ -9790,3 +9790,73 @@ Decision:
 - The free VRAM margin is very tight (`~251 MiB` observed in this short run), so the next implementation must avoid extra persistent GPU buffers and should treat full prefill/compute workspace growth as a first-class risk.
 - This is not a token-rate result and does not change accepted SOTA.
 - Next step should be correctness-first exact MXFP4 x Q8_0 op/top1 scaffolding, or a separately planned full-prefill timing diagnostic. No long France benchmark is allowed before compute verification.
+
+### 2026-07-05 Full Direct Prefill Timing Diagnostic Plan
+
+Purpose:
+
+- Measure the source/prefill cost of loading all top768 direct hot pool entries from the raw GGUF model via O_DIRECT.
+- This determines whether the direct pool path is already TTFT-impossible before exact Q8_0 compute is wired.
+
+Diagnostic command shape:
+
+- Short smoke only: `llama-cli -p Hi -n 1`.
+- Strict 16GB systemd cgroup with `MemoryMax=16000000000` and `MemorySwapMax=0`.
+- `--n-cpu-moe 41`
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+- `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=3264`
+- `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=768`
+- Direct manifest/model env enabled with `GGML_MOE_STREAM_ONE_DIRECT_IO=direct`.
+- Gate prefill remains disabled to isolate direct prefill timing.
+- The pool is still not used by compute, so this is logit-neutral infrastructure timing, not a token-rate result.
+
+Acceptance for this diagnostic:
+
+- Process exits `0`.
+- No host OOM/swap: `oom=0`, `oom_kill=0`.
+- Direct hot pool reports `attempted=768`, `inserted=768`, `read_failures=0`, `copy_failures=0`.
+- Direct manifest reports `reads=768`, `direct_reads=768`, `direct_failures=0`, `direct_fallbacks=0`.
+- Record elapsed_ms and compare it to the accepted TTFT slack (`~725 ms`) and earlier serialized top768 estimate (`~1148 ms`).
+
+Decision rule:
+
+- If full direct prefill is much above TTFT slack, do not promote or long-benchmark this path until prefill is overlapped/async or reduced.
+- If it is near or below slack, proceed to exact MXFP4 x Q8_0 op-compare/top1 scaffolding.
+
+### 2026-07-05 Full Direct Prefill Timing Diagnostic Result
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/full-direct-prefill768-timing.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T165954Z-cpu41-directpool3264-prefill768-timing/short-cpu41`
+
+Result:
+
+- Exit status: `0`
+- Host cgroup memory peak: `792145920`
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+- Direct hot pool: `3264.00 MiB`, `768` slots, `slot_sz=4456448`
+- Full direct prefill: `attempted=768`, `inserted=768`, `read_failures=0`, `copy_failures=0`
+- Direct manifest reads: `reads=768`, `bytes=3422552064`, `direct_reads=768`, `direct_failures=0`, `direct_fallbacks=0`
+- Measured synchronous direct prefill elapsed: `1723.238 ms`
+- Effective throughput: about `1.850 GiB/s`
+- Gate cache still allocated after direct prefill: `13.2 GiB`, `3192` slots
+- Resource sample GPU peak: `used=31866 MiB`, `free=245 MiB`
+
+TTFT analysis:
+
+- Accepted TTFT slack is only about `725.135454 ms`.
+- The earlier serialized estimate for top768 direct payload was about `1148 ms`.
+- Measured synchronous prefill is `1723.238 ms`, about `998.103 ms` over accepted TTFT slack.
+- Therefore, synchronous full top768 prefill is not promotable under the TTFT gate even though allocation and O_DIRECT reads work.
+
+Decision:
+
+- Keep the source path and direct pool infrastructure.
+- Do not run a long France benchmark with synchronous full top768 prefill as an accepted candidate.
+- Next plan must either:
+  - make direct prefill overlapped/async/hidden enough to recover about `1.0s` TTFT, or
+  - proceed to exact MXFP4 x Q8_0 op/top1 scaffolding while treating synchronous prefill as TTFT-rejected until overlap exists.
