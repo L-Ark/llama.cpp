@@ -43226,3 +43226,91 @@ Decision:
 - Move the next optimization target back to reducing movement latency or
   improving GPU coverage; do not spend more time on mmap page-release policies
   without a new token-order fallback trace.
+
+## Phase 7FB: slots12 minimal-profile production retest
+
+Start time:
+
+- 2026-07-04T05:52:00Z.
+
+Reason for this phase:
+
+- Current accepted 7EX SOTA was measured with the diagnostic runner and memory
+  timeline, which still enables:
+  - CPU MoE aggregate/name/eligibility profiling;
+  - fallback-profile CSV;
+  - down/upgate batch profile CSVs;
+  - route profile and route trace;
+  - TTFT trace;
+  - stream decline debug.
+- Phase 7EO tested `MIN_PROFILE=1` on the older slots16 runtime:
+  - first n32 was fast (`27967.55 ms / 31`);
+  - second n32 regressed (`31579.93 ms / 31`);
+  - rejected as non-reproducible.
+- Phase 7EX changed the accepted runtime to `PINNED_SLOTS=12`, reducing one
+  source of host-memory pressure. Retest minimal-profile only once under the
+  current SOTA to see whether the slots12 runtime makes the profiling removal
+  reproducible.
+
+Theoretical expectation:
+
+- Profiling removal does not reduce compulsory expert movement:
+  - expert-pack reads/bytes should remain unchanged;
+  - VRAM hit rates should remain unchanged;
+  - math and routing are unchanged.
+- A real improvement can only come from lower host-side bookkeeping, less CSV
+  accumulation, and lower scheduling noise.
+- Based on Phase 7EO, expected behavior is high variance. Promotion requires
+  confirmation, not a single fast n32.
+
+Experiment:
+
+- Env/runner-only; no source patch.
+- Use existing `/tmp/run_phase7eo_repro.sh` with current 7EX knobs:
+  - `PINNED_SLOTS=12`;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fb-slots12-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7eo_repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- strict cold start;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Activation checks:
+
+- `command.txt` records `MIN_PROFILE=1`;
+- run directory does not contain diagnostic CSV/trace files;
+- `env.txt` omits the diagnostic envs removed by Phase 7EO;
+- `env.txt` keeps current runtime envs including slots12 and pack mmap fallback.
+
+Promotion rule:
+
+- If first n32 is slower than accepted 7EX n32 confirmation
+  `29462.94 ms / 31`, reject immediately.
+- If first n32 beats `29462.94 ms / 31`, run one additional n32 cold-start
+  confirmation.
+- Only if both n32 runs beat `29462.94 ms / 31`, run two n96 cold-start
+  confirmations.
+- Both n96 confirmations must be no slower than accepted 7EX n96 B
+  `74174.67 ms / 77` and must pass all hard gates.
+- If rejected, do not promote `MIN_PROFILE=1`; keep diagnostic SOTA runner for
+  bottleneck visibility.
