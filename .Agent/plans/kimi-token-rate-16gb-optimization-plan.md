@@ -42770,3 +42770,64 @@ Decision rule:
     7EX n96 band and all gates pass.
 - If promoted, commit and push the plan update with all metrics and exact
   reproduction commands.
+
+Phase 7EY result - slots10 rejected:
+
+- End time: 2026-07-04T05:05:00Z.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-035055Z-n32-phase7ey-slots10-timeline`.
+- Change:
+  - runtime env only;
+  - `PINNED_SLOTS=12` -> `PINNED_SLOTS=10`;
+  - source unchanged.
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `74704.75 ms`;
+  - decode `30193.12 ms / 31`, `1.03 tok/s`;
+  - slower than accepted 7EX n32 confirmation `29462.94 ms / 31` by
+    `730.18 ms`;
+  - strict cgroup peak `15899996160`;
+  - final `file=14845599744`, `inactive_file=10345619456`,
+    `active_file=4499898368`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Movement counters:
+  - expert pack `iouring_wait_us=15271543`, worse than 7EX n32
+    `14351300-14461739`;
+  - main pinned `slots=10`, `slot_wait=50.968 ms`,
+    `host_stage=11936.531 ms`, `h2d=4138.704 ms`;
+  - gate pinned `slot_wait=12.006 ms`, `host_stage=353.241 ms`,
+    `h2d=932.407 ms`;
+  - down profile `38.382 ms/call`, fallback `35.998 ms/call`.
+- Timeline:
+  - `memory.events max +30482`;
+  - `pgscan +30556665`;
+  - `pgsteal +19979936`;
+  - `pgmajfault +987112`.
+
+Interpretation:
+
+- `PINNED_SLOTS=10` reduces ring capacity below the useful overlap floor.
+- It does not materially reduce cgroup reclaim pressure.
+- The smaller ring increases movement wait/staging enough to lose about
+  `0.73 s` versus the accepted 7EX n32 confirmation.
+
+Decision:
+
+- Reject `PINNED_SLOTS=10`.
+- Keep Phase 7EX as current runtime SOTA:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+```
+
+- Stop the downward pinned-slot sweep at `12`.
+- Next optimization should not spend more time on smaller pinned rings; target
+  file-cache/reclaim behavior or direct expert-pack movement reduction.
