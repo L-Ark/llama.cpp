@@ -55114,3 +55114,113 @@ systemd-run --wait --collect --same-dir \
   - Do not run n96.
   - Keep runner default `THREADS=32`.
   - No source rollback is needed because this was a runtime-only probe.
+
+## Phase 7HW: env-gated four-way down staging probe
+
+Start time: 2026-07-05T05:42:00+08:00.
+
+Goal:
+
+- Reduce exposed down-stage miss-copy wall time by splitting down staging jobs
+  across four existing CUDA streams / pinned rings instead of the current two.
+- Keep default behavior unchanged unless:
+
+```text
+GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1
+```
+
+- This is a source probe, not a default change.
+
+Why this targets the current bottleneck:
+
+- The latest accepted current-head n96 parity still shows:
+  - `current_down_overlap` worker about `8.44s`;
+  - runtime/down movement dominated by many small call-boundary batches;
+  - down hit rate only `73.4%`, leaving `8690` down cache misses on n96.
+- Current `GGML_MOE_DOWN_PARALLEL_STAGE=1` splits down miss jobs into two
+  vectors and copies them on:
+  - `bc.up_stream` + `bc.stage_ring`;
+  - `bc.gate_stream` + `bc.stage_ring_gate`.
+- At the down op, up/gate compute has already completed, so the aux streams
+  and rings used by rejected up/gate split staging can be reused for down-only
+  staging without changing up/gate overlap semantics:
+  - `bc.up_copy_stream` + `bc.stage_ring_up_aux`;
+  - `bc.gate_copy_stream` + `bc.stage_ring_gate_aux`.
+
+Theoretical upper bound:
+
+- This does not reduce total expert bytes read from SSD and cannot fix
+  call-boundary-limited batch sizes.
+- It can only reduce per-down-call staging wall when there are multiple miss
+  jobs and enough independent pinned slots / read queue depth.
+- The hard upper bound is the exposed portion of down staging and current-down
+  worker time. Based on n96 current-head parity, realistic upside is small:
+  about `0-2s` on n96.
+- If SSD queueing or H2D contention is already saturated, four-way staging may
+  increase iouring wait and regress decode; reject in that case.
+
+Implementation plan:
+
+- Add an env-gated branch under `down_parallel_stage`.
+- Keep the existing two-way branch as default.
+- When `GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1` and aux streams/events exist:
+  - split `down_stage_copy_job` jobs round-robin into four vectors;
+  - copy on four threads using the four rings/streams listed above;
+  - record completion events for all four streams;
+  - make the main stream wait for all four events before launching down MMVQ;
+  - clear all inserted jobs and decline on any copy/event failure.
+- Do not change math, cache keys, cache policy, RAM tier, prefetch depth,
+  prompt path, or runner defaults.
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hw-down-4way"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must be at least competitive with Phase 7HR n32 parity
+  `29598.42 ms / 31`; if it is slower, reject without n96.
+
+Experiment B: n96 candidate, only if n32 passes
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hw-down-4way"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails any hard gate or regresses decode, revert the source patch and
+  record rejection.
+- If n32 passes, run n96 once.
+- If n96 does not beat historical Phase 7FB `70087.31 ms / 77`, revert or keep
+  the code default-off only if it is diagnostically useful; do not update
+  defaults.
+- If n96 beats SOTA, repeat n96 once before accepting. Only after the repeat
+  passes should the result be committed as a performance improvement and pushed.
