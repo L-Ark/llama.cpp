@@ -9664,3 +9664,72 @@ Decision:
 - Keep the loader skeleton. It proves the source path can resolve top768 offsets from the committed manifest without generating a 3.26 GiB pack.
 - This is not a performance result and current accepted SOTA remains `4.4 tok/s`.
 - Next implementation step must add a separate q80 hot pool/prefill path, still default-off and not sharing the gate LRU. Only after that should exact MXFP4 x Q8_0 compute be wired and verified with op compare/top1.
+
+### 2026-07-05 Direct Hot Pool Skeleton Plan
+
+Purpose:
+
+- Add the next default-off infrastructure layer for `cpu41 + top768 exact Q8_0 hot residual`: a separate direct hot pool and optional prefill path fed by the direct manifest.
+- This is still source/path infrastructure, not a token-rate optimization result.
+
+Implementation boundary:
+
+1. Keep accepted SOTA behavior inert unless new envs are explicitly set.
+2. Do not share the existing gate `g_vcache`, hash table, LRU/FIFO eviction, or gate prefill path.
+3. Add a separate direct hot pool state keyed by the direct manifest entries.
+4. Add env-gated allocation and prefill controls:
+   - `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB`
+   - `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT`
+5. Prefill may read model payload bytes from the direct manifest and copy them into the separate pool, but the pool must not be used by compute yet.
+6. Record counters: pool slots, slot size, allocation bytes, prefill attempted/inserted/read failures/bytes/elapsed, direct read counters.
+7. Validation for this step is build plus a low-risk smoke:
+   - `POOL_MIB=0` or very small prefill limit is allowed;
+   - no long France benchmark;
+   - no token-rate promotion;
+   - direct reads may be observed only for a deliberately tiny smoke and must stay within 16GB/no-swap cgroup.
+
+Hard stops:
+
+- If build fails, default-off path changes accepted behavior, allocation affects gate cache when env unset, or smoke causes OOM/swap, revert runtime source and keep rejected docs only.
+- Do not wire exact MXFP4 x Q8_0 compute until this pool source path passes its smoke and the next plan update defines op-compare/top1 verification.
+
+### 2026-07-05 Direct Hot Pool Skeleton Result
+
+Source change:
+
+- Added a separate direct hot pool state in `ggml/src/ggml-cuda/moe_stream.cu`.
+- New envs:
+  - `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB`
+  - `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT`
+- The pool is independent from the accepted gate `g_vcache`; it has separate allocation, slots, manifest entries, and counters.
+- The pool can prefill from the direct manifest into VRAM, but it is still not used by compute or lookup. Therefore this remains logit-neutral infrastructure.
+
+Build validation:
+
+- Command: `cmake --build build-ds4-moe-stream --target llama-cli -j 8`
+- Result: success.
+- Source SHA256 after fix: `f7bd37005f0f312c0f25a537ffe9a8ab8a713df15b5515bfba98e504aab1d374`
+
+O_DIRECT gap and fix:
+
+- First prefill smoke exposed a direct-read gap: the first GGUF expert slice had `model_offset % 4096 = 256`, while O_DIRECT requires aligned offsets.
+- Before the fix, the pool inserted 1 entry but `direct_reads=0`, `direct_failures=1`, `direct_fallbacks=1`.
+- Fixed by aligning the model offset down to 4096 bytes, reading a rounded-up O_DIRECT bounce buffer, and copying the requested expert slice into the destination buffer.
+
+Passing smoke:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/direct-hot-pool-prefill1-smoke.json`
+- Run path: `/root/lfz/runs/vendor-ds4-16gb/20260704T164341Z-direct-hot-pool-prefill1-odirect-smoke/short-cpu40`
+- Purpose: direct hot pool prefill=1 smoke only; not token-rate measurement and not SOTA.
+- Exit status: `0`
+- Memory peak: `789651456`
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+- Pool log: `allocated 4.25 MiB slots=1 slot_sz=4456448`
+- Prefill log: `attempted=1 inserted=1 bytes=4456448 elapsed_ms=17.764`
+- Direct manifest report: `reads=1 bytes=4456448 failures=0 direct_reads=1 direct_failures=0 direct_fallbacks=0`
+
+Decision:
+
+- Keep the separate direct hot pool skeleton. It proves the top768 source path can prefill real GGUF expert payload from the raw model via O_DIRECT without generating a 3.26 GiB pack and without sharing the gate cache.
+- This is still not a performance result; current accepted SOTA remains `4.4 tok/s`.
+- Next plan step must decide whether to run a bounded larger prefill diagnostic under `cpu_moe=41` VRAM budget or move directly to exact MXFP4 x Q8_0 op-compare/top1 scaffolding. No long France benchmark is allowed before the compute path passes correctness verification.

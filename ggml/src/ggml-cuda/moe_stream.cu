@@ -772,12 +772,36 @@ static void one_direct_manifest_init_once() {
     return nullptr;
 }
 
+static bool one_direct_manifest_read_direct_aligned(const one_expert_pack_entry * entry, void * dst, size_t sz) {
+#if defined(__linux__) && defined(O_DIRECT)
+    const uint64_t align = 4096;
+    const uint64_t prefix = entry->offset & (align - 1);
+    const uint64_t read_off = entry->offset - prefix;
+    const size_t read_sz = (size_t) (((prefix + sz + align - 1) / align) * align);
+    void * bounce = nullptr;
+    if (posix_memalign(&bounce, (size_t) align, read_sz) != 0 || bounce == nullptr) {
+        return false;
+    }
+    const bool ok = one_pack_read_exact_fd(g_one_direct_manifest.fd_direct, bounce, read_sz, read_off);
+    if (ok) {
+        std::memcpy(dst, (const char *) bounce + prefix, sz);
+    }
+    std::free(bounce);
+    return ok;
+#else
+    (void) entry;
+    (void) dst;
+    (void) sz;
+    return false;
+#endif
+}
+
 [[maybe_unused]] static bool one_direct_manifest_read_entry(const one_expert_pack_entry * entry, void * dst, size_t sz) {
     if (!entry || g_one_direct_manifest.fd < 0 || entry->nbytes != sz) {
         return false;
     }
     if (g_one_direct_manifest.fd_direct >= 0) {
-        if (one_pack_read_exact_fd(g_one_direct_manifest.fd_direct, dst, sz, entry->offset)) {
+        if (one_direct_manifest_read_direct_aligned(entry, dst, sz)) {
             ++g_one_direct_manifest.reads;
             ++g_one_direct_manifest.direct_reads;
             g_one_direct_manifest.bytes.fetch_add(sz);
@@ -796,6 +820,165 @@ static void one_direct_manifest_init_once() {
 }
 
 static bool ensure_host_pinned(void *&p, size_t &cur, size_t need);
+
+struct one_direct_hot_pool_state {
+    void * pool = nullptr;
+    size_t pool_sz = 0;
+    size_t slot_sz = 0;
+    int n_slots = 0;
+    bool inited = false;
+    bool enabled = false;
+    bool prefill_done = false;
+    std::vector<one_expert_pack_entry> slot_entries;
+    std::mutex mu;
+    uint64_t attempted = 0;
+    uint64_t inserted = 0;
+    uint64_t read_failures = 0;
+    uint64_t copy_failures = 0;
+    uint64_t bytes = 0;
+    double prefill_elapsed_ms = 0.0;
+};
+
+static one_direct_hot_pool_state g_one_direct_hot_pool;
+
+static void one_direct_hot_pool_report_atexit() {
+    if (!g_one_direct_hot_pool.enabled && g_one_direct_hot_pool.attempted == 0) {
+        return;
+    }
+    std::fprintf(stderr,
+        "[moe_stream] one direct hot pool: enabled=%d slots=%d slot_sz=%zu pool_sz=%zu"
+        " attempted=%lu inserted=%lu read_failures=%lu copy_failures=%lu bytes=%lu elapsed_ms=%.3f\n",
+        g_one_direct_hot_pool.enabled ? 1 : 0,
+        g_one_direct_hot_pool.n_slots,
+        g_one_direct_hot_pool.slot_sz,
+        g_one_direct_hot_pool.pool_sz,
+        g_one_direct_hot_pool.attempted,
+        g_one_direct_hot_pool.inserted,
+        g_one_direct_hot_pool.read_failures,
+        g_one_direct_hot_pool.copy_failures,
+        g_one_direct_hot_pool.bytes,
+        g_one_direct_hot_pool.prefill_elapsed_ms);
+}
+
+static uint64_t one_direct_hot_pool_env_u64(const char * name, uint64_t fallback) {
+    const char * env = std::getenv(name);
+    if (!env || !env[0]) {
+        return fallback;
+    }
+    return (uint64_t) std::strtoull(env, nullptr, 10);
+}
+
+static void one_direct_hot_pool_init_once() {
+    std::lock_guard<std::mutex> lk(g_one_direct_hot_pool.mu);
+    if (g_one_direct_hot_pool.inited) {
+        return;
+    }
+    g_one_direct_hot_pool.inited = true;
+    std::atexit(one_direct_hot_pool_report_atexit);
+
+    const uint64_t budget_mib = one_direct_hot_pool_env_u64("GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB", 0);
+    if (budget_mib == 0) {
+        return;
+    }
+
+    one_direct_manifest_init_once();
+    if (!g_one_direct_manifest.enabled || g_one_direct_manifest.entries.empty()) {
+        std::fprintf(stderr, "[moe_stream] one direct hot pool: direct manifest is not enabled\n");
+        return;
+    }
+
+    size_t slot_sz = 0;
+    for (const one_expert_pack_entry & e : g_one_direct_manifest.entries) {
+        slot_sz = std::max(slot_sz, (size_t) e.nbytes);
+    }
+    if (slot_sz == 0) {
+        return;
+    }
+
+    const size_t budget = (size_t) budget_mib * 1024ULL * 1024ULL;
+    int n_slots = (int) std::min<uint64_t>(g_one_direct_manifest.entries.size(), budget / slot_sz);
+    if (n_slots <= 0) {
+        std::fprintf(stderr, "[moe_stream] one direct hot pool: budget too small budget_mib=%lu slot_sz=%zu\n",
+                budget_mib, slot_sz);
+        return;
+    }
+
+    const size_t alloc = (size_t) n_slots * slot_sz;
+    void * pool = nullptr;
+    if (cudaMalloc(&pool, alloc) != cudaSuccess) {
+        std::fprintf(stderr, "[moe_stream] one direct hot pool: cudaMalloc failed for %.2f MiB (%d slots)\n",
+                alloc / (1024.0 * 1024.0), n_slots);
+        return;
+    }
+
+    g_one_direct_hot_pool.pool = pool;
+    g_one_direct_hot_pool.pool_sz = alloc;
+    g_one_direct_hot_pool.slot_sz = slot_sz;
+    g_one_direct_hot_pool.n_slots = n_slots;
+    g_one_direct_hot_pool.slot_entries.resize((size_t) n_slots);
+    g_one_direct_hot_pool.enabled = true;
+    std::fprintf(stderr, "[moe_stream] one direct hot pool: allocated %.2f MiB slots=%d slot_sz=%zu\n",
+            alloc / (1024.0 * 1024.0), n_slots, slot_sz);
+}
+
+static void one_direct_hot_pool_prefill_maybe(slot_ctx & ctx, cudaStream_t st) {
+    one_direct_hot_pool_init_once();
+    std::lock_guard<std::mutex> lk(g_one_direct_hot_pool.mu);
+    if (g_one_direct_hot_pool.prefill_done || !g_one_direct_hot_pool.enabled) {
+        return;
+    }
+
+    uint64_t limit = one_direct_hot_pool_env_u64("GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT", 0);
+    if (limit == 0) {
+        return;
+    }
+    g_one_direct_hot_pool.prefill_done = true;
+    if (limit > (uint64_t) g_one_direct_hot_pool.n_slots) {
+        limit = (uint64_t) g_one_direct_hot_pool.n_slots;
+    }
+    if (limit > (uint64_t) g_one_direct_manifest.entries.size()) {
+        limit = (uint64_t) g_one_direct_manifest.entries.size();
+    }
+
+    if (!ensure_host_pinned(ctx.h_src0_pack, ctx.h_src0_pack_sz, g_one_direct_hot_pool.slot_sz)) {
+        g_one_direct_hot_pool.read_failures += limit;
+        return;
+    }
+
+    const auto t0 = std::chrono::steady_clock::now();
+    for (uint64_t i = 0; i < limit; ++i) {
+        const one_expert_pack_entry & e = g_one_direct_manifest.entries[(size_t) i];
+        g_one_direct_hot_pool.attempted++;
+        if (e.nbytes > g_one_direct_hot_pool.slot_sz) {
+            g_one_direct_hot_pool.read_failures++;
+            continue;
+        }
+        if (!one_direct_manifest_read_entry(&e, ctx.h_src0_pack, (size_t) e.nbytes)) {
+            g_one_direct_hot_pool.read_failures++;
+            continue;
+        }
+        void * dst = (char *) g_one_direct_hot_pool.pool + (size_t) i * g_one_direct_hot_pool.slot_sz;
+        if (cudaMemcpyAsync(dst, ctx.h_src0_pack, (size_t) e.nbytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            g_one_direct_hot_pool.copy_failures++;
+            continue;
+        }
+        g_one_direct_hot_pool.slot_entries[(size_t) i] = e;
+        g_one_direct_hot_pool.inserted++;
+        g_one_direct_hot_pool.bytes += e.nbytes;
+    }
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        g_one_direct_hot_pool.copy_failures++;
+    }
+    const auto t1 = std::chrono::steady_clock::now();
+    g_one_direct_hot_pool.prefill_elapsed_ms =
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
+    std::fprintf(stderr,
+        "[moe_stream] one direct hot pool: prefill attempted=%lu inserted=%lu bytes=%lu elapsed_ms=%.3f\n",
+        g_one_direct_hot_pool.attempted,
+        g_one_direct_hot_pool.inserted,
+        g_one_direct_hot_pool.bytes,
+        g_one_direct_hot_pool.prefill_elapsed_ms);
+}
 
 struct one_prefill_entry {
     std::string tensor;
@@ -1374,6 +1557,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (!ok) { release_slot(s); return false; }
 
     cudaStream_t st = ctx.stream;
+    one_direct_hot_pool_prefill_maybe(ctx, st);
 
     // Initialize VRAM cache on first call (needs to know expert size)
     if (!g_vcache_inited) {

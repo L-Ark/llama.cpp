@@ -1,0 +1,72 @@
+{
+  "timestamp_utc": "2026-07-04T16:43:41Z",
+  "status": "passed_after_odirect_alignment_fix",
+  "purpose": "direct hot pool prefill=1 smoke only; not a token-rate result and not a SOTA candidate",
+  "source_head_before_commit": "da3be76baa9dd1a1324b3cd3ef44280d7b75e5eb",
+  "source_sha256_after_fix": "f7bd37005f0f312c0f25a537ffe9a8ab8a713df15b5515bfba98e504aab1d374",
+  "build_validation": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli -j 8",
+    "status": "passed",
+    "new_warnings": "none; remaining warnings are pre-existing"
+  },
+  "first_smoke_before_fix": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T164011Z-direct-hot-pool-prefill1-smoke/short-cpu40",
+    "exit_status": 0,
+    "memory_peak_bytes": 14882369536,
+    "oom": 0,
+    "oom_kill": 0,
+    "hot_pool_inserted": 1,
+    "hot_pool_bytes": 4456448,
+    "direct_reads": 0,
+    "direct_failures": 1,
+    "direct_fallbacks": 1,
+    "gap": "GGUF expert model_offset was 256 mod 4096, so plain O_DIRECT pread from the raw model offset failed and fell back to buffered read."
+  },
+  "fix": {
+    "summary": "Direct manifest reads now align the O_DIRECT offset down to 4096 bytes, read a rounded-up bounce buffer, and memcpy the expert slice into the destination buffer.",
+    "first_entry_model_offset_mod_4096": 256,
+    "entry_nbytes_mod_4096": 0
+  },
+  "passing_smoke": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T164341Z-direct-hot-pool-prefill1-odirect-smoke/short-cpu40",
+    "exit_status": 0,
+    "memory_peak_bytes": 789651456,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "service_runtime_seconds": 6.675,
+    "cpu_time": "30.393s",
+    "direct_manifest": {
+      "entries": 768,
+      "manifest_bytes": 3422552064,
+      "direct_enabled": true,
+      "reads": 1,
+      "bytes_read": 4456448,
+      "failures": 0,
+      "direct_reads": 1,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "hot_pool": {
+      "enabled": true,
+      "slots": 1,
+      "slot_sz": 4456448,
+      "pool_sz": 4456448,
+      "attempted": 1,
+      "inserted": 1,
+      "read_failures": 0,
+      "copy_failures": 0,
+      "bytes": 4456448,
+      "elapsed_ms": 17.764
+    },
+    "command_hashes": {
+      "run_case_sha256": "ab27992ec72f6c1b979cd735312ae6b2e821f5fd96576f4bf778e0dfdd09c178",
+      "environment_sha256": "43a1f5d53a8b0cf44c3bda4d92f833a17d2690faf91002066a5b8c521e8266b3",
+      "exact_command_sha256": "2bf8446c30e96f4a91fb80c5f84f7842c3f51b4072db3ef4cafe6f5cbbb9c463",
+      "stderr_sha256": "1718808c34cb42f7bf77885e424dd0309c718c60bc6147146cdf3aee87e356d4"
+    }
+  },
+  "decision": "Keep the separate direct hot pool skeleton. It can allocate independently of the gate cache and prefill from the direct manifest via O_DIRECT without buffered fallback for the tested entry. The pool remains unused by compute, so this is not a correctness or performance promotion."
+}
