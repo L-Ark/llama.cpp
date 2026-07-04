@@ -48694,6 +48694,97 @@ Decision rule:
 - If no clear concentration appears, do not implement speculative aggregation;
   refresh TTFT/down/upgate profiles instead.
 
+Result: completed; diagnostic only, not a SOTA promotion.
+
+- End time: 2026-07-04T19:29:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-112521Z-n32-phase7gm-copy-profile-refresh`.
+- Code head:
+  `ef84ad3209dc030f16f98c874231a5d0deaa397a`.
+- Runtime:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv"`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-112521Z-n32-phase7gm-copy-profile-refresh
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77111.48 ms`;
+  - decode `30242.09 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=446464`;
+    - `file=14840012800`;
+    - `kernel=234893312`;
+    - `inactive_file=8756654080`;
+    - `active_file=6082834432`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert movement counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15373647`;
+  - main iouring batches `2743`, jobs `10969`, inflight avg `3.19`, max `8`;
+  - gate iouring batches `1259`, jobs `4055`, inflight avg `2.84`, max `8`;
+  - current down overlap jobs `3664`, cache hits `3528`, missing tensor `93`.
+- Copy-profile aggregate for `runtime_load`:
+  - rows `20250`;
+  - bytes `102.523 GiB`;
+  - wall `57484.454 ms`;
+  - io wait `45491.461 ms`;
+  - iouring rows `11529`, bytes `60.570 GiB`, wall/io wait
+    `45491.461 ms`;
+  - non-iouring rows `8721`, bytes `41.954 GiB`, wall `11992.993 ms`.
+- Top runtime-load size classes by wall:
+  - `4702208` bytes: rows `9435`, `41.318 GiB`, wall `27949.444 ms`,
+    io wait `22253.696 ms`;
+  - `5619712` bytes: rows `7322`, `38.322 GiB`, wall `15260.704 ms`,
+    io wait `9224.912 ms`;
+  - `7798784` bytes: rows `1702`, `12.362 GiB`, wall `7633.211 ms`,
+    io wait `7449.473 ms`;
+  - `6307840` bytes: rows `1791`, `10.521 GiB`, wall `6641.095 ms`,
+    io wait `6563.379 ms`.
+- Decision:
+  - Do not promote this diagnostic as SOTA because copy-profile overhead raised
+    n32 decode above the rebuilt baseline range.
+  - The result is still valid for bottleneck location: visible runtime load is
+    dominated by io_uring wait, and the highest-wall classes are many repeated
+    same-size expert reads rather than one broken tensor.
+- Gap analysis:
+  - The main loss remains small staging batches: runtime counters still show
+    avg inflight around `3`, max `8`, despite `MOE_IO_DEPTH=8`.
+  - Non-iouring `runtime_load` wall is real but smaller than iouring wait; do
+    not prioritize fallback conversion before trying to reduce io_uring wait
+    granularity.
+  - The next executable plan should test the smallest cross-tensor aggregation
+    that already exists behind `GGML_MOE_UP_GATE_COMBINED_STAGE=1`, then reject
+    or confirm it under the current SOTA runtime instead of relying on older
+    combined-staging results.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
@@ -48984,6 +49075,8 @@ Result: implemented and n32 validated.
 
 Start time: 2026-07-04T17:02:00+08:00.
 
+Refresh time: 2026-07-04T19:31:00+08:00.
+
 Goal:
 
 - Test the smallest code-level aggregation implied by Phase 7FW:
@@ -49013,12 +49106,15 @@ Theory:
 
 Implementation plan:
 
-- Add helper to append `std::vector<stage_copy_job>` lists.
+- The env-gated implementation already exists in the current tree from the
+  earlier combined-staging probe, and is clean at head
+  `ef84ad3209dc030f16f98c874231a5d0deaa397a`.
+- Re-test it under the latest accepted runtime and current bottleneck finding
+  before making any new source edits.
 - In the `parallel_stage` branch, before the existing split/parallel copy
-  paths:
+  paths, the current implementation:
   - if `GGML_MOE_UP_GATE_COMBINED_STAGE=1`;
   - and `stage_split` is disabled;
-  - and up/gate use the same `src0_bytes`;
   - copy `up_jobs + gate_jobs` through `copy_stage_jobs(..., bc.up_stream,
     bc.stage_ring)`;
   - record `bc.ev_up_copy_aux_done` on `bc.up_stream` after combined staging;
