@@ -51325,3 +51325,285 @@ Decision rule:
 - If misses are decode expert tensors present in pack but name/size mapping
   fails, implement the smallest mapping fix, test n32 then n96, and accept only
   if it improves decode without quality or TTFT regression.
+
+Implementation result:
+
+- Source commit:
+  `678f33d9f` (`diagnostics: trace kimi CPU fallback pack misses`).
+- Default behavior:
+  unchanged unless `GGML_MOE_CPU_FALLBACK_MISS_TRACE=1` is set.
+- Added CPU-side trace line:
+  `[kimi_cpu_fallback_pack_mmap_miss] phase=... tensor=... expert=... src0_type=... expert_bytes=... active_rows=... reason=... entry_bytes=... entry_offset=...`.
+- Added CUDA pack debug lookup reason path:
+  - `invalid_args`;
+  - `mmap_unavailable`;
+  - `entry_missing`;
+  - `nbytes_mismatch`;
+  - `range_invalid`.
+- Build:
+  - server head `678f33d9f`;
+  - production build option `GGML_CUDA_LIGHTNING_INDEXER=OFF`;
+  - `build-cuda-batch/bin/llama-completion`:
+    `c42d172394faceca42d6acd3dbe6a1b23f00b5e1d1acad4686d1ac868ab20eba`;
+  - `build-cuda-batch/bin/libggml-cuda.so`:
+    `27a5f32725522d3c4973be79ba25fdb2dae29d47df9df2f6d442cae4841230f6`.
+
+Experiment A: n32 fallback miss trace
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-133339Z-n32-phase7gy-fallback-miss-trace`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-133339Z-n32-phase7gy-fallback-miss-trace
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73533.19 ms`;
+  - decode `29437.32 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Trace result:
+  - 9 miss lines;
+  - all are `phase=decode`;
+  - all are `ffn_down_exps.weight`;
+  - all are `src0_type=2`;
+  - all are `expert_bytes=8257536`;
+  - all are `reason=entry_missing`.
+
+Experiment B: n96 fallback miss trace
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-133614Z-n96-phase7gy-fallback-miss-trace`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-133614Z-n96-phase7gy-fallback-miss-trace
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `75397.00 ms`;
+  - decode `71265.60 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15071330304`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `59193`, misses `607`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37785782`;
+  - main pinned copies `49350`, waits `49314`;
+  - gate pinned copies `10450`, waits `10426`;
+  - current-down worker `8411723 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Full miss list:
+  - `blk.9.ffn_down_exps.weight` expert `264`;
+  - `blk.9.ffn_down_exps.weight` expert `287`;
+  - `blk.18.ffn_down_exps.weight` expert `347`;
+  - `blk.15.ffn_down_exps.weight` expert `225`;
+  - `blk.15.ffn_down_exps.weight` expert `54`;
+  - `blk.6.ffn_down_exps.weight` expert `253`;
+  - `blk.10.ffn_down_exps.weight` expert `43`;
+  - `blk.7.ffn_down_exps.weight` expert `202`;
+  - `blk.8.ffn_down_exps.weight` expert `271`;
+  - `blk.8.ffn_down_exps.weight` expert `182`;
+  - `blk.10.ffn_down_exps.weight` expert `344`;
+  - `blk.18.ffn_down_exps.weight` expert `59`;
+  - `blk.8.ffn_down_exps.weight` expert `266`;
+  - `blk.9.ffn_down_exps.weight` expert `46`;
+  - `blk.7.ffn_down_exps.weight` expert `136`;
+  - `blk.18.ffn_down_exps.weight` expert `344`;
+  - `blk.8.ffn_down_exps.weight` expert `316`;
+  - `blk.9.ffn_down_exps.weight` expert `323`;
+  - `blk.15.ffn_down_exps.weight` expert `142`;
+  - `blk.6.ffn_down_exps.weight` expert `253`;
+  - `blk.7.ffn_down_exps.weight` expert `363`;
+  - `blk.9.ffn_down_exps.weight` expert `110`;
+  - `blk.15.ffn_down_exps.weight` expert `213`;
+  - `blk.7.ffn_down_exps.weight` expert `339`;
+  - `blk.18.ffn_down_exps.weight` expert `60`;
+  - `blk.9.ffn_down_exps.weight` expert `46`.
+- Decision:
+  - Accept diagnostic source change.
+  - The remaining GGUF CPU fallback misses are decode expert tensors absent
+    from the current main+overlay expert pack.
+  - They are not prompt-only, non-expert tensors, name mapping failures, or
+    size mismatches.
+  - Next phase must expand expert-pack overlay coverage for exactly these
+    missing Q4_0 down expert slices before attempting any fallback code change.
+
+## Phase 7GZ: missing decode down expert overlay pack
+
+Start time: 2026-07-04T21:48:52+08:00.
+
+Goal:
+
+- Remove the remaining `fallback_gguf=26` decode CPU fallback misses by adding
+  a small overlay pack that contains exactly the missing Q4_0 down expert
+  slices identified by Phase 7GY.
+- Keep source runtime unchanged except for a reusable artifact builder script.
+- Validate first with n32, then n96, under the same strict cold-start 16GB host
+  RAM gate.
+
+Why this is plausible:
+
+- Phase 7GY proved every remaining miss is:
+  - `phase=decode`;
+  - `tensor=blk.{6,7,8,9,10,15,18}.ffn_down_exps.weight`;
+  - `src0_type=2`;
+  - `expert_bytes=8257536`;
+  - `reason=entry_missing`.
+- The current CPU fallback pack-mmap path already works for most residual
+  fallback experts:
+  - n96 pack-mmap hits are `4286` in the normal runner shape;
+  - misses are only `26`.
+- Adding these slices should convert those remaining GGUF mmap reads into
+  expert-pack mmap reads without adding pinned H2D traffic.
+
+Theoretical upper bound:
+
+- Added overlay size for unique misses:
+  - 24 unique `(tensor, expert)` keys because `blk.6/expert253` and
+    `blk.9/expert46` repeat;
+  - `24 * 8257536 = 198180864 bytes`, about `189 MiB`.
+- This cannot reduce the dominant `214.9 GB` io_uring H2D traffic.
+- It can only reduce decode CPU fallback GGUF page faults and residual file
+  cache pressure.
+- Expected useful range is small: `0.05-0.4 s` n96 if the 26 misses cause
+  visible major faults; no SOTA is expected unless variance is favorable.
+
+Implementation:
+
+- Add a reusable script:
+  `scripts/kimi-build-missing-down-overlay.py`.
+- The script will:
+  - parse one or more GGUF shards using `gguf-py`;
+  - locate requested full tensors;
+  - copy `expert_idx * expert_bytes .. + expert_bytes` slices into a
+    `GGMLMOEPACKv1` overlay;
+  - align `data_start` and every slice offset to `4096` bytes for O_DIRECT;
+  - de-duplicate repeated keys;
+  - fail if any requested tensor/expert is missing;
+  - optionally reject duplicate keys already present in the current overlay.
+- Artifact path:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack`.
+
+Build command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+python3 scripts/kimi-build-missing-down-overlay.py \
+  --model-glob '/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-*.gguf' \
+  --out /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack \
+  --entry blk.9.ffn_down_exps.weight:264 \
+  --entry blk.9.ffn_down_exps.weight:287 \
+  --entry blk.18.ffn_down_exps.weight:347 \
+  --entry blk.15.ffn_down_exps.weight:225 \
+  --entry blk.15.ffn_down_exps.weight:54 \
+  --entry blk.6.ffn_down_exps.weight:253 \
+  --entry blk.10.ffn_down_exps.weight:43 \
+  --entry blk.7.ffn_down_exps.weight:202 \
+  --entry blk.8.ffn_down_exps.weight:271 \
+  --entry blk.8.ffn_down_exps.weight:182 \
+  --entry blk.10.ffn_down_exps.weight:344 \
+  --entry blk.18.ffn_down_exps.weight:59 \
+  --entry blk.8.ffn_down_exps.weight:266 \
+  --entry blk.9.ffn_down_exps.weight:46 \
+  --entry blk.7.ffn_down_exps.weight:136 \
+  --entry blk.18.ffn_down_exps.weight:344 \
+  --entry blk.8.ffn_down_exps.weight:316 \
+  --entry blk.9.ffn_down_exps.weight:323 \
+  --entry blk.15.ffn_down_exps.weight:142 \
+  --entry blk.7.ffn_down_exps.weight:363 \
+  --entry blk.9.ffn_down_exps.weight:110 \
+  --entry blk.15.ffn_down_exps.weight:213 \
+  --entry blk.7.ffn_down_exps.weight:339 \
+  --entry blk.18.ffn_down_exps.weight:60
+```
+
+Experiment A: n32 overlay check
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gz-missing-down-overlay"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 overlay check
+
+- Run only if n32 passes all gates and miss trace shows `fallback_gguf=0` or
+  no `[kimi_cpu_fallback_pack_mmap_miss]` lines for the known missing set.
+- Same command as n32 with `N=96` and run suffix
+  `n96-phase7gz-missing-down-overlay`.
+
+Acceptance gates:
+
+- Overlay build:
+  - exactly `24` unique entries;
+  - every entry offset is `4096`-aligned;
+  - every entry size is `8257536`;
+  - total file size is about `189 MiB` plus header/index padding.
+- Runtime:
+  - run exits `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality pass;
+  - TTFT <= `106331.72 ms`;
+  - memory peak <= `15900000000`, swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Mechanism:
+  - no known missing-entry trace lines;
+  - `fallback_gguf` drops from `26` to `0` on n96, or any remaining misses are
+    new tensors not present in the Phase 7GY list;
+  - output remains semantically correct.
+- Promotion:
+  - accept only if n96 decode beats the current accepted SOTA
+    `70087.31 ms / 77`;
+  - if it passes gates but does not beat SOTA, keep artifact and script as a
+    diagnostic/coverage improvement but do not claim token-rate SOTA.
+
+Rollback:
+
+- If overlay causes quality failure, TTFT regression over the cap, RAM breach,
+  read failures, iouring fallbacks, or decode regression, remove the overlay env
+  from test commands and do not use the artifact in accepted SOTA runs.
