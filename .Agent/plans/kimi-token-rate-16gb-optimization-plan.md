@@ -51157,3 +51157,171 @@ Decision rule:
   `GGML_CUDA_LIGHTNING_INDEXER=OFF`.
 - In all reject cases, do not change runtime defaults and do not leave the
   server in a non-production build configuration.
+
+Result:
+
+- End time: 2026-07-04T21:32:05+08:00.
+- Current source head:
+  `324347be2ae206bf8ee2f30d9799485312da5033`.
+- Test build:
+  `GGML_CUDA_LIGHTNING_INDEXER=ON`.
+- Build log confirmed `lightning-indexer.cu.o` was compiled.
+- Test build hashes:
+  - `build-cuda-batch/bin/llama-completion`:
+    `c42d172394faceca42d6acd3dbe6a1b23f00b5e1d1acad4686d1ac868ab20eba`;
+  - `build-cuda-batch/bin/libggml-cuda.so`:
+    `83ca1880e3be6d118c338b58e9fad9edc3dff7fee3c2718b7d07fa74d25003a9`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-132316Z-n96-phase7gx-current-lightning-on`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-132316Z-n96-phase7gx-current-lightning-on
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `75439.04 ms`;
+  - decode `71414.17 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15067049984`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=35976061`;
+  - `iouring_submit_us=97993`;
+  - main pinned copies `49350`;
+  - main pinned waits `49314`;
+  - pinned slots `12`;
+  - pinned slot size `7.44 MiB`;
+  - main iouring wait calls `21126`, inflight average `3.23`, max `8`;
+  - gate iouring wait calls `8568`, inflight average `2.83`, max `8`;
+  - current-down worker `8429910 us`;
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`.
+- Decision:
+  - Reject.
+  - The result did not beat the accepted SOTA `70087.31 ms / 77`.
+  - It also failed the useful diagnostic line from the plan:
+    `71414.17 ms >= 71150 ms`.
+  - Build composition alone does not explain the historical SOTA gap.
+- Restoration:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Restored production build hashes:
+  - `build-cuda-batch/bin/llama-completion`:
+    `c42d172394faceca42d6acd3dbe6a1b23f00b5e1d1acad4686d1ac868ab20eba`;
+  - `build-cuda-batch/bin/libggml-cuda.so`:
+    `cfd23a3887717b663acb45f13d895cb43357e19cf5c0361301c938359c5d1054`.
+- Gap analysis:
+  - Full-CUDA current-source build improved over Phase 7GU current validation
+    (`72330.81 ms`) by `916.64 ms`, but remained slower than Phase 7GW old
+    source rebuild (`71148.49 ms`) by `265.68 ms`.
+  - The unchanged read count, transferred bytes, and hit rates confirm the
+    improvement is not from reduced movement.
+  - Since the test did not cross `71150 ms`, the next optimization should not
+    focus on lightning-indexer build composition. It should return to a real
+    bottleneck that can reduce exposed movement or reduce CPU fallback cost.
+
+## Phase 7GY: CPU fallback source attribution and pack-backed fallback plan
+
+Start time: 2026-07-04T21:34:18+08:00.
+
+Goal:
+
+- Locate the remaining decode-side CPU fallback cost precisely before changing
+  code.
+- Determine whether fallback bytes are mainly pack-mmap hits, GGUF fallback,
+  or unavoidable tensor types not represented in the expert pack.
+- If the data shows a small number of GGUF fallback misses are creating
+  measurable page-cache/file-fault cost, implement a narrow pack-backed CPU
+  fallback fast path or expand pack coverage only for those tensors.
+
+Why this is now higher priority:
+
+- Phase 7GX ruled out build composition as a SOTA path.
+- n96 remains dominated by movement:
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - main pinned waits `49314`;
+  - gate pinned waits `10426`.
+- Current logs also show CPU fallback:
+  - `kimi_cpu_fallback_pack_mmap enabled=1 hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`.
+- The fallback path already mostly hits pack mmap, but the remaining `26`
+  GGUF fallback cases may be responsible for residual file cache refaults or
+  serial CPU stalls. The change should only proceed if attribution shows these
+  misses are on the decode hot path and correspond to packable expert tensors.
+
+Design experiment:
+
+- Add default-off diagnostic logging for CPU fallback misses:
+  - tensor name;
+  - layer;
+  - expert index if derivable;
+  - tensor type;
+  - byte size;
+  - phase (`prompt` or `decode`) if available;
+  - whether pack lookup failed because the tensor is absent, name mapping
+    failed, size/type mismatch, or fallback is not expert-pack eligible.
+- Gate the logging behind an env var such as
+  `GGML_MOE_CPU_FALLBACK_MISS_TRACE=1` so default runtime behavior is
+  unchanged.
+- Run one n32 trace first to keep diagnostic overhead bounded.
+- If trace overhead is acceptable and quality passes, run n96 trace only if the
+  n32 output shows decode misses worth measuring.
+
+Acceptance for diagnostic source change:
+
+- Build succeeds.
+- Default env keeps behavior unchanged.
+- n32 trace run exits `0`.
+- `quality=pass`, `quality_reason=ok`, and manual semantic quality pass.
+- TTFT stays within the global cap.
+- memory peak <= `15900000000`, swap max `0`.
+- `read_failures=0`, `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If misses are non-expert tensors, prompt-only, or not packable, reject any
+  pack-backed fallback implementation and record why.
+- If misses are decode expert tensors absent from the pack, plan a pack
+  coverage expansion before code changes.
+- If misses are decode expert tensors present in pack but name/size mapping
+  fails, implement the smallest mapping fix, test n32 then n96, and accept only
+  if it improves decode without quality or TTFT regression.
