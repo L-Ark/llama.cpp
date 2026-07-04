@@ -56285,3 +56285,31 @@ Decision rule:
   with a mathematical bound before implementation.
 - If the profile run stalls or produces incomplete CSVs, reject this diagnostic
   path and return to Phase 7HY copy/io evidence.
+
+Follow-up if down CSV is missing:
+
+- `GGML_MOE_DOWN_BATCH_PROFILE_OUT` only writes when the down batch CUDA event
+  profiler is enabled.
+- If the first n32 run emits `up-gate-profile.csv` but not
+  `down-batch-profile.csv`, run a second n32 profile with:
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Do not enable route trace, TTFT trace, fallback trace, or full
+  `MIN_PROFILE=0`; this is still a targeted down-stage profile.
+
+Follow-up command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ic-down-stage-breakdown"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
