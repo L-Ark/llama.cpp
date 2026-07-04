@@ -64,6 +64,8 @@ def load_trace(path: Path) -> dict[int, list[dict]]:
     batches: dict[int, list[dict]] = defaultdict(list)
     with path.open(newline="") as f:
         for row in csv.DictReader(f):
+            if row.get("batch_seq") == "batch_seq":
+                continue
             batch_seq = int(row["batch_seq"])
             item = {
                 "batch_pos": int(row["batch_pos"]),
