@@ -1,0 +1,108 @@
+{
+  "timestamp_utc": "2026-07-04T19:44:19Z",
+  "status": "completed_numerical_drift_confirmed",
+  "purpose": "Determine whether the first failing Q8_0 up-skip record is caused by CUDA arithmetic output drift or by a pre-fallback skip side effect.",
+  "source_head": "8a3c2ba5e3e12ddf6bc17c6a033a0a092ebc3f55",
+  "baseline_source_head": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "pre_run_note": {
+    "canceled_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T194209Z-q80-up-output-write-boundary/blk0-up",
+    "reason": "The first script required the baseline result source head to equal current HEAD. A docs-only commit changed HEAD while leaving binaries/source behavior unchanged, so the overly strict guard exited before running any verifier."
+  },
+  "clean_run": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T194419Z-q80-up-output-write-boundary/blk0-up-clean",
+    "systemd_unit": "vendor-ds4-q80-up-output-write-boundary-clean-20260704T194419Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 53.888,
+    "cpu_time_seconds": 605.765,
+    "baseline_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+    "model_stat": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf 156148189760 bytes"
+  },
+  "env": {
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_VRAM_CACHE_GB": "0",
+    "GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER": "blk.0.ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "unset"
+  },
+  "runtime_constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1024389120,
+    "memory_current_bytes_after_run": 6164480,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "summary": [
+    {
+      "max_calls": 103,
+      "exit_status": 0,
+      "same_top1": 145,
+      "n_tokens": 145,
+      "first_mismatch_pos": -1,
+      "logit_max_abs": 0.0,
+      "logit_mean_abs": 0.0,
+      "write_records": 103,
+      "write_max_abs": 1.43051147e-6,
+      "write_mean_abs_max": 5.33473212e-8,
+      "elapsed": "0:26.84",
+      "max_rss_kb": 50447996
+    },
+    {
+      "max_calls": 104,
+      "exit_status": 1,
+      "same_top1": 144,
+      "n_tokens": 145,
+      "first_mismatch_pos": 135,
+      "logit_max_abs": 4.67701,
+      "logit_mean_abs": 0.10113,
+      "write_records": 104,
+      "write_max_abs": 1.43051147e-6,
+      "write_mean_abs_max": 5.33473212e-8,
+      "elapsed": "0:26.51",
+      "max_rss_kb": 50412488
+    }
+  ],
+  "record_103_local_error": {
+    "record": 103,
+    "tensor": "blk.0.ffn_up_exps.weight",
+    "expert": 62,
+    "cne1": 1,
+    "ne01": 2048,
+    "local_max_abs": 7.15255737e-7,
+    "local_mean_abs": 4.58167051e-8
+  },
+  "top1_failure": {
+    "position": 135,
+    "base_top1": {"id": 8469, "piece": " player", "logit": 30.6294},
+    "base_top2": {"id": 7267, "piece": " cultural", "logit": 30.5904},
+    "base_margin": 0.0390034,
+    "calc_top1": {"id": 7267, "piece": " cultural", "logit": 30.4806},
+    "calc_top2": {"id": 8469, "piece": " player", "logit": 30.2471},
+    "calc_margin": 0.233429
+  },
+  "hashes": {
+    "summary_csv_sha256": "94dcfc96f859efdd538c37dd08bad26df0a955d8c96424e2e6f281dea97a87e3",
+    "max_calls_103_top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "max_calls_104_top1_sha256": "1c6fa6a926f0fe3d937f3584ce387b5936f9243eb5c4a8c8c03108bb3b27bbb0",
+    "max_calls_103_write_report_sha256": "cd669162b4ea07e9cce8fea3ee9f8c539119431e5891ac78eea953cd1119c964",
+    "max_calls_104_write_report_sha256": "8da0b49974e7f370b33b1dcfaed56a299a019ff4eca34defe24c6e59b93eba51"
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "classification": "numerical_token_stability_failure",
+    "reason": "Output-write reproduces the same 103/104 boundary while CPU fallback still runs, so the failure is not caused by skipping CPU fallback side effects. A local ~7e-7 record-level difference is enough to flip a later low-margin top1 position.",
+    "next_step": "Study CPU ggml_vec_dot_mxfp4_q8_0 accumulation semantics and implement/validate a more CPU-compatible CUDA arithmetic path before any further skip expansion or benchmark."
+  }
+}
