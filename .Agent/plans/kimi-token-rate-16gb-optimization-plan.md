@@ -41894,3 +41894,95 @@ Decision:
 - Revert the source patch locally and on the server.
 - Do not use `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING` in SOTA.
 - Keep Phase 7EB as accepted SOTA.
+
+## Phase 7ET: current-SOTA up/gate layer profile refresh
+
+Start time:
+
+- 2026-07-04T03:20:00Z.
+
+Reason for this phase:
+
+- Phase 7ER and 7ES both show that blindly pushing more current-down overlap is
+  not a valid next step:
+  - `blk.4/60` down movement is visible but bounded;
+  - moving current-down staging to an aux ring did not reduce down wall time;
+  - `blk.60` up/gate can regress sharply when copy/stream resources are
+    perturbed.
+- Q4_0 down fallback is real, but historical phases already rejected broad,
+  shared-cache, separate-cache, hot-cache, and one-shot Q4_0 GPU variants. A
+  new Q4_0 attempt would need a materially different design, not another quick
+  retry.
+- The next design step is to identify whether the current accepted SOTA has a
+  compressible up/gate layer-level bottleneck, especially:
+  - `blk.60` type `18/18` up/gate wall/kernel;
+  - type `22/22` layers where `up_wait/gate_wait` dominate.
+
+Hypothesis:
+
+- If one or two layers dominate up/gate wall time across strict cold starts, a
+  future implementation can target those layers specifically, for example by
+  changing staging order, avoiding unnecessary waits, or using a layer-specific
+  compute path.
+- If the apparent `blk.60` cost is run-to-run variance or resource interference
+  from diagnostics, then source work on up/gate would be speculative and should
+  not proceed.
+
+Design-stage experiment:
+
+- Run one strict cold-start n32 diagnostic on the exact Phase 7EB SOTA runtime
+  with layer-level up/gate profiling enabled:
+
+```text
+GGML_MOE_UP_GATE_LAYER_PROFILE=1
+GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=80
+```
+
+- Keep all accepted runtime knobs unchanged:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=16`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7et-upgate-layer-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      GGML_MOE_UP_GATE_LAYER_PROFILE=1 \
+      GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=80 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Acceptance for this diagnostic:
+
+- Hard gates must still pass:
+  - exit `0`;
+  - host RAM below the 16GB cgroup limit;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- The run cannot become SOTA because profiling may add overhead.
+- The result must record:
+  - decode time and TTFT;
+  - top up/gate layer rows from stderr;
+  - comparison against Phase 7ER aggregate up/gate rows;
+  - whether a concrete source implementation is justified.
+
+Decision rule:
+
+- If the same layer/type buckets dominate and the profile exposes a specific
+  wait/compute component, write the next implementation phase before editing
+  source.
+- If the profile is noisy or only confirms known movement limits, do not
+  implement another up/gate patch. Instead design a different non-overlap
+  movement reduction.
