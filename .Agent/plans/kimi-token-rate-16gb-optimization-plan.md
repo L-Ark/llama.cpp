@@ -46531,3 +46531,125 @@ Decision rule:
 - If n32 improves materially, run n96.
 - If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
   before claiming SOTA; commit and push immediately if confirmed.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T16:45:02+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-084254Z-n32-phase7fv-prefetchdown4`.
+- Code head:
+  `fe5a83327`.
+- Runtime overrides:
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=4`;
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76627.84 ms`;
+  - decode `29313.74 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14824656896`;
+    - `kernel=234655744`;
+    - `inactive_file=3980029952`;
+    - `active_file=10844192768`;
+    - `pgmajfault=962122`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15608990`;
+  - io_uring histograms:
+    - main `inflight_avg=3.19`, `inflight_max=8`;
+    - gate `inflight_avg=2.84`, `inflight_max=8`;
+    - no `9-16` batches observed.
+- Comparison:
+  - slower than Phase 7FU by `173.38 ms` decode;
+  - `iouring_wait_us` increased from `14728461` to `15608990`;
+  - no change in read count, bytes, hit rates, or batch shape.
+- Decision:
+  - Reject `MOE_PREFETCH_DOWN_DEPTH=4`.
+  - Do not run n96.
+  - Revert to default `MOE_PREFETCH_DOWN_DEPTH=2` for further experiments.
+  - Since both larger io_uring depth and deeper down prefetch leave batch shape
+    capped at 8 jobs, the next high-priority work is not another env sweep.
+
+## Phase 7FW: cross-call staging design, not yet implemented
+
+Start time: 2026-07-04T16:48:00+08:00.
+
+Goal:
+
+- Design the next code-level optimization needed to raise token rate beyond
+  the current plateau.
+- Avoid more env-only sweeps until the staging granularity bottleneck is
+  addressed.
+
+Current bottleneck finding:
+
+- Every tested configuration remains dominated by file-backed expert movement:
+  - n96 Phase 7FT: `iouring_wait_us=37082550`;
+  - n32 Phase 7FU: `iouring_wait_us=14728461`;
+  - n32 Phase 7FV: `iouring_wait_us=15608990`.
+- Increasing `GGML_MOE_IO_DEPTH` to `16` did not create `9-16` inflight
+  batches.
+- Increasing down prefetch depth to `4` did not change hit rates or read count
+  and made wait time worse.
+- Therefore the immediate cap is the staging call granularity:
+  each call submits at most the selected miss set for one tensor/stage, often
+  <= 8 experts.
+
+Optimization direction:
+
+- Build a cross-call staging planner that can collect read jobs from compatible
+  upcoming tensors before waiting, then submit them through one larger
+  io_uring window.
+- Candidate scope:
+  - first target down tensors, because down copies are already separated from
+    compute and mostly staging-bound;
+  - only combine jobs with identical `expert_bytes` and compatible destination
+    lifetime;
+  - preserve the current CUDA stream/event dependency model so semantic output
+    does not change.
+- Required instrumentation before implementation:
+  - per stage call: `trace_op`, `jobs.size()`, `read_jobs.size()`,
+    `depth`, `ring.slots.size()`, number of completions waited before refill;
+  - per token/layer: whether the wait is blocking compute or hidden behind
+    up/gate.
+
+Theory / upper bound:
+
+- n96 Phase 7FT spends `37082.55 ms` in io_uring wait.
+- If cross-call staging can raise average inflight from about `3.1` to `6.0`
+  without increasing total bytes, a rough storage-latency upper bound is a
+  20-35% reduction in visible io wait.
+- That corresponds to about `7.4-13.0 s` possible n96 decode reduction, enough
+  to exceed the current SOTA if TTFT and quality gates remain valid.
+- The first implementation should be gated behind a new env flag and rejected
+  immediately if it changes output, increases TTFT by >20%, or pushes host RAM
+  over 16GB.
+
+Planned next practice:
+
+1. Add lightweight staging granularity counters behind an env flag.
+2. Run n32 cold start with default SOTA runtime and counters enabled.
+3. Use the counters to decide whether to implement cross-call down-only
+   staging or cross-tensor up/gate staging first.
+
+Acceptance gates for instrumentation:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- instrumentation overhead on n32 decode <= 5%.
