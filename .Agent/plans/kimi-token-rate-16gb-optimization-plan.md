@@ -48259,6 +48259,71 @@ Decision rule:
 - Only accept as SOTA after n96 beats Phase 7FB `70087.31 ms` and a second n96
   confirmation reproduces.
 
+Result: n32 completed; rejected and implementation must be reverted.
+
+- End time: 2026-07-04T18:55:44+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-105326Z-n32-phase7gj-current-down-pack-only`.
+- Code head:
+  `d0aa35401`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73791.59 ms`;
+  - decode `30375.95 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14833438720`;
+    - `kernel=234491904`;
+    - `inactive_file=4593098752`;
+    - `active_file=10239545344`;
+    - `pgmajfault=942484`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25806`, misses `192`;
+    - `iouring_reads=15883`;
+    - `iouring_bytes=93638049792`;
+    - `iouring_wait_us=16426160`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `4334`;
+    - completed_jobs `4334`;
+    - cache_hits `3598`;
+    - missing_tensor `0`;
+    - missing_pack `40`;
+    - failed_batches `0`;
+    - worker_us `4215985`.
+  - VRAM down cache:
+    - slots `761`;
+    - slot size `7.88 MiB`;
+    - hit rate `72.2%`.
+- Comparison:
+  - Phase 7GI diagnostic baseline decode was `28967.28 ms`;
+  - 7GJ is slower by `1408.67 ms`;
+  - recent rebuilt n32 baseline range is `29140-29795 ms`, so 7GJ is outside
+    the acceptable range on the slow side.
+- Analysis:
+  - The implementation successfully removed `missing_tensor=93` and added
+    `~670` current-down planned jobs.
+  - The added jobs increased total expert-pack traffic:
+    - `iouring_reads` increased from `15024` to `15883`;
+    - `iouring_bytes` increased from `87.08 GB` to `93.64 GB`;
+    - `iouring_wait_us` increased from about `15.26 s` to `16.43 s`.
+  - The 8.26 MB Q4_0 pack-only down jobs also changed the down cache size class:
+    - slot size grew from about `7.44 MiB` to `7.88 MiB`;
+    - available down slots dropped from `806` to `761`;
+    - down hit rate dropped from `73.6%` to `72.2%`.
+  - Therefore the preloaded `blk.7/8/9` jobs are not sufficiently hidden and
+    they hurt cache capacity/IO more than they help visible down runtime loads.
+- Decision:
+  - reject `GGML_MOE_CURRENT_DOWN_PACK_ONLY=1`;
+  - do not run repeat or n96;
+  - revert the pack-only preload implementation;
+  - keep Phase 7GI missing metadata diagnostic because it is default-off and
+    produced useful evidence.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
