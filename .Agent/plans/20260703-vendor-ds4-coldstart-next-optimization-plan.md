@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `c455d99a124f5938e1edc506062af2798f806ff7` (`vendor-ds4: record invalid split top1 filter`)
+- Latest pushed head before this document update: `34ff6e331252111987223fdbe47319d784ce3569` (`vendor-ds4: plan ngram map k4v probe`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -29,7 +29,8 @@ Current bottleneck conclusion:
 - The current default-off DS4 hot-expert dual dispatch implementation is closed by the exact-up/down screening artifact: preserving the accepted gate cache leaves only about `238 MiB` CUDA free and gives only a `4.409 tok/s` no-overhead ceiling.
 - The route-specific CPU down prefetch family is now closed: repeated prefetch tied at `4.4 tok/s` only after pushed-source reproduction, and deduplicated prefetch reduced advice volume but regressed to `4.1 tok/s`. Do not retry another synchronous `madvise`/page-touch variant without a genuinely new lower-pressure async source model and a new hard-bound.
 - The `mul_mat_id` src1 conversion skip candidate is also closed by the 2026-07-04T05:16Z diagnostic: `convert_t0=0.002 ms/call` over `16920` calls, only `33.84 ms` total ideal savings, giving a no-overhead ceiling of about `4.405 tok/s`.
-- The next active plan is to rebuild the candidate list around exact CPU up/down fallback reduction. Start from the accepted SOTA wall/fallback profiles, compute a hard-bound per subcomponent, then only implement candidates that can plausibly move strict cold speed above `4.4 tok/s` without changing logits, exceeding 16GB host RAM including page cache, or violating the TTFT gate.
+- Split up/down one-stream, scalar Q8_0 CUDA up, and no-source `ngram-map-k4v` have all been closed by correctness/performance gates. The current SOTA remains `4.4 tok/s`.
+- The next active plan is to rebuild the candidate list around exact CPU up/down fallback reduction and algorithm-level decode reduction. Start from the accepted SOTA wall/fallback profiles, compute a hard-bound per subcomponent, then only implement candidates that can plausibly move strict cold speed above `4.4 tok/s` without changing logits, exceeding 16GB host RAM including page cache, or violating the TTFT gate.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -8611,3 +8612,90 @@ Acceptance / rejection:
 - If accepted, stop, record full reproducibility metadata, commit/push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from pushed source before promotion.
 - Reject if the run times out, loops/stalls, output is incomplete/incorrect, token rate is `<=4.4`, TTFT exceeds the accepted SOTA gate, or RAM/cgroup limits fail.
 - Since this is no-source, rejection does not require runtime source rollback; keep artifacts and plan only.
+
+### 2026-07-04 Ngram-Map-K4V No-Source Probe Result
+
+Artifact:
+
+- Compact artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-probe-result.json`
+- Compact artifact sha256: `5108009fc03cb3daead5f3d7f7e1dd394eb0098fe0b282a7ea1adc539a178726`
+- Raw run root: `/root/lfz/runs/vendor-ds4-16gb/20260704T071633Z-20260704_ngram_map_k4v_probe`
+- Case dir: `/root/lfz/runs/vendor-ds4-16gb/20260704T071633Z-20260704_ngram_map_k4v_probe/france-cpu40-vram0gb`
+- Source head: `34ff6e331252111987223fdbe47319d784ce3569`
+
+Result:
+
+- Systemd result: timeout at `10min`; `systemd_run_exit=1`.
+- No valid `eval_tok_s`, `prompt_tok_s`, TTFT, or perf footer was produced.
+- `stdout.txt` grew to `1755629825` bytes and ended with repeated interactive prompts, so the run did not complete normally.
+- `one-trace.csv` has `35152` rows including header and spans about `44.888s` of one-stream gate activity before the process later timed out.
+- France answer prefix was semantically correct, but correctness gate is still `false` for promotion because the process timed out and did not terminate with a complete valid measured run.
+- Cgroup memory files were not captured because the unit was terminated by the runtime limit before the post-run collection block executed. This is acceptable only for a rejected diagnostic, not for SOTA promotion.
+- Stderr counters remained mechanically healthy before timeout:
+  - one expert pack `hits=4886 misses=0 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+  - prefill `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4925.120`
+  - VRAM cache `hits=33265 misses=1886 hit_rate=94.6%`
+
+Decision:
+
+- Reject `ngram-map-k4v` for the accepted cold-start path.
+- Current accepted SOTA remains `4.4 tok/s`.
+- This closes the no-source speculative set currently available in this repo: `ngram-simple`, `ngram-mod`, target-only lookahead, server partial-serial fallback, and `ngram-map-k4v`.
+- Do not retry another no-source ngram/lookahead run unless a new target-verification mechanism or compatible draft/MTP artifact appears and the plan is updated first with a new hard-bound.
+
+### 2026-07-04 Latest Plan Update
+
+Objective:
+
+- Continue optimizing vendor DeepSeek cold-start token rate from the accepted `4.4 tok/s` SOTA.
+- Final results must remain in the `vendor` framework. `ik_llama` can only be used as a reference.
+- Hard gates remain unchanged: host RAM `<=16GB` including page cache, `MemorySwapMax=0`, France output semantic/coherent/complete, accepted TTFT `<=33617.688744 ms`, and no hidden warm global page-cache dependency.
+
+Immediate source/record state:
+
+- Current pushed source/record head before this plan update: `34ff6e331252111987223fdbe47319d784ce3569`.
+- Current accepted SOTA run remains `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
+- Current accepted SOTA metrics remain `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`.
+- New records and any future source commits must be pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using git identity `L-Ark <fliangae@connect.ust.hk>`.
+
+Closed candidate classes:
+
+- Synchronous page-touch/prefetch and source movement: closed by pushed-source repro and async-bound artifacts.
+- Broad/top-N CPU fallback pack mmap/direct staging: closed by measured ties/regressions and bandwidth/refault pressure.
+- Existing up/down one-stream offload: closed by fixed-text top1 verifier failures.
+- Scalar MXFP4 x Q8_0 CUDA diagnostic: closed by top1 failure and unusable runtime.
+- No-source speculation: closed by `ngram-simple`, `ngram-mod`, lookahead, server partial fallback, and `ngram-map-k4v`.
+- `mul_mat_id` conversion skip: closed by hard upper bound of only about `33.84 ms` ideal saving.
+
+Next execution sequence:
+
+1. Baseline guard before any new source change.
+   - Rerun the accepted SOTA command under strict cold `drop_caches` and 16GB cgroup if the runtime source, binary, model, profile, or pack state has changed since the last accepted run.
+   - Record token rates, TTFT, cgroup `memory.peak/current/stat/events`, exact France output, pack counters, VRAM cache counters, binary hashes, source head, model/profile/pack hashes, and run path.
+   - If the guard cannot reproduce the `4.4 tok/s` class while passing all gates, fix reproducibility before optimization.
+
+2. Fresh bottleneck table.
+   - Use the accepted SOTA path to produce a compact table of per-token wall time split into: gate one-stream source/load/kernel/sync, CPU up fallback, CPU down fallback, page/refault/source stall, scheduler/tail gap, and non-MoE overhead.
+   - For each row, record measured removable time and a strict upper-bound token rate after ideal removal.
+   - Do not implement a candidate whose hard upper bound is close to `4.4 tok/s`; it must have enough theoretical headroom to justify source risk.
+
+3. Candidate scoring before implementation.
+   - For every candidate, write in this plan first: theory, exact files/functions to touch, memory/VRAM footprint, expected removable time, upper-bound token rate, correctness risk, TTFT risk, rollback path, and acceptance/rejection criteria.
+   - Prioritize only candidates that reduce full or near-full CPU up/down fallback while preserving logits/top1, or algorithm-level decode work that still verifies target output.
+   - Avoid top-N hotsets, synchronous prefetch, global warm-cache tricks, and naive/scalar GPU kernels unless new measurements overturn the existing hard-bound.
+
+4. Correctness-first implementation gate.
+   - Any source-level up/down or decode-path candidate must first pass the fixed-text sequential top1 verifier or an equivalent token-level correctness gate before a token-rate benchmark.
+   - A France benchmark is allowed only after top1/correctness passes.
+   - If output is incomplete, incoherent, or top1 diverges without a proven correction mechanism, revert runtime source and record the rejection.
+
+5. SOTA promotion and push protocol.
+   - When a compliant result beats `4.4 tok/s`, stop exploration immediately.
+   - Record exact run path, env/CLI, source head, diff summary, build command, binary hashes, model/profile/pack hashes, full France output, token rates, TTFT, elapsed time, cgroup memory including page cache, pack/cache counters, and comparison with the previous SOTA.
+   - Commit source, plan, profiles, and artifacts immediately, then push to `ssd/vendor/deepseek-token-rate-16gb`.
+   - Clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source run still beats `4.4 tok/s` and passes every gate.
+   - If the pushed-source rerun fails, mark the candidate rejected, revert runtime source to the accepted SOTA path, keep the rejected artifact/docs, commit/push the rejection, and continue from the last accepted SOTA.
+
+Next concrete work item:
+
+- Produce the fresh bottleneck table and hard-bound artifact for the accepted `4.4 tok/s` path, then update this plan again with the single highest-headroom candidate before any new source edit.
