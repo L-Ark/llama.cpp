@@ -59121,6 +59121,89 @@ Decision rule:
 - If total iouring wait or decode regresses, reject this admission filter.
 - If it improves n32 reproducibly, validate n96 before SOTA.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `fde39a0da docs: record reuse-filter prefetch probe`.
+
+First n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iv-trace-prefetch-reuse2048`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `56550.22 ms`, below `106331.72 ms`;
+- decode `28380.53 ms / 31`, `1.09 tok/s`;
+- host RAM peak `15899996160` bytes, final `15004495872` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace prefetch:
+  - calls `42928`;
+  - matched `42928`;
+  - resync `0`;
+  - loads `781`;
+  - cached skips `10205`;
+  - reuse skips `28099`;
+- hit rates:
+  - down `74.1%`;
+  - upgate `47.0%`;
+- iouring reads `15191`, bytes `88007901184`, wait `15455493 us`.
+
+Repeat n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iv-trace-prefetch-reuse2048-repeat`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `67750.33 ms`, below `106331.72 ms`;
+- decode `28998.61 ms / 31`, `1.07 tok/s`;
+- host RAM peak `15899996160` bytes, final `15067852800` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace prefetch:
+  - calls `42928`;
+  - matched `42928`;
+  - resync `0`;
+  - loads `781`;
+  - cached skips `10205`;
+  - reuse skips `28099`;
+- hit rates:
+  - down `74.1%`;
+  - upgate `47.0%`;
+- iouring reads `15191`, bytes `88007901184`, wait `15742104 us`.
+
+Decision:
+
+- Reject `reuse_window=2048` trace prefetch as a SOTA improvement.
+- Reason:
+  - It passes all hard gates.
+  - It produces actual filtered prefetch loads (`781`) and improves hit rates
+    slightly.
+  - It is not a reproducible decode improvement:
+    - first run `28380.53 ms`;
+    - repeat `28998.61 ms`, essentially equal to trace-input baseline
+      `29006.70 ms`.
+  - Total iouring read count/bytes/wait remain above the trace-input baseline:
+    - baseline reads `14862`, wait `15448065 us`;
+    - repeat reads `15191`, wait `15742104 us`.
+- Do not run n96 for this path.
+- Conclusion for trace-prefetch family:
+  - broad prefetch: improves hit rate but regresses through extra IO;
+  - short reuse filter: no loads, no causal effect;
+  - 2048 reuse filter: some loads, no stable decode gain.
+- Next optimization should avoid adding extra reads. Prefer reducing foreground
+  wait directly, or reducing per-read overhead, rather than speculative
+  prefetch on the same IO/staging resources.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
