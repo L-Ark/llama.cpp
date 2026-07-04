@@ -57909,6 +57909,111 @@ Required gates:
 - manual semantic quality `pass` for
   `Please introduce France in a short paragraph.`
 
+## Phase 7JA: exact-key cold down pinning without global profile protect
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- Phase 7IW showed exposed decode movement is still dominated by foreground
+  `io_uring` wait, but the cost is broad.
+- The only narrow visible outlier family is the first cold down batch around:
+  - `blk.60.ffn_down_exps.weight` experts
+    `23,41,49,135,161,240,298,320`;
+  - `blk.4.ffn_down_exps.weight` experts
+    `79,127,139,141,159,214,311,335`.
+- Phase 7IX proved targeted preload can remove specific cold rows, but only
+  partially.
+- Phase 7IY loaded all `16` target entries but did not retain them until use.
+- Phase 7IZ enabled `GGML_MOE_VRAM_PROFILE_PROTECT=1`, which over-protected
+  `750` down entries, collapsed down hit rate from `73.4%` to `31.2%`, raised
+  iouring reads from `14862` to `17507`, and regressed decode to
+  `31360.46 ms / 31`.
+
+Hypothesis:
+
+- A source-level exact-key pin facility can keep only the intended `16` cold
+  down entries resident without enabling the broad profile-protect path.
+- If the intended entries remain pinned, the target first-use cold rows should
+  disappear while normal down cache hit rate stays close to the accepted pct62
+  baseline.
+
+Implementation plan:
+
+- Add a default-off exact pin profile env, separate from existing profile
+  protect:
+  - `GGML_MOE_VRAM_EXACT_PIN_PROFILE=/path/to/csv`;
+  - optional `GGML_MOE_VRAM_EXACT_PIN_MAX_TENSORS=2`.
+- Reuse the existing profile CSV row format so the experiment is reproducible
+  from the 16-entry cold-down profile generated in 7IY.
+- Extend the VRAM-cache insertion path with a force-pin flag that pins a slot
+  only for this exact-key path.
+- Do not set or depend on `GGML_MOE_VRAM_PROFILE_PROTECT`.
+- Do not alter default runtime behavior when the exact-pin env is unset.
+- Emit an atexit summary for exact pin load attempts, successful pins, cached
+  entries, and misses.
+
+Theoretical bound:
+
+- The maximum improvement is limited to the exposed time of the first cold down
+  clusters. From 7IW/7IX/7IY copy rows this is expected to be at most hundreds
+  of milliseconds, not a multi-second SOTA jump.
+- The risk is losing down-cache capacity. With only `16` pinned entries out of
+  `766` down slots, the capacity loss is about `2.1%`, so down hit rate should
+  remain near `73%` if the implementation is truly exact-key.
+- TTFT may rise by the preload work, but must remain below `106331.72 ms`.
+
+Reproducible experiment:
+
+- Build and push the default-off source change.
+- Run strict cold-start n32 using the accepted pct62 runtime:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `GGML_MOE_VRAM_EXACT_PIN_PROFILE=$RUN/cold-down-full-profile.csv`;
+  - `GGML_MOE_VRAM_EXACT_PIN_MAX_TENSORS=2`;
+  - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- The run must be launched with:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- The 16-entry profile must be stored in the run directory and copied into the
+  plan result for reproducibility.
+
+Required gates:
+
+- cold start through the cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- exact-pin summary must show only the intended small number of pinned entries,
+  not hundreds of profile-protected slots.
+
+Decision rule:
+
+- If n32 improves and all gates pass, repeat n32 with the same command.
+- If the repeat also improves, run n96 before accepting any SOTA claim.
+- If decode is flat/worse, down hit rate drops materially, pinned count grows
+  beyond the intended exact entries, TTFT rises too much, or correctness fails,
+  reject exact-key cold down pinning as a runtime optimization.
+- Default-off source infrastructure may remain only if it is useful for further
+  controlled experiments; rejected runtime envs must not be added to the
+  accepted runner.
+
 ### Result
 
 Timestamp: 2026-07-05.
