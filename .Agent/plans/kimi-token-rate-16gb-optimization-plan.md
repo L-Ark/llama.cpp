@@ -45196,3 +45196,73 @@ Decision rule:
      output remains semantically correct.
 - Accepted source changes must be committed and pushed immediately with
   reproduction commands and result paths recorded here.
+
+Result: rejected.
+
+- End time: 2026-07-04T15:02:30Z.
+- Build: succeeded on `/root/lfz/llama.cpp-vendor-kimi`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-064544Z-n32-phase7fl-iq3-parallel-upgate`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-064544Z-n32-phase7fl-iq3-parallel-upgate"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Metrics:
+
+- quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `68657.82 ms`, below the allowed `106331.72 ms`;
+- decode `29460.73 ms / 31`, `1.05 tok/s`;
+- memory peak `15899996160`, swap max `0`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- expert pack io_uring:
+  - reads `15024`;
+  - bytes `87082139648`;
+  - wait `15940120 us`;
+  - batches `4002`;
+  - inflight max `8`;
+- pinned staging:
+  - slots `12`;
+  - slot `7.44 MiB`;
+  - host stage `11694.794 ms`;
+  - h2d `3862.811 ms`;
+- down cache:
+  - slots `806`;
+  - hit rate `73.6%`.
+
+Up/gate diagnostic:
+
+- `stderr.txt` confirms:
+  - `IQ3_XXS parallel up/gate streams active`;
+  - `up/gate parallel CPU staging active`.
+- `up-gate-profile.csv` confirms type18 rows have:
+  - `parallel_up_gate=1`;
+  - `parallel_stage=1`.
+- Aggregate vs Phase 7FD:
+  - type18 improved from `2894.960 ms` to `2607.844 ms`;
+  - type22 improved from `3401.687 ms` to `3324.602 ms`;
+  - local up/gate saving was about `364 ms`.
+
+Decision:
+
+- Reject as a production SOTA change.
+- Reason:
+  - end-to-end n32 decode `29460.73 ms` is slower than accepted Phase 7FB
+    confirmations (`28673.82 ms` and `29182.49 ms`);
+  - local up/gate savings do not overcome run-level copy/io/runtime variance;
+  - the change adds another env-gated path without delivering accepted
+    token-rate improvement.
+- Action:
+  - revert `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - do not run n32 confirmation or n96;
+  - keep Phase 7FB as current accepted SOTA.
