@@ -1,0 +1,100 @@
+{
+  "timestamp_utc": "2026-07-04T17:46:51Z",
+  "status": "scaffold_built_and_probe_passed",
+  "purpose": "Validate a default-off CUDA MXFP4 x Q8_0 diagnostic scaffold before any output-writing Q8_0 path or performance benchmark.",
+  "source_head_before_change": "5bb4e5e909158a83bdf4a548cb63e0a1d76a5064",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "default_behavior_changed": false,
+    "files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ],
+    "summary": [
+      "Added weak CPU-side CUDA probe hook for MXFP4 fallback after CPU fallback has completed.",
+      "Probe is enabled only when GGML_MOE_STREAM_Q80_PROBE_OUT is set.",
+      "Probe copies selected CPU fallback Q8_0 activation rows from params->wdata into CUDA and computes bounded MXFP4 x Q8_0 values.",
+      "Probe compares CUDA values against CPU fallback dst and writes CSV only; it does not modify dst or skip CPU fallback."
+    ],
+    "env": [
+      "GGML_MOE_STREAM_Q80_PROBE_OUT",
+      "GGML_MOE_STREAM_Q80_PROBE_ROWS",
+      "GGML_MOE_STREAM_Q80_PROBE_COLS",
+      "GGML_MOE_STREAM_Q80_PROBE_MAX_RECORDS"
+    ]
+  },
+  "build": {
+    "llama_cli_command": "cmake --build build-ds4-moe-stream --target llama-cli -j 8",
+    "llama_cli_status": "passed",
+    "llama_results_command": "cmake --build build-ds4-moe-stream --target llama-results -j 8",
+    "llama_results_status": "passed"
+  },
+  "default_off_top1_selfcheck": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T174651Z-q80-scaffold-validation/default-top1",
+    "systemd_unit": "vendor-ds4-q80-default-top1-20260704T174651Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 52.763,
+    "baseline_status": 0,
+    "check_status": 0,
+    "top1": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 145,
+      "same_top1_ratio": 1.0,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    "cgroup_memory_peak_bytes": 1171214336,
+    "time_max_rss_kb": {
+      "baseline": 50486376,
+      "check": 50412712
+    },
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "q80_probe": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T174651Z-q80-scaffold-validation/q80-probe",
+    "systemd_unit": "vendor-ds4-q80-probe-20260704T174651Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 26.459,
+    "exit_status": 0,
+    "records": 16,
+    "csv": "/root/lfz/runs/vendor-ds4-16gb/20260704T174651Z-q80-scaffold-validation/q80-probe/q80-probe.csv",
+    "max_abs": 2.38418579e-7,
+    "mean_abs": 3.0733645e-8,
+    "sample_tensor": "blk.0.ffn_up_exps.weight",
+    "env": {
+      "GGML_MOE_STREAM_Q80_PROBE_ROWS": 1,
+      "GGML_MOE_STREAM_Q80_PROBE_COLS": 4,
+      "GGML_MOE_STREAM_Q80_PROBE_MAX_RECORDS": 16
+    },
+    "cgroup_memory_peak_bytes": 1171574784,
+    "time_max_rss_kb": 50485096,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "hashes": {
+    "q80_scaffold_plan_sha256": "b6e3f46716b0f135246aa734c8843fc5b67dfffd3937654dd2d6a0f273228683",
+    "default_top1_run_case_sha256": "688f3b7928e61c20ff5da8d3dafff0100951ca09700471389bf7960a4ff9e39b",
+    "default_top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "q80_probe_run_case_sha256": "2ff96ab99e7dc42dc279e41f8e73c4872f540fc163c029d753015daff4ab2fb9",
+    "q80_probe_csv_sha256": "73b14a4e4585261dee39529a108cfeb98e4dad35e2c80e5e1a7545ccba6fbd9f"
+  },
+  "decision": {
+    "keep_source": true,
+    "promote_as_sota": false,
+    "reason": "This is a correctness scaffold only. It proves the CUDA diagnostic can consume CPU fallback Q8_0 rows and match sampled CPU fallback outputs, but it does not accelerate or write model outputs.",
+    "next_step": "Broaden the Q8_0 probe over more layers/tensors/columns under bounded records, then implement a default-off output-writing Q8_0 path only if op-level errors remain small and top1 verifier remains mandatory before any benchmark."
+  }
+}

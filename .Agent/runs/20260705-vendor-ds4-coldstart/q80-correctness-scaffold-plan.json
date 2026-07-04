@@ -1,0 +1,51 @@
+{
+  "date": "2026-07-05",
+  "title": "Vendor DS4 Q8_0 correctness scaffold before performance benchmark",
+  "source_head_before_change": "5bb4e5e909158a83bdf4a548cb63e0a1d76a5064",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "bottleneck_component": {
+    "name": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "required_saving_for_10_tok_s_ms": 17386.57,
+    "max_allowed_new_overhead_ms": 1642.887
+  },
+  "candidate": {
+    "name": "default-off MXFP4 x Q8_0 correctness scaffold",
+    "purpose": "prove that CUDA can consume the exact CPU fallback Q8_0 activation rows before connecting direct top768 hot pool to compute",
+    "not_a_performance_candidate_yet": true,
+    "expected_token_rate_change": "none; probe does not write model outputs",
+    "expected_ram_pressure": "no strict France benchmark in this step; probe is env-gated and should only add tiny temporary diagnostic buffers when enabled",
+    "expected_ttft_impact": "none when unset; diagnostic-only run may be slower but cannot be promoted"
+  },
+  "implementation_boundary": [
+    "Do not change accepted default runtime behavior.",
+    "Do not repeat or promote the old dirty scalar Q8_0 up-only output path.",
+    "Wire CPU fallback Q8_0 activation row base and row size into a separate CUDA probe interface.",
+    "The probe may compute a small bounded number of rows/cols and compare against CPU fallback output already present in dst.",
+    "The probe must write a CSV/summary only when GGML_MOE_STREAM_Q80_PROBE_OUT is set.",
+    "The probe must not modify dst or skip CPU fallback."
+  ],
+  "correctness_gate": [
+    "First gate is op-level Q8_0 probe max_abs/mean_abs against CPU fallback for selected MXFP4 rows.",
+    "If op-level error is suspicious, reject before any token-level run.",
+    "Any future output-writing Q8_0 path must pass llama-results fixed-text top1 with same_top1 == n_tokens before any performance benchmark."
+  ],
+  "rollback_rule": [
+    "If build fails, revert runtime source and keep this artifact only if it documents the failure.",
+    "If the probe changes default accepted path, revert.",
+    "If a future output-writing path fails top1 or France semantic correctness, revert runtime source."
+  ],
+  "promotion_rule": [
+    "This scaffold cannot be promoted as SOTA.",
+    "A later performance result can be promoted only if eval_tok_s > 4.4, TTFT <= 33617.688744 ms, RAM including page cache <= 16000000000 bytes with MemorySwapMax=0, France output is coherent and semantically correct, full reproduction metadata is recorded, source/artifacts are committed and pushed, and pushed-source reproduction passes."
+  ]
+}
