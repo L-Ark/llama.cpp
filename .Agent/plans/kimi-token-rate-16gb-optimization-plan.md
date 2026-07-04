@@ -8147,6 +8147,97 @@ Rollback:
 - If n32 candidate passes but confirmation fails, revert source and record
   rejection, as with Phase 7EL.
 
+Phase 7EM result - rejected:
+
+- result time: 2026-07-04T01:32:00Z.
+- source status:
+  - dirty default-preserving threshold source patch tested on top of
+    `91889a2bc`;
+  - reverted after the n32 result failed the SOTA gate;
+  - no source commit retained.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-012943Z-n32-phase7em-down-minjobs9`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-012943Z-n32-phase7em-down-minjobs9"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7em_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `77202.55 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- activation:
+  - stderr contains
+    `down parallel stage threshold active: min_jobs=9`;
+  - `env.txt` contains `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=9`.
+- decode:
+  - `30577.34 ms / 31`, `1.01 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31`;
+  - fails promotion gate.
+- counters:
+  - down cache hit rate unchanged at `73.6%`;
+  - upgate cache hit rate unchanged at `43.7%`;
+  - expert-pack iouring:
+    - `iouring_reads=14981`;
+    - `iouring_bytes=86772137984`;
+    - `iouring_wait_us=12546801`;
+    - `inflight_avg=3.49`;
+  - main pinned:
+    - `copies=21308`;
+    - `host_stage=12094.455 ms`;
+    - `h2d=4550.479 ms`;
+  - gate pinned:
+    - `copies=2606`;
+    - `slot_size=4.48 MiB`;
+    - `host_stage=232.379 ms`;
+    - `h2d=484.468 ms`;
+  - down aggregate `39.526 ms/call`, `cuda_batch=2.265 ms/call`,
+    `fallback_t0=37.216 ms/call`;
+  - up/gate wall `7.572 ms/call`.
+- down-bucket profile:
+  - `0`: rows `900`, wall `318.237 ms`, stage `153.101 ms`;
+  - `1`: rows `15`, wall `29.296 ms`, stage `26.886 ms`;
+  - `2-4`: rows `330`, wall `1330.059 ms`, stage `1278.799 ms`;
+  - `5-8`: rows `399`, wall `2715.890 ms`, stage `2631.122 ms`.
+
+Gap analysis:
+
+- `min_jobs=9` improved iouring batch shape:
+  - expert-pack `inflight_avg=3.49`, better than Phase 7EI `2.60` and
+    Phase 7EL `3.11-3.16`.
+- It still regressed wall time because serializing all down copies onto the
+  main ring increased main pinned H2D/host-stage pressure:
+  - main H2D rose to `4550.479 ms`;
+  - up/gate wall regressed to `7.572 ms/call`;
+  - the down `2-4` bucket was worse than the Phase 7EL candidate and close to
+    baseline.
+- The useful mechanism is not "all serial"; the best result likely came from
+  reducing only some small-batch overhead without overloading the main ring,
+  but `min_jobs=5` was not reproducible enough.
+
+Decision:
+
+- Reject Phase 7EM.
+- Do not run n32 confirmation or n96.
+- Revert the source patch.
+- Keep Phase 7EB as current SOTA:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Avoid further fixed-threshold down-staging sweeps unless new instrumentation
+  can distinguish main-ring pressure from true copy overlap benefits.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
