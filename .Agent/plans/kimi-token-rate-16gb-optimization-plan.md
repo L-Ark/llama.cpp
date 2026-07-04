@@ -57431,3 +57431,154 @@ Decision rule:
 - If down remains CPU even after up_gate CUDA support, estimate the extra
   transfer cost before coding; do not move only up_gate to CUDA if it increases
   D2H/H2D traffic.
+
+### 7II result
+
+- Source head:
+  `4b77a2e64` (`ggml: add upgate cuda dryrun profile`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)` on the server passed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-200829Z-n32-phase7ii-upgate-cuda-dryrun`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 4b77a2e64
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-200829Z-n32-phase7ii-upgate-cuda-dryrun
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=16
+GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN=1
+GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN_LIMIT=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77316.53 ms`;
+  - decode `29355.38 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15023177728`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Split profile totals:
+  - all wall `105377.090 ms`;
+  - all CPU wall `104773.884 ms`;
+  - all CUDA0 wall `603.206 ms`;
+  - decode wall `29302.603 ms`;
+  - decode CPU wall `29114.111 ms`;
+  - decode CUDA0 wall `188.492 ms`.
+- Dry-run facts:
+  - emitted `64` lines, two per decoded MoE split for the first `32` layers;
+  - every sampled `ffn_moe_swiglu-*`:
+    - op `MOE_FUSED_UP_GATE`;
+    - shape `ne=[2048,8,1,1]`;
+    - output buffer `CUDA_Host`;
+    - `cuda_support=0`;
+    - ids tensor shape `ids_ne=[8,1,1,1]`;
+    - `rows_stride=8`;
+    - activation buffer `CUDA_Host`;
+    - up/gate weights are `CPU_Mapped`;
+    - `helper_needs_cpu_rowmap=1`;
+  - every sampled downstream `ffn_moe_down-*`:
+    - op `MUL_MAT_ID`;
+    - shape `ne=[7168,8,1,1]`;
+    - output buffer `CUDA_Host`;
+    - `cuda_support=1`;
+    - down weights are `CPU_Mapped`;
+    - dry-run estimates selected-weight copy/cache is still required if up_gate
+      becomes CUDA-owned.
+  - Q4_0 down layers remain visible in the sampled list, e.g.
+    `blk.6` through `blk.10` have `down_type=q4_0`.
+- 7II conclusion:
+  - The diagnostic passes all gates and is kept.
+  - A true CUDA `MOE_FUSED_UP_GATE` op is not a small `supports_op` switch:
+    - CUDA graph execution lacks the op case;
+    - the current helper requires CPU-built `matrix_row_counts` and
+      `matrix_rows`;
+    - expert weights remain `CPU_Mapped`;
+    - downstream down still needs selected expert copy/cache.
+  - Moving only up_gate to CUDA would not remove the measured CUDA batch work;
+    it mainly risks adding host/device handoff complexity.
+  - Existing GPU handoff has historical correctness/performance rejections, so
+    do not retry it without a new dataflow design.
+  - Next phase should optimize the existing accepted up_gate CUDA batch path by
+    measuring which tensor/type/cache-miss groups cause the `cuda_batch` wait,
+    not by forcing scheduler ownership to CUDA.
+
+## Phase 7IJ: up_gate batch wait attribution by tensor/type/cache
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- Up/gate has no real CPU fallback; all calls were accepted by the CUDA batch
+  helper.
+- The measured cost is wait inside the accepted CUDA batch path.
+- 7II rejects the naive true-CUDA-op path because row mapping and selected
+  expert movement are currently CPU-wrapper responsibilities.
+
+Hypothesis:
+
+- The next compressible portion is up_gate expert movement/cache misses, not
+  CUDA scheduler ownership.
+- Existing `GGML_MOE_UP_GATE_PROFILE_OUT` can attribute per-call stage/wait by
+  type pair; adding cache/miss context to that profile may show whether a small
+  layer/type-specific cache allocation or preload is worth implementing.
+
+Experiment:
+
+- No source behavior change.
+- Run strict cold-start n32 with:
+  - `GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=64`.
+- Keep runtime knobs identical to SOTA.
+- Do not enable split assignment or dry-run logs in this run.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- `up-gate-profile.csv` must exist.
+
+Analysis:
+
+- Summarize `up-gate-profile.csv` by:
+  - type pair;
+  - tensor/layer if available;
+  - stage time;
+  - up/gate wait time;
+  - kernel/compute time.
+- Compare with global upgate hit rate and iouring wait.
+- If a small layer/type group dominates wait and is cacheable within VRAM, plan
+  a narrow cache/preload experiment.
+- If waits are broad and proportional to total misses, avoid cache policy work
+  and look for IO batching or expert-pack layout opportunities.
