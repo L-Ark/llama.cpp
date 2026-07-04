@@ -4,6 +4,30 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-04 Current Status Override
+
+本节覆盖下面较早阶段的 `4.2 tok/s` 叙述；历史记录保留不改，最新执行以本节和文档尾部最新计划为准。
+
+当前接受的 strict cold SOTA：
+
+- `eval_tok_s=4.4`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Latest pushed head before this document update: `f016f7e851ff007e36b50932325ac0844dfd4905` (`vendor-ds4: plan gpu updown drift audit`)
+- Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
+- Correctness answer for the accepted SOTA is semantic, coherent, and complete for `Please introduce France in a short paragraph.`
+
+Current bottleneck conclusion:
+
+- Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.
+- Full current-SOTA CPU chunk trace shows fallback wall estimate about `27.072s`, chunk thread-average about `25.400s`, and only about `1.672s` scheduling/tail gap. Chunk scheduling, affinity, and overpartitioning are therefore closed for now.
+- Source movement/pack/direct/page prefetch variants are closed for now by the async-bound artifact: measured bytes and direct-read bandwidth make top64/top128/top256 staging negative after overlap.
+- No compatible local draft/MTP/NextN path exists; no-source speculative/lookahead/ngram paths are closed unless a compatible draft/MTP artifact appears.
+- The only active local plan is an offline GPU up/down output-drift audit using already recorded runs. No new model run or source change should happen until that audit is recorded.
+- Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
+
 当前事实：
 
 - 历史最高观测：`4.2 tok/s`，run `/root/lfz/runs/vendor-ds4-16gb/20260702T133103Z-20260702_pushed_onepack_odirect_sota_rerun/france-cpu40-vram0gb`。
@@ -7261,3 +7285,58 @@ Acceptance for the audit:
 Deliverable:
 
 - `.Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json`
+
+### 2026-07-04T02:35Z Latest Execution Plan Update
+
+This section is the active plan before any further source change or model run.
+
+Immediate objective:
+
+- Finish the offline GPU up/down output drift audit from existing artifacts.
+- Do not run another strict cold model pass and do not edit runtime source until this audit has a written verdict.
+- The audit must be committed and pushed as documentation/artifact work even if it closes the path.
+
+Required audit inputs:
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Rejected no-filter GPU up/down stream run: `/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb`
+- Rejected profile-gated hot up/down64 run: `/root/lfz/runs/vendor-ds4-16gb/20260704T005617Z-20260704_hot_updown64_require_profile_candidate/france-cpu40-vram0gb`
+- Sampled CPU-vs-GPU op compare: `.Agent/runs/20260704-vendor-ds4-coldstart/updown-gpu-compare-result.json`, sha256 `3fde8d52bced459efd0270e0a5b6d1acaa51be6a02089bf0f6fb12b385eab03a`
+
+Audit output requirements:
+
+- Write `.Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json`.
+- Include exact source/output differences between accepted SOTA and rejected GPU up/down runs.
+- Classify each drift as complete semantic pass, incomplete generation, or semantic error.
+- Compare counters for gate pack reads/misses, VRAM cache hit/miss rate, source/refault pressure, TTFT, and up/down stream/cache behavior.
+- Explain why tiny sampled per-op differences (`~1e-6` to `~1e-5`) are or are not enough to explain full-sequence drift.
+- End with one of two explicit decisions:
+  - close current GPU up/down offload classes; or
+  - propose one new narrow correctness experiment with a hard upper bound and a default-off implementation plan.
+
+Decision rules after the audit:
+
+1. If the audit confirms the existing GPU up/down classes perturb output trajectory or gate/source behavior:
+   - close no-filter one-stream up/down;
+   - close profile-gated hot64/topN scaling on the current shared gate cache;
+   - do not rerun larger hotsets, down-cache sizing, or broad one-stream variants without a new deterministic correctness mechanism.
+2. If a new GPU up/down experiment is still justified:
+   - first design an exact verifier or deterministic compare path;
+   - prove it preserves full France output before any performance run;
+   - calculate removable fallback time, VRAM cost, host-byte movement, and TTFT impact before coding;
+   - implement default-off only.
+3. If no GPU up/down path remains:
+   - record that local no-source/source-tweak paths are exhausted under current artifacts;
+   - next viable work requires either a compatible DeepSeek draft/MTP/NextN artifact, or a fundamentally new exact GPU up/down implementation whose correctness can be verified token-by-token.
+
+Promotion discipline for every future candidate:
+
+- Update this plan before implementation.
+- Run under strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`.
+- Accepted threshold is now `eval_tok_s > 4.4`, not `>4.2`.
+- Accepted TTFT must be `<=33617.688744 ms`.
+- France output must be manually reviewed as semantic, coherent, and complete.
+- Pack counters must show no direct failures/fallbacks on the accepted gate pack path.
+- Host RAM/page cache must stay inside the 16GB cgroup, with no OOM kill.
+- On any compliant new SOTA, stop exploration immediately, record full reproduction metadata, commit source/plan/artifacts/profiles, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild and reproduce from pushed source before declaring it accepted.
+- If performance regresses, correctness fails, TTFT exceeds the accepted gate, or RAM exceeds the cgroup limit, revert runtime source immediately and keep only rejected records/docs.
