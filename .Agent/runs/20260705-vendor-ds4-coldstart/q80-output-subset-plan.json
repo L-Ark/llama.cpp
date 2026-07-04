@@ -1,0 +1,50 @@
+{
+  "date": "2026-07-05",
+  "title": "Default-off Q8_0 output-writing subset before performance benchmark",
+  "source_head_before_change": "f89447fd23a3209fab960f7373a0a2a8317bffe6",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "bottleneck_component": {
+    "name": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "required_saving_for_10_tok_s_ms": 17386.57,
+    "max_allowed_new_overhead_ms": 1642.887
+  },
+  "prior_evidence": {
+    "q80_probe_up_max_abs": 4.76837158e-7,
+    "q80_probe_down_max_abs": 1.78813934e-7,
+    "coverage": "bounded samples over blk.0-2 ffn_up_exps and ffn_down_exps",
+    "limitation": "probe did not write model outputs and therefore did not prove token-level correctness"
+  },
+  "candidate": {
+    "name": "Q8_0 CUDA overwrite after CPU fallback",
+    "default_behavior_changed": false,
+    "performance_candidate": false,
+    "why_not_benchmark_yet": "The first output-writing path intentionally keeps CPU fallback and overwrites dst afterward. It is only a token-level correctness gate, not a speed path.",
+    "first_tensor_filter": "blk.0.ffn_up_exps.weight",
+    "expected_token_rate_change": "none or slower when enabled",
+    "expected_ram_pressure": "small temporary CUDA/host result buffers for cne1<=1; default path has no added allocation",
+    "expected_ttft_impact": "none when unset; enabled verifier run is diagnostic only and cannot be promoted"
+  },
+  "implementation_boundary": [
+    "Add a new env-gated CUDA function separate from the existing diagnostic probe.",
+    "Enable only when GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER is set.",
+    "Do not skip CPU fallback in this step.",
+    "Compute CUDA MXFP4 x Q8_0 for matching tensor/expert rows, compare against current CPU fallback dst, then overwrite dst with CUDA values.",
+    "Restrict default diagnostic use to cne1<=1 via GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1.",
+    "Optionally write per-call max_abs/mean_abs report when GGML_MOE_STREAM_Q80_WRITE_REPORT is set.",
+    "Do not touch direct hot pool, gate cache, accepted SOTA envs, or default output path."
+  ],
+  "correctness_gate": [
+    "Build llama-results and llama-cli.",
+    "Create baseline result.gguf with output-writing disabled.",
+    "Run check with output-writing enabled for blk.0.ffn_up_exps.weight.",
+    "Pass condition: llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1.",
+    "If top1 fails or NMSE fails, revert runtime source and keep only rejected artifact."
+  ],
+  "promotion_rule": "This step cannot be promoted as SOTA. Any later benchmark requires a top1-passing output-writing path that actually skips/hides CPU fallback and then strict cold 16GB France validation.",
+  "push_rule": "If the top1 gate passes and default behavior remains unchanged, commit and push source plus artifacts to ssd/vendor/deepseek-token-rate-16gb using L-Ark."
+}

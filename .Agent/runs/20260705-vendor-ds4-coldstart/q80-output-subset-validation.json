@@ -1,0 +1,115 @@
+{
+  "timestamp_utc": "2026-07-04T18:16:56Z",
+  "status": "up_subset_passed_down_subset_rejected",
+  "purpose": "Validate the first output-writing CUDA Q8_0 subset before any performance benchmark.",
+  "source_head_before_change": "f89447fd23a3209fab960f7373a0a2a8317bffe6",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ],
+    "default_behavior_changed": false,
+    "summary": [
+      "Added GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER output-writing path after CPU fallback.",
+      "The path computes CUDA MXFP4 x Q8_0, compares against CPU fallback dst, and overwrites dst.",
+      "CPU fallback is still executed, so this is a token-level correctness gate only, not a performance path.",
+      "After down subset failed token-level verification, the committed write path is guarded to ffn_up_exps only."
+    ],
+    "env": [
+      "GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CALLS",
+      "GGML_MOE_STREAM_Q80_WRITE_REPORT"
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j 8",
+    "status": "passed"
+  },
+  "accepted_correctness_gate": {
+    "name": "blk0-up-max64-guarded",
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T181656Z-q80-output-subset-top1/blk0-up-max64-guarded",
+    "systemd_unit": "vendor-ds4-q80-output-up-guarded-20260704T181656Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 53.608,
+    "baseline_status": 0,
+    "check_status": 0,
+    "write_filter": "blk.0.ffn_up_exps.weight",
+    "write_max_cne1": 1,
+    "write_max_calls": 64,
+    "write_report": {
+      "records": 64,
+      "max_abs": 1.43051147e-6,
+      "mean_abs_per_value": 4.78374318e-8,
+      "max_call_mean_abs": 5.33473212e-8
+    },
+    "top1": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 145,
+      "same_top1_ratio": 1.0,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0,
+      "nmse": 0.0
+    },
+    "memory_peak_bytes": 1171243008,
+    "time_max_rss_kb": {
+      "baseline": 50487720,
+      "check": 50419012
+    },
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "rejected_candidate": {
+    "name": "blk0-down-max64",
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T181656Z-q80-output-subset-top1/blk0-down-max64",
+    "systemd_unit": "vendor-ds4-q80-output-down-top1-20260704T181656Z.service",
+    "systemd_result": "exit-code",
+    "service_runtime_seconds": 53.581,
+    "baseline_status": 0,
+    "check_status": 1,
+    "write_filter": "blk.0.ffn_down_exps.weight",
+    "write_max_cne1": 1,
+    "write_max_calls": 64,
+    "write_report": {
+      "records": 64,
+      "max_abs": 9.53674316e-7,
+      "mean_abs_per_value": 1.50296344e-8,
+      "max_call_mean_abs": 6.53471943e-8
+    },
+    "top1": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 143,
+      "same_top1_ratio": 0.986207,
+      "first_mismatch_pos": 109,
+      "max_abs": 6.80463,
+      "mean_abs": 0.132666,
+      "nmse": 0.001296
+    },
+    "decision": "rejected; do not enable output-writing Q8_0 for down tensors yet"
+  },
+  "hashes": {
+    "up_guarded_run_case_sha256": "1e8974e7dec5bd1240386fb95310c2b092617e868045f90bce6468853efc2d93",
+    "up_guarded_top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "up_guarded_write_report_sha256": "2140064d1da291d9cf58e8251b1cba94cf114ee0903b2145663233854edaea1c",
+    "down_rejected_run_case_sha256": "f1610b494119c4310961b80bc57de30514aeeee775232711376c8457b388e381",
+    "down_rejected_top1_check_sha256": "f54fc72a8fea2184f243b4a960bcb6ceef9dd00caefc5e55bd610abed1e24b54",
+    "down_rejected_write_report_sha256": "6d1a7286ac009228f002ac2c13fd971982f857b02974761f0eef6d83dc5011af"
+  },
+  "decision": {
+    "keep_source": true,
+    "promote_as_sota": false,
+    "reason": "Up output-writing subset passes token-level verification, but CPU fallback is still executed so there is no performance gain. Down output-writing is rejected due token-level mismatch despite small op-level local error.",
+    "next_step": "Only expand output-writing Q8_0 along the up path first, or investigate why down local errors amplify before enabling down. No performance benchmark until an output-writing path can skip/hide CPU fallback and pass top1."
+  }
+}

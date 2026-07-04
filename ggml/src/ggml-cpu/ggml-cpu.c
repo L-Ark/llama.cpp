@@ -113,6 +113,22 @@ __attribute__((weak)) extern void ggml_cuda_moe_stream_q80_probe(
     size_t dst_nb1,
     size_t dst_nb2,
     const ggml_moe_stream_row_mapping * rows);
+__attribute__((weak)) extern void ggml_cuda_moe_stream_q80_write(
+    int src0_type_int,
+    const char * src0_name,
+    int64_t expert_index,
+    const void * src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const void * src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_ne1,
+    int64_t cne1,
+    float * dst,
+    size_t dst_nb1,
+    size_t dst_nb2,
+    const ggml_moe_stream_row_mapping * rows);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int src0_type_int,
     const char * src0_name,
@@ -1116,6 +1132,15 @@ static bool ggml_moe_stream_q80_probe_enabled(void) {
     static int enabled = -1;
     if (enabled < 0) {
         const char * env = getenv("GGML_MOE_STREAM_Q80_PROBE_OUT");
+        enabled = env && env[0] ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static bool ggml_moe_stream_q80_write_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER");
         enabled = env && env[0] ? 1 : 0;
     }
     return enabled != 0;
@@ -3242,6 +3267,43 @@ static void ggml_compute_forward_mul_mat_id(
                         ne11,
                         cne1,
                         (const float *) dst->data,
+                        nb1, nb2,
+                        (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
+            }
+        }
+        ggml_barrier(params->threadpool);
+    }
+
+    if (ggml_moe_stream_q80_write_enabled() &&
+            ggml_cuda_moe_stream_q80_write &&
+            src0->type == GGML_TYPE_MXFP4 &&
+            src1->type != vec_dot_type &&
+            vec_dot_type == GGML_TYPE_Q8_0 &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32) {
+        ggml_barrier(params->threadpool);
+        if (ith == 0) {
+            const void * q80_base = params->wdata;
+            const size_t q80_row_size = ggml_row_size(vec_dot_type, ne10);
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const char * src0_cur = fallback_pack_mmap_ptrs[cur_a] ?
+                    (const char *) fallback_pack_mmap_ptrs[cur_a] :
+                    (const char *) src0->data + cur_a * nb02;
+                ggml_cuda_moe_stream_q80_write(
+                        src0->type,
+                        src0->name,
+                        cur_a,
+                        src0_cur,
+                        ne01, ne00, nb01,
+                        q80_base,
+                        q80_row_size,
+                        ne11,
+                        cne1,
+                        (float *) dst->data,
                         nb1, nb2,
                         (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
             }

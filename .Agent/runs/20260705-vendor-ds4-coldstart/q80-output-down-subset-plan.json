@@ -1,0 +1,27 @@
+{
+  "date": "2026-07-05",
+  "title": "Default-off Q8_0 output-writing down subset validation",
+  "source_head_before_run": "f89447fd23a3209fab960f7373a0a2a8317bffe6-dirty",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "precondition": {
+    "up_subset_top1": "passed for blk.0.ffn_up_exps.weight with max 64 overwrite calls",
+    "implementation": "same default-off GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER path"
+  },
+  "candidate": {
+    "name": "Q8_0 CUDA overwrite for blk.0.ffn_down_exps.weight",
+    "default_behavior_changed": false,
+    "performance_candidate": false,
+    "why_not_benchmark_yet": "CPU fallback is still executed and the CUDA result overwrites afterward; this proves token-level correctness only."
+  },
+  "validation_plan": [
+    "Create baseline result.gguf with output-writing disabled.",
+    "Run check with GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER=blk.0.ffn_down_exps.weight.",
+    "Use GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1=1 and GGML_MOE_STREAM_Q80_WRITE_MAX_CALLS=64.",
+    "Pass condition: llama-results exits 0 and same_top1 == n_tokens.",
+    "If top1 or NMSE fails, revert runtime output-writing code."
+  ],
+  "promotion_rule": "This cannot be promoted as SOTA; it does not skip CPU fallback and is not a performance result."
+}
