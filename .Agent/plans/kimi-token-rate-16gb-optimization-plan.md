@@ -50898,3 +50898,94 @@ systemd-run --wait --collect --same-dir \
   - Further work should not focus on micro-optimizing default-off diagnostics;
     it needs to reduce visible expert movement or recover the old build/runtime
     conditions that produced `70087.31 ms`.
+
+## Phase 7GW: old-source rebuild parity diagnostic
+
+Start time: 2026-07-04T21:10:04+08:00.
+
+Goal:
+
+- Determine whether the Phase 7FB SOTA gap comes from current source changes or
+  from old binary/build/environment variance.
+- Build the old Phase 7FB source in an isolated server worktree and run the
+  current hardened runner against that worktree.
+- Do not modify the main server worktree except for normal fetch/worktree
+  operations.
+- Do not claim SOTA from this phase unless it is followed by a reproducible
+  production path on the main branch.
+
+Why this is required:
+
+- Old accepted SOTA:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-042843Z-n96-phase7fb-slots12-min-profile-b`
+  - code head `a87da8914f5600a9fdd876243ded2a4cb2d00f80`;
+  - decode `70087.31 ms / 77`.
+- Current default validation with the same runtime env remains slower:
+  - Phase 7GU decode `72330.81 ms / 77`;
+  - Phase 7GV probe decode `71726.56 ms / 77`.
+- Runtime env, cache hit rates, read counts, and iouring batch histograms are
+  effectively unchanged:
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Non-doc source diff from `a87da891` to current is limited to CUDA files and
+  the runner. If rebuilding old source restores `~70087 ms`, then the next
+  optimization is to bisect/cut default-path source changes. If it does not,
+  the old SOTA was likely old artifact/build/environment variance, and future
+  work should stop chasing that gap.
+
+Isolated build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git worktree remove -f /root/lfz/llama.cpp-vendor-kimi-a87 2>/dev/null || true
+git worktree add /root/lfz/llama.cpp-vendor-kimi-a87 a87da8914f5600a9fdd876243ded2a4cb2d00f80
+cd /root/lfz/llama.cpp-vendor-kimi-a87
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment: n96 old-source rebuild with current runner
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gw-a87-rebuild"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi-a87 \
+      RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- run exits `0`;
+- `quality=pass` and `quality_reason=ok` from the current runner;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If old source rebuild beats or approaches Phase 7FB (`<=70500 ms / 77`), then
+  source changes after `a87da891` are implicated. Next phase must bisect or
+  selectively revert default-path changes in `moe_stream_batch.cu`.
+- If old source rebuild is in the current slow range (`>=71500 ms / 77`), then
+  the gap is not explained by current source alone. Do not keep trying to
+  recover Phase 7FB by source micro-edits; return to movement-reduction
+  optimizations.
+- If build or run fails because old source lacks the current runner file, run
+  the current runner from the main worktree with `REPO=/root/lfz/llama.cpp-vendor-kimi-a87`;
+  do not edit old source except through its build directory.
