@@ -46396,6 +46396,92 @@ Decision rule:
   materially, run n96.
 - If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
   before claiming SOTA; commit and push immediately if confirmed.
+
+Result A: n32 completed; gates pass; run n96 confirmation.
+
+- End time: 2026-07-04T17:04:17+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-090210Z-n32-phase7fx-combined-upgate-stage`.
+- Code head:
+  `35964b647`.
+- Runtime:
+  - `GGML_MOE_UP_GATE_COMBINED_STAGE=1`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+  - `MOE_IO_DEPTH=16`;
+  - `MOE_IO_REFILL_BATCH=8`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73597.88 ms`;
+  - decode `28987.50 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14843543552`;
+    - `kernel=234745856`;
+    - `inactive_file=9317425152`;
+    - `active_file=5525311488`;
+    - `pgmajfault=932036`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=12148536`;
+    - `iouring_submit_us=32974`;
+  - global io_uring:
+    - batches `3464`;
+    - `inflight_avg=3.90`;
+    - `inflight_max=12`;
+    - batch hist `9-16:281`;
+  - main ring granularity:
+    - calls `2743`;
+    - `avg_jobs=4.92`;
+    - `avg_read_jobs=4.92`;
+    - `avg_depth=12.00`;
+    - `max_jobs=16`;
+    - `max_read_jobs=16`;
+  - gate ring granularity:
+    - calls `721`;
+    - `avg_jobs=2.13`;
+    - `avg_read_jobs=2.13`;
+    - `max_jobs=4`;
+    - `max_read_jobs=4`.
+- Comparison:
+  - versus Phase 7FW diagnostic n32:
+    - decode improved from `29816.41` to `28987.50` (`828.91 ms`);
+    - `iouring_wait_us` decreased from `15441298` to `12148536`
+      (`3292762 us`);
+    - granularity successfully created `max_read_jobs=16` and
+      `inflight_max=12`.
+  - versus the rebuilt non-diagnostic n32 range, decode is only modestly
+    better than the lower bound (`29140.36 ms`) but passes the intended
+    bottleneck-shape check.
+- Decision:
+  - Proceed to n96 confirmation because the experiment changed the measured
+    staging bottleneck in the intended direction and passed all gates.
+  - If n96 does not beat Phase 7FB `70087.31 ms`, reject as SOTA but keep the
+    env-gated code as an informative probe only if default-off behavior remains
+    clean.
+
+Experiment B: n96 confirmation
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7fx-combined-upgate-stage"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
