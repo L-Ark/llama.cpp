@@ -58108,6 +58108,193 @@ Acceptance rule for this phase:
 - Proceed to a real pack repack only if the simulation shows a large, concrete
   locality improvement over current layout.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Trace/source commit: `f2d16e722 ggml: trace moe io read jobs for layout simulation`.
+
+Script fix/source commit:
+`83c23f4c2 scripts: tolerate repeated io trace headers`.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace`
+
+Trace reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard f2d16e722
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Trace gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `72602.29 ms`, below `106331.72 ms`;
+- decode `28464.33 ms / 31`, `1.09 tok/s`;
+- host RAM peak `15899996160` bytes, final `15070294016` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14862`, bytes `86301917184`, wait `14763607 us`;
+- `io-read-trace.csv` size `1.2M`.
+
+Simulation reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 83c23f4c2
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace
+python3 scripts/kimi-pack-layout-sim.py \
+  --trace "$RUN/io-read-trace.csv" \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  | tee "$RUN/pack-layout-sim.txt"
+```
+
+Simulation results:
+
+- batches `4013`, tensors `180`;
+- current trace layout:
+  - rows `4013`;
+  - read jobs `14862`;
+  - read bytes `86301917184`;
+  - `span/read = 26.8310`;
+  - `gap/read = 25.8310`;
+  - `adjacent/read_jobs = 0.0179`;
+  - coalescing-plausible rows `3`;
+- first-use layout:
+  - `span/read = 7.3878`;
+  - `gap/read = 6.3878`;
+  - `adjacent/read_jobs = 0.3849`;
+  - coalescing-plausible rows `982`;
+- frequency layout:
+  - `span/read = 11.1019`;
+  - `gap/read = 10.1019`;
+  - `adjacent/read_jobs = 0.0647`;
+  - coalescing-plausible rows `16`;
+- greedy-pair layout:
+  - `span/read = 8.8285`;
+  - `gap/read = 7.8285`;
+  - `adjacent/read_jobs = 0.4606`;
+  - coalescing-plausible rows `847`.
+
+Decision:
+
+- Do not implement read coalescing yet.
+- Reason: even the best simple simulated layout leaves `gap/read = 6.3878`,
+  so full-batch coalescing would still amplify IO by about `7.39x`.
+- The first-use layout is the best candidate for physical pack reorder:
+  it reduces `span/read` by `72.5%` (`26.8310 -> 7.3878`) and increases
+  adjacency from `1.8%` to `38.5%`.
+- The expected upside is from lower random-span storage behavior and possibly
+  better kernel/device locality under the existing sorted O_DIRECT reads, not
+  from reading large contiguous spans.
+- Next phase should create a reproducible reordered pack with the same tensor
+  values and index keys, then cold-start n32 against the same gates. If decode,
+  TTFT, RAM, or quality regress, reject the reordered pack and keep source code
+  unchanged except the default-off tools.
+
+## Phase 7IR: first-use expert-pack reorder experiment
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IQ confirms iouring waits are still large: `14.763 s` for n32.
+- Current physical pack order produces `span/read = 26.8310` and almost no
+  adjacent reads.
+
+Hypothesis:
+
+- Reordering physical expert-pack data by first-use order per tensor can reduce
+  the physical distance between experts requested in the same decode window.
+- The runtime lookup sorts by `(tensor, expert_idx, nbytes)` after loading the
+  pack index, so changing physical data offsets is semantically safe if each
+  index entry still points to the exact original byte slice.
+
+Theoretical bound:
+
+- The simulation predicts `span/read = 7.3878`, a `72.5%` reduction in total
+  per-batch span.
+- It does not reduce `gap/read` below `1.0`, so the upper bound is not the full
+  iouring wait budget and not enough to justify coalescing.
+- If storage latency is dominated by physical seek/span inside each batch, the
+  practical upper bound is a fraction of the current `14.763 s` iouring wait.
+- If NVMe/O_DIRECT latency is dominated by independent random reads and queue
+  depth rather than intra-batch span, the reordered pack may show no speedup.
+
+Implementation plan:
+
+- Add a standalone, default-off script:
+  `scripts/kimi-reorder-expert-pack.py`.
+- Inputs:
+  - source pack;
+  - per-read trace;
+  - output pack path;
+  - layout mode, initially `first-use`.
+- Behavior:
+  - parse the source pack index;
+  - build per-tensor order from the trace;
+  - append untraced experts in original expert order;
+  - preserve each entry key `(tensor, expert_idx, nbytes)`;
+  - copy exact bytes from source offsets to new physical offsets;
+  - write a valid `GGMLMOEPACKv1` output with aligned data offsets.
+- Reorder the main pack and overlay separately, because runtime loads them as
+  separate pack sources.
+
+Experiment:
+
+- Build the reordered main pack and reordered overlay under
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-pack-reorder/`.
+- Run cold-start n32 with:
+  - `GGML_MOE_EXPERT_PACK=<reordered-main>`;
+  - `GGML_MOE_EXPERT_PACK_OVERLAY=<reordered-overlay>`;
+  - all other runtime knobs equal to current pct62 baseline.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Acceptance rule:
+
+- If token rate improves and all gates pass, run one repeat n32.
+- Commit/push only scripts and docs; the large reordered packs are runtime
+  artifacts and must be referenced by exact path and build command.
+- If token rate regresses, quality fails, RAM exceeds limit, TTFT exceeds the
+  gate, or expert-pack reads fail, reject the reordered pack and do not use it
+  as SOTA.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
