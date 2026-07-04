@@ -58771,6 +58771,116 @@ Decision rule:
 - If foreground `runtime_load` wait rises or down overlap worker time rises,
   reject this path as staging/IO contention.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `491409c3f docs: add trace input step for prefetch probe`.
+
+Trace input run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-route-trace-input`;
+- route trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-route-trace-input/route-trace.csv`;
+- route trace size `2.0M`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75960.33 ms`, below `106331.72 ms`;
+- decode `29006.70 ms / 31`, `1.07 tok/s`;
+- host RAM peak `15899996160` bytes, final `15065595904` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring reads `14862`, bytes `86301917184`, wait `15448065 us`;
+- down hit `73.4%`;
+- upgate hit `45.2%`.
+
+Trace-prefetch run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-trace-prefetch-small`;
+- env:
+  - `GGML_MOE_TRACE_PREFETCH=<trace input>/route-trace.csv`;
+  - `GGML_MOE_TRACE_PREFETCH_WINDOW=32`;
+  - `GGML_MOE_TRACE_PREFETCH_MAX_LOADS=2`;
+  - `GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=8`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75275.54 ms`, below `106331.72 ms`;
+- decode `29487.80 ms / 31`, `1.05 tok/s`;
+- host RAM peak `15899996160` bytes, final `15066857472` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace prefetch:
+  - loaded events `42928`;
+  - calls `42928`;
+  - matched `42928`;
+  - resync `0`;
+  - loads `2507`;
+  - cached skips `19470`;
+  - missing tensor `4`;
+  - cursor `42928/42928`;
+- hit rates:
+  - down `76.2%` vs trace-input baseline `73.4%`;
+  - upgate `51.0%` vs trace-input baseline `45.2%`;
+- iouring:
+  - reads `15730` vs baseline `14862`;
+  - bytes `90806861824` vs baseline `86301917184`;
+  - wait `16516084 us` vs baseline `15448065 us`;
+- current down overlap:
+  - planned jobs `3289` vs baseline `3673`;
+  - cache hits `3903` vs baseline `3519`;
+  - worker time `2960777 us` vs baseline `3435708 us`.
+
+IO batch profile:
+
+- rows `6163`;
+- `runtime_load`:
+  - rows `2887`;
+  - read jobs `10086`;
+  - wait `10938.037 ms`;
+  - wall `11155.754 ms`;
+  - average read jobs `3.49`;
+- `current_down_overlap`:
+  - rows `800`;
+  - read jobs `3142`;
+  - wait `2404.880 ms`;
+  - wall `2457.349 ms`;
+  - average read jobs `3.93`;
+- `trace_prefetch`:
+  - rows `2476`;
+  - read jobs `2502`;
+  - wait `3179.719 ms`;
+  - wall `3215.884 ms`;
+  - average read jobs `1.01`.
+
+Decision:
+
+- Reject conservative broad trace prefetch as a SOTA improvement.
+- Reason:
+  - Trace alignment is perfect (`matched=42928`, `resync=0`), so failure is not
+    a cursor/trace bug.
+  - It increases cache hit rates and reduces some foreground miss work, proving
+    the mechanism functions.
+  - It creates `2476` mostly single-read prefetch batches and adds `3.18 s` of
+    extra prefetch wait.
+  - Total iouring reads, bytes, and wait all increase.
+  - Decode regresses from trace-input `29006.70 ms` to `29487.80 ms`.
+- Do not increase window, lead, or max loads for this broad prefetch path.
+- Next target should be prefetch admission, not prefetch breadth:
+  - prefetch only entries with near-future reuse or high measured miss cost;
+  - avoid one-off prefetch reads that add IO without hiding foreground wait;
+  - preserve current-down overlap behavior and avoid sharing foreground staging
+    bandwidth with low-value prefetch work.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
