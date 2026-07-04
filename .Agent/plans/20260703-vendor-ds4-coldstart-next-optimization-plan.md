@@ -8967,3 +8967,58 @@ Updated next concrete work item:
   - an optimized MXFP4 x Q8_0 kernel only if it first has a hard performance model showing total decode overhead can plausibly fit below `1.64s`, then must pass fixed-text top1 before any benchmark;
   - or a correctness-preserving algorithmic/offload path that removes near-full decode up/down fallback and also reduces gate/source stall enough to make `10 tok/s` plausible.
 - The next action is a design/bound step, not a source patch: produce a hard-bound candidate table that explicitly excludes scalar Q8_0, same-op touch, direct staging, top-N residency/hotsets, and existing Q8_1 up/down stream.
+
+## 2026-07-04T13:23:00Z Non-Duplicate Hard-Bound Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/nonduplicate-hard-bound-after-q80-duplicate-audit.json`
+- sha256: `c6146eaa66eb4a55384fe669e6296b336606502ff58b22ad7b4fd363b73737d6`
+
+Purpose:
+
+- Rebuild the candidate table after excluding closed paths:
+  - same-op serial/parallel touch
+  - synchronous direct/mmap source staging
+  - top-N up/down residency/hotsets as a primary path
+  - existing Q8_1 up/down CUDA stream
+  - scalar MXFP4 x Q8_0 CUDA one-stream
+
+Model inputs:
+
+- Accepted SOTA decode window estimate: `31.04744671s`
+- Decoded tokens estimate: `136.608765524`
+- Target decode window for `10 tok/s`: `13.6608765524s`
+- Required decode saving: about `17.38657s`
+- Current gate cache profile: `3000` prefilled entries, about `12.45 GiB`; accepted cache budget is about `13.25 GiB`
+- Gate trace: `35151` gate rows, `33265` hits, `1886` misses
+- Estimated extra gate src0 cost per lost gate hit: about `1.024 ms`
+
+Best optimistic cache-allocation combination under the current `13.25 GiB` gate-cache-class budget:
+
+- gate cache reduced to top `2048` entries, about `8.5 GiB`
+- up/down exact residency top `1024`, about `4.1905 GiB`
+- total still fits the current cache budget class
+- estimated lost gate hits versus top3000: `2320`
+- estimated gate penalty: `2.376s`
+- ideal up/down fallback saving: `9.080s`
+- estimated decode window: `24.343s`
+- estimated token rate: `5.612 tok/s`
+- result: far below `10 tok/s`, even before exact-kernel overhead or correctness risk
+
+Streaming-copy bound:
+
+- Decode up/down expert-call source bytes from the touch split are about `148.916 GiB`.
+- If all decode up/down CPU fallback were removed, the total extra overhead budget for a `10 tok/s` result is only about `1.6429s`.
+- A streaming-copy design would therefore need about `90.6 GiB/s` effective H2D/source bandwidth before kernel/D2H/scatter/sync overhead.
+- Decision: streaming all up/down weights on demand is not a viable 10 tok/s path.
+
+Decision:
+
+- No non-duplicate cache-allocation or streaming-copy candidate currently has a 10 tok/s hard bound.
+- Do not implement another top-N residency, hotset, direct-staging, same-op prefetch/touch, Q8_1 up/down, or scalar Q8_0 source patch.
+- The next source-level proposal must first show a new hard bound above 10 tok/s and a correctness gate. Plausible classes are limited to a genuinely new algorithmic/offload mechanism, such as a compact resident representation with exact/corrected logits, or a verified speculation/draft path that does not exist in the current artifact set.
+
+Updated next concrete work item:
+
+- Inspect whether any existing vendor/DS4 code path can provide a compact resident representation or verified speculation path without changing model semantics. If no such path exists in source/artifacts, record that as the next blocker candidate and avoid further low-ceiling source probes.

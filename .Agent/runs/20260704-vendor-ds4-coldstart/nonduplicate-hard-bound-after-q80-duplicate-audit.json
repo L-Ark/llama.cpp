@@ -1,0 +1,260 @@
+{
+  "accepted_sota": {
+    "decode_window_s": 31.04744671,
+    "decoded_tokens_estimate": 136.608765524,
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "artifact": "nonduplicate-hard-bound-after-q80-duplicate-audit",
+  "best_fit_combo_under_current_13_25gib_cache_budget": {
+    "decode_s_est": 24.343,
+    "fits_current_gate_cache_vram_budget": true,
+    "gate_gib": 8.5,
+    "gate_k": 2048,
+    "gate_penalty_s_est": 2.376,
+    "gate_score": 30919,
+    "lost_hits_vs_top3000": 2320,
+    "meets_10_tok_s": false,
+    "tok_s_est": 5.612,
+    "updown_gib": 4.1905,
+    "updown_residency": 1024
+  },
+  "closed_paths": [
+    "same-op serial/parallel touch",
+    "synchronous direct/mmap source staging",
+    "top-N up/down residency/hotsets as primary path",
+    "existing Q8_1 up/down CUDA stream",
+    "scalar MXFP4 x Q8_0 CUDA one-stream"
+  ],
+  "combo_model_note": "Assumes up/down resident exact offload removes the measured fallback time for the selected top-N and that gate cache loss costs one extra miss-vs-hit src0 mean per lost gate profile score. This is optimistic because it ignores exact kernel overhead and correctness risk.",
+  "created_utc": "2026-07-04T13:23:00Z",
+  "decision": "No non-duplicate cache-allocation or streaming-copy candidate has a 10 tok/s hard bound. Next source work must not be another top-N residency or scalar exact kernel; it must first present a new algorithmic/offload mechanism with a hard bound above 10 and a top1 correctness gate.",
+  "gate_cache_model": {
+    "current_hits": 33265,
+    "current_misses": 1886,
+    "gate_extra_ms_per_lost_hit_est": 1.024052203321064,
+    "hit_src0_ms_mean": 0.13588257928763312,
+    "miss_src0_ms_mean": 1.159934782608697,
+    "profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "profile_entries": 3313,
+    "score_by_k": {
+      "512": 20073,
+      "1024": 25542,
+      "1536": 28785,
+      "2048": 30919,
+      "2560": 32359,
+      "3000": 33239,
+      "3192": 33623,
+      "3313": 33865
+    },
+    "score_total": 33865,
+    "trace_rows": 35151
+  },
+  "source_head": "12465256845d6bf16fb40f6239e75653522bd9e8",
+  "streaming_all_updown_copy_bound": {
+    "decision": "impossible as a streaming-copy design; requires residency, a much more compact compute representation, or a different algorithmic path",
+    "decode_expert_call_bytes_gib_est": 148.916,
+    "max_overhead_s_for_10tok_if_all_updown_removed": 1.6428868424,
+    "required_effective_h2d_gib_s": 90.64288309866618
+  },
+  "target": {
+    "required_decode_saving_s": 17.386570157599998,
+    "target_decode_s": 13.660876552400001,
+    "tok_s": 10.0
+  },
+  "top_valid_combos": [
+    {
+      "decode_s_est": 24.343,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 8.5,
+      "gate_k": 2048,
+      "gate_penalty_s_est": 2.376,
+      "gate_score": 30919,
+      "lost_hits_vs_top3000": 2320,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.612,
+      "updown_gib": 4.1905,
+      "updown_residency": 1024
+    },
+    {
+      "decode_s_est": 25.633,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 10.625,
+      "gate_k": 2560,
+      "gate_penalty_s_est": 0.901,
+      "gate_score": 32359,
+      "lost_hits_vs_top3000": 880,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.329,
+      "updown_gib": 2.1122,
+      "updown_residency": 512
+    },
+    {
+      "decode_s_est": 26.282,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 4.25,
+      "gate_k": 1024,
+      "gate_penalty_s_est": 7.882,
+      "gate_score": 25542,
+      "lost_hits_vs_top3000": 7697,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.198,
+      "updown_gib": 8.1982,
+      "updown_residency": 2048
+    },
+    {
+      "decode_s_est": 26.528,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 6.375,
+      "gate_k": 1536,
+      "gate_penalty_s_est": 4.561,
+      "gate_score": 28785,
+      "lost_hits_vs_top3000": 4454,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.15,
+      "updown_gib": 4.1905,
+      "updown_residency": 1024
+    },
+    {
+      "decode_s_est": 27.049,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 10.625,
+      "gate_k": 2560,
+      "gate_penalty_s_est": 0.901,
+      "gate_score": 32359,
+      "lost_hits_vs_top3000": 880,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.05,
+      "updown_gib": 1.0752,
+      "updown_residency": 256
+    },
+    {
+      "decode_s_est": 27.108,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 8.5,
+      "gate_k": 2048,
+      "gate_penalty_s_est": 2.376,
+      "gate_score": 30919,
+      "lost_hits_vs_top3000": 2320,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.039,
+      "updown_gib": 2.1122,
+      "updown_residency": 512
+    },
+    {
+      "decode_s_est": 27.306,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 12.451,
+      "gate_k": 3000,
+      "gate_penalty_s_est": 0.0,
+      "gate_score": 33239,
+      "lost_hits_vs_top3000": 0,
+      "meets_10_tok_s": false,
+      "tok_s_est": 5.003,
+      "updown_gib": 0.544,
+      "updown_residency": 128
+    },
+    {
+      "decode_s_est": 28.207,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 10.625,
+      "gate_k": 2560,
+      "gate_penalty_s_est": 0.901,
+      "gate_score": 32359,
+      "lost_hits_vs_top3000": 880,
+      "meets_10_tok_s": false,
+      "tok_s_est": 4.843,
+      "updown_gib": 0.544,
+      "updown_residency": 128
+    },
+    {
+      "decode_s_est": 28.524,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 8.5,
+      "gate_k": 2048,
+      "gate_penalty_s_est": 2.376,
+      "gate_score": 30919,
+      "lost_hits_vs_top3000": 2320,
+      "meets_10_tok_s": false,
+      "tok_s_est": 4.789,
+      "updown_gib": 1.0752,
+      "updown_residency": 256
+    },
+    {
+      "decode_s_est": 29.293,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 6.375,
+      "gate_k": 1536,
+      "gate_penalty_s_est": 4.561,
+      "gate_score": 28785,
+      "lost_hits_vs_top3000": 4454,
+      "meets_10_tok_s": false,
+      "tok_s_est": 4.664,
+      "updown_gib": 2.1122,
+      "updown_residency": 512
+    },
+    {
+      "decode_s_est": 29.682,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 8.5,
+      "gate_k": 2048,
+      "gate_penalty_s_est": 2.376,
+      "gate_score": 30919,
+      "lost_hits_vs_top3000": 2320,
+      "meets_10_tok_s": false,
+      "tok_s_est": 4.602,
+      "updown_gib": 0.544,
+      "updown_residency": 128
+    },
+    {
+      "decode_s_est": 29.849,
+      "fits_current_gate_cache_vram_budget": true,
+      "gate_gib": 4.25,
+      "gate_k": 1024,
+      "gate_penalty_s_est": 7.882,
+      "gate_score": 25542,
+      "lost_hits_vs_top3000": 7697,
+      "meets_10_tok_s": false,
+      "tok_s_est": 4.577,
+      "updown_gib": 4.1905,
+      "updown_residency": 1024
+    }
+  ],
+  "updown_residency_options": [
+    {
+      "gib": 0.0,
+      "ideal_save_s": 0.0,
+      "n": 0
+    },
+    {
+      "gib": 0.544,
+      "ideal_save_s": 3.741536,
+      "n": 128
+    },
+    {
+      "gib": 1.0752,
+      "ideal_save_s": 4.899473,
+      "n": 256
+    },
+    {
+      "gib": 2.1122,
+      "ideal_save_s": 6.315441,
+      "n": 512
+    },
+    {
+      "gib": 4.1905,
+      "ideal_save_s": 9.080314,
+      "n": 1024
+    },
+    {
+      "gib": 8.1982,
+      "ideal_save_s": 12.647096,
+      "n": 2048
+    },
+    {
+      "gib": 22.3295,
+      "ideal_save_s": 19.029457,
+      "n": "all-resident"
+    }
+  ]
+}
