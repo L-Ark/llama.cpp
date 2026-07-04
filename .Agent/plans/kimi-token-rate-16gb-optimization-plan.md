@@ -59681,6 +59681,75 @@ Decision rule:
 - If target rows remain or decode is flat/worse, reject protected preload and
   stop cold-down preload experiments.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `7e48997fa docs: record full cold down preload probe`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iz-protected-cold-down-preload/n32`
+
+Gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75793.77 ms`, below `106331.72 ms`;
+- decode `31360.46 ms / 31`, `0.99 tok/s`;
+- host RAM peak `15899996160` bytes, final `15077969920` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- profile preload loaded `16` entries;
+- iouring reads `17507`, bytes `104618737664`, wait `20941580 us`.
+
+Unexpected behavior:
+
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1` with
+  `GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS=16` did not protect only the intended
+  `16` cold entries.
+- Runtime counters show:
+  - down slots `766`;
+  - down pinned `750`;
+  - down preloads `750`;
+  - down hit rate collapsed from normal `73.4%` to `31.2%`;
+  - current-down overlap planned jobs dropped to `750`, but foreground gate/down
+    misses and iouring reads increased.
+- This indicates the existing profile protect semantics reserve a large portion
+  of the cache and interact badly with down preloads/profile counts; it is not
+  a narrow cold-entry pinning mechanism.
+
+Decision:
+
+- Reject protected cold-down preload.
+- Do not repeat and do not run n96.
+- Stop cold-down preload expansion using the current profile/protect mechanism.
+- Reason:
+  - The path passes correctness/RAM/TTFT gates but massively regresses decode.
+  - It increases total iouring reads and wait:
+    - normal `14862` reads;
+    - protected preload `17507` reads;
+    - wait rises to `20.94 s`.
+  - It damages down cache residency, which is more important than the first
+    cold-read cluster.
+
+Conclusion for phases 7IW-7IZ:
+
+- Foreground wait is broad and not dominated by a tiny tensor set.
+- The visible first cold down outlier is real, but using the current profile
+  preload/protect mechanism either:
+  - does not retain all targeted entries; or
+  - over-protects and destroys down cache hit rate.
+- Future work should not use `GGML_MOE_VRAM_PROFILE_PROTECT` for narrow cold
+  entry pinning unless the runtime gains an exact-key pinning mechanism.
+- The next viable direction is a source-level exact-key pin facility or a
+  lower-level foreground read path improvement; both require a new design step
+  before implementation.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
