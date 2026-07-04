@@ -42698,3 +42698,75 @@ GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
   - n96 `iouring_wait_us` remains about `35.8-36.6 s`.
 - Next design step should target reclaim-aware file-cache pressure or a more
   direct reduction in expert-pack movement, not larger pinned rings.
+
+## Phase 7EY: pinned slot lower-bound check at slots10
+
+Start time:
+
+- 2026-07-04T04:58:00Z.
+
+Reason for this phase:
+
+- Phase 7EX accepted `PINNED_SLOTS=12` as runtime SOTA and showed that reducing
+  pinned slots from `16` can improve reproducible cold-start speed under the
+  strict 16GB cgroup.
+- The remaining bottleneck is still movement under memory pressure:
+  - all accepted 7EX runs hit the cgroup cap;
+  - n96 `iouring_wait_us` remains `35.8-36.6 s`;
+  - n96 main pinned `host_stage` remains `30.3-30.7 s`;
+  - `memory.events max`, `pgscan`, and `pgsteal` remain high.
+- Test one more lower slot setting before leaving this optimization axis:
+  - `PINNED_SLOTS=10` may reduce non-reclaimable staging pressure further;
+  - but it may also increase slot waits and reduce overlap.
+
+Theoretical expectation:
+
+- Moving `12 -> 10` saves only a small amount of pinned host memory per active
+  ring compared with total file-backed pressure, so the upside is likely
+  smaller than Phase 7EX.
+- The only valid speedup mechanism is lower direct reclaim/page-cache churn.
+- If it works, expected n32 gain is likely `0.0-0.3 s` versus the accepted
+  7EX n32 band.
+- If `slot_wait`, `host_stage`, or `h2d` increases, the smaller ring is below
+  the useful concurrency floor and must be rejected.
+
+Design-stage experiment:
+
+- Env-only diagnostic; no source patch.
+- Run exact Phase 7EX SOTA env except:
+  - `PINNED_SLOTS=10`.
+- Keep memory timeline enabled.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ey-slots10-timeline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=10 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7ew_cgroup_timeline.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Decision rule:
+
+- If first n32 decode is slower than the accepted 7EX confirmation
+  `29462.94 ms / 31`, reject `PINNED_SLOTS=10`.
+- If first n32 decode beats `29462.94 ms / 31` and all gates pass:
+  - run one additional n32 cold-start confirmation;
+  - then run two n96 cold-start confirmations;
+  - only promote if the n96 confirmations are not slower than the accepted
+    7EX n96 band and all gates pass.
+- If promoted, commit and push the plan update with all metrics and exact
+  reproduction commands.
