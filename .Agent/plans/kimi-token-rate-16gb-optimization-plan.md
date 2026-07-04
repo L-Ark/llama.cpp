@@ -57916,3 +57916,109 @@ Decision rule:
 - If token rate is flat or worse, reject `UPGATE_PCT=62` and keep pct `60`.
 - If down hit loss causes decode regression, do not test pct `63` in this
   sequence because trace replay already predicts down miss growth past pct `62`.
+
+### 7IL result
+
+- Source head:
+  `d2e7b5f1a` (`docs: plan upgate split probe`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-204820Z-n32-phase7il-upgate-pct62`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard d2e7b5f1a
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-204820Z-n32-phase7il-upgate-pct62
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `81867.12 ms`;
+  - decode `29457.77 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15076745216`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Runtime counters:
+  - expert pack hits `25045`, misses `192`;
+  - iouring reads `14862`, bytes `86301917184`, wait
+    `14366347 us`;
+  - main pinned staging: copies `19380`, waits `19344`;
+  - main iouring batches `2750`, jobs `10846`, wait calls `8638`,
+    inflight average `3.15`;
+  - gate pinned staging: copies `4121`, waits `4097`;
+  - gate iouring batches `1263`, jobs `4016`, wait calls `3401`,
+    inflight average `2.79`;
+  - down overlap worker time `3535024 us`;
+  - down hit `73.4%`, slots `766`;
+  - upgate hit `45.2%`, slots `1735`.
+- 7IL conclusion:
+  - Direction matches trace replay:
+    - upgate slots increase from `1679` to `1735`;
+    - upgate hit rate improves from `43.7%` to `45.2%`;
+    - down hit rate slightly decreases from `73.6%` to `73.4%`.
+  - Token rate `1.05 tok/s` is better than the noisy pct60 min-profile runs at
+    `1.02-1.03 tok/s`, but not above the best recent n32 diagnostic run
+    (`1.06 tok/s`).
+  - This is a possible small improvement, not a confirmed SOTA. It must be
+    repeated before changing the default runtime.
+
+## Phase 7IM: repeat `UPGATE_PCT=62` n32 before accepting
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IL reduced upgate miss traffic and preserved correctness, but the measured
+  token-rate gain is small enough that run-to-run variance can explain it.
+
+Hypothesis:
+
+- If `UPGATE_PCT=62` is a real improvement, a second strict cold-start n32
+  min-profile run should stay at or above `1.05 tok/s`, preserve the
+  `~45.2%` upgate hit rate, and avoid a material down-hit regression.
+
+Experiment:
+
+- No source behavior change.
+- Repeat the exact 7IL command with a new run directory:
+  `UPGATE_PCT=62`, `N=32`, `VRAM_MIB=15000`, `THREADS=32`,
+  `PINNED_SLOTS=12`, `IQ2_UPGATE_PARALLEL=1`, `MIN_PROFILE=1`,
+  `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+  `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If repeat token rate is `>= 1.05 tok/s` and gates pass, update the runtime
+  default to `UPGATE_PCT=62`, commit, push, then run n96.
+- If repeat token rate falls back to pct60 noise (`<= 1.03 tok/s`) or TTFT/RAM
+  regresses, reject pct `62` and keep pct `60`.
