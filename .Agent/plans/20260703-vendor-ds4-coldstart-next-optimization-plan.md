@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `a63ad426173f4da10b5f16f3d009f7a7d288b29c` (`vendor-ds4: reject dedup down prefetch`)
+- Latest pushed head before this document update: `c455d99a124f5938e1edc506062af2798f806ff7` (`vendor-ds4: record invalid split top1 filter`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -53,7 +53,7 @@ Current bottleneck conclusion:
 
 ## Current Baseline
 
-- `current_pushed_head_before_this_update`: `a63ad4261` (`vendor-ds4: reject dedup down prefetch`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `c455d99a1` (`vendor-ds4: record invalid split top1 filter`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -95,7 +95,7 @@ Current measured bottleneck after O_DIRECT:
 
 Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 
-1. Treat `b1168731e` as the current pushed documentation/source baseline before this plan update, while treating the accepted runtime behavior as the post-rollback path restored at `5484a1806`. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
+1. Treat `c455d99a1` as the current pushed documentation/source baseline before this plan update, while treating the accepted runtime behavior as the pushed `4.4 tok/s` SOTA path. Before a new source change, verify the worktree state and whether any probe source is still unaccepted.
 2. Do not promote CPU prewarm touch. It tied at `4.2 tok/s` after pushed-source reproducibility and increased TTFT versus the accepted SOTA, so it remains rejected diagnostic evidence.
 3. External draft/internal MTP is currently not viable: DS4 GGUF has no `mtp`, `draft`, `eagle`, `spec`, or `next` tensors, and local model inventory has no tokenizer-compatible small DS4 draft model.
 4. No speculative diagnostic is currently active. no-draft `ngram-mod`, ngram-simple, server partial fallback, and target-only lookahead are all rejected for this path.
@@ -120,7 +120,7 @@ Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 - For each candidate draft path, calculate before running:
   - model size and host/VRAM footprint under the 16GB cgroup and current gate cache;
   - expected draft cost per token;
-  - required acceptance rate to beat `4.2 tok/s` and to approach `10 tok/s`;
+  - required acceptance rate to beat the current accepted `4.4 tok/s` SOTA and to approach `10 tok/s`;
   - whether the implementation verifies target logits without changing final output correctness.
 - If no compatible draft/MTP path exists, record that explicitly and do not spend more time on ngram-simple unless a new acceptance mechanism is designed.
 
@@ -134,16 +134,16 @@ Latest optimization direction after the 2026-07-04 rejected probes and rollback:
 ### Phase 3: Combined Fallback/Source Design If Speculative Is Not Viable
 
 - Use existing 2026-07-04 trace artifacts to separate CPU fallback compute from page/source stalls more precisely before coding.
-- Any new CPU/GPU fallback candidate must calculate a hard upper bound from measured removable time. A candidate whose bound is near `4.2 tok/s` is not worth implementation.
+- Any new CPU/GPU fallback candidate must calculate a hard upper bound from measured removable time. A candidate whose bound is near the current accepted `4.4 tok/s` SOTA is not worth implementation.
 - Preserve the accepted gate cache (`13568MiB`, `3192` slots, `86-87%` hit rate) unless the plan explicitly proves that sacrificing slots is compensated by a larger measured saving.
 - Do not repeat rejected page-touch/top-N sweeps; top512 touch prewarm has already tied after pushed-source repro.
 
 ### Phase 4: SOTA Promotion Protocol
 
-- If a candidate exceeds `4.2 tok/s` and passes RAM, correctness, TTFT, pack, and VRAM-cache gates, stop exploration immediately.
+- If a candidate exceeds `4.4 tok/s` and passes RAM, correctness, TTFT, pack, and VRAM-cache gates, stop exploration immediately.
 - Record exact run path, command/env, source head, build metadata, binary hashes, model/profile/pack hashes, memory stats including page cache, counters, TTFT, token rates, and France output.
 - Commit and push source, plan, profiles, and artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
-- Clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source rerun still exceeds `4.2 tok/s` and passes every gate.
+- Clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source rerun still exceeds `4.4 tok/s` and passes every gate.
 - If pushed-source rerun ties/regresses or violates a gate, revert runtime source to the accepted path and keep only rejected artifacts/docs.
 
 ## Execution Log
@@ -8361,3 +8361,59 @@ Next source candidate before rerun:
 - After the patch, rebuild `llama-results`, rerun the two verifier-only probes, and record whether top1 passes.
 - If both split probes fail top1, revert the source patch and keep only artifacts/docs.
 - If one split probe passes top1, update this plan with a strict cold performance-bound section before running any full token-rate benchmark.
+
+### 2026-07-04 Latest Active Plan Update
+
+This is the active plan after the invalid comma-filter verifier result. It supersedes the older `4.2 tok/s` promotion threshold in historical sections; the accepted cold-start SOTA is now `4.4 tok/s`.
+
+Current accepted SOTA guard:
+
+- Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- Required git identity for future pushes: `L-Ark <fliangae@connect.ust.hk>`.
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`.
+- TTFT acceptance gate remains `<=33617.688744 ms`.
+- Any new accepted SOTA must beat `4.4 tok/s`; ties or lower results are diagnostics/rejections only.
+
+Active bottleneck and hard-bound:
+
+- The latest hard-bound artifact is `.Agent/runs/20260704-vendor-ds4-coldstart/post-prefetch-bottleneck-hard-bound.json` at sha256 `f0474f3d66e5fb6ec22d7b0e86f727f06bb17f377deab4174daab1837b333c7f`.
+- Current bottleneck is CPU up/down fallback, especially decode fallback. The hard-bound says removing all decode up/down fallback gives an ideal no-overhead ceiling of `11.367 tok/s`; up-only or down-only decode removal alone only reaches about `6.3-6.4 tok/s`.
+- Therefore the next useful step is not another page-prefetch sweep. It is a correctness-first split up/down offload screen, then only benchmark a side that preserves exact token-level top1.
+
+Step 1: comma-list filter diagnostic patch
+
+- Add comma-list support to `moe_stream_one_name_filter_allows()` only for `GGML_MOE_STREAM_ONE_NAME_FILTER` values containing commas.
+- Preserve the old single-substring behavior exactly when the filter has no comma; this keeps the accepted `ffn_gate_exps` SOTA path unchanged.
+- Treat this as a diagnostic source patch, not a promoted optimization. It exists only so `ffn_gate_exps,ffn_up_exps` and `ffn_gate_exps,ffn_down_exps` can actually exercise the intended paths.
+- Run `git diff --check`, rebuild `llama-results`, and do not run a full token-rate benchmark before the top1 verifier passes.
+
+Step 2: split up/down top1 verifier rerun
+
+- Baseline: `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json`.
+- Fixed text: `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/fixed-france-text.txt`.
+- Up-only case: accepted SOTA env plus `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`.
+- Down-only case: accepted SOTA env plus `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_down_exps`.
+- Each case must run under strict 16GB cgroup with `MemorySwapMax=0`, cold `drop_caches`, and `llama-results --sequential-logits --top1-report`.
+- Passing criteria: `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes<=16000000000`, no cgroup OOM/OOM kill.
+- Record run paths, env/config, candidate JSON hashes, top1 comparison, cgroup memory stats, stderr cache/pack counters, and source head in `.Agent/runs/20260704-vendor-ds4-coldstart/`.
+
+Step 3: branch decisions after verifier
+
+- If both up-only and down-only fail top1, revert the comma-list diagnostic source patch, rebuild the accepted runtime path, record the rejection, commit/push docs/artifacts only, and keep SOTA at `4.4 tok/s`.
+- If exactly one side passes top1, update this plan with a side-specific performance hard-bound before running a full strict cold France benchmark. The benchmark is allowed only for the passing side.
+- If both sides pass top1, benchmark them separately first; do not combine them until each side has an individual strict cold result and a measured cache/RAM/TTFT profile.
+
+Step 4: strict cold benchmark gate for a passing side
+
+- Benchmark command must use the accepted SOTA runner shape: vendor DeepSeek, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, accepted gate profile/top-k envs, O_DIRECT one expert pack, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold `drop_caches`, and 16GB cgroup including page cache.
+- A result is accepted only if all are true: `eval_tok_s > 4.4`, France output is semantic/coherent/complete, `TTFT<=33617.688744 ms`, `memory_peak_bytes<=16000000000`, page cache is inside the cgroup, no OOM/OOM kill, no expert-pack direct failures/fallbacks, and cache counters are explained.
+- A candidate with TTFT over the gate may still be committed as an explicitly rejected/diagnostic result, but it cannot be promoted as accepted SOTA until TTFT is brought back under the gate.
+
+Step 5: mandatory reproducibility and push protocol
+
+- When a compliant new SOTA appears, stop exploration immediately.
+- Record full reproducibility metadata before leaving the run: exact run path, exact env/CLI, source head, build command, binary hashes, model/profile/pack hashes, token rates, TTFT, elapsed time, full output answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, pack/cache counters, and comparison to the previous `4.4 tok/s` SOTA.
+- Commit source, plan, profiles, and artifacts, then push immediately to `ssd/vendor/deepseek-token-rate-16gb`.
+- After push, clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source rerun still passes every gate and beats `4.4 tok/s`.
+- If pushed-source reproduction fails, revert runtime source to the accepted path, keep the failed artifact as rejected, update this plan, commit/push the rejection record, and keep the accepted SOTA unchanged.
