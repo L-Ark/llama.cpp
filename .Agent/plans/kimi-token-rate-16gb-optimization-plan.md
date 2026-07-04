@@ -42359,3 +42359,96 @@ Promotion:
 
 - Phase 7EW is diagnostic only and cannot promote SOTA.
 - No source/runtime change is accepted from this phase.
+
+Phase 7EW result - memory pressure confirmed, no SOTA promotion:
+
+- End time: 2026-07-04T03:58:00Z.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-032413Z-n32-phase7ew-cgroup-timeline`.
+- Result:
+  - exit `0`;
+  - strict cgroup `MemoryMax=15899996160`, `MemorySwapMax=0`;
+  - peak `memory.current=15899996160`;
+  - final `memory.current=14980628480`;
+  - no OOM or OOM kill.
+- France output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT:
+  - `74756.84 ms`, within the `106331.72 ms` hard gate.
+- Decode:
+  - `30279.06 ms / 31`, `1.02 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31`;
+  - this diagnostic run does not promote SOTA.
+- Expert-pack and copy counters:
+  - hits `25458`, misses `192`;
+  - `read_failures=0`;
+  - `direct_reads=8707`, `direct_fallbacks=0`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_fallbacks=0`;
+  - `iouring_wait_us=15393114`;
+  - main pinned copies `19754`, waits `19706`;
+  - main pinned `slot_wait=49.088 ms`, `host_stage=11555.322 ms`,
+    `h2d=4137.443 ms`;
+  - gate pinned `slot_wait=11.756 ms`, `host_stage=341.129 ms`,
+    `h2d=924.464 ms`;
+  - current-down overlap jobs planned/completed `3664`.
+- Final cgroup memory split:
+  - `anon=2007040`;
+  - `file=14739279872`;
+  - `kernel=236204032`;
+  - `inactive_file=8471207936`;
+  - `active_file=6267785216`;
+  - `pgmajfault=963429`;
+  - `pgfault=3871598`;
+  - `workingset_refault_file=23298`.
+- Timeline summary:
+  - samples `445`;
+  - `memory.current`: min `4268032`, max `15899996160`,
+    final `14981390336`;
+  - `file`: min `229376`, max `15418990592`,
+    delta `14740447232`;
+  - `inactive_file`: min `45056`, max `15247216640`,
+    final `8471207936`;
+  - `active_file`: min `184320`, max `15364063232`,
+    final `6268608512`;
+  - `anon`: max `497922048`, final `2433024`;
+  - `kernel`: max `464404480`, final `235376640`;
+  - `memory.events max` delta `32104`;
+  - `pgscan` delta `31093774`;
+  - `pgsteal` delta `20006468`;
+  - `pgmajfault` delta `963432`;
+  - `workingset_refault_file` delta `23328`.
+- Key timeline points:
+  - max `file` at `23676 ms`:
+    `memory.current=15862353920`, `file=15418990592`,
+    `active_file=15364063232`, `events_max=0`;
+  - max `inactive_file` at `34559 ms`:
+    `memory.current=15899672576`, `inactive_file=15247216640`,
+    `events_max=3787`, `pgscan=3657725`, `pgsteal=3002248`;
+  - max `memory.current` at `41252 ms`:
+    `current=15899996160`, `file=15321092096`,
+    `events_max=7514`, `pgscan=7238128`, `pgsteal=4505106`;
+  - max reclaim counters near run end at `125702 ms`:
+    `events_max=32104`, `pgscan=31093774`, `pgsteal=20006468`,
+    `pgmajfault=962405`.
+
+Interpretation:
+
+- The slow `30.279 s` decode run coincides with hard 16GB cgroup pressure.
+- The dominant resident memory is file-backed page cache, not anonymous model
+  allocations.
+- The large `memory.events max`, `pgscan`, and `pgsteal` deltas show direct
+  reclaim activity even though no OOM occurs.
+- The next optimization should first test whether reducing host-side pinned
+  staging pressure can lower reclaim variance without losing too much expert
+  transfer concurrency.
+
+Decision:
+
+- Keep Phase 7EB as accepted SOTA.
+- Use Phase 7EW as the baseline memory-pressure profile for the next
+  mitigation experiment.
+- Any mitigation must be reproducible under the same cold-start 16GB cgroup
+  command and must record `memory-timeline.csv` until pressure is understood.
