@@ -7645,3 +7645,29 @@ Next read-only direction:
 2. Compute the hard upper bound from route trace rows and current fallback timing before writing code.
 3. If and only if the bound can plausibly exceed the current `4.4 tok/s` SOTA by a meaningful margin and preserve correctness by construction, update this plan with the exact source design and verifier sequence.
 4. Otherwise close that path too and move to deeper CPU MXFP4/layout work.
+
+### 2026-07-04T05:05Z True Skip/Zero-Row Bound Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/true-skip-zero-row-bound-analysis.json`
+- sha256: `0af36aa32980612a7ea52917bf884fa9c6553a40de295678f967377323275228`
+- source head: `4b2621719c40972d02b509e81b3e6371585e6d57`
+
+Evidence:
+
+- Route trace counts for accepted SOTA: `up pruned0=19760`, `up pruned1=16720`, `down pruned0=19760`, `down pruned1=16720`.
+- Current fallback profile counts: `up count=19760`, `down count=19760`.
+- Therefore the remaining CPU fallback rows already match `pruned0`; `pruned1` rows are already zeroed/skipped before the CPU fallback loop.
+- Historical CPU phase trace measured grouping plus zero-fill at only `82.008 ms` while zeroing `33440` pruned entries / `410910720` bytes.
+
+Hard bounds:
+
+- Perfectly eliminating all existing grouping/zero-fill would save only `0.082008s`, with optimistic no-overhead ceiling `4.412 tok/s`.
+- Removing all remaining up/down CPU fallback would have a large reference ceiling (`26.438s` removable, optimistic `29.64 tok/s`), but that requires exact compute/offload/layout work. It is not available through skip/zero pruning.
+
+Verdict:
+
+- Close true skip/zero-row as a token-rate optimization path.
+- Any additional row removal is approximate top-k pruning, not exact correctness-preserving skipping. Relevant top2 variants already failed trajectory/correctness/performance (`late10-last10-top2`, `late10-last5-top2`, `late10-last10-up-only-top2`).
+- Next active direction must target exact elimination of remaining up/down CPU fallback through compute/offload/layout changes. If it can change logits, it must use the lightweight top1 verifier before any performance benchmark.

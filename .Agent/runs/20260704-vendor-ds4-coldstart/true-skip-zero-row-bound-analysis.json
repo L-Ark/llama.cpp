@@ -1,0 +1,85 @@
+{
+  "accepted_sota": {
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "generation_time_s_estimate": 31.047446709999996,
+    "generation_tokens_estimate_from_rounded_rate": 136.60876552399998,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "bounds": {
+    "perfect_existing_zero_group_elimination": {
+      "optimistic_eval_tok_s_no_overhead": 4.411652836679607,
+      "seconds_saved": 0.082008,
+      "verdict": "not useful"
+    },
+    "remove_all_remaining_updown_cpu_fallback_for_reference_only": {
+      "optimistic_eval_tok_s_no_overhead": 29.637074188319925,
+      "seconds_saved": 26.438059,
+      "verdict": "large enough, but this requires exact compute/offload/layout work, not skip/zero pruning"
+    }
+  },
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "decision": {
+    "next_direction": "Target exact elimination of remaining up/down CPU fallback via compute/offload/layout changes, not additional zero-row pruning. Any such candidate must use the top1 verifier before performance if it can change logits.",
+    "reason": "There are no remaining exact pruned rows to skip in the CPU fallback loop; pruned rows are already zeroed before fallback. The only exact skip/zero saving is the historical grouping/zero-fill cost around 82 ms. Skipping more rows would be approximate top-k pruning, and the relevant top2 variants already failed trajectory/correctness or performance.",
+    "skip_zero_path_pass": false
+  },
+  "evidence": {
+    "code_inspection": [
+      "ggml_compute_forward_mul_mat_id uses ggml_moe_keep_topk_for_tensor() and skips id >= keep_topk for ffn_up_exps/ffn_down_exps by zeroing dst and continuing before matrix_row_counts.",
+      "The active fallback profile count equals route pruned0 count for both up and down, so pruned1 rows are already outside the CPU fallback loop.",
+      "The fused up/gate path can still report up fallback work, but the current stream/fallback counters show only retained rows remain in CPU fallback under the accepted policy."
+    ],
+    "fallback_counts": {
+      "down_count": 19760,
+      "up_count": 19760
+    },
+    "fallback_matches_pruned0": true,
+    "historical_phase_trace": {
+      "group_plus_zero_ms": 82.008,
+      "interpretation": "Even perfect elimination of existing grouping/zero-fill is too small to move token rate materially.",
+      "pruned_entries": 33440,
+      "trace": "/root/lfz/runs/vendor-ds4-16gb/20260702T041023Z-20260702_late10_cpu_phase_trace_current_041023/france-cpu40-vram0gb/cpu_phase_summary.json",
+      "zeroed_bytes": 410910720
+    },
+    "previous_approximate_pruning_failures": [
+      {
+        "failure": "changed trajectory, increased gate rows/misses/refaults, truncated answer",
+        "name": "late10-last10-top2",
+        "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T013948Z-20260702_late10_last10_top2/france-cpu40-vram0gb"
+      },
+      {
+        "failure": "tied token rate and increased rows/misses/refaults",
+        "name": "late10-last5-top2",
+        "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T015049Z-20260702_late10_last5_top2/france-cpu40-vram0gb"
+      },
+      {
+        "failure": "quality failure and same gate row/miss explosion as both-projection top2",
+        "name": "late10-last10-up-only-top2",
+        "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T041644Z-20260702_late10_last10_up_only_top2_041644/france-cpu40-vram0gb"
+      }
+    ],
+    "route_counts": {
+      "down_pruned0": 19760,
+      "down_pruned1": 16720,
+      "up_pruned0": 19760,
+      "up_pruned1": 16720
+    }
+  },
+  "inputs": {
+    "accepted_summary_json": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb/summary.json",
+    "accepted_summary_sha256": "cca15940de41427cdba1d6457d702888195fbd2cf7ce3a434f9644ce723b1423",
+    "fallback_profile_json": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json",
+    "fallback_profile_sha256": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+    "ggml_cpu_c_sha256": "295494b501b2dc97dc6ab212eb116426fcefbdfd4bd9696fa6a65912ea04f777",
+    "route_trace_analysis_json": "/root/lfz/runs/vendor-ds4-16gb/20260703T113716Z-20260703T-route-trace-accepted-diagnostic/france-cpu40-vram0gb/route_trace_analysis.json",
+    "route_trace_analysis_sha256": "16792f62882a2de7b01ac02e701d5f9fcc0dc519cf1ab81bb074b440553aa786"
+  },
+  "phase": "true CPU fallback skip / zero-row bound",
+  "source_head": "4b26217199241d25255d0e3b2392114055ebe473",
+  "timestamp_utc": "2026-07-04T03:33:36Z"
+}
