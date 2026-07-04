@@ -47331,6 +47331,112 @@ Decision rule:
 - If metrics are captured and overhead is acceptable, keep the instrumentation
   and use its counters to plan the next down-overlap optimization.
 - If overhead or output regresses, revert the instrumentation.
+
+Result: n32 completed; instrumentation accepted.
+
+- End time: 2026-07-04T17:58:16+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-095545Z-n32-phase7gd-current-down-report`.
+- Code head:
+  `84828972e`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76958.47 ms`;
+  - decode `29739.62 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=462848`;
+    - `file=14814908416`;
+    - `kernel=234676224`;
+    - `inactive_file=7568109568`;
+    - `active_file=7246114816`;
+    - `pgmajfault=962539`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `direct_reads=8707`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15858667`.
+- New current-down overlap metrics:
+  - calls `992`;
+  - planned_jobs `3664`;
+  - completed_jobs `3664`;
+  - cache_hits `3528`;
+  - missing_tensor `93`;
+  - missing_pack `36`;
+  - submitted_batches `896`;
+  - failed_batches `0`;
+  - max_jobs `8`;
+  - worker_us `3386228`;
+  - batch hist `1:40,2-4:525,5-8:331`.
+- Acceptance:
+  - all gates pass;
+  - decode remains inside the current rebuilt n32 baseline range.
+- Decision:
+  - Keep the low-overhead current-down overlap report.
+  - Next diagnostic should enable the existing per-tensor profile output to
+    identify which tensors account for `missing_tensor`, `missing_pack`, and
+    low job counts.
+
+## Phase 7GE: current-down overlap per-tensor profile
+
+Start time: 2026-07-04T18:00:00+08:00.
+
+Goal:
+
+- Use existing per-tensor current-down overlap profiling to identify:
+  - which layers/tensors have `missing_tensor`;
+  - which layers/tensors have `missing_pack`;
+  - which layers have low planned jobs or many cache hits.
+- No code change; only enable profile output at atexit.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ge-current-down-tensor-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Postprocess:
+
+```bash
+python3 - <<'PY' "$RUN/current-down-profile.csv"
+import csv, sys
+rows=list(csv.DictReader(open(sys.argv[1])))
+for key in ["missing_tensor","missing_pack","planned_jobs","cache_hits"]:
+    print("---", key)
+    for r in sorted(rows, key=lambda r:int(r[key]), reverse=True)[:20]:
+        print(r)
+PY
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If missing tensors concentrate in specific down layers, investigate why those
+  tensors are not registered and whether registering them is safe.
+- If missing packs concentrate in overlay gaps, inspect expert-pack coverage.
+- If most layers are healthy and misses are unavoidable, do not add current-down
+  code yet; move to a different bottleneck.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
