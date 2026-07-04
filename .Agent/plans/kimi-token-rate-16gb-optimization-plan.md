@@ -54663,3 +54663,69 @@ Decision rule:
   `THREADS=32`.
 - If n96 beats SOTA, repeat n96 once before accepting; only then update runner
   defaults and push a result commit.
+
+Experiment A result: n32 passed, but no clear improvement.
+
+- Plan commit:
+  `2384096be` (`docs: plan threads24 contention probe`).
+- Server source:
+  `2384096be`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-172745Z-n32-phase7ht-threads24`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-172745Z-n32-phase7ht-threads24
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=24 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `88134.62 ms`;
+  - decode `29728.74 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15079047168`;
+  - swap max `0`;
+  - anon `458752`;
+  - file `14841217024`;
+  - kernel `234070016`;
+  - inactive file `3688034304`;
+  - active file `11152666624`;
+  - major faults `1275877`;
+  - file workingset refaults `21430`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_submit_us=43000`;
+  - `iouring_wait_us=15656028`;
+  - global iouring batches `4002`, submit calls `4002`, wait calls `12047`,
+    CQEs `15024`, inflight avg `3.10`, max `8`;
+  - main iouring jobs `10969`, wait calls `8558`, inflight avg `3.22`;
+  - gate iouring jobs `4055`, wait calls `3489`, inflight avg `2.81`;
+  - current-down worker `3484677 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Comparison:
+  - 7HR n32 THREADS=32 parity: `29598.42 ms / 31`, TTFT `82427.84 ms`;
+  - 7HT n32 THREADS=24: `29728.74 ms / 31`, TTFT `88134.62 ms`;
+  - n32 decode remains within the stable region but does not improve; TTFT is
+    higher by `5706.78 ms` but still below the 20% cap.
+- Decision:
+  - Run n96 once because n32 passed hard gates and did not show a gross decode
+    regression.
+  - Require n96 to beat `70087.31 ms / 77` before accepting; otherwise keep
+    default `THREADS=32`.
