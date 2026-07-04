@@ -53336,3 +53336,43 @@ Decision rule:
   reject depth `3` and keep production depth `2`.
 - If n32 passes and improves, run strict n96.
 - Accept only if n96 beats `70087.31 ms / 77`; otherwise record rejection.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-161224Z-n32-phase7hm-prefetch-depth3`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76103.76 ms`;
+  - decode `29512.94 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15040165`;
+  - iouring inflight avg `3.08`, max `8`;
+  - current-down overlap jobs `3664`, worker `3314852 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Comparison:
+  - Phase 7HK depth1 n32: `29087.31 ms / 31`;
+  - current rebuilt better n32 points are around `29.1s`;
+  - Phase 7HM depth3 n32: `29512.94 ms / 31`.
+- Decision:
+  - Reject `MOE_PREFETCH_DOWN_DEPTH=3`.
+  - Do not run n96.
+  - Keep production `MOE_PREFETCH_DOWN_DEPTH=2`.
+  - The current stable down-prefetch curve is now bounded by:
+    - depth1: can be fast but not reproducible on n96;
+    - depth2: current production default;
+    - depth3: n32 slower;
+    - depth4: previously rejected.
