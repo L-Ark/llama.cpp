@@ -1,0 +1,69 @@
+{
+  "date": "2026-07-05",
+  "title": "All-up Q8_0 CPU-compatible ffn_up_exps pre-fallback skip correctness gate",
+  "source_head_before_experiment": "d8b1fa0d0b9e86db4e1f4b55e51be0365c081316",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360
+  },
+  "bottleneck": {
+    "component": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "current_decode_cpu_updown_fallback_ms": 19029.457,
+    "saving_required_for_10_tok_s_ms": 17386.57,
+    "max_total_overhead_budget_ms": 1642.887
+  },
+  "prior_results": {
+    "cpu_compat_boundary": "max_calls=104 output-write and pre-fallback skip both passed with same_top1=145/145",
+    "cpu_compat_blk0_full": "passed, same_top1=145/145, 870 skipped calls",
+    "cpu_compat_blk1_full": "passed, same_top1=145/145, 870 skipped calls",
+    "cpu_compat_blk2_full": "passed, same_top1=145/145, 870 skipped calls",
+    "down_status": "rejected; blk.0.ffn_down_exps.weight max_calls=64 failed same_top1=143/145"
+  },
+  "candidate": {
+    "name": "all-up ffn_up_exps.weight CPU-compatible Q8_0 pre-fallback skip",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "why_this_step": "Early full-layer up checks passed individually. The next correctness gate must cover every ffn_up_exps tensor before any strict cold performance benchmark can be meaningful.",
+    "theoretical_effect_if_later_promoted": "This can only remove CPU fallback work for up projections. It is not expected to reach 10 tok/s alone because down fallback remains rejected; its value is to create a verified exact/token-stable up path before analyzing remaining down/source bottlenecks.",
+    "hard_upper_bound": "Upper bound is strictly below the all-up+all-down removal ceiling of 11.367 tok/s. Since down remains on CPU, this step is a correctness prerequisite rather than a promotable 10 tok/s design."
+  },
+  "env": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_VRAM_CACHE_GB": "0",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0"
+  },
+  "command_skeleton": "llama-results -m DeepSeek-V4-Flash-FP4-FP8-native.gguf -f fixed-france-text.txt --sequential-logits -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts --output baseline/result.gguf --check --top1-report top1-check.json --top1-fail-on-mismatch",
+  "correctness_gate": {
+    "baseline_source": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean/result.gguf",
+    "pass_condition": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0, and q80 skip report records only ffn_up_exps.weight tensors.",
+    "failure_rule": "If all-up top1 fails, do not run a performance benchmark. Record first mismatch, skip report tail, cgroup stats, then add multi-filter support or binary-search the first failing layer/record."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "strict_cgroup_required": true,
+    "down_skip_enabled": false,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "expected_ram_pressure": "Correctness verifier reuses the existing model/result artifacts and adds only transient CUDA/Q8_0 buffers plus the skip report. It must run inside MemoryMax=16000000000 and MemorySwapMax=0; page cache remains accounted by cgroup.",
+  "expected_ttft_impact": "Not evaluated in this correctness-only run. Any later strict cold performance run must satisfy TTFT <= 33617.688744 ms to be accepted.",
+  "rollback_rule": "The runtime path is default-off. If correctness fails, keep source guarded/off and only commit rejected documentation/artifacts.",
+  "promotion_rule": "This correctness run cannot be promoted as SOTA. It only decides whether a strict cold performance benchmark for CPU-compatible up-skip may be planned."
+}
