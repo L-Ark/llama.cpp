@@ -50520,3 +50520,91 @@ systemd-run --wait --collect --same-dir \
     placement of streamed expert movement rather than refill granularity.
   - Do not retry simple iouring refill/depth/slot runtime sweeps without a new
     batch construction mechanism that increases useful work per submission.
+
+## Phase 7GU: reproducible semantic quality gate hardening
+
+Start time: 2026-07-04T20:45:39+08:00.
+
+Goal:
+
+- Fix the runner's known false-positive quality check before continuing more
+  token-rate experiments.
+- Keep model runtime behavior unchanged:
+  - no CUDA source changes;
+  - no MoE cache/staging changes;
+  - no prompt, sampling, or generation length changes;
+  - no default performance env changes.
+- Change only the post-run metrics parser in
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Why this is required:
+
+- Phase 7GQ showed the current parser can mark a semantically broken answer as
+  `quality=pass`:
+  `France is a country in Western Europe known as a major global, its the largest city is, its a country, its is, the country, its largest,`
+- The user requirement says every step must ensure output correctness, especially
+  for large token-rate changes.
+- Manual inspection remains required, but the reproducible run artifact should
+  also expose a stricter machine-readable gate so later results cannot silently
+  pass obvious broken repetition/truncation.
+
+Implementation:
+
+- Replace the current keyword-only rule:
+
+```python
+quality = "France" in stdout and ("Europe" in stdout or "Paris" in stdout) and len(stdout.split()) >= 12
+```
+
+- Add a deterministic `semantic_quality` check that requires:
+  - mentions France;
+  - mentions at least one location/capital cue (`Europe`, `Paris`, `Eiffel`,
+    `Louvre`, `Riviera`, `Bordeaux`, `Western Europe`);
+  - at least 12 words;
+  - no obvious repetition collapse such as repeated `its`/`country` fragments;
+  - no excessive comma-fragment pattern;
+  - for n96-style full answers, no dangling ending like `and`, `of`, `the`,
+    `member of` without completion.
+- Emit:
+  - `quality=pass|fail`;
+  - `quality_reason=<reason>`.
+
+Validation:
+
+1. Local parser sanity test with three strings:
+   - accepted n96 France answer from Phase 7GT must pass;
+   - Phase 7GQ bad answer must fail;
+   - too-short/truncated fragment must fail.
+2. Cold-start n96 production-default validation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gu-quality-gate"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- local parser sanity test passes;
+- n96 run exits `0`;
+- `quality=pass`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If the parser rejects known-good output or accepts the known-bad Phase 7GQ
+  output, fix it before running n96.
+- If n96 quality fails despite manual good output, fix the parser.
+- If n96 gates pass, commit and push the runner hardening.
+- This phase does not claim token-rate SOTA by itself because it intentionally
+  changes only metrics classification.
