@@ -8108,3 +8108,43 @@ Decision:
 - Run one strict cold France benchmark with accepted SOTA config plus `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP_DEDUP=1`.
 - If first run is `>4.4 tok/s`, commit and push immediately, rebuild from pushed source, and reproduce before promotion.
 - Reject and revert runtime source if pushed-source reproduction is `<=4.4 tok/s`, TTFT exceeds the promotion gate, RAM exceeds 16GB including page cache, correctness fails, cache/pack counters collapse, or dedup counters show advice volume remains near the rejected `78.75 GiB` scale.
+
+### 2026-07-04T05:05Z Deduplicated Down Prefetch Rejection
+
+Run:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T050219Z-20260704_cpu_down_prefetch_dedup_probe/france-cpu40-vram0gb`
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-dedup-rejected.json`
+- artifact sha256: `3b3b658eb1bfec1400323ef77dada61d9bd9f0bcd32541a6accf7279bb8341c4`
+- Source head during run: `813ab55f9c5f202221a39d89bd6d9a615139c632` with `ggml/src/ggml-cpu/ggml-cpu.c` dirty.
+
+Metrics:
+
+- `eval_tok_s=4.1`
+- `prompt_tok_s=1.9`
+- `TTFT=33348.567464 ms`
+- `TTFT_limit=33617.688744 ms`
+- `elapsed_seconds=66.5`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=12968255488`
+- `ram_ok=true`
+- `oom_seen=false`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+- France answer remained semantic, coherent, and complete.
+
+Counters:
+
+- Gate pack: `hits=4886`, `misses=0`, `direct_reads=4886`, `direct_failures=0`, `direct_fallbacks=0`.
+- Gate prefill: `attempted=3000`, `inserted=3000`, `pack_misses=0`, `read_failures=0`, `elapsed_ms=4727.889`.
+- VRAM cache: `hits=33265`, `misses=1886`, `hit_rate=94.6%`.
+- Dedup prefetch: `enabled=1`, `entries=40`, `down_registered=40`, `down_updated=5600`, `calls=5640`, `matched=5600`, `missing=40`, `advised_experts=2970`, `skipped_already=16004`, `out_of_range=0`, `advised_bytes=13235650560`, `madvise_failures=0`.
+
+Decision:
+
+- Reject before push as a SOTA candidate. The dedup design successfully reduced advice volume from about `78.75 GiB` to about `12.33 GiB`, but strict cold speed regressed to `4.1 tok/s`.
+- This closes the current page-timing prefetch family: broad `WILLNEED`, route-specific repeated prefetch, and dedup route-specific prefetch all failed to produce a reproducible accepted SOTA.
+- Likely gap: under the 16GB cgroup, readahead/page-cache competition and prefetch timing offset any reduction in major faults or repeated advice overhead.
+- Runtime source must be reverted to the accepted path. Keep only bound/rejection artifacts and this plan record.
+- Current accepted SOTA remains `eval_tok_s=4.4`, run `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
+- Next work should not try another synchronous `madvise`/page-touch variant. It must either target exact compute/offload of up/down fallback or introduce a genuinely asynchronous/lower-pressure source mechanism with a new hard-bound section first.
