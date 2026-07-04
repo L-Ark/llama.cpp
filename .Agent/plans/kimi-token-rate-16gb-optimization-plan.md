@@ -44772,6 +44772,7 @@ Implementation plan:
    - when unset, Q4_0 remains unsupported and production behavior is
      unchanged.
 2. Under the env gate, allow `GGML_TYPE_Q4_0` in:
+   - CPU-side `ggml_cuda_moe_stream_supports_down_batch`;
    - `moe_stream_type_supported`;
    - `launch_moe_mmvq_compact_batch`;
    - `launch_moe_mmq_slot_batch` only if needed by the selected path.
@@ -44789,9 +44790,21 @@ systemd-run --wait --collect --same-dir \
   -p MemoryMax=15900000000 -p MemorySwapMax=0 \
   env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
       UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
-      GGML_MOE_STREAM_Q4_0=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_Q4_0=1" \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+Runner requirement:
+
+- The Phase 7FB reproduction script currently writes a fixed `$RUN/env.txt`
+  and only exports values from that file.
+- Therefore extra experiment variables passed to `systemd-run env ...` are not
+  visible to `llama-completion` unless the script appends them to `$RUN/env.txt`.
+- Add a default-empty `EXTRA_RUNTIME_ENV` hook before the next practice:
+  - one `KEY=VALUE` assignment per line;
+  - appended verbatim to `$RUN/env.txt`;
+  - recorded in `command.txt`;
+  - empty by default, so accepted Phase 7FB reproduction is unchanged.
 
 Required diagnostics:
 
@@ -44819,3 +44832,112 @@ Decision rule:
      semantically correct.
 - Accepted source changes must be committed and pushed immediately with
   reproduction commands and result paths in this plan.
+
+Invalid diagnostic - 2026-07-04 06:14Z:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-061404Z-n32-phase7fj-q4-0-gpu-diag`.
+- Outcome:
+  - quality: pass;
+  - TTFT: `74711.14 ms`;
+  - decode: `29987.08 ms / 31`, `1.03 tok/s`;
+  - memory peak: `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- This run does not validate Q4_0 support:
+  - `$RUN/env.txt` did not contain `GGML_MOE_STREAM_Q4_0=1`;
+  - no `down Q4_0 MMVQ batch path active` diagnostic appeared;
+  - eligibility still showed Q4_0 down as unsupported:
+    `src0_type=2 eligible=0 unsupported=32`;
+  - fallback profile still had `decode,type=2 calls=1736 fallback_ms=2579.376`.
+- Decision:
+  - treat this as an invalid diagnostic;
+  - do not accept or reject the Q4_0 source patch from this run;
+  - first add the reproducible `EXTRA_RUNTIME_ENV` runner hook, then rerun n32.
+
+Incomplete diagnostic - 2026-07-04 06:19Z:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-061939Z-n32-phase7fj-q4-0-gpu-diag-valid`.
+- Outcome:
+  - `$RUN/env.txt` did contain `GGML_MOE_STREAM_Q4_0=1`;
+  - quality: pass;
+  - TTFT: `71019.63 ms`;
+  - decode: `29560.85 ms / 31`, `1.05 tok/s`;
+  - memory peak: `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- This run still did not exercise Q4_0 GPU batch:
+  - no `down Q4_0 MMVQ batch path active` diagnostic appeared;
+  - eligibility still showed Q4_0 down as unsupported:
+    `src0_type=2 eligible=0 unsupported=32`;
+  - fallback profile still had `decode,type=2 calls=1736 fallback_ms=2434.872`.
+- Root cause:
+  - CPU-side eligibility has its own whitelist in
+    `ggml_cuda_moe_stream_supports_type` /
+    `ggml_cuda_moe_stream_supports_down_batch`;
+  - the CUDA-side Q4_0 gate is not reached unless CPU-side down-batch support
+    also allows Q4_0.
+- Decision:
+  - treat this as incomplete implementation, not an accepted improvement;
+  - add the same default-off `GGML_MOE_STREAM_Q4_0=1` gate to CPU-side
+    `ggml_cuda_moe_stream_supports_down_batch`, then rerun n32.
+
+Result - 2026-07-04 06:24Z:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-062446Z-n32-phase7fj-q4-0-gpu-cpu-gate`.
+- Temporary changes in this run:
+  - runner had the default-empty `EXTRA_RUNTIME_ENV` hook;
+  - CPU-side down-batch whitelist allowed Q4_0 under
+    `GGML_MOE_STREAM_Q4_0=1`;
+  - CUDA-side MoE batch allowed Q4_0 under the same env.
+- Gates:
+  - `$RUN/env.txt` contained `GGML_MOE_STREAM_Q4_0=1`;
+  - Q4_0 path was active:
+    `[moe_stream_batch] down Q4_0 MMVQ batch path active`;
+  - quality: pass;
+  - output: `France is a country in Western Europe known for its rich
+    history, art, and culture. It is famous for landmarks like the Eiffel
+    Tower, the Louvre`;
+  - TTFT: `76122.79 ms`, below the `106331.72 ms` limit;
+  - decode: `39465.90 ms / 31`, `0.79 tok/s`;
+  - memory peak: `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Diagnostics:
+  - `decode,type=2` CPU fallback disappeared from fallback-profile, but the
+    replacement GPU path was much slower overall;
+  - down batch accepted increased from `1644` to `1861`;
+  - down cache slot grew from `7.44 MiB` to `7.88 MiB`;
+  - down cache slots fell from `806` to `761`;
+  - down hit rate fell from `73.6%` to `67.5%`;
+  - upgate hit rate fell from `43.7%` to `40.1%`;
+  - expert pack misses increased from `192` to `1017`;
+  - iouring bytes increased from `87.08 GB` to `94.75 GB`;
+  - iouring wait increased to `16898085 us`;
+  - pinned staging main:
+    - copies `22571`;
+    - host_stage `21932.297 ms`;
+    - h2d `4850.355 ms`;
+  - pinned staging gate:
+    - copies `5012`;
+    - host_stage `2431.079 ms`;
+    - h2d `1146.782 ms`;
+  - down profile:
+    - `cuda_batch=3.892 ms/call`;
+    - `fallback_t0=35.815 ms/call`.
+- Interpretation:
+  - The theoretical `decode,type=2` CPU fallback saving was real, but the
+    GPU path caused more and larger staging work than it removed.
+  - Q4_0 down experts are not covered well enough by the current expert-pack /
+    cache layout; admitting them changes the down cache size class and reduces
+    residency.
+  - The added Q4_0 GPU work also indirectly worsened upgate timing and hit
+    rate, likely by increasing IO/staging pressure during decode.
+- Decision: rejected.
+  - Slower than Phase 7FD diagnostic `29610.75 ms`.
+  - Slower than current Phase 7FB n32 confirmation `29182.49 ms`.
+  - Do not run n32 confirmation or n96.
+  - Revert Q4_0 CPU/CUDA source changes.
+  - Keep only the default-empty runner `EXTRA_RUNTIME_ENV` hook if retained
+    for future reproducible env-gated experiments; it must not change
+    production behavior when unset.

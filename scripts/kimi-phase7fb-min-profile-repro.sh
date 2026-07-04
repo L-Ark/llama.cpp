@@ -11,6 +11,7 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${UPGATE_PCT:=60}"
 : "${IQ2_UPGATE_PARALLEL:=1}"
 : "${MIN_PROFILE:=1}"
+: "${EXTRA_RUNTIME_ENV:=}"
 
 PROMPT="<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>"
 mkdir -p "$RUN"
@@ -93,6 +94,9 @@ if [ "$IQ2_UPGATE_PARALLEL" != "0" ]; then
   echo "GGML_MOE_STREAM_UP_GATE_PARALLEL=1" >> "$RUN/env.txt"
   echo "GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE=1" >> "$RUN/env.txt"
 fi
+if [ -n "$EXTRA_RUNTIME_ENV" ]; then
+  printf '%s\n' "$EXTRA_RUNTIME_ENV" >> "$RUN/env.txt"
+fi
 
 LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special
   -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf
@@ -109,6 +113,7 @@ LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl
   echo "UPGATE_PCT=$UPGATE_PCT"
   echo "IQ2_UPGATE_PARALLEL=$IQ2_UPGATE_PARALLEL"
   echo "MIN_PROFILE=$MIN_PROFILE"
+  echo "EXTRA_RUNTIME_ENV=$EXTRA_RUNTIME_ENV"
   printf '%q ' "${LLAMA_ARGS[@]}"
   echo
 } > "$RUN/command.txt"
@@ -124,6 +129,7 @@ systemd-run --wait --collect --same-dir \\
   -p MemoryMax=15900000000 -p MemorySwapMax=0 \\
   env RUN=<new-run-dir> N=$N VRAM_MIB=$VRAM_MIB THREADS=$THREADS PINNED_SLOTS=$PINNED_SLOTS \\
       UPGATE_PCT=$UPGATE_PCT IQ2_UPGATE_PARALLEL=$IQ2_UPGATE_PARALLEL MIN_PROFILE=$MIN_PROFILE \\
+      EXTRA_RUNTIME_ENV='<optional KEY=VALUE lines>' \\
       scripts/kimi-phase7fb-min-profile-repro.sh
 
 This script keeps the accepted Phase 7FB production runtime. With MIN_PROFILE=1
