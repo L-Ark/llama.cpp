@@ -42561,3 +42561,140 @@ Promotion rule:
     and IO gates.
 - If promoted, commit and push the plan update immediately with exact
   reproduction commands and all metrics.
+
+Phase 7EX result - accepted as runtime SOTA:
+
+- End time: 2026-07-04T04:52:00Z.
+- Change:
+  - runtime env only;
+  - `PINNED_SLOTS=16` -> `PINNED_SLOTS=12`;
+  - source unchanged.
+- Reproduction command template:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ex-slots12"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7ew_cgroup_timeline.sh
+```
+
+- For production runs without timeline sampling, keep the same env and use the
+  normal Phase 7EB reproduction runner:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ex-slots12-prod"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Accepted run set:
+
+- n32 diagnostic:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-033254Z-n32-phase7ex-slots12-timeline`
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality `pass`;
+  - TTFT `72885.58 ms`;
+  - decode `29225.78 ms / 31`, `1.06 tok/s`;
+  - versus Phase 7EB n32 SOTA `29599.64 ms`: faster by `373.86 ms`;
+  - memory peak `15899996160`;
+  - final `file=14812307456`, `inactive_file=5129523200`,
+    `active_file=9682386944`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - main pinned `slots=12`, `slot_wait=47.990 ms`,
+    `host_stage=11391.396 ms`, `h2d=4153.008 ms`;
+  - gate pinned `slot_wait=11.554 ms`, `host_stage=339.824 ms`,
+    `h2d=957.335 ms`;
+  - timeline: `memory.events max +31351`, `pgscan +30656928`,
+    `pgsteal +19985694`, `pgmajfault +940484`.
+- n32 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-033700Z-n32-phase7ex-slots12-confirm`
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality `pass`;
+  - TTFT `77297.87 ms`;
+  - decode `29462.94 ms / 31`, `1.05 tok/s`;
+  - versus Phase 7EB n32 SOTA `29599.64 ms`: faster by `136.70 ms`;
+  - memory peak `15899996160`;
+  - final `file=14811385856`, `inactive_file=1248616448`,
+    `active_file=13562736640`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - main pinned `slots=12`, `slot_wait=46.028 ms`,
+    `host_stage=11730.519 ms`, `h2d=4172.448 ms`;
+  - gate pinned `slot_wait=11.277 ms`, `host_stage=329.619 ms`,
+    `h2d=947.791 ms`;
+  - timeline: `memory.events max +32744`, `pgscan +31425826`,
+    `pgsteal +19997507`, `pgmajfault +955701`.
+- n96 confirmation A:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-033958Z-n96-phase7ex-slots12-confirm-a`
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+  - quality `pass`;
+  - TTFT `74683.20 ms`;
+  - decode `73491.97 ms / 77`, `1.05 tok/s`;
+  - versus Phase 7EB n96 SOTA `74201.57 ms`: faster by `709.60 ms`;
+  - memory peak `15899996160`;
+  - final `file=14771384320`, `inactive_file=256704512`,
+    `active_file=14514442240`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - main pinned `slots=12`, `slot_wait=122.457 ms`,
+    `host_stage=30255.281 ms`, `h2d=10378.649 ms`;
+  - gate pinned `slot_wait=25.777 ms`, `host_stage=1070.460 ms`,
+    `h2d=2326.420 ms`;
+  - timeline: `memory.events max +34323`, `pgscan +32694486`,
+    `pgsteal +21531241`, `pgmajfault +984429`.
+- n96 confirmation B:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-034335Z-n96-phase7ex-slots12-confirm-b`
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+  - quality `pass`;
+  - TTFT `75737.81 ms`;
+  - decode `74174.67 ms / 77`, `1.04 tok/s`;
+  - versus Phase 7EB n96 SOTA `74201.57 ms`: faster by `26.90 ms`;
+  - memory peak `15899996160`;
+  - final `file=14771027968`, `inactive_file=1748955136`,
+    `active_file=13021855744`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - main pinned `slots=12`, `slot_wait=124.899 ms`,
+    `host_stage=30670.856 ms`, `h2d=10374.928 ms`;
+  - gate pinned `slot_wait=28.047 ms`, `host_stage=1091.095 ms`,
+    `h2d=2327.497 ms`;
+  - timeline: `memory.events max +32573`, `pgscan +31847907`,
+    `pgsteal +21543720`, `pgmajfault +974258`.
+
+Decision:
+
+- Accept Phase 7EX as current runtime SOTA.
+- Current SOTA env:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+```
+
+- Current SOTA run set:
+  - n32: `29225.78 ms / 31` and `29462.94 ms / 31`;
+  - n96: `73491.97 ms / 77` and `74174.67 ms / 77`.
+- The improvement is modest and primarily reduces variance/regression from
+  excessive pinned-slot pressure; it does not eliminate the underlying 16GB
+  page-cache/direct-reclaim problem.
+- The remaining dominant bottleneck is still movement under memory pressure:
+  - `memory.current` reaches the cgroup cap in all accepted runs;
+  - `memory.events max`, `pgscan`, and `pgsteal` remain high;
+  - n96 main pinned `host_stage` remains about `30.3-30.7 s`;
+  - n96 `iouring_wait_us` remains about `35.8-36.6 s`.
+- Next design step should target reclaim-aware file-cache pressure or a more
+  direct reduction in expert-pack movement, not larger pinned rings.
