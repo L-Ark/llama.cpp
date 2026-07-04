@@ -1,0 +1,91 @@
+{
+  "artifact": "exact-verifier-feasibility-inspection",
+  "timestamp_utc": "2026-07-04T02:31:35Z",
+  "source_head": "59e2c514bfb16c1ad41f3b56ac19e3af2cca5084",
+  "inspection_type": "source_read_only",
+  "no_model_run_performed": true,
+  "runtime_source_modified": false,
+  "objective": "Find an existing or low-risk way to verify future GPU up/down candidates token-by-token against the accepted SOTA path before any more performance experiments.",
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "strict_limits": "cold drop_caches, 16GB cgroup including page cache, MemorySwapMax=0, TTFT <= 33617.688744 ms, France manual correctness pass"
+  },
+  "findings": {
+    "llama_debug_save_logits": {
+      "files": [
+        "examples/debug/debug.cpp:55-96",
+        "examples/debug/debug.cpp:100-113"
+      ],
+      "capability": "Can save logits for the final prompt position with --save-logits.",
+      "limitation": "It only calls llama_get_logits_ith(ctx, tokens.size() - 1), so it does not verify every generated step or a full forced sequence."
+    },
+    "llama_perplexity_save_all_logits_and_kl": {
+      "files": [
+        "tools/perplexity/perplexity.cpp:460-527",
+        "tools/perplexity/perplexity.cpp:573-625",
+        "tools/perplexity/perplexity.cpp:1869-1900"
+      ],
+      "capability": "Can evaluate fixed text windows, save compressed log-probability data, and report aggregate KL / Same top p statistics against a base logits file.",
+      "limitation": "Default mode requires tokens.size() >= 2*n_ctx and only evaluates the last half of each context window. KL mode reports aggregate same-top percentage, not a per-position mismatch list with token ids and margins."
+    },
+    "server_n_probs": {
+      "files": [
+        "tools/server/README.md:478-488",
+        "tools/server/README.md:496-520"
+      ],
+      "capability": "Can return top_logprobs / token ids during online generation when n_probs > 0.",
+      "limitation": "This is an online single-path generation API. It records probabilities but does not compare an accepted path and a candidate path under identical forced tokens."
+    },
+    "common_sampler_logits_access": {
+      "files": [
+        "common/sampling.cpp:130-162"
+      ],
+      "capability": "The sampler layer can access full logits via llama_get_logits_ith when sampled logits/probs are not supplied.",
+      "limitation": "There is no current CLI flag that emits a complete token-by-token top1/top2/margin report for a fixed accepted output sequence."
+    },
+    "llama_results": {
+      "files": [
+        "tools/results/results.cpp:30-55",
+        "tools/results/results.cpp:82-84",
+        "tools/results/results.cpp:92-131"
+      ],
+      "capability": "Most useful existing base. It tokenizes a fixed prompt, sets batch logits=true for every token, stores all logits in a GGUF result file, and --check compares a new run against a previous result.",
+      "limitation": "The existing --check gate is NMSE only. It does not report per-token top1 equality, top2 margin, first mismatch, or whether the accepted next token remains top1. It also evaluates the whole fixed text as prompt/prefill, not the exact one-token generation loop."
+    }
+  },
+  "verdict": {
+    "existing_no_source_verifier_sufficient": false,
+    "reason": "No existing command fully proves that a candidate GPU up/down path emits the same greedy token sequence as the accepted SOTA path. Existing tools provide partial logits/probability evidence but not a complete forced-sequence top1/top2/margin report.",
+    "most_viable_base": "tools/results/results.cpp",
+    "why": "It already evaluates a fixed token sequence and materializes all logits for every position. A small default-off extension can compare top1/top2/margin per position without touching llama-cli runtime behavior."
+  },
+  "next_plan": {
+    "name": "llama-results top1 verifier extension",
+    "purpose": "Create a diagnostic correctness mechanism before any future GPU up/down performance candidate.",
+    "not_a_sota_candidate": true,
+    "expected_token_rate_gain": "0 tok/s directly; this only enables safe validation of future high-risk candidates.",
+    "implementation_scope": [
+      "tools/results/results.cpp only if possible",
+      "no llama-cli runtime behavior change",
+      "default-off flag or output mode only"
+    ],
+    "required_output": [
+      "tokens compared",
+      "first top1 mismatch position if any",
+      "accepted token id and candidate token id",
+      "accepted/candidate top1 and top2 logits",
+      "margin to top2",
+      "count of same top1 positions",
+      "max_abs / mean_abs logits difference summary"
+    ],
+    "memory_accounting_before_run": "For a diagnostic France sequence, estimate logits bytes as n_tokens * n_vocab * 4. Abort or lower n_ctx if the resulting anonymous/output buffer would materially threaten the 16GB cgroup. For n_tokens <= 256 and n_vocab <= 200000, logits storage is <= 204800000 bytes per result matrix before overhead.",
+    "ttft_impact": "Not applicable to SOTA promotion. Any diagnostic run still records elapsed time and memory but cannot be accepted as token-rate improvement.",
+    "rollback_criteria": [
+      "build fails",
+      "tool changes any llama-cli/runtime path",
+      "tool cannot compare top1/margins from existing result files",
+      "diagnostic memory exceeds the 16GB cgroup when tested"
+    ]
+  }
+}

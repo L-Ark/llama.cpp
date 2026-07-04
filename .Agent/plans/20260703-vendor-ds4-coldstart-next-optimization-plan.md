@@ -7425,3 +7425,53 @@ Hard rule for the next implementation candidate:
   - RAM/page-cache accounting under the 16GB cgroup;
   - TTFT impact estimate;
   - the rollback criteria.
+
+### 2026-07-04T03:10Z Exact Verifier Feasibility Inspection Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/exact-verifier-feasibility-inspection.json`
+- sha256: `72bc9058cbabbd6ba50dc5a09abb6b39386ac6fb3980b938a4435dc5e8360333`
+- source head: `59e2c514bfb16c1ad41f3b56ac19e3af2cca5084`
+- inspection type: source read-only; no model run; no runtime source modified.
+
+Findings:
+
+- `llama-debug --save-logits` only saves final prompt-position logits via `llama_get_logits_ith(ctx, tokens.size() - 1)`. It cannot verify each generated step.
+- `llama-perplexity --save-all-logits` / `--kl-divergence-base` can evaluate fixed text windows and report aggregate KL / `Same top p`, but it does not emit per-position top1 mismatch, accepted token id, candidate token id, or margin report. Default mode also requires enough tokens for the ppl window.
+- Server `n_probs` can report top logprobs during online generation, but it is a single-path generation API, not a forced dual-path verifier.
+- The sampler layer can access logits, but there is no current CLI flag for a full forced-sequence top1/top2/margin report.
+- `llama-results` is the best existing base: it tokenizes a fixed prompt, evaluates all positions with `logits=true`, stores all logits, and `--check` compares against a previous result file. Its current check is NMSE only and is not strong enough for future GPU up/down correctness gates.
+
+Verdict:
+
+- Existing no-source verifier is insufficient.
+- The next implementation may be a diagnostic-only extension of `tools/results/results.cpp` to report top1/top2/margin per position.
+- This verifier extension has `0 tok/s` direct performance upside and cannot be promoted as SOTA. Its purpose is to prevent invalid GPU/offload candidates from being accepted on weak semantic checks or sampled per-op comparisons.
+
+Implementation plan for verifier extension:
+
+1. Scope:
+   - Modify only `tools/results/results.cpp` if possible.
+   - Keep `llama-cli` and accepted runtime behavior unchanged.
+   - Add default-off reporting/check behavior only.
+2. Output requirements:
+   - number of token positions compared;
+   - same-top1 count and ratio;
+   - first top1 mismatch position;
+   - token ids and pieces for base top1, candidate top1, and actual next token where applicable;
+   - base/candidate top1 and top2 logits;
+   - margin to top2;
+   - max_abs and mean_abs logits difference summary.
+3. RAM accounting:
+   - Before any diagnostic run, estimate `n_tokens * n_vocab * 4` for one logits matrix.
+   - For France verifier text with `n_tokens <= 256` and `n_vocab <= 200000`, one logits matrix is `<=204800000` bytes before overhead. If actual metadata exceeds this bound or cgroup memory approaches 16GB, abort.
+   - The verifier is diagnostic; it must not be used to claim SOTA token rate.
+4. TTFT:
+   - Not applicable to promotion because verifier runs are not SOTA candidates.
+   - Still record elapsed time and memory if a diagnostic run is later executed.
+5. Rollback criteria:
+   - build failure;
+   - any change outside diagnostic tool behavior;
+   - inability to compare top1/margins from result files;
+   - diagnostic memory violation under 16GB cgroup when tested.
