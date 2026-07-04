@@ -58048,17 +58048,31 @@ Hypothesis:
 
 Implementation plan:
 
-- Add a default-off analysis script, not runtime code:
+- First add a default-off per-read trace, because the 7IP aggregate CSV does
+  not include enough information to reconstruct expert IDs or per-read offsets:
+  `GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv`.
+- The trace should write one row per read job with:
+  - batch sequence;
+  - row sequence inside the batch;
+  - op;
+  - jobs;
+  - read jobs;
+  - tensor;
+  - expert index;
+  - source index;
+  - source offset;
+  - bytes.
+- Then add a default-off analysis script, not runtime behavior:
   `scripts/kimi-pack-layout-sim.py`.
 - Inputs:
-  - 7IP `io-locality-profile.csv` for requested expert groups;
+  - `io-read-trace.csv` for requested expert groups;
   - one or more `GGMLMOEPACKv1` pack files for current entry sizes and current
     offsets.
 - The script should:
   - parse current pack index entries;
   - group entries by tensor;
-  - reconstruct each profiled batch as a tensor plus selected expert IDs by
-    matching current offsets back to pack entries;
+  - reconstruct each profiled batch as a tensor plus selected expert IDs
+    directly from the per-read trace;
   - compute current layout locality metrics;
   - compute candidate layouts:
     - current key order;
@@ -58089,7 +58103,8 @@ Reproducibility requirement:
 Acceptance rule for this phase:
 
 - Commit and push only the analysis script and recorded results.
-- Do not change runtime behavior in this phase.
+- Any C++ trace code must be default-off and must not change runtime behavior
+  when the env var is unset.
 - Proceed to a real pack repack only if the simulation shows a large, concrete
   locality improvement over current layout.
 
