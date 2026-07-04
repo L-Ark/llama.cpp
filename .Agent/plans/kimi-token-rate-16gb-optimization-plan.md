@@ -7877,6 +7877,95 @@ Rollback:
 - If build fails, activation is missing, hard gates fail, quality fails, or
   n32 is slower, revert the source patch and commit the rejection record.
 
+Phase 7EL n32 candidate result - passed, confirmation required:
+
+- result time: 2026-07-04T01:18:00Z.
+- source status:
+  - dirty default-preserving source patch on top of plan commit `72b1e0875`;
+  - because first n32 improved and all hard gates passed, commit and push the
+    source patch immediately before confirmation.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-011555Z-n32-phase7el-down-minjobs5`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-011555Z-n32-phase7el-down-minjobs5"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7el_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `73291.06 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- activation:
+  - `env.txt` contains `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=5`;
+  - stderr contains
+    `down parallel stage threshold active: min_jobs=5`.
+- decode:
+  - `28055.21 ms / 31`, `1.10 tok/s`;
+  - faster than Phase 7EB n32 SOTA `29599.64 ms / 31` by `1544.43 ms`;
+  - passes first n32 promotion gate.
+- counters:
+  - down cache unchanged versus SOTA shape:
+    - slots `806`;
+    - hits `9659`;
+    - misses `3461`;
+    - preloads `3664`;
+    - hit rate `73.6%`;
+  - upgate cache unchanged:
+    - slots `1679`;
+    - hits `13019`;
+    - misses `16757`;
+    - hit rate `43.7%`;
+  - expert pack:
+    - `iouring_reads=15006`;
+    - `iouring_bytes=86953689088`;
+    - `iouring_wait_us=12551316`;
+    - `inflight_avg=3.11`;
+  - pinned staging:
+    - main `host_stage=11319.734 ms`, `h2d=4270.405 ms`;
+    - gate `host_stage=313.165 ms`, `h2d=797.436 ms`;
+  - up/gate wall `6.711 ms/call`;
+  - down aggregate `37.907 ms/call`, `cuda_batch=2.214 ms/call`,
+    `fallback_t0=35.650 ms/call`.
+- down-batch staged-job buckets:
+  - `0`: rows `900`, wall `285.946 ms`, stage `127.063 ms`;
+  - `1`: rows `15`, wall `28.351 ms`, stage `26.057 ms`;
+  - `2-4`: rows `330`, wall `1263.052 ms`, stage `1214.449 ms`;
+  - `5-8`: rows `399`, wall `2723.278 ms`, stage `2639.920 ms`.
+
+Mechanism:
+
+- The patch did not change cache hit rates or selected experts.
+- The improvement came from lower staging overhead:
+  - down small-job buckets improved versus Phase 7EI n32:
+    - `1` job wall `32.350 -> 28.351 ms`;
+    - `2-4` jobs wall `1361.211 -> 1263.052 ms`;
+    - `5-8` jobs wall also improved `2926.525 -> 2723.278 ms`, likely from
+      reduced contention with small serial copies;
+  - up/gate profile improved to `6.711 ms/call`, likely because less down
+    staging contention reduced shared host/io pressure.
+- Because n32 cold-start variance exists, this is not accepted SOTA until n32
+  confirmation and n96 validation pass.
+
+Next:
+
+- Commit and push:
+  - source patch;
+  - this candidate result.
+- Run a second strict cold n32 confirmation with the same commit and env.
+- If n32 confirmation passes, run n96 candidate and n96 confirmation.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
