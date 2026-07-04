@@ -4,6 +4,47 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-05 Latest Active Plan Override
+
+本节是当前生效计划，覆盖下面较早的 2026-07-04 active plan。历史记录保留不改；后续执行必须先按本节更新/记录计划，再做任何 runtime 实验。
+
+当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被 direct-reader、Q8_0、CUDA graph 或其他候选替代：
+
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Accepted constraints: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Promotion gate remains: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB RAM including page cache, no swap, coherent/semantically correct France output, committed+pushed source/artifacts, then clean pushed-source reproduction
+- Model file: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`)
+- Latest pushed code/audit head before this plan update: `a0ae1c03fc46b483676a7491244078f4ca0a3731` (`vendor-ds4: fix top1 comparator logits output`) on `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+
+Recent completed work and decisions:
+
+- Top768 direct-reader manifest is generated and pushed: `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv`, 768 entries, no missing tensors, payload `3422552064` bytes.
+- Direct manifest loader and direct hot pool skeleton are implemented default-off. They must not affect the accepted SOTA path unless the corresponding env vars are set.
+- O_DIRECT raw GGUF reads required align-down bounce reads because expert offsets are `256 mod 4096`; this is fixed in the direct reader skeleton.
+- `cpu_moe=41 + gate cache 13568 MiB + direct pool 3264 MiB` fits as a diagnostic: direct pool has 768 slots, gate cache has 3192 slots, GPU sample peak left about `245-251 MiB` free.
+- Full synchronous top768 direct prefill read `3422552064` bytes in `1723.238 ms` at about `1.850 GiB/s`, with `direct_failures=0` and `direct_fallbacks=0`. This is useful as a source substrate but is not promotable synchronously because accepted TTFT slack is only about `725 ms`; it needs about `998 ms` hidden/overlapped to satisfy the TTFT gate.
+- The direct hot pool currently stages payload only; it is not yet connected to exact up/down compute and cannot by itself improve token rate.
+- `tools/results/results.cpp` top1 comparator is fixed and pushed. The self-check passed with baseline/check status `0`, `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs=0`, `mean_abs=0`; this verifier is now mandatory before any logit-changing candidate benchmark.
+- The old dirty Q8_0 up-only candidate is not reproducible from pushed source and previously failed top1 (`same_top1=136/145`, first mismatch at token position 4). It is rejected as evidence and must not be used as a SOTA or correctness claim.
+
+Current bottleneck:
+
+- The accepted path is still dominated by DeepSeek CPU up/down fallback plus source/page behavior, not by gate cache alone.
+- Current decode CPU up/down fallback is about `19029.457 ms`. Reaching `10 tok/s` requires saving about `17386.570 ms` while adding less than about `1642.887 ms` total overhead.
+- `cpu_moe=41 + top768 exact Q8_0 hot residual` remains only a tight paper candidate: best-case zero-overhead bound is about `10.338 tok/s` with about `446 ms` slack, and only if the extra CPU layer and top768 source reads are hidden. If they are not hidden, slack drops to about `120 ms`, which is not enough for kernel/D2H/scatter/sync overhead.
+
+Next execution plan:
+
+1. Keep the accepted `4.4 tok/s` runtime path unchanged by default. No candidate may change default behavior until it has passed the verifier and a strict cold benchmark.
+2. Before the next runtime source edit, write or update the corresponding artifact with: bottleneck component, removable time, hard upper bound, expected RAM/page-cache pressure, expected TTFT impact, correctness gate, rollback rule, and exact env/command skeleton.
+3. Do not repeat the old scalar Q8_0 CUDA one-stream probe. The next Q8_0 attempt must be a default-off, source-auditable implementation that wires CPU fallback Q8_0 activation rows/row size into CUDA and validates exact/token-stable MXFP4 x Q8_0 arithmetic against the CPU fallback before any performance claim.
+4. First implementation target is a narrow correctness scaffold, not a full France performance run: add the minimum default-off Q8_0 diagnostic/op path, run op-level compare if available, then run the fixed-text `llama-results` top1 verifier. Reject immediately on top1 mismatch.
+5. Only after top1 passes may the direct top768 hot pool be connected to compute. The first performance run after that must be strict cold with `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches`, full cgroup memory/page-cache logging, TTFT, prompt/eval token rates, counters, and exact France output.
+6. Synchronous top768 direct prefill can be recorded as TTFT-rejected if useful for diagnosis, but cannot be promoted unless TTFT stays `<=33617.688744 ms`. Any promotable design must hide/overlap enough of the measured `1723.238 ms` prefill cost.
+7. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promotion.
+8. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
+
 ### 2026-07-04 Current Status Override
 
 本节覆盖下面较早阶段的 `4.2 tok/s` 叙述；历史记录保留不改，最新执行以本节和文档尾部最新计划为准。
@@ -13,7 +54,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed execution/audit head before this document update: `37c4981a015c68f4e1e132aa290679b491980df2` (`vendor-ds4: design cpu41 q80 hot residual`)
+- Latest pushed execution/audit head before the 2026-07-04 document update: `37c4981a015c68f4e1e132aa290679b491980df2` (`vendor-ds4: design cpu41 q80 hot residual`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
