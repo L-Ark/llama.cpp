@@ -8417,3 +8417,48 @@ Step 5: mandatory reproducibility and push protocol
 - Commit source, plan, profiles, and artifacts, then push immediately to `ssd/vendor/deepseek-token-rate-16gb`.
 - After push, clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source rerun still passes every gate and beats `4.4 tok/s`.
 - If pushed-source reproduction fails, revert runtime source to the accepted path, keep the failed artifact as rejected, update this plan, commit/push the rejection record, and keep the accepted SOTA unchanged.
+
+### 2026-07-04 Split Up/Down Top1 List-Filter Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/split-updown-top1-listfilter-result.json`
+- Artifact sha256: `71a1655c09011a7256c70658bfd3e655d4768c38d4e1d4b9e7d34c35debf60ad`
+- Run root: `/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter`
+- Source head during verifier: `51d8fff187079183832c4645bbb9a16b0a86ba3e` with only the diagnostic comma-list filter patch dirty.
+
+Verifier patch:
+
+- Added comma-list parsing to `moe_stream_one_name_filter_allows()` only for filters containing commas.
+- Preserved the old single-substring behavior for normal `ffn_gate_exps`.
+- This patch was diagnostic only. It was reverted immediately after the verifier failed, and `build-ds4-moe-stream` was rebuilt back on clean source.
+
+Results:
+
+| Case | Filter | same_top1 | first_mismatch_pos | memory_peak_bytes | OOM | Verdict |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| split-up-only | `ffn_gate_exps,ffn_up_exps` | `139/145` | `9` | `16000000000` | false | rejected |
+| split-down-only | `ffn_gate_exps,ffn_down_exps` | `134/145` | `4` | `16000000000` | false | rejected |
+
+Important counters:
+
+- The comma-list filter worked this time. Both stderr logs include one expert pack and VRAM cache lines, unlike the earlier invalid-filter runs.
+- Up-only: one expert pack `hits=4497 misses=19563 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=32590 misses=21060 hit_rate=60.7%`.
+- Down-only: one expert pack `hits=4474 misses=19567 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=32609 misses=21041 hit_rate=60.8%`.
+
+Decision:
+
+- Do not run a token-rate benchmark for this split up/down one-stream path. It fails token-level top1 correctness before performance measurement.
+- Current accepted SOTA remains `4.4 tok/s`.
+- Keep the rejection artifact and plan record, but do not keep the diagnostic source patch in the runtime source.
+
+Next active direction:
+
+1. Keep the current bottleneck target as CPU up/down fallback; the hard-bound still shows full decode up/down fallback removal is the only non-speculative class with a `10 tok/s` ceiling.
+2. Do not retry one-stream up/down benchmark variants unless a new arithmetic-equivalence check proves their logits/top1 match the CPU path.
+3. Next optimization attempt must first isolate why up/down one-stream changes top1:
+   - compare GPU one-stream up/down math against the CPU fallback on the same fixed rows and activations;
+   - distinguish arithmetic drift from cache/admission trajectory changes;
+   - only after exact or top1-equivalent arithmetic is proven, revisit any up/down offload benchmark.
+4. If arithmetic equivalence cannot be made exact cheaply, return to an exact CPU-side fallback reduction path with a new hard-bound, such as asynchronous source movement that does not displace the accepted gate cache and does not rely on global warm page cache.
+5. Every new candidate still must pass RAM <=16GB including page cache, France correctness, TTFT <=`33617.688744 ms` for promotion, and pushed-source reproduction before becoming SOTA.

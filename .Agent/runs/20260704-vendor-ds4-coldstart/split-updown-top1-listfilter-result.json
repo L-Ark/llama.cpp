@@ -1,0 +1,401 @@
+{
+  "artifact": "split-updown-top1-listfilter-result",
+  "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+  "baseline_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-results",
+  "binary_sha256": "d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9",
+  "cases": [
+    {
+      "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+      "baseline_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "candidate": "/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter/split-up-only-top1-listfilter/top1-candidate.json",
+      "candidate_sha256": "fd9fbf1741980082881bb274efb063bef9f9292b7058308ce791892ce8c5de20",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter/split-up-only-top1-listfilter",
+      "config_delta": {
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_up_exps"
+      },
+      "counter_lines": {
+        "enabled": [
+          "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)",
+          "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=1",
+          "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+          "[moe_stream] one prefill: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv limit=3000",
+          "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one prefill: completed attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4782.888",
+          "[moe_stream] cache admission: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+          "[moe_stream] one expert pack: hits=4497 misses=19563 reads=4497 bytes=20040646656 failures=0 entries=4599 direct_enabled=1 direct_reads=4497 direct_failures=0 direct_fallbacks=0",
+          "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=4782.888"
+        ],
+        "pack": [
+          "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: hits=4497 misses=19563 reads=4497 bytes=20040646656 failures=0 entries=4599 direct_enabled=1 direct_reads=4497 direct_failures=0 direct_fallbacks=0"
+        ],
+        "vram": [
+          "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+          "[moe_stream] VRAM cache: hits=32590 misses=21060 hit_rate=60.7%"
+        ]
+      },
+      "exit_code": 0,
+      "first_mismatch_pos": 9,
+      "label": "split-up-only-top1-listfilter",
+      "max_abs_top1_logit_delta": 1.3765,
+      "mean_abs_top1_logit_delta": 0.2784144827586208,
+      "memory_current_bytes": 15159648256,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 15355,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_events_raw": "low 0\nhigh 0\nmax 15355\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_sha256": "972bf0d4b88cdeb72e23cbe0ea2a0c6b513dd08fe435a919fb44a987b239cfb8",
+      "mismatch_examples": [
+        {
+          "base_margin": 0.458164,
+          "base_top1": {
+            "id": 260,
+            "logit": 25.683,
+            "piece": " a"
+          },
+          "candidate_margin": 0.024683,
+          "candidate_top1": {
+            "id": 782,
+            "logit": 25.3936,
+            "piece": " your"
+          },
+          "pos": 9
+        },
+        {
+          "base_margin": 0.18231,
+          "base_top1": {
+            "id": 3459,
+            "logit": 30.6476,
+            "piece": " known"
+          },
+          "candidate_margin": 0.0320702,
+          "candidate_top1": {
+            "id": 270,
+            "logit": 30.1852,
+            "piece": " the"
+          },
+          "pos": 18
+        },
+        {
+          "base_margin": 0.0479832,
+          "base_top1": {
+            "id": 983,
+            "logit": 28.4661,
+            "piece": " It"
+          },
+          "candidate_margin": 0.148954,
+          "candidate_top1": {
+            "id": 5795,
+            "logit": 28.738,
+            "piece": " From"
+          },
+          "pos": 42
+        },
+        {
+          "base_margin": 0.29962,
+          "base_top1": {
+            "id": 5785,
+            "logit": 31.1945,
+            "piece": " culture"
+          },
+          "candidate_margin": 0.175457,
+          "candidate_top1": {
+            "id": 6262,
+            "logit": 30.8678,
+            "piece": " science"
+          },
+          "pos": 89
+        },
+        {
+          "base_margin": 0.668116,
+          "base_top1": {
+            "id": 25714,
+            "logit": 29.6463,
+            "piece": " democratic"
+          },
+          "candidate_margin": 0.361982,
+          "candidate_top1": {
+            "id": 36737,
+            "logit": 29.4276,
+            "piece": " republic"
+          },
+          "pos": 95
+        },
+        {
+          "base_margin": 0.0763092,
+          "base_top1": {
+            "id": 18826,
+            "logit": 21.2808,
+            "piece": "||"
+          },
+          "candidate_margin": 0.520592,
+          "candidate_top1": {
+            "id": 1004,
+            "logit": 21.0678,
+            "piece": " \n\n"
+          },
+          "pos": 144
+        }
+      ],
+      "n_positions_base": 145,
+      "n_positions_candidate": 145,
+      "oom_seen": false,
+      "ram_ok": true,
+      "same_top1": 139,
+      "same_top1_ratio": 0.9586206896551724,
+      "status": "fail",
+      "stderr_sha256": "d47d0caeac5044d7eb746b6d2d0ac1792743165c106670a417690214cf2bd51a",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "systemd_run_exit": 0
+    },
+    {
+      "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+      "baseline_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "candidate": "/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter/split-down-only-top1-listfilter/top1-candidate.json",
+      "candidate_sha256": "41550c437b29428fdc2547fbdf8849d9251bd6f2a36def69c857737972e824e0",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter/split-down-only-top1-listfilter",
+      "config_delta": {
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_down_exps"
+      },
+      "counter_lines": {
+        "enabled": [
+          "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)",
+          "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=1",
+          "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+          "[moe_stream] one prefill: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv limit=3000",
+          "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one prefill: completed attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4710.521",
+          "[moe_stream] cache admission: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+          "[moe_stream] one expert pack: hits=4474 misses=19567 reads=4474 bytes=19938148352 failures=0 entries=4599 direct_enabled=1 direct_reads=4474 direct_failures=0 direct_fallbacks=0",
+          "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=4710.521"
+        ],
+        "pack": [
+          "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+          "[moe_stream] one expert pack: hits=4474 misses=19567 reads=4474 bytes=19938148352 failures=0 entries=4599 direct_enabled=1 direct_reads=4474 direct_failures=0 direct_fallbacks=0"
+        ],
+        "vram": [
+          "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+          "[moe_stream] VRAM cache: hits=32609 misses=21041 hit_rate=60.8%"
+        ]
+      },
+      "exit_code": 0,
+      "first_mismatch_pos": 4,
+      "label": "split-down-only-top1-listfilter",
+      "max_abs_top1_logit_delta": 0.9085000000000001,
+      "mean_abs_top1_logit_delta": 0.22310896551724124,
+      "memory_current_bytes": 15163699200,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 14932,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_events_raw": "low 0\nhigh 0\nmax 14932\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_sha256": "3d94864892598abe82c262b83e28c8662ce7013e02aab8ce77fcd20f8ca47270",
+      "mismatch_examples": [
+        {
+          "base_margin": 0.00125313,
+          "base_top1": {
+            "id": 47468,
+            "logit": 24.6524,
+            "piece": " concise"
+          },
+          "candidate_margin": 0.0726166,
+          "candidate_top1": {
+            "id": 2767,
+            "logit": 24.5581,
+            "piece": " few"
+          },
+          "pos": 4
+        },
+        {
+          "base_margin": 0.208698,
+          "base_top1": {
+            "id": 295,
+            "logit": 23.1186,
+            "piece": " in"
+          },
+          "candidate_margin": 0.137789,
+          "candidate_top1": {
+            "id": 396,
+            "logit": 22.8348,
+            "piece": " that"
+          },
+          "pos": 6
+        },
+        {
+          "base_margin": 0.420826,
+          "base_top1": {
+            "id": 8189,
+            "logit": 22.848,
+            "piece": "ello"
+          },
+          "candidate_margin": 0.0127087,
+          "candidate_top1": {
+            "id": 717,
+            "logit": 22.2351,
+            "piece": "ere"
+          },
+          "pos": 7
+        },
+        {
+          "base_margin": 0.458164,
+          "base_top1": {
+            "id": 260,
+            "logit": 25.683,
+            "piece": " a"
+          },
+          "candidate_margin": 0.051239,
+          "candidate_top1": {
+            "id": 270,
+            "logit": 25.4006,
+            "piece": " the"
+          },
+          "pos": 9
+        },
+        {
+          "base_margin": 0.18231,
+          "base_top1": {
+            "id": 3459,
+            "logit": 30.6476,
+            "piece": " known"
+          },
+          "candidate_margin": 0.213804,
+          "candidate_top1": {
+            "id": 270,
+            "logit": 30.3168,
+            "piece": " the"
+          },
+          "pos": 18
+        },
+        {
+          "base_margin": 0.392794,
+          "base_top1": {
+            "id": 7840,
+            "logit": 31.2798,
+            "piece": " located"
+          },
+          "candidate_margin": 0.111219,
+          "candidate_top1": {
+            "id": 295,
+            "logit": 30.3759,
+            "piece": " in"
+          },
+          "pos": 25
+        },
+        {
+          "base_margin": 0.0938606,
+          "base_top1": {
+            "id": 32380,
+            "logit": 32.2249,
+            "piece": " iconic"
+          },
+          "candidate_margin": 0.0358505,
+          "candidate_top1": {
+            "id": 3168,
+            "logit": 32.4013,
+            "piece": " significant"
+          },
+          "pos": 38
+        },
+        {
+          "base_margin": 0.277081,
+          "base_top1": {
+            "id": 5217,
+            "logit": 31.026,
+            "piece": " global"
+          },
+          "candidate_margin": 0.0717125,
+          "candidate_top1": {
+            "id": 10782,
+            "logit": 31.1198,
+            "piece": " leader"
+          },
+          "pos": 81
+        },
+        {
+          "base_margin": 0.29962,
+          "base_top1": {
+            "id": 5785,
+            "logit": 31.1945,
+            "piece": " culture"
+          },
+          "candidate_margin": 0.106632,
+          "candidate_top1": {
+            "id": 4342,
+            "logit": 31.0551,
+            "piece": " education"
+          },
+          "pos": 89
+        },
+        {
+          "base_margin": 0.0496254,
+          "base_top1": {
+            "id": 8536,
+            "logit": 29.7963,
+            "piece": " economy"
+          },
+          "candidate_margin": 0.105776,
+          "candidate_top1": {
+            "id": 6672,
+            "logit": 30.003,
+            "piece": " central"
+          },
+          "pos": 107
+        },
+        {
+          "base_margin": 0.0763092,
+          "base_top1": {
+            "id": 18826,
+            "logit": 21.2808,
+            "piece": "||"
+          },
+          "candidate_margin": 0.172577,
+          "candidate_top1": {
+            "id": 1004,
+            "logit": 21.0072,
+            "piece": " \n\n"
+          },
+          "pos": 144
+        }
+      ],
+      "n_positions_base": 145,
+      "n_positions_candidate": 145,
+      "oom_seen": false,
+      "ram_ok": true,
+      "same_top1": 134,
+      "same_top1_ratio": 0.9241379310344827,
+      "status": "fail",
+      "stderr_sha256": "e68e160f6ab69ce065374e6c69deda4e4121e1bd153131a5efc87e943597bb0d",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "systemd_run_exit": 0
+    }
+  ],
+  "constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "strict_cold_drop_caches_per_case": true
+  },
+  "created_utc": "2026-07-04T06:21:45Z",
+  "fixed_text": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/fixed-france-text.txt",
+  "next_decision": "revert diagnostic source patch and keep docs/artifacts only",
+  "overall_status": "fail",
+  "runroot": "/root/lfz/runs/vendor-ds4-16gb/20260704T061834Z-20260704_split_updown_top1_listfilter",
+  "source_diff_sha256": "a06a32ebcc1b57964ffb81567abe4abedff24d4fa38d0cb37e12f763c5acf27f",
+  "source_head": "51d8fff187079183832c4645bbb9a16b0a86ba3e",
+  "source_status_short": " M ggml/src/ggml-cuda/moe_stream.cu\n"
+}
