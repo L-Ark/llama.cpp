@@ -36352,6 +36352,81 @@ Rollback:
 - If first n32 passes but confirmation fails, revert source and record
   rejection.
 
+Phase 7EQ result - rejected:
+
+- result timestamp: 2026-07-04T02:30Z.
+- plan commit:
+  `65c7292af` (`docs: plan kimi phase7eq after up overlap`).
+- source status:
+  - dirty default-off source patch tested on top of `65c7292af`;
+  - build passed;
+  - first n32 crashed with signal `11` / exit `139`;
+  - source patch reverted locally and on the server;
+  - no source commit created.
+- patch behavior:
+  - added default-off
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_AFTER_UP_STAGE_LAYERS`;
+  - for matching serial same-type layers, started current-down overlap after
+    up expert staging and before up compute;
+  - kept gate staging after up compute, unlike Phase 7EP.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-022628Z-n32-phase7eq-after-up-stage-overlap-l4-l60`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-022628Z-n32-phase7eq-after-up-stage-overlap-l4-l60"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7eq_repro.sh
+```
+
+- activation:
+  - stderr contains
+    `after-up-stage same-type current down overlap active: layers=4,60`;
+  - stderr then reports
+    `current down overlap active: tensor=blk.4.ffn_down_exps.weight jobs=8`.
+- hard gate failure:
+  - process terminated by signal `11`;
+  - `exit=139`;
+  - output only `France`;
+  - quality `fail`;
+  - no TTFT/decode metrics were produced.
+- memory/cgroup:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - crash was not cgroup OOM.
+
+Gap analysis:
+
+- The crash happens immediately after activating after-up-stage overlap for
+  `blk.4`.
+- Starting current-down overlap while the same main stream later uses the same
+  staging ring/cache state for gate staging is not safe in the current
+  implementation.
+- This confirms that preserving gate order is not sufficient; safe overlap
+  would need stronger separation of staging rings, cache slot ownership, and
+  stream synchronization.
+- Since Phase 7EP was correct but slow and Phase 7EQ is unsafe, this family
+  should stop unless the implementation is redesigned around explicit resource
+  isolation rather than another env/layer tweak.
+
+Decision:
+
+- Reject Phase 7EQ.
+- Do not run confirmation or n96.
+- Keep source reverted.
+- Keep Phase 7EB as accepted SOTA:
+  - n32 gate `29599.64 ms / 31`;
+  - n96 gate `74201.57 ms / 77`.
+- Do not continue same-type current-down overlap micro-variants without first
+  implementing separate staging resources and proving correctness on a small
+  smoke test.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
