@@ -55524,3 +55524,130 @@ Decision rule:
   next source plan.
 - If the lightweight profile also stalls or fails gates, do not add more
   instrumentation; fall back to existing Phase 7HO/7HC profiles.
+
+Result: accepted diagnostic.
+
+- Plan/result commit before run:
+  `5b71d928c` (`docs: record heavy profile failure and plan light refresh`).
+- Server source:
+  `5b71d928c`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-182418Z-n32-phase7hy-current-copy-io-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-182418Z-n32-phase7hy-current-copy-io-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76629.58 ms`;
+  - decode `30123.46 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15050924032`;
+  - swap max `0`;
+  - anon `462848`;
+  - file `14812225536`;
+  - kernel `234659840`;
+  - inactive file `2778357760`;
+  - active file `12033163264`;
+  - major faults `970281`;
+  - file workingset refaults `20132`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert pack / staging counters:
+  - expert pack hits `25458`, misses `192`;
+  - `direct_reads=8707`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_submit_us=44927`;
+  - `iouring_wait_us=15072932`;
+  - global iouring batches `4002`, submit calls `4002`, wait calls `11909`,
+    CQEs `15024`, inflight avg `3.10`, max `8`;
+  - global batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - main iouring jobs `10969`, wait calls `8513`, inflight avg `3.20`;
+  - gate iouring jobs `4055`, wait calls `3396`, inflight avg `2.84`;
+  - current-down overlap jobs `3664`, worker `3473887 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Copy-profile totals:
+  - `runtime_load`: rows `20250`, iouring rows `11529`,
+    bytes `102.523 GiB`, io wait `44434.674 ms`, wall `56466.509 ms`,
+    host `11900.033 ms`, enqueue `423.760 ms`;
+  - `current_down_overlap`: rows `3664`, iouring rows `3495`,
+    bytes `21.525 GiB`, io wait `10822.864 ms`, wall `11413.264 ms`,
+    host `585.731 ms`, enqueue `52.361 ms`.
+- Top `runtime_load` tensors by wall:
+  - `blk.60.ffn_down_exps.weight`: rows `170`, `0.999 GiB`,
+    io/wall `1104.347 ms`;
+  - `blk.4.ffn_down_exps.weight`: rows `169`, `1.227 GiB`,
+    io/wall `1048.344 ms`;
+  - `blk.1.ffn_up_exps.weight`: rows `179`, `0.784 GiB`,
+    io/wall `909.028 ms`;
+  - `blk.1.ffn_gate_exps.weight`: rows `179`, `0.784 GiB`,
+    io/wall `908.049 ms`;
+  - `blk.10.ffn_gate_exps.weight`: rows `168`, `0.736 GiB`,
+    io `779.072 ms`, wall `792.992 ms`;
+  - `blk.10.ffn_up_exps.weight`: rows `168`, `0.736 GiB`,
+    io `768.205 ms`, wall `781.824 ms`;
+  - `blk.24.ffn_gate_exps.weight`: rows `163`, `0.714 GiB`,
+    io/wall `770.611 ms`;
+  - `blk.24.ffn_up_exps.weight`: rows `163`, `0.714 GiB`,
+    io/wall `735.369 ms`;
+  - `blk.24.ffn_down_exps.weight`: rows `162`, `1.177 GiB`,
+    io/wall `701.885 ms`;
+  - `blk.5.ffn_down_exps.weight`: rows `190`, `1.116 GiB`,
+    io/wall `695.361 ms`.
+- IO batch profile:
+  - `runtime_load`: batches `3142`, jobs `11529`, read jobs `11529`,
+    submit calls `3142`, wait calls `9357`, CQEs `11529`,
+    wait `12399.182 ms`, wall `13119.852 ms`;
+  - `current_down_overlap`: batches `860`, jobs `3495`, read jobs `3495`,
+    submit calls `860`, wait calls `2552`, CQEs `3495`,
+    wait `2679.728 ms`, wall `2851.514 ms`;
+  - runtime job hist:
+    `1:295,2:692,3:727,4:500,5:354,6:254,7:185,8:135`.
+- Current-down overlap top rows by planned+cache-hit routes:
+  - `blk.55.ffn_down_exps.weight`: planned `139`, cache hits `109`,
+    missing pack `6`;
+  - `blk.33.ffn_down_exps.weight`: planned `143`, cache hits `105`,
+    missing pack `1`;
+  - `blk.40.ffn_down_exps.weight`: planned `104`, cache hits `144`,
+    missing pack `1`;
+  - `blk.38.ffn_down_exps.weight`: planned `121`, cache hits `127`,
+    missing pack `1`;
+  - `blk.50.ffn_down_exps.weight`: planned `111`, cache hits `137`,
+    missing pack `0`.
+- Comparison to Phase 7HO:
+  - same basic shape:
+    - `runtime_load` rows `20250`;
+    - iouring rows `11529`;
+    - bytes `102.523 GiB`;
+    - runtime job histogram unchanged;
+    - slot wait remains negligible;
+    - current-down planned jobs remain `3664`;
+  - current-head `runtime_load` wall `56.47s` vs Phase 7HO `56.98s`;
+  - current-head `runtime_load` io wait `44.43s` vs Phase 7HO `45.47s`.
+- Decision:
+  - Accept as current bottleneck evidence.
+  - The bottleneck is still call-boundary-limited `runtime_load` movement, not
+    H2D, slot wait, static hotset residency, CPU thread count, or naive stream
+    fanout.
+  - Next source plan should avoid more stream splitting and instead target
+    reducing repeated `runtime_load` misses or changing when those same loads
+    are issued, without fragmenting iouring batches.
