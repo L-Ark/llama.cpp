@@ -57582,3 +57582,165 @@ Analysis:
   a narrow cache/preload experiment.
 - If waits are broad and proportional to total misses, avoid cache policy work
   and look for IO batching or expert-pack layout opportunities.
+
+### 7IJ result
+
+- Source head:
+  `fd6be7d43` (`docs: record upgate cuda dryrun`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-201422Z-n32-phase7ij-upgate-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard fd6be7d43
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-201422Z-n32-phase7ij-upgate-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=64" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `81224.48 ms`;
+  - decode `29925.22 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15077576704`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Runtime counters:
+  - expert pack hits `25458`, misses `192`;
+  - iouring reads `15024`, bytes `87082139648`, wait
+    `15281150 us`;
+  - main pinned staging: copies `19754`, waits `19718`,
+    slot wait `47.910 ms`, host stage `12123.500 ms`,
+    enqueue `311.754 ms`, H2D `4145.824 ms`;
+  - main iouring batches `2743`, jobs `10969`, wait calls `8702`,
+    inflight average `3.17`;
+  - gate pinned staging: copies `4160`, waits `4136`,
+    slot wait `11.529 ms`, host stage `350.082 ms`,
+    enqueue `86.830 ms`, H2D `921.194 ms`;
+  - gate iouring batches `1259`, jobs `4055`, wait calls `3448`,
+    inflight average `2.83`;
+  - down overlap worker time `3515214 us`;
+  - down hit `73.6%`;
+  - upgate hit `43.7%`.
+- CPU MoE wrapper profile:
+  - up_gate calls `1861`, total `11.814 ms/call`,
+    `cuda_batch=11.689 ms/call`, post barrier `0.110 ms/call`,
+    fallback `0.001 ms/call`, accept `1861`, decline `0`;
+  - down calls `2038`, total `40.053 ms/call`,
+    `cuda_batch=2.287 ms/call`, fallback `37.722 ms/call`,
+    accept `1644`, decline `52`.
+- `up-gate-profile.csv`:
+  - exists and has `869` decode rows;
+  - all rows have `mode=decode`;
+  - grouped by type pair:
+    - `(22,22)`: calls `558`, wall `3467.292 ms`,
+      stage `20.653 ms`, up wait `3197.278 ms`,
+      gate wait `3348.851 ms`, kernel `3420.420 ms`,
+      up misses `2605`, gate misses `2606`;
+    - `(18,18)`: calls `311`, wall `3070.482 ms`,
+      stage `11.679 ms`, up wait `0.000 ms`,
+      gate wait `0.000 ms`, kernel `3033.427 ms`,
+      up misses `1549`, gate misses `1548`.
+  - slowest rows:
+    - `seq=1`, `blk.60`, type `(18,18)`, misses `8+8`,
+      kernel `519.274 ms`, wall `531.437 ms`;
+    - `seq=112`, `blk.59`, type `(18,18)`, misses `5+5`,
+      kernel `33.294 ms`, wall `33.360 ms`;
+    - `seq=791`, `blk.6`, type `(18,18)`, misses `7+7`,
+      kernel `32.468 ms`, wall `32.570 ms`;
+    - `seq=408`, `blk.19`, type `(22,22)`, misses `8+8`,
+      up wait `18.827 ms`, gate wait `18.912 ms`,
+      kernel `19.037 ms`, wall `19.108 ms`.
+- 7IJ conclusion:
+  - This is a diagnostic run, not a new SOTA; token rate `1.04 tok/s` is within
+    normal profiling overhead/noise.
+  - Type `(22,22)` is movement/wait dominated. Its wall time tracks up/gate
+    wait and cache misses, so it is a candidate for narrow IO/cache/layout work.
+  - Type `(18,18)` is kernel dominated. It reports zero up/gate wait, and its
+    total wall is dominated by kernel time.
+  - The largest single-row bottleneck is the first decode `blk.60` `(18,18)`
+    call at `531.437 ms`. Because this row is `seq=1`, it may be a cold kernel
+    or first-use effect rather than steady-state token-rate cost.
+  - Do not implement a cache expansion yet. First verify whether the `blk.60`
+    outlier repeats under strict cold start and whether removing it changes the
+    steady-state priority between `(18,18)` compute and `(22,22)` movement.
+
+## Phase 7IK: repeat up_gate attribution and isolate cold first-use outlier
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IJ keeps decode dominated by the CPU MoE wrapper path, but the accepted
+  up_gate CUDA batch path has two distinct costs:
+  - `(22,22)` waits on expert movement/cache misses;
+  - `(18,18)` spends time inside the kernel, including a single first decode
+    `blk.60` outlier.
+
+Hypothesis:
+
+- If the `seq=1 blk.60` `(18,18)` outlier repeats on every cold start, it is
+  likely a first-use initialization or first cold expert cost and should be
+  handled separately from steady-state token-rate optimization.
+- If it does not repeat, the next practical target should be `(22,22)` movement
+  wait, because that group has a broad `3.2-3.3 s` wait budget across `558`
+  decode calls.
+
+Experiment:
+
+- No source behavior change.
+- Run a second strict cold-start n32 attribution with the exact 7IJ runtime
+  knobs and profile env.
+- Parse `up-gate-profile.csv` by:
+  - `mode`;
+  - type pair;
+  - top rows by `wall_ms`;
+  - top rows by `up_wait_ms` and `gate_wait_ms`;
+  - first `16` sequence rows.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- `up-gate-profile.csv` must exist.
+
+Decision rule:
+
+- If the `blk.60` outlier repeats with similar magnitude at `seq=1`, plan a
+  narrow first-use mitigation only if it can be done without increasing TTFT by
+  more than `20%`; otherwise exclude it from steady-state optimization
+  accounting.
+- If `(22,22)` remains movement/wait dominated, plan the next implementation
+  around reducing gate/up expert wait, with an upper bound computed from:
+  misses, iouring bytes, iouring wait, H2D time, and cache capacity.
+- If the second run shifts costs materially, do not code an optimization yet;
+  add a third run or finer profile before changing behavior.
