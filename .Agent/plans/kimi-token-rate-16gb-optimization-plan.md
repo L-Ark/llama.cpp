@@ -54047,3 +54047,130 @@ GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
   - Because the rejected Phase 7HF shared coalescer already proved that wide
     reads alone can regress wall time, the next design must preserve the current
     up-first launch behavior and avoid a shared staging ring.
+
+## Phase 7HQ: IQ2_S MMVQ VDR=4 micro-probe
+
+Start time: 2026-07-05T03:15:00+08:00.
+
+Goal:
+
+- Probe a narrow kernel-side optimization for the n96 type `22,22` up/gate
+  bucket (`GGML_TYPE_IQ2_S`).
+- Change only the MMVQ VDR for `IQ2_S`:
+
+```c
+#define VDR_IQ2_S_Q8_1_MMVQ 4
+```
+
+- Keep `VDR_IQ2_S_Q8_1_MMQ` unchanged.
+- Do not change runtime settings, cache policy, expert pack, prompt, sampling,
+  stream scheduling, or runner defaults.
+
+Why this is the next source probe:
+
+- Phase 7GO ranked the largest n96 exposed wall bucket as up/gate:
+  - type `22,22` (`IQ2_S`) wall `9084.751 ms`, kernel `8977.952 ms`;
+  - type `18,18` (`IQ3_XXS`) wall `7763.360 ms`, kernel `7701.515 ms`.
+- Phase 7HP showed H2D is not the dominant exposed bucket.
+- Prior IO/scheduler probes reduced summed io wait but did not improve
+  critical-path wall because they lost overlap.
+- `IQ3_XXS` VDR sweeps are already closed:
+  - VDR=4 failed repeat;
+  - VDR=1 catastrophically regressed.
+- `IQ2_S` has not been swept in the current SOTA path, and the current
+  register profile is low enough to justify one VDR=4 probe:
+  - earlier note: `type22 IQ2_S ncols=1: REG:50 STACK:0 SHARED:1408`.
+
+Theory and upper bound:
+
+- VDR=4 groups more vec-dot work per MMVQ lane than the default VDR=2.
+- Possible upside:
+  - fewer loop/control iterations;
+  - better amortization of per-call overhead;
+  - potentially lower type `22,22` kernel time.
+- Possible downside:
+  - higher register pressure;
+  - lower occupancy or less latency hiding;
+  - changed instruction scheduling that can perturb routing timing and output
+    length.
+- Hard n96 upper bound is the type `22,22` kernel bucket:
+  `8977.952 ms`.
+- A realistic target is small:
+  - `1%` of the bucket is about `90 ms`;
+  - `3%` is about `269 ms`;
+  - `5%` is about `449 ms`.
+- Because the expected effect is near cold-start variance, any n96 candidate
+  must beat the historical Phase 7FB `70087.31 ms / 77` and then pass a repeat
+  before acceptance.
+
+Source change:
+
+- Patch only:
+
+```c
+#define VDR_IQ2_S_Q8_1_MMVQ 4
+```
+
+- Keep:
+
+```c
+#define VDR_IQ2_S_Q8_1_MMQ 2
+```
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hq-iq2-vdr4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must be at least competitive with current stable n32 best region
+  around `29.1s`; otherwise reject and revert without n96.
+
+Experiment B: n96 candidate, only if n32 passes
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hq-iq2-vdr4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance / rollback:
+
+- If n32 fails any gate or regresses decode, revert the source patch, commit and
+  push the rollback, and record rejection.
+- If n32 passes and improves, run n96.
+- Accept only if n96 beats historical Phase 7FB `70087.31 ms / 77` and a
+  second n96 repeat also beats it.
+- If n96 fails speed, quality, TTFT, RAM, swap, or fallback gates, revert the
+  source patch and record rejection.
+- Do not update runner defaults unless both n96 runs pass.
