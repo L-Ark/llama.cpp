@@ -6548,3 +6548,226 @@ Deliverable:
 
 - `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json`
 - Append next optimization recommendation based on measured fallback profile.
+
+### 2026-07-04T01:43Z Current SOTA CPU Fallback Profile Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json`
+- artifact sha256: `c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb`
+
+Config:
+
+- Diagnostic only, no source change.
+- Exact current accepted gate-only SOTA config:
+  - vendor DeepSeek;
+  - strict cold `drop_caches`;
+  - 16GB cgroup including file/page cache;
+  - `cpu_moe=40`;
+  - `GGML_MOE_VRAM_CACHE_GB=0`;
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`;
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`;
+  - gate O_DIRECT expert pack;
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`;
+  - current gate admit profile;
+  - current top-k envs.
+- Added profile env:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback_profile.csv`
+
+Metrics:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.8`
+- `TTFT=32239.387852 ms`
+- `elapsed_seconds=64.09`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15097294848`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is also celebrated for its cuisine, wine, fashion, and art. With its capital in Paris, France is a major economic and political power, a founding member of the European Union, and a permanent member of the United Nations Security Council. The country has a rich cultural heritage and continues to play a significant role in global affairs.
+```
+
+Profile summary:
+
+- fallback entries: `7030`
+- total up/down CPU fallback: `26438.059 ms`
+- up fallback: `12786.863 ms`
+  - `19760` rows
+  - `19111` calls
+  - `669.084 us/call`
+- down fallback: `13651.196 ms`
+  - `19760` rows
+  - `19111` calls
+  - `714.311 us/call`
+- prompt fallback: `7408.602 ms`
+  - `2342` calls
+  - `3163.365 us/call`
+- decode fallback: `19029.457 ms`
+  - `35880` calls
+  - `530.364 us/call`
+- `pack_mmap_calls=0` for all profile rows.
+- all profiled CPU fallback rows read from GGUF/default source, not a CPU fallback pack.
+
+Top fallback tensors by total fallback time in this run:
+
+- `blk.1.ffn_up_exps.weight`: `817.940 ms`
+- `blk.0.ffn_down_exps.weight`: `783.378 ms`
+- `blk.1.ffn_down_exps.weight`: `729.180 ms`
+- `blk.2.ffn_up_exps.weight`: `710.795 ms`
+- `blk.2.ffn_down_exps.weight`: `707.991 ms`
+- `blk.0.ffn_up_exps.weight`: `686.698 ms`
+- `blk.3.ffn_down_exps.weight`: `531.704 ms`
+- `blk.4.ffn_down_exps.weight`: `474.856 ms`
+
+Additional stderr counters:
+
+- gate prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4594.171`
+- gate pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- gate VRAM cache: `hits=33265 misses=1886 hit_rate=94.6%`
+- `kimi_cpu_moe_profile down calls=16920 total=2.077 ms/call cuda_single=0.501 post_cuda_barrier=0.001 fallback_t0=1.564 single_accept=35151 single_decline=38222`
+
+Artifact hashes:
+
+- `summary.json`: `af6da0b39b04c171f6a3ad9ed6d21ca26a5de0b6cb7f2cadd951065b8fe8ca9b`
+- `stdout.txt`: `bae23fa0545581626f15e9916e4c08e69c4ab7dad3adb080477bd9d3a5aab269`
+- `stderr.txt`: `20a4ab68f675ed0f24689ac13fd1ff559fb93040301c6a7711d811f003614b22`
+- `environment.txt`: `a5d68cb666296df05a9344cb49efd4831d165c48b54685c630cd9053acd38185`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `8dcde4975db511339c6efd9d022d84172d208d0dc03fb3056a810f8b8218238d`
+- `fallback_profile.csv`: `f334f867df76a653be7281a0ba38bd172c444062aaf5b883497c80fd2575fe81`
+- `resource_samples.tsv`: `370c0c237c63eeb1a205f287472f229d66e7ecc025328775e2f78755e2a705cc`
+
+Verdict:
+
+- Diagnostic accepted as evidence, but not promoted as a new SOTA because profiling overhead produced `4.3 tok/s`.
+- Current accepted strict cold SOTA remains:
+  - `eval_tok_s=4.4`;
+  - run `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`;
+  - branch `ssd/vendor/deepseek-token-rate-16gb`;
+  - commit `f276d0b32` before this documentation commit.
+
+Bottleneck conclusion:
+
+- Gate-side work is not the first priority now:
+  - gate pack has zero misses;
+  - gate VRAM cache hit rate is high;
+  - gate prefill cost is about `4.6s`, already inside TTFT budget.
+- The dominant remaining measured work is up/down CPU fallback:
+  - total fallback `26.4s`;
+  - decode fallback `19.0s`;
+  - prompt fallback `7.4s`.
+- Earlier CPU fallback pack paths are closed for now:
+  - compact mmap top128/top256 worked mechanically but tied/regressed;
+  - synchronous O_DIRECT direct staging hit the pack but regressed to `2.9 tok/s`;
+  - pure source-location changes do not solve the current 16GB cold page/cache pressure.
+- Earlier up/down GPU-stream paths are also not promotable:
+  - full no-filter stream regressed to `1.8 tok/s` and failed output completeness;
+  - hot up/down64 stream regressed to `3.6 tok/s` and failed manual semantic correctness;
+  - per-op numerical audit was close, but full-output trajectory remains quality-risky.
+
+### 2026-07-04T01:55Z Next Plan: CPU Fallback Scheduling And Compute Decomposition
+
+Goal:
+
+- Continue from the accepted `4.4 tok/s` SOTA and target a new strict cold SOTA above `4.4 tok/s`.
+- Do not repeat already rejected mmap/direct staging, broad up/down GPU stream, CUDA graph, affinity, or blind top-k/cache-size sweeps.
+- First localize whether the remaining up/down CPU fallback time is dominated by:
+  - CPU GEMV compute;
+  - thread/barrier scheduling;
+  - page faults/refaults;
+  - source preparation and GGUF pointer lookup;
+  - prompt-phase batching shape versus decode single-row shape.
+
+Current hard bound:
+
+- Accepted generation estimate: `192 / 4.4 = 43.64s`.
+- Measured total up/down CPU fallback in profile run: `26.44s`.
+- Measured decode fallback alone: `19.03s`.
+- If a safe optimization removed:
+  - `1.0s`, ideal token rate is about `4.50 tok/s`;
+  - `2.0s`, ideal token rate is about `4.61 tok/s`;
+  - `4.0s`, ideal token rate is about `4.85 tok/s`;
+  - `8.0s`, ideal token rate is about `5.39 tok/s`.
+- Therefore the next candidate must have a plausible hard bound above `1-2s`; otherwise it is not worth a strict cold run.
+
+Stage A: no-source profiling before implementation:
+
+- Run one strict cold diagnostic from the accepted SOTA config with existing profiling only.
+- Add or use existing timers to split CPU fallback into:
+  - source pointer lookup / source preparation;
+  - page fault or first-touch proxy where available;
+  - Q8 activation preparation;
+  - MXFP4 dot/GEMV compute;
+  - thread wait/barrier time;
+  - combine/post-processing time.
+- Keep the France prompt and full correctness check.
+- Record cgroup memory including page cache, `pgmajfault`, `workingset_refault_file`, TTFT, full output, and all profile hashes.
+
+Stage B: candidate selection after Stage A:
+
+- If CPU GEMV compute dominates:
+  - evaluate a narrow MXFP4 CPU-kernel scheduling/layout change only if the measured bound is at least `1-2s`;
+  - preferred candidates are default-off, minimal, and bitwise/near-bitwise equivalent;
+  - do not repeat the earlier simple MXFP4 prefetch that already regressed.
+- If thread/barrier wait dominates:
+  - test one bounded scheduling change, such as grouping small fallback tasks to reduce wake/barrier cost;
+  - do not repeat already rejected coarse `GGML_MOE_CPU_CHUNK_SIZE`, `OVERPARTITION_CNE1`, or global affinity probes unless the new split shows a different bottleneck.
+- If page fault/refault dominates:
+  - do not repeat mmap top128/top256 or synchronous O_DIRECT staging;
+  - only consider an actually overlapped design where reads for the next expert happen while the current expert computes, and only after deriving an IO/compute overlap bound from measured bytes and call order.
+- If prompt fallback dominates TTFT risk:
+  - avoid prompt-path experiments unless the theoretical TTFT impact is explicitly bounded below the `20%` limit.
+- If no component has a clear `>1s` bound:
+  - stop source-level CPU fallback tweaks and switch back to higher-level algorithmic paths, such as correctness-preserving speculative verification, because small local tweaks cannot reach the long-term `10 tok/s` target.
+
+Candidate acceptance gates:
+
+- Strict cold `drop_caches`.
+- Host RAM cgroup including page cache must stay `<=16000000000` bytes.
+- `MemorySwapMax=0`.
+- France output must be semantically correct, coherent, and manually reviewed.
+- `TTFT <= 33617.688744 ms` for accepted SOTA.
+- `eval_tok_s > 4.4`.
+- Any larger token-rate jump must include extra correctness scrutiny and the exact output text in the record.
+
+Required rollback rules:
+
+- Any source patch that regresses token rate, fails correctness, violates RAM, or exceeds accepted TTFT must be reverted before continuing, unless it is explicitly kept as default-off diagnostic instrumentation and documented as such.
+- If TTFT rises above the accepted limit but the result is otherwise informative, record and commit it only as rejected/high-TTFT evidence; do not call it accepted SOTA.
+- The rollback point for accepted performance remains the pushed `4.4 tok/s` SOTA.
+
+Required record and push discipline:
+
+- Before every experiment, append the hypothesis, hard bound, exact env/CLI config, acceptance/rejection rules, and start time to this plan.
+- For every run, record:
+  - run directory;
+  - source commit and dirty/clean state;
+  - binary path and sha256;
+  - exact env and CLI;
+  - stdout correctness answer;
+  - `eval_tok_s`, `prompt_tok_s`, TTFT, elapsed time;
+  - cgroup peak memory and file/page-cache bytes;
+  - `pgmajfault`, `workingset_refault_file`, and relevant counters;
+  - all artifact hashes.
+- When a new compliant SOTA appears, immediately:
+  - record the full reproduction block in this plan;
+  - commit source, plan, and artifacts;
+  - push to remote `ssd` branch `vendor/deepseek-token-rate-16gb`;
+  - use git identity `L-Ark <fliangae@connect.ust.hk>`;
+  - rebuild and rerun from the pushed source before marking it reproducible.
+- Do not promote any local-only or dirty-tree result as SOTA.
