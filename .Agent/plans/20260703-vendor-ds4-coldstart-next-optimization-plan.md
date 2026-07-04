@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed execution/audit head before this document update: `b52881a2bb52eb77b82a4c9b4b4e5fb970705ea1` (`vendor-ds4: audit vram recovery compression`)
+- Latest pushed execution/audit head before this document update: `37c4981a015c68f4e1e132aa290679b491980df2` (`vendor-ds4: design cpu41 q80 hot residual`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -179,7 +179,7 @@ Decision:
 
 ### 2026-07-04 Active Next Plan After VRAM Audit
 
-Current accepted SOTA remains `4.4 tok/s`; runtime source is unchanged by the latest audits. The current pushed execution/audit head before this plan update is `b52881a2bb52eb77b82a4c9b4b4e5fb970705ea1` on `ssd/vendor/deepseek-token-rate-16gb`.
+Current accepted SOTA remains `4.4 tok/s`; runtime source is unchanged by the latest audits. The current pushed execution/audit head before this plan update is `37c4981a015c68f4e1e132aa290679b491980df2` on `ssd/vendor/deepseek-token-rate-16gb`.
 
 The immediate bottleneck decision is now VRAM/source constrained, not kernel-arithmetic constrained:
 
@@ -9508,3 +9508,54 @@ Decision:
 - Do not promote lightning indexer.
 - Current accepted SOTA remains `4.4 tok/s`.
 - Close this no-source lightning path for now; only revisit if a separate TTFT reduction or stronger repeated evidence is designed and recorded first.
+
+## 2026-07-04T16:01:29Z Top768 Residual Profile And Pack Plan Update
+
+Purpose:
+
+- Update the active plan after generating the top768 up/down residual profile for the `cpu41 + exact Q8_0 hot residual` candidate.
+- This is a planning/artifact update only. Runtime source is unchanged and the accepted SOTA remains `4.4 tok/s`.
+
+Current accepted SOTA guardrail:
+
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Promotion gate remains: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB cgroup including file page cache, `MemorySwapMax=0`, coherent France answer, immediate commit/push, then pushed-source reproduction.
+
+New profile artifact:
+
+- Profile path: `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.tsv`
+- Source fallback profile: `/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44/france-touch-profile-cpu40-vram0gb/fallback_profile.csv`
+- Profile SHA256: `c8226df2f35b3f26a90ed33cdc5e432bdeb813fb48d47a02b7e82bbc8ba4695e`
+- Entries: `768`
+- Residual decode fallback covered by this profile: `2048.860 ms`
+- Payload: `3422552064 bytes` (`3264.000 MiB`)
+
+Pack status:
+
+- The top768 up/down pack has not been generated.
+- Intended durable pack path, if disk is made available: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top768-updown-touchresid-20260704.pack`
+- Current free space on `/dev/root` at this update: `3221327872 bytes`.
+- Required raw payload alone is `3422552064 bytes`; index/alignment overhead makes the real requirement larger.
+- Therefore generating the pack now would likely fill the root filesystem and is not allowed.
+- Do not use `/dev/shm` for this accepted-SOTA path because it is tmpfs/RAM-backed, volatile, and would confuse the 16GB host/page-cache accounting.
+- Do not delete or move old reproducibility packs without explicit approval. Existing large packs are historical artifacts needed for reproducing earlier accepted/rejected runs.
+
+Updated active plan:
+
+1. Commit and push this plan update plus the top768 profile artifact before any runtime experiment.
+2. Do not run a strict cold performance benchmark for `cpu41 + top768` until the source path is resolved. A benchmark without a durable pack or direct O_DIRECT GGUF reader would not reproduce.
+3. Choose exactly one source path before coding:
+   - durable-pack path: free or move enough disk, generate the top768 pack from the profile trace, record pack hash/size/index metadata, then continue to split-pool implementation;
+   - direct-reader path: implement a default-off GGUF-offset O_DIRECT reader for the q80 hot pool so the extra 3.26 GiB pack file is not needed.
+4. The first runtime source change must remain default-off and preserve the accepted `4.4 tok/s` path when unset.
+5. Implement split-pool allocation and counters before compute: keep the accepted gate cache at `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`; add a separate fixed q80 hot pool for the top768 up/down entries. Do not share an LRU that can evict gate entries.
+6. Implement exact MXFP4 x Q8_0 CUDA semantics only after the source path is reproducible. Cover both up and down fallback paths; down-only cannot reach the hard-bound.
+7. Run op compare and the fixed-text token-level top1 verifier before any long France benchmark. If top1 mismatches or France output becomes incoherent, revert runtime source and keep only rejected docs/artifacts.
+8. Any new compliant SOTA must be recorded with full reproduction information and immediately pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
+
+Decision:
+
+- The profile generation step is complete and useful.
+- The pack/source step is currently disk-constrained.
+- Current accepted SOTA remains `4.4 tok/s`; no new performance result is promoted by this update.

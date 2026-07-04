@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "2026-07-04T16:01:29Z",
+  "status": "profile_generated_pack_blocked_by_disk",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "candidate": "cpu41_top768_exact_q80_hot_residual",
+  "profile": {
+    "path": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.tsv",
+    "source_fallback_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44/france-touch-profile-cpu40-vram0gb/fallback_profile.csv",
+    "sha256": "c8226df2f35b3f26a90ed33cdc5e432bdeb813fb48d47a02b7e82bbc8ba4695e",
+    "entries": 768,
+    "residual_ms_sum": 2048.860,
+    "payload_bytes": 3422552064,
+    "payload_mib": 3264.000
+  },
+  "pack": {
+    "generated": false,
+    "intended_path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top768-updown-touchresid-20260704.pack",
+    "raw_payload_bytes": 3422552064,
+    "root_free_bytes_at_update": 3221327872,
+    "blocker": "Root filesystem has less free space than the raw payload before index/alignment overhead; generating the pack now may fill /dev/root.",
+    "do_not_use_dev_shm_reason": "tmpfs/RAM-backed storage is volatile and would confuse the strict 16GB host/page-cache accounting for accepted SOTA reproduction.",
+    "do_not_delete_old_packs_without_approval": true
+  },
+  "next_plan": [
+    "Commit and push this plan update plus the top768 profile artifact before any runtime experiment.",
+    "Do not run a strict cold performance benchmark for cpu41 + top768 until a durable source path exists.",
+    "Either free/move enough disk and generate the top768 durable pack with hash/size/index metadata, or implement a default-off GGUF-offset O_DIRECT reader for the q80 hot pool.",
+    "Keep accepted gate cache at GGML_MOE_STREAM_ONE_CACHE_MIB=13568 and add a separate fixed q80 hot pool; do not share an LRU that can evict gate entries.",
+    "Implement exact MXFP4 x Q8_0 CUDA semantics for both up and down fallback only after the source path is reproducible.",
+    "Run op compare and fixed-text token-level top1 verification before any long France benchmark.",
+    "Promote only if eval_tok_s exceeds 4.4, TTFT is at most 33617.688744 ms, RAM including file page cache is inside the 16GB cgroup with no swap, France output is coherent, and pushed-source reproduction passes."
+  ]
+}
