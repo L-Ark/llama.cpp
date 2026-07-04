@@ -54962,3 +54962,83 @@ systemd-run --wait --collect --same-dir \
   - Do not run n96.
   - Keep runner default `THREADS=32`.
   - No source rollback is needed because this was a runtime-only probe.
+
+## Phase 7HV: CPU thread midpoint probe with THREADS=36
+
+Start time: 2026-07-05T05:22:00+08:00.
+
+Goal:
+
+- Test the narrow upper-side midpoint between accepted production
+  `THREADS=32` and rejected `THREADS=40`.
+- Keep all model/cache/io/VRAM parameters unchanged.
+- This is the last simple CPU-thread count probe unless it produces a
+  reproducible n96 improvement.
+
+Why this is still worth one n32 gate:
+
+- Phase 7HU showed `THREADS=40` improves TTFT (`61349.00 ms`) but destroys
+  decode (`89859.70 ms / 31`), so using every CPU is not viable.
+- Phase 7HT showed `THREADS=24` is slower on n96 and worsens TTFT.
+- A midpoint at `36` keeps four CPUs free for staging/io/CUDA runtime while
+  giving prompt/fallback more CPU than `32`. It may preserve decode while
+  improving TTFT, but the expected decode upside is small.
+
+Theoretical upper bound:
+
+- `THREADS=36` does not change expert movement volume, cache hit rate, or
+  iouring batch shape.
+- Any decode gain must come from host-side CPU work: route/scatter, CUDA driver
+  work, fallback/prompt side effects, or reduced scheduling variance.
+- Expected n96 upper bound is therefore below `1s` unless there is an
+  unexpected CPU scheduling cliff at `32`.
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hv-threads36"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=36 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must beat or match Phase 7HR n32 parity
+  `29598.42 ms / 31` within noise; otherwise reject without n96.
+
+Experiment B: n96 candidate, only if n32 passes with a real decode or TTFT
+reason to continue
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hv-threads36"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=36 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails any hard gate or decode is slower than 7HR parity, reject
+  without n96 and keep `THREADS=32`.
+- If n96 does not beat historical Phase 7FB `70087.31 ms / 77`, reject or
+  record as parity-only and keep `THREADS=32`.
+- If n96 beats SOTA, repeat n96 once before accepting; only then update runner
+  defaults and push the result.
