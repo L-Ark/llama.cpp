@@ -45678,3 +45678,91 @@ Decision:
   - use the `sm_120a` build as the local rebuilt-build baseline;
   - future source optimizations must beat this rebuilt baseline first, then
     prove n96 against Phase 7FB `70087.31 ms / 77` before being called SOTA.
+
+## Phase 7FP: refreshed `sm_120a` bottleneck profile
+
+Start time: 2026-07-04T15:31:00+08:00.
+
+Goal:
+
+- Re-enter the design phase after restoring a valid RTX 5090 `sm_120a` build.
+- Measure current per-token time breakdown before choosing the next
+  optimization.
+- Do not change source.
+
+Current accepted comparison points:
+
+- Accepted SOTA remains Phase 7FB:
+  - n96 best:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-042843Z-n96-phase7fb-slots12-min-profile-b`;
+  - TTFT `71701.31 ms`;
+  - decode `70087.31 ms / 77`, `1.10 tok/s`;
+  - quality pass.
+- Current rebuilt local baseline is Phase 7FO:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-071859Z-n32-phase7fo-blackwell-baseline`;
+  - build `CMAKE_CUDA_ARCHITECTURES=120a`,
+    `GGML_CUDA_LIGHTNING_INDEXER=OFF`;
+  - TTFT `76037.93 ms`;
+  - decode `29794.86 ms / 31`, `1.04 tok/s`;
+  - quality pass;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+
+Why this diagnostic is required:
+
+- The previous detailed profile, Phase 7FD, was captured before the build
+  restoration and before the `sm_89 -> sm_120a` correction.
+- The latest production baseline uses `MIN_PROFILE=1`, so it omits per-op CSV
+  attribution.
+- The next optimization must target the current bottleneck, not an old
+  measurement.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fp-sm120a-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required metrics:
+
+- quality output for the France prompt;
+- TTFT;
+- decode time and token rate;
+- memory peak including page cache;
+- `read_failures`, `iouring_fallbacks`;
+- expert pack io_uring summary;
+- pinned staging summary;
+- VRAM down/upgate hit rates;
+- `up-gate-profile.csv` aggregate by type;
+- `down-batch-profile.csv` or `down-profile` summary if present;
+- `ttft-trace.csv` top buckets if present.
+
+Analysis method:
+
+1. Compute decode wall buckets:
+   - expert-pack wait;
+   - pinned host staging;
+   - H2D;
+   - up/gate type18 and type22 wall;
+   - down batch wall/fallback;
+   - current-down overlap;
+   - CPU fallback by type.
+2. Compare with Phase 7FO production baseline:
+   - profile overhead must be understood before using absolute decode time.
+3. Rank next optimizations by compressible time and risk:
+   - copy/io path first if staging and expert-pack wait dominate;
+   - up/down compute only if kernel wall dominates;
+   - cache repartition only if miss/hit data shows enough theoretical upside.
+
+Decision rule:
+
+- This phase cannot be accepted as a token-rate improvement.
+- It is complete when the bottleneck ranking is recorded here with concrete
+  numbers and the next implementation phase is written before any source edit.
