@@ -35707,6 +35707,146 @@ Decision:
   implementation must reduce critical-path staging rather than merely reshuffle
   cache residency.
 
+## Phase 7EO: current Phase 7EB minimal-profile production retest
+
+Start time:
+
+- 2026-07-04T01:52:05Z.
+
+Reason:
+
+- Phase 7EN reproduced the current Phase 7EB SOTA but also showed the accepted
+  runner still writes several diagnostic artifacts on every strict run:
+  - `fallback-profile.csv`;
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`;
+  - CPU MoE eligibility/name/profile logs;
+  - stream decline debug logs.
+- Phase 7CS minimal-profile was rejected on the older Phase 7CC/slots8 runtime
+  because n96 did not improve. It does not fully answer whether the current
+  Phase 7EB/slots16 accepted recipe is paying measurable diagnostic overhead.
+- This is a low-risk env/runner-only experiment. It does not change math,
+  cache sizing, expert packs, overlay pack, IO depth, pinned slots, current-down
+  overlap, or output sampling.
+
+Bottleneck hypothesis:
+
+- The diagnostic hooks add per-call bookkeeping, file appends, route/TTFT event
+  accumulation, and atexit CSV writes.
+- Phase 7EN's two runs had identical route/cache counters but different exposed
+  staging time. Removing diagnostic work may reduce scheduling noise and
+  host-side critical-path overhead.
+- If the effect is real, it should reduce n32 decode without changing:
+  - down/upgate hit rates;
+  - expert-pack read counts/bytes;
+  - France answer;
+  - TTFT beyond the allowed gate.
+
+Theoretical upper bound:
+
+- The hard ceiling is small because movement itself is unchanged:
+  - Phase 7EN n32 expert-pack bytes remained `87082139648`;
+  - down/upgate hit counts were deterministic;
+  - mandatory SSD/H2D movement remains.
+- Based on prior minimal-profile attempts, plausible n32 upside is
+  `0.2-0.6 s`.
+- Because Phase 7EN measured about `0.626 s` cold-run spread, Phase 7EO cannot
+  promote on one n32 win. It must beat the historical Phase 7EB n32 gate
+  `29599.64 ms / 31` and reproduce before n96.
+
+Implementation:
+
+- No source patch.
+- Create `/tmp/run_phase7eo_repro.sh` from `/tmp/run_phase7eb_repro.sh`.
+- Add `MIN_PROFILE=1` support in the runner:
+  - when `MIN_PROFILE=1`, omit these diagnostic envs:
+    - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_NAME_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+    - `GGML_MOE_DOWN_BATCH_PROFILE_OUT`;
+    - `GGML_MOE_UP_GATE_PROFILE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE_OUT`;
+    - `GGML_MOE_ROUTE_TRACE_OUT`;
+    - `GGML_MOE_TTFT_TRACE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE`;
+    - `GGML_MOE_STREAM_DECLINE_DEBUG`;
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`.
+  - keep all accepted Phase 7EB runtime envs:
+    - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+    - main expert pack and l1/l2 overlay pack;
+    - `GGML_MOE_IO_BACKEND=iouring`;
+    - `GGML_MOE_IO_BYTES=8388608`;
+    - `GGML_MOE_IO_DEPTH=8`;
+    - `GGML_MOE_IO_REFILL_BATCH=4`;
+    - `GGML_MOE_IO_SORT_OFFSET=1`;
+    - `GGML_MOE_IO_SQPOLL=1`;
+    - `GGML_MOE_PREFETCH_DOWN=1`;
+    - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`;
+    - `GGML_MOE_STAGE_PINNED=1`;
+    - `GGML_MOE_STAGE_PINNED_SLOTS=16`;
+    - `GGML_MOE_STREAM=1`;
+    - `GGML_MOE_STREAM_BATCH_ONLY=1`;
+    - `GGML_MOE_STREAM_DOWN_BATCH=1`;
+    - `GGML_MOE_STREAM_FUSED_UP_GATE=1`;
+    - `GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES=1`;
+    - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+    - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+    - `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+    - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`;
+    - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+    - dense/expert mmap drop envs.
+- The run still writes standard reproducibility artifacts:
+  `README.md`, `command.txt`, `env.txt`, `git.txt`, `script.sh`,
+  `stdout.txt`, `stderr.txt`, cgroup memory files, and `metrics.txt`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7eo-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7eo_repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- strict cold start;
+- `memory.peak <= 15900000000`;
+- `oom=0`, `oom_kill=0`, `memory.swap.max=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output must be coherent and semantically correct.
+
+Activation checks:
+
+- `command.txt` records `MIN_PROFILE=1`;
+- `env.txt` omits the diagnostic envs listed above;
+- `env.txt` keeps all accepted runtime envs;
+- `stderr.txt` should not report route/TTFT/down/upgate CSV files written.
+
+Promotion rule:
+
+- If first n32 is slower than Phase 7EB historical SOTA
+  `29599.64 ms / 31`, reject immediately and keep the current diagnostic
+  reproduction runner for visibility.
+- If first n32 beats, run a second strict cold n32 confirmation.
+- Only if both n32 runs beat `29599.64 ms / 31`, run n96 candidate and
+  confirmation.
+- Both n96 runs must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- Env/runner-only failure needs no source rollback.
+- If rejected, record all metrics and do not promote `MIN_PROFILE=1`.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
