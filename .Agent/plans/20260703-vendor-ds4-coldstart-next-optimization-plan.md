@@ -9252,3 +9252,24 @@ Decision:
 - This is a candidate only, not yet promoted.
 - Immediately commit/push the plan and candidate artifact, then run one strict cold pushed-state reproduction with the same config.
 - Promote `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` to accepted SOTA only if the pushed-state reproduction also has `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict 16GB RAM/page-cache pass, and France correctness pass.
+
+Pushed-state reproduction result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-pushed-repro-rejected.json`
+- Pushed source: `ca1a80c57cdd6210bcbba36d7f6bed3924d38066`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T140232Z-20260704_lightning_indexer_pushed_repro/france-lightning-indexer-pushed-repro-cpu40-vram0gb`
+- Metrics:
+  - `eval_tok_s=4.4`
+  - `prompt_tok_s=1.9`
+  - `TTFT=33618.90603 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15091015680`
+  - `ram_ok=true`
+  - `correctness_ok=true`, France output is semantic/coherent/complete
+- Verdict: rejected as accepted SOTA. It tied the accepted `4.4 tok/s` and TTFT was `1.217286 ms` above the promotion gate.
+
+Decision:
+
+- Do not promote lightning indexer.
+- Current accepted SOTA remains `4.4 tok/s`.
+- Close this no-source lightning path for now; only revisit if a separate TTFT reduction or stronger repeated evidence is designed and recorded first.

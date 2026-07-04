@@ -1,0 +1,111 @@
+{
+  "artifact": "lightning-indexer-pushed-repro-rejected",
+  "recorded_at_utc": "2026-07-04T14:08:00Z",
+  "pushed_source_head": "ca1a80c57cdd6210bcbba36d7f6bed3924d38066",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "candidate_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-repeat-candidate.json",
+  "candidate_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T135703Z-20260704_lightning_indexer_repeat/france-lightning-indexer-repeat-cpu40-vram0gb",
+  "candidate_metrics": {
+    "eval_tok_s": 4.5,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 33285.240047,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15093157888,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260704T140232Z-20260704_lightning_indexer_pushed_repro",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T140232Z-20260704_lightning_indexer_pushed_repro/france-lightning-indexer-pushed-repro-cpu40-vram0gb",
+    "strict_cold": true,
+    "drop_caches_before_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb_arg": 0,
+    "extra_env": {
+      "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER": "1",
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct"
+    },
+    "cli_tail": "-c 256 -b 16 -ub 16 -t 20 -tb 20"
+  },
+  "metrics": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.9,
+    "ttft_ms": 33618.90603,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_over_gate_ms": 1.217286,
+    "elapsed_seconds": 64.82,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15091015680,
+    "memory_max_events": 16893,
+    "pgmajfault": 264772,
+    "workingset_refault_file": 1661754,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "counters": {
+    "vram_cache": {
+      "hits": 33265,
+      "misses": 1886,
+      "hit_rate_percent": 94.6
+    },
+    "expert_pack": {
+      "hits": 4886,
+      "misses": 0,
+      "reads": 4886,
+      "bytes": 21774204928,
+      "failures": 0,
+      "direct_enabled": true,
+      "direct_reads": 4886,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "prefill": {
+      "loaded": 3313,
+      "limit": 3000,
+      "attempted": 3000,
+      "inserted": 3000,
+      "bytes": 13369344000,
+      "elapsed_ms": 4711.572,
+      "pack_misses": 0,
+      "read_failures": 0
+    }
+  },
+  "hashes_sha256": {
+    "summary_json": "99dd1dc7e2b36be6744bd32caf5dc35b03efebd21eeb2694e27bf3a0bd97f31b",
+    "stdout_txt": "174159a306fccdb951ac1357c70bc59374ec9ba1027f8ffd3bd15c643a94f990",
+    "stderr_txt": "d8750773a34f29f869ca0af796d80a68b247472b43a3e4e0cc17428b04dfdc6a",
+    "combined_txt": "d43897cd5c3a5f955d4e405a6b85c280b4abf7d8078752d9dc84e420a4de422e",
+    "environment_txt": "db2e1a901493e000c95841631dd7c6c4e36f5057f7db2cd847c21d33fa5223bd",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "resource_samples_tsv": "54f720b41cd849038fbaad83b0cc0721033094d6b8265fffc5befdbca1fa0f0e",
+    "memory_stat": "f91141500b2f8a1105c0d797ebf4f6114eff81062827c324a9a74aaeab682039"
+  },
+  "verdict": "rejected_pushed_reproduction_tied_and_ttft_over_gate",
+  "decision": {
+    "promote": false,
+    "accepted_sota_unchanged_eval_tok_s": 4.4,
+    "reason": "Pushed-state reproduction tied accepted generation rate and missed TTFT gate by 1.217286 ms."
+  }
+}
