@@ -6771,3 +6771,82 @@ Required record and push discipline:
   - use git identity `L-Ark <fliangae@connect.ust.hk>`;
   - rebuild and rerun from the pushed source before marking it reproducible.
 - Do not promote any local-only or dirty-tree result as SOTA.
+
+### 2026-07-04T01:29Z Execution: Current SOTA CPU Chunk Trace Diagnostic
+
+Start time:
+
+- `2026-07-04T01:29Z`
+
+Hypothesis:
+
+- The current accepted `4.4 tok/s` run still spends about `26.44s` in up/down CPU fallback.
+- Existing aggregate profiles cannot distinguish whether this is mostly uniform MXFP4 GEMV work or thread scheduling / long-tail chunk imbalance.
+- Existing `GGML_MOE_CPU_CHUNK_TRACE_OUT` records true fallback chunk wall time by role, expert, thread, row range, and chunk shape without changing math.
+- If one or a few threads/chunks dominate tail latency by more than `1-2s`, the next source candidate should be scheduling/chunk assignment.
+- If chunk time is broadly balanced and totals match fallback time, the next source candidate should focus on CPU GEMV/kernel arithmetic or higher-level algorithmic changes rather than scheduling.
+
+Hard bound:
+
+- Accepted generation estimate: `192 / 4.4 = 43.64s`.
+- A `1.0s` reduction gives an ideal `4.50 tok/s`; a `2.0s` reduction gives an ideal `4.61 tok/s`.
+- Therefore the diagnostic is useful only if chunk imbalance, tail wait, or a concentrated role/layer bucket exposes at least `1-2s` of plausible removable time.
+
+Code change:
+
+- None for this run.
+- Use existing default-off tracing only.
+
+Run config:
+
+- Branch/source: `feat/ds4-moe-stream-on-vendor`, starting commit `fc622213b`.
+- Binary: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`.
+- Strict runner: `/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/strict_ds4_runner.py`.
+- Model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Effective llama args:
+  - `-n 192`
+  - `-c 256 -b 16 -ub 16`
+  - `-t 20 -tb 20`
+  - `-ngl all --fit on -fa auto`
+  - `--temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt`
+  - `--n-cpu-moe 40 --defer-experts`
+- Base env from accepted SOTA:
+  - `CUDA_VISIBLE_DEVICES=0`
+  - `GGML_CUDA_DISABLE_GRAPHS=1`
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_VRAM_CACHE_GB=0`
+  - `GGML_MOE_STREAM_DONTNEED=1`
+  - `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`
+  - `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+  - `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+  - `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+  - `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=4`
+  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
+- Added diagnostic env:
+  - `GGML_MOE_CPU_CHUNK_TRACE_OUT={case_dir}/cpu_chunk_trace.csv`
+  - `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=250000`
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback_profile.csv`
+  - `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`
+
+Acceptance / rejection:
+
+- Diagnostic only, not a SOTA candidate unless it unexpectedly exceeds `4.4 tok/s` with all gates passing despite trace overhead.
+- Must pass RAM, cgroup, and correctness gates to be used as bottleneck evidence.
+- Record and analyze:
+  - chunk trace row count;
+  - total chunk ms by role;
+  - max/p95 chunk ms;
+  - per-thread total chunk ms;
+  - imbalance between busiest and least busy thread;
+  - top experts/layers by chunk ms;
+  - gap between aggregate `fallback_t0` and summed chunk ms.
+- If the trace shows no `>1s` scheduling/tail bound, do not implement another chunk-size or affinity tweak.
