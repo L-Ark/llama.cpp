@@ -7966,6 +7966,73 @@ Next:
 - Run a second strict cold n32 confirmation with the same commit and env.
 - If n32 confirmation passes, run n96 candidate and n96 confirmation.
 
+Phase 7EL n32 confirmation result - rejected and source reverted:
+
+- result time: 2026-07-04T01:23:00Z.
+- source commit tested:
+  `7e1c0dab1` (`cuda: threshold down parallel staging`).
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-012019Z-n32-phase7el-down-minjobs5-confirm`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-012019Z-n32-phase7el-down-minjobs5-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7el_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `76474.21 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- activation:
+  - `env.txt` contains `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=5`;
+  - stderr contains
+    `down parallel stage threshold active: min_jobs=5`.
+- decode:
+  - `30215.97 ms / 31`, `1.03 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31` by `616.33 ms`;
+  - fails confirmation gate.
+- counters:
+  - down cache unchanged: hit rate `73.6%`;
+  - upgate cache unchanged: hit rate `43.7%`;
+  - expert-pack `iouring_wait_us=13786220`;
+  - main pinned `host_stage=11883.144 ms`;
+  - gate pinned `host_stage=298.292 ms`;
+  - down aggregate `39.991 ms/call`, `cuda_batch=2.395 ms/call`,
+    `fallback_t0=37.549 ms/call`;
+  - up/gate wall `7.215 ms/call`.
+
+Gap analysis:
+
+- The first n32 candidate was a real favorable run under all hard gates, but
+  the improvement did not reproduce.
+- The confirmation kept the intended mechanism active but regressed past the
+  Phase 7EB gate.
+- The threshold patch reduces some small-batch scheduling overhead in the best
+  run, but the effect is within cold-run variance and can be outweighed by
+  iouring wait and fallback variance.
+
+Decision:
+
+- Reject Phase 7EL.
+- Do not run n96.
+- Revert the source patch from `7e1c0dab1`.
+- Keep Phase 7EB as current SOTA:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Keep this as evidence that thresholded down staging is promising but not
+  reproducible enough with a fixed `min_jobs=5`.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.

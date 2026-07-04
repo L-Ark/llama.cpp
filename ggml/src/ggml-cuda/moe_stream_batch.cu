@@ -2162,14 +2162,6 @@ static bool current_down_overlap_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
-static int down_parallel_stage_min_jobs() {
-    const char *env = std::getenv("GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS");
-    long value = (env && env[0]) ? std::atol(env) : 1;
-    if (value < 1) value = 1;
-    if (value > 64) value = 64;
-    return (int)value;
-}
-
 static bool current_down_overlap_tensor_profile_enabled() {
     const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT");
     return env && env[0];
@@ -7156,24 +7148,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     bc.h_bounds[n_active] = n_active;
 
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
-        const int min_parallel_jobs = down_parallel_stage_min_jobs();
-        static std::atomic<int> first_down_parallel_threshold{0};
-        if (min_parallel_jobs > 1 && first_down_parallel_threshold.fetch_add(1) == 0) {
-            std::fprintf(stderr,
-                "[moe_stream_batch] down parallel stage threshold active: min_jobs=%d\n",
-                min_parallel_jobs);
-        }
-        const size_t total_down_jobs = down_jobs_a.size() + down_jobs_b.size();
-        if (total_down_jobs < (size_t)min_parallel_jobs) {
-            std::vector<down_stage_copy_job> down_jobs_serial;
-            down_jobs_serial.reserve(total_down_jobs);
-            down_jobs_serial.insert(down_jobs_serial.end(), down_jobs_a.begin(), down_jobs_a.end());
-            down_jobs_serial.insert(down_jobs_serial.end(), down_jobs_b.begin(), down_jobs_b.end());
-            if (!copy_down_stage_jobs(down_jobs_serial, st, bc.stage_ring)) {
-                clear_down_stage_jobs(down_jobs_serial);
-                return decline("serial_stage_copy");
-            }
-        } else {
         bool copy_a_ok = true;
         bool copy_b_ok = true;
         std::thread copy_a([&]() {
@@ -7193,7 +7167,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return decline("record_gate_done");
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return decline("wait_up_done");
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return decline("wait_gate_done");
-        }
     }
 
     if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_h2d");
