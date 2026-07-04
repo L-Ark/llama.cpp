@@ -57247,3 +57247,166 @@ Decision rule:
   path consumption and fallback elimination.
 - If fallback is near zero and wall is CUDA wait, do not optimize CPU scalar
   kernels; target synchronization/stream boundaries.
+
+### 7IH result
+
+- Plan head:
+  `74ef1515c` (`docs: record moe assignment profile`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-195616Z-n32-phase7ih-cpu-moe-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 74ef1515c
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-195616Z-n32-phase7ih-cpu-moe-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=16
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76933.45 ms`;
+  - decode `29458.81 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15075770368`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Split profile totals:
+  - all wall `105290.365 ms`;
+  - all CPU wall `104653.563 ms`;
+  - all CUDA0 wall `636.802 ms`;
+  - decode wall `29413.167 ms`;
+  - decode CPU wall `29254.315 ms`;
+  - decode CUDA0 wall `158.852 ms`.
+- CPU MoE profile:
+  - up_gate:
+    - calls `1861`;
+    - total `11.436 ms/call`;
+    - `cuda_batch=11.322 ms/call`;
+    - `post_cuda_barrier=0.101 ms/call`;
+    - `fallback_t0=0.001 ms/call`;
+    - batch accept `1861`, decline `0`;
+  - down:
+    - calls `2038`;
+    - total `39.916 ms/call`;
+    - `cuda_batch=2.243 ms/call`;
+    - `fallback_t0=37.631 ms/call`;
+    - batch accept `1644`, decline `52`.
+- Name profile:
+  - Q4_0-like unsupported decode fallback is visible in specific down layers:
+    - `blk.6.ffn_down_exps.weight`: decode total `11.902 ms/call`,
+      decode fallback `11.865 ms/call`, batch eligible `0`;
+    - `blk.7.ffn_down_exps.weight`: decode total `11.565 ms/call`,
+      decode fallback `11.542 ms/call`, batch eligible `0`;
+    - `blk.8.ffn_down_exps.weight`: decode total `10.966 ms/call`,
+      decode fallback `10.943 ms/call`, batch eligible `0`;
+    - `blk.9.ffn_down_exps.weight`: decode total `11.895 ms/call`,
+      decode fallback `11.872 ms/call`, batch eligible `0`;
+    - `blk.10.ffn_down_exps.weight`: decode total `13.044 ms/call`,
+      decode fallback `13.021 ms/call`, batch eligible `0`.
+  - Many other down tensors have prompt fallback but decode fallback is near
+    zero after batch accept; examples:
+    - `blk.26.ffn_down_exps.weight`: decode fallback `0.001 ms/call`,
+      prompt fallback `986.544 ms/call`;
+    - `blk.4.ffn_down_exps.weight`: decode fallback `0.001 ms/call`,
+      prompt fallback `735.023 ms/call`.
+- Source inspection after 7IH:
+  - `ggml_cuda_moe_stream_supports_down_batch()` excludes `Q4_0`;
+  - `moe_stream_type_supported()` also excludes `Q4_0`;
+  - assignment profile showed the batch-ineligible layers are Q4_0 down layers;
+  - historical phases already rejected broad Q4_0 down GPU/shared-cache work
+    because it increased slot size and regressed wall time.
+- 7IH conclusion:
+  - The diagnostic passes all gates.
+  - Up/gate has essentially no CPU fallback; its cost is CUDA batch wait through
+    the CPU backend wrapper.
+  - Down has real CPU fallback, but the decode-visible unsupported portion is
+    concentrated in a small Q4_0 layer set and is much smaller than the up_gate
+    CUDA batch wait total.
+  - Do not retry broad Q4_0 down GPU/shared-cache enablement without a new
+    design, because previous Q4_0 GPU/cache attempts removed fallback but
+    regressed wall time.
+
+## Phase 7II: true up_gate CUDA backend feasibility, not Q4_0 retry
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current prioritized bottleneck:
+
+- `up_gate` costs `11.322 ms/call` in `cuda_batch`, accepted for every call.
+- `up_gate` fallback is effectively zero.
+- `down` Q4_0 fallback is real but bounded and historically dangerous to
+  attack through the shared down cache.
+
+Why this is the next priority:
+
+- The largest measured decode bucket is not scalar CPU math; it is the CPU
+  backend wrapper waiting for the CUDA up/gate batch path.
+- Making `MOE_FUSED_UP_GATE` a true CUDA backend op could remove CPU scheduler
+  split ownership and may allow cleaner stream scheduling, but only if the CUDA
+  backend implements the op and preserves the existing expert-pack/cache
+  semantics.
+
+Required investigation before implementation:
+
+- Locate the exact CUDA backend graph execution hook needed for
+  `GGML_OP_MOE_FUSED_UP_GATE`.
+- Determine whether it can call the existing
+  `ggml_cuda_moe_stream_up_gate_batch()` safely from CUDA backend execution
+  without depending on CPU backend threadpool state.
+- Determine how row mapping (`matrix_row_counts`, `matrix_rows`) is currently
+  built in the CPU implementation and whether equivalent data is available or
+  must be reconstructed for a CUDA backend op.
+- Determine whether assigning up_gate to CUDA would make `ffn_moe_down` move to
+  CUDA or whether down still remains CPU due host expert buffers.
+- Compute upper bound:
+  - if only CPU wrapper overhead disappears and CUDA batch work remains, gain is
+    limited to wrapper/barrier overhead, not the full `11.322 ms/call`;
+  - if true CUDA backend enables down to consume GPU-resident up_gate output,
+    gain could include host round-trip removal and Q4_0 fallback avoidance for
+    supported layers.
+
+First experiment:
+
+- No behavior change yet.
+- Add or use a debug-only dry-run support report that prints for one decode
+  layer:
+  - whether CUDA backend could accept `MOE_FUSED_UP_GATE` if `supports_op` were
+    true;
+  - required src tensors, ids shape, row mapping dimensions, and output buffer
+    placement;
+  - whether downstream `MUL_MAT_ID` would remain CPU because weights are
+    `CPU_Mapped`.
+
+Decision rule:
+
+- If row mapping is not available in CUDA backend without duplicating CPU
+  scheduler logic, do not implement true CUDA op yet; instead target a smaller
+  synchronization/bypass around the CPU wrapper.
+- If row mapping is straightforward and down can consume the output without a
+  host round trip, implement a default-off prototype for one layer range and run
+  n32 correctness first.
+- If down remains CPU even after up_gate CUDA support, estimate the extra
+  transfer cost before coding; do not move only up_gate to CUDA if it increases
+  D2H/H2D traffic.
