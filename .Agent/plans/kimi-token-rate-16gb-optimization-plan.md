@@ -50045,3 +50045,88 @@ Decision rule:
 - Accept only if the repeat also passes all gates and beats Phase 7FB.
 - If accepted, commit/push the source change and record exact reproduction
   commands and both run directories.
+
+Result: n96 completed; rejected and reverted.
+
+- End time: 2026-07-04T20:19:00+08:00.
+- Plan commit:
+  `e1915bd39` (`docs: plan iq3 vdr1 micro probe`).
+- Source probe commit:
+  `5668dedb8` (`cuda: probe iq3 xxs mmvq vdr1`).
+- Rollback commit:
+  `5601518ad` (`Revert "cuda: probe iq3 xxs mmvq vdr1"`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-121244Z-n96-phase7gr-iq3-vdr1`.
+- Code head under test:
+  `5668dedb8fa2e8f8d4b92ecdd815413f44b09c73`.
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-121244Z-n96-phase7gr-iq3-vdr1
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - runner quality `pass`;
+  - manual semantic quality `pass`, but the answer is truncated at the output
+    limit and much longer than the usual short paragraph shape;
+  - output:
+    `France, located in Western Europe, is renowned for its profound influence on art, philosophy, and cuisine. Bordered by countries including Spain, Germany, Italy, and Switzerland, it has long been a center of European culture and politics. The capital, Paris, is world-famous for landmarks like the Eiffel Tower and the Louvre Museum. With a population of around 67 million, metropolitan France stretches from the Atlantic coast to the Alpine peaks. The country is a leading member of`;
+  - TTFT `79418.73 ms`;
+  - decode `292926.59 ms / 95`, `0.32 tok/s`;
+  - memory peak `15899996160`;
+  - memory swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Cache / movement metrics:
+  - expert pack hits `72725`, misses `16160`;
+  - `iouring_reads=23642`;
+  - `iouring_bytes=139169644544`;
+  - `iouring_wait_us=26078299`;
+  - main pinned copies `70204`, jobs `16021`;
+  - gate pinned copies `13361`, jobs `7621`;
+  - current-down overlap:
+    - calls `3040`;
+    - planned/completed jobs `13398`;
+    - cache hits `8642`;
+    - missing tensor `285`;
+    - missing pack `2650`;
+    - worker `54897165 us`;
+  - down cache:
+    - hits `28901`;
+    - misses `11355`;
+    - hit rate `71.8%`;
+  - upgate cache:
+    - hits `32436`;
+    - misses `58780`;
+    - hit rate `35.6%`.
+- Decision:
+  - Reject `VDR_IQ3_XXS_Q8_1_MMVQ=1`.
+  - Do not run repeat.
+  - Revert immediately; rollback commit `5601518ad` was pushed.
+- Gap analysis:
+  - VDR=1 massively increases decode time. The extra loop work and poorer
+    per-thread work grouping dominate any possible dependency/register benefit.
+  - The run also perturbs routing/cache timing enough that generated tokens
+    differ (`95` decode runs instead of the expected `77`), and upgate hit rate
+    collapses from the current SOTA range to `35.6%`.
+  - This closes the simple VDR sweep space:
+    - VDR=4 failed repeat;
+    - VDR=1 catastrophically regressed;
+    - VDR=2 remains the only viable IQ3_XXS MMVQ setting.
+  - Do not retry IQ3 VDR changes without a new kernel-level design and a
+    resource/timing explanation that is not just macro sweeping.
