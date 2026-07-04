@@ -45080,3 +45080,119 @@ Result - 2026-07-04 06:32Z:
   - keep production `GGML_MOE_IO_DEPTH=8` and
     `GGML_MOE_IO_REFILL_BATCH=4`;
   - do not run n32 confirmation or n96.
+
+## Phase 7FL: env-gated IQ3_XXS parallel up/gate path
+
+Start time: 2026-07-04T14:55:00Z.
+
+Goal:
+
+- Reduce decode time by overlapping IQ3_XXS up and gate computation/staging.
+- Do not change the accepted IQ2_S parallel path.
+- Keep the change default-off until n32 and n96 prove speed and quality.
+
+Current bottleneck evidence:
+
+- Current accepted SOTA remains Phase 7FB:
+  - n32 confirmation:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-042209Z-n32-phase7fb-slots12-min-profile-confirm`;
+  - decode `29182.49 ms / 31`;
+  - TTFT `73438.91 ms`;
+  - quality pass;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Phase 7FD diagnostic up/gate profile:
+  - IQ2_S/type22:
+    - calls `558`;
+    - already `parallel_up_gate=1`, `parallel_stage=1`;
+    - wall `3401.687 ms`;
+    - up wait `3131.827 ms`, gate wait `3274.719 ms`;
+    - compute is overlapped.
+  - IQ3_XXS/type18:
+    - calls `311`;
+    - `parallel_up_gate=0`, `parallel_stage=0`;
+    - wall `2894.960 ms`;
+    - up `1529.771 ms`;
+    - gate `1321.743 ms`;
+    - kernel `2857.691 ms`.
+- Code inspection:
+  - `parallel_up_gate` currently requires `src0_type == GGML_TYPE_IQ2_S`;
+  - `fused_mmq_up_gate` currently accepts both `IQ3_XXS` and `IQ2_S`;
+  - branch order chooses `fused_mmq_up_gate` before `parallel_up_gate`, so
+    IQ3_XXS remains serial even when parallel envs are set.
+
+Theory and upper bound:
+
+- IQ3_XXS up/gate currently serializes up and gate work.
+- If IQ3_XXS can reuse the existing parallel MMVQ/staged copy path, up and
+  gate work can overlap on separate streams like IQ2_S.
+- Hard n32 upper bound:
+  - cannot save more than the smaller serial side of the type18 bucket,
+    approximately `1321.743 ms`;
+  - practical result may be worse if MMVQ parallel is slower than current
+    serial MMQ or causes additional staging contention.
+- Acceptance target:
+  - n32 diagnostic must beat Phase 7FD `29610.75 ms`;
+  - preferably beat current Phase 7FB n32 confirmation `29182.49 ms`;
+  - all strict gates must pass.
+
+Implementation plan:
+
+1. Add a default-off env:
+   - `GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1`.
+2. Under that env only:
+   - include `GGML_TYPE_IQ3_XXS` in the `parallel_up_gate` predicate;
+   - exclude IQ3_XXS from the earlier `fused_mmq_up_gate` serial branch so
+     branch order reaches the parallel path.
+3. Add a one-time diagnostic line:
+   - `IQ3_XXS parallel up/gate streams active`.
+4. Do not alter:
+   - IQ2_S behavior;
+   - cache split;
+   - pinned slots;
+   - current-down overlap;
+   - io depth/refill;
+   - CPU threads.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fl-iq3-parallel-upgate"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required diagnostics:
+
+- `up-gate-profile.csv` must show type18 rows with:
+  - `parallel_up_gate=1`;
+  - `parallel_stage=1`;
+  - lower type18 wall time or a clear explanation if it regresses.
+- `metrics.txt` must show:
+  - quality pass;
+  - TTFT within limit;
+  - memory peak under `15900000000`;
+  - no swap;
+  - decode time and token rate.
+- `stderr.txt` must show:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no new decline/fallback bucket that invalidates the result.
+
+Decision rule:
+
+- If n32 is slower than current SOTA or violates any gate, revert source and
+  record rejection.
+- If n32 improves:
+  1. run n32 minimal-profile confirmation;
+  2. run n96 twice with the same env;
+  3. accept only if n96 beats Phase 7FB best `70087.31 ms / 77` and France
+     output remains semantically correct.
+- Accepted source changes must be committed and pushed immediately with
+  reproduction commands and result paths recorded here.
