@@ -1,0 +1,148 @@
+{
+  "artifact": "cpu41-top768-q80-hot-residual-design",
+  "created_utc": "2026-07-04T16:32:00Z",
+  "source_head_before_design": "d97271c3a90d7e3b59bd430feec3377d223b1fd7",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "design_complete_top1_first_prototype_allowed",
+  "purpose": "Define the only model-footprint-reopened candidate: cpu_moe=41 plus a top768 exact MXFP4 x Q8_0 hot residual up/down residency path, with explicit correctness, TTFT, and RAM gates before performance promotion.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "hard_bound": {
+    "decoded_tokens_estimate": 136.608765524,
+    "target_decode_ms_for_10_tok_s": 13660.8765524,
+    "source_only_overlap_decode_ms": 15191.28071,
+    "top768_hot_residual_save_ms": 2048.86,
+    "extra_cpu41_layer_cost_if_source_hidden_ms": 72.041,
+    "extra_cpu41_layer_cost_if_not_source_hidden_ms": 397.887,
+    "top768_source_hidden_decode_ms_zero_overhead": 13214.463,
+    "top768_source_hidden_tok_s_zero_overhead": 10.338,
+    "top768_source_hidden_slack_ms": 446.414,
+    "top768_not_source_hidden_decode_ms_zero_overhead": 13540.308,
+    "top768_not_source_hidden_tok_s_zero_overhead": 10.089,
+    "top768_not_source_hidden_slack_ms": 120.569,
+    "decision": "Only the source-hidden top768 case has enough paper slack to justify a top1-first prototype. It still has a very small implementation budget."
+  },
+  "vram_layout": {
+    "cpu41_observed_cuda_model_mib": 14075,
+    "cpu41_observed_cuda_free_mib_with_14336_mib_gate_cache": 2731,
+    "proposed_gate_cache_mib": 13568,
+    "proposed_gate_slots": 3192,
+    "proposed_q80_hot_pool_mib": 3264,
+    "proposed_q80_hot_slots": 768,
+    "estimated_cuda_free_after_split_pools_mib": 235,
+    "rationale": "Keep the accepted gate cache size unchanged and spend the one expert layer freed by cpu41 on a separate fixed hot-residual pool. Do not use a single unpartitioned LRU because that can evict accepted gate entries and invalidate the no-gate-penalty bound."
+  },
+  "source_layout": {
+    "accepted_gate_prefill": {
+      "profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "prefill_limit": 3000,
+      "pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "prefill_bytes": 13369344000,
+      "prefill_elapsed_ms_observed": 4485.962,
+      "pack_sha256": "7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076"
+    },
+    "required_hot_updown_profile": {
+      "source_csv": "/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44/france-touch-profile-cpu40-vram0gb/fallback_profile.csv",
+      "selection": "decode phase, sort by residual fallback_us descending, take top768 tensor/expert pairs",
+      "payload_mib": 3264,
+      "pack_requirement": "The current gate pack is insufficient. Build either a combined one-stream pack containing the existing gate entries plus top768 up/down entries, or add a second q80-hot O_DIRECT pack reader. The implementation must not fault the top768 payload through normal GGUF mmap during decode."
+    },
+    "ttft_risk": {
+      "serialized_extra_prefill_bytes": 3422552064,
+      "estimated_serial_extra_prefill_ms_from_gate_prefill_bandwidth": 1148,
+      "ttft_slack_ms": 725.135454,
+      "decision": "A synchronous top768 hot prefill before first token is likely TTFT-rejected. The prototype must either overlap hot prefill with existing gate prefill/prompt work or be recorded as TTFT-rejected and not promoted."
+    }
+  },
+  "required_runtime_design": [
+    {
+      "step": "profile_and_pack",
+      "details": "Generate a top768 up/down residual profile and a pack source for those entries. Preserve the accepted gate pack behavior and hashes or record any combined-pack hash separately."
+    },
+    {
+      "step": "split_pool",
+      "details": "Keep existing g_vcache dedicated to gate with GGML_MOE_STREAM_ONE_CACHE_MIB=13568 and GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps. Add a default-off q80 hot pool with 768 fixed slots keyed by tensor/expert. No LRU eviction between gate and q80 hot entries."
+    },
+    {
+      "step": "q80_activation_path",
+      "details": "Use CPU fallback semantics: MXFP4 weights times Q8_0 activations. Down and up paths must pass or copy the already converted Q8_0 activation rows from params->wdata, or quantize F32 to Q8_0 on GPU with identical block scale semantics. Do not reuse the existing Q8_1 one-stream path."
+    },
+    {
+      "step": "cuda_kernel",
+      "details": "Add a device vec_dot_mxfp4_q8_0 path: 32-element MXFP4 blocks, signed nibble lookup, int dot, scale by q8_0.d * mxfp4.e. Use one expert/row micro-kernel first; optimize only after correctness."
+    },
+    {
+      "step": "call_sites",
+      "details": "Cover both down and up fallback. Down currently calls ggml_cuda_moe_stream_one before CPU fallback. Up is inside the up/gate fallback path, so a hot q80 up hook must be added there as well; optimizing down alone cannot reach the top768 bound."
+    },
+    {
+      "step": "async_source_hidden_prefill",
+      "details": "Source-hidden bound requires the q80 hot pool to be ready before most decode fallback uses. The implementation should support async prefill on a separate stream/thread and counters for attempted/inserted/ready-before-use/missed-before-ready. A synchronous TTFT-heavy mode is allowed only as a rejected diagnostic."
+    }
+  ],
+  "correctness_gates": [
+    "Build must preserve accepted behavior when the new env is unset.",
+    "Before any strict cold performance run, run the fixed-text token-level top1 verifier against the accepted path. Required result: same_top1 for all checked positions and no first mismatch.",
+    "If a lower-level op compare is added, require max_abs and top1 agreement for representative up and down hot entries, but op compare alone is not enough to run a long benchmark.",
+    "France output must remain semantic, coherent, and complete."
+  ],
+  "performance_gates": [
+    "Strict cold drop_caches.",
+    "MemoryMax=16000000000 and MemorySwapMax=0.",
+    "memory_file_bytes included in cgroup accounting.",
+    "TTFT <= 33617.688744 ms for promotion. TTFT-rejected diagnostics may be committed and marked rejected.",
+    "eval_tok_s must exceed 4.4 for SOTA promotion and ultimately target 10 tok/s.",
+    "Gate-cache counters must stay comparable to accepted SOTA; a gate hit-rate collapse invalidates the no-gate-penalty bound.",
+    "q80 hot counters must show high ready-hit coverage for the selected top768 entries; misses-before-ready must be included in gap analysis."
+  ],
+  "prototype_order": [
+    {
+      "order": 1,
+      "name": "profile_pack_artifacts",
+      "action": "Generate top768 profile and document pack-generation command/hash. No runtime code yet."
+    },
+    {
+      "order": 2,
+      "name": "default_off_split_pool_skeleton",
+      "action": "Add env-gated q80 hot pool allocation and prefill counters, but keep compute disabled. Verify accepted SOTA path unchanged when env unset."
+    },
+    {
+      "order": 3,
+      "name": "q80_op_compare",
+      "action": "Enable a tiny compare-only path for selected hot entries. Do not run performance. Reject on numerical/top1 mismatch."
+    },
+    {
+      "order": 4,
+      "name": "fixed_text_top1",
+      "action": "Run the existing fixed-text top1 verifier. Reject on first mismatch."
+    },
+    {
+      "order": 5,
+      "name": "strict_cold_diagnostic",
+      "action": "Only after top1 passes, run France strict cold with cpu_moe=41, gate cache 13568, q80 hot top768. Record TTFT even if rejected."
+    }
+  ],
+  "reject_without_runtime_code_if": [
+    "A top768 pack cannot be generated without increasing host page-cache pressure during decode.",
+    "The split-pool VRAM layout cannot allocate with at least roughly 100 MiB free after workspaces.",
+    "The design cannot source-hide the new cpu41 layer and top768 hot entries without TTFT exceeding the acceptance gate.",
+    "A concrete Q8_0 top1 verifier command cannot be defined."
+  ],
+  "decision": {
+    "implement_runtime_source_now": "allowed_only_after_this_design_is_committed",
+    "first_source_change_must_be_default_off": true,
+    "first_runtime_checkpoint": "split-pool skeleton plus q80 op/top1 verifier, not a performance benchmark",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  }
+}
