@@ -49431,3 +49431,76 @@ Result: completed; diagnostic accepted, no source change.
       increasing host RAM above 16GB;
     - kernel-side compute for type `18,18` and `22,22`, if a low-overhead n96
       profile confirms the same distribution without profile distortion.
+
+## Phase 7GO: n96 wall-time bottleneck profile before source optimization
+
+Start time: 2026-07-04T19:52:00+08:00.
+
+Goal:
+
+- Re-rank the true bottlenecks on the target validation length `n96`, not n32.
+- Use wall-time profile CSVs already available in the runner:
+  - `GGML_MOE_UP_GATE_PROFILE_OUT`;
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT`;
+  - `GGML_MOE_BATCH_PROFILE_OUT`.
+- Do not change source code in this phase.
+
+Why this is required:
+
+- Phase 7GN showed `iouring_wait_us` can improve while critical-path wall does
+  not. The next implementation must therefore use wall-time evidence.
+- n32 is useful for smoke tests, but the user target is stable n96 output with
+  correct semantics.
+- The current candidate target list is ambiguous:
+  - down path wall/fallback;
+  - up/gate type `18,18`;
+  - up/gate type `22,22`;
+  - runtime-load count / cache hit rate.
+- A single cold-start n96 full profile can rank these buckets under the exact
+  validation prompt and memory gate.
+
+Experiment A: n96 full wall profile baseline
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7go-wall-profile-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required summaries:
+
+```bash
+awk -F, 'NR>1 && $2=="decode"{n++; upw+=$18; gatew+=$19; upc+=$20; gatec+=$21; fuse+=$22; kern+=$23; wall+=$26; upm+=$16; gatem+=$17} END{printf "upgate decode_rows=%d up_wait=%.3f gate_wait=%.3f up_compute=%.3f gate_compute=%.3f up_ms=%.3f gate_ms=%.3f fuse=%.3f kernel=%.3f wall=%.3f\n",n,upw,gatew,upc,gatec,upm,gatem,fuse,kern,wall}' "$RUN/up-gate-profile.csv"
+awk -F, 'NR>1 && $2=="decode"{key=$5 "," $6; n[key]++; upw[key]+=$18; gatew[key]+=$19; upc[key]+=$20; gatec[key]+=$21; kern[key]+=$23; wall[key]+=$26} END{for(k in n) printf "wall=%.3f types=%s rows=%d up_wait=%.3f gate_wait=%.3f up_compute=%.3f gate_compute=%.3f kernel=%.3f\n",wall[k],k,n[k],upw[k],gatew[k],upc[k],gatec[k],kern[k]}' "$RUN/up-gate-profile.csv" | sort -nr
+awk -F, 'NR>1{n++; stage+=$8; kern+=$10; d2h+=$11; scatter+=$12; wall+=$13; misses+=$6; hits+=$5} END{printf "down rows=%d hits=%d misses=%d stage=%.3f kernel=%.3f d2h=%.3f scatter=%.3f wall=%.3f\n",n,hits,misses,stage,kern,d2h,scatter,wall}' "$RUN/down-batch-profile.csv"
+awk -F, 'NR>1{key=$3; n[key]++; hits[key]+=$5; misses[key]+=$6; stage[key]+=$8; kern[key]+=$10; wall[key]+=$13} END{for(k in n) printf "wall=%.3f type=%s rows=%d hits=%d misses=%d stage=%.3f kernel=%.3f\n",wall[k],k,n[k],hits[k],misses[k],stage[k],kern[k]}' "$RUN/down-batch-profile.csv" | sort -nr
+awk -F, 'NR>1{key=$2; n[key]++; stage[key]+=$8; kern[key]+=$10; wall[key]+=$13; misses[key]+=$6} END{for(k in n) printf "wall=%.3f rows=%d misses=%d stage=%.3f kernel=%.3f tensor=%s\n",wall[k],n[k],misses[k],stage[k],kern[k],k}' "$RUN/down-batch-profile.csv" | sort -nr | head -20
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- full n96 France answer must be semantically correct and coherent;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 profile fails any gate, reject the diagnostic and do not use it to
+  choose implementation.
+- If down wall is the largest exposed bucket and is stage-dominated, plan the
+  next source change around reducing down runtime loads or down staging wall.
+- If up/gate type `18,18` is the largest exposed bucket and kernel-dominated,
+  plan a compute-side type-18 optimization, not another IO scheduling change.
+- If up/gate type `22,22` wait dominates, plan a scheduling/resource-isolation
+  change that preserves critical-path wall instead of lowering summed wait.
+- The next phase must write the chosen source-change theory, expected upper
+  bound, and rollback criteria before editing code.
