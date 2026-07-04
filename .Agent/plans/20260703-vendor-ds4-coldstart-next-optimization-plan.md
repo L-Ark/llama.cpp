@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `52a20d0828a2336db3a49b8f6fe5b263f9fb943c` (`vendor-ds4: update coldstart plan after ngram map probe`)
+- Latest pushed head before this document update: `becd957f458e3316cac6221cdca4b0c0aa97b964` (`vendor-ds4: add fresh sota44 bottleneck bound`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -31,7 +31,8 @@ Current bottleneck conclusion:
 - The `mul_mat_id` src1 conversion skip candidate is also closed by the 2026-07-04T05:16Z diagnostic: `convert_t0=0.002 ms/call` over `16920` calls, only `33.84 ms` total ideal savings, giving a no-overhead ceiling of about `4.405 tok/s`.
 - Split up/down one-stream, scalar Q8_0 CUDA up, and no-source `ngram-map-k4v` have all been closed by correctness/performance gates. The current SOTA remains `4.4 tok/s`.
 - Fresh SOTA hard-bound artifact `fresh-sota44-bottleneck-hard-bound.json` shows the only remaining non-speculative class with a 10 tok/s ceiling is exact full decode CPU up/down fallback removal: ideal ceiling `11.367 tok/s`, required decode saving `17386.570 ms`, and only `1642.887 ms` overhead budget after full fallback removal.
-- The next active plan is to inspect the active CPU fallback path and produce a dot-vs-source/page split for up/down fallback before any source edit. Any implementation must plausibly remove near-full decode fallback while preserving logits/top1, staying under 16GB host RAM including page cache, and keeping accepted TTFT within gate.
+- The no-source touch-profile split diagnostic shows source/page exposure dominates cold CPU up/down fallback: decode fallback drops from `19029.457 ms` to `3173.291 ms` after active expert pages are touched. Synchronous touch is rejected because it adds `41626.545 ms` decode touch time, regresses to `2.6 tok/s`, and raises TTFT to `36167.863 ms`.
+- The next active plan is a default-off bounded async/overlapped source-page preparation design for near-full decode up/down fallback. It may only change when pages are faulted, not logits or routing; it must preserve top1/output correctness, remain within the 16GB cgroup including page cache, and keep accepted TTFT within gate.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -8654,7 +8655,7 @@ Objective:
 
 Immediate source/record state:
 
-- Current pushed source/record head before this plan update: `52a20d0828a2336db3a49b8f6fe5b263f9fb943c`.
+- Current pushed source/record head before this plan update: `becd957f458e3316cac6221cdca4b0c0aa97b964`.
 - Current accepted SOTA run remains `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
 - Current accepted SOTA metrics remain `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`.
 - New records and any future source commits must be pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using git identity `L-Ark <fliangae@connect.ust.hk>`.
@@ -8729,7 +8730,61 @@ Plan decision:
 - Do not resume no-source speculation, top-N hotsets, synchronous prefetch/source movement, scalar GPU kernels, or scheduler-only experiments.
 - The next candidate family is `exact full decode CPU up/down fallback removal path`, but it is only allowed to proceed after source-path inspection and a hard design showing overhead below about `1.64s`.
 
+Touch-profile source/page split result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-fallback-touch-split-diagnostic.json`
+- Artifact sha256: `9be90deef85afb244cfbd629f04d72fc269f3c84556c7ff4928556f79a153d37`
+- Run root: `/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44`
+- Case dir: `/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44/france-touch-profile-cpu40-vram0gb`
+- Config: accepted SOTA env plus `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback_profile.csv`, and `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE=1`.
+- Result: diagnostic rejected for promotion, but useful for bottleneck split.
+  - `eval_tok_s=2.6`
+  - `prompt_tok_s=1.3`
+  - `TTFT=36167.863458 ms`, above accepted TTFT gate
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15105347584`
+  - `ram_ok=true`
+  - `correctness_ok=true`, France output semantic/coherent/complete
+
+Split conclusion:
+
+| Metric | No-touch profile | Touch-profile diagnostic | Interpretation |
+| --- | ---: | ---: | --- |
+| decode fallback wall | `19029.457 ms` | `3173.291 ms` after touch | most cold fallback wall is source/page-fault exposed |
+| decode source/page touch | n/a | `41626.545 ms` | synchronous touch is far too expensive |
+| total fallback wall | `26438.059 ms` | `3445.735 ms` after touch | hot dot/compute part alone is small enough |
+| total source/page touch | n/a | `51754.842 ms` | serial pre-touch destroys token rate |
+| major faults | accepted SOTA `271465` | `21569` | touch moves faults out of the fallback dot loop |
+
+Source-path inspection:
+
+- DeepSeek4 graph builds cold MoE with `build_lora_mm_id()` in `src/models/deepseek4.cpp:664-675` and default gate/up/down with `build_lora_mm_id()` in `src/models/deepseek4.cpp:709-726`.
+- Generic down/separate up/gate CPU fallback is `ggml_compute_forward_mul_mat_id()` in `ggml/src/ggml-cpu/ggml-cpu.c:2749-3189`.
+- Fused up/gate CPU fallback is `ggml_compute_forward_moe_up_gate()` in `ggml/src/ggml-cpu/ggml-cpu.c:3275-3544`.
+- MXFP4 CPU dot uses `ggml_vec_dot_mxfp4_q8_0` with Q8_0 activations via `ggml/src/ggml-cpu/ggml-cpu.c:1340-1344`.
+- Existing useful hooks:
+  - chunk wall trace: `ggml/src/ggml-cpu/ggml-cpu.c:834-942`
+  - fallback touch profile: `ggml/src/ggml-cpu/ggml-cpu.c:944-986`
+  - touch before fallback loop: `ggml/src/ggml-cpu/ggml-cpu.c:3041-3063`
+  - remaining fallback loop timer: `ggml/src/ggml-cpu/ggml-cpu.c:3065-3150`
+
+Plan decision after touch split:
+
+- Synchronous touch/page prewarm remains rejected. It proves the bottleneck but is not an optimization.
+- The only plausible next implementation direction is default-off bounded async/overlapped source-page preparation for up/down fallback:
+  - it may only change timing of page faults / source preparation, not selected experts, math, logits, routing, or output;
+  - it must use a bounded queue or bounded per-layer window so host RAM including page cache stays inside the 16GB cgroup;
+  - it must preserve accepted gate cache behavior and avoid adding more persistent host or VRAM caches;
+  - it must target near-full decode up/down fallback exposure, because partial/scheduler/source-only classes do not have a 10 tok/s ceiling.
+
 Next concrete work item:
 
-- Inspect the active CPU fallback code path and produce a dot-vs-source/page split plan for up/down fallback. The output must name exact files/functions, identify where timing/instrumentation should be added, and decide whether a correctness-preserving implementation can plausibly remove at least `17386.570 ms` decode time while adding less than `1642.887 ms` overhead.
-- Only after that plan is written may a default-off source patch be attempted. The first validation remains fixed-text sequential top1, not a token-rate benchmark.
+- Write the source-level design for `GGML_MOE_CPU_FALLBACK_ASYNC_TOUCH=1` or equivalent:
+  - exact files/functions to edit;
+  - queue/window size and RAM/page-cache bound;
+  - where worker thread(s) are created and joined;
+  - how active expert pages are enqueued from `matrix_row_counts`;
+  - how ordering avoids racing tensor lifetime or cgroup cleanup;
+  - how metrics will report async submitted/touched/skipped/cancelled bytes and overlap;
+  - why logits and top1 remain unchanged.
+- Only after that design is written in this plan may a default-off source patch be attempted. The first validation remains strict cold France correctness/TTFT diagnostic and fixed-text top1 if logits could change; promotion still requires `eval_tok_s > 4.4`, `TTFT<=33617.688744 ms`, RAM <=16GB including page cache, and pushed-source reproduction.
