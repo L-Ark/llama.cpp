@@ -922,8 +922,8 @@ struct batch_vram_cache {
     uint64_t async_prefetch_waits = 0;
 };
 
-static batch_vram_cache g_bcaches[3];
-static bool g_bcache_inited[3] = {};
+static batch_vram_cache g_bcaches[2];
+static bool g_bcache_inited[2] = {};
 
 struct cache_policy_diag {
     std::atomic<uint64_t> profile_count_lookups{0};
@@ -1389,8 +1389,6 @@ static void batch_route_profile_hit(const char *tensor_name, int expert_idx, siz
     }
 }
 
-static const char * batch_cache_label_for_id(int cid);
-
 static void batch_cache_report_atexit() {
     uint64_t hits = 0;
     uint64_t misses = 0;
@@ -1419,11 +1417,11 @@ static void batch_cache_report_atexit() {
         std::fprintf(stderr, "[moe_stream_batch] VRAM cache: hits=%lu misses=%lu preloads=%lu hit_rate=%.1f%%\n",
                      hits, misses, preloads, 100.0 * hits / total);
     }
-    for (int ic = 0; ic < 3; ++ic) {
+    for (int ic = 0; ic < 2; ++ic) {
         const batch_vram_cache &c = g_bcaches[ic];
         const uint64_t c_total = c.hits + c.misses;
         if (c_total == 0) continue;
-        const char *label = batch_cache_label_for_id(ic);
+        const char *label = ic == 1 ? "upgate" : "down";
         std::fprintf(stderr,
             "[moe_stream_batch] VRAM cache %s: slots=%d slot=%.2f MiB "
             "hits=%lu misses=%lu preloads=%lu pinned=%lu hit_rate=%.1f%%\n",
@@ -1630,29 +1628,12 @@ static void load_prompt_profile_once() {
 static int batch_cache_id_for_size(size_t expert_sz) {
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
     const char *split_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT");
-    const char *large_down_env = std::getenv("GGML_MOE_VRAM_CACHE_LARGE_DOWN");
-    const bool large_down = large_down_env && large_down_env[0] && large_down_env[0] != '0';
-    const char *large_down_min_env = std::getenv("GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB");
-    size_t large_down_min_mib = large_down_min_env && large_down_min_env[0] ?
-        (size_t)std::strtoull(large_down_min_env, nullptr, 10) : 8;
-    if (large_down_min_mib < 1) large_down_min_mib = 1;
-    if (large_down_min_mib > 64) large_down_min_mib = 64;
-    const char *large_down_min_bytes_env = std::getenv("GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_BYTES");
-    const size_t large_down_min_bytes = large_down_min_bytes_env && large_down_min_bytes_env[0] ?
-        (size_t)std::strtoull(large_down_min_bytes_env, nullptr, 10) :
-        large_down_min_mib*1024ULL*1024ULL;
     const char *split_max_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB");
     size_t split_max_mib = 4;
     if (split_max_env && split_max_env[0]) {
         split_max_mib = (size_t)std::strtoull(split_max_env, nullptr, 10);
         if (split_max_mib < 1) split_max_mib = 1;
         if (split_max_mib > 64) split_max_mib = 64;
-    }
-    if (large_down &&
-            fused_env && fused_env[0] && fused_env[0] != '0' &&
-            split_env && split_env[0] && split_env[0] != '0' &&
-            expert_sz >= large_down_min_bytes) {
-        return 2;
     }
     if (fused_env && fused_env[0] && fused_env[0] != '0' &&
             split_env && split_env[0] && split_env[0] != '0' &&
@@ -1666,12 +1647,6 @@ static int batch_cache_id_for_size(size_t expert_sz) {
 }
 
 static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
-    if (cid == 2) {
-        const char *env = std::getenv("GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIB");
-        const size_t value = env && env[0] ? (size_t)std::strtoull(env, nullptr, 10) : 512;
-        return value > 0 ? value : 1;
-    }
-
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
     const bool fused = fused_env && fused_env[0] && fused_env[0] != '0';
     const char *split_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT");
@@ -1691,12 +1666,6 @@ static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
         return 8192;
     }
     return budget_mib;
-}
-
-static const char * batch_cache_label_for_id(int cid) {
-    if (cid == 1) return "upgate";
-    if (cid == 2) return "large-down";
-    return "down";
 }
 
 static size_t env_mib_or_default(const char *name, size_t fallback) {
@@ -1819,7 +1788,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         }
         if (alloc_err != cudaSuccess) {
             std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc retry failed; disabling %s cache\n",
-                         batch_cache_label_for_id(cid));
+                         cid == 1 ? "upgate" : "down");
             c->n_slots = 0;
             g_bcache_inited[cid] = true;
             return nullptr;
@@ -2207,11 +2176,6 @@ static bool current_down_overlap_enabled() {
 
 static bool current_down_overlap_early_enabled() {
     const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY");
-    return env && env[0] && env[0] != '0';
-}
-
-static bool current_down_overlap_pack_only_enabled() {
-    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_PACK_ONLY");
     return env && env[0] && env[0] != '0';
 }
 
@@ -6027,71 +5991,6 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             return;
         }
 
-        auto launch_current_down_jobs = [&](batch_vram_cache *down_cache,
-                std::vector<stage_copy_job> &&down_jobs,
-                size_t expert_bytes,
-                const char *tensor_name) {
-            if (!down_cache || down_jobs.empty()) return;
-
-            current_down_overlap_record_batch(down_jobs.size());
-            static std::atomic<int> first_current_down_overlap{0};
-            if (first_current_down_overlap.fetch_add(1) == 0) {
-                std::fprintf(stderr,
-                    "[moe_stream_batch] current down overlap active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
-                    tensor_name ? tensor_name : "", down_jobs.size(), expert_bytes / (1024.0 * 1024.0));
-            }
-
-            current_down_overlap_thread = std::thread([&, down_cache, down_jobs = std::move(down_jobs), expert_bytes]() {
-                const auto worker_start = std::chrono::steady_clock::now();
-                bool copied = expert_pack_iouring_copy_jobs(down_jobs, expert_bytes, bc.prefetch_stream,
-                        bc.stage_ring, "current_down_overlap");
-                if (!copied) {
-                    copied = true;
-                    for (const stage_copy_job &job : down_jobs) {
-                        batch_copy_trace copy_trace;
-                        if (!batch_cache_copy_h2d(bc.stage_ring, job.dst, job.host_data, expert_bytes,
-                                bc.prefetch_stream, job.pack_entry, &copy_trace,
-                                "current_down_overlap", job.tensor, job.expert_idx)) {
-                            copied = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (copied) {
-                    for (const stage_copy_job &job : down_jobs) {
-                        if (!down_cache->slot_ready[job.slot] &&
-                                cudaEventCreateWithFlags(&down_cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
-                            copied = false;
-                            ++g_current_down_overlap.mark_failed;
-                            break;
-                        }
-                        if (cudaEventRecord(down_cache->slot_ready[job.slot], bc.prefetch_stream) != cudaSuccess) {
-                            copied = false;
-                            ++g_current_down_overlap.mark_failed;
-                            break;
-                        }
-                        down_cache->slot_pending[job.slot] = true;
-                    }
-                }
-
-                if (!copied) {
-                    cudaStreamSynchronize(bc.prefetch_stream);
-                    clear_stage_jobs_for_cache(down_cache, down_jobs);
-                    ++g_current_down_overlap.failed_batches;
-                    current_down_overlap_ok = false;
-                } else {
-                    g_current_down_overlap.completed_jobs.fetch_add(down_jobs.size());
-                    current_down_overlap_tensor_profile_record(
-                        down_jobs.empty() ? "" : down_jobs[0].tensor, 0, 0, 0, 0, 0, down_jobs.size());
-                }
-
-                const auto worker_end = std::chrono::steady_clock::now();
-                g_current_down_overlap.worker_us.fetch_add(
-                    (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(worker_end - worker_start).count());
-            });
-        };
-
         registered_tensor rt;
         bool found = false;
         {
@@ -6105,82 +6004,6 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             }
         }
         if (!found || !rt.data || rt.expert_bytes == 0) {
-            if (current_down_overlap_pack_only_enabled()) {
-                expert_pack_init_once();
-                size_t pack_expert_bytes = 0;
-                bool ambiguous_bytes = false;
-                uint64_t local_cache_hits = 0;
-                uint64_t local_missing_pack = 0;
-                std::vector<stage_copy_job> down_jobs;
-                down_jobs.reserve((size_t)n_active);
-
-                for (int j = 0; j < n_active; ++j) {
-                    const int expert = active_experts[j];
-                    const expert_pack_entry *selected = nullptr;
-                    for (const expert_pack_entry &entry : g_expert_pack.entries) {
-                        if (entry.expert_idx != expert || std::strcmp(entry.tensor, down_name) != 0) continue;
-                        if (pack_expert_bytes == 0) {
-                            pack_expert_bytes = (size_t)entry.nbytes;
-                        } else if (pack_expert_bytes != (size_t)entry.nbytes) {
-                            ambiguous_bytes = true;
-                            break;
-                        }
-                        selected = &entry;
-                        break;
-                    }
-                    if (ambiguous_bytes) break;
-                    if (!selected) {
-                        ++g_current_down_overlap.missing_pack;
-                        ++local_missing_pack;
-                        continue;
-                    }
-                    if (pack_expert_bytes == 0) {
-                        pack_expert_bytes = (size_t)selected->nbytes;
-                    }
-                    batch_vram_cache *pack_cache = batch_cache_get(pack_expert_bytes);
-                    if (!pack_cache) {
-                        ambiguous_bytes = true;
-                        break;
-                    }
-                    const uintptr_t key = batch_key_hash(down_name, expert);
-                    if (batch_cache_find_slot(pack_cache, key) >= 0) {
-                        ++g_current_down_overlap.cache_hits;
-                        ++local_cache_hits;
-                        continue;
-                    }
-                    const int slot = batch_cache_insert_slot(
-                        pack_cache, key, nullptr, pack_expert_bytes, bc.prefetch_stream,
-                        true, true, nullptr, 0, false, down_name, expert, true);
-                    if (slot < 0) continue;
-
-                    stage_copy_job job;
-                    job.slot = slot;
-                    job.dst = (char *)pack_cache->pool + (size_t)slot * pack_cache->slot_sz;
-                    job.host_data = nullptr;
-                    job.pack_entry = selected;
-                    job.expert_idx = expert;
-                    std::snprintf(job.tensor, sizeof(job.tensor), "%s", down_name);
-                    down_jobs.push_back(job);
-                }
-
-                if (!ambiguous_bytes && pack_expert_bytes > 0) {
-                    batch_vram_cache *pack_cache = batch_cache_get(pack_expert_bytes);
-                    if (pack_cache && !down_jobs.empty()) {
-                        current_down_overlap_tensor_profile_record(
-                            down_name, 1, down_jobs.size(), local_cache_hits, 0, local_missing_pack, 0);
-                        launch_current_down_jobs(pack_cache, std::move(down_jobs), pack_expert_bytes, down_name);
-                        return;
-                    }
-                    if (pack_cache && local_cache_hits > 0) {
-                        current_down_overlap_tensor_profile_record(
-                            down_name, 1, 0, local_cache_hits, 0, local_missing_pack, 0);
-                        return;
-                    }
-                }
-                if (ambiguous_bytes && pack_expert_bytes > 0 && !down_jobs.empty()) {
-                    clear_stage_jobs_for_cache(batch_cache_get(pack_expert_bytes), down_jobs);
-                }
-            }
             ++g_current_down_overlap.missing_tensor;
             current_down_missing_profile_record("registered_missing", down_name, active_experts, n_active);
             current_down_overlap_tensor_profile_record(down_name, 1, 0, 0, 1, 0, 0);
@@ -6232,9 +6055,65 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             return;
         }
 
+        current_down_overlap_record_batch(down_jobs.size());
         current_down_overlap_tensor_profile_record(
             rt.name, 1, down_jobs.size(), local_cache_hits, 0, local_missing_pack, 0);
-        launch_current_down_jobs(down_cache, std::move(down_jobs), rt.expert_bytes, rt.name);
+        static std::atomic<int> first_current_down_overlap{0};
+        if (first_current_down_overlap.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] current down overlap active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
+                rt.name, down_jobs.size(), rt.expert_bytes / (1024.0 * 1024.0));
+        }
+
+        current_down_overlap_thread = std::thread([&, down_cache, down_jobs = std::move(down_jobs), expert_bytes = rt.expert_bytes]() {
+            const auto worker_start = std::chrono::steady_clock::now();
+            bool copied = expert_pack_iouring_copy_jobs(down_jobs, expert_bytes, bc.prefetch_stream,
+                    bc.stage_ring, "current_down_overlap");
+            if (!copied) {
+                copied = true;
+                for (const stage_copy_job &job : down_jobs) {
+                    batch_copy_trace copy_trace;
+                    if (!batch_cache_copy_h2d(bc.stage_ring, job.dst, job.host_data, expert_bytes,
+                            bc.prefetch_stream, job.pack_entry, &copy_trace,
+                            "current_down_overlap", job.tensor, job.expert_idx)) {
+                        copied = false;
+                        break;
+                    }
+                }
+            }
+
+            if (copied) {
+                for (const stage_copy_job &job : down_jobs) {
+                    if (!down_cache->slot_ready[job.slot] &&
+                            cudaEventCreateWithFlags(&down_cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                        copied = false;
+                        ++g_current_down_overlap.mark_failed;
+                        break;
+                    }
+                    if (cudaEventRecord(down_cache->slot_ready[job.slot], bc.prefetch_stream) != cudaSuccess) {
+                        copied = false;
+                        ++g_current_down_overlap.mark_failed;
+                        break;
+                    }
+                    down_cache->slot_pending[job.slot] = true;
+                }
+            }
+
+            if (!copied) {
+                cudaStreamSynchronize(bc.prefetch_stream);
+                clear_stage_jobs_for_cache(down_cache, down_jobs);
+                ++g_current_down_overlap.failed_batches;
+                current_down_overlap_ok = false;
+            } else {
+                g_current_down_overlap.completed_jobs.fetch_add(down_jobs.size());
+                current_down_overlap_tensor_profile_record(
+                    down_jobs.empty() ? "" : down_jobs[0].tensor, 0, 0, 0, 0, 0, down_jobs.size());
+            }
+
+            const auto worker_end = std::chrono::steady_clock::now();
+            g_current_down_overlap.worker_us.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(worker_end - worker_start).count());
+        });
     };
 
     auto split_stage_jobs = [&](const std::vector<stage_copy_job> &jobs,

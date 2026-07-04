@@ -48579,6 +48579,54 @@ Decision rule:
 - If decode is slower than rebuilt n32 baseline, reject and revert.
 - Only repeat/n96 if n32 improves below the rebuilt baseline range.
 
+Result: n32 completed; reject and revert.
+
+- End time: 2026-07-04T19:18:12+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-111542Z-n32-phase7gl-large-down-cache-minbytes-pack-only`.
+- Code head:
+  `1e40a4c72`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75767.07 ms`;
+  - decode `29627.80 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - `iouring_reads=15447`;
+    - `iouring_bytes=90575077376`;
+    - `iouring_wait_us=15435409`;
+  - current down overlap:
+    - planned_jobs `4087`;
+    - completed_jobs `4087`;
+    - cache_hits `3845`;
+    - missing_tensor `0`;
+    - missing_pack `40`;
+    - worker_us `3929243`.
+  - main down cache:
+    - slots `806`;
+    - slot size `7.44 MiB`;
+    - hit rate `73.6%`.
+- Analysis:
+  - The byte threshold fixed the cache-size-class damage from 7GJ/7GK:
+    main down cache stayed at `806` slots and `7.44 MiB`.
+  - Decode still landed inside the rebuilt baseline noise range and did not
+    improve.
+  - raw stderr did not report `VRAM cache large-down` hits/misses; the large
+    cache only received preloads and was not consumed by a later CUDA down batch
+    path.
+  - Therefore Q4_0 pack-only current-down preload is not on the visible decode
+    critical path in the current implementation.
+- Decision:
+  - reject large-down cache + pack-only current-down preload;
+  - do not run repeat or n96;
+  - revert the implementation;
+  - keep the diagnostic conclusion: future work should focus on visible
+    runtime loads / cross-call IO aggregation, not `blk.7/8/9` current-down
+    pack-only preload.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
