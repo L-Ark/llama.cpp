@@ -49243,3 +49243,100 @@ systemd-run --wait --collect --same-dir \
   - The lost copy/compute overlap consumes the IO wait reduction, so future
     aggregation must preserve early up compute or target down/current-down
     movement where copy can be hidden behind up/gate compute.
+
+## Phase 7GN: up/gate overlap-loss profile before next source change
+
+Start time: 2026-07-04T19:42:00+08:00.
+
+Goal:
+
+- Quantify where Phase 7FX lost the `2.27 s` io_uring wait reduction.
+- Compare default SOTA staging and combined staging under the same
+  `GGML_MOE_UP_GATE_PROFILE_OUT` profiling overhead.
+- Do not change source code in this phase.
+
+Why this is the next step:
+
+- Phase 7FX proved larger read batches are possible:
+  - max read jobs increased to `16`;
+  - `9-16` batch bucket appeared;
+  - `iouring_wait_us` dropped from `15373647` to `13103274`.
+- But decode stayed at `29756.45 ms / 31`, not materially better than the
+  rebuilt n32 baseline range.
+- Therefore the next implementation should not be another blind aggregation
+  attempt. It must identify whether the lost time appears in:
+  - `up_wait_ms`;
+  - `gate_wait_ms`;
+  - `up_compute_ms`;
+  - `gate_compute_ms`;
+  - `kernel_ms`;
+  - or down/current-down counters.
+
+Theory:
+
+- In the default path, up copy and gate copy run in separate host threads.
+  Up compute can start as soon as up copy finishes, while gate copy continues.
+- In 7FX combined staging, up compute waits for up+gate copy to finish, and
+  gate compute waits for the same combined-copy event.
+- If the profile shows `up_wait_ms` rises by approximately the same amount that
+  io wait falls, the correct next implementation is an async per-job completion
+  model that preserves early up compute; however an older per-stream combined
+  probe was rejected, so a new source change must be justified by more precise
+  timing.
+- If the profile shows down/current-down worker time or gate wait dominates,
+  the next implementation should target down-side hiding instead.
+
+Experiment A: default SOTA up/gate profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gn-upgate-profile-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: combined staging with the same up/gate profile overhead
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gn-upgate-profile-combined"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required summaries:
+
+```bash
+awk -F, 'NR>1 && $2=="decode"{n++; upw+=$18; gatew+=$19; upc+=$20; gatec+=$21; fuse+=$22; kern+=$23; wall+=$26; upm+=$16; gatem+=$17} END{printf "decode_rows=%d up_wait=%.3f gate_wait=%.3f up_compute=%.3f gate_compute=%.3f up_ms=%.3f gate_ms=%.3f fuse=%.3f kernel=%.3f wall=%.3f\n",n,upw,gatew,upc,gatec,upm,gatem,fuse,kern,wall}' "$RUN/up-gate-profile.csv"
+awk -F, 'NR>1 && $2=="decode"{key=$5 "," $6; n[key]++; upw[key]+=$18; gatew[key]+=$19; upc[key]+=$20; gatec[key]+=$21; wall[key]+=$26} END{for(k in n) printf "types=%s rows=%d up_wait=%.3f gate_wait=%.3f up_compute=%.3f gate_compute=%.3f wall=%.3f\n",k,n[k],upw[k],gatew[k],upc[k],gatec[k],wall[k]}' "$RUN/up-gate-profile.csv" | sort -k7,7nr
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If either profile run fails a gate, reject the diagnostic and do not use it
+  for implementation decisions.
+- If combined staging mainly increases `up_wait_ms` while lowering io wait,
+  do not retry whole up+gate combined staging; plan only an implementation that
+  preserves up compute early start.
+- If combined staging mainly increases gate wait or down/current-down worker
+  time, plan a down-side or ring-contention fix instead.
+- Do not make a source change until this profile comparison is recorded.
