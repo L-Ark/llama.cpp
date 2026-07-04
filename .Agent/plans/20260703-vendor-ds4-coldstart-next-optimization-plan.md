@@ -8771,20 +8771,47 @@ Source-path inspection:
 Plan decision after touch split:
 
 - Synchronous touch/page prewarm remains rejected. It proves the bottleneck but is not an optimization.
-- The only plausible next implementation direction is default-off bounded async/overlapped source-page preparation for up/down fallback:
+- The only plausible next implementation direction is default-off bounded parallel or async source-page preparation for up/down fallback:
   - it may only change timing of page faults / source preparation, not selected experts, math, logits, routing, or output;
   - it must use a bounded queue or bounded per-layer window so host RAM including page cache stays inside the 16GB cgroup;
   - it must preserve accepted gate cache behavior and avoid adding more persistent host or VRAM caches;
   - it must target near-full decode up/down fallback exposure, because partial/scheduler/source-only classes do not have a 10 tok/s ceiling.
 
+Source-level design for the next source patch:
+
+- First implementation should be `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1`, not a long-lived async thread pool yet.
+  - Reason: the touch split shows single-thread touch is the immediate bottleneck (`41626.545 ms` decode touch for `148.916 GiB` expert-call bytes). Before adding a persistent queue/thread lifecycle, test whether the existing ggml worker threads can parallelize page faults enough to reduce fallback exposure.
+  - Expected upper bound: if parallel touch compresses decode touch below about `1.64s` and leaves hot fallback around `3.17s`, this source/page class can materially exceed the current `4.4 tok/s` SOTA. If touch remains above several seconds, this family cannot reach 10 tok/s without a deeper predictive/overlap mechanism.
+- Exact files/functions to edit:
+  - `ggml/src/ggml-cpu/ggml-cpu.c`
+  - add `ggml_moe_cpu_fallback_parallel_touch_enabled()` near `ggml_moe_cpu_fallback_touch_profile_enabled()`;
+  - add `ggml_moe_cpu_fallback_parallel_touch_decode_only()` defaulting to decode-only unless `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH_DECODE_ONLY=0`;
+  - edit `ggml_compute_forward_mul_mat_id()` around `ggml_kimi_cpu_fallback_pack_mmap_prepare()` and the current serial touch block (`ggml/src/ggml-cpu/ggml-cpu.c:3041-3063`);
+  - leave `ggml_compute_forward_mul_mat_id_one_chunk()` and `ggml_vec_dot_mxfp4_q8_0` math untouched.
+- Execution model:
+  - `ith==0` still prepares `fallback_pack_mmap_ptrs` and zeroes `fallback_touch_us`.
+  - all threads hit a barrier after prepare;
+  - if `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1` and the op is decode phase (`ids->ne[1] <= 1`) by default, each worker touches a disjoint subset of active experts with `for (cur_a = ith; cur_a < n_as; cur_a += nth)`;
+  - each touched expert uses the same pointer source the fallback loop will use: `fallback_pack_mmap_ptrs[cur_a]` if present, otherwise `src0->data + cur_a * nb02`;
+  - touch size remains `(size_t) ne01 * nb01`, exactly matching current expert source size;
+  - all threads hit a second barrier before the existing fallback compute loop.
+- RAM/page-cache bound:
+  - no new persistent host allocation except the existing `fallback_touch_us` array;
+  - no new VRAM allocation;
+  - page cache content is not expanded beyond pages the fallback loop would fault anyway;
+  - strict 16GB cgroup including page cache and `MemorySwapMax=0` remain mandatory for every run.
+- Correctness proof:
+  - the patch only reads expert weight pages before `vec_dot`; it does not change `matrix_row_counts`, `matrix_rows`, selected experts, activations, weights, math kernels, output buffers, or top-k pruning;
+  - it cannot change logits except through a memory/race bug, which should be ruled out by France output and fixed-text top1 if any suspicious output appears.
+- Metrics:
+  - run the first diagnostic with `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT` enabled so `touch_us` is recorded per expert;
+  - record token rates, TTFT, RAM/page cache, major faults, `touch_us`, fallback after touch, pack/VRAM counters, output answer, source head, binary hash, and artifact hashes.
+- Rejection rules:
+  - reject if RAM exceeds 16GB including page cache, OOM appears, output correctness fails, or TTFT exceeds the gate for a promoted result;
+  - reject this family if parallel touch still leaves decode touch + hot fallback too high to plausibly beat `4.4 tok/s` or if it regresses token rate like serial touch.
+- Promotion rules:
+  - only promote if a strict cold run without diagnostic overhead beats `4.4 tok/s`, has `TTFT<=33617.688744 ms`, passes correctness, stays within 16GB including page cache, and is reproduced after push.
+
 Next concrete work item:
 
-- Write the source-level design for `GGML_MOE_CPU_FALLBACK_ASYNC_TOUCH=1` or equivalent:
-  - exact files/functions to edit;
-  - queue/window size and RAM/page-cache bound;
-  - where worker thread(s) are created and joined;
-  - how active expert pages are enqueued from `matrix_row_counts`;
-  - how ordering avoids racing tensor lifetime or cgroup cleanup;
-  - how metrics will report async submitted/touched/skipped/cancelled bytes and overlap;
-  - why logits and top1 remain unchanged.
-- Only after that design is written in this plan may a default-off source patch be attempted. The first validation remains strict cold France correctness/TTFT diagnostic and fixed-text top1 if logits could change; promotion still requires `eval_tok_s > 4.4`, `TTFT<=33617.688744 ms`, RAM <=16GB including page cache, and pushed-source reproduction.
+- Implement the default-off `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1` patch exactly as above, rebuild, then run a strict cold France diagnostic with fallback profile enabled. If it cannot beat the source/page hard-bound or violates gates, revert runtime source and commit only rejected artifacts/docs.
