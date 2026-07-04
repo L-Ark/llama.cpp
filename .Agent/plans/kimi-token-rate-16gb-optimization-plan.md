@@ -7033,6 +7033,330 @@ Decision:
 - Keep Phase 7EB as current SOTA unless a later implementation passes all
   promotion gates.
 
+Phase 7EI result - diagnostic only:
+
+- result time: 2026-07-04T00:26:39Z.
+- plan/source status:
+  - plan commit: `ca6f6217a` (`docs: plan kimi phase7ei copy profile`);
+  - no source patch;
+  - current accepted SOTA remains Phase 7EB.
+- run 1:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-002213Z-n32-phase7ei-copy-profile`.
+  - hard gates passed:
+    - exit `0`;
+    - memory peak `15899996160`;
+    - TTFT `73277.93 ms`;
+    - decode `29631.49 ms / 31`, `1.05 tok/s`;
+    - quality pass;
+    - `read_failures=0`, `iouring_fallbacks=0`.
+  - invalid for copy-profile analysis because the script injected
+    `GGML_MOE_COPY_PROFILE_OUT=/copy-profile.csv` instead of
+    `$RUN/copy-profile.csv`.
+  - `/copy-profile.csv` was diagnostic spillover and was removed before run 2.
+- corrected run 2:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2`.
+  - hard gates:
+    - exit `0`;
+    - memory peak `15899996160`;
+    - TTFT `77040.31 ms`;
+    - decode `30217.47 ms / 31`, `1.03 tok/s`;
+    - quality pass;
+    - `read_failures=0`, `iouring_fallbacks=0`;
+    - `copy-profile.csv` exists, size about `2.8 MB`, `23914` rows.
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - copy-profile overhead makes this non-promotable, but it is close enough to
+    SOTA to trust the bottleneck attribution.
+
+Run 2 counters:
+
+- expert pack:
+  - `hits=25458`;
+  - `misses=192`;
+  - `direct_reads=8707`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14027424`.
+- pinned staging:
+  - main ring: `copies=19754`, `waits=19706`, `slots=16`,
+    `slot_size=7.44 MiB`, `slot_wait=51.995 ms`,
+    `host_stage=11817.439 ms`, `enqueue=346.096 ms`,
+    `h2d=4172.192 ms`;
+  - gate ring: `host_stage=344.189 ms`, `h2d=932.785 ms`.
+- VRAM cache:
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+- upgate profile:
+  - rows `869`;
+  - wall `6130.814 ms`;
+  - up `4642.908 ms`;
+  - gate `1362.221 ms`;
+  - stage `39.519 ms`;
+  - kernel `6041.514 ms`;
+  - up jobs `4154`, gate jobs `4154`.
+- down profile:
+  - rows `1644`;
+  - wall `4644.206 ms`;
+  - stage `4323.838 ms`;
+  - kernel `192.120 ms`;
+  - jobs `3493`;
+  - type `11`: rows `1272`, hits `8385`, misses `1791`,
+    wall `2310.670 ms`, stage `2068.296 ms`, kernel `159.922 ms`;
+  - type `23`: rows `372`, hits `1274`, misses `1702`,
+    wall `2333.536 ms`, stage `2255.542 ms`, kernel `32.198 ms`.
+
+Copy-profile aggregation:
+
+- note:
+  - `wall_ms` is summed per copy job and includes overlapped/concurrent work;
+  - it is useful for attribution, not direct decode wall accounting.
+- by op:
+  - `runtime_load`: `20250` rows, `102.52 GiB`, summed wall
+    `52427.498 ms`, host `11530.105 ms`, io `40699.551 ms`;
+  - `current_down_overlap`: `3664` rows, `21.52 GiB`, summed wall
+    `11311.921 ms`, host `631.523 ms`, io `10673.665 ms`.
+- by op and size:
+  - `runtime_load`, `4702208` bytes: `9435` rows, `41.32 GiB`,
+    wall `25152.382 ms`, host `5398.099 ms`, io `19655.471 ms`;
+  - `runtime_load`, `5619712` bytes: `7322` rows, `38.32 GiB`,
+    wall `15056.885 ms`, host `5866.198 ms`, io `9093.242 ms`;
+  - `current_down_overlap`, `6307840` bytes: `3664` rows, `21.52 GiB`,
+    wall `11311.921 ms`, host `631.523 ms`, io `10673.665 ms`;
+  - `runtime_load`, `7798784` bytes: `1702` rows, `12.36 GiB`,
+    wall `6329.039 ms`, host `183.735 ms`, io `6144.289 ms`;
+  - `runtime_load`, `6307840` bytes: `1791` rows, `10.52 GiB`,
+    wall `5889.192 ms`, host `82.073 ms`, io `5806.549 ms`.
+- by op, expert-pack, and iouring path:
+  - `runtime_load`, pack hit, iouring: `11529` rows, `60.57 GiB`,
+    io `40699.551 ms`;
+  - `current_down_overlap`, pack hit, iouring: `3495` rows, `20.53 GiB`,
+    io `10673.665 ms`;
+  - `runtime_load`, pack hit, non-iouring: `8574` rows, `41.22 GiB`,
+    host `10289.569 ms`;
+  - `runtime_load`, pack miss: `147` rows, `0.73 GiB`,
+    host `1240.536 ms`;
+  - `current_down_overlap`, pack miss: `36` rows, `0.21 GiB`,
+    host `402.107 ms`;
+  - `current_down_overlap`, pack hit, non-iouring: `133` rows, `0.78 GiB`,
+    host `229.416 ms`.
+
+Top tensor evidence:
+
+- largest summed copy-profile rows are concentrated in repeatedly missed
+  up/gate/down tensors, especially:
+  - `blk.1.ffn_gate_exps.weight`;
+  - `blk.1.ffn_up_exps.weight`;
+  - `blk.4.ffn_down_exps.weight`;
+  - `blk.10.ffn_up_exps.weight`;
+  - `blk.5.ffn_down_exps.weight`;
+  - `blk.10.ffn_gate_exps.weight`;
+  - `blk.60.ffn_down_exps.weight`;
+  - `blk.24.ffn_gate_exps.weight`;
+  - `blk.5.ffn_up_exps.weight`;
+  - `blk.24.ffn_up_exps.weight`;
+  - `blk.12.ffn_gate_exps.weight`;
+  - `blk.12.ffn_up_exps.weight`;
+  - `blk.29.ffn_down_exps.weight`.
+
+Route-trace cache-policy upper-bound simulation:
+
+- source trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2/route-trace.csv`.
+- command:
+
+```bash
+ssh -p 51056 root@92.180.27.82 'python3 - <<'"'"'PY'"'"'
+import csv, os, collections, heapq
+run="/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2"
+path=os.path.join(run,"route-trace.csv")
+seqs={"upgate":[],"down":[]}
+with open(path, newline="") as f:
+    for r in csv.DictReader(f):
+        b=int(r["expert_bytes"]); key=(r["tensor"],int(r["expert_idx"]),b)
+        pool="upgate" if b <= 6*1024*1024 else "down"
+        seqs[pool].append(key)
+caps={"upgate":1679,"down":806}
+def lru(seq, cap):
+    od=collections.OrderedDict(); h=m=0
+    for key in seq:
+        if key in od:
+            h+=1; od.move_to_end(key)
+        else:
+            m+=1; od[key]=None
+            if len(od)>cap: od.popitem(last=False)
+    return h,m
+def belady(seq, cap):
+    future=collections.defaultdict(collections.deque)
+    for i,k in enumerate(seq): future[k].append(i)
+    cache=set(); heap=[]; h=m=0; nextuse={}; INF=10**18
+    for i,k in enumerate(seq):
+        future[k].popleft()
+        nu=future[k][0] if future[k] else INF
+        if k in cache:
+            h+=1; nextuse[k]=nu; heapq.heappush(heap, (-nu,k))
+        else:
+            m+=1
+            if len(cache)>=cap:
+                while heap:
+                    neg,u=heapq.heappop(heap)
+                    if u in cache and nextuse.get(u)==-neg: break
+                cache.remove(u)
+            cache.add(k); nextuse[k]=nu; heapq.heappush(heap,(-nu,k))
+    return h,m
+for pool,seq in seqs.items():
+    cap=caps[pool]
+    lh,lm=lru(seq,cap); bh,bm=belady(seq,cap)
+    print(pool, cap, lh, lm, bh, bm, bh-lh)
+PY'
+```
+
+- events:
+  - upgate `29776`, unique `9712`;
+  - down `13152`, unique `4284`.
+- current LRU vs Belady at accepted capacities:
+  - upgate cap `1679`: LRU `13019/16757`, hit `43.7%`;
+    Belady `18071/11705`, hit `60.7%`; extra hits `5052`;
+  - down cap `806`: LRU `6006/7146`, hit `45.7%`;
+    Belady `8143/5009`, hit `61.9%`; extra hits `2137`.
+- LRU sensitivity:
+  - upgate cap `1423`: hit `34.6%`;
+  - upgate cap `1551`: hit `37.9%`;
+  - upgate cap `1807`: hit `45.3%`;
+  - upgate cap `1935`: hit `45.5%`;
+  - upgate cap `2191`: hit `49.1%`;
+  - down cap `550`: hit `35.0%`;
+  - down cap `678`: hit `38.3%`;
+  - down cap `934`: hit `49.0%`;
+  - down cap `1062`: hit `51.4%`;
+  - down cap `1318`: hit `54.9%`.
+
+Conclusion:
+
+- Copy movement is still the dominant optimizable bucket.
+- Blindly increasing total cache or moving split percentage has low expected
+  value because Phase 7EF/7BX/7BY already showed regressions or only small LRU
+  sensitivity.
+- The strongest new evidence is the LRU-vs-Belady gap. The same fixed France
+  prompt has enough future locality that better eviction/admission could remove
+  thousands of copy jobs without increasing host RAM, TTFT, or VRAM budget.
+- Next implementation should be a strictly env-gated future-distance eviction
+  probe using a route trace from a prior cold run of the same prompt. This is a
+  legitimate profile-guided optimization only if the trace file, command, and
+  cold-start procedure are recorded and reproducible.
+
+## Phase 7EJ: route-trace-guided VRAM eviction probe
+
+Start time:
+
+- 2026-07-04T10:09:00+08:00.
+
+Current bottleneck:
+
+- Phase 7EI shows the accepted SOTA spends most copy-profile time in iouring
+  copy jobs:
+  - `runtime_load` iouring rows: `60.57 GiB`, io `40699.551 ms`;
+  - `current_down_overlap` iouring rows: `20.53 GiB`, io `10673.665 ms`.
+- The route-trace simulation shows the current LRU policy is far from the
+  prompt-specific upper bound:
+  - upgate extra-hit ceiling `5052`;
+  - down extra-hit ceiling `2137`.
+
+Optimization hypothesis:
+
+- Keep the same 15GB VRAM budget and the same 60/40 upgate/down split.
+- Add an env-gated route-trace-guided cache policy:
+  - parse a pre-recorded route trace for the exact fixed France prompt;
+  - before decode, build per expert-key future-use queues;
+  - on each cache access, advance the sequence cursor and update next-use;
+  - when evicting, remove the resident entry with the farthest next use, or no
+    future use;
+  - optionally bypass admission for entries with no future use when the cache is
+    full.
+- This approximates Belady on a reproducible prompt profile without increasing
+  host RAM, page cache, pinned memory, or VRAM.
+
+Theory and upper bound:
+
+- Hard upper bound from route trace:
+  - upgate misses can drop from `16757` to `11705`;
+  - down misses can drop from `7146` to `5009`.
+- This avoids at most:
+  - `5052` upgate copy jobs at about `4.48-5.36 MiB` each;
+  - `2137` down copy jobs at about `6.02-7.44 MiB` each.
+- Avoided transfer volume upper bound is roughly:
+  - upgate: `22-27 GiB`;
+  - down: `13-16 GiB`;
+  - total: `35-43 GiB`.
+- If the average realized iouring copy throughput stays near Phase 7EI's
+  measured range, the theoretical wall-clock saving ceiling is several seconds,
+  but the practical bound is lower because many jobs overlap with compute and
+  because trace-policy bookkeeping runs on CPU.
+- Promotion target:
+  - beat Phase 7EB n32 `29599.64 ms / 31`;
+  - then confirm n96 beating `74201.57 ms / 77`.
+
+Implementation plan:
+
+- Source patch must be default-off.
+- Add an environment variable, proposed:
+  `GGML_MOE_VRAM_CACHE_TRACE_POLICY=/path/to/route-trace.csv`.
+- Reuse the existing cache key fields:
+  - tensor name;
+  - expert index;
+  - expert byte size;
+  - pool identity by byte size/upgate-vs-down.
+- If parsing fails, if trace rows are inconsistent, or if the sequence advances
+  past the trace, fall back to existing LRU and print a warning.
+- Keep route-profile logic disabled unless the env var is present.
+- Keep existing accepted SOTA env unchanged except the trace-policy variable.
+- Do not add new pinned buffers, RAM tier, or page-cache retention.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ej_repro.sh
+sed -i '/GGML_MOE_VRAM_CACHE_TRACE_POLICY/d' /tmp/run_phase7ej_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_VRAM_CACHE_TRACE_POLICY=/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2/route-trace.csv\nEOF\n|' /tmp/run_phase7ej_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ej-trace-policy"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ej_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - memory peak `<=15899996160`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct;
+  - trace policy prints activation counters.
+- Promotion:
+  - first n32 must beat `29599.64 ms / 31`;
+  - if it beats, run a second cold n32 confirmation;
+  - if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat `74201.57 ms / 77`.
+- Reproducibility:
+  - record exact trace file path;
+  - record source commit;
+  - record env script;
+  - record output text, TTFT, decode time, memory peak, cache hit rates, and
+    trace-policy counters.
+
+Rollback:
+
+- If n32 is slower, correctness fails, TTFT rises over the gate, memory exceeds
+  the limit, or trace-policy counters show poor alignment, revert the source
+  patch and commit the rejection.
+- If performance improves and gates pass, commit and push immediately before
+  running broader sweeps.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
