@@ -7756,6 +7756,127 @@ Decision:
   - reducing CPU fallback/page-cache overhead without consuming VRAM slots;
   - or improving down runtime staging itself without changing cache residency.
 
+## Phase 7EL: thresholded down parallel staging
+
+Start time:
+
+- 2026-07-04T09:39:00Z.
+
+Current bottleneck:
+
+- Phase 7EK showed static protected down residency is harmful.
+- The remaining useful target is down runtime staging without changing cache
+  residency.
+- Phase 7EB n96 down-batch profile by `staged_jobs`:
+  - `0` jobs: `2226` rows, wall `872.777 ms`;
+  - `1` job: `47` rows, wall `99.197 ms`;
+  - `2-4` jobs: `827` rows, wall `3498.809 ms`, stage `3372.867 ms`;
+  - `5-8` jobs: `982` rows, wall `6894.884 ms`, stage `6717.400 ms`.
+- The current code uses the two-thread/two-ring down parallel staging path for
+  every miss batch, including `1` and `2-4` job batches:
+  - it inserts slots with `do_copy=false`;
+  - splits jobs alternately into `down_jobs_a/down_jobs_b`;
+  - creates two host threads;
+  - copies on `bc.stage_ring` and `bc.stage_ring_gate`;
+  - waits on both CUDA streams before launching the down kernel.
+- Phase 7X proved that disabling down parallel stage globally is bad, so the
+  safe probe is a threshold, not a full disable.
+
+Hypothesis:
+
+- Add a default-preserving env:
+
+```sh
+GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=<N>
+```
+
+- Default `N=1`, so current SOTA behavior is unchanged.
+- Test `N=5`:
+  - batches with `1-4` staged jobs use a single serial copy path on the main
+    stream/ring;
+  - batches with `5+` staged jobs keep the current two-thread/two-ring path.
+- This may reduce thread creation, event synchronization, and iouring batch
+  fragmentation for small down miss batches while preserving overlap for the
+  large `5-8` bucket.
+
+Theory and upper bound:
+
+- The `1` and `2-4` buckets sum to about `3.60 s` n96 wall and `3.46 s` stage.
+- A threshold can only recover overhead inside those buckets; it cannot remove
+  the actual SSD/H2D transfer.
+- Realistic n96 upside is `0.3-1.0 s`; n32 upside is smaller.
+- If serial copy loses useful overlap or increases main-ring contention, the
+  first n32 will regress and the patch must be reverted.
+
+Implementation:
+
+- Source patch must be default-off/default-preserving.
+- Add helper:
+
+```c++
+static int down_parallel_stage_min_jobs()
+```
+
+reading `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS`, clamped to `[1, 64]`, default
+`1`.
+- In the down batch path:
+  - continue planning jobs exactly as today when `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - after job planning, compute total staged jobs;
+  - if total jobs are nonzero and below the threshold, copy all planned jobs
+    serially through `copy_down_stage_jobs(..., st, bc.stage_ring)` instead of
+    spawning the two parallel copy threads;
+  - if total jobs meet the threshold, keep the existing parallel path.
+- Keep cache keys, slot assignment, math, routing, prompt, sampling, VRAM
+  budgets, and IO settings unchanged.
+- Add a one-time activation log:
+  `[moe_stream_batch] down parallel stage threshold active: min_jobs=N`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7el_repro.sh
+sed -i '/GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS/d' /tmp/run_phase7el_repro.sh
+perl -0pi -e 's|GGML_MOE_DOWN_PARALLEL_STAGE=1\n|GGML_MOE_DOWN_PARALLEL_STAGE=1\nGGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=5\n|' /tmp/run_phase7el_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7el-down-minjobs5"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7el_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - memory peak `<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - source diff is recorded in `git.txt`;
+  - `env.txt` contains `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=5`;
+  - stderr contains the threshold activation log.
+- Promotion:
+  - first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+  - if it beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7EB n96 `74201.57 ms / 77`.
+- Mechanism:
+  - down profile should show lower wall/stage in small-job buckets or lower
+    overall down wall;
+  - if wall improves without down improvement, inspect expert-pack wait,
+    up/gate profile, and fallback profile before promotion.
+
+Rollback:
+
+- If build fails, activation is missing, hard gates fail, quality fails, or
+  n32 is slower, revert the source patch and commit the rejection record.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
