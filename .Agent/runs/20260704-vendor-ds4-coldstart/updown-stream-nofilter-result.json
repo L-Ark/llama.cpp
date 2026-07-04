@@ -1,0 +1,189 @@
+{
+  "all_trace_summary": {
+    "cache_hits": 43544,
+    "cache_inserted": 427,
+    "cache_misses": 56319,
+    "component_fractions": {
+      "d2h_ms": 0.0027175527285823683,
+      "dontneed_ms": 0.08364023203716822,
+      "kernel_ms": 0.01095020321760389,
+      "scatter_ms": 0.001239461068687021,
+      "src0_ms": 0.8846333080694466,
+      "src1_ms": 0.004272270895379211,
+      "sync_ms": 0.012649650628161608
+    },
+    "component_sums_ms": {
+      "d2h_ms": 310.849999999409,
+      "dontneed_ms": 9567.27200000538,
+      "kernel_ms": 1252.5499999999456,
+      "scatter_ms": 141.77700000014923,
+      "src0_ms": 101189.67000000562,
+      "src1_ms": 488.6880000002364,
+      "sync_ms": 1446.943000001252,
+      "total_ms": 114386.00500000831
+    },
+    "rows": 99863,
+    "total_ms_max": 4570.475,
+    "total_ms_p50": 0.761,
+    "total_ms_p90": 4.863800000000003,
+    "total_ms_p99": 6.596
+  },
+  "artifact_hashes_sha256": {
+    "environment.txt": "e02418d2946c4cb6e0c34261cb15ab66b0c52e89651daedf77dce78cc71dfd21",
+    "exact_command.txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace.csv": "271c03c23146f3c0ce3bf4776792095dc221a7cb25e6a95772bf87cf2f87e360",
+    "resource_samples.tsv": "c03198be8cae5079377db756394cc0e411adaf611feaa2f661830482bc97ab5f",
+    "stderr.txt": "12fe183f69defe975a2ebce39423cc6feaf2e2f68deea5d62a51309da4bfb144",
+    "stdout.txt": "cb8c30843a6140d6aea5ad69126639dc869c15febe50fc7a99b4c50dbd9b4019",
+    "summary.json": "e0a9ef0ee418f6a479f3cc84a4ba9e03826748c5495c875c9e917644d1b6ba0e"
+  },
+  "by_role": {
+    "down": {
+      "cache_hits": 0,
+      "cache_inserted": 0,
+      "cache_misses": 25997,
+      "component_fractions": {
+        "d2h_ms": 0.0017628874207335477,
+        "dontneed_ms": 0.0940374236038881,
+        "kernel_ms": 0.008352125468065772,
+        "scatter_ms": 0.001326232310073395,
+        "src0_ms": 0.8866070139420851,
+        "src1_ms": 0.002643342757748535,
+        "sync_ms": 0.005382866597354904
+      },
+      "component_sums_ms": {
+        "d2h_ms": 85.61400000000285,
+        "dontneed_ms": 4566.894000000017,
+        "kernel_ms": 405.617999999947,
+        "scatter_ms": 64.40800000001195,
+        "src0_ms": 43057.75400000034,
+        "src1_ms": 128.37300000003566,
+        "sync_ms": 261.4170000000319,
+        "total_ms": 48564.643999999935
+      },
+      "rows": 25997,
+      "total_ms_max": 37.137,
+      "total_ms_p50": 0.819,
+      "total_ms_p90": 5.334,
+      "total_ms_p99": 7.130080000000002
+    },
+    "gate": {
+      "cache_hits": 43544,
+      "cache_inserted": 427,
+      "cache_misses": 4325,
+      "component_fractions": {
+        "d2h_ms": 0.008577920069372006,
+        "dontneed_ms": 0.02591197733858738,
+        "kernel_ms": 0.027602049448176333,
+        "scatter_ms": 0.003017667665088585,
+        "src0_ms": 0.8681871924385226,
+        "src1_ms": 0.013816344073310751,
+        "sync_ms": 0.05297327206897949
+      },
+      "component_sums_ms": {
+        "d2h_ms": 140.54499999996102,
+        "dontneed_ms": 424.5549999998276,
+        "kernel_ms": 452.24599999995974,
+        "scatter_ms": 49.44299999997639,
+        "src0_ms": 14224.820000003965,
+        "src1_ms": 226.37399999987204,
+        "sync_ms": 867.9410000002156,
+        "total_ms": 16384.507999997066
+      },
+      "rows": 47869,
+      "total_ms_max": 4570.475,
+      "total_ms_p50": 0.03,
+      "total_ms_p90": 0.054,
+      "total_ms_p99": 5.577
+    },
+    "up": {
+      "cache_hits": 0,
+      "cache_inserted": 0,
+      "cache_misses": 25997,
+      "component_fractions": {
+        "d2h_ms": 0.0017131147081713026,
+        "dontneed_ms": 0.09255894585361128,
+        "kernel_ms": 0.007983639249852034,
+        "scatter_ms": 0.0005648822347168937,
+        "src0_ms": 0.8881450443457719,
+        "src1_ms": 0.0027093350784287823,
+        "sync_ms": 0.006424053731737038
+      },
+      "component_sums_ms": {
+        "d2h_ms": 84.69100000000242,
+        "dontneed_ms": 4575.822999999931,
+        "kernel_ms": 394.6859999999645,
+        "scatter_ms": 27.92600000001051,
+        "src0_ms": 43907.09600000032,
+        "src1_ms": 133.94100000002692,
+        "sync_ms": 317.58499999998475,
+        "total_ms": 49436.8529999999
+      },
+      "rows": 25997,
+      "total_ms_max": 68.904,
+      "total_ms_p50": 0.823,
+      "total_ms_p90": 5.428,
+      "total_ms_p99": 7.391320000000007
+    }
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb",
+  "experiment": "updown-stream-nofilter-top3000-probe",
+  "hot_expert_coverage_from_trace": {
+    "down": {
+      "top128_frac": 0.4045,
+      "top192_frac": 0.4726,
+      "top256_frac": 0.5237,
+      "top384_frac": 0.602,
+      "top512_frac": 0.6609,
+      "top64_frac": 0.2879,
+      "total": 25997,
+      "unique": 3396
+    },
+    "gate": {
+      "top128_frac": 0.3108,
+      "top192_frac": 0.3833,
+      "top256_frac": 0.4358,
+      "top384_frac": 0.5127,
+      "top512_frac": 0.5707,
+      "top64_frac": 0.1966,
+      "total": 47869,
+      "unique": 5204
+    },
+    "up": {
+      "top128_frac": 0.4045,
+      "top192_frac": 0.4726,
+      "top256_frac": 0.5237,
+      "top384_frac": 0.602,
+      "top512_frac": 0.6609,
+      "top64_frac": 0.2879,
+      "total": 25997,
+      "unique": 3396
+    }
+  },
+  "manual_correctness_ok": false,
+  "manual_correctness_reason": "answer is semantically about France but ends with an incomplete trailing sentence (and), so it is not accepted for the strict correctness gate",
+  "next_recommendation": "Do not stream all up/down. Add a default-off profile-gated stream eligibility mode so only hot up/down experts from a combined profile are streamed/cached while cold up/down remains on CPU fallback.",
+  "observations": {
+    "pack_summary": "hits=5545 misses=53774 reads=5545 bytes=24711004160 direct_reads=5545 direct_failures=0 direct_fallbacks=0",
+    "prefill": "attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4552.723",
+    "vram_cache": "hits=43544 misses=56319 hit_rate=43.6%",
+    "why_slow": "up/down became stream-eligible but had no pack/cache admission, causing 53774 pack misses and many direct mmap/page-cache H2D copies; token rate fell to 1.8"
+  },
+  "summary_metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 140.07,
+    "eval_tok_s": 1.8,
+    "memory_file_bytes": 15064793088,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "prompt_tok_s": 1.2,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 36713.048232
+  },
+  "timestamp_utc": "2026-07-04T00:58:00Z",
+  "trace_rows": 99863,
+  "trace_span_ms": 122647.822,
+  "verdict": "rejected"
+}

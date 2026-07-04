@@ -6086,3 +6086,164 @@ Rejection rules:
 - Reject if token rate is `<=4.4`, correctness fails, TTFT fails, RAM fails, OOM appears, or direct failures/fallbacks appear.
 - If rejected, record metrics, output, counters, hashes, and reason in this document and push docs/artifacts only.
 - If accepted, immediately commit/push all reproduction records and rerun from pushed branch before promoting.
+
+### 2026-07-04T00:58Z Config-Only Up/Down GPU Stream Probe Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/updown-stream-nofilter-result.json`
+- artifact sha256: `d6f604863966256f31a20bba8b6ae0241c6074022043ffde8061ee57c847fead`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb`
+
+Config delta from accepted SOTA:
+
+- Removed `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Kept gate cache admission profile and gate prefill profile.
+- Kept current gate O_DIRECT pack.
+- No source change.
+
+Metrics:
+
+- `eval_tok_s=1.8`
+- `prompt_tok_s=1.2`
+- `TTFT=36713.048232 ms`
+- `elapsed_seconds=140.07`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15064793088`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- runner `correctness_ok=true`, but manual correctness rejected because the output ends with an incomplete trailing sentence.
+
+Output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. Renowned for its art, fashion, cuisine, and landmarks like the Eiffel Tower, the Louvre, and the Palace of Versailles, France is a major center for culture and politics. It is a unitary semi-presidential republic with a strong democratic tradition, and its capital, Paris, is often called the "City of Light." Beyond its metropolitan borders, France also includes overseas regions and territories, making it a truly global nation. The country is famous for its wine regions, such as Bordeaux and Burgundy, as well as its iconic landmarks and world-renowned cuisine. France is also known for its rich history, including the French Revolution and its role in both World Wars. Today, it remains a global leader in art, fashion, and culture, with a thriving economy and
+```
+
+Counters:
+
+- prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4552.723`
+- pack: `hits=5545 misses=53774 reads=5545 bytes=24711004160 direct_reads=5545 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=43544 misses=56319 hit_rate=43.6%`
+- trace rows: `99863`
+
+Trace role split:
+
+- gate:
+  - rows `47869`
+  - cache hits `43544`
+  - cache misses `4325`
+  - `src0_ms=14224.820`
+  - `total_ms=16384.508`
+- up:
+  - rows `25997`
+  - cache hits `0`
+  - cache misses `25997`
+  - `src0_ms=43907.096`
+  - `total_ms=49436.853`
+- down:
+  - rows `25997`
+  - cache hits `0`
+  - cache misses `25997`
+  - `src0_ms=43057.754`
+  - `total_ms=48564.644`
+
+Artifact hashes:
+
+- `summary.json`: `e0a9ef0ee418f6a479f3cc84a4ba9e03826748c5495c875c9e917644d1b6ba0e`
+- `stdout.txt`: `cb8c30843a6140d6aea5ad69126639dc869c15febe50fc7a99b4c50dbd9b4019`
+- `stderr.txt`: `12fe183f69defe975a2ebce39423cc6feaf2e2f68deea5d62a51309da4bfb144`
+- `environment.txt`: `e02418d2946c4cb6e0c34261cb15ab66b0c52e89651daedf77dce78cc71dfd21`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `271c03c23146f3c0ce3bf4776792095dc221a7cb25e6a95772bf87cf2f87e360`
+- `resource_samples.tsv`: `c03198be8cae5079377db756394cc0e411adaf611feaa2f661830482bc97ab5f`
+
+Hot expert coverage from this trace:
+
+- up:
+  - total rows `25997`, unique expert keys `3396`
+  - top64 covers `28.79%`
+  - top128 covers `40.45%`
+  - top192 covers `47.26%`
+  - top384 covers `60.20%`
+  - top512 covers `66.09%`
+- down has the same coverage as up because routed up/down expert ids match.
+- gate:
+  - total rows `47869`, unique expert keys `5204`
+  - top192 covers `38.33%`
+  - top512 covers `57.07%`
+
+Verdict:
+
+- Rejected. Full up/down streaming without pack/cache is much slower than CPU fallback under the cold 16GB cgroup.
+- The bottleneck moved to up/down `src0_ms` and page-backed H2D; up/down had zero cache hits.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+Conclusion:
+
+- Do not stream all up/down experts.
+- A plausible next direction is selective profile-gated up/down streaming:
+  - cache/stream only hot up/down expert keys;
+  - leave cold up/down on CPU fallback;
+  - trade a small number of gate cache slots for hot up/down slots only if hit coverage justifies it.
+
+### 2026-07-04T01:04Z Next Plan: Profile-Gated Hot Up/Down Stream
+
+Goal:
+
+- Test a selective source change that streams only experts present in an admission profile.
+- Use it to stream/cache hot up/down experts while leaving cold up/down on CPU fallback.
+
+Bottleneck:
+
+- Full up/down stream was rejected because up/down had `0` cache hits and about `87s` combined `src0_ms`.
+- CPU walltrace showed up/down CPU fallback is the main trace-external bottleneck.
+- Hot expert coverage is nontrivial: top192 up/down keys cover about `47%` of up/down stream rows each.
+
+Theory / hard-bound:
+
+- If `192` hot up and `192` hot down keys are cached, they could cover roughly `47%` of up/down rows in this prompt.
+- That would reduce CPU fallback rows without paying the full no-cache H2D cost for cold up/down.
+- Cost: about `384` VRAM cache slots, roughly `1.6GB`, likely taken from gate cache capacity.
+- Benefit must exceed any gate-hit loss and cold prefill cost.
+- Because current gate cache hit rate is high (`94.6%`), the first test should be conservative and keep most gate slots.
+
+Implementation plan:
+
+- Add a default-off env, e.g. `GGML_MOE_STREAM_ONE_REQUIRE_ADMIT=1`.
+- When enabled, `ggml_cuda_moe_stream_one()` should return `false` before acquiring a slot if `moe_stream_cache_admit_allows(src0_name, expert_index)` is false.
+- Keep default behavior unchanged when the env is unset.
+- Build a combined profile from current accepted SOTA/no-filter traces:
+  - include the hottest gate keys first;
+  - include a small hot up/down budget, starting with top96 up + top96 down or top128 up + top128 down;
+  - keep total prefill limit at `3000` initially.
+
+Practice config:
+
+- strict cold `drop_caches`;
+- 16GB cgroup including page cache;
+- `GGML_MOE_STREAM_ONE_NAME_FILTER` unset so up/down can be eligible;
+- `GGML_MOE_STREAM_ONE_REQUIRE_ADMIT=1`;
+- combined gate+hot-up+hot-down admit/prefill profile;
+- current gate pack remains enabled; up/down pack misses are expected unless a combined pack is later built.
+
+Acceptance gates:
+
+- `eval_tok_s > 4.4`.
+- France output must be complete, coherent, and semantically correct.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`, and `ram_ok=true`.
+- `TTFT <= 33617.688744 ms`.
+- Direct failures/fallbacks must be `0`.
+
+Rejection rules:
+
+- Reject if token rate is `<=4.4`, correctness fails, TTFT fails, RAM fails, OOM appears, or direct failures/fallbacks appear.
+- If rejected, revert source and push docs/artifacts only.
+- If accepted, immediately commit/push source/docs/artifacts and rerun from pushed branch before promotion.
