@@ -1,0 +1,103 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: strict cold performance benchmark for all-up Q8_0 CPU-compatible skip",
+  "result": "rejected",
+  "rejection_reasons": [
+    "eval_tok_s 1.8 is below accepted SOTA 4.4",
+    "TTFT 38267.907446 ms exceeds acceptance gate 33617.688744 ms",
+    "elapsed_seconds 114.46 is much slower than accepted SOTA 63.94"
+  ],
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "1292ae8620c35bf3182269e773caa65f6e31ca55",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "commit_identity_required": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "run": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T204845Z-q80-cpucompat-upskip-strict-cold/france-cpu40",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-upskip-20260704T204845Z.service",
+    "service_result": "success",
+    "service_runtime": "1min 54.841s",
+    "cpu_time": "22min 2.992s",
+    "framework": "vendor DeepSeek",
+    "strict_cold": true,
+    "cold_start_procedure": "sync; echo 3 > /proc/sys/vm/drop_caches"
+  },
+  "metrics": {
+    "eval_tok_s": 1.8,
+    "prompt_tok_s": 1.3,
+    "ttft_ms": 38267.907446,
+    "elapsed_seconds": 114.46,
+    "max_rss_kb": 15597752,
+    "q80_skip_records": 18688,
+    "q80_skip_bad_records": 0,
+    "one_stream_hits": 33265,
+    "one_stream_misses": 1886,
+    "one_stream_hit_rate": 94.6,
+    "one_prefill_elapsed_ms": 4638.477,
+    "one_pack_reads": 4886,
+    "one_pack_bytes": 21774204928,
+    "one_pack_failures": 0,
+    "one_pack_direct_failures": 0,
+    "one_pack_direct_fallbacks": 0
+  },
+  "correctness": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "cgroup": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15086510080,
+    "memory_max_events": 16045,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 16045,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "ram_ok": true,
+    "swaps": 0,
+    "pgmajfault": 190454,
+    "workingset_refault_file": 1924155
+  },
+  "hashes": {
+    "summary_json_sha256": "b5cf9f1e805869d6a17400f97b9a95253a13151f9588d8079af4f64cc22ea4bd",
+    "summary_env_sha256": "75af77cf6d7772b05ad08236a2ecaa2c05dcbe906f7abee4706a3d1381059dec",
+    "run_case_sha256": "224325791507088e93d7fc9e676fc6dcdea0e417c0360e91a839dea4b38c3281",
+    "exact_command_sha256": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "environment_sha256": "6c8e144bb6d568d2b17053d7e8f81f9e05c0118437a3b4bc6952081cb3618213",
+    "q80_skip_report_sha256": "a2d449a0130d14a58cdc875061661b9129733a1ee502ae626f9081e4443077b5",
+    "one_trace_sha256": "413cc77cb564fb8a5583530261d683e171257067865eb9790bcf34beb1a86eda",
+    "stdout_sha256": "b79e67fe8c672531193602984e6b4efdba41c2fae2811c5918846889eafb78b6",
+    "stderr_sha256": "4175b3d39afa6fc746e61d9aa7924f181f7890f3018e82ccdb58c556c86108e3",
+    "binary_sha256": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62"
+  },
+  "analysis": {
+    "expected": "All-up Q8_0 CPU-compatible skip would remove decode CPU up fallback while preserving token-level correctness.",
+    "observed_gap": "The path is correct but slower: eval_tok_s dropped from 4.4 to 1.8 and TTFT rose by 5375.354156 ms over accepted SOTA.",
+    "likely_causes": [
+      "Per-call CPU-compatible Q8_0 CUDA work is too fine-grained; 18688 skipped up calls add launch/sync/D2H/scatter overhead.",
+      "The remaining down projection still uses CPU fallback and source/page behavior, so up-only offload cannot remove the full fallback bottleneck.",
+      "CPU time increased to 22min 2.992s, indicating the current skip path still adds substantial host-side overhead instead of reducing total work."
+    ],
+    "next_step": "Do not rerun this same benchmark. Write q80-upskip-overhead-localization-plan.json and add default-off timing counters to break down quantization, CUDA kernel, D2H/scatter/sync, launch overhead, down fallback, and source/page time."
+  }
+}
