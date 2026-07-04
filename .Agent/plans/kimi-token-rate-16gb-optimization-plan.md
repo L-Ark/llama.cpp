@@ -47221,6 +47221,56 @@ Decision rule:
   target making that overlap deeper or more selective.
 - If disabling current-down overlap is neutral or faster, reject further
   down-overlap work and profile another bottleneck.
+
+Result: n32 ablation completed; current-down overlap is important.
+
+- End time: 2026-07-04T17:49:29+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-094716Z-n32-phase7gc-no-current-down-overlap`.
+- Code head:
+  `90f6fc84c`.
+- Runtime:
+  - default SOTA runtime except `GGML_MOE_CURRENT_DOWN_OVERLAP=0`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76760.13 ms`;
+  - decode `32095.91 ms / 31`, `0.97 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14831874048`;
+    - `kernel=234524672`;
+    - `inactive_file=8575320064`;
+    - `active_file=6255824896`;
+    - `pgmajfault=996069`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `direct_reads=11564`;
+    - `iouring_reads=12167`;
+    - `iouring_bytes=67747119104`;
+    - `iouring_wait_us=13563390`;
+  - down VRAM cache:
+    - slots `806`;
+    - hits `9212`;
+    - misses `3908`;
+    - hit rate `70.2%`.
+- Comparison:
+  - default n32 rebuilt range is about `29140-29795 ms`;
+  - disabling current-down overlap regresses to `32095.91 ms`, about
+    `2.3-3.0 s` slower;
+  - down hit rate drops from the normal `73.6%` to `70.2%`;
+  - iouring bytes drop because fewer down overlap reads are submitted early,
+    but wall time worsens.
+- Decision:
+  - Current-down overlap is a real contributor and should remain enabled.
+  - Next optimization should target this path, but not by simply disabling or
+    shallow env sweeping.
+  - Candidate next step: make current-down overlap cover more useful misses or
+    reduce direct fallback inside the overlap worker while preserving its
+    ability to hide reads behind up/gate compute.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
