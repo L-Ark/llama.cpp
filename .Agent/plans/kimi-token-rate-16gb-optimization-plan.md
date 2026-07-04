@@ -48424,6 +48424,161 @@ Decision rule:
 - If n32 improves below the rebuilt n32 range, run one n32 repeat.
 - Only run n96 after n32 repeat reproduces.
 
+Result A: n32 completed, but the large-down threshold did not match the Q4_0
+expert size; rerun with `MIN_MIB=7`.
+
+- End time: 2026-07-04T19:08:14+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-110547Z-n32-phase7gk-large-down-cache-pack-only`.
+- Code head:
+  `6028bcd7c`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74019.17 ms`;
+  - decode `30095.57 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - `iouring_reads=15883`;
+    - `iouring_bytes=93638049792`;
+    - `iouring_wait_us=16054147`;
+  - current down overlap:
+    - planned_jobs `4334`;
+    - completed_jobs `4334`;
+    - missing_tensor `0`;
+    - missing_pack `40`;
+    - worker_us `4046745`.
+  - VRAM down cache:
+    - slots `761`;
+    - slot size `7.88 MiB`;
+    - hit rate `72.2%`.
+- Configuration issue:
+  - Q4_0 pack-only expert size is `8257536` bytes, about `7.88 MiB`.
+  - The default `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB=8` compares against
+    `8 * 1024 * 1024 = 8388608`, so the Q4_0 experts did not route to the
+    large-down cache.
+  - No `VRAM cache large-down` line appeared in metrics.
+  - The run therefore repeated the Phase 7GJ failure mode rather than testing
+    the new hypothesis.
+- Decision:
+  - Do not accept or reject the large-down-cache idea from Result A.
+  - Run Experiment B with
+    `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB=7`.
+
+Experiment B: n32 probe with threshold fixed
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gk-large-down-cache-min7-pack-only"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_LARGE_DOWN=1 GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB=7 GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIB=512 GGML_MOE_CURRENT_DOWN_PACK_ONLY=1 GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Result B: n32 completed; threshold too low, normal down experts were also routed
+away from the main down cache.
+
+- End time: 2026-07-04T19:12:39+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-110932Z-n32-phase7gk-large-down-cache-min7-pack-only`.
+- Code head:
+  `6028bcd7c`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73776.82 ms`;
+  - decode `30903.50 ms / 31`, `1.00 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - `iouring_reads=16140`;
+    - `iouring_bytes=97437089792`;
+    - `iouring_wait_us=17045231`;
+  - current down overlap:
+    - planned_jobs `3826`;
+    - completed_jobs `3826`;
+    - cache_hits `4106`;
+    - missing_tensor `0`;
+    - missing_pack `40`;
+    - worker_us `3897083`.
+  - reported `VRAM cache down`:
+    - slots `997`;
+    - slot size `6.02 MiB`;
+    - hit rate `85.5%`.
+- Analysis:
+  - `MIN_MIB=7` is below both:
+    - normal down size `~7.44 MiB`;
+    - Q4_0 down size `~7.88 MiB`.
+  - Therefore normal 7.44 MiB down tensors were incorrectly routed to the
+    large-down cache along with Q4_0.
+  - The original down cache became a smaller 6.02 MiB class, so Result B still
+    did not test the intended separation.
+  - Decode is slower than 7GJ and must be rejected.
+- Decision:
+  - Reject `MIN_MIB=7`.
+  - Add a byte-precise threshold so the split can be placed between `7.44 MiB`
+    and `7.88 MiB`.
+  - Do not run n96.
+
+## Phase 7GL: byte-precise large-down threshold
+
+Start time: 2026-07-04T19:13:00+08:00.
+
+Goal:
+
+- Correct the 7GK threshold mistake by routing only Q4_0-sized down experts to
+  the large-down cache.
+- Keep normal `~7.44 MiB` down experts in the main down cache.
+
+Implementation plan:
+
+- Add `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_BYTES`.
+- If set, it overrides `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB`.
+- Use `8000000` bytes for the next probe:
+  - normal down `~7.44 MiB` is below threshold;
+  - Q4_0 down `8257536` bytes is above threshold.
+- Keep all behavior default-off.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gl-large-down-cache-minbytes-pack-only"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_LARGE_DOWN=1 GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_BYTES=8000000 GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIB=512 GGML_MOE_CURRENT_DOWN_PACK_ONLY=1 GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If normal down cache is not preserved at about `7.44 MiB`/`806` slots, reject
+  the threshold implementation.
+- If large-down cache is not separately reported/used, reject the threshold
+  implementation.
+- If decode is slower than rebuilt n32 baseline, reject and revert.
+- Only repeat/n96 if n32 improves below the rebuilt baseline range.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.

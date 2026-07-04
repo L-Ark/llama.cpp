@@ -1637,6 +1637,10 @@ static int batch_cache_id_for_size(size_t expert_sz) {
         (size_t)std::strtoull(large_down_min_env, nullptr, 10) : 8;
     if (large_down_min_mib < 1) large_down_min_mib = 1;
     if (large_down_min_mib > 64) large_down_min_mib = 64;
+    const char *large_down_min_bytes_env = std::getenv("GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_BYTES");
+    const size_t large_down_min_bytes = large_down_min_bytes_env && large_down_min_bytes_env[0] ?
+        (size_t)std::strtoull(large_down_min_bytes_env, nullptr, 10) :
+        large_down_min_mib*1024ULL*1024ULL;
     const char *split_max_env = std::getenv("GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB");
     size_t split_max_mib = 4;
     if (split_max_env && split_max_env[0]) {
@@ -1647,7 +1651,7 @@ static int batch_cache_id_for_size(size_t expert_sz) {
     if (large_down &&
             fused_env && fused_env[0] && fused_env[0] != '0' &&
             split_env && split_env[0] && split_env[0] != '0' &&
-            expert_sz >= large_down_min_mib*1024ULL*1024ULL) {
+            expert_sz >= large_down_min_bytes) {
         return 2;
     }
     if (fused_env && fused_env[0] && fused_env[0] != '0' &&
