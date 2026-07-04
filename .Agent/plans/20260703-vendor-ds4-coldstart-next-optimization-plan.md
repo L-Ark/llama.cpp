@@ -5934,3 +5934,155 @@ Deliverable:
 
 - `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-moe-walltrace-result.json`
 - Append the wall-time breakdown and next optimization recommendation to this plan before any subsequent source optimization.
+
+### 2026-07-04T00:45Z CPU-Side MoE Wall-Time Instrumentation Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-moe-walltrace-result.json`
+- artifact sha256: `8db82a6ef6f2976b8062884474cec41bf1c79411c988b7e45f4efa1017d7f403`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T002803Z-20260704_cpu_moe_walltrace_top3000_diagnostic/france-cpu40-vram0gb`
+
+Source status:
+
+- Temporary diagnostic source added `GGML_MOE_STREAM_CPU_TRACE_OUT`.
+- The diagnostic source was reverted after the run.
+- Build directory was rebuilt after revert; CMake reports clean commit `68e82af87`.
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=33628.923137 ms`
+- TTFT gate: fail by about `11.234 ms` versus `33617.688744 ms`
+- `elapsed_seconds=64.70`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15082663936`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Artifact hashes:
+
+- `summary.json`: `fbb662dbbfc59ae9c350696da6721c9301e7b293d637a58d2f2628a7cc8a8e72`
+- `stdout.txt`: `ca34d58b964622213783d1036f91bafcfad230eef2f9b972e19bda7818650aec`
+- `stderr.txt`: `c0e36f151a24ed94617c42116bba9b7625ecfa58828e2802d0f169b1b1778e32`
+- `environment.txt`: `f0e689b6dd6aa28d5ddf1959f61f22c1cd5e6b0858d9389559ab040c5a123b23`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `39f3d55852899b0b5f7f960b3d282d5cf6be0405e4b7f71eaf6f8cd8810c6895`
+- `cpu_moe_walltrace.csv`: `109415577787ea0f17c3f0ab03b5af94537d25c56141f311432bb074403475ec`
+- `resource_samples.tsv`: `23d2e048dcce6351edf4fcde7bb08ba0cfeb1e393633ddd2958144f5eacc9aa7`
+
+CPU walltrace aggregate:
+
+- CPU walltrace rows: `16920`
+- trace span: about `40.13s`
+- stream branch total time sum: `8.590s`
+- rows before stream branch: `76000`
+- accepted rows: `36480` (`48%`)
+- declined rows: `39520` (`52%`)
+- remaining rows after stream branch: `39520`
+
+By role:
+
+- gate:
+  - ops `5640`
+  - rows before `36480`
+  - accepted rows `36480`
+  - declined rows `0`
+  - stream branch total `8.570s`
+- up:
+  - ops `5640`
+  - rows before `19760`
+  - accepted rows `0`
+  - declined rows `19760`
+  - stream branch total only `0.009s`
+- down:
+  - ops `5640`
+  - rows before `19760`
+  - accepted rows `0`
+  - declined rows `19760`
+  - stream branch total only `0.011s`
+
+Conclusion:
+
+- Current SOTA streams only `ffn_gate_exps`.
+- `ffn_up_exps` and `ffn_down_exps` are declined by the stream path and fully handled by CPU fallback.
+- This explains why `one_trace.csv` accounts for only a small fraction of total wall time.
+- The largest remaining token-rate opportunity is no longer gate cache sync/scatter; it is reducing or eliminating up/down CPU fallback under the 16GB RAM and TTFT gates.
+
+Verdict:
+
+- Diagnostic-only. It did not produce a new accepted SOTA because TTFT narrowly failed and token rate only tied at `4.4`.
+- Source instrumentation was reverted and not retained.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+### 2026-07-04T00:53Z Next Plan: Config-Only Up/Down GPU Stream Probe
+
+Goal:
+
+- Test whether moving `ffn_up_exps` and `ffn_down_exps` from CPU fallback to the existing GPU stream path improves token rate.
+- Avoid increasing VRAM cache footprint by keeping cache admission restricted to the current gate profile.
+
+Bottleneck:
+
+- CPU walltrace shows `39520` rows (`52%`) are declined by the stream path.
+- All declined rows are up/down experts:
+  - up declined rows: `19760`
+  - down declined rows: `19760`
+- These rows are then handled by CPU fallback and dominate the wall time outside `one_trace.csv`.
+
+Theory / hard-bound:
+
+- Accepted SOTA gate stream branch costs about `8.57s` and handles `36480` rows.
+- Up/down CPU fallback rows are `39520`, slightly more than gate streamed rows.
+- If GPU streaming up/down is correct and its H2D/kernel/D2H cost is similar to or moderately above gate stream cost, token rate could materially improve.
+- The theoretical upper bound is large because removing most CPU fallback could reduce a large portion of the `~40s` trace span; a practical first success would be `>4.4 tok/s`, with `5-7 tok/s` plausible if CPU fallback is the dominant wall-time component.
+- Risk: up/down streaming without a pack/cache may trigger large mmap/page-cache reads and H2D copies, hurting cold-start TTFT or token rate.
+
+Experiment design:
+
+- No source change.
+- Keep accepted top3000 SOTA settings except remove the name filter:
+  - do not pass `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Keep `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` and `GGML_MOE_STREAM_ONE_PREFILL_PROFILE` on the current gate profile.
+- Expected behavior:
+  - gate experts stay cached/prefilled as before;
+  - up/down experts become stream-eligible;
+  - up/down experts are not admitted into the VRAM cache because the admit profile contains gate entries only;
+  - up/down will use direct model mmap pages rather than the gate pack when no pack entry exists.
+
+Practice config:
+
+- strict cold `drop_caches`;
+- 16GB cgroup including page cache;
+- same `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, top-k envs, prefill limit `3000`, gate pack, and CLI args;
+- trace enabled to verify up/down stream acceptance and correctness.
+
+Acceptance gates:
+
+- `eval_tok_s > 4.4`.
+- France output must be semantically correct, coherent, and complete.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`, and `ram_ok=true`.
+- `TTFT <= 33617.688744 ms`.
+- O_DIRECT direct failures/fallbacks must remain `0`.
+- Pack misses for up/down are expected and are not by themselves rejection, because this probe intentionally uses the existing gate pack only.
+
+Rejection rules:
+
+- Reject if token rate is `<=4.4`, correctness fails, TTFT fails, RAM fails, OOM appears, or direct failures/fallbacks appear.
+- If rejected, record metrics, output, counters, hashes, and reason in this document and push docs/artifacts only.
+- If accepted, immediately commit/push all reproduction records and rerun from pushed branch before promoting.
