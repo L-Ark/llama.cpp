@@ -50330,3 +50330,91 @@ systemd-run --wait --collect --same-dir \
     provide more staging capacity for the same movement pattern.
   - Future pinned changes need a coupled design that changes submission depth or
     batch construction; slot count alone should not be retried.
+
+## Phase 7GT: iouring refill-batch equals depth probe
+
+Start time: 2026-07-04T20:38:00+08:00.
+
+Goal:
+
+- Test whether the current iouring submission loop loses critical-path time by
+  refilling at `4` jobs while the practical per-call read batch often has
+  `5-8` jobs.
+- Change exactly one runtime parameter:
+  `MOE_IO_REFILL_BATCH=4 -> 8`.
+- Keep production pinned slots at `12`.
+- Keep all source, model, prompt, sampling, VRAM split, cache policy, iouring
+  depth, down-prefetch depth, expert-pack, and build settings unchanged.
+
+Why this is the next narrow probe:
+
+- Phase 7GS showed `PINNED_SLOTS=16` did not beat n96 SOTA.
+- Its iouring batch histogram showed no `9-16` batches:
+  - n96 expert-pack hist `1:805, 2-4:5991, 5-8:3050, 9-16:0`;
+  - current-down hist `1:104, 2-4:1283, 5-8:837, 9-16:0`.
+- Therefore increasing depth or slots beyond `8` is unlikely to help without a
+  deeper batch-construction change.
+- But many batches are in the `5-8` bucket, so `MOE_IO_REFILL_BATCH=4` can still
+  split a naturally full-depth batch into two submission waves.
+
+Theory and upper bound:
+
+- With `depth=8`, `refill_batch=8` can submit all currently visible jobs in a
+  single refill for the `5-8` bucket.
+- This may reduce submit/wait loop overhead and allow the kernel to service the
+  full queue earlier.
+- It cannot reduce expert bytes, VRAM misses, or compute time.
+- Hard upper bound is the exposed iouring wait span, but `iouring_wait_us` is a
+  summed counter; the realistic target is small:
+  - if refill overhead is critical-path visible, n96 could gain `0.2-0.8 s`;
+  - if device bandwidth and CUDA copy synchronization dominate, decode will not
+    improve.
+- Host RAM impact should be negligible versus baseline because depth and slot
+  count remain unchanged.
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gt-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 does not regress
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gt-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- France answer must be manually inspected and semantically correct/coherent;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 must not regress materially versus current rebuilt range
+  (`29140-29795 ms / 31`);
+- n96 must beat Phase 7FB `70087.31 ms / 77` before any SOTA claim;
+- a passing n96 improvement must be repeated once with the same command shape.
+
+Decision rule:
+
+- If n32 regresses or fails any gate, reject immediately.
+- If n32 passes but n96 does not beat Phase 7FB, reject as not SOTA.
+- If n96 passes and beats Phase 7FB, run an n96 repeat. Accept only if repeat
+  also passes all gates, then update runner default, commit, and push
+  immediately.
