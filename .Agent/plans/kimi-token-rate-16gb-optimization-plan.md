@@ -58979,6 +58979,148 @@ Decision rule:
 - If reuse skips are near zero, the filter is ineffective and needs a different
   admission signal before more runtime experiments.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `410020817 ggml: filter trace prefetch by future reuse`.
+
+First n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iu-trace-prefetch-reuse2`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76334.54 ms`, below `106331.72 ms`;
+- decode `27751.42 ms / 31`, `1.12 tok/s`;
+- host RAM peak `15899996160` bytes, final `15068348416` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace prefetch:
+  - `min_future_uses=2`;
+  - `reuse_window=64`;
+  - calls `42928`;
+  - matched `42928`;
+  - resync `0`;
+  - loads `0`;
+  - reuse skips `42919`;
+- iouring reads `14862`, bytes `86301917184`, wait `13329497 us`;
+- hit rates unchanged from non-prefetch:
+  - down `73.4%`;
+  - upgate `45.2%`.
+
+Repeat n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iu-trace-prefetch-reuse2-repeat`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `64090.87 ms`, below `106331.72 ms`;
+- decode `28524.30 ms / 31`, `1.09 tok/s`;
+- host RAM peak `15899996160` bytes, final `15067766784` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace prefetch:
+  - calls `42928`;
+  - matched `42928`;
+  - resync `0`;
+  - loads `0`;
+  - reuse skips `42919`;
+- iouring reads `14862`, bytes `86301917184`, wait `15021879 us`;
+- hit rates unchanged from non-prefetch:
+  - down `73.4%`;
+  - upgate `45.2%`.
+
+Offline reuse-distance analysis:
+
+```text
+events 42928
+unique 13996
+repeat candidates within 64: 0
+within 128: 0
+within 256: 0
+within 512: 0
+within 1024: 0
+within 2048: 14821 (34.5%)
+within 4096: 19496 (45.4%)
+has any next occurrence: 28932 (67.4%)
+```
+
+Decision:
+
+- Do not accept 7IU as a SOTA improvement.
+- Reason:
+  - Both runs pass all hard gates and show good token-rate numbers.
+  - But `loads=0`, hit rates are unchanged, and the prefetch path performs no
+    actual expert movement.
+  - Therefore the decode difference is runtime variance, not an optimization.
+- Keep the default-off source knob because it is harmless by default and useful
+  for the next admission probe.
+- The `reuse_window=64` admission signal is too strict for this route trace.
+
+## Phase 7IV: trace-prefetch reuse-window 2048 probe
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IT broad prefetch performs useful loads but adds too many single-read
+  batches and regresses.
+- 7IU with `reuse_window=64` removes all loads, so it cannot improve hit rate.
+
+Hypothesis:
+
+- Route reuse has a layer-cycle distance: no same-key repeats occur within
+  `1024` events, while `34.5%` have a repeat within `2048`.
+- Using `MIN_FUTURE_USES=2` with `REUSE_WINDOW=2048` may keep recurrent experts
+  while removing one-off candidates.
+- This may still regress if the prefetch happens too early and evicts useful
+  cache entries before the repeat, so this is a probe, not a default change.
+
+Theoretical bound:
+
+- It can only improve if it keeps enough of the hit-rate gain from 7IT while
+  reducing the `2502` prefetch read jobs and `3179.719 ms` prefetch wait.
+- If loads are close to 7IT but decode remains worse, admission is still too
+  broad or shared staging/IO contention dominates.
+- If loads are much smaller and hit rates unchanged, the filter is not useful.
+
+Experiment:
+
+- Run strict cold-start n32 with the same 7IT prefetch settings except:
+  - `GGML_MOE_TRACE_PREFETCH_MIN_FUTURE_USES=2`;
+  - `GGML_MOE_TRACE_PREFETCH_REUSE_WINDOW=2048`.
+- Keep `WINDOW=32`, `MAX_LOADS=2`, and `LEAD_EVENTS=8`.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If decode improves over trace-input baseline and all gates pass, repeat n32.
+- If total iouring wait or decode regresses, reject this admission filter.
+- If it improves n32 reproducibly, validate n96 before SOTA.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
