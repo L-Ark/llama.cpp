@@ -43576,3 +43576,124 @@ Decision rule:
   confirmations.
 - Both n96 confirmations must beat accepted 7FB n96 B `70087.31 ms / 77`.
 - Promotion requires all hard gates plus reproducible quality.
+
+Phase 7FC result - VRAM 15100 rejected by n96 gate:
+
+- End time: 2026-07-04T07:02:00Z.
+- Source status:
+  - no source patch;
+  - env-only experiment;
+  - no rollback required.
+- Change:
+  - `VRAM_MIB=15000` -> `VRAM_MIB=15100`;
+  - all other Phase 7FB production/min-profile settings unchanged.
+
+n32 candidate A:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-044134Z-n32-phase7fc-vram15100-min-profile`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT `71602.11 ms`.
+- Decode `28295.29 ms / 31`, `1.10 tok/s`.
+- Faster than accepted 7FB n32 B `29182.49 ms` by `887.20 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15080243200`;
+  - final `file=14841958400`;
+  - `inactive_file=11444326400`;
+  - `active_file=3396911104`;
+  - `pgmajfault=976421`;
+  - `workingset_refault_file=20149`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=14955`;
+  - `iouring_bytes=86748512256`;
+  - `iouring_wait_us=14797705`;
+  - down slots `812`, hit rate `73.6%`;
+  - upgate slots `1690`, hit rate `44.1%`.
+
+n32 confirmation B:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-044446Z-n32-phase7fc-vram15100-min-profile-confirm`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT `75172.86 ms`.
+- Decode `28405.65 ms / 31`, `1.09 tok/s`.
+- Faster than accepted 7FB n32 B `29182.49 ms` by `776.84 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15067348992`;
+  - final `file=14829420544`;
+  - `inactive_file=8391139328`;
+  - `active_file=6437814272`;
+  - `pgmajfault=968885`;
+  - `workingset_refault_file=22568`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=14955`;
+  - `iouring_bytes=86748512256`;
+  - `iouring_wait_us=13849529`;
+  - down slots `812`, hit rate `73.6%`;
+  - upgate slots `1690`, hit rate `44.1%`.
+
+n96 candidate A:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-044751Z-n96-phase7fc-vram15100-min-profile-a`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- Quality: pass.
+- TTFT `71517.58 ms`.
+- Decode `70348.48 ms / 77`, `1.09 tok/s`.
+- Faster than 7FB n96 A `71635.31 ms` by `1286.83 ms`, but slower than
+  accepted 7FB n96 B `70087.31 ms` by `261.17 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15066722304`;
+  - final `file=14813421568`;
+  - `inactive_file=4651851776`;
+  - `active_file=10160840704`;
+  - `pgmajfault=975635`;
+  - `workingset_refault_file=45930`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=36975`;
+  - `iouring_bytes=214366781440`;
+  - `iouring_wait_us=35671718`;
+  - down slots `812`, hit rate `73.4%`;
+  - upgate slots `1690`, hit rate `43.5%`.
+
+Interpretation:
+
+- The extra `100 MiB` cache works mechanically:
+  - upgate hit rate improves from 7FB n32 `43.7%` to `44.1%`;
+  - upgate hit rate improves from 7FB n96 `43.2%` to `43.5%`;
+  - expert-pack bytes drop slightly.
+- The improvement is not enough to beat the current best n96 production SOTA.
+- Because the user rules require reproducible SOTA improvements, and because
+  the first n96 failed the explicit `70087.31 ms` gate, do not run the second
+  n96 confirmation.
+
+Decision:
+
+- Reject `VRAM_MIB=15100` for current production SOTA.
+- Keep Phase 7FB as current accepted production SOTA:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+MIN_PROFILE=1
+```
+
+- Future VRAM cache changes need a larger hit-rate gain or a different split;
+  small global increases alone are not enough.
