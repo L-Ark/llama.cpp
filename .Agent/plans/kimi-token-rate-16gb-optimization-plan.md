@@ -46738,3 +46738,82 @@ Result: implemented and n32 validated.
   - The next performance implementation should aggregate compatible jobs across
     staging calls, likely main+gate or cross-layer down, rather than increasing
     the per-call queue depth.
+
+## Phase 7FX: env-gated up/gate combined staging probe
+
+Start time: 2026-07-04T17:02:00+08:00.
+
+Goal:
+
+- Test the smallest code-level aggregation implied by Phase 7FW:
+  combine up and gate staging jobs into one io_uring copy call when their
+  tensor byte size is identical.
+- Keep the implementation behind `GGML_MOE_UP_GATE_COMBINED_STAGE=1`.
+- Keep default behavior unchanged when the env flag is off.
+
+Theory:
+
+- Phase 7FW measured:
+  - main ring `avg_read_jobs=4.00`, `max_read_jobs=8`;
+  - gate ring `avg_read_jobs=3.22`, `max_read_jobs=8`.
+- Current parallel up/gate staging runs two independent io_uring submissions,
+  each with a small miss set.
+- Combining the already-planned `up_jobs` and `gate_jobs` can raise one
+  submission's average read set toward `7.22`, and max toward `16`, without
+  changing cache selection or model math.
+- Upper bound:
+  - n32 Phase 7FW visible iouring wait is `15441.30 ms`;
+  - if combined staging reduces wait by 10%, n32 decode could improve by about
+    `1.54 s`;
+  - if the lost overlap between up/gate copy and up compute is larger than the
+    reduced io wait, decode will regress.
+- This experiment is explicitly allowed to fail; the decision must come from
+  cold-start metrics, not from expectation.
+
+Implementation plan:
+
+- Add helper to append `std::vector<stage_copy_job>` lists.
+- In the `parallel_stage` branch, before the existing split/parallel copy
+  paths:
+  - if `GGML_MOE_UP_GATE_COMBINED_STAGE=1`;
+  - and `stage_split` is disabled;
+  - and up/gate use the same `src0_bytes`;
+  - copy `up_jobs + gate_jobs` through `copy_stage_jobs(..., bc.up_stream,
+    bc.stage_ring)`;
+  - record `bc.ev_up_copy_aux_done` on `bc.up_stream` after combined staging;
+  - make `bc.gate_stream` wait on that event before launching gate compute;
+  - launch up and gate normally on their streams.
+- Keep fallback/clear behavior identical to current failed copy handling.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fx-combined-upgate-stage"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 decode is not materially better than the current rebuilt n32 baseline
+  range (`29140-29795 ms`), reject and do not run n96.
+- If n32 improves materially and granularity shows `max_read_jobs > 8` or
+  lower `iouring_wait_us`, run n96.
+- If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
+  before claiming SOTA; commit and push immediately if confirmed.
