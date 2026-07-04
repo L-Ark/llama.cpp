@@ -58881,6 +58881,104 @@ Decision:
   - preserve current-down overlap behavior and avoid sharing foreground staging
     bandwidth with low-value prefetch work.
 
+## Phase 7IU: trace-prefetch future-use admission filter
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IT broad trace prefetch aligns perfectly and improves hit rate, but regresses
+  decode because it adds too many low-value prefetch reads:
+  - `trace_prefetch` rows `2476`;
+  - average read jobs `1.01`;
+  - extra wait `3179.719 ms`;
+  - total iouring wait increases from `15448065 us` to `16516084 us`.
+
+Hypothesis:
+
+- Many prefetch candidates are one-off future uses. They may convert one future
+  miss into a hit, but if they are not fully hidden they add a foreground-like
+  read and compete for the same staging/IO resources.
+- Filtering to candidates that repeat in the near future should preserve some
+  useful hit-rate improvement while reducing low-value prefetch reads.
+
+Implementation plan:
+
+- Add default-preserving env knobs:
+  - `GGML_MOE_TRACE_PREFETCH_MIN_FUTURE_USES`;
+  - `GGML_MOE_TRACE_PREFETCH_REUSE_WINDOW`.
+- Default behavior:
+  - `MIN_FUTURE_USES=1`, which preserves current behavior;
+  - `REUSE_WINDOW=GGML_MOE_TRACE_PREFETCH_WINDOW`.
+- If `MIN_FUTURE_USES=2`, a candidate at trace index `i` is eligible only if
+  the same `(tensor, expert_idx, expert_bytes)` appears at least one more time
+  within the next `REUSE_WINDOW` events.
+- Add a report counter for reuse-filter skips.
+
+Theoretical bound:
+
+- 7IT saved some foreground work:
+  - foreground/runtime/down/gate read jobs dropped;
+  - hit rates improved.
+- But it added `2502` prefetch read jobs and total iouring wait rose by
+  `~1.07 s`.
+- A future-use filter can only help if it removes a large fraction of those
+  `2502` prefetch reads while keeping enough saved foreground misses.
+- If prefetch loads drop but decode still regresses, the issue is shared
+  staging/IO contention rather than admission quality, and this path should be
+  rejected.
+
+Experiment:
+
+- Build current head.
+- Run strict cold-start n32 with:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7iu-commit>
+TRACE=/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-route-trace-input/route-trace.csv
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iu-trace-prefetch-reuse2
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_TRACE_PREFETCH=$TRACE
+GGML_MOE_TRACE_PREFETCH_WINDOW=32
+GGML_MOE_TRACE_PREFETCH_MAX_LOADS=2
+GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=8
+GGML_MOE_TRACE_PREFETCH_MIN_FUTURE_USES=2
+GGML_MOE_TRACE_PREFETCH_REUSE_WINDOW=64
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If decode improves over the trace-input baseline and all gates pass, run a
+  repeat n32.
+- If decode is flat/worse, or total iouring wait remains above baseline, reject
+  this prefetch-admission path.
+- If reuse skips are near zero, the filter is ineffective and needs a different
+  admission signal before more runtime experiments.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
