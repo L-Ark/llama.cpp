@@ -7863,9 +7863,15 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const bool down_parallel_stage =
         down_parallel_stage_env && down_parallel_stage_env[0] && down_parallel_stage_env[0] != '0' &&
         bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
+    const bool down_stage_single_ring = down_parallel_stage &&
+        expert_pack_env_bool("GGML_MOE_DOWN_STAGE_SINGLE_RING", false);
     static std::atomic<int> first_down_parallel_stage{0};
     if (down_parallel_stage && first_down_parallel_stage.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down parallel CPU staging active\n");
+    }
+    static std::atomic<int> first_down_stage_single_ring{0};
+    if (down_stage_single_ring && first_down_stage_single_ring.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] down single-ring staging probe active\n");
     }
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
@@ -7997,7 +8003,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 job.pack_entry = pack_entry;
                 job.expert_idx = active_experts[j];
                 std::snprintf(job.tensor, sizeof(job.tensor), "%s", src0_name ? src0_name : "");
-                if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
+                if (down_stage_single_ring) {
+                    down_jobs_a.push_back(job);
+                } else if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
                     down_jobs_b.push_back(job);
                 } else {
                     down_jobs_a.push_back(job);
