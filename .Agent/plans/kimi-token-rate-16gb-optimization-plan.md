@@ -45266,3 +45266,98 @@ Decision:
   - revert `ggml/src/ggml-cuda/moe_stream_batch.cu`;
   - do not run n32 confirmation or n96;
   - keep Phase 7FB as current accepted SOTA.
+
+## Phase 7FM: MIN_PROFILE=1 confirmation for IQ3_XXS parallel up/gate
+
+Start time: 2026-07-04T15:09:00Z.
+
+Goal:
+
+- Determine whether the Phase 7FL local up/gate saving survives under the
+  accepted production-style `MIN_PROFILE=1` runner.
+- Keep the code default-off behind `GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1`.
+- Do not accept the source change unless it beats current accepted SOTA.
+
+Why this needs one more test:
+
+- Phase 7FL was a diagnostic run with `MIN_PROFILE=0`.
+- It was rejected because end-to-end n32 decode did not beat Phase 7FB.
+- However it did show real local operator improvement:
+  - type18 wall `2894.960 ms -> 2607.844 ms`;
+  - type22 wall `3401.687 ms -> 3324.602 ms`;
+  - combined up/gate saving about `364 ms`.
+- The current accepted production runner uses `MIN_PROFILE=1`, which removes
+  most per-call profile logging overhead.
+- A single `MIN_PROFILE=1` n32 run is therefore needed before permanently
+  discarding this path.
+
+Current bottleneck:
+
+- Phase 7FL n32:
+  - decode `29460.73 ms / 31`;
+  - expert pack io_uring wait `15940120 us`;
+  - pinned host stage `11694.794 ms`;
+  - h2d `3862.811 ms`;
+  - up/gate type18 + type22 wall `5932.446 ms`.
+- Local up/gate is no longer the dominant wall bucket, but a few hundred ms is
+  still enough to matter near the `1.06-1.10 tok/s` SOTA band.
+
+Theory and upper bound:
+
+- With `MIN_PROFILE=1`, the operator should keep the same CUDA/dataflow
+  behavior as 7FL:
+  - IQ3_XXS routed through parallel up/gate;
+  - IQ2_S unchanged;
+  - no cache split or pinned-slot changes.
+- Hard upper bound from Phase 7FL operator savings is about `364 ms` on n32
+  relative to the profile-refresh diagnostic.
+- Acceptance requires beating Phase 7FB n32 confirmation, not just Phase 7FD:
+  - target decode below `29182.49 ms / 31`;
+  - stronger target below `28673.82 ms / 31`.
+
+Implementation plan:
+
+1. Re-apply the Phase 7FL env-gated source patch:
+   - `GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1`;
+   - include IQ3_XXS in `parallel_up_gate`;
+   - exclude IQ3_XXS from serial fused MMQ only when that env is enabled.
+2. Build `build-cuda-batch`.
+3. Run one n32 cold-start test with:
+   - `MIN_PROFILE=1`;
+   - strict 15.9GB MemoryMax;
+   - no swap;
+   - same production cache split and slots as Phase 7FB.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fm-iq3-parallel-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass` on the France prompt;
+- semantic output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode beats accepted Phase 7FB confirmation `29182.49 ms / 31`.
+
+Decision rule:
+
+- If n32 passes all gates and beats `29182.49 ms`, run:
+  1. n32 confirmation with the same env;
+  2. n96 twice with the same env.
+- Accept only if n96 beats Phase 7FB best `70087.31 ms / 77`.
+- If n32 does not beat `29182.49 ms`, revert the source patch, record the
+  result here, commit and push the rejection.
