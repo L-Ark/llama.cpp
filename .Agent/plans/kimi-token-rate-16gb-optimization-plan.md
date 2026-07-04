@@ -53606,3 +53606,106 @@ Experiment 3 result:
   - Do not update `scripts/kimi-phase7fb-min-profile-repro.sh`.
   - The first n96 run remains diagnostic evidence that the current cache split
     is near a variance boundary; it is not acceptable as a new SOTA.
+
+## Phase 7HO: current stable IO/copy variance attribution refresh
+
+Start time: 2026-07-05T02:15:00+08:00.
+
+Goal:
+
+- Re-sample the current stable runtime with both copy-profile and io-batch
+  profile enabled in the same cold-start n32 run.
+- Attribute the observed n96 variance around the `70087.31 ms / 77` target to
+  concrete counters before making another scheduler/source change.
+- Keep this diagnostic-only: no default/runtime setting is accepted from this
+  phase.
+
+Why this is required after Phase 7HN:
+
+- `UPGATE_PCT=61` produced a first n96 SOTA-like run
+  (`69638.95 ms / 77`) but failed repeat (`70238.80 ms / 77`) with identical
+  high-level hit rates and read counts.
+- This means the next change should not be another cache split/depth sweep.
+- Phase 7HD/7HE proved the bottleneck is exposed `runtime_load` io wait, but
+  those measurements were taken before the latest stable rebuild/variance runs.
+- `down_prefetch` already reports `useful_rate=100%` and
+  `evicted_unused=0`, so protecting current prefetch slots is not supported by
+  current evidence.
+
+Theory:
+
+- If repeat variance is mostly io wait, the same run shape should show large
+  differences in:
+  - `iouring_wait_us`;
+  - io-batch `wait_ms`;
+  - batch histogram/inflight average;
+  - top runtime-load tensor waits.
+- If io wait and batch shape are stable while decode varies, the next bottleneck
+  is more likely compute/cuda scheduling or graph/reuse variance.
+- The useful next source change must target the observed subcomponent:
+  - io wait spread across many small batches -> overlap-preserving read
+    scheduler;
+  - H2D/enqueue exposure -> stream/copy ordering;
+  - slot wait -> slot pressure, but only if measured slot wait is non-trivial.
+
+Experiment: n32 combined diagnostic
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ho-io-copy-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Diagnostic gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `copy-profile.csv` exists and has rows;
+- `io-batch-profile.csv` exists and has rows;
+- `current-down-overlap-profile.csv` exists and has rows.
+
+Data to aggregate:
+
+- `metrics.txt` high-level counters:
+  - decode time;
+  - `iouring_wait_us`;
+  - expert-pack reads/bytes;
+  - down/upgate hit rates;
+  - current-down worker time.
+- `copy-profile.csv`:
+  - total wall/io/slot/enqueue by op;
+  - top runtime-load tensors by cumulative `io_wait_ms`;
+  - top current-down-overlap tensors by cumulative `io_wait_ms`.
+- `io-batch-profile.csv`:
+  - rows/jobs/read_jobs by op;
+  - total wait/wall by op;
+  - histogram of `jobs` and `initial_submit_jobs`;
+  - `inflight_avg` and `inflight_max` by op.
+- `current-down-overlap-profile.csv`:
+  - layers/tensors with most planned jobs and missing-pack entries.
+
+Decision rule:
+
+- If the diagnostic matches Phase 7HD/7HE, plan a source change that improves
+  effective runtime-load batching without using the rejected shared coalescer.
+- If a small set of tensors dominates new exposed wait, plan a tensor-scoped
+  change rather than a broad cache split.
+- If profile overhead breaks speed but all gates pass, use the counters as
+  diagnostic only and do not compare decode directly to SOTA.
+- This phase can only produce a follow-up plan; it cannot accept a performance
+  improvement because profiling overhead changes timing.
