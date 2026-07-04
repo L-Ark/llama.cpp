@@ -1,0 +1,89 @@
+{
+  "artifact": "exact-compact-residency-hard-bound",
+  "created_utc": "2026-07-04T14:42:00Z",
+  "source_head_before_audit": "5b7f5bb67875590e0959b2a6c6d96efca5d08d63",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "rejected_without_runtime_source_change",
+  "purpose": "Screen whether an exact compact-resident up/down layout, without new compression or approximate arithmetic, can provide enough residency to reach 10 tok/s under the current 16GB RAM/page-cache and VRAM constraints.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_acceptance_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "inputs": {
+    "decoded_tokens_estimate": 136.608765524,
+    "accepted_decode_window_ms_estimate": 31047.44671,
+    "target_decode_window_for_10_tok_s_ms": 13660.8765524,
+    "required_decode_saving_ms": 17386.570158,
+    "all_decode_updown_fallback_removal_ms": 19029.457,
+    "required_fraction_of_all_decode_updown_fallback": 0.913666,
+    "all_updown_decode_unique_payload_gib": 22.3295,
+    "top2048_updown_payload_gib": 8.1982,
+    "top2048_updown_ideal_save_ms": 12647.096,
+    "current_gate_cache_mib": 13568,
+    "current_gate_cache_gib": 13.25,
+    "best_nonduplicate_cache_allocation_tok_s": 5.612,
+    "best_nonduplicate_cache_allocation": {
+      "gate_k": 2048,
+      "gate_gib": 8.5,
+      "updown_residency": 1024,
+      "updown_gib": 4.1905,
+      "decode_s_est": 24.343,
+      "tok_s_est": 5.612
+    },
+    "artifacts": [
+      ".Agent/runs/20260704-vendor-ds4-coldstart/nonduplicate-hard-bound-after-q80-duplicate-audit.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/fresh-sota44-bottleneck-hard-bound.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/post-prefetch-bottleneck-hard-bound.json"
+    ]
+  },
+  "derived_bounds": {
+    "optimistic_payload_needed_for_10_tok_s_gib": 18.691955,
+    "method": "Linear interpolation between top2048 up/down residency and all-resident up/down decode fallback removal. This is optimistic because it ignores kernel overhead, D2H/scatter/sync, gate-cache loss, workspace, and cgroup refault pressure.",
+    "payload_needed_plus_current_gate_cache_gib": 31.941955,
+    "saving_if_13_25_gib_dedicated_to_updown_ms_optimistic": 14928.72694,
+    "tok_s_if_13_25_gib_dedicated_to_updown_no_overhead_optimistic": 8.475162,
+    "saving_if_16_gib_dedicated_to_updown_ms_optimistic": 16170.75653,
+    "tok_s_if_16_gib_dedicated_to_updown_no_overhead_optimistic": 9.182739
+  },
+  "constraint_failures": [
+    {
+      "constraint": "16GB host RAM including page cache",
+      "failure": "The optimistic up/down payload needed for 10 tok/s is about 18.69 GiB before gate/model page cache, so it cannot be held in host file cache inside the 16GB cgroup."
+    },
+    {
+      "constraint": "use VRAM while preserving accepted gate benefit",
+      "failure": "The current gate cache is about 13.25 GiB. Adding the optimistic 18.69 GiB exact up/down payload would require about 31.94 GiB before workspace, which is outside the current VRAM budget."
+    },
+    {
+      "constraint": "do not trade away gate cache for insufficient up/down residency",
+      "failure": "The existing nonduplicate allocation model found the best current-cache-budget mix at only 5.612 tok/s. Even dedicating 16 GiB optimistically to up/down gives only about 9.18 tok/s with zero overhead and no gate penalty, which is not acceptable."
+    }
+  ],
+  "decision": {
+    "exact_compact_residency_without_new_compression_is_worth_implementing": false,
+    "reason": "A layout-only exact residency design cannot fit enough up/down payload under the 16GB host/page-cache and current VRAM constraints to reach 10 tok/s. It must be paired with a new exact compression scheme, verified approximate/token-stable compute, or a different offload mechanism.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  },
+  "remaining_open_candidates": [
+    "verified exact/token-stable GPU MXFP4 x Q8_0 path paired with a source/cache solution",
+    "new exact compression or packed representation with a measured resident footprint below the current RAM/VRAM budget",
+    "combined source overlap plus exact compute/offload that removes near-full decode up/down fallback"
+  ],
+  "next_required_work": {
+    "before_runtime_code": "Write a concrete compute+source design. It must explain how it removes at least 17386.570 ms decode time with less than 1642.887 ms overhead, and it must define fixed-text top1 verification before any strict cold benchmark.",
+    "do_not_repeat": [
+      "top-N exact residency/hotset as primary path",
+      "layout-only compact pack without new compression ratio",
+      "sacrificing gate cache for an up/down hotset that stays below 10 tok/s"
+    ]
+  }
+}

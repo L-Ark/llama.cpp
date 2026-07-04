@@ -94,6 +94,26 @@ Decision:
 - Do not implement source-only predictive overlap, io_uring-only overlap, same-op page touch, or scheduler-gap-only tuning.
 - The next viable class must combine source/page hiding with exact compute/offload, or use an exact compact resident representation, and must show `>17386.570 ms` decode saving with `<1642.887 ms` overhead before any runtime code is changed.
 
+### 2026-07-04 Exact Compact Residency Hard Bound
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/exact-compact-residency-hard-bound.json`.
+
+Result: layout-only exact compact residency is rejected before runtime implementation. This closes top-N/hotset residency as a primary path unless a new exact compression format or verified token-stable approximation changes the footprint.
+
+Hard-bound result:
+
+- Reaching `10 tok/s` requires removing about `17386.570 ms`, or `91.37%`, of the current decode up/down fallback.
+- All-resident up/down decode payload is about `22.3295 GiB`; top2048 residency is about `8.1982 GiB` and saves only `12647.096 ms`.
+- Optimistic interpolation says `10 tok/s` would need about `18.692 GiB` of exact up/down payload resident before any gate cache, workspace, D2H/scatter/sync, or cgroup refault cost.
+- Keeping the current `13.25 GiB` gate cache plus that up/down payload would require about `31.942 GiB`, which does not fit current VRAM.
+- Dedicating even `16 GiB` optimistically to up/down residency reaches only about `9.183 tok/s` with zero overhead and no gate penalty, and violates the 16GB host/page-cache rule if done through file cache.
+- The best existing nonduplicate cache allocation remains only `5.612 tok/s`.
+
+Decision:
+
+- Do not implement layout-only exact residency, another top-N up/down hotset, or a gate-cache sacrifice that still has a sub-10 hard bound.
+- Remaining source-code candidates must be combined compute+source designs: verified exact/token-stable GPU MXFP4 x Q8_0 plus source/cache solution, or a genuinely new exact compression/resident representation with measured footprint below the RAM/VRAM budget.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.
