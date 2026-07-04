@@ -45505,3 +45505,114 @@ Decision rule:
   - comparison against the rebuilt baseline;
   - eventual n96 confirmation against the accepted Phase 7FB SOTA before any
     source change can be accepted.
+
+Result: failed baseline.
+
+- End time: 2026-07-04T15:11:30+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-070807Z-n32-phase7fn-rebuilt-production-baseline`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `116406.14 ms`, which violates the allowed `106331.72 ms`;
+  - decode `35817.52 ms / 31`, `0.87 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack io_uring wait `14996917 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Root-cause finding:
+  - the GPU is `NVIDIA GeForce RTX 5090`, compute capability `12.0`;
+  - the rebuilt baseline used `CMAKE_CUDA_ARCHITECTURES=89`;
+  - this build is not a valid replacement for the old accepted SOTA artifact.
+- Decision:
+  - do not use Phase 7FN as an optimization baseline;
+  - restore a Blackwell-targeted build before further token-rate work.
+
+## Phase 7FO: restore Blackwell production build by gating lightning-indexer
+
+Start time: 2026-07-04T15:14:00+08:00.
+
+Goal:
+
+- Rebuild production with a GPU-appropriate CUDA architecture for RTX 5090
+  (`sm_120a`) instead of `sm_89`.
+- Keep Kimi runtime behavior unchanged.
+- Avoid the clean-build failure in `lightning-indexer.cu`, which is unrelated
+  to the Kimi MoE stream path.
+
+Current bottleneck / blocker:
+
+- Clean default CUDA build with CUDA 12.9 tried to compile Blackwell
+  architectures and failed in `ggml/src/ggml-cuda/lightning-indexer.cu` due
+  `fattn-common.cuh` static assertions for unsupported dequantization types.
+- Rebuilding with `CMAKE_CUDA_ARCHITECTURES=89` succeeded but produced an
+  invalid baseline:
+  - TTFT `116406.14 ms`;
+  - decode `35817.52 ms / 31`.
+- Therefore the immediate blocker is build-target correctness, not a MoE
+  algorithm change.
+
+Theory:
+
+- Kimi K2 MoE stream experiments do not use `GGML_OP_LIGHTNING_INDEXER`.
+- Excluding `lightning-indexer.cu` from the CUDA backend should not affect the
+  Kimi France prompt path, but allows a clean `sm_120a` build.
+- A correct Blackwell build should recover much of the lost performance from
+  the `sm_89` fallback.
+
+Implementation plan:
+
+1. Add a CMake option in `ggml/src/ggml-cuda/CMakeLists.txt`:
+   - `GGML_CUDA_LIGHTNING_INDEXER`, default `ON`.
+2. If the option is `OFF`, remove `lightning-indexer.cu` from
+   `GGML_SOURCES_CUDA`.
+3. Rebuild on the server with:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+rm -rf build-cuda-batch
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fo-blackwell-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode is materially better than the invalid `sm_89` baseline
+  `35817.52 ms / 31`.
+
+Decision rule:
+
+- If the Blackwell build passes gates and restores performance, commit and push
+  the CMake build-gate change immediately with full reproduction details.
+- If it fails to build or fails quality/TTFT/RAM, revert the CMake change and
+  record the failure.
+- Even if accepted, this is a build correctness restoration; it is not a new
+  model token-rate SOTA unless n96 later beats Phase 7FB `70087.31 ms / 77`.
