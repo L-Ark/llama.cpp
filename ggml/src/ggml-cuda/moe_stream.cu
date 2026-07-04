@@ -1795,11 +1795,24 @@ extern "C" void ggml_cuda_moe_stream_q80_probe(
     }
 }
 
+static bool moe_stream_q80_allow_down_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_Q80_ALLOW_DOWN");
+        return (env && env[0] && env[0] != '0') ? 1 : 0;
+    }();
+    return enabled != 0;
+}
+
 static bool moe_stream_q80_write_name_allows(const char * name) {
     static const char * filter = std::getenv("GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER");
-    return filter && filter[0] && name &&
-        std::strstr(name, "ffn_up_exps") != nullptr &&
-        std::strstr(name, filter) != nullptr;
+    if (!filter || !filter[0] || !name || std::strstr(name, filter) == nullptr) {
+        return false;
+    }
+    if (std::strstr(name, "ffn_up_exps") != nullptr) {
+        return true;
+    }
+    return moe_stream_q80_allow_down_enabled() &&
+        std::strstr(name, "ffn_down_exps") != nullptr;
 }
 
 static FILE * moe_stream_q80_write_report_fp() {
@@ -1970,9 +1983,14 @@ extern "C" void ggml_cuda_moe_stream_q80_write(
 
 static bool moe_stream_q80_skip_name_allows(const char * name) {
     static const char * filter = std::getenv("GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER");
-    return filter && filter[0] && name &&
-        std::strstr(name, "ffn_up_exps") != nullptr &&
-        std::strstr(name, filter) != nullptr;
+    if (!filter || !filter[0] || !name || std::strstr(name, filter) == nullptr) {
+        return false;
+    }
+    if (std::strstr(name, "ffn_up_exps") != nullptr) {
+        return true;
+    }
+    return moe_stream_q80_allow_down_enabled() &&
+        std::strstr(name, "ffn_down_exps") != nullptr;
 }
 
 static FILE * moe_stream_q80_skip_report_fp() {
