@@ -58361,6 +58361,63 @@ GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
 
 Required gates remain the same as 7IR.
 
+Overlay-only result:
+
+Timestamp: 2026-07-05.
+
+Source commit: `e88fa5e5e docs: plan storage constrained pack reorder probe`.
+
+Run directory:
+
+- pack build:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse`
+- n32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse/n32`
+
+Reordered overlay:
+
+- path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse/kimi-iq3s-l1l2down-overlay-firstuse.expert-pack`;
+- entries `768`;
+- tensors `2`;
+- data start `118784`;
+- size `4844539904` bytes;
+- copied bytes `4844421120`.
+
+Gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76774.05 ms`, below `106331.72 ms`;
+- decode `29440.28 ms / 31`, `1.05 tok/s`;
+- host RAM peak `15899996160` bytes, final `15012511744` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14862`, bytes `86301917184`, wait `15408596 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Decision:
+
+- Reject overlay-only first-use reorder as a SOTA improvement.
+- Reason:
+  - It passes correctness, TTFT, RAM, swap, and expert-pack gates.
+  - It regresses decode versus the 7IQ trace run
+    (`28464.33 ms -> 29440.28 ms`) and versus the current pct62 accepted
+    baseline shape.
+  - iouring wait also increases
+    (`14763607 us -> 15408596 us`), so the small overlay reorder does not
+    reduce the exposed bottleneck.
+- Keep the default-off trace/repack tools because they are required for the
+  reproducible full-pack reorder experiment.
+- Full main-pack reorder is still untested because only `93G` free disk was
+  available and the main output requires about `175G` plus safety margin.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
