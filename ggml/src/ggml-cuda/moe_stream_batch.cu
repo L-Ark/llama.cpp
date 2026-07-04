@@ -3657,6 +3657,11 @@ static bool io_locality_profile_enabled() {
     return env && env[0];
 }
 
+static bool io_read_trace_enabled() {
+    const char *env = std::getenv("GGML_MOE_IO_READ_TRACE_OUT");
+    return env && env[0];
+}
+
 static void io_locality_profile_record(
         const char *op,
         size_t jobs,
@@ -3756,6 +3761,11 @@ static void io_locality_profile_record(
             items.front().tensor,
             items.back().tensor);
     std::fclose(f);
+}
+
+static uint64_t io_read_trace_next_batch_seq() {
+    static std::atomic<uint64_t> seq{0};
+    return ++seq;
 }
 
 static bool expert_pack_ram_tier_copy_h2d(
@@ -4188,6 +4198,42 @@ static bool expert_pack_iouring_copy_jobs(
             locality_items.push_back(item);
         }
         io_locality_profile_record(trace_op, jobs.size(), locality_items);
+    }
+    if (io_read_trace_enabled()) {
+        const char *path = std::getenv("GGML_MOE_IO_READ_TRACE_OUT");
+        static std::mutex trace_mu;
+        static bool header_written = false;
+        const uint64_t batch_seq = io_read_trace_next_batch_seq();
+        std::lock_guard<std::mutex> lk(trace_mu);
+        FILE *f = std::fopen(path, "a");
+        if (f) {
+            if (!header_written) {
+                std::fprintf(f,
+                        "batch_seq,batch_pos,op,jobs,read_jobs,tensor,expert_idx,"
+                        "source_idx,offset,nbytes\n");
+                header_written = true;
+            }
+            size_t batch_pos = 0;
+            for (size_t job_idx : read_jobs) {
+                const Job &job = jobs[job_idx];
+                if (!job.pack_entry) {
+                    continue;
+                }
+                std::fprintf(f,
+                        "%lu,%zu,%s,%zu,%zu,%s,%d,%d,%lu,%lu\n",
+                        (unsigned long)batch_seq,
+                        batch_pos++,
+                        trace_op ? trace_op : "",
+                        jobs.size(),
+                        read_jobs.size(),
+                        job.tensor,
+                        job.expert_idx,
+                        job.pack_entry->source_idx,
+                        (unsigned long)job.pack_entry->offset,
+                        (unsigned long)job.pack_entry->nbytes);
+            }
+            std::fclose(f);
+        }
     }
     expert_pack_record_iouring_batch(read_jobs.size());
     ring.iouring_batches += 1;
