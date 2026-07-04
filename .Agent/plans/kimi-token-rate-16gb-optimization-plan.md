@@ -51518,8 +51518,15 @@ Implementation:
   - de-duplicate repeated keys;
   - fail if any requested tensor/expert is missing;
   - optionally reject duplicate keys already present in the current overlay.
+- Runtime limitation:
+  - current code supports one `GGML_MOE_EXPERT_PACK_OVERLAY` path;
+  - replacing the existing l1/l2 overlay with a 24-entry missing-down overlay
+    would lose accepted Phase 7DS coverage and is not a fair performance test.
 - Artifact path:
-  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack`.
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack`.
+- Combined overlay contents:
+  - all entries from the existing accepted l1/l2 overlay;
+  - plus the 24 unique missing decode down entries from Phase 7GY.
 
 Build command:
 
@@ -51527,7 +51534,8 @@ Build command:
 cd /root/lfz/llama.cpp-vendor-kimi
 python3 scripts/kimi-build-missing-down-overlay.py \
   --model-glob '/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-*.gguf' \
-  --out /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack \
+  --include-pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack \
   --entry blk.9.ffn_down_exps.weight:264 \
   --entry blk.9.ffn_down_exps.weight:287 \
   --entry blk.18.ffn_down_exps.weight:347 \
@@ -51564,7 +51572,7 @@ systemd-run --wait --collect --same-dir \
   env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
       UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
       MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
-      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
 
@@ -51578,10 +51586,11 @@ Experiment B: n96 overlay check
 Acceptance gates:
 
 - Overlay build:
-  - exactly `24` unique entries;
+  - exactly `792` unique entries (`768` existing l1/l2 entries plus `24`
+    new missing decode down entries);
   - every entry offset is `4096`-aligned;
-  - every entry size is `8257536`;
-  - total file size is about `189 MiB` plus header/index padding.
+  - every new missing down entry size is `8257536`;
+  - total file size is about existing l1/l2 overlay size plus `189 MiB`.
 - Runtime:
   - run exits `0`;
   - automated quality `pass`;
