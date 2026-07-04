@@ -55327,3 +55327,89 @@ systemd-run --wait --collect --same-dir \
   - Do not run n96.
   - Revert source patch immediately; rollback commit `86aae8af6` was pushed.
   - Keep production two-way down staging.
+
+## Phase 7HX: current-head detailed bottleneck refresh
+
+Start time: 2026-07-05T06:12:00+08:00.
+
+Goal:
+
+- Re-profile the current reverted production head after closing the CPU thread
+  and down-staging fanout directions.
+- Identify the next source optimization target from current per-layer
+  wall/stage/io evidence instead of continuing parameter sweeps.
+- This is diagnostic only; do not compare decode directly to SOTA because the
+  enabled CSV profiles add overhead.
+
+Why this is required now:
+
+- Recent rejected probes showed that total iouring wait alone is misleading:
+  - four-way down staging increased parallelism but fragmented batches and
+    regressed n32;
+  - CPU thread sweeps changed TTFT but did not improve decode;
+  - earlier coalescer/combined staging reduced some summed wait counters but
+    damaged overlap or compute timing.
+- Existing hot-layer evidence from Phase 7HO/7HC points at movement-heavy
+  `runtime_load` and down stage, but those runs predate the latest validation
+  and reverts.
+- The next source change should target a concrete current bucket such as:
+  - a specific op/tensor group with high wall and low hit rate;
+  - down-stage wall that is not already hidden by current-down overlap;
+  - up/gate compute or stage if it has become the exposed wall bucket;
+  - CPU fallback if it has reappeared as a current-head hotspot.
+
+Experiment: n32 detailed profile refresh
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hx-current-detailed-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required outputs:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- CSV files exist:
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `fallback-profile.csv`;
+  - `route-profile.csv`;
+  - `ttft-trace.csv`;
+  - `copy-profile.csv`;
+  - `io-batch-profile.csv`;
+  - `current-down-overlap-profile.csv`.
+
+Analysis to record:
+
+- Top `runtime_load` tensors by `wall_ms`, `io_wait_ms`, rows, bytes, and
+  iouring rows.
+- `runtime_load` and `current_down_overlap` totals.
+- Top down-batch tensors by total wall and stage, including cache misses and
+  staged jobs.
+- Top up/gate tensors by wall, stage, up/gate compute, D2H, and staged jobs.
+- CPU fallback totals by type/op if present.
+- Current-down overlap per tensor, including missing tensor and missing pack.
+- Batch histogram changes versus Phase 7HR/7HO.
+
+Decision rule:
+
+- Do not change source in this phase.
+- Use the recorded current bottleneck to plan the next source experiment.
+- If the profile fails correctness, RAM, TTFT, or fallback gates, stop and
+  investigate before any new optimization.
