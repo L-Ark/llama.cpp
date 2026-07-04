@@ -3818,6 +3818,7 @@ static bool expert_pack_iouring_copy_jobs(
 
             const pending_job done = pending[pending_idx];
             const Job &job = jobs[done.job_idx];
+            cudaStream_t copy_stream = job.stream ? job.stream : st;
             pinned_stage_slot &slot = ring.slots[done.slot_idx];
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
@@ -3826,21 +3827,21 @@ static bool expert_pack_iouring_copy_jobs(
             const bool measure_enqueue = profile_stage || profile_copy;
             const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (profile_stage && slot.copy_start) {
-                if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
+                if (cudaEventRecord(slot.copy_start, copy_stream) != cudaSuccess) {
                     return false;
                 }
             }
-            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, copy_stream) != cudaSuccess) {
                 return false;
             }
             if (profile_stage && slot.copy_done) {
-                if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) {
+                if (cudaEventRecord(slot.copy_done, copy_stream) != cudaSuccess) {
                     return false;
                 }
                 slot.timing_pending = true;
             }
-            if (cudaEventRecord(slot.done, st) != cudaSuccess) {
-                cudaStreamSynchronize(st);
+            if (cudaEventRecord(slot.done, copy_stream) != cudaSuccess) {
+                cudaStreamSynchronize(copy_stream);
                 return false;
             }
             double enqueue_ms = 0.0;
@@ -4253,6 +4254,7 @@ static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        cudaStream_t stream = nullptr;
         int expert_idx = -1;
         char tensor[128] = {};
     };
@@ -5798,6 +5800,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        cudaStream_t stream = nullptr;
         int expert_idx = -1;
         char tensor[128] = {};
     };
@@ -5849,12 +5852,13 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             return cudaGetLastError() == cudaSuccess;
         }
         for (const stage_copy_job &job : jobs) {
+            cudaStream_t copy_stream = job.stream ? job.stream : run_stream;
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, copy_stream, job.pack_entry, &copy_trace,
                         "runtime_load", job.tensor, job.expert_idx)) {
                 if (!job.pack_entry ||
-                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace,
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, copy_stream, nullptr, &copy_trace,
                             "runtime_load", job.tensor, job.expert_idx)) {
                     return false;
                 }
@@ -6453,9 +6457,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const bool combined_stage = !stage_split &&
                 expert_pack_env_bool("GGML_MOE_UP_GATE_COMBINED_STAGE", false) &&
                 bc.ev_up_copy_aux_done;
+            const bool combined_stage_per_stream = !stage_split &&
+                expert_pack_env_bool("GGML_MOE_UP_GATE_COMBINED_STAGE_PER_STREAM", false);
             static std::atomic<int> first_combined_stage{0};
             if (combined_stage && first_combined_stage.fetch_add(1) == 0) {
                 std::fprintf(stderr, "[moe_stream] up/gate combined staging active\n");
+            }
+            static std::atomic<int> first_combined_stage_per_stream{0};
+            if (combined_stage_per_stream && first_combined_stage_per_stream.fetch_add(1) == 0) {
+                std::fprintf(stderr, "[moe_stream] up/gate combined per-stream staging active\n");
             }
 
             if (stage_split) {
@@ -6518,6 +6528,33 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                         cudaStreamWaitEvent(bc.gate_stream, bc.ev_gate_copy_aux_done, 0) != cudaSuccess) {
                     return parallel_fail();
                 }
+                if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
+                if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+                    return parallel_fail();
+                }
+            } else if (combined_stage_per_stream) {
+                std::vector<stage_copy_job> combined_jobs;
+                combined_jobs.reserve(up_jobs.size() + gate_jobs.size());
+                for (stage_copy_job job : up_jobs) {
+                    job.stream = bc.up_stream;
+                    combined_jobs.push_back(job);
+                }
+                for (stage_copy_job job : gate_jobs) {
+                    job.stream = bc.gate_stream;
+                    combined_jobs.push_back(job);
+                }
+                if (!copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)) {
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return parallel_fail();
+                }
+                if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
+                if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+                    return parallel_fail();
+                }
+                if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+                if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
                 if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
                 if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
                     return parallel_fail();
@@ -7124,6 +7161,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        cudaStream_t stream = nullptr;
         int expert_idx = -1;
         char tensor[128] = {};
     };
@@ -7140,12 +7178,13 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             return cudaGetLastError() == cudaSuccess;
         }
         for (const down_stage_copy_job &job : jobs) {
+            cudaStream_t copy_stream = job.stream ? job.stream : run_stream;
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, copy_stream, job.pack_entry, &copy_trace,
                         "runtime_load", job.tensor, job.expert_idx)) {
                 if (!job.pack_entry ||
-                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace,
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, copy_stream, nullptr, &copy_trace,
                             "runtime_load", job.tensor, job.expert_idx)) {
                     return false;
                 }
