@@ -42452,3 +42452,112 @@ Decision:
   mitigation experiment.
 - Any mitigation must be reproducible under the same cold-start 16GB cgroup
   command and must record `memory-timeline.csv` until pressure is understood.
+
+## Phase 7EX: pinned slot pressure mitigation diagnostic
+
+Start time:
+
+- 2026-07-04T04:05:00Z.
+
+Reason for this phase:
+
+- Phase 7EW showed the strict 16GB cgroup hitting `memory.current` max with:
+  - `memory.events max` delta `32104`;
+  - `pgscan` delta `31093774`;
+  - `pgsteal` delta `20006468`.
+- The dominant resident memory is file-backed page cache, but pinned staging
+  buffers and CUDA host allocations still consume non-reclaimable host memory
+  and reduce the page-cache headroom available under the same cgroup cap.
+- Current accepted SOTA uses `PINNED_SLOTS=16`.
+- Historical slot results:
+  - `4` was rejected as too slow;
+  - `8` was an older baseline;
+  - `16` is current SOTA;
+  - `24` was rejected;
+  - `12` and `14` have not been tested in the current Phase 7EB runtime.
+- Test `PINNED_SLOTS=12` first because it reduces staging pressure while
+  preserving most of the current overlap/concurrency.
+
+Theoretical expectation:
+
+- Reducing slots from `16` to `12` can lower non-reclaimable pinned/staging
+  memory across the active transfer rings.
+- The direct decode speed gain is not from faster H2D; it can only come from
+  reducing direct reclaim/page-cache churn in cold-start 16GB runs.
+- Upper bound:
+  - Phase 7EW slow n32 decode was `30279.06 ms`;
+  - current SOTA n32 decode is `29599.64 ms`;
+  - if the difference is mostly reclaim variance, a successful mitigation can
+    recover at most about `0.68 s` versus the slow Phase 7EW run and reach the
+    normal `29.6 s` band;
+  - it must beat the accepted `29599.64 ms` SOTA to be promoted.
+- Risk:
+  - fewer pinned slots may increase slot waits and reduce expert movement
+    overlap;
+  - if `host_stage`, `h2d`, or `slot_wait` increases enough to offset lower
+    reclaim, reject immediately.
+
+Design-stage experiment:
+
+- Env-only diagnostic; no source patch.
+- Run exact Phase 7EB production env except:
+  - `PINNED_SLOTS=12`.
+- Keep memory timeline enabled for the first run.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ex-slots12-timeline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7ew_cgroup_timeline.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Metrics to record:
+
+- Decode time, token rate, TTFT, exact output.
+- Expert-pack:
+  - hits/misses;
+  - `iouring_bytes`;
+  - `iouring_wait_us`;
+  - `read_failures`;
+  - `iouring_fallbacks`.
+- Pinned rings:
+  - slots actually used;
+  - copy counts;
+  - wait counts;
+  - `slot_wait`;
+  - `host_stage`;
+  - `enqueue`;
+  - `h2d`.
+- Memory timeline:
+  - max/final `memory.current`;
+  - max/final `file`, `active_file`, `inactive_file`;
+  - `memory.events max` delta;
+  - `pgscan`, `pgsteal`, `pgmajfault`, `workingset_refault_file` deltas.
+
+Promotion rule:
+
+- The first Phase 7EX run is diagnostic only.
+- If n32 `PINNED_SLOTS=12` is slower than Phase 7EB SOTA
+  `29599.64 ms / 31`, reject the change.
+- If it beats SOTA and passes all hard gates:
+  - run one additional n32 cold-start confirmation without changing the env;
+  - then run two n96 cold-start confirmations;
+  - only promote after all confirmation runs preserve quality, TTFT, cgroup,
+    and IO gates.
+- If promoted, commit and push the plan update immediately with exact
+  reproduction commands and all metrics.
