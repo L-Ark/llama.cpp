@@ -59204,6 +59204,93 @@ Decision:
   wait directly, or reducing per-read overhead, rather than speculative
   prefetch on the same IO/staging resources.
 
+## Phase 7IW: foreground IO wait attribution by tensor/layer
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- Layout/repack and trace-prefetch families did not produce reproducible gains.
+- Broad prefetch and reuse-window prefetch both show that adding extra reads on
+  the same IO/staging resources can improve hit rate but does not reliably
+  improve decode.
+- Historical submit/refill/sort probes show:
+  - submit overhead is tiny compared with wait;
+  - sort-off regressed;
+  - larger global depth/refill did not solve the call-boundary-limited batches.
+
+Hypothesis:
+
+- The remaining foreground wait may be concentrated in specific tensors/layers
+  or quant/type groups. If so, a targeted treatment is still possible:
+  - keep those tensors resident longer;
+  - tune cache split by tensor class;
+  - selectively preload only high-cost recurring groups;
+  - add a special path for a narrow tensor/type.
+- If foreground wait is broad and proportional to all misses, another cache or
+  prefetch policy change is unlikely to beat variance under the 16GB RAM limit.
+
+Experiment:
+
+- Diagnostic only; do not compare token rate directly to SOTA because per-copy
+  profiling adds overhead.
+- Use current head and accepted pct62 runtime knobs.
+- Enable copy profile without H2D event timing:
+  - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`;
+  - do not set `GGML_MOE_COPY_PROFILE_H2D=1`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Run strict cold-start n32:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7iw-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iw-foreground-io-attribution
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Analysis:
+
+- Parse `copy-profile.csv` by:
+  - op;
+  - tensor;
+  - layer id;
+  - tensor class: up, gate, down;
+  - wait/wall bytes and count;
+  - top rows by `io_wait_ms` and `wall_ms`.
+- Parse `io-batch-profile.csv` by op to compare batch-level wait with per-copy
+  attribution.
+- Decision rule:
+  - If a small set of layers/tensors contributes a large fraction of wait,
+    write a targeted plan for those tensors.
+  - If top wait is broad and diffuse, do not continue cache/preload/layout work;
+    target a lower-level reduction in per-read foreground wait or accept that
+    IO is variance-bound under current hardware/16GB RAM constraints.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
