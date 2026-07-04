@@ -1,0 +1,110 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "artifact": "cpu-down-prefetch-dedup-bound",
+  "decision": {
+    "not_path_to_10_tok_s_by_itself": true,
+    "reason": "The previous page-timing probe had a positive no-overhead bound but tied after pushed reproduction. Its counters show 84.56GB of repeated advice. A dedup bitmap can cut advice volume to at most the observed unique down payload without changing math or consuming VRAM, so it is materially different from the rejected probe.",
+    "reject_probe_if": [
+      "eval_tok_s <= 4.4 after pushed-source reproduction",
+      "TTFT > 33617.688744 ms for a promoted result",
+      "memory_peak_bytes > 16000000000 or page cache is not charged to the cgroup",
+      "any OOM/kill/ram-limit flag appears",
+      "France output is incomplete, incoherent, or semantically wrong",
+      "gate pack direct failures appear or gate cache counters collapse",
+      "dedup counters show repeated advice remains near the rejected 84.56GB scale"
+    ],
+    "required_next_step": "Update the plan, then implement a default-off GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP_DEDUP=1 probe with counters and run one strict cold France benchmark.",
+    "verdict": "allow_one_default_off_dedup_probe"
+  },
+  "dedup_model": {
+    "additional_state": "small per-layer/expert advised bitmap; no copied expert payload and no VRAM consumption",
+    "correctness": "page-timing only; no routing, top-k, tensor value, dot-product, accumulation, or CPU/GPU compute split changes",
+    "down_decode_call_weighted_payload_gib_reference": 74.4580078125,
+    "down_decode_unique_entries": 2627,
+    "down_decode_unique_payload_gib": 10.903076171875,
+    "down_total_call_weighted_payload_gib_reference": 79.318115234375,
+    "down_total_unique_entries": 3515,
+    "down_total_unique_payload_gib": 14.588623046875,
+    "max_advice_byte_reduction_vs_rejected_decode_unique": 0.86154738062612,
+    "max_advice_byte_reduction_vs_rejected_total_unique": 0.8147464952039634,
+    "max_advice_expert_reduction_vs_rejected_decode_unique": 0.86154738062612,
+    "max_advice_expert_reduction_vs_rejected_total_unique": 0.8147464952039634,
+    "mechanism": "route-specific future down prefetch, but each layer/expert is advised at most once per run",
+    "previous_advised_gib": 78.74951171875,
+    "repeated_to_unique_decode_ratio": 7.222687476208603,
+    "repeated_to_unique_total_ratio": 5.39800853485064
+  },
+  "inputs": {
+    "accepted_sota": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-pushed-repro-result.json",
+      "sha256": "9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658"
+    },
+    "dirty_source_candidate": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-from-up-candidate-result.json",
+      "sha256": "f022f8d90c2792a889b9b2ec6a0c82333b0aeb48109ed186dadabe7844432294"
+    },
+    "pushed_repro_rejected": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-from-up-pushed-repro-rejected.json",
+      "sha256": "d7fdbb5a1646ba04a68c3f380c85ee361202748a273e738f88036ff6951193ef"
+    },
+    "route_specific_prefetch_bound": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-overlap-bound.json",
+      "sha256": "5c7a9a466b45317065f37975ff5d9983846ddb9e569239e8e734ffa256afba2b"
+    }
+  },
+  "previous_prefetch_result": {
+    "dirty_source_eval_tok_s": 4.6,
+    "pushed_prefetch_advised_experts": 18974,
+    "pushed_prefetch_advised_gib": 78.74951171875,
+    "pushed_prefetch_madvise_failures": 0,
+    "pushed_prefetch_matched_calls": 5600,
+    "pushed_prefetch_missing_calls": 40,
+    "pushed_repro_eval_tok_s": 4.4,
+    "pushed_repro_verdict": "reject as SOTA: pushed-source reproduction tied accepted 4.4 tok/s instead of exceeding it; revert runtime source and keep records/docs"
+  },
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "source_head": "0107390f57dc0d8fc3b3f73fe30fe599e945dd49",
+  "theoretical_bounds_inherited": {
+    "hide_down_decode_delta": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 26.023825709999976,
+      "optimistic_eval_tok_s_no_overhead": 5.249372903366256,
+      "removable_ms": 5023.621000000019
+    },
+    "hide_down_total_delta_if_it_all_landed_in_generation_window": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 24.770698709999973,
+      "optimistic_eval_tok_s_no_overhead": 5.514933879069418,
+      "removable_ms": 6276.748000000021
+    },
+    "hide_half_down_decode_delta": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 28.535636209999986,
+      "optimistic_eval_tok_s_no_overhead": 4.7873040053730085,
+      "removable_ms": 2511.8105000000096
+    },
+    "targets": {
+      "saving_ms_for_10_0_tok_s": 17386.5701576,
+      "saving_ms_for_4_5_tok_s": 689.943260222222,
+      "saving_ms_for_5_0_tok_s": 3725.6936052
+    }
+  },
+  "timestamp_utc": "2026-07-04T04:53:53Z"
+}

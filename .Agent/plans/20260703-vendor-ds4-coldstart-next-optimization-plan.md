@@ -8059,3 +8059,52 @@ Decision:
 - Runtime source must be reverted to the previous accepted path. Keep only the candidate and rejected repro artifacts plus this plan record.
 - Current accepted SOTA remains `eval_tok_s=4.4` from `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
 - Do not retry this exact route-specific down prefetch probe unless a new design reduces the `84.56GB` call-weighted advice volume, avoids the pushed-source tie, and has a new hard-bound/update section before implementation.
+
+### 2026-07-04T04:53Z Deduplicated Down Prefetch Bound
+
+Artifacts:
+
+- `.Agent/run-tools/analyze_cpu_down_prefetch_dedup_bound.py`
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-dedup-bound.json`
+- script sha256: `8d0ff32f960d39f8790eb18037f2833596bddf61e8b556b97f222f6b556e12c0`
+- bound JSON sha256: `52a2eb6c9d99433cd53d6e9a83aff421d208a3812385e93676fab0e454d42570`
+- source head for artifact: `0107390f57dc0d8fc3b3f73fe30fe599e945dd49`
+
+Why this is a new candidate:
+
+- The rejected route-specific prefetch probe was exact and had clean counters, but the pushed-source reproduction tied at `4.4 tok/s`.
+- Its counters showed repeated advice volume: `advised_experts=18974`, `advised_bytes=84556644352` (`78.75 GiB`).
+- The observed unique down payload from the bound artifact is much smaller:
+  - down total unique payload: `14.5886 GiB`, `3515` entries;
+  - down decode unique payload: `10.9031 GiB`, `2627` entries.
+- A dedup bitmap can reduce advice volume by about `81.5%` versus the rejected pushed run if it limits advice to unique routed down experts.
+- This is materially different from the rejected probe because it targets the measured overhead gap instead of repeating the same per-call advice pattern.
+
+Candidate:
+
+- Name: `route_specific_cpu_down_prefetch_from_up_dedup`.
+- Env flag: `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP_DEDUP=1`.
+- Code path: `ggml/src/ggml-cpu/ggml-cpu.c:ggml_compute_forward_mul_mat_id`.
+- Mechanism: register `ffn_down_exps` tensors by layer, then when `ffn_up_exps` CPU fallback is about to run, prefetch only matching routed down experts that have not been advised before in this process.
+- Additional state: small per-layer/expert advised bitmap; no expert payload copy, no persistent host pack, no VRAM consumption.
+- Correctness: page-timing only. No routing, top-k, tensor value, dot-product, accumulation, or CPU/GPU compute split changes.
+
+Inherited theoretical bound:
+
+- Same best-case compute/page ceiling as the previous route-specific prefetch analysis:
+  - hide all down decode delta: `5.249 tok/s`;
+  - hide half down decode delta: `4.787 tok/s`;
+  - not a standalone path to `10 tok/s`.
+- Savings needed from accepted generation-window estimate:
+  - `4.5 tok/s`: about `689.943 ms`;
+  - `5.0 tok/s`: about `3725.694 ms`;
+  - `10.0 tok/s`: about `17386.570 ms`.
+
+Decision:
+
+- Passes hard-bound gate for one default-off dedup probe.
+- Must first commit and push this bound artifact and plan update to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`.
+- Then implement the smallest default-off source change possible.
+- Run one strict cold France benchmark with accepted SOTA config plus `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP_DEDUP=1`.
+- If first run is `>4.4 tok/s`, commit and push immediately, rebuild from pushed source, and reproduce before promotion.
+- Reject and revert runtime source if pushed-source reproduction is `<=4.4 tok/s`, TTFT exceeds the promotion gate, RAM exceeds 16GB including page cache, correctness fails, cache/pack counters collapse, or dedup counters show advice volume remains near the rejected `78.75 GiB` scale.
