@@ -43697,3 +43697,87 @@ MIN_PROFILE=1
 
 - Future VRAM cache changes need a larger hit-rate gain or a different split;
   small global increases alone are not enough.
+
+## Phase 7FD: production SOTA diagnostic bottleneck refresh
+
+Start time:
+
+- 2026-07-04T07:08:00Z.
+
+Reason for this phase:
+
+- Phase 7FB accepted a production/min-profile SOTA, but minimal-profile omits
+  the per-call timing needed to choose the next source optimization:
+  - down/upgate profiles;
+  - route/fallback profile;
+  - TTFT trace;
+  - pinned staging timing details like `host_stage` and `h2d`.
+- Phase 7FC showed that a small global VRAM cache increase improves hit rate
+  but does not beat the n96 production SOTA.
+- Historical `UPGATE_PCT` split sweeps (`55`, `58`, `62`, `65`) repeatedly
+  failed to beat `60`, so do not continue blind split tuning now.
+- Before writing more source, refresh the current SOTA bottleneck using the
+  diagnostic mode of the stable repo runner.
+
+Experiment:
+
+- Diagnostic only; cannot promote SOTA.
+- Use current accepted production SOTA knobs:
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`.
+- Set:
+  - `MIN_PROFILE=0`.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fd-sota-profile-refresh"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- strict cold start;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Metrics to record:
+
+- Decode time and TTFT.
+- Exact France output.
+- Expert-pack reads/bytes/wait.
+- Pinned staging:
+  - `host_stage`;
+  - `h2d`;
+  - `slot_wait`;
+  - copy counts.
+- Down/upgate profile:
+  - total ms/call;
+  - CUDA batch ms;
+  - fallback ms;
+  - up/gate wait/compute split.
+- Fallback profile:
+  - decode Q4_0 fallback time;
+  - top tensors and expert pairs.
+- Cgroup final memory split and major faults.
+
+Decision:
+
+- Use this phase only to choose the next source/env experiment.
+- Do not compare its wall time as production SOTA because diagnostics add
+  overhead.
+- If movement still dominates, next plan should target concrete movement
+  reduction with a theoretical upper bound.
+- If fallback compute dominates, next plan should target Q4_0 fallback support
+  or a safer partial GPU path only if the refreshed upper bound justifies it.
