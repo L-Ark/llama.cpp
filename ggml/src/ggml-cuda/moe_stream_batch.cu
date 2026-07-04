@@ -4915,7 +4915,16 @@ static void preload_exact_pin_for_tensor(
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
     if (!cache) return;
     std::lock_guard<std::mutex> lk(g_profile_mu);
-    if (exact_pin_tensor_already_preloaded(tensor_name)) return;
+
+    bool has_match = false;
+    for (const profile_entry &e : g_exact_pin_profile) {
+        if (e.expert_bytes != 0 && e.expert_bytes != src0_bytes) continue;
+        if (std::strcmp(e.tensor, tensor_name) != 0) continue;
+        if (e.expert_idx < 0 || e.expert_idx >= n_as) continue;
+        has_match = true;
+        break;
+    }
+    if (!has_match || exact_pin_tensor_already_preloaded(tensor_name)) return;
 
     int loaded = 0;
     int cached = 0;
