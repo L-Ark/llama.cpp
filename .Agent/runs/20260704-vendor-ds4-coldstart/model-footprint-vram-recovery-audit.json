@@ -1,0 +1,208 @@
+{
+  "artifact": "model-footprint-vram-recovery-audit",
+  "created_utc": "2026-07-04T16:05:00Z",
+  "source_head_before_audit": "827d0e38449da699fdb749467b32cff704a9c4c2",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "audit_complete_candidate_reopened_before_runtime_source_change",
+  "purpose": "Audit whether reducing fixed GPU model footprint can free enough VRAM to reopen exact hot up/down compute without violating the accepted 16GB cold-start constraints.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "cuda_memory_breakdown_mib": "32109 = 238 + (17362 = 17339 model + 18 context + 4 compute) + 14508 unaccounted",
+    "config": "vendor DeepSeek, strict cold drop_caches, MemoryMax=16000000000, MemorySwapMax=0, cpu_moe=40, gate-only one-stream O_DIRECT pack, GGML_MOE_STREAM_ONE_CACHE_MIB=13568, prefill_limit=3000, -c 256 -b 16 -ub 16 -t 20 -tb 20"
+  },
+  "model_facts": {
+    "model_file": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "model_size_bytes": 156148189760,
+    "model_size_gib": 145.42,
+    "gguf_architecture": "deepseek4",
+    "layers": 43,
+    "experts_per_layer": 256,
+    "expert_used_count": 6,
+    "expert_payload_per_layer_mib": 3264.0,
+    "expert_payload_total_gib": 137.0625,
+    "dense_block_payload_total_gib": 6.383957,
+    "non_block_payload_gib": 1.972916,
+    "source": "GGUFReader tensor-size scan with PYTHONPATH=gguf-py"
+  },
+  "source_semantics": {
+    "n_cpu_moe": "common/arg.cpp defines --n-cpu-moe as keeping the MoE weights of the first N layers on CPU.",
+    "ngl": "src/llama-model.cpp places GPU layers back-to-front; lowering -ngl moves dense/attention repeating layers from GPU to CPU.",
+    "fit": "common/fit.cpp first evaluates all-MoE-on-CPU dense placement, then fills dense-only layers back-to-front and may convert dense-only layers to full layers when surplus exists."
+  },
+  "historical_footprint_evidence": [
+    {
+      "name": "accepted_cpu40",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+      "cpu_moe": 40,
+      "eval_tok_s": 4.4,
+      "ttft_ms": 32892.55329,
+      "cuda_model_mib": 17339,
+      "cuda_free_mib": 238,
+      "gate_cache_mib": 13568,
+      "gate_hit_rate_pct": 94.6,
+      "ram_ok": true,
+      "correctness_ok": true
+    },
+    {
+      "name": "cpu39_cache10496_profile_admission",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260701T172501Z-20260702_cpu39-cache10496-profile-admission/france-cpu39-vram0gb",
+      "cpu_moe": 39,
+      "eval_tok_s": 1.6,
+      "ttft_ms": 50852.470994,
+      "cuda_model_mib": 20603,
+      "cuda_free_mib": 45,
+      "gate_cache_mib": 10496,
+      "gate_hit_rate_pct": 85.8,
+      "ram_ok": true,
+      "correctness_ok": true,
+      "decision": "rejected; one fewer CPU MoE layer increases GPU model by about 3264 MiB and forces smaller gate cache."
+    },
+    {
+      "name": "cpu38_vram10_tradeoff",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260701T145202Z-20260701T_cpu-moe38-vram10-gpu-layer-tradeoff/france-cpu38-vram10gb",
+      "cpu_moe": 38,
+      "eval_tok_s": 0.9,
+      "ttft_ms": 57141.168244,
+      "cuda_model_mib": 23867,
+      "cuda_free_mib": 7273,
+      "gate_cache_fit": false,
+      "ram_ok": true,
+      "correctness_ok": true,
+      "decision": "rejected; moving more MoE layers to GPU consumes VRAM and collapses the gate-cache path."
+    },
+    {
+      "name": "cpu41_vram14_gate_cache_tradeoff",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260701T161444Z-20260702T_cpu41-vram14-gate-cache-tradeoff/france-cpu41-vram14gb",
+      "cpu_moe": 41,
+      "eval_tok_s": 1.6,
+      "ttft_ms": 43630.3318,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14964662272,
+      "cuda_model_mib": 14075,
+      "cuda_free_mib": 2731,
+      "gate_cache_mib": 14336,
+      "gate_hit_rate_pct": 86.1,
+      "ram_ok": true,
+      "correctness_ok": true,
+      "decision": "rejected as a pure gate-cache tradeoff; it freed one expert layer but added CPU fallback and only reached 1.6 tok/s in the old path."
+    },
+    {
+      "name": "cpu41_cache14336_t24_nowarmup",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260701T192344Z-20260702_cpu41_cache14336_t24_nowarmup/france-cpu41-vram0gb",
+      "cpu_moe": 41,
+      "eval_tok_s": 1.5,
+      "ttft_ms": 43012.05977,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14973276160,
+      "cuda_model_mib": 14075,
+      "cuda_free_mib": 2731,
+      "gate_cache_mib": 14336,
+      "ram_ok": true,
+      "correctness_ok": true,
+      "decision": "rejected as a pure gate-cache/thread/no-warmup variant."
+    },
+    {
+      "name": "warm_cache_cpu39_old_result_not_accepted",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260701T044615Z-hard16g-cpu39-cpu38/france-cpu39-vram2gb",
+      "cpu_moe": 39,
+      "eval_tok_s": 8.4,
+      "ttft_ms": 18726.305226,
+      "memory_file_bytes_recorded": false,
+      "drop_caches_evidence": false,
+      "decision": "not an accepted cold-start SOTA. Same vram2 family later cold-profile reruns with drop_caches reached only 1.2-1.3 tok/s and recorded file page-cache pressure."
+    }
+  ],
+  "dense_attention_ngl_bound": {
+    "candidate": "lower -ngl to move dense/attention layers from GPU to CPU",
+    "freed_vram_per_layer_mib_estimate": "about 136-166 MiB dense tensors per layer from GGUF tensor scan",
+    "useful_target_mib": "at least 1632-2176 MiB for top384/top512 hot residual, preferably 3264 MiB for top768",
+    "layers_needed_to_free_2176_mib": "about 14-16 dense layers",
+    "hard_bound_decision": "rejected before benchmark",
+    "reason": "Moving 14-16 dense/attention layers to CPU would add CPU attention/dense matmul on many decode layers while current 10 tok/s budget has only about 1642.887 ms total overhead after full fallback removal. It also risks TTFT and page-cache pressure. No existing accepted evidence shows dense/attention CPU placement can preserve the current 4.4 tok/s line, let alone support 10 tok/s."
+  },
+  "cpu41_reopened_candidate": {
+    "candidate": "cpu41 plus exact MXFP4 x Q8_0 hot residual up/down residency",
+    "why_reopened": "cpu41 frees about one expert layer, 3264 MiB, without reducing gate-cache capacity. This is enough for a top768 hot residual up/down payload at 4.25 MiB per tensor/expert slot.",
+    "required_payload_mib": {
+      "top512": 2176.0,
+      "top768": 3264.0
+    },
+    "residual_source_model": {
+      "base_source_only_decode_window_ms": 15191.28071,
+      "serial_touch_residual_decode_fallback_ms": 3173.291,
+      "top512_residual_save_ms": 1773.973,
+      "top768_residual_save_ms": 2048.86,
+      "late_layers_30_39_source_hidden_residual_avg_ms": 72.041,
+      "late_layers_30_39_full_cold_fallback_avg_ms": 376.843,
+      "layer39_full_cold_fallback_ms": 397.887
+    },
+    "zero_overhead_bounds": [
+      {
+        "scenario": "top512_plus_cpu41_new_layer_source_hidden",
+        "decode_ms": 13489.35,
+        "tok_s": 10.127,
+        "slack_to_10_tok_s_ms": 171.527,
+        "decision": "paper_ceiling_positive_but_too_tight"
+      },
+      {
+        "scenario": "top768_plus_cpu41_new_layer_source_hidden",
+        "decode_ms": 13214.463,
+        "tok_s": 10.338,
+        "slack_to_10_tok_s_ms": 446.414,
+        "decision": "best_reopened_candidate"
+      },
+      {
+        "scenario": "top512_plus_cpu41_new_layer_not_source_hidden",
+        "decode_ms": 13815.195,
+        "tok_s": 9.888,
+        "slack_to_10_tok_s_ms": -154.318,
+        "decision": "fails_bound"
+      },
+      {
+        "scenario": "top768_plus_cpu41_new_layer_not_source_hidden",
+        "decode_ms": 13540.308,
+        "tok_s": 10.089,
+        "slack_to_10_tok_s_ms": 120.569,
+        "decision": "paper_ceiling_positive_but_not_enough_for_kernel_overhead"
+      }
+    ],
+    "correctness_gate": "Any exact Q8_0 CUDA hot-residual implementation must pass fixed-text token-level top1 verification before a strict cold France benchmark. Prior scalar Q8_0 probe failed same_top1=136/145, so this is a real blocker.",
+    "ram_gate": "All runs must keep MemoryMax=16000000000 and MemorySwapMax=0; source/hotset preparation must not put the 145.42 GiB model into host page cache.",
+    "ttft_gate": "Accepted TTFT must remain <= 33617.688744 ms. A diagnostic may be recorded as rejected if TTFT exceeds the gate, but cannot be promoted."
+  },
+  "decision": {
+    "pure_model_footprint_tuning_is_worth_benchmarking": false,
+    "lower_ngl_dense_attention_is_worth_benchmarking": false,
+    "cpu_moe_39_or_38_is_closed": true,
+    "cpu_moe_41_as_pure_gate_cache_is_closed": true,
+    "cpu41_plus_exact_hot_q80_residency_is_reopened_for_design": true,
+    "runtime_source_changed": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  },
+  "next_required_work": {
+    "plan_update": "Add a concrete design step for cpu41 + top768 exact Q8_0 hot residual residency before runtime code.",
+    "implementation_preconditions": [
+      "Define a default-off hot residual cache that uses the 3264 MiB freed by cpu41 without reducing the accepted gate cache.",
+      "Implement or prototype exact MXFP4 x Q8_0 CUDA arithmetic close to CPU fallback semantics.",
+      "Run the fixed-text token-level top1 verifier before any performance benchmark.",
+      "Only then run a strict cold diagnostic under 16GB cgroup with full memory/page-cache accounting."
+    ],
+    "reject_if": [
+      "top1 verifier mismatches",
+      "implementation overhead exceeds the 446 ms best-case budget before other effects",
+      "host RAM including file cache exceeds 16GB or swap is used",
+      "TTFT exceeds the accepted gate for a promoted result",
+      "France answer is not semantic, coherent, and complete"
+    ]
+  }
+}

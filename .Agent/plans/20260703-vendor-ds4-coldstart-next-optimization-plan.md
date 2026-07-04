@@ -49,8 +49,8 @@ Current execution plan:
 
 1. Keep the accepted `4.4 tok/s` runtime path unchanged unless a candidate first has a written hard-bound above the promotion gate. The completed and pushed audits now close the cheap paths: exact backend switch, source-only overlap, layout-only exact residency, Q8_0 compute without a source/cache solution, and generic VRAM/compression recovery.
 2. Do not code another low-ceiling source/prefetch/scheduler/cache-size variant. Before every new experiment, update this plan with the bottleneck component, removable time, hard upper bound, expected RAM/page-cache pressure, expected TTFT impact, and rollback criteria.
-3. The immediate next step is a model-footprint VRAM recovery audit. It must verify whether `cpu_moe=40` is already the minimal GPU model footprint, use existing `cpu_moe=39/38/37/36` memory evidence, check whether reducing dense/attention GPU layers could free useful VRAM without destroying token rate, and reject the path on paper unless it can free at least `1.6-2.2 GiB` usable CUDA memory without losing enough compute to fall below `10 tok/s`.
-4. If model-footprint recovery is closed, the next plan must pick exactly one higher-level class and write a hard-bound before source changes: compatible multi-token/speculative execution, a fundamentally different shared gate+up/down residency structure, or a correctness-preserving model/runtime-level footprint reduction.
+3. The model-footprint VRAM recovery audit is complete. Pure `cpu_moe` tuning, lower `-ngl` dense/attention CPU placement, `cpu_moe=39/38`, and `cpu_moe=41` as a pure larger-gate-cache tradeoff are closed. However, `cpu_moe=41` frees about `3264 MiB` of expert VRAM and reopens exactly one design candidate: use that space for a top768 exact MXFP4 x Q8_0 hot residual up/down residency path while preserving the accepted gate cache.
+4. The immediate next step is a concrete `cpu41 + top768 exact Q8_0 hot residual` design artifact before runtime code. It must define the hotset layout, source/page handling for the new CPU layer, expected kernel/D2H/scatter overhead under the `446 ms` best-case budget, and the fixed-text top1 verification path. If it cannot satisfy those gates, close it on paper and move to compatible multi-token/speculative execution or a fundamentally different shared gate+up/down residency structure.
 5. Every logit-changing or numerically different path must first pass the fixed-text token-level top1 verifier or an equivalent deterministic correctness gate before any long performance run. For France, the final answer must remain semantically correct, coherent, and complete.
 6. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promoting.
 7. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
@@ -202,6 +202,34 @@ Execution rule for the next implementation attempt:
 3. If it shows a credible ceiling, run only a bounded diagnostic first under strict cgroup (`MemoryMax=16000000000`, `MemorySwapMax=0`) and strict cold `drop_caches`.
 4. Any numerically different path must pass the fixed-text token-level top1 verifier before a long France run.
 5. A result can be promoted only if it exceeds `4.4 tok/s`, has TTFT within gate, has `ram_ok=true` with file page cache counted, has coherent France output, is committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, and is reproduced from pushed source.
+
+### 2026-07-04 Model-Footprint VRAM Recovery Audit
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/model-footprint-vram-recovery-audit.json`.
+
+Result: pure model-footprint tuning is rejected, but the audit reopens one combined compute+source candidate. Runtime source is unchanged and accepted SOTA remains `4.4 tok/s`.
+
+Closed findings:
+
+- `--n-cpu-moe` semantics are explicit in `common/arg.cpp`: it keeps MoE weights of the first `N` layers on CPU. `cpu_moe=39/38` moves one or more MoE layers back to GPU, increasing model VRAM by about `3264 MiB` per layer and shrinking or breaking the gate cache. Existing strict runs dropped to `0.8-1.6 tok/s`.
+- `cpu_moe=41` frees about one expert layer (`3264 MiB`) and allows a larger gate cache, but as a pure gate-cache tradeoff it was already rejected: strict cold `cpu41/vram14` reached only `1.6 tok/s`, and `cpu41/cache14336/t24/no-warmup` reached only `1.5 tok/s`.
+- Lowering `-ngl` to move dense/attention layers to CPU is rejected before benchmark. GGUF tensor scan shows only about `136-166 MiB` dense payload per layer, so freeing `2.1-3.2 GiB` would require moving roughly `14-23` dense/attention layers to CPU. That adds CPU dense/attention work under a budget that has only about `1642.887 ms` total overhead after full fallback removal and risks TTFT/page-cache pressure.
+- Old `8 tok/s`-class `cpu37/38/39/vram2` logs are not accepted SOTA evidence: they lack cold `drop_caches` and file-cache accounting, and later same-family cold-profile reruns with `drop_caches` reached only `1.2-1.3 tok/s`.
+
+Reopened candidate:
+
+- `cpu_moe=41` frees about `3264 MiB` while preserving enough VRAM for the accepted gate cache. That is exactly the payload for a top768 hot residual up/down set at `4.25 MiB` per tensor/expert slot.
+- Under the serial-touch residual source model, source/page overlap alone leaves a decode window of about `15191.281 ms`. A top768 exact hot residual path saves about `2048.860 ms`. Adding the estimated source-hidden extra CPU layer cost from `cpu41` (`~72.041 ms`, late-layer residual average) gives a zero-overhead decode window of about `13214.463 ms`, or `10.338 tok/s`, with about `446 ms` slack to the `10 tok/s` line.
+- If the newly CPU layer is not source-hidden, top768 still has only about `120 ms` zero-overhead slack, which is not enough for kernel/D2H/scatter/sync overhead. Therefore the candidate only remains open if source/page handling covers the new CPU layer too.
+- This is not a promotable result; it is only a paper ceiling that justifies one concrete design step. Prior scalar Q8_0 CUDA probing failed token-level stability (`same_top1=136/145`), so correctness verification is the first hard gate.
+
+Next execution plan:
+
+1. Write a concrete `cpu41 + top768 exact Q8_0 hot residual` design artifact before runtime code.
+2. Define the resident hotset layout and prove it fits in the `3264 MiB` freed by `cpu41` without reducing the accepted gate cache or increasing host page-cache pressure above the 16GB cgroup.
+3. Define exact MXFP4 x Q8_0 CUDA arithmetic against the CPU fallback scale/order and the source/page plan for the extra CPU layer.
+4. Run the fixed-text token-level top1 verifier before any strict cold France benchmark. If top1 mismatches, reject and revert source.
+5. Promote only after strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, coherent France output, TTFT within gate, full run metadata, commit/push to `ssd/vendor/deepseek-token-rate-16gb`, and clean pushed-source reproduction.
 
 Current bottleneck conclusion:
 
