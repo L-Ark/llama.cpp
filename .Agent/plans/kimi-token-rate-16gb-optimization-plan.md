@@ -58711,7 +58711,23 @@ Experiment:
 - No source change.
 - Use current head and accepted pct62 runtime knobs.
 - Do not use the rejected hot replacement overlay.
-- Run strict cold-start n32 with:
+- First generate a current-head n32 route trace with minimal extra profiling:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7it-commit>
+TRACE_RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-route-trace-input
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$TRACE_RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_ROUTE_TRACE_OUT=$TRACE_RUN/route-trace.csv" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Then run strict cold-start n32 with trace prefetch:
 
 ```bash
 cd /root/lfz/llama.cpp-vendor-kimi
@@ -58723,7 +58739,7 @@ systemd-run --wait --collect --same-dir \
   env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
     IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
     MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
-    EXTRA_RUNTIME_ENV="GGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace/route-trace.csv
+    EXTRA_RUNTIME_ENV="GGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-route-trace-input/route-trace.csv
 GGML_MOE_TRACE_PREFETCH_WINDOW=32
 GGML_MOE_TRACE_PREFETCH_MAX_LOADS=2
 GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=8
