@@ -1,0 +1,47 @@
+{
+  "date": "2026-07-05",
+  "title": "Default-off Q8_0 up-only pre-fallback skip correctness gate",
+  "source_head_before_change": "06af3aa31e4944764f1783e0ccdc2ab3c3ee347a",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "bottleneck_component": {
+    "name": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "required_saving_for_10_tok_s_ms": 17386.57,
+    "max_allowed_new_overhead_ms": 1642.887
+  },
+  "prior_evidence": {
+    "up_output_write_top1": "passed for blk.0.ffn_up_exps.weight with max 64 overwrite calls",
+    "down_output_write_top1": "failed and remains disabled",
+    "limitation": "The passing up output-write path still executed CPU fallback, so it did not prove a performance path."
+  },
+  "candidate": {
+    "name": "Q8_0 CUDA up skip before CPU fallback",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "why_not_benchmark_yet": "This is the first path that can skip CPU fallback, but it must pass token-level correctness before any timing benchmark.",
+    "first_tensor_filter": "blk.0.ffn_up_exps.weight",
+    "expected_token_rate_change_in_verifier": "not measured",
+    "expected_ram_pressure": "temporary CUDA/host buffers for matching up tensors only; verifier runs in 16GB cgroup",
+    "expected_ttft_impact": "not evaluated in this correctness gate"
+  },
+  "implementation_boundary": [
+    "Add a separate default-off env-gated pre-fallback skip path.",
+    "Enable only when GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER is set.",
+    "Guard the skip path to ffn_up_exps only; down is known token-level failing.",
+    "Run CUDA MXFP4 x Q8_0 before CPU fallback, write dst, and set matrix_row_counts[cur_a]=0 only when CUDA reports success.",
+    "Do not touch the accepted default path, direct hot pool, gate cache, or existing q80 write correctness gate.",
+    "Do not promote or benchmark until fixed-text top1 passes."
+  ],
+  "correctness_gate": [
+    "Build llama-results and llama-cli.",
+    "Create baseline result.gguf with skip disabled.",
+    "Run check with GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=blk.0.ffn_up_exps.weight and a small max call limit.",
+    "Pass condition: llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1.",
+    "If top1 fails, revert skip runtime source and keep only rejected documentation."
+  ],
+  "promotion_rule": "This step cannot be promoted as SOTA. A later benchmark requires strict cold drop_caches, 16GB cgroup including page cache, TTFT gate, France correctness, full metadata, commit/push, and pushed-source reproduction."
+}

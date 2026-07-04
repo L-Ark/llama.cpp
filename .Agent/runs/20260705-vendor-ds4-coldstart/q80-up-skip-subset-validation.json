@@ -1,0 +1,78 @@
+{
+  "timestamp_utc": "2026-07-04T18:41:24Z",
+  "status": "skip64_top1_passed",
+  "purpose": "Validate a default-off up-only Q8_0 CUDA path that runs before CPU fallback and skips the matching CPU fallback rows.",
+  "source_head_before_change": "06af3aa31e4944764f1783e0ccdc2ab3c3ee347a",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ],
+    "default_behavior_changed": false,
+    "summary": [
+      "Added GGML_MOE_STREAM_Q80_SKIP_* path before CPU fallback.",
+      "The CPU side calls CUDA only when skip env is set and clears matrix_row_counts[cur_a] only if CUDA returns success.",
+      "The CUDA side is guarded to ffn_up_exps only because down output-writing previously failed token-level top1.",
+      "This is the first Q8_0 path in this sequence that can actually skip CPU fallback work, but this run is still only a correctness gate."
+    ],
+    "env": [
+      "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS",
+      "GGML_MOE_STREAM_Q80_SKIP_REPORT"
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j 8",
+    "status": "passed"
+  },
+  "correctness_gate": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T184124Z-q80-up-skip-top1/blk0-up-skip64",
+    "systemd_unit": "vendor-ds4-q80-up-skip-top1-20260704T184124Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 53.253,
+    "baseline_status": 0,
+    "check_status": 0,
+    "skip_filter": "blk.0.ffn_up_exps.weight",
+    "skip_max_cne1": 1,
+    "skip_max_calls": 64,
+    "skip_records": 64,
+    "skip_tensor": "blk.0.ffn_up_exps.weight",
+    "top1": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 145,
+      "same_top1_ratio": 1.0,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0,
+      "nmse": 0.0
+    },
+    "memory_peak_bytes": 1172144128,
+    "time_max_rss_kb": {
+      "baseline": 50485504,
+      "check": 50419044
+    },
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "hashes": {
+    "run_case_sha256": "9230f6eabd426a7040784a812d8bd4fe6c3f41df625d1a89c1b98815e7271aa1",
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "skip_report_sha256": "8d724e55b6733d4d064355b0bdc319df352666eab66be9ee522d1a0c9d8b2ca2"
+  },
+  "decision": {
+    "keep_source": true,
+    "promote_as_sota": false,
+    "reason": "The first up-only skip path passes fixed-text top1 and skips 64 CPU fallback calls, but it is not a strict cold France performance run and does not yet prove a new token-rate SOTA.",
+    "next_step": "Expand the up skip scope under top1 verification before any benchmark, then run strict cold performance only if correctness remains stable."
+  }
+}

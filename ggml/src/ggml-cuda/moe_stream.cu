@@ -11,6 +11,7 @@ int ggml_cuda_host_register(void *, size_t) { return 0; }
 bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const float *, size_t, size_t, int64_t, int64_t, const void *, size_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 void ggml_cuda_moe_stream_q80_probe(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, const float *, size_t, size_t, const ggml_moe_row_mapping *) {}
 void ggml_cuda_moe_stream_q80_write(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) {}
+bool ggml_cuda_moe_stream_q80_skip(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
@@ -101,6 +102,22 @@ void ggml_cuda_moe_stream_q80_probe(
     const ggml_moe_row_mapping *rows);
 
 void ggml_cuda_moe_stream_q80_write(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t expert_index,
+    const void *src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const void *src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_ne1,
+    int64_t cne1,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const ggml_moe_row_mapping *rows);
+
+bool ggml_cuda_moe_stream_q80_skip(
     int src0_type_int,
     const char *src0_name,
     int64_t expert_index,
@@ -1832,6 +1849,164 @@ extern "C" void ggml_cuda_moe_stream_q80_write(
     if (d_out) {
         cudaFree(d_out);
     }
+}
+
+static bool moe_stream_q80_skip_name_allows(const char * name) {
+    static const char * filter = std::getenv("GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER");
+    return filter && filter[0] && name &&
+        std::strstr(name, "ffn_up_exps") != nullptr &&
+        std::strstr(name, filter) != nullptr;
+}
+
+static FILE * moe_stream_q80_skip_report_fp() {
+    static FILE * fp = nullptr;
+    static int initialized = 0;
+    static std::mutex mu;
+
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = 1;
+        const char * path = std::getenv("GGML_MOE_STREAM_Q80_SKIP_REPORT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "w");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+                std::fprintf(fp, "record,tensor,expert,cne1,ne01\n");
+            } else {
+                std::fprintf(stderr, "[moe_stream_q80_skip] failed to open report: %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
+static std::atomic<uint64_t> g_q80_skip_calls{0};
+static std::atomic<uint64_t> g_q80_skip_reports{0};
+
+extern "C" bool ggml_cuda_moe_stream_q80_skip(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t expert_index,
+    const void *src0_data,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const void *src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_ne1,
+    int64_t cne1,
+    float *dst,
+    size_t dst_nb1, size_t dst_nb2,
+    const ggml_moe_row_mapping *rows) {
+    if (!moe_stream_q80_skip_name_allows(src0_name)) {
+        return false;
+    }
+    if (src0_type_int != GGML_TYPE_MXFP4 || !src0_data || !src1_q8_0 || !dst || !rows) {
+        return false;
+    }
+    if (ne00 <= 0 || ne01 <= 0 || cne1 <= 0 || src1_ne1 <= 0 || src1_q8_0_row_size == 0) {
+        return false;
+    }
+    if (ne00 % QK_MXFP4 != 0) {
+        return false;
+    }
+
+    const int max_cne1 = std::max(1, moe_stream_env_int("GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1", 1));
+    if (cne1 > max_cne1) {
+        return false;
+    }
+
+    const int max_calls = moe_stream_env_int("GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS", 0);
+    const uint64_t call_idx = g_q80_skip_calls.fetch_add(1, std::memory_order_relaxed);
+    if (max_calls > 0 && call_idx >= (uint64_t) max_calls) {
+        return false;
+    }
+
+    if (cudaSetDevice(0) != cudaSuccess) {
+        return false;
+    }
+
+    const int64_t total = cne1 * ne01;
+    if (total <= 0) {
+        return false;
+    }
+
+    std::vector<uint8_t> h_src0((size_t) ne01 * nb01);
+    std::memcpy(h_src0.data(), src0_data, h_src0.size());
+
+    std::vector<uint8_t> h_q80((size_t) cne1 * src1_q8_0_row_size);
+    for (int64_t k = 0; k < cne1; ++k) {
+        int64_t i11 = rows[k].i1 % src1_ne1;
+        if (i11 < 0) {
+            i11 += src1_ne1;
+        }
+        const int64_t i12 = rows[k].i2;
+        if (i12 < 0) {
+            return false;
+        }
+        const char * q80_row = (const char *) src1_q8_0 + (size_t) (i11 + i12 * src1_ne1) * src1_q8_0_row_size;
+        std::memcpy(h_q80.data() + (size_t) k * src1_q8_0_row_size, q80_row, src1_q8_0_row_size);
+    }
+
+    void * d_src0 = nullptr;
+    void * d_q80 = nullptr;
+    float * d_out = nullptr;
+    std::vector<float> h_out((size_t) total);
+    const size_t src0_bytes = h_src0.size();
+    const size_t q80_bytes = h_q80.size();
+    const size_t out_bytes = h_out.size() * sizeof(float);
+
+    bool ok = cudaMalloc(&d_src0, src0_bytes) == cudaSuccess &&
+        cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
+        cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+    if (ok) {
+        ok = cudaMemcpy(d_src0, h_src0.data(), src0_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+            cudaMemcpy(d_q80, h_q80.data(), q80_bytes, cudaMemcpyHostToDevice) == cudaSuccess;
+    }
+    if (ok) {
+        const int threads = 128;
+        const int blocks = ((int) total + threads - 1) / threads;
+        moe_stream_q80_probe_kernel<<<blocks, threads>>>(
+                (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                ne00, (int) cne1, (int) ne01, d_out);
+        ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
+            cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+    }
+
+    if (ok) {
+        for (int64_t k = 0; k < cne1; ++k) {
+            float * dst_row = (float *) ((char *) dst + (size_t) rows[k].i1 * dst_nb1 + (size_t) rows[k].i2 * dst_nb2);
+            const float * out_row = h_out.data() + (size_t) k * ne01;
+            std::memcpy(dst_row, out_row, (size_t) ne01 * sizeof(float));
+        }
+
+        if (FILE * fp = moe_stream_q80_skip_report_fp()) {
+            const uint64_t report_idx = g_q80_skip_reports.fetch_add(1, std::memory_order_relaxed);
+            flockfile(fp);
+            std::fprintf(fp,
+                    "%" PRIu64 ",%s,%" PRId64 ",%" PRId64 ",%" PRId64 "\n",
+                    report_idx,
+                    src0_name ? src0_name : "",
+                    expert_index,
+                    cne1,
+                    ne01);
+            funlockfile(fp);
+        }
+    } else {
+        std::fprintf(stderr, "[moe_stream_q80_skip] CUDA skip failed for %s expert=%" PRId64 "\n",
+                src0_name ? src0_name : "", expert_index);
+    }
+
+    if (d_src0) {
+        cudaFree(d_src0);
+    }
+    if (d_q80) {
+        cudaFree(d_q80);
+    }
+    if (d_out) {
+        cudaFree(d_out);
+    }
+    return ok;
 }
 
 static bool moe_stream_one_type_allowed(ggml_type type, const char * name) {
