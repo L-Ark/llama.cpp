@@ -1,0 +1,68 @@
+{
+  "timestamp_utc": "2026-07-04T16:52:13Z",
+  "status": "passed",
+  "purpose": "cpu41 direct_pool3264 + gate13568 allocation fit only; not a token-rate result and not a SOTA candidate",
+  "source_head": "91826dd0d3eb588cdadf9eca314b4ee4eab2c443",
+  "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T165213Z-cpu41-directpool3264-gate13568-fit/short-cpu41",
+  "config": {
+    "n_cpu_moe": 41,
+    "prompt": "Hi",
+    "n_predict": 1,
+    "context": 64,
+    "batch": 16,
+    "ubatch": 16,
+    "threads": 20,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": 13568,
+    "GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB": 3264,
+    "GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT": 0
+  },
+  "result": {
+    "exit_status": 0,
+    "memory_peak_bytes": 788729856,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "service_runtime_seconds": 6.046,
+    "cpu_time": "28.742s"
+  },
+  "vram": {
+    "direct_hot_pool": {
+      "allocated_mib": 3264.0,
+      "slots": 768,
+      "slot_sz": 4456448,
+      "pool_sz": 3422552064
+    },
+    "gate_vram_cache": {
+      "reported_gib": 13.2,
+      "slots": 3192,
+      "slot_mib": 4.25,
+      "hits": 277,
+      "misses": 885,
+      "hit_rate_pct": 23.8
+    },
+    "resource_sample_peak": {
+      "gpu_mem_used_mib": 31860,
+      "gpu_mem_free_mib": 251
+    }
+  },
+  "direct_manifest": {
+    "entries": 768,
+    "manifest_bytes": 3422552064,
+    "reads": 0,
+    "direct_reads": 0,
+    "direct_failures": 0,
+    "direct_fallbacks": 0
+  },
+  "hashes": {
+    "run_case_sha256": "7c824657e5f15c0030809af0fcb377de0eeaa5443581d3b18e8918fea644b5bb",
+    "environment_sha256": "8a27a187cf826d5a1390c1d2d83fd2578f63abe67736d0568375fdc757f860b8",
+    "exact_command_sha256": "f0525b9835da70ea11cddc1438e35528ca6943c339677503ca3c2c4bf3a411b9",
+    "stderr_sha256": "4183798a7a3ed2aaec77c81fea7b3212a886550f94a89ea55d521257eb2da529",
+    "resource_samples_sha256": "c05529b90fcc5feb20baa8b09136e7a29d8eaed70f3cca3cb5f54c5f19e625ea"
+  },
+  "decision": "The cpu41 VRAM budget can fit the accepted-size gate cache and the full top768 direct hot pool simultaneously, but the observed GPU slack is only about 251 MiB in this short diagnostic. Continue only with correctness-first Q8_0 op/top1 scaffolding or a bounded full-prefill timing diagnostic; do not run a long France benchmark before compute verification."
+}

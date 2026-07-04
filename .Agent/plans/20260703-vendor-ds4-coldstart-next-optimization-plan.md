@@ -9733,3 +9733,60 @@ Decision:
 - Keep the separate direct hot pool skeleton. It proves the top768 source path can prefill real GGUF expert payload from the raw model via O_DIRECT without generating a 3.26 GiB pack and without sharing the gate cache.
 - This is still not a performance result; current accepted SOTA remains `4.4 tok/s`.
 - Next plan step must decide whether to run a bounded larger prefill diagnostic under `cpu_moe=41` VRAM budget or move directly to exact MXFP4 x Q8_0 op-compare/top1 scaffolding. No long France benchmark is allowed before the compute path passes correctness verification.
+
+### 2026-07-05 CPU41 Dual-Pool Fit Diagnostic Plan
+
+Purpose:
+
+- Verify the core VRAM assumption behind the `cpu41 + top768 exact Q8_0 hot residual` design: `cpu_moe=41` must be able to hold both the accepted gate cache and the separate top768 direct pool.
+
+Diagnostic command shape:
+
+- Short smoke only: `llama-cli -p Hi -n 1`.
+- Strict 16GB systemd cgroup with `MemoryMax=16000000000` and `MemorySwapMax=0`.
+- `--n-cpu-moe 41`
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+- `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=3264`
+- `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=0`
+- Direct manifest/model env enabled, but no direct prefill payload read.
+- No gate prefill profile for this diagnostic, to isolate allocation fit from TTFT/prefill cost.
+
+Acceptance for this diagnostic:
+
+- Build already passed.
+- Process exits `0`.
+- Direct pool allocates `3264 MiB` / `768` slots.
+- Gate VRAM cache also allocates `13568 MiB` / about `3192` slots.
+- No CUDA OOM, no host OOM, no swap, `oom_kill=0`.
+
+Rejection:
+
+- If either allocation fails, this exact VRAM layout is not viable and the plan must be revised before compute work.
+- Even if it passes, it is still not a token-rate result and does not promote SOTA.
+
+### 2026-07-05 CPU41 Dual-Pool Fit Diagnostic Result
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/cpu41-dualpool-fit-diagnostic.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T165213Z-cpu41-directpool3264-gate13568-fit/short-cpu41`
+
+Result:
+
+- Exit status: `0`
+- Host cgroup memory peak: `788729856`
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+- Direct hot pool allocation: `3264.00 MiB`, `768` slots, `slot_sz=4456448`, `pool_sz=3422552064`
+- Gate VRAM cache allocation: `13.2 GiB`, `3192` slots, `4.25 MiB` each
+- Resource sample GPU peak: `used=31860 MiB`, `free=251 MiB`
+- Direct prefill was disabled: `attempted=0`, `reads=0`, `direct_reads=0`
+
+Decision:
+
+- The core `cpu_moe=41` VRAM assumption is viable in a short allocation diagnostic: full top768 direct pool and accepted-size gate cache can coexist.
+- The free VRAM margin is very tight (`~251 MiB` observed in this short run), so the next implementation must avoid extra persistent GPU buffers and should treat full prefill/compute workspace growth as a first-class risk.
+- This is not a token-rate result and does not change accepted SOTA.
+- Next step should be correctness-first exact MXFP4 x Q8_0 op/top1 scaffolding, or a separately planned full-prefill timing diagnostic. No long France benchmark is allowed before compute verification.
