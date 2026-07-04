@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `34ff6e331252111987223fdbe47319d784ce3569` (`vendor-ds4: plan ngram map k4v probe`)
+- Latest pushed head before this document update: `52a20d0828a2336db3a49b8f6fe5b263f9fb943c` (`vendor-ds4: update coldstart plan after ngram map probe`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -30,7 +30,8 @@ Current bottleneck conclusion:
 - The route-specific CPU down prefetch family is now closed: repeated prefetch tied at `4.4 tok/s` only after pushed-source reproduction, and deduplicated prefetch reduced advice volume but regressed to `4.1 tok/s`. Do not retry another synchronous `madvise`/page-touch variant without a genuinely new lower-pressure async source model and a new hard-bound.
 - The `mul_mat_id` src1 conversion skip candidate is also closed by the 2026-07-04T05:16Z diagnostic: `convert_t0=0.002 ms/call` over `16920` calls, only `33.84 ms` total ideal savings, giving a no-overhead ceiling of about `4.405 tok/s`.
 - Split up/down one-stream, scalar Q8_0 CUDA up, and no-source `ngram-map-k4v` have all been closed by correctness/performance gates. The current SOTA remains `4.4 tok/s`.
-- The next active plan is to rebuild the candidate list around exact CPU up/down fallback reduction and algorithm-level decode reduction. Start from the accepted SOTA wall/fallback profiles, compute a hard-bound per subcomponent, then only implement candidates that can plausibly move strict cold speed above `4.4 tok/s` without changing logits, exceeding 16GB host RAM including page cache, or violating the TTFT gate.
+- Fresh SOTA hard-bound artifact `fresh-sota44-bottleneck-hard-bound.json` shows the only remaining non-speculative class with a 10 tok/s ceiling is exact full decode CPU up/down fallback removal: ideal ceiling `11.367 tok/s`, required decode saving `17386.570 ms`, and only `1642.887 ms` overhead budget after full fallback removal.
+- The next active plan is to inspect the active CPU fallback path and produce a dot-vs-source/page split for up/down fallback before any source edit. Any implementation must plausibly remove near-full decode fallback while preserving logits/top1, staying under 16GB host RAM including page cache, and keeping accepted TTFT within gate.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -8653,7 +8654,7 @@ Objective:
 
 Immediate source/record state:
 
-- Current pushed source/record head before this plan update: `34ff6e331252111987223fdbe47319d784ce3569`.
+- Current pushed source/record head before this plan update: `52a20d0828a2336db3a49b8f6fe5b263f9fb943c`.
 - Current accepted SOTA run remains `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
 - Current accepted SOTA metrics remain `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`.
 - New records and any future source commits must be pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using git identity `L-Ark <fliangae@connect.ust.hk>`.
@@ -8696,6 +8697,39 @@ Next execution sequence:
    - Clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source run still beats `4.4 tok/s` and passes every gate.
    - If the pushed-source rerun fails, mark the candidate rejected, revert runtime source to the accepted SOTA path, keep the rejected artifact/docs, commit/push the rejection, and continue from the last accepted SOTA.
 
+Fresh bottleneck result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/fresh-sota44-bottleneck-hard-bound.json`
+- Artifact sha256: `968449a8f672d7c044ba43b23e9ce922cabc1ae58a317d73c406e76e58725ed6`
+- Source head: `52a20d0828a2336db3a49b8f6fe5b263f9fb943c`
+- Accepted SOTA basis: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted SOTA decode window estimate: `31047.446710 ms`
+- Same-output decoded-token estimate: `136.608766`
+- Target 10 tok/s decode window: `13660.876552 ms`
+- Required decode saving: `17386.570158 ms`
+- Ideal full decode up/down fallback removal: `19029.457 ms`
+- Remaining overhead budget for a 10 tok/s-class full-fallback-removal implementation: `1642.886842 ms`
+
+Hard-bound conclusion:
+
+| Candidate class | Removable decode ms | Ideal tok/s | Decision |
+| --- | ---: | ---: | --- |
+| all decode CPU up/down fallback removed | `19029.457` | `11.367` | only remaining non-speculative 10 tok/s ceiling |
+| cold-vs-nodrop fallback delta removed | `12791.007` | `7.483` | not promotable; depends on warm global page cache |
+| decode CPU up fallback removed | `9697.125` | `6.398` | insufficient alone |
+| decode CPU down fallback removed | `9332.332` | `6.291` | insufficient alone |
+| gate one-stream total removed | `8050.224` | `5.940` | insufficient alone and mixed prompt/decode trace time |
+| gate one-stream src0/source removed | `6707.771` | `5.613` | insufficient alone |
+| chunk scheduling/tail gap removed | `1672.318` | `4.650` | closed by bound |
+| `mul_mat_id` src1 conversion removed | `33.840` | `4.405` | closed by bound |
+
+Plan decision:
+
+- Do not run another full strict-cold model benchmark until there is a concrete exact design that targets near-full decode CPU up/down fallback removal.
+- Do not resume no-source speculation, top-N hotsets, synchronous prefetch/source movement, scalar GPU kernels, or scheduler-only experiments.
+- The next candidate family is `exact full decode CPU up/down fallback removal path`, but it is only allowed to proceed after source-path inspection and a hard design showing overhead below about `1.64s`.
+
 Next concrete work item:
 
-- Produce the fresh bottleneck table and hard-bound artifact for the accepted `4.4 tok/s` path, then update this plan again with the single highest-headroom candidate before any new source edit.
+- Inspect the active CPU fallback code path and produce a dot-vs-source/page split plan for up/down fallback. The output must name exact files/functions, identify where timing/instrumentation should be added, and decide whether a correctness-preserving implementation can plausibly remove at least `17386.570 ms` decode time while adding less than `1642.887 ms` overhead.
+- Only after that plan is written may a default-off source patch be attempted. The first validation remains fixed-text sequential top1, not a token-rate benchmark.

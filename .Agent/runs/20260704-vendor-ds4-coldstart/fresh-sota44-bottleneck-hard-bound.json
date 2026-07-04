@@ -1,0 +1,233 @@
+{
+  "accepted_sota": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "decode_window_ms_estimate": 31047.44671,
+    "decoded_tokens_estimate": 136.608766,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_limit_ms": null,
+    "ttft_ms": 32892.55329
+  },
+  "closed_candidate_evidence": {
+    "ngram_map_k4v": {
+      "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-probe-result.json",
+      "reason": "systemd runtime timeout at 10 minutes; stdout grew to 1.7GB and ended in repeated interactive prompts; no valid token-rate/perf footer was produced",
+      "status": "rejected"
+    },
+    "q80_cuda_updown": {
+      "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/q80-cuda-updown-path-screening.json",
+      "decision": "scalar Q8_0 probe failed top1 and was far too slow; future GPU path must solve arithmetic/top1 and overhead budget",
+      "hard_bound": null
+    },
+    "source_movement": {
+      "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json",
+      "conclusion": {
+        "async_source_overlap_is_worth_implementing_now": false,
+        "decision": "Close pack/direct/page-source variants for now; next optimization should pivot to correctness-preserving algorithmic work or a fundamentally different offload path with exact-token verification.",
+        "do_not_repeat": [
+          "compact mmap pack",
+          "synchronous O_DIRECT staging",
+          "willneed/page-touch prewarm",
+          "chunk-size/affinity scheduling",
+          "early-layer top-k pruning",
+          "broad up/down GPU stream without full output correctness"
+        ],
+        "reason": "Prior O_DIRECT staging moved tens of GiB and measured effective direct bandwidth under the 16GB cgroup is far below the bandwidth needed for top64/top128/top256 to save >1-2s after accounting for the ~3s hot-compute overlap window."
+      }
+    },
+    "split_updown_top1": {
+      "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/split-updown-top1-listfilter-result.json",
+      "decision": "closed before benchmark because top1 verifier failed",
+      "summary": {}
+    }
+  },
+  "component_table": {
+    "cache_counters": {
+      "pack_counters": {
+        "bytes": "21774204928",
+        "direct_enabled": "1",
+        "direct_failures": "0",
+        "direct_fallbacks": "0",
+        "direct_reads": "4886",
+        "entries": "4599",
+        "failures": "0",
+        "hits": "4886",
+        "misses": "0",
+        "reads": "4886"
+      },
+      "prefill_counters": {
+        "attempted": "3000",
+        "bytes": "13369344000",
+        "elapsed_ms": "4485.962",
+        "enabled": "1",
+        "inserted": "3000",
+        "limit": "3000",
+        "loaded": "3313",
+        "pack_misses": "0",
+        "read_failures": "0"
+      },
+      "vram_cache_counters": {
+        "hit_rate": "94.6",
+        "hits": "33265",
+        "misses": "1886"
+      }
+    },
+    "cgroup_memory": {
+      "memory_file_bytes": 15102607360,
+      "memory_peak_bytes": 16000000000,
+      "pgmajfault": 271465,
+      "workingset_refault_file": 1638812
+    },
+    "cpu_fallback": {
+      "decode_ms": 19029.457,
+      "down_decode_ms": 9332.332,
+      "down_total_ms": 13651.196,
+      "prompt_ms": 7408.602,
+      "total_ms": 26438.058999999997,
+      "up_decode_ms": 9697.125,
+      "up_total_ms": 12786.863
+    },
+    "gate_one_stream": {
+      "all_gate": {
+        "rows": 35151,
+        "src0_ms": 6707.771,
+        "total_ms": 8050.224
+      },
+      "gate_hits": {
+        "rows": 33265,
+        "src0_ms": 4520.134,
+        "total_ms": 5513.78
+      },
+      "gate_misses": {
+        "rows": 1886,
+        "src0_ms": 2187.637,
+        "total_ms": 2536.444
+      }
+    }
+  },
+  "generated_at_utc": "2026-07-04T07:47:59.419981+00:00",
+  "hard_bound_rows": [
+    {
+      "caveat": "Only non-speculative single class with a 10 tok/s ceiling, but it leaves only about 1.64s total overhead budget.",
+      "class": "exact_compute_or_offload_ideal",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": 1642.886842,
+      "name": "all decode CPU up/down fallback removed",
+      "removable_ms": 19029.457,
+      "source": "current-sota-cpu-fallback-profile.json by_phase.decode",
+      "status": "open_bound",
+      "theoretical_tok_s_no_overhead": 11.367023
+    },
+    {
+      "caveat": "Not directly promotable because warm global page cache violates strict cold-start semantics.",
+      "class": "source_page_stall_reference_not_promotable",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -4595.563158,
+      "name": "cold-vs-nodrop total fallback delta removed",
+      "removable_ms": 12791.007,
+      "source": "post-prefetch-bottleneck-hard-bound.json cold_vs_nodrop_metrics",
+      "status": "closed_not_promotable",
+      "theoretical_tok_s_no_overhead": 7.482771
+    },
+    {
+      "caveat": "Insufficient alone.",
+      "class": "exact_compute_or_offload_partial",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -7689.445158,
+      "name": "decode CPU up fallback removed",
+      "removable_ms": 9697.125,
+      "source": "current-sota-cpu-fallback-profile.json by_role_phase.up:decode",
+      "status": "open_bound",
+      "theoretical_tok_s_no_overhead": 6.398441
+    },
+    {
+      "caveat": "Insufficient alone.",
+      "class": "exact_compute_or_offload_partial",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -8054.238158,
+      "name": "decode CPU down fallback removed",
+      "removable_ms": 9332.332,
+      "source": "current-sota-cpu-fallback-profile.json by_role_phase.down:decode",
+      "status": "open_bound",
+      "theoretical_tok_s_no_overhead": 6.290953
+    },
+    {
+      "caveat": "Mixed prompt/decode trace time; useful bound, not a concrete implementation.",
+      "class": "gate_source_or_stream_reference",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -9336.346158,
+      "name": "gate one-stream total removed",
+      "removable_ms": 8050.224,
+      "source": "gate-prefill-top3000-pushed-repro-result.json one_trace_aggregate.all_gate.total_ms",
+      "status": "open_bound",
+      "theoretical_tok_s_no_overhead": 5.940229
+    },
+    {
+      "caveat": "Mixed prompt/decode trace time and gate cache is already near VRAM limit.",
+      "class": "gate_source_reference",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -10678.799158,
+      "name": "gate one-stream src0/source removed",
+      "removable_ms": 6707.771,
+      "source": "gate-prefill-top3000-pushed-repro-result.json one_trace_aggregate.all_gate.src0_ms",
+      "status": "open_bound",
+      "theoretical_tok_s_no_overhead": 5.612596
+    },
+    {
+      "caveat": "Closed: scheduling/tail-only savings cannot move token rate materially.",
+      "class": "scheduler_reference_closed",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -15714.252158,
+      "name": "chunk scheduling/tail gap removed",
+      "removable_ms": 1672.318,
+      "source": "source-movement-async-bound/current chunk analysis",
+      "status": "closed_bound_too_small",
+      "theoretical_tok_s_no_overhead": 4.650491
+    },
+    {
+      "caveat": "Closed by hard bound.",
+      "class": "micro_closed",
+      "direct_decode_token_rate_bound": true,
+      "margin_to_10_tok_s_ms": -17352.730158,
+      "name": "mul_mat_id src1 conversion removed",
+      "removable_ms": 33.84,
+      "source": "mulmatid-convert-skip-bound.json",
+      "status": "closed_bound_too_small",
+      "theoretical_tok_s_no_overhead": 4.404801
+    }
+  ],
+  "input_hashes_sha256": {
+    "accepted_one_trace.csv": "421e58e3393917bd785df7a9ef300e59fab8f7eb7ccabd499f2e16a85ae84c64",
+    "accepted_stderr.txt": "186bc7727f28c254ac6e5a9e216c1577b831530fde11ea2e6febbd1b1170af69",
+    "accepted_summary.json": "cca15940de41427cdba1d6457d702888195fbd2cf7ce3a434f9644ce723b1423",
+    "current-sota-cpu-fallback-profile.json": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+    "gate-prefill-top3000-pushed-repro-result.json": "9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658",
+    "post-prefetch-bottleneck-hard-bound.json": "f0474f3d66e5fb6ec22d7b0e86f727f06bb17f377deab4174daab1837b333c7f"
+  },
+  "next_candidate": {
+    "name": "exact full decode CPU up/down fallback removal path",
+    "rejection_rule": "Reject before full benchmark if the design cannot plausibly remove at least 17386.570 ms decode time while adding less than 1642.887 ms overhead, or if top1 correctness cannot be guaranteed.",
+    "required_before_source_edit": [
+      "Inspect active CPU fallback path and produce a dot-vs-source/page split for up/down fallback.",
+      "Write a source-level design that preserves logits/top1 and explains how new overhead stays below about 1.64s.",
+      "Run fixed-text sequential top1 verifier before any strict cold France token-rate benchmark."
+    ],
+    "why": "It is the only remaining non-speculative class whose ideal bound exceeds 10 tok/s. All partial/offload/source-only paths are below 10 or already rejected."
+  },
+  "schema": "fresh-sota44-bottleneck-hard-bound/v1",
+  "source_head": "52a20d0828a2336db3a49b8f6fe5b263f9fb943c",
+  "target": {
+    "full_decode_updown_fallback_ms": 19029.457,
+    "interpretation": "To reach 10 tok/s on the same output length, the accepted decode window must shrink by about 17.39s. Ideal full decode up/down fallback removal saves about 19.03s, leaving only about 1.64s for all new overhead.",
+    "needed_decode_saving_ms": 17386.570158,
+    "overhead_budget_ms_if_full_decode_updown_removed": 1642.886842,
+    "target_decode_window_ms_for_same_output": 13660.876552,
+    "target_tok_s": 10.0
+  }
+}
