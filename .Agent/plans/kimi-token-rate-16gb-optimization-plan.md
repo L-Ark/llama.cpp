@@ -36243,6 +36243,115 @@ Decision:
   schedule and use a separate staging ring, otherwise the cost just moves from
   down to upgate.
 
+## Phase 7EQ: up-compute-only same-type down overlap for blk.4 and blk.60
+
+Start time:
+
+- 2026-07-04T02:21:58Z.
+
+Reason:
+
+- Phase 7EP proved that same-type early overlap can reduce local down misses,
+  but the implementation staged both up and gate before starting compute.
+- That changed the original same-type schedule and caused `blk.4` upgate wall
+  to jump to `585.441 ms` from Phase 7EN's `267-279 ms` range.
+- The gap is not that the layer list was wrong; the gap is that the early path
+  destroyed the up/gate scheduling shape.
+
+Hypothesis:
+
+- Add a different default-off env:
+
+```sh
+GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_AFTER_UP_STAGE_LAYERS=4,60
+```
+
+- For matching same-type serial-stage calls, keep the original order:
+  1. plan/copy up;
+  2. start current-down overlap;
+  3. launch up compute immediately;
+  4. plan/copy gate;
+  5. launch gate compute;
+  6. join current-down overlap before return.
+- This preserves the original “do not stage gate before up compute” behavior.
+- It should give current-down overlap the up-compute window without forcing
+  gate staging onto the front of the critical path.
+
+Theoretical upper bound:
+
+- Same target as Phase 7EP:
+  - `blk.4/60` down stage is about `0.82-0.91 s` on n32.
+- Because this variant only overlaps with the up-compute portion and keeps gate
+  staging serial, the realistic n32 gain is smaller: `0.1-0.4 s`.
+- If up compute and current-down H2D contend too much, the run will regress and
+  should be rejected after the first n32.
+
+Implementation:
+
+- Modify only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add helper:
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_AFTER_UP_STAGE_LAYERS`.
+- In the `serial_stage_batch` non-mixed path:
+  - after `copy_stage_jobs(up_jobs, ...)`;
+  - before `launch_tensor(... up ...)`;
+  - if env matches the layer, call `start_current_down_overlap()`.
+- Do not pre-plan or pre-copy gate before up compute.
+- Add conservative join-on-error handling after overlap starts.
+- Print one-time activation:
+  `[moe_stream_batch] after-up-stage same-type current down overlap active: layers=...`.
+- Default behavior remains unchanged when the env is unset.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7eq_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_AFTER_UP_STAGE_LAYERS=4,60\nEOF\n|' /tmp/run_phase7eq_repro.sh
+chmod +x /tmp/run_phase7eq_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7eq-after-up-stage-overlap-l4-l60"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7eq_repro.sh
+```
+
+Hard gates:
+
+- build succeeds;
+- exit `0`;
+- strict cold start;
+- `memory.peak <= 15900000000`;
+- `oom=0`, `oom_kill=0`, `memory.swap.max=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Mechanism gates:
+
+- activation log appears;
+- `blk.4/60` down stage is lower than Phase 7EN without the Phase 7EP
+  `blk.4` upgate wall explosion;
+- `blk.4.ffn_up_exps.weight` wall must stay near the Phase 7EN range, not near
+  Phase 7EP's `585.441 ms`;
+- main pinned host-stage and expert-pack wait must not rise enough to erase the
+  local down improvement.
+
+Promotion:
+
+- first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+- if first n32 beats, run a second strict cold n32 confirmation;
+- only if both n32 runs beat, run n96 candidate and confirmation;
+- both n96 runs must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- If build fails or first n32 fails any hard/mechanism gate or is slower than
+  SOTA, revert source and record rejection.
+- If first n32 passes but confirmation fails, revert source and record
+  rejection.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
