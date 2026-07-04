@@ -55651,3 +55651,97 @@ GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv"
   - Next source plan should avoid more stream splitting and instead target
     reducing repeated `runtime_load` misses or changing when those same loads
     are issued, without fragmenting iouring batches.
+
+## Phase 7HZ: cache eviction reuse diagnostic
+
+Start time: 2026-07-05T02:34:23+08:00.
+
+Goal:
+
+- Before changing cache residency policy, determine whether the current
+  `runtime_load` bottleneck is caused by hot experts being evicted and loaded
+  again soon after.
+- Add default-off instrumentation only:
+  `GGML_MOE_CACHE_EVICT_PROFILE_OUT`.
+- Keep production behavior unchanged unless the env var is set.
+- Avoid repeating rejected static preload / trace prefetch / host prefetch
+  experiments until this diagnostic shows that eviction policy is a real
+  bottleneck.
+
+Implementation plan:
+
+- Extend `batch_vram_cache` slot metadata with:
+  - tensor name;
+  - expert index.
+- Populate metadata on each successful slot insertion.
+- Clear metadata on slot clear / failed insertion.
+- When an occupied slot is selected as the victim, write one CSV row with:
+  - sequence number;
+  - cache slot size;
+  - victim tensor/expert/key/hits/profile_count/pinned/prefetch_down/last_used;
+  - incoming tensor/expert/key/preload/prefetch_down/profile_count;
+  - cache clock.
+- The CSV is opened lazily and guarded by a mutex, so the default path has only
+  a cheap env-var check after first initialization.
+
+Experiment: n32 eviction diagnostic
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hz-cache-evict-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CACHE_EVICT_PROFILE_OUT=$RUN/cache-evict-profile.csv
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start;
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `cache-evict-profile.csv` exists and has rows.
+
+Analysis to record:
+
+- Total eviction rows.
+- Top evicted tensors by count.
+- Top evicted tensors by prior hit count.
+- Whether Phase 7HY top `runtime_load` tensors are also frequent eviction
+  victims:
+  - `blk.60.ffn_down_exps.weight`;
+  - `blk.4.ffn_down_exps.weight`;
+  - `blk.1.ffn_up_exps.weight`;
+  - `blk.1.ffn_gate_exps.weight`;
+  - `blk.10.ffn_gate_exps.weight`;
+  - `blk.10.ffn_up_exps.weight`;
+  - `blk.24.ffn_gate_exps.weight`;
+  - `blk.24.ffn_up_exps.weight`;
+  - `blk.24.ffn_down_exps.weight`;
+  - `blk.5.ffn_down_exps.weight`.
+- Whether victims generally have nonzero hits/profile counts.
+- If evictions mostly target never-hit entries, stop cache-policy work and
+  return to batching/scheduling.
+- If hot tensors are repeatedly evicted after nonzero hits, design a narrow
+  dynamic admission/eviction policy in the next phase.
+
+Decision rule:
+
+- Accept the instrumentation only if default behavior remains unchanged with
+  the env var unset.
+- Treat this run as diagnostic, not SOTA.
+- Do not proceed to source-level cache-policy changes until this phase provides
+  evidence that cache policy can reduce repeated `runtime_load` misses.
