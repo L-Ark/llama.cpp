@@ -1,0 +1,80 @@
+{
+  "date": "2026-07-05",
+  "title": "Hard-bound: source-resident and batched Q8_0 after up-skip overhead profile",
+  "source_head": "507c86d5d6ceb2c91321e5682ca3bb952cb32443",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "measured_q80_up_profile": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T211727Z-q80-upskip-overhead-profile/france-cpu40",
+    "calls_attempted": 18688,
+    "calls_ok": 18688,
+    "total_ms": 58687.042,
+    "host_src0_ms": 28106.781,
+    "h2d_ms": 6062.462,
+    "kernel_sync_ms": 20341.664,
+    "cuda_alloc_free_ms": 3796.468,
+    "d2h_ms": 184.696,
+    "scatter_ms": 17.111,
+    "src0_bytes": 83282100224
+  },
+  "baseline_inference": {
+    "accepted_sota_elapsed_seconds": 63.94,
+    "q80_upskip_elapsed_seconds": 114.19,
+    "observed_regression_seconds": 50.25,
+    "rough_cpu_up_fallback_replaced_seconds": 8.437,
+    "method": "Assumes other run components are comparable; CPU up fallback replaced is approximated as q80_profile_total - observed_wall_regression.",
+    "implication": "Any replacement for all-up CPU fallback must be well below about 8.4s to beat SOTA; current Q8_0 replacement is 58.7s."
+  },
+  "hotset_coverage": {
+    "manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+    "manifest_entries": 768,
+    "manifest_up_entries": 382,
+    "profile_skip_records": 18688,
+    "unique_profile_up_pairs": 2919,
+    "covered_records": 11455,
+    "covered_record_ratio": 0.6129601883561644,
+    "covered_unique_pairs": 382,
+    "up_payload_bytes": 1702398976,
+    "up_payload_gib": 1.585
+  },
+  "rejected_designs": [
+    {
+      "name": "persistent cudaMalloc/cudaFree buffers only",
+      "max_measured_saving_ms": 3796.468,
+      "decision": "reject",
+      "reason": "Saves far less than the roughly 50s regression and leaves host src0 copy, H2D, and synchronized kernels intact."
+    },
+    {
+      "name": "source-resident/H2D elimination only",
+      "max_measured_saving_ms": 34169.243,
+      "remaining_q80_profile_ms": 24517.799,
+      "decision": "reject",
+      "reason": "Still leaves about 24.5s of Q8_0 path time, mostly kernel_sync, before considering remaining down fallback."
+    },
+    {
+      "name": "up-only hotset source residency with current per-call kernel",
+      "covered_record_ratio": 0.6129601883561644,
+      "decision": "reject",
+      "reason": "Hotset source residency can remove a large source-copy bucket for covered up calls, but current per-call kernel_sync remains too expensive and up-only cannot reach 10 tok/s."
+    }
+  ],
+  "possible_but_not_yet_implemented": {
+    "name": "source-resident batched/fused Q8_0 hot up path",
+    "required_properties": [
+      "Keep hot up payload resident or otherwise avoid repeated full src0 host copies.",
+      "Reuse persistent CUDA buffers.",
+      "Batch multiple expert rows per layer/token to avoid one cudaDeviceSynchronize per expert call.",
+      "Keep CPU-compatible arithmetic or prove token-level stability with fixed-text top1 before performance.",
+      "Preserve accepted gate cache or show a new VRAM allocation bound."
+    ],
+    "scope_limit": "Potential small SOTA candidate only. Up-only hotset does not solve 10 tok/s; down correctness and batching are still required."
+  },
+  "next_correctness_step": {
+    "decision": "revisit down correctness with CPU-compatible arithmetic before designing all-up/all-down performance",
+    "reason": "The previous down rejection happened before CPU-compatible arithmetic fixed the up boundary. Down is still required for a 10 tok/s path.",
+    "required_source_guard": "Any down test must be behind an explicit default-off env gate; current code deliberately restricts q80 write/skip to ffn_up_exps."
+  }
+}
