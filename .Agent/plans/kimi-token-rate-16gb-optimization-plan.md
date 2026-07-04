@@ -54798,3 +54798,90 @@ systemd-run --wait --collect --same-dir \
   - Reject THREADS=24.
   - Keep runner default `THREADS=32`.
   - No source rollback is needed because this was a runtime-only probe.
+
+## Phase 7HU: CPU thread upper-bound probe with THREADS=40
+
+Start time: 2026-07-05T05:05:00+08:00.
+
+Goal:
+
+- Test the opposite side of Phase 7HT: use all visible host CPUs
+  (`nproc=40`) instead of the production `THREADS=32`.
+- Keep all model/cache/io/VRAM parameters unchanged.
+- Determine whether the current `THREADS=32` leaves useful CPU prompt/fallback,
+  scatter, or CUDA-driver work underfed, or whether extra CPU workers only
+  increase contention with io_uring/pinned staging workers.
+
+Why this is still aligned with the current bottleneck:
+
+- Phase 7HT proved reducing threads to `24` is worse:
+  - n96 decode `73296.36 ms / 77`;
+  - TTFT `89211.74 ms`;
+  - iouring wait increased to `38.070s`.
+- The server has `40` online CPUs. Production `THREADS=32` leaves about eight
+  CPUs for staging/io/CUDA runtime work. It is not yet proven whether this is
+  the best split under the current post-drop-cache, 16 GB constrained setup.
+- This probe is cheap and bounded: no source risk, no cache policy change, no
+  extra RAM tier, and no already rejected VDR/coalescer/prefetch-depth path.
+
+Theoretical upper bound:
+
+- If prompt/fallback or host scatter is CPU-underfed at `32` threads, using
+  `40` threads can reduce TTFT and possibly shave a small amount from decode.
+- It cannot reduce the fundamental `iouring_bytes` volume or call-boundary
+  batch shape, so expected decode upside is small: at most around `0-1.5s` on
+  n96, bounded by observed run-to-run variance and CPU-side host work.
+- If the bottleneck is storage/read wait plus staging contention, `THREADS=40`
+  should regress iouring wait and/or TTFT; reject immediately in that case.
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hu-threads40"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=40 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must be competitive with the current n32 stable region
+  `29.1-29.8s / 31`;
+- continue to n96 only if n32 is not slower than Phase 7HR
+  `29598.42 ms / 31` by more than noise, or if TTFT improves enough to justify
+  a long-output check.
+
+Experiment B: n96 candidate, only if n32 passes
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hu-threads40"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=40 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails any hard gate or clearly regresses decode/TTFT, reject without
+  n96 and keep `THREADS=32`.
+- If n96 does not beat historical Phase 7FB `70087.31 ms / 77`, reject or
+  record as parity-only and keep `THREADS=32`.
+- If n96 beats SOTA, repeat n96 once before accepting; only then update runner
+  defaults and push the result.
