@@ -49775,3 +49775,94 @@ systemd-run --wait --collect --same-dir \
     exposed wall bucket.
   - Do not continue decreasing `UPGATE_PCT` without a more selective down
     hotset policy that avoids taking broad capacity from upgate.
+
+## Phase 7GQ: current SOTA LFU/LRU cache policy retest
+
+Start time: 2026-07-04T20:03:00+08:00.
+
+Goal:
+
+- Improve cache hit rate within the existing VRAM split instead of moving VRAM
+  between upgate and down.
+- Keep `UPGATE_PCT=60`, `VRAM_MIB=15000`, and source code unchanged.
+- Test only the existing `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru` runtime option.
+
+Why this follows Phase 7GP:
+
+- Phase 7GP showed broad capacity transfer to down is harmful:
+  - down hit rate improved only from about `73.6%` to `74.7%`;
+  - upgate hit rate fell from about `43.7%` to `37.3%`;
+  - n32 decode regressed to `30675.60 ms`.
+- The right low-risk direction is therefore not more down capacity, but better
+  eviction within the current per-cache capacity.
+- Historical `profile_lfu_lru`/hybrid profile attempts were rejected because
+  profile-guided eviction damaged prefetch behavior. This phase does not use
+  a profile file, preloading, or profile protection.
+- Plain `lfu_lru` uses observed slot hits and LRU as a tiebreaker, so it may
+  keep reused hot experts without consuming extra host RAM or changing model
+  math.
+
+Theory:
+
+- Current n96 Phase 7GO:
+  - down misses `8690`;
+  - upgate misses `41969`;
+  - down stage wall `10554.907 ms`;
+  - upgate wall `16848.110 ms`.
+- If LFU/LRU reduces misses by even 3% in both caches without disrupting
+  current-down prefetch, the rough n96 upper bound is around:
+  - down stage: `0.03 * 10.55 s ~= 0.32 s`;
+  - upgate runtime load: smaller but still meaningful because upgate misses are
+    numerous.
+- If the access pattern is scan-like or LFU keeps stale early experts, decode
+  can regress. The decision must come from cold-start metrics.
+
+Experiment A: n32 LFU/LRU probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gq-lfu-lru"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_POLICY=lfu_lru" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 materially improves
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gq-lfu-lru"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_POLICY=lfu_lru" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 does not materially improve decode versus the current rebuilt n32
+  baseline range (`29140-29795 ms`), reject and do not run n96.
+- If n32 improves and both upgate/down hit rates do not regress materially, run
+  n96.
+- If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
+  before claiming SOTA and make the runtime setting part of the accepted
+  reproduction.
+- If n96 fails speed, quality, TTFT, RAM, or fallback gates, reject and keep
+  default LRU.
