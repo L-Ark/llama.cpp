@@ -47814,6 +47814,81 @@ Result B: n32 repeat completed; rejected as a performance optimization.
   - keep the env-gated implementation default-off for diagnostics only because
     default behavior and SOTA runtime are unchanged.
 
+## Phase 7GH: isolate current-down overlap on an aux pinned ring
+
+Start time: 2026-07-04T18:28:00+08:00.
+
+Goal:
+
+- Test whether current-down overlap is losing time by sharing the main pinned
+  staging ring with other runtime loads.
+- Move only current-down overlap copies to an aux pinned ring when
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1`.
+- Keep default behavior unchanged when the flag is off.
+
+Bottleneck and theory:
+
+- Phase 7GD/7GF/7GG all show current-down overlap worker time around
+  `3.38-3.48 s` for n32.
+- Phase 7GG proved that simply starting the same work earlier is not a
+  reproducible SOTA improvement.
+- Current-down overlap uses `bc.prefetch_stream` but stages through
+  `bc.stage_ring`; regular up/gate/down runtime loads also use the main and
+  gate rings.
+- If ring slot waits or io_uring accounting contention contributes to visible
+  worker time, using `bc.stage_ring_up_aux` for current-down overlap may reduce
+  wait without changing selected experts or math.
+- Upper bound is small:
+  - current-down overlap worker time is only `~3.4 s`;
+  - if 10-15% is ring-slot contention, n32 decode can improve by `0.34-0.51 s`;
+  - if the bottleneck is SSD latency and per-call batch granularity, this will
+    be neutral.
+
+Implementation plan:
+
+- Add `current_down_overlap_aux_ring_enabled()`.
+- In `start_current_down_overlap()`, choose:
+  - `bc.stage_ring_up_aux` when the flag is enabled;
+  - otherwise the existing `bc.stage_ring`.
+- Use the chosen ring for both:
+  - `expert_pack_iouring_copy_jobs(...)`;
+  - fallback `batch_cache_copy_h2d(...)`.
+- Do not change cache keys, cache insertion, CUDA stream, active expert list,
+  output math, or the accepted SOTA runner.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gh-current-down-aux-ring"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 fails gates or is not faster than the recent rebuilt n32 range
+  (`29140-29795 ms`), reject and keep the flag default-off only if useful for
+  diagnostics.
+- If n32 is faster than the range, run a second n32 repeat before n96.
+- If both n32 runs reproduce and n96 beats Phase 7FB `70087.31 ms`, accept,
+  commit, and push immediately.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
