@@ -46092,3 +46092,55 @@ Decision:
   - before testing lower or higher splits, rerun current `UPGATE_PCT=60` n96
     on the rebuilt `sm_120a` build to establish an apples-to-apples long-decode
     baseline.
+
+## Phase 7FS: rebuilt `UPGATE_PCT=60` n96 baseline
+
+Start time: 2026-07-04T16:00:00+08:00.
+
+Goal:
+
+- Establish the current rebuilt `sm_120a` long-decode baseline at the accepted
+  split `UPGATE_PCT=60`.
+- Avoid making more split decisions from n32-only improvements.
+- Keep source unchanged.
+
+Why this is required:
+
+- Phase 7FQ (`UPGATE_PCT=65`) and Phase 7FR (`UPGATE_PCT=62`) both improved
+  n32 but failed n96.
+- The accepted Phase 7FB n96 SOTA was measured before the clean-build
+  restoration work.
+- Current rebuilt `sm_120a` build has only an n32 `UPGATE_PCT=60` baseline
+  (Phase 7FO), not a fresh n96 `UPGATE_PCT=60` baseline.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7fs-upgate60-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 is close to or better than Phase 7FB `70087.31 ms / 77`, keep
+  `UPGATE_PCT=60` as the long-decode baseline and stop split-upward tests.
+- If rebuilt `UPGATE_PCT=60` is materially slower than Phase 7FB, treat current
+  build/runtime as having a long-decode regression and investigate build/runtime
+  differences before more algorithmic tuning.
+- If it is clearly faster than Phase 7FB, run a second n96 confirmation before
+  calling it a new SOTA.
