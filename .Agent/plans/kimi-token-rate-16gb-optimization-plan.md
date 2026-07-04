@@ -43131,3 +43131,98 @@ Decision:
 - This phase is diagnostic only and cannot promote SOTA.
 - It should decide whether to spend engineering time on route-aware delayed
   pack-mmap release, or abandon this axis.
+
+Phase 7FA result - fallback pack-mmap reuse is high:
+
+- End time: 2026-07-04T05:47:00Z.
+- Artifacts analyzed:
+  - 7EX n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-033254Z-n32-phase7ex-slots12-timeline/fallback-profile.csv`;
+  - 7EZ n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-040531Z-n32-phase7ez-packmmap-dontneed/fallback-profile.csv`;
+  - 7EX n96 A:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-033958Z-n96-phase7ex-slots12-confirm-a/fallback-profile.csv`.
+- Filter:
+  - `phase=decode`;
+  - `tensor` contains `ffn_down_exps.weight`.
+
+7EX n32:
+
+- pairs `572`;
+- total fallback count/calls `1736`;
+- fallback time `2553.984 ms`;
+- routed bytes `13.351 GiB`;
+- repeated pairs `310`;
+- repeated count/calls `1474`;
+- repeated fallback time `2042.610 ms`;
+- repeated routed bytes `11.336 GiB`;
+- repeat share:
+  - count `84.91%`;
+  - time `79.98%`;
+  - bytes `84.91%`.
+
+7EZ n32:
+
+- pairs `572`;
+- total fallback count/calls `1736`;
+- fallback time `4448.848 ms`;
+- routed bytes `13.351 GiB`;
+- repeated pairs `310`;
+- repeated count/calls `1474`;
+- repeated fallback time `3683.274 ms`;
+- repeated routed bytes `11.336 GiB`;
+- repeat share:
+  - count `84.91%`;
+  - time `82.79%`;
+  - bytes `84.91%`.
+
+7EX n96 A:
+
+- pairs `1049`;
+- total fallback count/calls `4312`;
+- fallback time `4810.992 ms`;
+- routed bytes `33.161 GiB`;
+- repeated pairs `623`;
+- repeated count/calls `3886`;
+- repeated fallback time `4203.904 ms`;
+- repeated routed bytes `29.885 GiB`;
+- repeat share:
+  - count `90.12%`;
+  - time `87.38%`;
+  - bytes `90.12%`.
+
+Top repeated fallback pairs:
+
+- 7EX n32:
+  - `blk.18.ffn_down_exps.weight expert=211 count=27`;
+  - `blk.15.ffn_down_exps.weight expert=15 count=24`;
+  - `blk.10.ffn_down_exps.weight expert=35 count=22`;
+  - `blk.7.ffn_down_exps.weight expert=14 count=21`;
+  - `blk.8.ffn_down_exps.weight expert=241 count=20`.
+- 7EX n96 A:
+  - `blk.18.ffn_down_exps.weight expert=211 count=69`;
+  - `blk.8.ffn_down_exps.weight expert=241 count=64`;
+  - `blk.7.ffn_down_exps.weight expert=8 count=46`;
+  - `blk.15.ffn_down_exps.weight expert=130 count=46`;
+  - `blk.15.ffn_down_exps.weight expert=15 count=43`.
+
+Interpretation:
+
+- Immediate per-use `MADV_DONTNEED` is structurally wrong for this route
+  pattern.
+- Most residual decode fallback bytes are reused within the same run:
+  - `84.91%` on n32;
+  - `90.12%` on n96 A.
+- Phase 7EZ slowed down because it discarded pages that were likely to be
+  reused soon.
+- A delayed release policy would need accurate future-use/reuse-distance
+  prediction. Without token-order fallback trace, implementing that now would
+  be speculative and high-risk.
+
+Decision:
+
+- Abandon immediate or naive delayed expert-pack mmap release for now.
+- Keep Phase 7EX as current SOTA.
+- Move the next optimization target back to reducing movement latency or
+  improving GPU coverage; do not spend more time on mmap page-release policies
+  without a new token-order fallback trace.
