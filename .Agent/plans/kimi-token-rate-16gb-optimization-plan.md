@@ -48627,6 +48627,73 @@ Result: n32 completed; reject and revert.
     runtime loads / cross-call IO aggregation, not `blk.7/8/9` current-down
     pack-only preload.
 
+## Phase 7GM: current runtime_load copy-profile refresh
+
+Start time: 2026-07-04T19:22:00+08:00.
+
+Goal:
+
+- Re-locate the visible IO bottleneck after rejecting the `blk.7/8/9`
+  current-down preload path.
+- Use the existing default-off `GGML_MOE_COPY_PROFILE_OUT` instrumentation to
+  identify which `runtime_load` size classes and tensors dominate current
+  cold-start n32 decode.
+- Do not change inference behavior.
+
+Why this is the next step:
+
+- Phase 7FW showed the queue-depth cap is staging granularity:
+  - main avg read jobs about `4.00`;
+  - gate avg read jobs about `3.22`;
+  - no `9-16` inflight batches.
+- Phase 7GJ/7GK/7GL showed adding non-consumed current-down preload increases
+  IO or leaves decode unchanged.
+- Therefore the next implementation must target visible `runtime_load` calls,
+  not speculative current-down preload.
+
+Experiment A: n32 copy profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gm-copy-profile-refresh"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required summaries:
+
+```bash
+awk -F, 'NR>1 && $2=="runtime_load"{cnt++; bytes+=$5; wall+=$14; io+=$11; if($8==1){icnt++; ibytes+=$5; iwall+=$14; iio+=$11} else {ncnt++; nbytes+=$5; nwall+=$14; nio+=$11}} END{printf "runtime_load rows=%d bytes=%.3fGiB wall=%.3f io_wait=%.3f iouring_rows=%d iouring_bytes=%.3fGiB iouring_wall=%.3f iouring_io=%.3f non_iouring_rows=%d non_iouring_bytes=%.3fGiB non_iouring_wall=%.3f non_iouring_io=%.3f\n",cnt,bytes/1024/1024/1024,wall,io,icnt,ibytes/1024/1024/1024,iwall,iio,ncnt,nbytes/1024/1024/1024,nwall,nio}' "$RUN/copy-profile.csv"
+awk -F, 'NR>1 && $2=="runtime_load"{key=$5; cnt[key]++; bytes[key]+=$5; wall[key]+=$14; io[key]+=$11} END{for(k in cnt) printf "bytes=%s rows=%d GiB=%.3f wall=%.3f io_wait=%.3f\n",k,cnt[k],bytes[k]/1024/1024/1024,wall[k],io[k]}' "$RUN/copy-profile.csv" | sort -k4,4nr | head -20
+awk -F, 'NR>1 && $2=="runtime_load"{key=$3; cnt[key]++; bytes[key]+=$5; wall[key]+=$14; io[key]+=$11} END{for(k in cnt) printf "wall=%.3f rows=%d GiB=%.3f io_wait=%.3f tensor=%s\n",wall[k],cnt[k],bytes[k]/1024/1024/1024,io[k],k}' "$RUN/copy-profile.csv" | sort -nr | head -30
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If copy-profile overhead is extreme or gates fail, reject this diagnostic and
+  do not base implementation decisions on it.
+- If one size class/tensor family dominates visible `runtime_load` wall and is
+  already iouring, plan cross-call aggregation for that class.
+- If non-iouring rows dominate, plan fallback-to-pack/iouring conversion for the
+  specific reason.
+- If no clear concentration appears, do not implement speculative aggregation;
+  refresh TTFT/down/upgate profiles instead.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
