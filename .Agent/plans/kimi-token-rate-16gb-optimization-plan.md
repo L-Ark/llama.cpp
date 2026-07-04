@@ -49933,3 +49933,115 @@ systemd-run --wait --collect --same-dir \
     be manually checked against the semantic/coherence gate.
   - Do not retry broad cache-policy changes (`lfu_lru`, `profile_lfu_lru`, or
     hybrid) without a narrow tensor/layer-scoped design.
+
+## Phase 7GR: IQ3_XXS MMVQ VDR=1 micro-probe
+
+Start time: 2026-07-04T20:12:00+08:00.
+
+Goal:
+
+- Test one remaining IQ3_XXS single-column MMVQ kernel parameter that has not
+  been covered by earlier phases:
+  `VDR_IQ3_XXS_Q8_1_MMVQ=1`.
+- Keep the current source path shape:
+  - no true-batch MMVQ;
+  - no vendor MMQ;
+  - no Q8_K decode path;
+  - no IQ3 up/gate parallel stream;
+  - no gate-copy pipeline;
+  - no cache-policy or VRAM split changes.
+
+Why this is the next narrow source probe:
+
+- Phase 7GO current n96 profile shows a durable IQ3_XXS bucket:
+  - type `18,18`: rows `771`, wall `7763.360 ms`, kernel `7701.515 ms`.
+- Broad movement/cache policies just failed:
+  - Phase 7GP `UPGATE_PCT=55` moved capacity to down but regressed decode;
+  - Phase 7GQ `lfu_lru` broke both speed and semantic output.
+- Prior IQ3 alternatives are already rejected:
+  - VDR=4 did not reproduce on n96 repeat;
+  - sign-unpack precompute did not reproduce on n96 repeat;
+  - true compact-batch IQ3 MMVQ regressed badly;
+  - vendor MMQ and Q8_K decode regressed;
+  - IQ3 parallel/up-gate pipeline variants added IO/staging contention.
+- VDR=1 is different from VDR=4:
+  - it reduces the work grouped per vec-dot call instead of increasing it;
+  - it may reduce instruction dependency length and live temporaries;
+  - it may also regress because each thread does less work per iteration and
+    loop overhead rises.
+
+Theory and upper bound:
+
+- The active single-column IQ3_XXS kernel previously showed modest resource
+  usage (`REG:52`, no stack spill), so this is not primarily a register-pressure
+  fix.
+- The possible win is small and must come from instruction scheduling or
+  latency hiding inside `vec_dot_iq3_xxs_q8_1`.
+- Hard n96 upper bound is the type `18,18` kernel bucket:
+  `7701.515 ms`.
+- Realistic bound is at most a few percent of that bucket:
+  - `1% ~= 77 ms`;
+  - `3% ~= 231 ms`;
+  - `5% ~= 385 ms`.
+- Because this effect size is below cold-start variance, a candidate must pass
+  n96 and then a second n96 repeat before acceptance.
+
+Source change:
+
+- Patch only:
+
+```c
+#define VDR_IQ3_XXS_Q8_1_MMVQ 1
+```
+
+- Keep:
+
+```c
+#define VDR_IQ3_XXS_Q8_1_MMQ 2
+```
+
+- Do not edit any other type, runner, model path, expert pack, cache setting,
+  iouring setting, pinned slot count, prompt, or sampling setting.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment A: n96 candidate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gr-iq3-vdr1"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- full France answer must be semantically correct and coherent by manual
+  inspection, regardless of the runner's simple `quality` field;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n96 decode must beat Phase 7FB `70087.31 ms / 77`.
+
+Decision rule:
+
+- If the n96 candidate fails any gate or does not beat Phase 7FB, revert the
+  source patch immediately, commit and push the rollback, and record the
+  rejection here.
+- If the n96 candidate passes and beats Phase 7FB, run a second n96 cold-start
+  repeat with the same commit and command shape.
+- Accept only if the repeat also passes all gates and beats Phase 7FB.
+- If accepted, commit/push the source change and record exact reproduction
+  commands and both run directories.
