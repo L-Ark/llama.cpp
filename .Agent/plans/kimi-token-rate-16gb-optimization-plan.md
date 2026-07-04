@@ -47665,59 +47665,154 @@ Decision rule:
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
-Result: n32 completed; rejected, do not run n96.
+Result A: n32 completed; gates pass, but improvement is small and must be
+reproduced before n96.
 
-- End time: 2026-07-04T16:39:42+08:00.
+- End time: 2026-07-04T18:19:06+08:00.
 - Run:
-  `/root/lfz/runs/vendor-kimi-token-rate/20260704-083731Z-n32-phase7fu-iodepth16-refill8`.
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-101702Z-n32-phase7gg-early-current-down`.
 - Code head:
-  `2622f3ef1`.
+  `afe2a9541`.
 - Runtime overrides:
-  - `MOE_IO_DEPTH=16`;
-  - `MOE_IO_REFILL_BATCH=8`;
+  - `EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1"`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
   - `MOE_PREFETCH_DOWN_DEPTH=2`;
   - `VRAM_MIB=15000`;
   - `PINNED_SLOTS=12`;
-  - `UPGATE_PCT=60`.
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`.
 - Metrics:
   - quality `pass`;
   - output:
     `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
-  - TTFT `76991.25 ms`;
-  - decode `29140.36 ms / 31`, `1.06 tok/s`;
+  - TTFT `73516.28 ms`;
+  - decode `28927.32 ms / 31`, `1.07 tok/s`;
   - memory peak `15899996160`;
   - memory final:
-    - `anon=462848`;
-    - `file=14844252160`;
-    - `kernel=234618880`;
-    - `inactive_file=5847101440`;
-    - `active_file=8996634624`;
-    - `pgmajfault=973390`;
+    - `anon=450560`;
+    - `file=14844489728`;
+    - `kernel=234729472`;
+    - `inactive_file=2657759232`;
+    - `active_file=12185985024`;
+    - `pgmajfault=959766`;
   - `read_failures=0`, `iouring_fallbacks=0`;
   - expert pack:
     - hits `25458`, misses `192`;
     - `iouring_reads=15024`;
     - `iouring_bytes=87082139648`;
-    - `iouring_wait_us=14728461`;
-  - io_uring histograms:
-    - global/main batches remained capped at `inflight_max=8`;
-    - main `inflight_avg=3.19`, `inflight_max=8`;
-    - gate `inflight_avg=2.83`, `inflight_max=8`;
-    - no `9-16` batches observed.
+    - `iouring_wait_us=15457450`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - submitted_batches `896`;
+    - failed_batches `0`;
+    - worker_us `3416428`;
+    - max_jobs `8`.
+  - VRAM cache:
+    - down hit rate `73.6%`;
+    - upgate hit rate `43.7%`.
+- Comparison:
+  - better than Phase 7GF `29118.60 ms` by `191.28 ms`;
+  - better than the recent rebuilt n32 range lower edge only slightly, so the
+    observed gain is not yet strong enough to claim a new SOTA.
 - Analysis:
-  - env overrides were correctly written to `env.txt`, so the lack of
-    `inflight_max > 8` is not a runner propagation problem.
-  - Code computes real depth as `min(GGML_MOE_IO_DEPTH, ring.slots.size())`;
-    with `PINNED_SLOTS=12`, depth could have exceeded 8.
-  - The observed cap is therefore dominated by per-call `read_jobs.size()` /
-    selected expert miss grouping, not by the io_uring queue depth parameter.
-  - Increasing single-call queue depth does not attack the current bottleneck.
+  - starting current-down overlap earlier did not change the number of planned
+    or completed current-down jobs;
+  - `worker_us` remains about `3.4 s`, so the possible gain comes only from
+    hiding a slightly larger fraction of the same read/copy work;
+  - `iouring_wait_us` is not reduced, which means this is an overlap timing
+    improvement, not an IO throughput improvement.
 - Decision:
-  - Reject `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8` as a performance
-    optimization.
-  - Do not run n96 confirmation.
-  - Keep the runner override support because defaults remain unchanged and it
-    makes the negative result reproducible.
+  - Run one n32 repeat with the same command and cold-start gates.
+  - Only run n96 if the repeat remains below the recent n32 rebuilt range
+    (`29140-29795 ms`) and passes all gates.
+  - If repeat falls back into baseline noise, reject the env flag as a
+    performance optimization and keep it only as default-off diagnostic code.
+
+Experiment B: n32 repeat for reproducibility
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gg-early-current-down-repeat"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment C: n96 confirmation only if Experiment B passes and remains faster
+than rebuilt n32 noise
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gg-early-current-down"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Result B: n32 repeat completed; rejected as a performance optimization.
+
+- End time: 2026-07-04T18:23:48+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-102141Z-n32-phase7gg-early-current-down-repeat`.
+- Code head:
+  `afe2a9541`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74089.88 ms`;
+  - decode `29231.83 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=450560`;
+    - `file=14839173120`;
+    - `kernel=234676224`;
+    - `inactive_file=10863624192`;
+    - `active_file=3975008256`;
+    - `pgmajfault=972620`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15083077`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - submitted_batches `896`;
+    - failed_batches `0`;
+    - worker_us `3478318`;
+    - max_jobs `8`.
+- Reproducibility decision:
+  - the first run was `28927.32 ms`, but the repeat was `29231.83 ms`;
+  - the repeat is inside the recent rebuilt n32 baseline range
+    (`29140-29795 ms`);
+  - the gain is therefore not reproducible enough to justify n96.
+- Final Phase 7GG decision:
+  - reject `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` as a SOTA/performance
+    optimization;
+  - do not run n96;
+  - do not enable this flag in the accepted SOTA runner;
+  - keep the env-gated implementation default-off for diagnostics only because
+    default behavior and SOTA runtime are unchanged.
 
 ## Phase 7FV: down prefetch depth overlap probe
 
