@@ -53234,3 +53234,41 @@ Decision rule:
   commands.
 - If repeat does not beat `70087.31 ms / 77`, reject depth `1` as not
   reproducibly SOTA and keep production depth `2`.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-160513Z-n96-phase7hl-prefetch-depth1-repeat`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `75468.03 ms`;
+  - decode `71672.10 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Counters:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37463994`;
+  - iouring inflight avg `3.10`, max `8`;
+  - current-down overlap jobs `9109`, worker `8432004 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Comparison:
+  - Phase 7HK n96 depth1 first run: `70104.60 ms / 77`;
+  - Phase 7HL n96 depth1 repeat: `71672.10 ms / 77`;
+  - historical Phase 7FB target: `70087.31 ms / 77`;
+  - repeat is slower than both the first depth1 run and the historical target.
+- Decision:
+  - Reject `MOE_PREFETCH_DOWN_DEPTH=1` as not reproducibly SOTA.
+  - Keep production default `MOE_PREFETCH_DOWN_DEPTH=2`.
+  - Do not update `scripts/kimi-phase7fb-min-profile-repro.sh`.
+  - The first depth1 run remains useful evidence that down-prefetch concurrency
+    is near a variance boundary, but it is not reliable enough for acceptance.
