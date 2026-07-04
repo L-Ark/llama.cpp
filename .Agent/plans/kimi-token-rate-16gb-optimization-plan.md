@@ -49705,3 +49705,73 @@ Decision rule:
   before claiming SOTA.
 - If n96 does not beat Phase 7FB or fails quality/TTFT/RAM/fallback gates,
   reject the split and keep `UPGATE_PCT=60`.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T20:00:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-115635Z-n32-phase7gp-upgate55`.
+- Code head:
+  `d27dadb6776d2d2acb66ec2b602f21b0d2b200a1`.
+- Runtime:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=55`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-115635Z-n32-phase7gp-upgate55
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=55 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77116.90 ms`;
+  - decode `30675.60 ms / 31`, `1.01 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Cache / movement metrics:
+  - expert pack hits `27085`, misses `192`;
+  - `iouring_reads=15671`;
+  - `iouring_bytes=89796460544`;
+  - `iouring_wait_us=15845438`;
+  - down slots `907`, hits `9801`, misses `3319`, preloads `3525`,
+    hit rate `74.7%`;
+  - upgate slots `1539`, hits `11111`, misses `18665`,
+    hit rate `37.3%`;
+  - current-down overlap jobs `3525`, cache hits `3667`, worker `3282397 us`.
+- Comparison versus default n32 shape:
+  - down slots increased from `806` to `907`;
+  - down hit rate improved from about `73.6%` to `74.7%`;
+  - upgate slots dropped from `1679` to `1539`;
+  - upgate hit rate regressed from about `43.7%` to `37.3%`;
+  - decode worsened versus the rebuilt n32 baseline range
+    (`29140-29795 ms`) by at least `880 ms`.
+- Decision:
+  - Reject `UPGATE_PCT=55`.
+  - Do not run n96.
+  - Keep current default `UPGATE_PCT=60`.
+- Gap analysis:
+  - More down cache did reduce down misses slightly, but the lost upgate cache
+    capacity caused a much larger upgate miss increase.
+  - Global VRAM split is too blunt: it moves capacity away from the largest
+    exposed wall bucket.
+  - Do not continue decreasing `UPGATE_PCT` without a more selective down
+    hotset policy that avoids taking broad capacity from upgate.
