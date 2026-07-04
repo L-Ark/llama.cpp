@@ -59582,6 +59582,105 @@ Decision rule:
 - If it only moves IO into TTFT or decode remains flat, reject the profile and
   stop cold-down preload expansion.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `05b9d6858 docs: record cold down preload probe`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iy-full-cold-down-preload/n32`
+
+Gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `72296.62 ms`, below `106331.72 ms`;
+- decode `28930.38 ms / 31`, `1.07 tok/s`;
+- host RAM peak `15899996160` bytes, final `15071404032` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- profile preload loaded `16` entries;
+- iouring reads `14862`, bytes `86301917184`, wait `14683533 us`.
+
+Outlier check:
+
+- Despite loading `16` entries, the main cold rows remain for half of the
+  intended first batch:
+  - `blk.60 down` experts `240,320,135,41`: `~119 ms`;
+  - `blk.4 down` experts `311,159,139,79`: `~117 ms`.
+- This indicates the preloaded entries are not protected by default and can be
+  evicted before use.
+
+Decision:
+
+- Reject unprotected full cold-down preload.
+- Reason:
+  - It passes all hard gates.
+  - It does not improve decode versus the diagnostic baseline.
+  - TTFT rises to `72296.62 ms`.
+  - The target cold cluster is still visible, so the preload is not retained
+    reliably.
+- Do not repeat this unprotected profile.
+
+## Phase 7IZ: protected full first cold down preload
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IY showed that profile preload can load entries, but without
+  `GGML_MOE_VRAM_PROFILE_PROTECT=1`, entries can be evicted before use.
+
+Hypothesis:
+
+- Enabling profile protect with a small explicit reserve can keep the `16`
+  cold-down entries resident until first use.
+- Because only `16` down slots are protected and down cache has `766` slots,
+  the hit-rate/VRAM cost should be small.
+
+Theoretical bound:
+
+- Same as 7IY: the only expected gain is the first cold down cluster, likely
+  hundreds of milliseconds at most.
+- TTFT may rise because the protected preload work occurs before decode; TTFT
+  must remain below `106331.72 ms`.
+
+Experiment:
+
+- No source change.
+- Use the same `16` entry profile as 7IY.
+- Add:
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`;
+  - `GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS=16`;
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2`.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If n32 improves and target cold rows disappear, repeat n32.
+- If target rows remain or decode is flat/worse, reject protected preload and
+  stop cold-down preload experiments.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
