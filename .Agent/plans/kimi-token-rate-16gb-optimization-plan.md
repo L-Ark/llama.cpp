@@ -55224,3 +55224,106 @@ Decision rule:
   defaults.
 - If n96 beats SOTA, repeat n96 once before accepting. Only after the repeat
   passes should the result be committed as a performance improvement and pushed.
+
+Result: rejected and reverted.
+
+- Plan commit:
+  `d3a5b2697` (`docs: plan down four-way staging probe`).
+- Source probe commit:
+  `46470aec5` (`cuda: add down four-way staging probe`).
+- Rollback commit:
+  `86aae8af6` (`Revert "cuda: add down four-way staging probe"`).
+- Server source for run:
+  `46470aec5`.
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard wici/vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - success at source head `46470aec5`;
+  - only pre-existing warning classes were reported.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-175837Z-n32-phase7hw-down-4way`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-175837Z-n32-phase7hw-down-4way
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Activation evidence:
+  - stderr contains `down parallel CPU staging active`;
+  - stderr contains `down four-way CPU staging active`;
+  - aux pinned rings were used:
+    - `up_aux` copies `796`, iouring jobs `790`;
+    - `gate_aux` copies `591`, iouring jobs `588`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `70229.93 ms`;
+  - decode `29928.75 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `14865764352`;
+  - swap max `0`;
+  - anon `454656`;
+  - file `14626353152`;
+  - kernel `234770432`;
+  - inactive file `2315706368`;
+  - active file `12310118400`;
+  - major faults `940270`;
+  - file workingset refaults `22858`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache counters:
+  - expert pack hits `25458`, misses `192`;
+  - `direct_reads=8687`;
+  - `iouring_reads=15044`;
+  - `iouring_bytes=87229169664`;
+  - `iouring_submit_us=40601`;
+  - `iouring_wait_us=20499962`;
+  - global iouring batches `5209`, submit calls `5209`, wait calls `12415`,
+    CQEs `15044`, inflight avg `2.88`, max `8`;
+  - global batch hist `1:1923,2-4:2044,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - main ring jobs `10192`, wait calls `8070`, inflight avg `3.20`;
+  - gate ring jobs `3474`, wait calls `3002`, inflight avg `2.80`;
+  - up_aux jobs `790`, wait calls `772`, inflight avg `1.17`;
+  - gate_aux jobs `588`, wait calls `571`, inflight avg `1.09`;
+  - current-down worker `3461732 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Comparison:
+  - 7HR n32 parity: `29598.42 ms / 31`;
+  - 7HW n32 four-way down staging: `29928.75 ms / 31`;
+  - four-way is `330.33 ms` slower on n32 and does not meet the n96 gate.
+- Gap analysis:
+  - The implementation did split work to aux rings, but this increased total
+    iouring calls and fragmented batches:
+    - global batches rose from normal `4002` to `5209`;
+    - `1`-job batches rose from normal `335` to `1923`;
+    - aux rings had very low inflight avg (`1.17` and `1.09`).
+  - The extra parallelism therefore worsened read granularity and queueing
+    instead of reducing the critical path.
+  - This matches the earlier lesson from the rejected coalescer/split paths:
+    more streams are not useful unless they preserve effective batching and
+    up/down overlap.
+- Decision:
+  - Reject `GGML_MOE_DOWN_PARALLEL_STAGE_4WAY=1`.
+  - Do not run n96.
+  - Revert source patch immediately; rollback commit `86aae8af6` was pushed.
+  - Keep production two-way down staging.
