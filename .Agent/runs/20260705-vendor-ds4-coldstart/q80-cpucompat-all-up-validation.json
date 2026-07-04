@@ -1,0 +1,93 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: all-up Q8_0 CPU-compatible ffn_up_exps pre-fallback skip correctness gate",
+  "result": "passed",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "e798311a89880fb3d344796d7508e871d17b2c8f",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "commit_identity_required": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "run": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T203834Z-q80-cpucompat-all-up/top1",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-all-up-20260704T203834Z.service",
+    "service_result": "success",
+    "service_runtime": "1min 43.729s",
+    "cpu_time": "18min 46.368s",
+    "framework": "vendor DeepSeek",
+    "performance_candidate_this_step": false
+  },
+  "environment": {
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0",
+    "down_skip_enabled": false
+  },
+  "correctness": {
+    "baseline_result": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean/result.gguf",
+    "pass_condition": "llama-results exits 0 with same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0",
+    "status": 0,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "same_top1_ratio": 1.0,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "base_top1_matches_next_token": 119,
+    "calc_top1_matches_next_token": 119,
+    "mismatches_preview": []
+  },
+  "skip_report": {
+    "records": 34800,
+    "bad_records": 0,
+    "coverage": "blk.0 through blk.39 ffn_up_exps.weight, 870 records per layer",
+    "first_records": [
+      "0,blk.0.ffn_up_exps.weight,16,1,2048",
+      "1,blk.0.ffn_up_exps.weight,26,1,2048",
+      "2,blk.0.ffn_up_exps.weight,96,1,2048",
+      "3,blk.0.ffn_up_exps.weight,137,1,2048"
+    ],
+    "last_records": [
+      "34794,blk.39.ffn_up_exps.weight,9,1,2048",
+      "34795,blk.39.ffn_up_exps.weight,117,1,2048",
+      "34796,blk.39.ffn_up_exps.weight,142,1,2048",
+      "34797,blk.39.ffn_up_exps.weight,190,1,2048",
+      "34798,blk.39.ffn_up_exps.weight,212,1,2048",
+      "34799,blk.39.ffn_up_exps.weight,221,1,2048"
+    ]
+  },
+  "cgroup": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1026064384,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "hashes": {
+    "summary_csv_sha256": "acc3a4d9d5055a3ebe8110406b068eda814f9ad0e935be7b335fdd892ea69a3c",
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "q80_skip_report_sha256": "1b6bad809b76ec514faa2324fe211153d8bdfa11cbfa35fc82141fc2dd447f09",
+    "run_case_sha256": "03a4925fb29aff368cd059f5f04fed2724bb70e25d5c740feb7e0f3f099b3109",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14"
+  },
+  "decision": {
+    "accepted_for_correctness_expansion": true,
+    "sota_status": "not a performance benchmark; current accepted SOTA remains 4.4 tok/s",
+    "next_step": "Write q80-cpucompat-up-skip-perf-plan.json, then run a strict cold France benchmark under 16GB/no-swap cgroup with all-up CPU-compatible up-skip enabled."
+  }
+}
