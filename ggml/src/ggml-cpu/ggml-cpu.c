@@ -34,6 +34,9 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <signal.h>
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
 #if defined(__gnu_linux__)
 #include <syscall.h>
 #endif
@@ -879,9 +882,6 @@ typedef void * thread_ret_t;
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#if defined(__linux__)
-#include <sys/mman.h>
-#endif
 
 #endif
 
