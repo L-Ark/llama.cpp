@@ -15,6 +15,7 @@ bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
+const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t, const char **, size_t *, uint64_t *) { return nullptr; }
 }
 #else
 // Decode-only batched streaming MoE path.
@@ -2479,7 +2480,7 @@ static void expert_pack_init_once() {
                  g_expert_pack.entries.size(), g_expert_pack.sources.size());
 }
 
-static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int expert_idx, size_t nbytes) {
+static const expert_pack_entry * expert_pack_lookup_impl(const char *tensor_name, int expert_idx, size_t nbytes, bool count_stats) {
     expert_pack_init_once();
     const char *disable_env = std::getenv("GGML_MOE_EXPERT_PACK_RUNTIME_DISABLE");
     if (disable_env && disable_env[0] && disable_env[0] != '0') return nullptr;
@@ -2498,10 +2499,46 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
     }
     if (lo < g_expert_pack.entries.size() &&
             expert_pack_entry_cmp(g_expert_pack.entries[lo], tensor_name, expert_idx, nbytes) == 0) {
-        ++g_expert_pack.hits;
+        if (count_stats) {
+            ++g_expert_pack.hits;
+        }
         return &g_expert_pack.entries[lo];
     }
-    ++g_expert_pack.misses;
+    if (count_stats) {
+        ++g_expert_pack.misses;
+    }
+    return nullptr;
+}
+
+static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int expert_idx, size_t nbytes) {
+    return expert_pack_lookup_impl(tensor_name, expert_idx, nbytes, true);
+}
+
+static const expert_pack_entry * expert_pack_lookup_any_size(const char *tensor_name, int expert_idx) {
+    expert_pack_init_once();
+    const char *disable_env = std::getenv("GGML_MOE_EXPERT_PACK_RUNTIME_DISABLE");
+    if (disable_env && disable_env[0] && disable_env[0] != '0') return nullptr;
+    if (!g_expert_pack.enabled || !tensor_name || !tensor_name[0]) return nullptr;
+
+    expert_pack_entry probe = {};
+    std::snprintf(probe.tensor, sizeof(probe.tensor), "%s", tensor_name);
+    probe.expert_idx = expert_idx;
+    probe.nbytes = 0;
+    auto it = std::lower_bound(
+            g_expert_pack.entries.begin(),
+            g_expert_pack.entries.end(),
+            probe,
+            [](const expert_pack_entry &a, const expert_pack_entry &b) {
+                const int name_cmp = std::strcmp(a.tensor, b.tensor);
+                if (name_cmp != 0) return name_cmp < 0;
+                if (a.expert_idx != b.expert_idx) return a.expert_idx < b.expert_idx;
+                return a.nbytes < b.nbytes;
+            });
+    if (it != g_expert_pack.entries.end() &&
+            std::strcmp(it->tensor, tensor_name) == 0 &&
+            it->expert_idx == expert_idx) {
+        return &*it;
+    }
     return nullptr;
 }
 
@@ -2642,6 +2679,72 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *tensor_na
     }
     if (entry->offset > g_expert_pack.mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > g_expert_pack.mmap_size) {
         ++g_expert_pack.mmap_misses;
+        return nullptr;
+    }
+    ++g_expert_pack.mmap_hits;
+    g_expert_pack.mmap_bytes.fetch_add(nbytes);
+    return (const char *) g_expert_pack.mmap_base + entry->offset;
+}
+
+extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
+        const char * tensor_name,
+        int expert_idx,
+        size_t nbytes,
+        const char ** reason,
+        size_t * entry_nbytes,
+        uint64_t * entry_offset) {
+    if (reason) {
+        *reason = "ok";
+    }
+    if (entry_nbytes) {
+        *entry_nbytes = 0;
+    }
+    if (entry_offset) {
+        *entry_offset = 0;
+    }
+    if (!tensor_name || !tensor_name[0] || nbytes == 0) {
+        if (reason) {
+            *reason = "invalid_args";
+        }
+        return nullptr;
+    }
+    if (!expert_pack_mmap_ensure()) {
+        if (reason) {
+            *reason = "mmap_unavailable";
+        }
+        return nullptr;
+    }
+
+    const expert_pack_entry * entry = expert_pack_lookup_impl(tensor_name, expert_idx, nbytes, false);
+    if (!entry) {
+        ++g_expert_pack.mmap_misses;
+        const expert_pack_entry * any_size = expert_pack_lookup_any_size(tensor_name, expert_idx);
+        if (any_size) {
+            if (reason) {
+                *reason = "nbytes_mismatch";
+            }
+            if (entry_nbytes) {
+                *entry_nbytes = (size_t) any_size->nbytes;
+            }
+            if (entry_offset) {
+                *entry_offset = any_size->offset;
+            }
+        } else if (reason) {
+            *reason = "entry_missing";
+        }
+        return nullptr;
+    }
+    if (entry_nbytes) {
+        *entry_nbytes = (size_t) entry->nbytes;
+    }
+    if (entry_offset) {
+        *entry_offset = entry->offset;
+    }
+    if (entry->offset > g_expert_pack.mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > g_expert_pack.mmap_size) {
+        ++g_expert_pack.mmap_misses;
+        if (reason) {
+            *reason = "range_invalid";
+        }
         return nullptr;
     }
     ++g_expert_pack.mmap_hits;

@@ -115,6 +115,13 @@ __attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr(
     const char * tensor_name,
     int expert_idx,
     size_t nbytes);
+__attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
+    const char * tensor_name,
+    int expert_idx,
+    size_t nbytes,
+    const char ** reason,
+    size_t * entry_nbytes,
+    uint64_t * entry_offset);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     int src0_up_type_int,
     int src0_gate_type_int,
@@ -309,8 +316,20 @@ static bool ggml_kimi_cpu_fallback_pack_mmap_enabled(void) {
     return ggml_kimi_cpu_fallback_pack_mmap.enabled && ggml_cuda_moe_expert_pack_mmap_ptr != NULL;
 }
 
+static bool ggml_kimi_cpu_fallback_miss_trace_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        initialized = 1;
+        const char * env = getenv("GGML_MOE_CPU_FALLBACK_MISS_TRACE");
+        enabled = env && env[0] && env[0] != '0';
+    }
+    return enabled;
+}
+
 static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
         const char * tensor_name,
+        int src0_type,
         bool prompt_phase,
         int64_t n_as,
         const int64_t * matrix_row_counts,
@@ -323,11 +342,26 @@ static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
             !tensor_name || !tensor_name[0] || expert_bytes == 0) {
         return;
     }
+    const bool trace_misses = ggml_kimi_cpu_fallback_miss_trace_enabled();
     for (int64_t cur_a = 0; cur_a < n_as; ++cur_a) {
         if (matrix_row_counts[cur_a] == 0) {
             continue;
         }
-        const void * ptr = ggml_cuda_moe_expert_pack_mmap_ptr(tensor_name, (int) cur_a, expert_bytes);
+        const char * reason = "entry_missing";
+        size_t entry_nbytes = 0;
+        uint64_t entry_offset = 0;
+        const void * ptr = NULL;
+        if (trace_misses && ggml_cuda_moe_expert_pack_mmap_ptr_debug != NULL) {
+            ptr = ggml_cuda_moe_expert_pack_mmap_ptr_debug(
+                    tensor_name,
+                    (int) cur_a,
+                    expert_bytes,
+                    &reason,
+                    &entry_nbytes,
+                    &entry_offset);
+        } else {
+            ptr = ggml_cuda_moe_expert_pack_mmap_ptr(tensor_name, (int) cur_a, expert_bytes);
+        }
         if (ptr) {
             mmap_ptrs[cur_a] = ptr;
             ggml_kimi_cpu_fallback_pack_mmap.hits++;
@@ -335,6 +369,21 @@ static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
         } else {
             ggml_kimi_cpu_fallback_pack_mmap.misses++;
             ggml_kimi_cpu_fallback_pack_mmap.fallback_gguf++;
+            if (trace_misses) {
+                fprintf(stderr,
+                        "[kimi_cpu_fallback_pack_mmap_miss] phase=%s tensor=%s expert=%" PRId64
+                        " src0_type=%d expert_bytes=%zu active_rows=%" PRId64
+                        " reason=%s entry_bytes=%zu entry_offset=%" PRIu64 "\n",
+                        prompt_phase ? "prompt" : "decode",
+                        tensor_name,
+                        cur_a,
+                        src0_type,
+                        expert_bytes,
+                        matrix_row_counts[cur_a],
+                        reason ? reason : "unknown",
+                        entry_nbytes,
+                        entry_offset);
+            }
         }
     }
 }
@@ -2530,6 +2579,7 @@ static void ggml_compute_forward_mul_mat_id(
     if (ith == 0) {
         ggml_kimi_cpu_fallback_pack_mmap_prepare(
                 src0->name,
+                src0->type,
                 ids->ne[1] > 1,
                 n_as,
                 matrix_row_counts,
