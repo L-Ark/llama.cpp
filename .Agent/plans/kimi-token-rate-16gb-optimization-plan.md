@@ -51764,3 +51764,125 @@ Decision rule:
 - If quality passes but speed regresses or fallback misses move to new tensors,
   record and decide whether to expand coverage further before n96.
 - Only run n96 after n32 proves semantic correctness.
+
+Implementation result:
+
+- Source commit:
+  `a953b7693` (`cuda: mmap CPU fallback expert pack sources`).
+- Build:
+  - server head `a953b7693`;
+  - production build option `GGML_CUDA_LIGHTNING_INDEXER=OFF`;
+  - `build-cuda-batch/bin/llama-completion`:
+    `c42d172394faceca42d6acd3dbe6a1b23f00b5e1d1acad4686d1ac868ab20eba`;
+  - `build-cuda-batch/bin/libggml-cuda.so`:
+    `a1eca4caa40bfeafb23ea891673bea52871487d1bd480725e7f301caba5470c6`.
+
+Experiment A: n32 source-specific mmap with combined overlay
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-135719Z-n32-phase7ha-source-mmap-combined-overlay`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-135719Z-n32-phase7ha-source-mmap-combined-overlay
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
+GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75881.94 ms`;
+  - decode `29118.88 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - miss trace count `0`.
+- Decision:
+  - Correctness fix works for n32.
+  - The Phase 7GZ corruption was caused by wrong-source mmap, and this patch
+    fixes it.
+  - Proceed to n96 because quality and mechanism passed.
+
+Experiment B: n96 source-specific mmap with combined overlay
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-135957Z-n96-phase7ha-source-mmap-combined-overlay`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-135957Z-n96-phase7ha-source-mmap-combined-overlay
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
+GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `73445.42 ms`;
+  - decode `72180.32 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15070031872`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - miss trace count `0`.
+- Movement/cache metrics:
+  - expert pack hits `59193`, misses `607`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37350337`;
+  - main pinned copies `49350`, waits `49314`;
+  - gate pinned copies `10450`, waits `10426`;
+  - current-down worker `8494204 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Decision:
+  - Accept the source-specific mmap patch as a correctness fix for multi-source
+    expert-pack CPU fallback.
+  - Reject the combined overlay as a token-rate optimization.
+  - Do not promote the combined overlay artifact into accepted SOTA runs.
+  - Do not claim a new SOTA.
+- Gap analysis:
+  - Eliminating the 26 known GGUF CPU fallback mmap misses did not improve the
+    n96 decode path; decode worsened relative to Phase 7FB SOTA
+    (`72180.32 ms` vs `70087.31 ms`) and current best validations.
+  - The hard counters stayed unchanged for the real bottleneck:
+    `37080` io_uring reads, `214.9 GB` moved through expert-pack/H2D, and the
+    same VRAM hit rates.
+  - The fallback misses were correctness/page-cache cleanup work, not the
+    dominant token-rate limiter.
+
+Next direction:
+
+- Stop expanding cold expert-pack coverage based only on rare CPU fallback
+  misses.
+- Return to the dominant exposed movement:
+  - reduce `37080` iouring reads;
+  - reduce pinned wait count `49314`;
+  - increase useful overlap around up/gate compute and down movement;
+  - avoid cache-policy changes that only increase hit rate by changing output
+    semantics.
