@@ -9022,3 +9022,88 @@ Decision:
 Updated next concrete work item:
 
 - Inspect whether any existing vendor/DS4 code path can provide a compact resident representation or verified speculation path without changing model semantics. If no such path exists in source/artifacts, record that as the next blocker candidate and avoid further low-ceiling source probes.
+
+## 2026-07-04T13:28:25Z Latest Plan: 10 tok/s Gate After Non-Duplicate Audit
+
+Latest pushed source state:
+
+- Local branch: `feat/ds4-moe-stream-on-vendor`
+- Required push target for this project: `ssd/vendor/deepseek-token-rate-16gb`
+- Latest pushed head before this plan update: `16f0a7105ad04b7bf0499ba60159c8781f0fad07`
+- Runtime source status at that head: clean accepted-path source; rejected Q8/touch prototypes are not present.
+
+Current accepted SOTA remains unchanged:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=32892.55329 ms`
+- `elapsed_seconds=63.94`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `ram_ok=true`, including page cache under the 16GB cgroup with `MemorySwapMax=0`
+- `correctness_ok=true`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted config: vendor DeepSeek strict cold `drop_caches`, `cpu_moe=40`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream cache with `ffn_gate_exps`, O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+- Promotion TTFT gate remains `<=33617.688744 ms`.
+
+Hard-bound status after the latest audits:
+
+- Target for `10 tok/s` requires decode window about `13.6608765524s`.
+- Accepted SOTA decode window estimate is `31.04744671s`, so a candidate must save about `17.38657s`.
+- If a candidate removes all remaining decode up/down CPU fallback, the entire allowed extra overhead budget is only about `1.6429s`.
+- Closed source families:
+  - same-op serial/parallel page touch;
+  - synchronous direct/mmap source staging;
+  - top-N up/down residency or hotsets as the primary path;
+  - existing Q8_1 CUDA up/down stream;
+  - scalar MXFP4 x Q8_0 CUDA one-stream;
+  - skip/zero-row pruning beyond already-active exact pruning;
+  - `mul_mat_id` src1 Q8 conversion removal;
+  - ngram/lookahead/speculative variants that already failed correctness, progress, or token-rate gates.
+- Best optimistic non-duplicate cache-allocation bound under the current cache-budget class is only about `5.612 tok/s`.
+- Streaming all up/down weights on demand would need about `90.6 GiB/s` effective source/H2D bandwidth before kernel, D2H, scatter, and sync overhead, so it is not a viable 10 tok/s path.
+
+Algorithmic/speculation audit status:
+
+- Existing source has NextN/MTP metadata/tensor loading, but DeepSeek4 does not currently execute a DS4 MTP/NextN verification path. Source comments also mark NextN/MTP tensors as preserved/ignored or TODO for future MTP implementation.
+- `llama-speculative` and `llama-speculative-simple` require a compatible draft model. No local tokenizer-compatible small DeepSeek draft GGUF has been found; local GLM GGUF shards are not compatible DeepSeek draft models.
+- Historical ngram/lookahead attempts are rejected:
+  - all-output ngram-simple reached repeated verification/progress loops and incomplete output;
+  - partial serial fallback restored progress and correctness but only reached about `3.7 tok/s`;
+  - no-source `ngram-map-k4v` timed out at 10 minutes and produced repeated prompts instead of a valid footer;
+  - target-only lookahead previously failed under DeepSeek4 coupled-sequence behavior and damaged cache hit behavior.
+
+Updated optimization plan:
+
+1. Compact exact resident representation feasibility gate.
+   - Before writing source, define the exact representation, memory footprint, transfer path, kernel work, and correction needed to preserve logits.
+   - It must have a hard-bound decode window `<=13.66s` under the same 16GB host RAM/page-cache limit.
+   - It must explain how it avoids the current `1.64s` overhead ceiling if it claims to remove full up/down fallback.
+   - If it changes numeric behavior, it must pass fixed-text top1 before any token-rate benchmark.
+
+2. Verified speculation or draft-model gate.
+   - Do not rerun ngram/lookahead variants without a concrete fix for the recorded progress-loop or coupled-KV-state failure.
+   - Do not run draft speculative decoding unless a compatible DeepSeek draft/MTP artifact exists.
+   - If a compatible draft/MTP artifact appears, first record model provenance, tokenizer compatibility, RAM/VRAM budget, and exact target-verification semantics; then run correctness before performance.
+
+3. Predictive cross-op source overlap gate.
+   - Same-op touch is closed. Any future source/page-fault work must overlap page faults before the consuming `mul_mat_id` op or layer.
+   - The design must show which future rows can be predicted, how much wall time can be hidden, and why it will not increase TTFT or cgroup page-cache pressure.
+   - This path is only worth implementing if its hard bound can beat the accepted `4.4 tok/s` SOTA with room after synchronization overhead.
+
+4. No low-ceiling patches.
+   - Do not implement another source patch unless the design step first shows a hard upper bound above the current SOTA and, for 10 tok/s work, a credible path to the `13.66s` decode-window target.
+   - If no current source/artifact path passes this gate, record the blocker explicitly instead of spending time on another low-ceiling probe.
+
+Execution rules for the next implementation:
+
+- Every practical step must start by updating this plan with the bottleneck, theory, hard-bound calculation, expected token-rate range, validation command, and rejection criteria.
+- Any candidate that affects logits must pass fixed-text top1/correctness before a token-rate benchmark.
+- Any benchmark must record token rate, prompt rate, TTFT, elapsed time, RAM/page-cache counters, correctness answer, command/env, source head, binary hashes, run path, and artifact hash.
+- A new accepted SOTA must be immediately committed and pushed to `ssd/vendor/deepseek-token-rate-16gb`, then reproduced from the pushed source before promotion.
+- A rejected source candidate must be reverted, the accepted path rebuilt, and only rejected artifacts/docs committed and pushed.
+- Git identity for pushes should remain `L-Ark <fliangae@connect.ust.hk>`.
+
+Immediate next concrete action:
+
+- Produce a compact/speculation path audit artifact that ties the source evidence and historical rejected artifacts to this latest plan, then commit and push this plan update plus the artifact. After that, only proceed to source implementation if a new compact, verified-speculation, or predictive-overlap design passes the hard-bound gate above.

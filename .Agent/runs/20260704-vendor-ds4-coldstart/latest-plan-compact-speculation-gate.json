@@ -1,0 +1,70 @@
+{
+  "artifact": "latest-plan-compact-speculation-gate",
+  "recorded_at_utc": "2026-07-04T13:28:25Z",
+  "source_head": "16f0a7105ad04b7bf0499ba60159c8781f0fad07",
+  "local_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "elapsed_seconds": 63.94,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "config_note": "vendor DeepSeek strict cold drop_caches, 16GB cgroup including page cache, MemorySwapMax=0, cpu_moe=40, gate-only one-stream cache, O_DIRECT gate expert pack, prefill_limit=3000"
+  },
+  "target_bound": {
+    "target_eval_tok_s": 10.0,
+    "accepted_decode_window_seconds_estimate": 31.04744671,
+    "target_decode_window_seconds": 13.6608765524,
+    "required_saving_seconds": 17.38657,
+    "max_extra_overhead_if_full_updown_removed_seconds": 1.6429
+  },
+  "closed_paths": [
+    "same-op serial page touch",
+    "same-op parallel page touch",
+    "synchronous direct/mmap source staging",
+    "top-N up/down residency or hotsets as primary path",
+    "existing Q8_1 CUDA up/down stream",
+    "scalar MXFP4 x Q8_0 CUDA one-stream",
+    "additional exact skip/zero-row pruning",
+    "mul_mat_id src1 Q8 conversion removal",
+    "ngram/lookahead/speculative variants already rejected by correctness, progress, or token-rate gates"
+  ],
+  "latest_hard_bound_summary": {
+    "best_nonduplicate_cache_allocation_tok_s": 5.612,
+    "streaming_all_updown_required_effective_bandwidth_gib_s": 90.6,
+    "decision": "No current cache-allocation or streaming-copy candidate has a credible 10 tok/s bound."
+  },
+  "algorithmic_audit_summary": {
+    "deepseek4_nextn_mtp_runtime_available": false,
+    "nextn_mtp_source_note": "Source loads or preserves NextN/MTP metadata/tensors, but comments mark them as TODO/reserved/ignored and no DS4 runtime verifier path is active.",
+    "speculative_requires_compatible_draft_model": true,
+    "compatible_deepseek_draft_model_found_locally": false,
+    "ngram_lookahead_current_status": "Historical attempts are rejected due progress loops, coupled-sequence/KV behavior, timeout, or sub-SOTA token rate."
+  },
+  "next_plan": [
+    {
+      "name": "compact_exact_resident_representation_gate",
+      "rule": "No source implementation until memory footprint, kernel/transfer overhead, and correctness preservation show a hard-bound decode window <= 13.66s under 16GB host RAM including page cache."
+    },
+    {
+      "name": "verified_speculation_or_draft_gate",
+      "rule": "No speculative benchmark until a tokenizer-compatible DeepSeek draft/MTP artifact exists and exact target verification semantics are documented."
+    },
+    {
+      "name": "predictive_cross_op_source_overlap_gate",
+      "rule": "Same-op touch is closed; future page/source work must prefetch before the consuming op/layer and show a hard-bound improvement after sync overhead."
+    }
+  ],
+  "execution_rules": [
+    "Update the plan before each practical step with bottleneck, theory, hard bound, commands, and rejection criteria.",
+    "Run fixed-text top1/correctness before token-rate benchmark for any path that can affect logits.",
+    "Record token rate, prompt rate, TTFT, elapsed time, RAM/page-cache counters, answer, command/env, source head, binary hashes, run path, and artifact hash.",
+    "Immediately commit and push any accepted new SOTA to ssd/vendor/deepseek-token-rate-16gb, then reproduce from pushed source.",
+    "Revert rejected runtime source, rebuild the accepted path, and commit/push only rejected artifacts/docs."
+  ]
+}
