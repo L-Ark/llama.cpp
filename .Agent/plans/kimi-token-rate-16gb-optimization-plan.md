@@ -44155,3 +44155,55 @@ Promotion rule:
   result passes n96 against Phase 7FB best `70087.31 ms / 77`.
 - If any gate fails or n96 is slower, revert the source patch and record the
   rejection.
+
+Phase 7FF result - rejected:
+
+- End time: 2026-07-04T08:26:00Z.
+- Source status:
+  - temporary source patch applied on top of plan commit `aec8759f5`;
+  - patch built successfully on the server;
+  - source patch was not committed;
+  - source patch was reverted locally and on the server after the n32 gate
+    failed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-051947Z-n32-phase7ff-partial-iouring-diag`.
+- Result gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `74576.26 ms`, below `106331.72 ms`;
+  - decode `29888.80 ms / 31`, `1.04 tok/s`;
+  - cgroup peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement deltas versus Phase 7FD diagnostic:
+  - `direct_reads` reduced from `8707` to `8369`;
+  - `iouring_reads` increased from `15024` to `15362`;
+  - `iouring_bytes` increased from `87082139648` to `88990547968`;
+  - main `host_stage` reduced from `11455.176 ms` to `11191.955 ms`;
+  - gate `host_stage` reduced from `354.900 ms` to `216.960 ms`;
+  - `iouring_wait_us` increased from `14744321` to `16166860`;
+  - decode regressed from `29610.75 ms` to `29888.80 ms`.
+
+Interpretation:
+
+- The theory was directionally correct: batch-level fallback amplification
+  existed, and partial fallback converted some direct reads to iouring reads.
+- The converted jobs were not free:
+  - extra iouring submissions/waits increased `iouring_wait_us` by about
+    `1.42 s`;
+  - this outweighed the about `0.26 s` main host-stage reduction and about
+    `0.14 s` gate host-stage reduction;
+  - net decode regressed by about `278 ms`.
+- This means the remaining non-iouring rows are not simply bad because they are
+  non-iouring; for these small/mixed batches, the existing serial fallback can
+  be cheaper than adding more io_uring wait points.
+
+Decision:
+
+- Reject Phase 7FF.
+- Keep Phase 7FB as accepted production SOTA.
+- Do not run minimal-profile confirmation or n96 for this patch.
+- Next plan should avoid converting small direct fallback work to iouring unless
+  it also reduces wait calls or combines the converted jobs into fewer waits.
