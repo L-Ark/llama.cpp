@@ -42831,3 +42831,54 @@ GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
 - Stop the downward pinned-slot sweep at `12`.
 - Next optimization should not spend more time on smaller pinned rings; target
   file-cache/reclaim behavior or direct expert-pack movement reduction.
+
+Phase 7EX/7EY SOTA env clarification:
+
+- End time: 2026-07-04T05:10:00Z.
+- The outer reproduction command only passes the short knobs, but
+  `/tmp/run_phase7eb_repro.sh` expands them into the full accepted runtime.
+- Confirmed in Phase 7EX n96 env:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-033958Z-n96-phase7ex-slots12-confirm-a/env.txt`
+  - `GGML_MOE_STAGE_PINNED=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=12`;
+  - `GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_SAFETY_MIB=512`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - `LLAMA_DROP_DENSE_MMAP_CACHE=1`;
+  - `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1`;
+  - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`;
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - `IQ2_UPGATE_PARALLEL=1`.
+- Confirmed CPU fallback pack mmap was active in 7EX n96:
+  - `[moe_stream_batch] expert pack mmap: enabled size=167019.88 MiB`;
+  - `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`.
+
+Correct current SOTA:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+GGML_MOE_STAGE_PINNED=1
+GGML_MOE_STAGE_PINNED_SLOTS=12
+GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SAFETY_MIB=512
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=60
+GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+- Do not retest `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1` as a new idea; it is
+  already part of the accepted runner.
