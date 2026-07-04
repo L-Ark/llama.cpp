@@ -53376,3 +53376,101 @@ Result:
     - depth2: current production default;
     - depth3: n32 slower;
     - depth4: previously rejected.
+
+## Phase 7HN: current stable UPGATE_PCT=61 probe
+
+Start time: 2026-07-05T01:30:00+08:00.
+
+Goal:
+
+- Probe a smaller VRAM cache split shift than rejected `UPGATE_PCT=62/65`.
+- Keep this env-only until strict n96 acceptance proves a reproducible SOTA.
+- Preserve the hard runtime envelope:
+  - cold start only;
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - include page cache in the 16 GB host-RAM limit;
+  - maximize VRAM use with `VRAM_MIB=15000`;
+  - output for `Please introduce France in a short paragraph.` must be
+    semantically correct and coherent;
+  - TTFT must stay <= `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Why this is the next highest-priority probe:
+
+- Current stable n96 rebuilt baseline range is:
+  - Phase 7HI: `70221.94 ms / 77`, `1.10 tok/s`;
+  - Phase 7HJ: `71598.71 ms / 77`, `1.08 tok/s`.
+- Historical strict target remains Phase 7FB:
+  - `70087.31 ms / 77`.
+- `UPGATE_PCT=62` and `UPGATE_PCT=65` both showed n32 upside but failed n96
+  because the extra up/gate residency was offset by worse down miss behavior.
+- `UPGATE_PCT=61` moves only about `1% * 15000 MiB ~= 150 MiB` from down cache
+  to up/gate cache:
+  - at about `5.36 MiB` per IQ2 up/gate slot, this can add roughly `28`
+    up/gate slots;
+  - at about `7.44 MiB` per Q4 down slot, this can remove roughly `20` down
+    slots.
+- The expected win, if any, is a small reduction in exposed up/gate miss/compute
+  time without crossing the down-cache knee seen at 62/65.
+
+Theory and upper bound:
+
+- This does not reduce total expert bytes or math; it only changes which misses
+  are avoided.
+- Because prior 62/65 n96 failures were dominated by down miss sensitivity, the
+  realistic upper bound is small: a few hundred milliseconds over 77 decode
+  tokens.
+- Accepting this phase therefore requires beating the historical `70087.31 ms`
+  target, not merely beating one noisy rebuilt baseline sample.
+
+Experiment 1: n32 UPGATE_PCT=61 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hn-upgate61"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=61 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must be at least competitive with the current stable n32 region around
+  `29.1s`; otherwise reject without n96.
+
+Experiment 2: strict n96 promotion, only if n32 passes
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hn-upgate61"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=61 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n96 acceptance gates:
+
+- all n32 gates still pass;
+- decode beats historical Phase 7FB `70087.31 ms / 77`;
+- if the first n96 run is within normal variance of the target but not clearly
+  faster, update this plan and run one repeat before accepting or rejecting;
+- if accepted, update the runner default, commit, and push immediately with the
+  exact reproduction commands and result paths;
+- if rejected, keep production `UPGATE_PCT=60` and record the metrics.
