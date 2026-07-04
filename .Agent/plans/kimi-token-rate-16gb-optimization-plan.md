@@ -56487,3 +56487,112 @@ GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
   - down/up kernels are too small to justify kernel-first work;
   - current evidence points to expert movement plus unprofiled graph/scheduler
     overhead rather than a single MoE matvec kernel.
+
+## Phase 7ID: graph/scheduler split attribution for unprofiled decode time
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck evidence:
+
+- Phase 7IC n32 decode is `28-29 s`.
+- Profiled down batch wall is only `~4.1 s`; down kernel is only `0.192 s`.
+- Profiled up/gate wall is `~5.7-6.2 s`; up/gate compute is much smaller than
+  the wait/stage portion.
+- Main-ring host stage plus H2D are visible but still do not fully explain the
+  decode wall time.
+
+Hypothesis:
+
+- The next largest compressible time is outside the per-op MoE batch profiles:
+  graph submit/synchronize, backend split scheduling, CPU fallback split work, or
+  non-MoE CUDA split synchronization.
+- Before changing the read/coalescing path again, we need low-overhead
+  attribution of the whole decode wall so the next optimization targets the
+  largest measured bucket rather than another local MoE kernel.
+
+Experiment:
+
+- Run one strict cold-start n32 diagnostic using existing low-overhead profilers:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=32`.
+- Keep all production SOTA runtime knobs unchanged:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Do not enable heavy per-op CSV profilers in this run. The purpose is whole-run
+  attribution with minimal extra overhead.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7id-plan-commit>
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7id-graph-split-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through the runner's cache-drop path;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for:
+  `Please introduce France in a short paragraph.`;
+- profile overhead accepted only if decode remains comparable to recent n32
+  diagnostics. This run is not a SOTA candidate unless it also improves token
+  rate under all gates.
+
+Analysis checklist:
+
+- Extract graph profile submit/sync totals, especially decode synchronize time.
+- Extract split profile total/top split rows.
+- Compare:
+  - total decode wall;
+  - graph submit and sync decode totals;
+  - top CUDA/backend split rows;
+  - any CPU split/fallback rows;
+  - Phase 7IC down wall `~4.1 s`;
+  - Phase 7IC up/gate wall `~6 s`.
+- If split/profile rows expose a dominant non-MoE bucket, write the next design
+  step around that bucket.
+- If graph sync dominates but split rows do not attribute it, inspect scheduler
+  boundaries and CUDA stream synchronization before implementing another IO
+  optimization.
+- If CPU fallback dominates, inspect whether the remaining fallback can use the
+  expert pack path without adding pinned/H2D overhead.
+- If no dominant new bucket appears, reject broad source changes and add a
+  narrower profiler for decode-only split attribution.
+
+Commit/push rule:
+
+- This plan update must be committed and pushed before the experiment.
+- If the experiment only provides attribution, record all metrics and push the
+  result as documentation.
+- If the experiment unexpectedly improves compliant token rate, record
+  reproduction details, commit, and push immediately.
+- If the experiment fails correctness, RAM, TTFT, fallback, or cold-start gates,
+  mark it rejected and do not use it as the baseline for later phases.
