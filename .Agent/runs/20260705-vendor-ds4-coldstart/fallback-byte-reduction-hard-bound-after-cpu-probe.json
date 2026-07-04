@@ -1,0 +1,104 @@
+{
+  "date": "2026-07-05",
+  "title": "Hard bound: fallback-byte reduction after CPU batch microprobe rejection",
+  "result": "no_new_runtime_candidate_above_10_tok_s_under_current_vram_and_source_shape",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "inputs": {
+    "post_cpu_batch_plan": ".Agent/runs/20260705-vendor-ds4-coldstart/post-cpu-batch-rejection-next-plan.json",
+    "cpu_batch_microprobe_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu-batch-microprobe-validation.json",
+    "topn_residency_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json",
+    "async_source_cpu_batch_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/async-source-plus-cpu-batch-hard-bound.json",
+    "fallback_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/fallback_profile.csv"
+  },
+  "fixed_numbers": {
+    "accepted_decode_window_ms": 31047.44671,
+    "accepted_eval_tokens_for_rate_model": 136.608765524,
+    "target_10_tok_s_decode_window_ms": 13660.8765524,
+    "required_decode_saving_for_10_tok_s_ms": 17386.57,
+    "decode_updown_fallback_ms": 19029.457,
+    "source_page_exposed_saving_ms": 15856.166,
+    "hot_cpu_fallback_after_touch_ms": 3173.291,
+    "decode_expert_calls": 35880,
+    "decode_fallback_entries": 5254,
+    "expert_payload_bytes_each": 4456448,
+    "decode_expert_call_gib": 148.916016
+  },
+  "cpu_microprobe_bound": {
+    "best_observed_src0_gib_s": 74.719,
+    "required_src0_gib_s_zero_overhead": 90.643,
+    "required_src0_gib_s_with_500ms_overhead": 130.298,
+    "best_hot_time_ms_if_all_hot_fallback_ran_at_observed_microprobe_bw": 1993.01,
+    "decode_after_perfect_source_overlap_and_best_cpu_probe_ms": 14011.0,
+    "zero_overhead_tok_s": 9.750,
+    "shortfall_to_10_tok_s_ms": 350.127,
+    "remaining_hot_fraction_to_remove_zero_overhead": 0.176,
+    "remaining_hot_fraction_to_remove_with_500ms_overhead": 0.427,
+    "decision": "CPU batch or microkernel tuning remains below the 10 tok/s bound even when paired with perfect source/page overlap, unless another mechanism removes additional fallback bytes/calls."
+  },
+  "resident_exact_hotset_bound": [
+    {
+      "top_n": 3072,
+      "payload_gib": 12.75,
+      "calls_covered": 31982,
+      "saving_ms": 17312.615,
+      "zero_overhead_tok_s": 9.946,
+      "slack_to_10_tok_s_ms": -73.955,
+      "fit_status": "does_not_fit_while_preserving_gate_cache; also has negative zero-overhead slack"
+    },
+    {
+      "top_n": 4096,
+      "payload_gib": 17.0,
+      "calls_covered": 34406,
+      "saving_ms": 18395.412,
+      "zero_overhead_tok_s": 10.797,
+      "slack_to_10_tok_s_ms": 1008.842,
+      "fit_status": "first positive 10 tok/s bound, but raw payload alone does not fit with current gate cache/workspace; even cpu_moe=41 plus the measured extra pool is insufficient before workspace"
+    }
+  ],
+  "vram_implication": {
+    "current_extra_pool_that_was_measured_to_fit_with_cpu_moe_41_gib": 3.188,
+    "top3072_payload_gib": 12.75,
+    "top4096_payload_gib": 17.0,
+    "top3072_additional_payload_over_top768_gib": 9.562,
+    "top4096_additional_payload_over_top768_gib": 13.812,
+    "decision": "Top3072 would require a large gate-cache sacrifice and still misses 10 tok/s before overhead. Top4096 needs more than the recoverable extra-pool budget and cannot be promoted without a new VRAM-footprint breakthrough."
+  },
+  "source_streaming_bound": {
+    "measured_sync_direct_top768_read_gib_s": 1.85,
+    "required_effective_source_payload_gib_s_for_10_class": 90.643,
+    "decision": "Source streaming or io_uring-only work is not a 10 tok/s route. It can hide some cold source/page time only if paired with a separate exact bytes/calls removal mechanism, and same-op touch/parallel source work has already regressed."
+  },
+  "candidate_decisions": [
+    {
+      "candidate": "large CPU batch / microkernel rewrite",
+      "decision": "rejected",
+      "reason": "Best measured exact hot replay is 74.719 GiB/s source-payload, below the zero-overhead 90.643 GiB/s requirement."
+    },
+    {
+      "candidate": "raw exact topN up/down residency under current VRAM shape",
+      "decision": "rejected",
+      "reason": "Top3072 does not fit and still misses 10 at zero overhead; Top4096 first crosses 10 but needs 17 GiB raw payload before gate/workspace."
+    },
+    {
+      "candidate": "source streaming / io_uring only",
+      "decision": "rejected",
+      "reason": "Measured direct read throughput is orders of magnitude below the required effective source-payload bandwidth and source-only overlap has a sub-10 ceiling."
+    },
+    {
+      "candidate": "blind cpu_moe/ngl placement sweeps",
+      "decision": "rejected_without_new_bound",
+      "reason": "Prior audits already closed pure placement sweeps; any placement candidate must quantify exact bytes/calls removed, VRAM recovered, and TTFT impact before benchmarking."
+    }
+  ],
+  "next_required_breakthrough_class": [
+    "Recover enough VRAM or reduce model/workspace/gate footprint so that at least a top4096-equivalent exact up/down hotset can fit without destroying gate-cache savings.",
+    "Find an exact/token-stable representation that reduces up/down payload by roughly 4x-6x beyond raw MXFP4 packing for the hotset, because generic compression samples were only about 1.04x.",
+    "Remove fallback bytes/calls at the routing/model level with a written proof that the France fixed-text top1 remains exact before any strict cold benchmark."
+  ],
+  "immediate_next_action": "Do not write new runtime source for CPU batch, source-only streaming, or raw topN residency. If continuing implementation, first write a VRAM-footprint/payload-reduction breakthrough plan with a hard bound above 10 tok/s and enough overhead slack."
+}

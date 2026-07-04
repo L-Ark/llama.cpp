@@ -1,0 +1,63 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: VRAM footprint or exact payload-reduction breakthrough audit",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "fallback_byte_reduction_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/fallback-byte-reduction-hard-bound-after-cpu-probe.json",
+    "first_positive_raw_topn_for_10": {
+      "top_n": 4096,
+      "payload_gib": 17.0,
+      "zero_overhead_tok_s": 10.797,
+      "slack_to_10_tok_s_ms": 1008.842
+    },
+    "measured_extra_pool_that_fits_with_gate_preserved_gib": 3.188,
+    "required_payload_compression_if_vram_not_recovered": {
+      "top3072_payload_over_extra_pool": 4.0,
+      "top4096_payload_over_extra_pool": 5.33
+    }
+  },
+  "candidate_scope": [
+    {
+      "candidate": "recover VRAM without increasing host RAM or TTFT",
+      "questions": [
+        "Can model/context/workspace/gate-cache memory be reduced enough to fit a top4096-equivalent exact up/down hotset?",
+        "What is the measured token-rate and TTFT penalty for each recovered GiB?",
+        "Does any placement change keep MemoryMax=16000000000 including page cache?"
+      ],
+      "reject_if": "Recovered usable VRAM is below 13.8 GiB over the current top768-fit shape, or the gate-cache/TTFT penalty consumes the 1008 ms top4096 zero-overhead slack."
+    },
+    {
+      "candidate": "exact hotset payload reduction",
+      "questions": [
+        "Is there an exact/token-stable representation of hot up/down experts with at least 4.0x compression for top3072 or 5.33x for top4096?",
+        "Can decompression or direct compute from the representation fit inside the overhead slack?",
+        "Can fixed-text top1 equality be preserved?"
+      ],
+      "reject_if": "Compression is generic entropy-only near the prior 1.04x result, or decompression/workspace violates VRAM/TTFT."
+    },
+    {
+      "candidate": "routing/model-level fallback byte removal",
+      "questions": [
+        "Can selected fallback calls be removed without changing fixed-text top1?",
+        "How many fallback ms/calls/bytes are removed on the current profile?",
+        "Does the method generalize beyond the single France prompt or must it be marked prompt-specific?"
+      ],
+      "reject_if": "It cannot prove token-level correctness before performance, or removes less than a top3072-equivalent fallback share without another saving mechanism."
+    }
+  ],
+  "required_artifact_before_code": {
+    "must_include": [
+      "Current accepted VRAM allocation and recoverable GiB by component",
+      "Required hotset payload and slack for top3072/top4096",
+      "Expected TTFT delta",
+      "Expected 16GB host RAM/page-cache pressure",
+      "Correctness gate and exact verifier command",
+      "Rollback criteria"
+    ],
+    "promotion_rule": "No runtime source edit until the hard-bound shows a plausible >10 tok/s route with at least 500 ms overhead slack, or an explicitly intermediate >4.4 tok/s SOTA candidate with accepted TTFT/correctness/RAM gates."
+  },
+  "immediate_next_action": "Collect a fresh accepted-path VRAM allocation snapshot and reconcile it with the top4096 payload requirement; then write the hard-bound decision before coding."
+}
