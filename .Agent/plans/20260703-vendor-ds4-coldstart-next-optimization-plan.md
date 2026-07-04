@@ -7907,3 +7907,62 @@ Required record/push discipline:
 Next action:
 
 - Produce `cpu-down-prefetch-overlap-bound.json` first. If it passes the hard-bound gate, implement the smallest default-off prefetch patch and run one strict cold France benchmark. If it fails, do not implement this path; return to exact up/down compute/offload redesign or a new compatible DeepSeek draft/MTP artifact.
+
+### 2026-07-04T04:24Z CPU Down Prefetch Bound Result
+
+Artifacts:
+
+- `.Agent/run-tools/analyze_cpu_down_prefetch_bound.py`
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-overlap-bound.json`
+- script sha256: `30309b4ca7f12507b0c0a43ba927eb4547672b32fe8dc45288c5be8db55bfd8c`
+- bound JSON sha256: `5c7a9a466b45317065f37975ff5d9983846ddb9e569239e8e734ffa256afba2b`
+- source head for artifact: `6af293d40f65e5ef1a7523ec8ddad10e023e7190`
+
+Bound result:
+
+- Accepted SOTA remains `4.4 tok/s`, `TTFT=32892.55329 ms`, 16GB cgroup including page cache, correctness pass.
+- Active path is confirmed as gate-only one-stream cache; up/down tensors remain CPU fallback.
+- Cold-vs-no-drop fallback deltas from parsed `fallback-profile.csv`:
+  - `down_decode_delta=5023.621 ms`
+  - `down_prompt_delta=1253.127 ms`
+  - `down_total_delta=6276.748 ms`
+  - `up_decode_delta=5464.241 ms`
+- No-overhead ceiling if all down decode delta is hidden: `5.249 tok/s`.
+- No-overhead ceiling if half of down decode delta is hidden: `4.787 tok/s`.
+- No-overhead ceiling if all down total delta landed in the generation window: `5.515 tok/s`.
+- Savings needed from the accepted generation-window estimate:
+  - `4.5 tok/s`: about `689.943 ms`
+  - `5.0 tok/s`: about `3725.694 ms`
+  - `10.0 tok/s`: about `17386.570 ms`
+
+Scale and risk:
+
+- Down decode profile has `2627` unique down expert entries and `17940` calls.
+- Unique down decode payload is about `10.90 GiB`; call-weighted down decode advised range would be about `74.46 GiB` if implemented naively per call.
+- Down total unique payload is about `14.59 GiB`; call-weighted down total advised range is about `79.32 GiB`.
+- This means the probe must stay route-specific, nonblocking, and default-off. It must not add a new copied pack or persistent host buffer, and all page cache remains charged to the strict 16GB cgroup.
+- Prior broad/current-tensor `WILLNEED` remains a negative control: the current-tensor CPU willneed probe measured only `4.0 tok/s`; stream opwide willneed measured `1.4 tok/s`; late10 CPU willneed measured `2.5 tok/s`.
+
+Decision:
+
+- `route_specific_cpu_down_prefetch_from_up` passes the hard-bound gate for exactly one default-off runtime probe.
+- This is not a standalone path to `10 tok/s`; it is an incremental SOTA candidate that may stack with later exact up/source/gate or algorithmic work.
+- Proceed to implementation only with a default-off env flag such as `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP=1`.
+- The implementation must be page-timing-only: no tensor value, routing decision, top-k value, dot product, accumulation order, or CPU/GPU compute split may change.
+- If the patch remains page-timing-only, semantic France correctness is mandatory and top1 verification is optional. If any compute/layout/logit path changes, run the lightweight sequential top1 verifier before performance.
+
+Implementation gate:
+
+1. Register MoE up/down tensor metadata in CPU code without changing default behavior.
+2. On `ffn_up_exps` CPU fallback, after routing counts are available, prefetch matching routed `ffn_down_exps` pages for the same layer.
+3. Add counters for calls, advised experts, advised bytes, missing down tensor matches, and failures.
+4. Build and run one strict cold France benchmark with the accepted SOTA config plus `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP=1`.
+5. Reject and revert runtime source if:
+   - `eval_tok_s <= 4.4`;
+   - TTFT exceeds `33617.688744 ms` for a promoted result;
+   - cgroup memory exceeds 16GB including page cache;
+   - any OOM/kill/ram-limit flag appears;
+   - France output is incomplete, incoherent, or semantically wrong;
+   - gate pack direct failures appear or cache counters collapse;
+   - counters show missing down tensor registration for most decode calls.
+6. If the probe produces a compliant new SOTA, immediately record full reproduction metadata, commit and push source/plan/scripts/artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduce from pushed source before promotion.

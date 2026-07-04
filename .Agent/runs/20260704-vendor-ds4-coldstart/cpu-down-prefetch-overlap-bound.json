@@ -1,0 +1,203 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "artifact": "cpu-down-prefetch-overlap-bound",
+  "bottleneck": {
+    "active_path": "gate-only one-stream cache; up/down ffn_exps remain CPU fallback",
+    "fallback_key_numbers": {
+      "decode_fallback_ms": 19029.457,
+      "down_fallback_ms": 13651.196,
+      "prompt_fallback_ms": 7408.602,
+      "total_fallback_ms": 26438.058999999997,
+      "up_fallback_ms": 12786.863
+    },
+    "walltrace_gate_all_streamed": true,
+    "walltrace_up_down_all_declined": true
+  },
+  "candidate": {
+    "code_path": "ggml/src/ggml-cpu/ggml-cpu.c:ggml_compute_forward_mul_mat_id",
+    "exactness": "page-timing only; must not change tensor values, routing, top-k, dot products, accumulation order, or CPU/GPU compute split",
+    "host_ram_impact": "page cache remains charged to the strict 16GB cgroup; candidate must be killed/rejected on any cgroup memory or OOM violation",
+    "implementation_mode": "default-off env GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP=1",
+    "intended_overlap": "issue MADV_WILLNEED for the matching routed ffn_down_exps experts after ffn_up_exps routing is known, while up fallback and later activation work are still running",
+    "name": "route_specific_cpu_down_prefetch_from_up",
+    "top1_verifier_requirement": "not required if patch is page-timing-only, but France semantic correctness remains mandatory; any compute/layout/logit change requires top1 verifier before performance",
+    "vram_impact": "none; must preserve GGML_MOE_STREAM_ONE_CACHE_MIB=13568 gate cache"
+  },
+  "cold_vs_nodrop_fallback_deltas_ms": {
+    "down_decode": 5023.621000000019,
+    "down_prompt": 1253.1270000000013,
+    "down_total": 6276.748000000021,
+    "phasec_fallback_total_delta_abs": 12791.007,
+    "phasec_pgmajfault_delta_abs": 145447,
+    "up_decode": 5464.241000000009,
+    "up_prompt": 1050.0180000000055
+  },
+  "decision": {
+    "not_path_to_10_tok_s_by_itself": true,
+    "passes_bound_gate": true,
+    "reason": "Down decode cold-vs-nodrop delta gives a no-overhead ceiling above the accepted 4.4 tok/s line, but the path is only an incremental SOTA candidate and prior broad WILLNEED probes regressed.",
+    "reject_probe_if": [
+      "eval_tok_s <= 4.4",
+      "TTFT > 33617.688744 ms for a promoted result",
+      "memory_peak_bytes > 16000000000 or cgroup page cache escapes accounting",
+      "oom_seen, oom_kill, or ram_limit_killed",
+      "France output is incomplete, incoherent, or semantically wrong",
+      "gate pack direct failures appear or gate cache counters collapse",
+      "prefetch counters show missing down tensor registration for most decode calls"
+    ],
+    "required_next_step": "Implement the smallest default-off page-timing patch with counters, then run exactly one strict cold France benchmark.",
+    "verdict": "allow_one_default_off_probe"
+  },
+  "inputs": {
+    "accepted_sota": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-pushed-repro-result.json",
+      "sha256": "9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658"
+    },
+    "cold_fallback_profile_csv": {
+      "exists": true,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T172436Z-20260704_phaseB_current_sota_profile_head4be08352/france-cpu40-vram0gb/fallback-profile.csv",
+      "sha256": "c1d6a08e4a5c39d5874d1934b1e1dc4f39af6f42428a1b57734f48052f38f9ba"
+    },
+    "cpu_moe_walltrace": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-moe-walltrace-result.json",
+      "sha256": "8db82a6ef6f2976b8062884474cec41bf1c79411c988b7e45f4efa1017d7f403"
+    },
+    "current_sota_cpu_fallback_profile": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json",
+      "sha256": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5"
+    },
+    "exact_updown_screening": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/exact-updown-candidate-screening.json",
+      "sha256": "b80a28749cadddd56473608b00379481a18fff6508f041835565ec8f85062768"
+    },
+    "nodrop_fallback_profile_csv": {
+      "exists": true,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T173550Z-20260704_phaseC_nodrop_profile_io_compute_split_head6b11e5a/france-cpu40-vram0gb/fallback-profile.csv",
+      "sha256": "f0144bbe579d26e23cbf48d680430b154b7d119e408fcf67da945bc791e4b23c"
+    },
+    "phaseC_cold_vs_nodrop": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/phaseC-cold-vs-nodrop-comparison.json",
+      "sha256": "9970953a0772f2dd2b7fa64dcca072c3ab4e277c149aa033edb0c9ae21d1729b"
+    },
+    "source_movement_async_bound": {
+      "exists": true,
+      "path": ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json",
+      "sha256": "d97f52ca6f58eb945e12b4473158f07c16d0e412a690f895f9a5eb2e7f9dcf78"
+    }
+  },
+  "prefetch_scale_estimate": {
+    "down_decode_call_weighted_payload_gib": 74.4580078125,
+    "down_decode_calls": 17940,
+    "down_decode_entries": 2627,
+    "down_decode_unique_payload_gib": 10.903076171875,
+    "down_total_call_weighted_payload_gib": 79.318115234375,
+    "down_total_calls": 19111,
+    "down_total_entries": 3515,
+    "down_total_unique_payload_gib": 14.588623046875
+  },
+  "prior_willneed_rejections": {
+    "current_tensor_cpu_willneed_probe": {
+      "correctness_ok": true,
+      "elapsed_seconds": 63.55,
+      "eval_tok_s": 4.0,
+      "exists": true,
+      "first_answer_ms": 29414.893158,
+      "memory_file_bytes": 15103877120,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T045821Z-20260703T045821Z-odirect-sota-cpu-willneed-probe/france-cpu40-vram0gb/summary.json",
+      "pgmajfault": 181560,
+      "prompt_tok_s": 1.6,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "sha256": "94aba35ab0c5694096f27622637e1a537c2ceebe92998bb4d98ffe00d89702e6",
+      "ttft_estimate_ms": 29414.893158,
+      "workingset_refault_file": 1579212
+    },
+    "late10_cpu_willneed_no_trace": {
+      "correctness_ok": true,
+      "elapsed_seconds": 88.07,
+      "eval_tok_s": 2.5,
+      "exists": true,
+      "first_answer_ms": 35387.340617,
+      "memory_file_bytes": 15029985280,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260702T034123Z-20260702_late10_cpu_willneed_no_trace/france-cpu40-vram0gb/summary.json",
+      "pgmajfault": 190937,
+      "prompt_tok_s": 1.0,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "sha256": "231dbd5388cd989a2472a377cae7911202ac6d919cd3eb16307444e722f92800",
+      "ttft_estimate_ms": 35387.340617,
+      "workingset_refault_file": 3289956
+    },
+    "stream_opwide_willneed_gate_cache13568": {
+      "correctness_ok": true,
+      "elapsed_seconds": 19.34,
+      "eval_tok_s": 1.4,
+      "exists": true,
+      "first_answer_ms": 45919.682075,
+      "memory_file_bytes": 14978084864,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260701T183053Z-20260702_stream-opwide-willneed-gate-cache13568/france-cpu40-vram0gb/summary.json",
+      "pgmajfault": 607397,
+      "prompt_tok_s": 0.7,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "sha256": "d875d9e3648b22a37e4913007df499fb7e60a8355808159ac59a13496f7d5106",
+      "ttft_estimate_ms": 45919.682075,
+      "workingset_refault_file": 16767150
+    }
+  },
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "source_head": "6af293d40f65e5ef1a7523ec8ddad10e023e7190",
+  "theoretical_bounds": {
+    "hide_down_decode_delta": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 26.023825709999976,
+      "optimistic_eval_tok_s_no_overhead": 5.249372903366256,
+      "removable_ms": 5023.621000000019
+    },
+    "hide_down_total_delta_if_it_all_landed_in_generation_window": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 24.770698709999973,
+      "optimistic_eval_tok_s_no_overhead": 5.514933879069418,
+      "removable_ms": 6276.748000000021
+    },
+    "hide_half_down_decode_delta": {
+      "base_eval_tok_s": 4.4,
+      "estimated_decoded_tokens_from_reported_rate": 136.60876552399998,
+      "generation_window_s_estimate": 31.047446709999996,
+      "new_generation_window_s_estimate": 28.535636209999986,
+      "optimistic_eval_tok_s_no_overhead": 4.7873040053730085,
+      "removable_ms": 2511.8105000000096
+    },
+    "targets": {
+      "saving_ms_for_10_0_tok_s": 17386.5701576,
+      "saving_ms_for_4_5_tok_s": 689.943260222222,
+      "saving_ms_for_5_0_tok_s": 3725.6936052
+    }
+  },
+  "timestamp_utc": "2026-07-04T04:24:37Z"
+}
