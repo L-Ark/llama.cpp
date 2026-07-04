@@ -44690,3 +44690,132 @@ systemd-run --wait --collect --same-dir \
     lower iouring wait enough; `iouring_wait_us=15021914` remained comparable
     to the current SOTA diagnostic.
   - Since token rate fell, the source patch must not be accepted.
+
+## Phase 7FJ: env-gated Q4_0 down GPU batch support
+
+Start time: 2026-07-04T14:20:00Z.
+
+Goal:
+
+- Remove the remaining decode `Q4_0` down CPU fallback when it is safe.
+- Keep behavior default-off until n32 and n96 prove correctness and speed.
+- Preserve the hard gates:
+  - cold start only;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - France prompt quality pass;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - no accepted commit unless decode improves and results are reproducible.
+
+Current bottleneck evidence:
+
+- Current accepted SOTA remains Phase 7FB:
+  - n32 confirmation:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-042209Z-n32-phase7fb-slots12-min-profile-confirm`;
+  - TTFT `73438.91 ms`;
+  - decode `29182.49 ms / 31`, `1.06 tok/s`;
+  - quality pass;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Phase 7FD diagnostic:
+  - decode `29610.75 ms / 31`;
+  - down profile: `fallback_t0=34.335 ms/call`,
+    `cuda_batch=2.368 ms/call`;
+  - `decode,type=2` fallback:
+    - `calls=1736`;
+    - `fallback_ms=2499.208`;
+    - logical bytes `13.3506 GiB`;
+    - top tensors are Q4_0 down experts such as
+      `blk.7.ffn_down_exps.weight`, `blk.18.ffn_down_exps.weight`,
+      `blk.15.ffn_down_exps.weight`, etc.
+- Source inspection:
+  - `ggml/src/ggml-cuda/mmvq.cu` already supports
+    `GGML_TYPE_Q4_0` in `mul_mat_vec_q_switch_type`;
+  - `vecdotq.cuh` has `vec_dot_q4_0_q8_1`;
+  - `moe_stream_batch.cu` currently blocks Q4_0 in:
+    - `moe_stream_type_supported`;
+    - `launch_moe_mmvq_compact_batch`;
+    - `launch_moe_mmq_slot_batch`.
+
+Theory and upper bound:
+
+- Today the Q4_0 decode down experts are computed on CPU.
+- The existing MoE streaming path already stages expert tensors into VRAM,
+  quantizes the input vector to Q8_1, and launches MMVQ.
+- Enabling Q4_0 for the MMVQ path should replace the CPU fallback cost with:
+  - cache lookup / staging for Q4_0 down expert misses;
+  - Q4_0 x Q8_1 GPU MMVQ;
+  - existing down scatter / D2H.
+- Hard upper bound on n32:
+  - cannot save more than the measured `decode,type=2` fallback
+    `2499.208 ms`;
+  - if Q4_0 staging behaves similarly to current down staging throughput,
+    the copy cost for `13.3506 GiB` is material, so realistic improvement is
+    below the upper bound;
+  - target for a worthwhile n32 diagnostic is at least `>300 ms` decode
+    reduction versus Phase 7FD `29610.75 ms`, and preferably beating current
+    n32 confirmation `29182.49 ms`.
+- Possible failure modes:
+  - Q4_0 GPU MMVQ can be slower than CPU fallback for these small active
+    batches;
+  - Q4_0 expert pack coverage may be incomplete, increasing GGUF-backed
+    staging/page-cache pressure;
+  - prompt Q4_0 fallback may become GPU batch too if Q4_0 is globally allowed,
+    so TTFT must be checked carefully;
+  - numerical differences may break the France quality gate.
+
+Implementation plan:
+
+1. Add a default-off env gate:
+   - `GGML_MOE_STREAM_Q4_0=1`;
+   - when unset, Q4_0 remains unsupported and production behavior is
+     unchanged.
+2. Under the env gate, allow `GGML_TYPE_Q4_0` in:
+   - `moe_stream_type_supported`;
+   - `launch_moe_mmvq_compact_batch`;
+   - `launch_moe_mmq_slot_batch` only if needed by the selected path.
+3. Add one first-use diagnostic line so the run proves Q4_0 was enabled.
+4. Do not change cache split, pinned slots, down overlap, or CPU threads in
+   this phase.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fj-q4-0-gpu-diag"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      GGML_MOE_STREAM_Q4_0=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required diagnostics:
+
+- `metrics.txt`:
+  - output text and quality;
+  - TTFT;
+  - decode time and token rate;
+  - memory peak/final;
+  - expert pack read/fallback counters.
+- `stderr.txt`:
+  - Q4_0 enablement diagnostic;
+  - down profile `fallback_t0` reduction;
+  - fallback profile should no longer have decode `type=2` as a large CPU
+    bucket;
+  - pinned staging and iouring counters to explain any gap.
+
+Decision rule:
+
+- If n32 is slower than current SOTA or quality/TTFT/RAM/pack gates fail,
+  revert the source patch and record rejection.
+- If n32 improves decode with all gates passing:
+  1. run n32 minimal-profile confirmation with the same env;
+  2. run n96 twice with the same env;
+  3. accept only if n96 beats Phase 7FB best `70087.31 ms / 77` and output is
+     semantically correct.
+- Accepted source changes must be committed and pushed immediately with
+  reproduction commands and result paths in this plan.
