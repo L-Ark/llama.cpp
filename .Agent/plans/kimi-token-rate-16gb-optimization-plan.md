@@ -43314,3 +43314,189 @@ Promotion rule:
   `74174.67 ms / 77` and must pass all hard gates.
 - If rejected, do not promote `MIN_PROFILE=1`; keep diagnostic SOTA runner for
   bottleneck visibility.
+
+Phase 7FB result - accepted as production/min-profile SOTA:
+
+- End time: 2026-07-04T06:34:00Z.
+- Source status:
+  - no source patch;
+  - env/runner-only production mode;
+  - uses existing `/tmp/run_phase7eo_repro.sh`.
+- Change over 7EX diagnostic SOTA:
+  - keep `PINNED_SLOTS=12`;
+  - add `MIN_PROFILE=1`;
+  - omit diagnostic CSV/trace/profile envs;
+  - keep math, routing, packs, cache split, mmap drops, iouring, current-down
+    overlap, and output sampling unchanged.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7fb-slots12-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7eo_repro.sh
+```
+
+Activation:
+
+- All accepted 7FB run directories contain only standard reproducibility files:
+  - no `fallback-profile.csv`;
+  - no `down-batch-profile.csv`;
+  - no `up-gate-profile.csv`;
+  - no `route-profile.csv`;
+  - no `route-trace.csv`;
+  - no `ttft-trace.csv`.
+- `env.txt` keeps:
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`;
+  - `GGML_MOE_STAGE_PINNED=1`;
+  - `GGML_MOE_STAGE_PINNED_SLOTS=12`;
+  - `GGML_MOE_VRAM_CACHE_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_SPLIT=1`;
+  - `GGML_MOE_VRAM_CACHE_UPGATE_PCT=60`;
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`;
+  - dense/expert mmap drop envs.
+
+Accepted n32 run A:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-041852Z-n32-phase7fb-slots12-min-profile`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT `75157.32 ms`.
+- Decode `28673.82 ms / 31`, `1.08 tok/s`.
+- Versus accepted 7EX n32 confirmation `29462.94 ms`: faster by
+  `789.12 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15080632320`;
+  - final `file=14841339904`;
+  - `inactive_file=850239488`;
+  - `active_file=13990522880`;
+  - `pgmajfault=974900`;
+  - `workingset_refault_file=21310`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14900936`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+
+Accepted n32 run B:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-042209Z-n32-phase7fb-slots12-min-profile-confirm`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: pass.
+- TTFT `73438.91 ms`.
+- Decode `29182.49 ms / 31`, `1.06 tok/s`.
+- Versus accepted 7EX n32 confirmation `29462.94 ms`: faster by
+  `280.45 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15082426368`;
+  - final `file=14846332928`;
+  - `inactive_file=6034518016`;
+  - `active_file=8811114496`;
+  - `pgmajfault=1013474`;
+  - `workingset_refault_file=20774`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15578565`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+
+Accepted n96 run A:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-042509Z-n96-phase7fb-slots12-min-profile-a`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- Quality: pass.
+- TTFT `66490.64 ms`.
+- Decode `71635.31 ms / 77`, `1.07 tok/s`.
+- Versus accepted 7EX n96 B `74174.67 ms`: faster by `2539.36 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15069077504`;
+  - final `file=14816079872`;
+  - `inactive_file=2692239360`;
+  - `active_file=12123103232`;
+  - `pgmajfault=958482`;
+  - `workingset_refault_file=44947`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37605353`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+
+Accepted n96 run B:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-042843Z-n96-phase7fb-slots12-min-profile-b`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- Quality: pass.
+- TTFT `71701.31 ms`.
+- Decode `70087.31 ms / 77`, `1.10 tok/s`.
+- Versus accepted 7EX n96 B `74174.67 ms`: faster by `4087.36 ms`.
+- Memory:
+  - peak `15899996160`;
+  - final `memory.current=15067164672`;
+  - final `file=14814810112`;
+  - `inactive_file=4723531776`;
+  - `active_file=10090627072`;
+  - `pgmajfault=964831`;
+  - `workingset_refault_file=43984`.
+- IO/cache:
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert-pack `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=36314446`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+
+Decision:
+
+- Accept Phase 7FB as production/min-profile SOTA.
+- Current production SOTA:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+MIN_PROFILE=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+GGML_MOE_STAGE_PINNED=1
+GGML_MOE_STAGE_PINNED_SLOTS=12
+GGML_MOE_VRAM_CACHE_MIB=15000
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=60
+GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+- Current production SOTA run set:
+  - n32: `28673.82 ms / 31` and `29182.49 ms / 31`;
+  - n96: `71635.31 ms / 77` and `70087.31 ms / 77`.
+- Diagnostic runner should still be used for bottleneck investigations because
+  minimal-profile omits per-call timing details like `host_stage`, `h2d`, and
+  down/upgate profile CSVs.
