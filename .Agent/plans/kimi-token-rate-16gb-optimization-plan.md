@@ -50608,3 +50608,64 @@ Decision rule:
 - If n96 gates pass, commit and push the runner hardening.
 - This phase does not claim token-rate SOTA by itself because it intentionally
   changes only metrics classification.
+
+Result: accepted as gate hardening; no SOTA claim.
+
+- End time: 2026-07-04T20:54:00+08:00.
+- Plan commit:
+  `a4aac4c3b` (`docs: plan semantic quality gate hardening`).
+- Runner commit:
+  `caf2e5b96` (`scripts: harden kimi france quality gate`).
+- Local parser sanity test:
+  - accepted n96 output: `pass`, reason `ok`;
+  - Phase 7GQ broken LFU output: `fail`, reason `repetition_collapse`;
+  - too-short fragment: `fail`, reason `too_few_words`.
+- Source/runtime impact:
+  - only the post-run Python metrics parser changed;
+  - no model execution, CUDA, MoE cache, iouring, prompt, sampling, or default
+    performance env changed.
+
+Cold-start n96 validation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-124904Z-n96-phase7gu-quality-gate`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-124904Z-n96-phase7gu-quality-gate
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `75092.43 ms`;
+  - decode `72330.81 ms / 77`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37619025`;
+  - current-down overlap worker `8541217 us`;
+  - down cache slots `806`, hit rate `73.4%`;
+  - upgate cache slots `1679`, hit rate `43.2%`.
+- Decision:
+  - Accept the runner hardening.
+  - Do not claim token-rate SOTA because runtime behavior was intentionally
+    unchanged and decode is slower than Phase 7FB `70087.31 ms / 77`.
+  - Future experiments must use `quality_reason` plus manual semantic inspection
+    before accepting any performance gain.
