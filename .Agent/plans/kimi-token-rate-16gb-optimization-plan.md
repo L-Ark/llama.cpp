@@ -44287,3 +44287,64 @@ Decision rule:
   `70087.31 ms / 77`.
 - If any gate fails or n96 is slower, revert the source patch and record the
   rejection.
+
+Phase 7FG result - rejected:
+
+- End time: 2026-07-04T08:40:00Z.
+- Source status:
+  - temporary source patch applied on top of plan commit `1994ddc72`;
+  - patch built successfully on the server;
+  - source patch was not committed;
+  - source patch was reverted locally and on the server after the n32 gate
+    failed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-052730Z-n32-phase7fg-io-min-batch2-diag`.
+- Test env:
+  - `GGML_MOE_IO_MIN_BATCH=2`;
+  - all other Phase 7FB runtime settings unchanged;
+  - `MIN_PROFILE=0`.
+- Result gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `78300.21 ms`, below `106331.72 ms`;
+  - decode `30005.48 ms / 31`, `1.03 tok/s`;
+  - cgroup peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement deltas versus Phase 7FD diagnostic:
+  - one-job iouring batches were eliminated:
+    - expert-pack histogram `1:0`;
+    - main ring histogram `1:0`;
+    - gate ring histogram `1:0`;
+  - `iouring_reads` fell from `15024` to `14689`;
+  - `direct_reads` rose from `8707` to `9042`;
+  - `iouring_wait_us` fell from `14744321` to `14380255`;
+  - main `host_stage` rose from `11455.176 ms` to `11760.568 ms`;
+  - gate `host_stage` rose from `354.900 ms` to `816.369 ms`;
+  - decode regressed from `29610.75 ms` to `30005.48 ms`.
+
+Interpretation:
+
+- The implementation did exactly what it was supposed to do: all one-job
+  iouring batches were bypassed intentionally without creating iouring
+  fallback errors.
+- The performance hypothesis was wrong:
+  - the saved iouring wait was only about `0.36 s`;
+  - the added direct/staged host work was about `0.77 s`;
+  - down fallback profile also worsened from `34.335 ms/call` to
+    `36.389 ms/call`;
+  - net decode regressed by about `395 ms`.
+- This confirms that the current single-job io_uring path is still better than
+  direct fallback for this workload.
+
+Decision:
+
+- Reject Phase 7FG.
+- Keep Phase 7FB as accepted production SOTA.
+- Do not run minimal-profile confirmation or n96.
+- Do not pursue simple iouring-to-direct thresholding further.
+- Next source experiment should target reducing or overlapping CPU fallback /
+  prompt-side fallback work, or reducing total route misses, not changing
+  iouring batch thresholds.
