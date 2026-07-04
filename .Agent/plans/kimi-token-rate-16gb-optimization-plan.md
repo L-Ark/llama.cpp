@@ -53063,3 +53063,72 @@ Result:
     - the historical promotion target `70087.31 ms / 77`.
   - Do not accept any n32-only/local improvement unless it proceeds to strict
     n96 and beats `70087.31 ms / 77`.
+
+## Phase 7HK: current stable down-prefetch depth-1 probe
+
+Start time: 2026-07-05T00:35:00+08:00.
+
+Goal:
+
+- Test whether reducing current-down prefetch depth from `2` to `1` improves the
+  current stable rebuilt baseline by lowering IO/staging contention.
+- Keep this env-only and default behavior unchanged unless strict n96 promotion
+  later proves a win.
+
+Why this is worth re-testing now:
+
+- Older phases rejected `GGML_MOE_PREFETCH_DOWN_DEPTH=1`, but those runs were on
+  older source/build/runtime combinations.
+- Current stable n96 baseline is close to historical SOTA:
+  - Phase 7HI: `70221.94 ms / 77`;
+  - Phase 7HJ: `71598.71 ms / 77`;
+  - historical promotion target: `70087.31 ms / 77`.
+- Current-down overlap still performs substantial work:
+  - n96 planned/completed jobs `9109`;
+  - worker about `8.35-8.37 s`;
+  - current production `MOE_PREFETCH_DOWN_DEPTH=2`.
+- If depth `2` adds enough competing IO to slow up/gate/runtime loads, depth `1`
+  could improve wall decode even if current-down overlap itself becomes less
+  aggressive.
+
+Theory and upper bound:
+
+- The change cannot reduce compute time; it only changes overlap/concurrency.
+- Potential gain is bounded by the exposed part of current-down worker/IO
+  contention, not by the full `8.3 s` worker time because much of it overlaps.
+- Practical target is small: n32 should not regress, and any n96 promotion must
+  beat both the current rebuilt best `70221.94 ms / 77` and historical SOTA
+  `70087.31 ms / 77`.
+
+Experiment: n32 depth-1 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hk-prefetch-depth1"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 is slower than current rebuilt n32 baseline range or any gate fails,
+  reject depth `1` and keep production depth `2`.
+- If n32 passes and improves, run strict n96 with the same env.
+- Accept only if n96 beats `70087.31 ms / 77`; otherwise record rejection and
+  keep production depth `2`.
