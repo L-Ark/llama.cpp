@@ -41810,3 +41810,87 @@ Rollback:
   first n32 is slower than SOTA, revert the source patch immediately.
 - If first n32 wins but confirmation fails, revert the source patch and record
   the first run as diagnostic only.
+
+Phase 7ES result - rejected and source reverted:
+
+- End time: 2026-07-04T03:00:00Z.
+- Tested dirty source on top of commit `95ad5731c`.
+- Source patch:
+  - added default-off `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING`;
+  - routed current-down overlap copies through `stage_ring_up_aux` when enabled;
+  - no numerical kernel or routing change.
+- Build:
+  - `cmake --build build-cuda-batch -j 32` passed.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-025616Z-n32-phase7es-current-down-aux-ring`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7es-current-down-aux-ring"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `76418.36 ms`, below the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality: pass.
+- Activation:
+  - stderr contains
+    `[moe_stream_batch] current down overlap aux staging ring active`;
+  - `pinned staging up_aux` shows copies `3664`, waits `3648`,
+    `host_stage=580.286 ms`, `h2d=860.470 ms`.
+- Decode:
+  - `29975.65 ms / 31`, `1.03 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31` by `376.01 ms`;
+  - slower than Phase 7ER diagnostic `29860.16 ms / 31` by `115.49 ms`.
+- Counters:
+  - expert pack `iouring_wait_us=14499318`, lower than Phase 7ER
+    `15316845`, but not enough to improve end-to-end decode;
+  - main pinned ring fell to copies `16090`, `host_stage=11104.505 ms`,
+    `h2d=3296.346 ms`;
+  - aux ring added copies `3664`, `host_stage=580.286 ms`,
+    `h2d=860.470 ms`;
+  - total pinned H2D increased from Phase 7ER main+gate about `5.06 s`
+    to main+gate+aux about `5.09 s`;
+  - down cache hit/miss counts unchanged;
+  - current-down overlap planned/completed jobs unchanged at `3664`.
+- Aggregated profile:
+  - `blk.4.ffn_down_exps.weight` worsened to wall `492.253 ms`
+    from Phase 7ER `458.643 ms`;
+  - `blk.60.ffn_down_exps.weight` stayed about flat at `454.359 ms`
+    versus Phase 7ER `452.939 ms`;
+  - `blk.60` up/gate worsened to wall `751.974 ms`
+    from Phase 7ER `574.808 ms`.
+
+Gap analysis:
+
+- The aux ring isolated pinned slots, but it did not reduce the target down
+  stage. Instead it moved `3664` current-down copies into an additional ring
+  and added extra H2D/host-stage accounting.
+- The SSD/io_uring wait improved, but the unchanged CUDA prefetch stream and
+  shared copy engines still expose enough work to slow decode.
+- The `blk.60` up/gate regression suggests resource interference remains at
+  the GPU stream/copy-engine level, not only at pinned-slot ownership.
+
+Decision:
+
+- Reject Phase 7ES.
+- Do not run n32 confirmation or n96.
+- Revert the source patch locally and on the server.
+- Do not use `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING` in SOTA.
+- Keep Phase 7EB as accepted SOTA.
