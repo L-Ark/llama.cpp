@@ -1,0 +1,36 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: revalidate ffn_down_exps with Q8_0 CPU-compatible arithmetic",
+  "source_head_before_experiment": "0ce3b568038fc5b6474896abcc7624d9d126e589",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "motivation": {
+    "previous_down_result": "blk.0.ffn_down_exps.weight output-write max_calls=64 failed with same_top1=143/145 and first_mismatch_pos=109.",
+    "why_revisit": "That rejection happened before the CPU-compatible Q8_0 arithmetic fixed the up boundary and full all-up top1. Down may have failed for the same arithmetic-order reason.",
+    "why_correctness_first": "10 tok/s requires removing or reducing both up and down fallback, but no down performance work is allowed until token-level correctness is proven."
+  },
+  "source_change_plan": {
+    "default_off": true,
+    "new_env": "GGML_MOE_STREAM_Q80_ALLOW_DOWN=1",
+    "behavior": "When unset, q80 write/skip remains restricted to ffn_up_exps exactly as current accepted source. When set, q80 write/skip name filters may also match ffn_down_exps.",
+    "validation_before_down_test": "Build llama-cli and llama-results, then run default-off fixed-text top1 sanity to ensure accepted/default behavior is unchanged."
+  },
+  "first_runtime_gate": {
+    "type": "output-write correctness only; CPU fallback still runs first and CUDA overwrites dst",
+    "env": {
+      "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+      "GGML_MOE_STREAM_Q80_ALLOW_DOWN": "1",
+      "GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER": "blk.0.ffn_down_exps.weight",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1": "1",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CALLS": "64"
+    },
+    "command": "llama-results fixed-text top1 check against the existing baseline result.gguf under 16GB/no-swap cgroup",
+    "pass_condition": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0",
+    "failure_rule": "If output-write fails, do not run down skip and keep down disabled except for rejected artifacts."
+  },
+  "not_a_sota": true,
+  "promotion_rule": "No performance benchmark may be run from this plan. Passing down output-write only permits a later down skip correctness plan."
+}
