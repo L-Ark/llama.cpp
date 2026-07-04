@@ -58539,6 +58539,129 @@ Decision rule:
   this path.
 - If accepted at n32, validate with n96 before claiming SOTA.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `d3b8d191c ggml: support hot replacement expert overlays`.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay`
+
+Build result:
+
+- generated hot overlay:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay/kimi-iq3s-main-hot-firstuse.expert-pack`;
+- input main pack entries `30831`;
+- output hot entries `8583`;
+- trace keys `8763`;
+- tensors `107`;
+- output size `49833127936` bytes (`47 GiB`);
+- copied bytes `49831821312`;
+- the `180` trace keys not present in main are covered by the existing
+  l1/l2 down overlay path.
+
+First n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay/n32`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75908.09 ms`, below `106331.72 ms`;
+- decode `28197.80 ms / 31`, `1.10 tok/s`;
+- host RAM peak `15899996160` bytes, final `15077879808` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert pack loaded:
+  - main `30831` entries;
+  - l1/l2 down overlay `768` entries;
+  - hot replacement overlay `8583` entries;
+  - replaced duplicate keys `8583`;
+  - total runtime entries `31599`, sources `3`;
+- iouring reads `14862`, bytes `86301917184`, wait `13580356 us`;
+- down hit `73.4%`;
+- upgate hit `45.2%`;
+- locality:
+  - total `span/read = 8.7761`;
+  - total `gap/read = 7.7761`;
+  - total `adjacent/read_jobs = 0.3787`;
+  - `runtime_load span/read = 9.4978`;
+  - `current_down_overlap span/read = 6.6798`.
+
+Repeat n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay/n32-repeat`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76495.02 ms`, below `106331.72 ms`;
+- decode `29465.58 ms / 31`, `1.05 tok/s`;
+- host RAM peak `15899996160` bytes, final `15051853824` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- replaced duplicate keys `8583`;
+- total runtime entries `31599`, sources `3`;
+- iouring reads `14862`, bytes `86301917184`, wait `14561299 us`;
+- down hit `73.4%`;
+- upgate hit `45.2%`;
+- locality is identical to the first run:
+  - total `span/read = 8.7761`;
+  - total `gap/read = 7.7761`;
+  - total `adjacent/read_jobs = 0.3787`.
+
+Decision:
+
+- Reject hot replacement overlay as a SOTA improvement.
+- Reason:
+  - It passes correctness, TTFT, RAM, swap, and expert-pack gates.
+  - It improves physical locality (`span/read` from about `26.83` current trace
+    layout to `8.78`), proving the replacement mechanism works.
+  - The token-rate improvement is not reproducible:
+    - first run `28197.80 ms`, `1.10 tok/s`;
+    - repeat `29465.58 ms`, `1.05 tok/s`.
+  - Repeat iouring wait `14561299 us` is close to the pre-overlay trace run
+    `14763607 us`, so the reduced physical span does not reliably compress the
+    exposed bottleneck.
+- Do not run n96 for this rejected path.
+- Keep the source changes as default-off infrastructure only:
+  - without `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA` and
+    `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`, runtime behavior remains the
+    strict duplicate-reject path;
+  - the tools are useful for future reproductions but are not enabled in the
+    accepted SOTA runtime.
+- The rejected 47 GiB generated hot overlay was removed after recording:
+
+```bash
+rm -f /root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay/kimi-iq3s-main-hot-firstuse.expert-pack
+df -h /root/lfz
+du -sh /root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay
+```
+
+- Disk after cleanup:
+  - `/dev/root` available `89G`;
+  - 7IS run directory `1.2M`.
+
+Next target:
+
+- The result falsifies a simple physical-layout explanation for the remaining
+  bottleneck. Even after large `span/read` reduction, wall decode does not
+  improve reliably.
+- Next design should focus on reducing the number of exposed iouring waits or
+  making more of them overlapped, not just moving hot entries closer together.
+- Candidate: profile whether `current_down_overlap` can be extended to up/gate
+  next-layer prefetch without increasing TTFT or damaging stream overlap. The
+  theory must account for the fact that previous broad coalescer and extra
+  depth experiments regressed.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
