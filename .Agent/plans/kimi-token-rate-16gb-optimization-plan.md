@@ -53003,3 +53003,63 @@ Decision rule:
   optimization.
 - If repeat passes and remains slower, record the two-run rebuilt baseline range
   and use it for future comparisons.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-155114Z-n96-phase7hj-current-stable-repeat`.
+- Source/build:
+  - repo head `c23f18377afd588d4068ac7931b9532819f9f34e`;
+  - clean worktree recorded in `git.txt`;
+  - stable Blackwell `120a` build.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `71412.43 ms`;
+  - decode `71598.71 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory final:
+  - `anon=479232`;
+  - `file=14817337344`;
+  - `kernel=248786944`;
+  - `inactive_file=1822011392`;
+  - `active_file=12994871296`;
+  - `pgmajfault=985969`;
+  - `workingset_refault_file=45059`.
+- Expert pack and staging:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37464690`;
+  - `iouring_submit_us=100002`;
+  - iouring batches `9846`, wait calls `29597`, cqes `37080`, inflight avg
+    `3.12`, max `8`;
+  - batch hist `1:805,2-4:5991,5-8:3050,9-16:0`;
+  - main pinned copies `49350`, waits `49314`;
+  - gate pinned copies `10450`, waits `10426`.
+- Cache and overlap:
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`;
+  - current-down overlap calls `2464`, planned/completed jobs `9109`, cache
+    hits `8755`, submitted batches `2224`, worker `8355637 us`.
+- Comparison:
+  - Phase 7HI first n96 baseline: `70221.94 ms / 77`;
+  - Phase 7HJ repeat: `71598.71 ms / 77`;
+  - two-run current stable n96 range: `70221.94-71598.71 ms`;
+  - historical accepted Phase 7FB n96 SOTA remains `70087.31 ms / 77`.
+- Decision:
+  - Repeat passes all gates but does not beat historical Phase 7FB.
+  - Current stable rebuilt source is valid but not a new SOTA.
+  - Future source optimizations must beat both:
+    - the current stable rebuilt baseline range, especially the best rebuilt
+      run `70221.94 ms / 77`;
+    - the historical promotion target `70087.31 ms / 77`.
+  - Do not accept any n32-only/local improvement unless it proceeds to strict
+    n96 and beats `70087.31 ms / 77`.
