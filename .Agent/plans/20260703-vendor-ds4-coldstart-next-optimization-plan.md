@@ -8243,3 +8243,80 @@ Promotion rule remains unchanged:
 - After pushing, rebuild from pushed source and reproduce the result before calling it accepted SOTA.
 - If pushed-source reproduction fails to exceed `4.4 tok/s`, or RAM/TTFT/correctness/cache counters fail, revert runtime source, keep rejected artifacts/docs, and push the rejection record.
 - Each accepted or rejected experiment must include run path, full env/config, binary/source hashes, output answer, token rates, TTFT, elapsed time, cgroup memory/file-cache stats, cache counters, and artifact sha256.
+
+### 2026-07-04T05:55Z Post-Prefetch Bottleneck Hard-Bound
+
+Artifacts:
+
+- Tool: `.Agent/run-tools/analyze_post_prefetch_bottleneck.py`
+- Tool sha256: `663109370fa8195411d89745d5408b8820d5a20d964e1ffbb9032dfc49d71417`
+- Result: `.Agent/runs/20260704-vendor-ds4-coldstart/post-prefetch-bottleneck-hard-bound.json`
+- Result sha256: `f0474f3d66e5fb6ec22d7b0e86f727f06bb17f377deab4174daab1837b333c7f`
+- Source head used for analysis: `0cc181c24480a710899aab96adf67261e406d396`
+
+Baseline used for all ceilings:
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- `eval_tok_s=4.4`
+- `elapsed_seconds=63.94`
+- `TTFT=32892.55329 ms`
+- Decode-window estimate: `31.04744671 s`
+- Decoded-token estimate: `136.608765524`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `ram_ok=true`
+- `correctness_ok=true`
+
+Top hard bounds under the accepted SOTA window:
+
+| Row | Removable time | No-overhead ceiling | Decision |
+| --- | ---: | ---: | --- |
+| all decode up/down fallback + gate one-stream total removed | `27079.681 ms` | `34.430 tok/s` | reference only; not one implementation |
+| all prompt+decode up/down fallback removed | `26438.059 ms` | `29.637 tok/s` | reference only |
+| all decode up/down fallback removed | `19029.457 ms` | `11.367 tok/s` | only class that can reach 10 without speculation |
+| cold-vs-nodrop total fallback delta removed | `12791.007 ms` | `7.483 tok/s` | diagnostic only; no-drop not promotable |
+| cold-vs-nodrop decode fallback delta removed | `10487.862 ms` | `6.645 tok/s` | diagnostic only |
+| decode up fallback removed | `9697.125 ms` | `6.398 tok/s` | useful only as a step, not enough alone |
+| decode down fallback removed | `9332.332 ms` | `6.291 tok/s` | useful only as a step, not enough alone |
+| gate one-stream total time removed | `8050.224 ms` | `5.940 tok/s` | not enough alone |
+
+Interpretation:
+
+- The next material target is exact full or near-full decode up/down fallback reduction.
+- Micro-optimizations below several hundred milliseconds, including the conversion skip, cannot move SOTA meaningfully.
+- Single-side up-only or down-only offload cannot reach 10 by itself, but can be used as a correctness-screened stepping stone if it preserves top1.
+- Existing fused up/gate, nofilter up/down stream, hot64 up/down stream, down batch, packmmap/packdirect, and synchronous prefetch attempts stay closed.
+- The old phaseB hard-bound used a slower `4.1 tok/s` diagnostic window; the new table is the active bound because it uses the accepted pushed `4.4 tok/s` SOTA run.
+
+### 2026-07-04T06:05Z Next Candidate: Split Up/Down Top1 Verifier
+
+Why this is the next practical screen:
+
+- Full nofilter up/down GPU stream already failed output correctness and performance, but it combined multiple effects: up, down, gate cache pressure, and much worse cache/source behavior.
+- The new hard-bound shows `decode up fallback removed` and `decode down fallback removed` each have about `6.3-6.4 tok/s` no-overhead ceiling. Either side alone is not enough for the final target, but a side that preserves top1 is a viable subproblem for later stacking.
+- The existing top1 verifier can reject arithmetic/offload candidates before a full strict cold benchmark.
+
+Planned verifier-only probes:
+
+1. `split-up-only-top1`:
+   - Baseline: existing accepted SOTA top1 baseline `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json`.
+   - Fixed text: `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/fixed-france-text.txt`.
+   - Config: accepted SOTA env plus `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`.
+   - Keep accepted gate prefill/profile/pack/cache settings.
+   - Run only `llama-results --sequential-logits --top1-report`; compare JSON to baseline.
+2. `split-down-only-top1`:
+   - Same baseline/fixed text.
+   - Config: accepted SOTA env plus `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_down_exps`.
+   - Run only `llama-results --sequential-logits --top1-report`; compare JSON to baseline.
+
+Acceptance for this screen:
+
+- The screen passes only if `same_top1=145/145`, `first_mismatch_pos=-1`, no cgroup OOM/OOM kill, and RAM remains within the strict 16GB cgroup including page cache.
+- This is not a SOTA benchmark and cannot be promoted by itself.
+- If either side fails top1, reject that side without full benchmark.
+- If either side passes top1, update this plan again with a performance hard-bound and then run one strict cold France benchmark for that side.
+
+Rollback / source rule:
+
+- No source changes are planned for the verifier probes; only env changes and artifacts.
+- Any later source change must be default-off, pass this verifier first when it changes arithmetic/offload, then pass strict cold France correctness/RAM/TTFT/token-rate gates.

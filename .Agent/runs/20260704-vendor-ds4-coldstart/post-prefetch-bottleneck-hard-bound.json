@@ -1,0 +1,348 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "decode_window_seconds": 31.047446709999996,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "bottleneck_rows_sorted_by_ceiling": [
+    {
+      "class_": "stacked_reference_to_10",
+      "name": "all decode up/down fallback + gate one-stream total removed",
+      "removable_ms": 27079.680999999997,
+      "source": "current fallback + accepted one_trace_aggregate",
+      "theoretical_tok_s_no_overhead": 34.42964517277408
+    },
+    {
+      "class_": "full_run_ideal_reference",
+      "name": "all prompt+decode up/down fallback removed",
+      "removable_ms": 26438.058999999997,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 29.637074188319925
+    },
+    {
+      "class_": "exact_compute_or_offload_ideal",
+      "name": "all decode up/down fallback removed",
+      "removable_ms": 19029.457,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 11.367023006379325
+    },
+    {
+      "class_": "source_page_stall_reference_not_promotable",
+      "name": "cold-vs-nodrop total fallback delta removed",
+      "removable_ms": 12791.007,
+      "source": "phaseC-cold-vs-nodrop-comparison",
+      "theoretical_tok_s_no_overhead": 7.482771432656297
+    },
+    {
+      "class_": "source_page_stall_reference_not_promotable",
+      "name": "cold-vs-nodrop decode fallback delta removed",
+      "removable_ms": 10487.862000000076,
+      "source": "phaseC-cold-vs-nodrop-comparison",
+      "theoretical_tok_s_no_overhead": 6.644529422695743
+    },
+    {
+      "class_": "exact_compute_or_offload",
+      "name": "decode up fallback removed",
+      "removable_ms": 9697.125,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 6.398440612724613
+    },
+    {
+      "class_": "exact_compute_or_offload",
+      "name": "decode down fallback removed",
+      "removable_ms": 9332.332,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 6.290952976688191
+    },
+    {
+      "class_": "gate_source_or_stream_reference",
+      "name": "gate one-stream total time removed",
+      "removable_ms": 8050.224,
+      "source": "accepted one_trace_aggregate",
+      "theoretical_tok_s_no_overhead": 5.940228837484699
+    },
+    {
+      "class_": "ttft_only_mostly",
+      "name": "all prompt up/down fallback removed",
+      "removable_ms": 7408.602,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 5.778995005885802
+    },
+    {
+      "class_": "gate_source_reference",
+      "name": "gate one-stream src0 time removed",
+      "removable_ms": 6707.771,
+      "source": "accepted one_trace_aggregate",
+      "theoretical_tok_s_no_overhead": 5.6125959586172325
+    },
+    {
+      "class_": "layer_band_reference",
+      "name": "layers 10-19 up/down fallback removed",
+      "payload_mib_unique": 5278.5,
+      "removable_ms": 5675.9240000000045,
+      "source": "fallback_profile.csv",
+      "theoretical_tok_s_no_overhead": 5.384334518879968
+    },
+    {
+      "class_": "layer_band_reference",
+      "name": "layers 3-9 up/down fallback removed",
+      "payload_mib_unique": 5278.5,
+      "removable_ms": 5473.609999999993,
+      "source": "fallback_profile.csv",
+      "theoretical_tok_s_no_overhead": 5.341739179502252
+    },
+    {
+      "class_": "layer_band_reference",
+      "name": "layers 30-39 up/down fallback removed",
+      "payload_mib_unique": 4921.5,
+      "removable_ms": 5446.1100000000015,
+      "source": "fallback_profile.csv",
+      "theoretical_tok_s_no_overhead": 5.336001282723648
+    },
+    {
+      "class_": "layer_band_reference",
+      "name": "layers 20-29 up/down fallback removed",
+      "payload_mib_unique": 4981.0,
+      "removable_ms": 5406.432999999999,
+      "source": "fallback_profile.csv",
+      "theoretical_tok_s_no_overhead": 5.327744334488716
+    },
+    {
+      "class_": "layer_band_reference",
+      "name": "layers 0-2 up/down fallback removed",
+      "payload_mib_unique": 4819.5,
+      "removable_ms": 4435.981999999996,
+      "source": "fallback_profile.csv",
+      "theoretical_tok_s_no_overhead": 5.133455336363557
+    },
+    {
+      "class_": "scheduler_reference_closed",
+      "name": "chunk scheduling/tail gap removed",
+      "removable_ms": 1672.3180000000007,
+      "source": "source-movement-async-bound",
+      "theoretical_tok_s_no_overhead": 4.650490790104865
+    },
+    {
+      "class_": "micro_closed",
+      "name": "mul_mat_id src1 conversion removed",
+      "removable_ms": 33.84,
+      "source": "mulmatid-convert-skip-bound",
+      "theoretical_tok_s_no_overhead": 4.4048009894944595
+    }
+  ],
+  "closed_candidate_summary": {
+    "concrete_runtime_candidate_passes_gate": false,
+    "next_required_work": [
+      "Inspect the active CPU fallback code path to identify a new exact mechanism that reduces actual up/down source/dot work instead of only changing scheduling.",
+      "A viable design must explain how it avoids the rejected hot-dispatch VRAM/gate-cache tradeoff and rejected repack/page-refault regressions.",
+      "If the design can change logits, run the lightweight top1 verifier before any strict cold token-rate run."
+    ],
+    "passing_candidates": [],
+    "verdict": "No already-defined concrete runtime candidate passes the plan's screening gate. Do not run another full model benchmark until a new exact compute/offload/layout mechanism has a hard bound above tie and a correctness-verification path."
+  },
+  "cold_vs_nodrop_metrics": {
+    "eval_tok_s": {
+      "cold": 4.1,
+      "delta": 3.1000000000000005,
+      "nodrop": 7.2,
+      "pct_delta": 75.609756097561
+    },
+    "fallback_decode_ms": {
+      "cold": 18089.280000000068,
+      "delta": -10487.862000000076,
+      "nodrop": 7601.417999999992,
+      "pct_delta": -57.97832749562192
+    },
+    "fallback_down_ms": {
+      "cold": 13356.187000000038,
+      "delta": -6276.748000000021,
+      "nodrop": 7079.439000000017,
+      "pct_delta": -46.99505929349449
+    },
+    "fallback_prompt_ms": {
+      "cold": 7654.396999999998,
+      "delta": -2303.1450000000095,
+      "nodrop": 5351.251999999989,
+      "pct_delta": -30.089176195068145
+    },
+    "fallback_total_ms": {
+      "cold": 25743.677,
+      "delta": -12791.007,
+      "nodrop": 12952.67,
+      "pct_delta": -49.68601416184642
+    },
+    "fallback_up_ms": {
+      "cold": 12387.489999999994,
+      "delta": -6514.259,
+      "nodrop": 5873.230999999994,
+      "pct_delta": -52.587400676004606
+    },
+    "memory_file_bytes": {
+      "cold": 15102832640,
+      "delta": 1347584,
+      "nodrop": 15104180224,
+      "pct_delta": 0.00892272351897028
+    },
+    "one_src0_ms": {
+      "cold": 5236.633000004192,
+      "delta": 123.76699999997709,
+      "nodrop": 5360.400000004169,
+      "pct_delta": 2.363484322844049
+    },
+    "one_total_ms": {
+      "cold": 6986.810000000334,
+      "delta": 104.30999999981759,
+      "nodrop": 7091.120000000152,
+      "pct_delta": 1.4929560128272072
+    },
+    "pgmajfault": {
+      "cold": 265548,
+      "delta": -145447,
+      "nodrop": 120101,
+      "pct_delta": -54.772395197855005
+    },
+    "prompt_tok_s": {
+      "cold": 1.5,
+      "delta": 0.5,
+      "nodrop": 2.0,
+      "pct_delta": 33.33333333333333
+    },
+    "ttft_ms": {
+      "cold": 29663.442807,
+      "delta": -3008.640317999998,
+      "nodrop": 26654.802489,
+      "pct_delta": -10.142586407030329
+    },
+    "workingset_refault_file": {
+      "cold": 1671406,
+      "delta": 5902153,
+      "nodrop": 7573559,
+      "pct_delta": 353.12503365430064
+    }
+  },
+  "decode_hotset_reference": [
+    {
+      "fallback_ms": 2622.38,
+      "payload_mib_naive": 272.0,
+      "theoretical_tok_s_no_overhead": 4.805925942680048,
+      "top_entries": 64
+    },
+    {
+      "fallback_ms": 4066.374,
+      "payload_mib_naive": 544.0,
+      "theoretical_tok_s_no_overhead": 5.063133219064662,
+      "top_entries": 128
+    },
+    {
+      "fallback_ms": 5870.384,
+      "payload_mib_naive": 1088.0,
+      "theoretical_tok_s_no_overhead": 5.425921486454446,
+      "top_entries": 256
+    },
+    {
+      "fallback_ms": 8229.846,
+      "payload_mib_naive": 2176.0,
+      "theoretical_tok_s_no_overhead": 5.986990799787732,
+      "top_entries": 512
+    },
+    {
+      "fallback_ms": 11426.538,
+      "payload_mib_naive": 4352.0,
+      "theoretical_tok_s_no_overhead": 6.9624076816776554,
+      "top_entries": 1024
+    },
+    {
+      "fallback_ms": 15337.17,
+      "payload_mib_naive": 8704.0,
+      "theoretical_tok_s_no_overhead": 8.695503462204774,
+      "top_entries": 2048
+    }
+  ],
+  "generated_at_utc": "2026-07-04T05:37:23Z",
+  "inputs": {
+    ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-chunk-trace-analysis.json": "95ea0ba1fb9dac338c6b2354638f6ed0e346b90568d12b5f895cf24337e76024",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/exact-updown-candidate-screening.json": "b80a28749cadddd56473608b00379481a18fff6508f041835565ec8f85062768",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-pushed-repro-result.json": "9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/mulmatid-convert-skip-bound.json": "5bc6105af0072c0f1cc451a101d30fe0fcb1b50f28f8de356661a1ba6010bb6e",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-bottleneck-summary.json": "8a1f39920fe15274f6a2631e54f6fa37fd6053b6b28524f377d4788750d1741a",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/phaseC-cold-vs-nodrop-comparison.json": "9970953a0772f2dd2b7fa64dcca072c3ab4e277c149aa033edb0c9ae21d1729b",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/phaseC-nodrop-bottleneck-summary.json": "0cee5fbd235feaf6c4fa816a3b0b5bd37251e028bf11352494a99fc852cbbe6c",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json": "d97f52ca6f58eb945e12b4473158f07c16d0e412a690f895f9a5eb2e7f9dcf78",
+    "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/fallback_profile.csv": "f334f867df76a653be7281a0ba38bd172c444062aaf5b883497c80fd2575fe81"
+  },
+  "interpretation": {
+    "candidate_rows_worth_design": [
+      "all decode up/down fallback + gate one-stream total removed",
+      "all decode up/down fallback removed",
+      "decode up fallback removed",
+      "decode down fallback removed"
+    ],
+    "do_not_repeat": [
+      "synchronous madvise/page-touch down prefetch",
+      "packmmap/packdirect source movement without new bandwidth model",
+      "chunk-size/affinity-only probes",
+      "mul_mat_id conversion skip",
+      "existing one-stream up/down cache expansion without new correctness mechanism"
+    ],
+    "next_required_design": "Inspect active CPU fallback code and find a new exact compute/offload/layout mechanism. Any arithmetic/offload change must pass the existing top1 verifier before strict cold benchmark.",
+    "primary_remaining_bottleneck": "CPU up/down fallback dominates. Under the accepted 4.4 tok/s run window, ideal removal of all decode up/down fallback has an estimated ceiling above 10 tok/s, so the next design must target exact full or near-full decode fallback reduction rather than millisecond-scale micro-optimizations."
+  },
+  "layer_band_payload_reference": {
+    "layers 0-2": {
+      "calls": 3608,
+      "count": 3648,
+      "entries": 1354,
+      "fallback_ms": 4435.981999999996,
+      "payload_bytes_unique": 5053612032,
+      "payload_mib_unique": 4819.5
+    },
+    "layers 10-19": {
+      "calls": 8798,
+      "count": 9120,
+      "entries": 1452,
+      "fallback_ms": 5675.9240000000045,
+      "payload_bytes_unique": 5534908416,
+      "payload_mib_unique": 5278.5
+    },
+    "layers 20-29": {
+      "calls": 8778,
+      "count": 9120,
+      "entries": 1372,
+      "fallback_ms": 5406.432999999999,
+      "payload_bytes_unique": 5222957056,
+      "payload_mib_unique": 4981.0
+    },
+    "layers 3-9": {
+      "calls": 8246,
+      "count": 8512,
+      "entries": 1476,
+      "fallback_ms": 5473.609999999993,
+      "payload_bytes_unique": 5534908416,
+      "payload_mib_unique": 5278.5
+    },
+    "layers 30-39": {
+      "calls": 8792,
+      "count": 9120,
+      "entries": 1376,
+      "fallback_ms": 5446.1100000000015,
+      "payload_bytes_unique": 5160566784,
+      "payload_mib_unique": 4921.5
+    }
+  },
+  "schema": "vendor-ds4-post-prefetch-bottleneck-v1",
+  "source": {
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "dirty": true,
+    "head": "0cc181c24480a710899aab96adf67261e406d396",
+    "remote_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  }
+}
