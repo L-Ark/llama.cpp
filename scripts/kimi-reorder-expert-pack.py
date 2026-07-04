@@ -17,7 +17,7 @@ def align_up(value: int, alignment: int = ALIGNMENT) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
-def load_trace_first_use(path: Path) -> dict[str, list[int]]:
+def load_trace_first_use(path: Path) -> tuple[dict[str, list[int]], set[tuple[str, int]]]:
     order: dict[str, list[int]] = defaultdict(list)
     seen: dict[str, set[int]] = defaultdict(set)
     with path.open(newline="") as f:
@@ -29,7 +29,8 @@ def load_trace_first_use(path: Path) -> dict[str, list[int]]:
             if expert_idx not in seen[tensor]:
                 seen[tensor].add(expert_idx)
                 order[tensor].append(expert_idx)
-    return order
+    keys = {(tensor, expert_idx) for tensor, experts in seen.items() for expert_idx in experts}
+    return order, keys
 
 
 def load_pack(path: Path) -> tuple[int, list[dict]]:
@@ -59,9 +60,15 @@ def load_pack(path: Path) -> tuple[int, list[dict]]:
     return data_start, entries
 
 
-def build_physical_order(entries: list[dict], first_use: dict[str, list[int]], mode: str) -> list[dict]:
+def build_physical_order(
+        entries: list[dict],
+        first_use: dict[str, list[int]],
+        mode: str,
+        only_keys: set[tuple[str, int]] | None) -> list[dict]:
     by_tensor: dict[str, list[dict]] = defaultdict(list)
     for entry in entries:
+        if only_keys is not None and (entry["name"], entry["expert_idx"]) not in only_keys:
+            continue
         by_tensor[entry["name"]].append(entry)
 
     ordered = []
@@ -91,8 +98,13 @@ def copy_exact(src, dst, nbytes: int, chunk_size: int) -> None:
         remaining -= chunk
 
 
-def write_reordered_pack(src_path: Path, out_path: Path, entries: list[dict], physical_order: list[dict], chunk_size: int) -> None:
-    index_bytes = len(entries) * PACK_ENTRY.size
+def write_reordered_pack(
+        src_path: Path,
+        out_path: Path,
+        index_entries: list[dict],
+        physical_order: list[dict],
+        chunk_size: int) -> None:
+    index_bytes = len(index_entries) * PACK_ENTRY.size
     data_start = align_up(PACK_HEADER.size + index_bytes)
     offset = data_start
     by_entry_idx = {}
@@ -109,8 +121,8 @@ def write_reordered_pack(src_path: Path, out_path: Path, entries: list[dict], ph
     copied_bytes = 0
     next_report = 16 * 1024 * 1024 * 1024
     with src_path.open("rb") as src, tmp_out.open("wb") as out:
-        out.write(PACK_HEADER.pack(PACK_MAGIC, 1, PACK_HEADER.size, len(entries), data_start))
-        for original in entries:
+        out.write(PACK_HEADER.pack(PACK_MAGIC, 1, PACK_HEADER.size, len(index_entries), data_start))
+        for original in index_entries:
             item = by_entry_idx[original["entry_idx"]]
             name_bytes = item["name"].encode("utf-8")
             out.write(PACK_ENTRY.pack(
@@ -140,7 +152,7 @@ def write_reordered_pack(src_path: Path, out_path: Path, entries: list[dict], ph
 
     os.replace(tmp_out, out_path)
     print(f"wrote {out_path}")
-    print(f"entries={len(entries)} data_start={data_start} size={total_size} copied_bytes={copied_bytes}")
+    print(f"entries={len(index_entries)} data_start={data_start} size={total_size} copied_bytes={copied_bytes}")
 
 
 def main() -> int:
@@ -149,6 +161,8 @@ def main() -> int:
     parser.add_argument("--trace", required=True, type=Path, help="io-read-trace.csv.")
     parser.add_argument("--out", required=True, type=Path, help="Output reordered pack.")
     parser.add_argument("--mode", choices=["first-use", "current"], default="first-use")
+    parser.add_argument("--only-trace-entries", action="store_true",
+                        help="Write only entries that appear in the trace and exist in the input pack.")
     parser.add_argument("--chunk-size", type=int, default=64 * 1024 * 1024)
     args = parser.parse_args()
 
@@ -157,17 +171,21 @@ def main() -> int:
     if args.chunk_size <= 0:
         raise RuntimeError("--chunk-size must be positive")
 
-    first_use = load_trace_first_use(args.trace)
+    first_use, trace_keys = load_trace_first_use(args.trace)
     _data_start, entries = load_pack(args.pack)
-    physical_order = build_physical_order(entries, first_use, args.mode)
-    if len(physical_order) != len(entries):
+    only_keys = trace_keys if args.only_trace_entries else None
+    physical_order = build_physical_order(entries, first_use, args.mode, only_keys)
+    if not args.only_trace_entries and len(physical_order) != len(entries):
         raise RuntimeError("internal error: physical order length mismatch")
     print(f"pack={args.pack}")
     print(f"trace={args.trace}")
     print(f"out={args.out}")
     print(f"mode={args.mode}")
-    print(f"entries={len(entries)} tensors={len({e['name'] for e in entries})}")
-    write_reordered_pack(args.pack, args.out, entries, physical_order, args.chunk_size)
+    print(f"only_trace_entries={1 if args.only_trace_entries else 0}")
+    print(f"input_entries={len(entries)} output_entries={len(physical_order)} trace_keys={len(trace_keys)} "
+          f"tensors={len({e['name'] for e in physical_order})}")
+    index_entries = physical_order if args.only_trace_entries else entries
+    write_reordered_pack(args.pack, args.out, index_entries, physical_order, args.chunk_size)
     return 0
 
 
