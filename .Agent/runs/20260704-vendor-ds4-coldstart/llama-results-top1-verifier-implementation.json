@@ -1,0 +1,40 @@
+{
+  "artifact": "llama-results-top1-verifier-implementation",
+  "behavior": "In --check mode, compares the stored base logits against current logits, writes same-top1 count, first mismatch, top1/top2 token ids/pieces/logits, margins, max_abs, and mean_abs to JSON. With --top1-fail-on-mismatch, exits failure if any top1 differs.",
+  "binary_sha256": {
+    "build-ds4-moe-stream/bin/llama-results": "5f78342ddf9bfeaf2a21c773f43a4b5ce83ffaebbe6762b376288301a273f98b"
+  },
+  "build_command": "cmake --build build-ds4-moe-stream --target llama-results -j 16",
+  "checks": [
+    {
+      "name": "build llama-results",
+      "status": "pass"
+    },
+    {
+      "name": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "build-ds4-moe-stream/bin/llama-results --help --top1-report /tmp/unused-top1.json",
+      "exit_status": 0,
+      "name": "help parses with --top1-report stripped before common parser",
+      "report_file_created": false,
+      "status": "pass"
+    }
+  ],
+  "files_changed": [
+    "tools/results/results.cpp",
+    "tools/results/README.md"
+  ],
+  "model_run_performed": false,
+  "new_tool_flags": [
+    "--top1-report <json>",
+    "--top1-fail-on-mismatch"
+  ],
+  "next_required_validation": "Run a DS4 diagnostic self-check with an accepted fixed France text under a 16GB cgroup before relying on this verifier for future GPU/offload candidates. This diagnostic cannot promote token rate.",
+  "not_a_sota_candidate": true,
+  "runtime_path_changed": false,
+  "source_head_before_commit": "f0a65033b7a02114dc6b6fa84d084387813a8998",
+  "status": "implemented_build_passed_light_check_only",
+  "timestamp_utc": "2026-07-04T02:42:35Z"
+}

@@ -7475,3 +7475,43 @@ Implementation plan for verifier extension:
    - any change outside diagnostic tool behavior;
    - inability to compare top1/margins from result files;
    - diagnostic memory violation under 16GB cgroup when tested.
+
+### 2026-07-04T03:25Z `llama-results` Top1 Verifier Implementation Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-verifier-implementation.json`
+- sha256: `7d400e3c3501728b1f451f971beba4b39c74331351747d421d28ee978db9629a`
+
+Implementation:
+
+- Changed `tools/results/results.cpp` only for tool-local behavior:
+  - added private parsing for `--top1-report <json>`;
+  - added `--top1-fail-on-mismatch`;
+  - in `--check` mode, compares stored base logits against current logits and writes a JSON top1 report.
+- Updated `tools/results/README.md` with the diagnostic usage.
+- `llama-cli` and accepted runtime path are unchanged.
+
+Build and light verification:
+
+- Build command: `cmake --build build-ds4-moe-stream --target llama-results -j 16`
+- Result: pass.
+- `build-ds4-moe-stream/bin/llama-results` sha256: `5f78342ddf9bfeaf2a21c773f43a4b5ce83ffaebbe6762b376288301a273f98b`
+- `git diff --check`: pass.
+- Help/arg strip check: `build-ds4-moe-stream/bin/llama-results --help --top1-report /tmp/unused-top1.json` exits `0` and does not create the report file.
+
+Verifier output fields:
+
+- `n_tokens`, `n_vocab`, `same_top1`, `same_top1_ratio`
+- `first_mismatch_pos`
+- `base_top1_matches_next_token`, `calc_top1_matches_next_token`
+- `max_abs`, `mean_abs`
+- first 16 mismatch previews with actual next token, base/candidate top1/top2 ids/pieces/logits, and margins.
+
+Status:
+
+- This is a correctness diagnostic tool, not a token-rate optimization and not a SOTA candidate.
+- Before relying on it for future GPU/offload candidates, run one DS4 self-check on the accepted fixed France text under a 16GB cgroup. The self-check should:
+  - create a baseline `llama-results` GGUF from accepted SOTA env/config;
+  - rerun `--check --top1-report --top1-fail-on-mismatch` against the same accepted path;
+  - confirm `same_top1 == n_tokens`, `first_mismatch_pos == -1`, no cgroup OOM, and report memory/elapsed time.
