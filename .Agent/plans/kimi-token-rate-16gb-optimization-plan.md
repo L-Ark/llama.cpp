@@ -43956,3 +43956,106 @@ Decision rule:
 - If the profile is diffuse, do not keep sweeping cache-size or slot knobs;
   pivot to a source-level scheduling change that reduces serial movement or
   moved bytes, then run n32 and n96 promotion gates.
+
+Phase 7FE result - current movement profile recorded:
+
+- End time: 2026-07-04T07:58:00Z.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-050750Z-n32-phase7fe-copy-profile`.
+- Source status:
+  - plan-only commit before run: `fcb8b6461`;
+  - no production source/runtime change;
+  - `GGML_MOE_COPY_PROFILE_OUT` enabled only for this diagnostic.
+- Result gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `78564.23 ms`, below `106331.72 ms`;
+  - decode `30372.86 ms / 31`, `1.02 tok/s`;
+  - cgroup peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory:
+  - final `file=14765174784`;
+  - `inactive_file=8892837888`;
+  - `active_file=5871755264`;
+  - `pgmajfault=1030718`;
+  - `workingset_refault_file=20456`.
+- Expert movement:
+  - hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15163287`;
+  - iouring detail `inflight_avg=3.13`, `inflight_max=8`,
+    batch histogram `1:335,2-4:2425,5-8:1242,9-16:0`.
+- Pinned staging:
+  - main `copies=19754`, `waits=19718`;
+  - main `slot_wait=49.193 ms`;
+  - main `host_stage=11531.089 ms`;
+  - main `h2d=4155.067 ms`;
+  - gate `copies=4160`, `waits=4136`;
+  - gate `slot_wait=11.091 ms`;
+  - gate `host_stage=341.927 ms`;
+  - gate `h2d=925.863 ms`.
+- Cache:
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+- `copy-profile.csv`:
+  - rows `23914`;
+  - logical bytes `124.048 GiB`;
+  - hit mix:
+    - `pack_hit=1`: `23731`;
+    - `pack_hit=0`: `183`;
+    - `ram_hit=0`: `23914`;
+    - `iouring=1`: `15024`;
+    - `iouring=0`: `8890`.
+- Copy-profile by op:
+  - `runtime_load`: rows `20250`, `102.523 GiB`,
+    row-summed wall `56192.693 ms`, host `11322.109 ms`,
+    io `44694.821 ms`;
+  - `current_down_overlap`: rows `3664`, `21.525 GiB`,
+    row-summed wall `11435.004 ms`, host `550.907 ms`,
+    io `10878.604 ms`.
+- Top tensor rows are diffuse rather than a single dominant tensor:
+  - `blk.1.ffn_gate_exps.weight`: `1037.367 ms`;
+  - `blk.1.ffn_up_exps.weight`: `1000.883 ms`;
+  - `blk.60.ffn_down_exps.weight`: `826.549 ms`;
+  - `blk.4.ffn_down_exps.weight`: `802.582 ms`;
+  - `blk.5.ffn_down_exps.weight`: `765.177 ms`;
+  - `blk.24.ffn_gate_exps.weight`: `743.434 ms`;
+  - `blk.24.ffn_up_exps.weight`: `730.749 ms`;
+  - `blk.10.ffn_gate_exps.weight`: `729.571 ms`;
+  - `blk.10.ffn_up_exps.weight`: `720.632 ms`.
+
+Interpretation:
+
+- The diagnostic is valid and satisfies the strict gates, but it is not a
+  production SOTA candidate because CSV logging adds overhead.
+- The bottleneck is still movement, but it is diffuse:
+  - no single tensor/layer bucket is large enough to justify a narrow hotset
+    patch;
+  - `runtime_load` dominates row-summed movement;
+  - `current_down_overlap` remains useful but consumes a separate `21.5 GiB`
+    logical movement stream.
+- Existing rejected paths should stay disabled:
+  - planned host prefetch was rejected in Phase 7CI because same-step prefetch
+    arrived too late and did not produce useful hits;
+  - broad trace prefetch was rejected because it increased IO/eviction or
+    broke output;
+  - larger global VRAM cache was rejected by the n96 gate;
+  - lower/higher pinned slot sweeps did not beat Phase 7FB;
+  - deeper iouring did not create `9-16` inflight batches.
+
+Decision:
+
+- Keep Phase 7FB as the accepted production SOTA.
+- Do not change the production runner based on Phase 7FE.
+- Next source experiment should not be another global knob sweep. It should
+  target reducing total moved bytes or moving `runtime_load`/current-down wait
+  out of the decode critical path, with the theoretical upper bound derived
+  from:
+  - global `iouring_wait_us` about `15.2 s`;
+  - main `host_stage` about `11.5 s`;
+  - main `h2d` about `4.16 s`;
+  - diffuse top tensor profile showing no narrow hotset.
