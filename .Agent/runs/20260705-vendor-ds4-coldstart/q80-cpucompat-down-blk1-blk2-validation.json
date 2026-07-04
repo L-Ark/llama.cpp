@@ -1,0 +1,88 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: individual full blk.1 and blk.2 ffn_down_exps Q8_0 CPU-compatible pre-fallback skip",
+  "result": "passed",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "f3c51c5c4138d55696db559cdf9c6f49542474ce",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "runs": [
+    {
+      "filter": "blk.1.ffn_down_exps.weight",
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T221306Z-q80-cpucompat-down-skip-individual/blk1-down-full",
+      "systemd_unit": "vendor-ds4-q80-cpucompat-down-blk1-full-20260704T221306Z.service",
+      "service_result": "success",
+      "service_runtime": "28.740s",
+      "cpu_time": "5min 21.579s",
+      "check_exit_status": 0,
+      "same_top1": 145,
+      "n_tokens": 145,
+      "first_mismatch_pos": -1,
+      "max_abs": 0,
+      "mean_abs": 0,
+      "skip_records": 870,
+      "memory_peak_bytes": 1024749568,
+      "memory_file_bytes": 126976,
+      "oom": 0,
+      "oom_kill": 0,
+      "q80_skip_report_sha256": "baf5439df8daab92f77ba19bc3cc340f3f2b4be9399dde9d68fc563f31384fd0",
+      "run_case_sha256": "d051681cb9a3e0785cac934d37c26ff654fae3094413e430a9c65dc21efae714",
+      "stderr_sha256": "848b95d576bc7cd962fabc6bc12e4a113d815695136846e985fc25b2113f668d",
+      "environment_sha256": "4388d43e935944911d0f3b8f641fb58311df6a92fe6895d56917e9f5759323f2"
+    },
+    {
+      "filter": "blk.2.ffn_down_exps.weight",
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T221306Z-q80-cpucompat-down-skip-individual/blk2-down-full",
+      "systemd_unit": "vendor-ds4-q80-cpucompat-down-blk2-full-20260704T221306Z.service",
+      "service_result": "success",
+      "service_runtime": "28.145s",
+      "cpu_time": "5min 19.943s",
+      "check_exit_status": 0,
+      "same_top1": 145,
+      "n_tokens": 145,
+      "first_mismatch_pos": -1,
+      "max_abs": 0,
+      "mean_abs": 0,
+      "skip_records": 870,
+      "memory_peak_bytes": 1025245184,
+      "memory_file_bytes": 126976,
+      "oom": 0,
+      "oom_kill": 0,
+      "q80_skip_report_sha256": "23e7d2f1d8a3dd885bf257af970a71fd3747abfc62f7e5336dea9410fb7a65fc",
+      "run_case_sha256": "c01f2ffbd54b6e5f3ad4586ee07470253a28f96c54485e8dc642509f9162183e",
+      "stderr_sha256": "8992061eb443ad4652710775caee35e163434973141f98e01fbc731860690128",
+      "environment_sha256": "dcb771194672acc9dbce73f141eb3def5de53ba6903dbcbd94dfc71ad78e58f6"
+    }
+  ],
+  "shared_hashes": {
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14",
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "stdout_sha256": "32978891d859d0d369c774270dd2026c2d7d7263c236a4cc0310567996710194"
+  },
+  "cgroup_common": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "decision": {
+    "accepted_for_correctness_expansion": true,
+    "sota_status": "not a performance benchmark; current accepted SOTA remains 4.4 tok/s",
+    "next_step": "Write and run all ffn_down_exps pre-fallback skip top1 gate under GGML_MOE_STREAM_Q80_ALLOW_DOWN=1 and GGML_MOE_STREAM_Q80_CPU_COMPAT=1."
+  }
+}
