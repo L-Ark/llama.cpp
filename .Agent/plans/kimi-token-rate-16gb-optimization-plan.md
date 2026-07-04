@@ -44429,3 +44429,62 @@ Decision rule:
   against Phase 7FB best `70087.31 ms / 77`.
 - If any gate fails or the result is slower, keep `THREADS=32` and record the
   rejection.
+
+Phase 7FH result - rejected:
+
+- End time: 2026-07-04T08:56:00Z.
+- Source status:
+  - no source patch;
+  - env-only diagnostic;
+  - plan commit before run: `4d7172f25`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-053513Z-n32-phase7fh-threads28-diag`.
+- Test env:
+  - `THREADS=28`;
+  - `PINNED_SLOTS=12`;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=0`.
+- Result gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `80537.32 ms`, below `106331.72 ms`;
+  - decode `30594.19 ms / 31`, `1.01 tok/s`;
+  - cgroup peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/compute deltas versus Phase 7FD diagnostic:
+  - `direct_reads` unchanged at `8707`;
+  - `iouring_reads` unchanged at `15024`;
+  - `iouring_wait_us` worsened from `14744321` to `15710881`;
+  - main `host_stage` worsened from `11455.176 ms` to `11702.860 ms`;
+  - gate `host_stage` stayed roughly flat: `354.900 ms` to `343.767 ms`;
+  - down `fallback_t0` worsened from `34.335 ms/call` to
+    `39.884 ms/call`;
+  - decode regressed from `29610.75 ms` to `30594.19 ms`.
+- CPU fallback pack mmap:
+  - enabled;
+  - hits `1727`;
+  - misses `9`;
+  - bytes `14260764672`;
+  - fallback_gguf `9`.
+
+Interpretation:
+
+- Current SOTA is not oversubscribed in a way that benefits from lowering
+  llama CPU threads to `28`.
+- Lower thread count directly slows the remaining CPU fallback bucket and does
+  not reduce movement enough to compensate.
+- The pack-mmap hit/miss profile is stable, so this result is a CPU scheduling
+  regression rather than a pack-mmap activation issue.
+
+Decision:
+
+- Reject Phase 7FH.
+- Keep production `THREADS=32`.
+- Do not run minimal-profile confirmation or n96.
+- Do not continue broad global CPU thread sweeps without a more specific
+  per-op/threading mechanism.
