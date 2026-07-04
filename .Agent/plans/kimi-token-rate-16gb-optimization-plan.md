@@ -45766,3 +45766,167 @@ Decision rule:
 - This phase cannot be accepted as a token-rate improvement.
 - It is complete when the bottleneck ranking is recorded here with concrete
   numbers and the next implementation phase is written before any source edit.
+
+Result: completed diagnostic.
+
+- End time: 2026-07-04T15:35:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-072623Z-n32-phase7fp-sm120a-profile`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77339.71 ms`;
+  - decode `30497.64 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`, swap max `0`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Profile overhead:
+  - Phase 7FO production baseline decode was `29794.86 ms`;
+  - this profile run decode is `30497.64 ms`;
+  - profile overhead is about `702.78 ms` on n32.
+
+Decode/runtime buckets:
+
+- expert pack:
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15039897`;
+  - inflight max `8`.
+- pinned staging:
+  - main copies `19754`;
+  - main host stage `11777.295 ms`;
+  - main H2D `4139.096 ms`;
+  - gate host stage `338.075 ms`;
+  - gate H2D `922.783 ms`.
+- up/gate profile:
+  - type18:
+    - calls `311`;
+    - wall `3001.099 ms`;
+    - kernel `2969.720 ms`;
+    - hits `1879`;
+    - misses `3097`;
+    - not parallel;
+  - type22:
+    - calls `558`;
+    - wall `3413.456 ms`;
+    - kernel `3371.852 ms`;
+    - hits `3717`;
+    - misses `5211`;
+    - `parallel_up_gate=558`, `parallel_stage=558`.
+- down batch profile:
+  - rows `1644`;
+  - total wall `4658.85 ms`;
+  - total stage `4371.57 ms`;
+  - total kernel `189.611 ms`;
+  - type11 wall `2376.321 ms`, stage `2159.127 ms`, kernel `157.619 ms`;
+  - type23 wall `2282.532 ms`, stage `2212.439 ms`, kernel `31.991 ms`.
+- decode fallback:
+  - `decode,type=2`;
+  - bytes `4.399 GiB`;
+  - fallback `2628.304 ms`.
+- prompt fallback:
+  - type11 `17.812 GiB`, `20775.357 ms`;
+  - type18 `19.988 GiB`, `17783.075 ms`;
+  - type22 `21.384 GiB`, `22800.892 ms`;
+  - type23 `6.297 GiB`, `7915.279 ms`;
+  - type2 `3.476 GiB`, `3626.048 ms`.
+- TTFT trace:
+  - `runtime_load`: `102.523 GiB`, `54675.346 ms`;
+  - `call_upgate`: `17.679 GiB`, `21420.506 ms`;
+  - `current_down_overlap`: `20.532 GiB`, `10856.462 ms`;
+  - `call_down`: `10.174 GiB`, `4713.612 ms`;
+  - `cache_hit`: `120.302 GiB`, `0 ms`.
+
+Bottleneck ranking:
+
+1. Up/gate miss movement is the highest-risk/highest-reward decode target:
+   - upgate hit rate is only `43.7%`;
+   - TTFT `call_upgate` is `21.4s`;
+   - type18 + type22 compute wall is `6414.555 ms`, but movement dominates the
+     larger end-to-end buckets.
+2. Down movement is still large, but mostly staging, not compute:
+   - down kernel is only `189.611 ms`;
+   - down stage is `4371.57 ms`;
+   - down hit rate is already `73.6%`.
+3. Expert-pack/io and pinned staging dominate over pure CUDA compute:
+   - expert-pack wait `15.04s`;
+   - main host stage `11.78s`;
+   - main H2D `4.14s`.
+4. CPU fallback remains a secondary target:
+   - decode Q4_0 fallback is `2.63s`;
+   - prompt fallback dominates TTFT but not decode token rate.
+
+Next priority:
+
+- Test a safer VRAM split that gives more slots to up/gate before editing
+  kernels.
+- First candidate: `UPGATE_PCT=65`.
+- Rationale:
+  - at 15GB total cache, shifting 5 percentage points moves about `750 MiB`
+    from down to upgate;
+  - upgate gains roughly `140` slots at `5.36 MiB/slot`;
+  - down loses roughly `100` slots at `7.44 MiB/slot`;
+  - because upgate miss count and TTFT/copy cost are larger than down compute
+    cost, this may improve net token rate if additional upgate hits outweigh
+    added down misses.
+
+## Phase 7FQ: upgate-heavy split runtime test
+
+Start time: 2026-07-04T15:36:00+08:00.
+
+Goal:
+
+- Improve token rate without source changes by reallocating existing VRAM cache
+  from down to up/gate.
+- Keep total host RAM under 16GB and keep cold-start reproducibility.
+- Use this as a low-risk test before kernel or io path edits.
+
+Theory and upper bound:
+
+- Phase 7FP shows:
+  - upgate hit rate `43.7%`;
+  - down hit rate `73.6%`;
+  - upgate TTFT/copy bucket `21420.506 ms`;
+  - down batch kernel only `189.611 ms`, with most down time in staging.
+- Moving from `UPGATE_PCT=60` to `65` at the same `VRAM_MIB=15000` should:
+  - increase upgate pool by about `750 MiB`;
+  - add about `140` upgate slots;
+  - reduce down pool by about `750 MiB`;
+  - remove about `100` down slots.
+- Hard upper bound:
+  - even if the added upgate slots removed all profile-run upgate extra cost
+    attributable to those slots, the n32 gain is unlikely to exceed
+    `1-2 seconds`;
+  - if down misses rise sharply, the result may regress.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fq-upgate65"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=65 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode beats Phase 7FO rebuilt baseline `29794.86 ms / 31`.
+
+Decision rule:
+
+- If n32 fails any gate or is slower than `29794.86 ms`, reject and keep
+  `UPGATE_PCT=60`.
+- If n32 beats `29794.86 ms`, run one n32 confirmation.
+- If confirmed, run n96 twice.
+- It is a new SOTA only if n96 beats Phase 7FB `70087.31 ms / 77` with quality
+  pass and TTFT within limit.
