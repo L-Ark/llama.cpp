@@ -1063,15 +1063,15 @@ static int ggml_moe_keep_topk_for_tensor(const char * name) {
     return fallback_keep_topk;
 }
 
-static bool ggml_moe_cpu_willneed_pages_checked(const void * ptr, size_t size) {
+static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
 #if defined(__linux__)
     if (!ptr || size == 0) {
-        return false;
+        return;
     }
 
     const long page_size = sysconf(_SC_PAGESIZE);
     if (page_size <= 0) {
-        return false;
+        return;
     }
 
     const uintptr_t begin = (uintptr_t) ptr;
@@ -1079,220 +1079,12 @@ static bool ggml_moe_cpu_willneed_pages_checked(const void * ptr, size_t size) {
     const uintptr_t aligned_begin = begin & ~(uintptr_t) (page_size - 1);
     const uintptr_t aligned_end = (end + (uintptr_t) page_size - 1) & ~(uintptr_t) (page_size - 1);
     if (aligned_end > aligned_begin) {
-        return madvise((void *) aligned_begin, aligned_end - aligned_begin, MADV_WILLNEED) == 0;
+        (void) madvise((void *) aligned_begin, aligned_end - aligned_begin, MADV_WILLNEED);
     }
-    return false;
 #else
     (void) ptr;
     (void) size;
-    return false;
 #endif
-}
-
-static void ggml_moe_cpu_willneed_pages(const void * ptr, size_t size) {
-    (void) ggml_moe_cpu_willneed_pages_checked(ptr, size);
-}
-
-#define GGML_MOE_CPU_DOWN_PREFETCH_MAX 256
-
-struct ggml_moe_cpu_down_prefetch_entry {
-    bool valid;
-    int layer;
-    const void * data;
-    int64_t n_as;
-    size_t nb02;
-    size_t expert_bytes;
-    char name[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
-};
-
-struct ggml_moe_cpu_down_prefetch_state {
-    bool initialized;
-    bool enabled;
-    bool registered;
-    int n_entries;
-    uint64_t down_registered;
-    uint64_t down_updated;
-    uint64_t calls;
-    uint64_t matched_calls;
-    uint64_t missing_calls;
-    uint64_t advised_experts;
-    uint64_t advised_bytes;
-    uint64_t madvise_failures;
-    struct ggml_moe_cpu_down_prefetch_entry entries[GGML_MOE_CPU_DOWN_PREFETCH_MAX];
-};
-
-static struct ggml_moe_cpu_down_prefetch_state ggml_moe_cpu_down_prefetch;
-static pthread_mutex_t ggml_moe_cpu_down_prefetch_mu = PTHREAD_MUTEX_INITIALIZER;
-
-static void ggml_moe_cpu_down_prefetch_report(void) {
-    pthread_mutex_lock(&ggml_moe_cpu_down_prefetch_mu);
-    const bool enabled = ggml_moe_cpu_down_prefetch.enabled;
-    const int n_entries = ggml_moe_cpu_down_prefetch.n_entries;
-    const uint64_t down_registered = ggml_moe_cpu_down_prefetch.down_registered;
-    const uint64_t down_updated = ggml_moe_cpu_down_prefetch.down_updated;
-    const uint64_t calls = ggml_moe_cpu_down_prefetch.calls;
-    const uint64_t matched_calls = ggml_moe_cpu_down_prefetch.matched_calls;
-    const uint64_t missing_calls = ggml_moe_cpu_down_prefetch.missing_calls;
-    const uint64_t advised_experts = ggml_moe_cpu_down_prefetch.advised_experts;
-    const uint64_t advised_bytes = ggml_moe_cpu_down_prefetch.advised_bytes;
-    const uint64_t madvise_failures = ggml_moe_cpu_down_prefetch.madvise_failures;
-    pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
-
-    if (!enabled && calls == 0 && down_registered == 0) {
-        return;
-    }
-
-    fprintf(stderr,
-            "[moe_cpu_down_prefetch] enabled=%d entries=%d down_registered=%" PRIu64
-            " down_updated=%" PRIu64 " calls=%" PRIu64 " matched=%" PRIu64
-            " missing=%" PRIu64 " advised_experts=%" PRIu64 " advised_bytes=%" PRIu64
-            " madvise_failures=%" PRIu64 "\n",
-            enabled ? 1 : 0,
-            n_entries,
-            down_registered,
-            down_updated,
-            calls,
-            matched_calls,
-            missing_calls,
-            advised_experts,
-            advised_bytes,
-            madvise_failures);
-}
-
-static bool ggml_moe_cpu_down_prefetch_enabled(void) {
-    if (ggml_moe_cpu_down_prefetch.initialized) {
-        return ggml_moe_cpu_down_prefetch.enabled;
-    }
-
-    pthread_mutex_lock(&ggml_moe_cpu_down_prefetch_mu);
-    if (!ggml_moe_cpu_down_prefetch.initialized) {
-        ggml_moe_cpu_down_prefetch.initialized = true;
-        const char * env = getenv("GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP");
-        ggml_moe_cpu_down_prefetch.enabled = env && env[0] && env[0] != '0';
-        if (ggml_moe_cpu_down_prefetch.enabled && !ggml_moe_cpu_down_prefetch.registered) {
-            ggml_moe_cpu_down_prefetch.registered = true;
-            atexit(ggml_moe_cpu_down_prefetch_report);
-        }
-    }
-    const bool enabled = ggml_moe_cpu_down_prefetch.enabled;
-    pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
-    return enabled;
-}
-
-static void ggml_moe_cpu_down_prefetch_register_tensor(
-        const struct ggml_tensor * src0,
-        int64_t n_as,
-        size_t nb02) {
-    if (!ggml_moe_cpu_down_prefetch_enabled() ||
-            !src0 || !src0->name[0] || !strstr(src0->name, "ffn_down_exps") ||
-            !src0->data || n_as <= 0 || nb02 == 0) {
-        return;
-    }
-
-    const int layer = ggml_moe_tensor_layer(src0->name);
-    if (layer < 0) {
-        return;
-    }
-
-    pthread_mutex_lock(&ggml_moe_cpu_down_prefetch_mu);
-    int idx = -1;
-    for (int i = 0; i < ggml_moe_cpu_down_prefetch.n_entries; ++i) {
-        if (ggml_moe_cpu_down_prefetch.entries[i].valid &&
-                ggml_moe_cpu_down_prefetch.entries[i].layer == layer) {
-            idx = i;
-            break;
-        }
-    }
-
-    if (idx < 0) {
-        if (ggml_moe_cpu_down_prefetch.n_entries >= GGML_MOE_CPU_DOWN_PREFETCH_MAX) {
-            pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
-            return;
-        }
-        idx = ggml_moe_cpu_down_prefetch.n_entries++;
-        ggml_moe_cpu_down_prefetch.entries[idx].valid = true;
-        ggml_moe_cpu_down_prefetch.entries[idx].layer = layer;
-        ggml_moe_cpu_down_prefetch.down_registered++;
-    } else {
-        ggml_moe_cpu_down_prefetch.down_updated++;
-    }
-
-    struct ggml_moe_cpu_down_prefetch_entry * e = &ggml_moe_cpu_down_prefetch.entries[idx];
-    e->data = src0->data;
-    e->n_as = n_as;
-    e->nb02 = nb02;
-    e->expert_bytes = nb02;
-    snprintf(e->name, sizeof(e->name), "%s", src0->name);
-    pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
-}
-
-static bool ggml_moe_cpu_down_prefetch_find(
-        int layer,
-        struct ggml_moe_cpu_down_prefetch_entry * out) {
-    bool found = false;
-    pthread_mutex_lock(&ggml_moe_cpu_down_prefetch_mu);
-    for (int i = 0; i < ggml_moe_cpu_down_prefetch.n_entries; ++i) {
-        const struct ggml_moe_cpu_down_prefetch_entry * e = &ggml_moe_cpu_down_prefetch.entries[i];
-        if (e->valid && e->layer == layer && e->data && e->expert_bytes > 0) {
-            *out = *e;
-            found = true;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
-    return found;
-}
-
-static void ggml_moe_cpu_down_prefetch_from_up(
-        const struct ggml_tensor * src0,
-        int64_t n_as,
-        const int64_t * matrix_row_counts) {
-    if (!ggml_moe_cpu_down_prefetch_enabled() ||
-            !src0 || !src0->name[0] || !strstr(src0->name, "ffn_up_exps") ||
-            !matrix_row_counts || n_as <= 0) {
-        return;
-    }
-
-    const int layer = ggml_moe_tensor_layer(src0->name);
-    if (layer < 0) {
-        return;
-    }
-
-    struct ggml_moe_cpu_down_prefetch_entry down = { 0 };
-    uint64_t calls = 1;
-    uint64_t matched_calls = 0;
-    uint64_t missing_calls = 0;
-    uint64_t advised_experts = 0;
-    uint64_t advised_bytes = 0;
-    uint64_t madvise_failures = 0;
-
-    if (!ggml_moe_cpu_down_prefetch_find(layer, &down)) {
-        missing_calls = 1;
-    } else {
-        matched_calls = 1;
-        const int64_t limit = MIN(n_as, down.n_as);
-        for (int64_t cur_a = 0; cur_a < limit; ++cur_a) {
-            if (matrix_row_counts[cur_a] == 0) {
-                continue;
-            }
-            const void * ptr = (const char *) down.data + cur_a * down.nb02;
-            if (ggml_moe_cpu_willneed_pages_checked(ptr, down.expert_bytes)) {
-                advised_experts++;
-                advised_bytes += down.expert_bytes;
-            } else {
-                madvise_failures++;
-            }
-        }
-    }
-
-    pthread_mutex_lock(&ggml_moe_cpu_down_prefetch_mu);
-    ggml_moe_cpu_down_prefetch.calls += calls;
-    ggml_moe_cpu_down_prefetch.matched_calls += matched_calls;
-    ggml_moe_cpu_down_prefetch.missing_calls += missing_calls;
-    ggml_moe_cpu_down_prefetch.advised_experts += advised_experts;
-    ggml_moe_cpu_down_prefetch.advised_bytes += advised_bytes;
-    ggml_moe_cpu_down_prefetch.madvise_failures += madvise_failures;
-    pthread_mutex_unlock(&ggml_moe_cpu_down_prefetch_mu);
 }
 
 static bool ggml_moe_stream_compare_cpu_enabled(void) {
@@ -2990,10 +2782,6 @@ static void ggml_compute_forward_mul_mat_id(
     const int n_ids = ids->ne[0]; // n_expert_used
     const int n_as  = ne02;       // n_expert
 
-    if (ith == 0) {
-        ggml_moe_cpu_down_prefetch_register_tensor(src0, n_as, nb02);
-    }
-
     void * wdata_cur = params->wdata;
 
     if (src1->type != vec_dot_type) {
@@ -3273,10 +3061,6 @@ static void ggml_compute_forward_mul_mat_id(
         }
     }
     ggml_barrier(params->threadpool);
-
-    if (ith == 0) {
-        ggml_moe_cpu_down_prefetch_from_up(src0, n_as, matrix_row_counts);
-    }
 
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {

@@ -8017,3 +8017,45 @@ Pre-push decision:
 - It is not final accepted SOTA yet because the first run was from dirty source.
 - Required immediate action: commit and push source, plan, and candidate artifact to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then rebuild/rerun the same strict cold command from the pushed source.
 - Promote only if pushed-source reproduction remains `eval_tok_s > 4.4` with all gates passing.
+
+### 2026-07-04T04:45Z CPU Down Prefetch Pushed Repro Rejection
+
+Pushed-source reproduction:
+
+- Source commit tested: `834b8c214347d7161d5e737c0f984cdfe354eaad` (`vendor-ds4: add cpu down prefetch probe`)
+- Remote branch before rejection: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T044151Z-20260704_cpu_down_prefetch_from_up_pushed_repro/france-cpu40-vram0gb`
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-from-up-pushed-repro-rejected.json`
+- artifact sha256: `d7fdbb5a1646ba04a68c3f380c85ee361202748a273e738f88036ff6951193ef`
+- Build hashes:
+  - `llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+  - `libggml_cpu`: `b357ca59f1d73c2fa290a384dfecc4004b16aae5425b84725a690ebc37b7dc89`
+  - `libggml_cuda`: `eaeb2b8d199c6542f7bba83959e3f21732b721620cf87dec10ac53a0c1facbbc`
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=2.0`
+- `TTFT=31898.198672 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15100809216`
+- `ram_ok=true`
+- `oom_seen=false`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+- France answer remained semantic, coherent, and complete.
+
+Counters:
+
+- Gate pack: `hits=4886`, `misses=0`, `direct_reads=4886`, `direct_failures=0`, `direct_fallbacks=0`.
+- Gate prefill: `attempted=3000`, `inserted=3000`, `pack_misses=0`, `read_failures=0`, `elapsed_ms=4424.543`.
+- VRAM cache: `hits=33265`, `misses=1886`, `hit_rate=94.6%`.
+- CPU down prefetch: `enabled=1`, `entries=40`, `down_registered=40`, `down_updated=5600`, `calls=5640`, `matched=5600`, `missing=40`, `advised_experts=18974`, `advised_bytes=84556644352`, `madvise_failures=0`.
+
+Decision:
+
+- Reject as a promoted SOTA. The dirty-source first run reached `4.6 tok/s`, but the required pushed-source reproduction tied the accepted SOTA at `4.4 tok/s` instead of exceeding it.
+- All correctness/RAM/TTFT/cache gates passed, so the evidence is useful diagnostic data, but it is not an accepted token-rate improvement.
+- Runtime source must be reverted to the previous accepted path. Keep only the candidate and rejected repro artifacts plus this plan record.
+- Current accepted SOTA remains `eval_tok_s=4.4` from `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
+- Do not retry this exact route-specific down prefetch probe unless a new design reduces the `84.56GB` call-weighted advice volume, avoids the pushed-source tie, and has a new hard-bound/update section before implementation.
