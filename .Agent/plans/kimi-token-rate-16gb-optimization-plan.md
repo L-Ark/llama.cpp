@@ -53132,3 +53132,105 @@ Decision rule:
 - If n32 passes and improves, run strict n96 with the same env.
 - Accept only if n96 beats `70087.31 ms / 77`; otherwise record rejection and
   keep production depth `2`.
+
+Result:
+
+- n32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-155723Z-n32-phase7hk-prefetch-depth1`.
+- n32 gates:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `72970.07 ms`;
+  - decode `29087.31 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- n32 counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15074966`;
+  - iouring inflight avg `3.09`, max `8`;
+  - current-down overlap jobs `3664`, worker `3368471 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- n32 decision:
+  - passes all gates;
+  - faster than recent rebuilt n32 baselines and slightly faster than the
+    `29182.49 ms / 31` confirmation point;
+  - proceed to strict n96.
+
+- n96 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-160021Z-n96-phase7hk-prefetch-depth1`.
+- n96 gates:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `75423.44 ms`;
+  - decode `70104.60 ms / 77`, `1.10 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- n96 counters:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=35441357`;
+  - iouring inflight avg `3.11`, max `8`;
+  - current-down overlap jobs `9109`, worker `8370490 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Comparison:
+  - Phase 7HI rebuilt best: `70221.94 ms / 77`;
+  - Phase 7HJ rebuilt repeat: `71598.71 ms / 77`;
+  - Phase 7HK depth1 n96: `70104.60 ms / 77`;
+  - historical Phase 7FB target: `70087.31 ms / 77`;
+  - depth1 is `117.34 ms` faster than the best rebuilt baseline, but still
+    `17.29 ms` slower than the historical target.
+- Decision:
+  - Do not accept yet because the first n96 run did not beat `70087.31 ms`.
+  - Because the miss is only `17.29 ms`, run one strict n96 repeat before
+    rejecting; this is smaller than observed cold-start baseline variance.
+
+## Phase 7HL: down-prefetch depth-1 n96 repeat
+
+Start time: 2026-07-05T00:50:00+08:00.
+
+Goal:
+
+- Confirm whether `MOE_PREFETCH_DOWN_DEPTH=1` can reproducibly beat the
+  historical n96 target, or whether the first n96 result was only a near miss.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hl-prefetch-depth1-repeat"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- same strict quality, semantic output, TTFT, memory, swap, and fallback gates.
+
+Decision rule:
+
+- If repeat beats `70087.31 ms / 77`, update the production runner default to
+  `MOE_PREFETCH_DOWN_DEPTH=1`, commit, push, and record the exact reproduction
+  commands.
+- If repeat does not beat `70087.31 ms / 77`, reject depth `1` as not
+  reproducibly SOTA and keep production depth `2`.
