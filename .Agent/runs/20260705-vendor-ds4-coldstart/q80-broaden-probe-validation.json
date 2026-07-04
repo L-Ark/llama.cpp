@@ -1,0 +1,81 @@
+{
+  "timestamp_utc": "2026-07-04T18:00:20Z",
+  "status": "broaden_probe_passed",
+  "purpose": "Broaden Q8_0 op-level validation coverage across up/down tensor roles before any output-writing Q8_0 path.",
+  "source_head_before_change": "0c1fb4c69d53639d2280f75fc5c45c48176f5a11",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "summary": "Added GGML_MOE_STREAM_Q80_PROBE_NAME_FILTER to the existing default-off Q8_0 probe. If unset, current probe behavior is preserved; if set, non-matching tensors return before CUDA allocation or record reservation.",
+    "default_behavior_changed": false,
+    "output_path_changed": false,
+    "performance_candidate": false
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j 8",
+    "status": "passed"
+  },
+  "runs": [
+    {
+      "name": "up",
+      "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T180020Z-q80-broaden-probe/up",
+      "systemd_unit": "vendor-ds4-q80-broaden-up-20260704T180020Z.service",
+      "systemd_result": "success",
+      "service_runtime_seconds": 26.244,
+      "exit_status": 0,
+      "name_filter": "ffn_up_exps",
+      "records": 256,
+      "tensors": [
+        "blk.0.ffn_up_exps.weight",
+        "blk.1.ffn_up_exps.weight",
+        "blk.2.ffn_up_exps.weight"
+      ],
+      "max_abs": 4.76837158e-7,
+      "mean_abs": 4.45870683e-8,
+      "memory_peak_bytes": 1171836928,
+      "memory_events": {
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "name": "down",
+      "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T180020Z-q80-broaden-probe/down",
+      "systemd_unit": "vendor-ds4-q80-broaden-down-20260704T180020Z.service",
+      "systemd_result": "success",
+      "service_runtime_seconds": 26.414,
+      "exit_status": 0,
+      "name_filter": "ffn_down_exps",
+      "records": 256,
+      "tensors": [
+        "blk.0.ffn_down_exps.weight",
+        "blk.1.ffn_down_exps.weight",
+        "blk.2.ffn_down_exps.weight"
+      ],
+      "max_abs": 1.78813934e-7,
+      "mean_abs": 1.0135409e-8,
+      "memory_peak_bytes": 1171636224,
+      "memory_events": {
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    }
+  ],
+  "hashes": {
+    "run_case_sha256": "d24b05f650973c94b123ca2a632bdafc1eacf0ea7517c933f0109cfb6f12f788",
+    "up_probe_csv_sha256": "4aabbf2c81487e6afd833f4725ec2161cf81df38538b1a5356c2ddd92090f736",
+    "down_probe_csv_sha256": "2a552b4c96e60d5199f154aa519960e77c39188914c8697859719a98327e472e"
+  },
+  "decision": {
+    "keep_source": true,
+    "promote_as_sota": false,
+    "reason": "The broadened probe improves op-level correctness evidence for Q8_0 but still does not write outputs or improve token rate.",
+    "next_step": "Implement a default-off output-writing Q8_0 path for a tightly bounded tensor subset and run llama-results top1 before any performance benchmark."
+  }
+}

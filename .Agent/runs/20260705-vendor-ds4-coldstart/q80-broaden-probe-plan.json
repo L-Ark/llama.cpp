@@ -1,0 +1,33 @@
+{
+  "date": "2026-07-05",
+  "title": "Broaden Q8_0 probe coverage with a default-off tensor name filter",
+  "source_head_before_change": "0c1fb4c69d53639d2280f75fc5c45c48176f5a11",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "motivation": {
+    "current_probe_gap": "The first Q8_0 probe only sampled the earliest fallback records, all from blk.0.ffn_up_exps.weight.",
+    "why_this_matters": "Before any output-writing Q8_0 path, op-level validation must cover at least up and down tensor roles and preferably nonzero layers."
+  },
+  "candidate": {
+    "name": "GGML_MOE_STREAM_Q80_PROBE_NAME_FILTER",
+    "default_behavior_changed": false,
+    "output_path_changed": false,
+    "performance_candidate": false,
+    "expected_token_rate_change": "none"
+  },
+  "implementation_boundary": [
+    "Add an optional substring filter inside the existing Q8_0 probe.",
+    "If unset, preserve current probe behavior.",
+    "If set, skip tensors whose src0_name does not contain the substring before allocating CUDA buffers or reserving probe records.",
+    "Do not modify dst, routing, cache admission, direct pool, or accepted SOTA envs."
+  ],
+  "validation_plan": [
+    "Build llama-results and llama-cli.",
+    "Run bounded probe for ffn_up_exps and ffn_down_exps under 16GB systemd cgroup.",
+    "Summarize records, max_abs, mean_abs, tensor names, exit status, and memory events.",
+    "If either probe fails, revert runtime source and keep only rejected documentation."
+  ],
+  "promotion_rule": "This change cannot be promoted as SOTA; it only strengthens correctness evidence for a later output-writing Q8_0 path."
+}

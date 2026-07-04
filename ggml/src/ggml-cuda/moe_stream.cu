@@ -1450,6 +1450,14 @@ static FILE * moe_stream_q80_probe_fp() {
 
 static std::atomic<uint64_t> g_q80_probe_records{0};
 
+static bool moe_stream_q80_probe_name_allows(const char * name) {
+    static const char * filter = std::getenv("GGML_MOE_STREAM_Q80_PROBE_NAME_FILTER");
+    if (!filter || !filter[0]) {
+        return true;
+    }
+    return name && std::strstr(name, filter) != nullptr;
+}
+
 static __device__ __forceinline__ int moe_stream_mxfp4_value_dev(int q) {
     switch (q & 0x0F) {
         case 0x0: return 0;
@@ -1521,6 +1529,9 @@ extern "C" void ggml_cuda_moe_stream_q80_probe(
     const float *dst,
     size_t dst_nb1, size_t dst_nb2,
     const ggml_moe_row_mapping *rows) {
+    if (!moe_stream_q80_probe_name_allows(src0_name)) {
+        return;
+    }
     FILE * fp = moe_stream_q80_probe_fp();
     if (!fp || src0_type_int != GGML_TYPE_MXFP4 || !src0_data || !src1_q8_0 || !dst || !rows) {
         return;
