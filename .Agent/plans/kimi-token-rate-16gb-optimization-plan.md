@@ -57399,6 +57399,27 @@ First experiment:
   - whether downstream `MUL_MAT_ID` would remain CPU because weights are
     `CPU_Mapped`.
 
+Implementation detail for the dry-run report:
+
+- Add a default-off env gate:
+  `GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN=1`.
+- Reuse the existing decode CPU MoE assignment profile site so the report sees
+  the exact scheduler split that currently contains:
+  `ffn_moe_swiglu-* -> ffn_moe_down-*`.
+- Print only a capped number of rows:
+  `GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN_LIMIT`, default `32`.
+- For each matching decode split, print:
+  - up/gate node name, op, type, dimensions, output buffer;
+  - ids tensor dimensions and stride;
+  - up/gate expert tensor types and buffer types;
+  - whether CUDA currently supports `MOE_FUSED_UP_GATE`;
+  - whether CUDA currently supports the downstream `MUL_MAT_ID`;
+  - whether downstream down weights are `CPU_Mapped`;
+  - whether the current CUDA helper would need CPU-built `matrix_row_counts`
+    and `matrix_rows`.
+- This phase must not change `supports_op`, graph assignment, cache admission,
+  expert staging, or kernel launches.
+
 Decision rule:
 
 - If row mapping is not available in CUDA backend without duplicating CPU
