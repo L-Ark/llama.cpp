@@ -51616,3 +51616,151 @@ Rollback:
 - If overlay causes quality failure, TTFT regression over the cap, RAM breach,
   read failures, iouring fallbacks, or decode regression, remove the overlay env
   from test commands and do not use the artifact in accepted SOTA runs.
+
+Result:
+
+- Combined overlay artifact:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack`.
+- Build command used:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+python3 scripts/kimi-build-missing-down-overlay.py \
+  --model-glob "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-*.gguf" \
+  --include-pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack \
+  --reject-pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --expert-bytes 8257536 \
+  --entry blk.9.ffn_down_exps.weight:264 \
+  --entry blk.9.ffn_down_exps.weight:287 \
+  --entry blk.18.ffn_down_exps.weight:347 \
+  --entry blk.15.ffn_down_exps.weight:225 \
+  --entry blk.15.ffn_down_exps.weight:54 \
+  --entry blk.6.ffn_down_exps.weight:253 \
+  --entry blk.10.ffn_down_exps.weight:43 \
+  --entry blk.7.ffn_down_exps.weight:202 \
+  --entry blk.8.ffn_down_exps.weight:271 \
+  --entry blk.8.ffn_down_exps.weight:182 \
+  --entry blk.10.ffn_down_exps.weight:344 \
+  --entry blk.18.ffn_down_exps.weight:59 \
+  --entry blk.8.ffn_down_exps.weight:266 \
+  --entry blk.9.ffn_down_exps.weight:46 \
+  --entry blk.7.ffn_down_exps.weight:136 \
+  --entry blk.18.ffn_down_exps.weight:344 \
+  --entry blk.8.ffn_down_exps.weight:316 \
+  --entry blk.9.ffn_down_exps.weight:323 \
+  --entry blk.15.ffn_down_exps.weight:142 \
+  --entry blk.7.ffn_down_exps.weight:363 \
+  --entry blk.9.ffn_down_exps.weight:110 \
+  --entry blk.15.ffn_down_exps.weight:213 \
+  --entry blk.7.ffn_down_exps.weight:339 \
+  --entry blk.18.ffn_down_exps.weight:60
+```
+
+- Artifact metrics:
+  - entries `792`;
+  - data_start `122880`;
+  - size `5042724864` bytes, about `4.7 GiB`;
+  - contains the existing `768` l1/l2 overlay entries plus `24` new missing
+    decode down entries.
+
+Experiment: n32 combined overlay
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-135033Z-n32-phase7gz-combined-overlay`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-135033Z-n32-phase7gz-combined-overlay
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
+GGML_MOE_CPU_FALLBACK_MISS_TRACE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `fail`;
+  - `quality_reason=missing_location_or_landmark_cue`;
+  - manual semantic quality `fail`;
+  - output:
+    `France is a country in!!!!!!!!!!!!!!!!!!!!!!!!!!!`;
+  - TTFT `74871.06 ms`;
+  - decode `15972.47 ms / 31`, `1.94 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Mechanism metrics:
+  - expert pack entries `31623`;
+  - `iouring_reads=2536`, much lower than the normal `15024`;
+  - down hit rate `94.1%`;
+  - upgate hit rate `87.4%`;
+  - output collapse proves the speedup is invalid.
+- Decision:
+  - Reject.
+  - Do not run n96.
+  - Do not use the combined overlay artifact for accepted runs.
+- Root cause:
+  - The multi-source expert pack read path supports source-specific
+    direct/io_uring reads for GPU/H2D staging.
+  - The CPU fallback pack-mmap path does not: it mmaps only the first source
+    file (`g_expert_pack.file`) and then applies `entry->offset` even when the
+    matching entry came from overlay source `1`.
+  - With combined overlay as source `1`, CPU fallback can read bytes from the
+    wrong file, causing semantic corruption.
+
+## Phase 7HA: source-specific expert-pack mmap for CPU fallback
+
+Start time: 2026-07-04T21:56:21+08:00.
+
+Goal:
+
+- Fix CPU fallback pack mmap so it uses the mmap base of the entry's actual
+  `source_idx`, matching the existing direct/io_uring source-specific behavior.
+- Keep default behavior unchanged for single-pack runs.
+- Re-test the Phase 7GZ combined overlay only after this correctness fix.
+
+Implementation:
+
+- Move mmap state from global-only `expert_pack_state` into each
+  `expert_pack_source`:
+  - `mmap_base`;
+  - `mmap_size`;
+  - `mmap_attempted`;
+  - `mmap_enabled`.
+- Change `expert_pack_mmap_ensure()` to take an `expert_pack_entry *`, resolve
+  `expert_pack_source_for_entry(entry)`, and mmap that source file.
+- Change `ggml_cuda_moe_expert_pack_mmap_ptr()` and debug lookup to:
+  - lookup entry first;
+  - ensure mmap for `entry->source_idx`;
+  - validate `entry->offset + entry->nbytes` against that source's mmap size;
+  - return `source->mmap_base + entry->offset`.
+- Preserve existing counters:
+  - `mmap_hits`;
+  - `mmap_misses`;
+  - `mmap_bytes`.
+
+Acceptance gates:
+
+- Build succeeds.
+- Single-overlay/default Phase 7FB runner behavior remains valid.
+- n32 combined overlay run exits `0`.
+- `quality=pass`, `quality_reason=ok`, and manual semantic quality pass.
+- TTFT <= `106331.72 ms`.
+- memory peak <= `15900000000`, swap max `0`.
+- `read_failures=0`, `iouring_fallbacks=0`.
+- Miss trace no longer includes the known Phase 7GY missing down entries.
+
+Decision rule:
+
+- If n32 combined overlay quality still fails, revert the source-specific mmap
+  patch and reject the overlay path.
+- If quality passes but speed regresses or fallback misses move to new tensors,
+  record and decide whether to expand coverage further before n96.
+- Only run n96 after n32 proves semantic correctness.
