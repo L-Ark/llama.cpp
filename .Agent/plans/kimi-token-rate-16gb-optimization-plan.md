@@ -42166,3 +42166,64 @@ Decision:
 - Keep Phase 7EB as accepted SOTA.
 - Continue only with changes that reduce measured movement/copy work or expose
   a new concrete bottleneck.
+
+## Phase 7EV: current-SOTA partial-row Q4_0 fallback feasibility
+
+Start time:
+
+- 2026-07-04T03:35:00Z.
+
+Reason for this phase:
+
+- Current remaining decode CPU fallback is concentrated in Q4_0 down layers,
+  but prior Q4_0 attempts failed:
+  - broad Q4_0 GPU down polluted the shared down cache;
+  - isolated Q4_0 VRAM pools removed fallback but added too much staging/H2D;
+  - anonymous CPU hot cache added RAM pressure and first-load cost;
+  - full-batch hot cache had very low acceptance because all 8 active experts
+    had to be hot at once.
+- The only Q4_0 design not fully ruled out is partial-row handling:
+  - GPU/cache only the hot Q4_0 expert rows that are present;
+  - CPU fallback only the missing rows;
+  - merge/scatter the two results.
+- This is invasive and must not be implemented unless the current Phase 7EB
+  fallback profile shows enough upper-bound gain to justify the complexity and
+  the extra VRAM/RAM/copy work.
+
+Design-stage calculation:
+
+- Use the current strict Phase 7ER fallback profile:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260704-024459Z-n32-phase7er-sota-bottleneck-refresh/fallback-profile.csv
+```
+
+- Filter rows:
+  - `phase=decode`;
+  - `src0_type=2`;
+  - tensor contains `ffn_down_exps.weight`.
+- Sort tensor/expert pairs by measured `fallback_us`.
+- Compute coverage for Q4 hot sets:
+  - `128 MiB`, `256 MiB`, `512 MiB`, `768 MiB`, `1024 MiB`,
+    `2048 MiB`.
+- Record:
+  - admitted slots;
+  - admitted bytes;
+  - covered fallback time;
+  - covered routed GiB;
+  - coverage percent;
+  - theoretical token-rate ceiling before GPU/cache overhead.
+
+Decision rule:
+
+- Do not implement partial-row Q4_0 unless the current n32 profile shows at
+  least `1.5 s` covered fallback at `<=512 MiB` or at least `2.5 s` at
+  `<=1024 MiB`.
+- Even if the upper bound passes, the next source plan must include:
+  - exact row-level correctness checks;
+  - mixed GPU/CPU scatter semantics;
+  - memory budget under the 16GB cgroup;
+  - default-off env gates;
+  - n4 smoke before n32.
+- If the upper bound fails, reject partial-row Q4_0 for the current SOTA and
+  move back to movement/copy scheduling diagnostics.
