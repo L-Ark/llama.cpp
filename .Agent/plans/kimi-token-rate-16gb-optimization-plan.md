@@ -59452,6 +59452,136 @@ Decision rule:
 - If decode is flat/worse or TTFT rises materially without decode gain, reject
   the preload profile.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `b85301c1f docs: record foreground io attribution`.
+
+Profile:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ix-cold-down-profile-preload/cold-down-profile.csv`
+- Entries:
+  - `blk.60.ffn_down_exps.weight`: experts `298,49,161,23`;
+  - `blk.4.ffn_down_exps.weight`: experts `335,214,141,127`.
+
+First n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ix-cold-down-profile-preload/n32`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `63643.85 ms`, below `106331.72 ms`;
+- decode `27546.24 ms / 31`, `1.13 tok/s`;
+- host RAM peak `15899996160` bytes, final `15077265408` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- profile preload loaded `8` entries;
+- iouring reads `14862`, bytes `86301917184`, wait `13527989 us`.
+
+Outlier check from first run:
+
+- The targeted experts dropped to normal read latency:
+  - `blk.60 down` targeted experts: about `3.0-4.2 ms`;
+  - `blk.4 down` targeted experts: about `3.3-4.3 ms`.
+- The cold outlier moved to the other first-batch experts in the same tensors:
+  - `blk.60 down` experts `320,240,135,41`: about `79.8-79.9 ms`;
+  - `blk.4 down` experts `311,159,139,79`: about `92.4-92.5 ms`.
+
+Repeat n32 run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ix-cold-down-profile-preload/n32-repeat`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `64144.36 ms`, below `106331.72 ms`;
+- decode `28818.02 ms / 31`, `1.08 tok/s`;
+- host RAM peak `15899996160` bytes, final `15058452480` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- profile preload loaded `8` entries;
+- iouring reads `14862`, bytes `86301917184`, wait `15032640 us`.
+
+Decision:
+
+- Do not accept the 8-entry preload profile as SOTA.
+- Reason:
+  - It passes all hard gates.
+  - It removes the targeted cold rows, proving the existing
+    `GGML_MOE_VRAM_PROFILE` mechanism works for this purpose.
+  - The first run is good, but repeat regresses toward baseline and iouring wait
+    does not stay reduced.
+  - The cold outlier shifts to the other same-batch experts, so the 8-entry
+    profile is incomplete.
+- Next probe should preload the full first cold down batches:
+  - `blk.60 down`: experts `23,41,49,135,161,240,298,320`;
+  - `blk.4 down`: experts `79,127,139,141,159,214,311,335`.
+
+## Phase 7IY: full first cold down batch preload
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IX proves partial preload can remove selected cold rows, but missed the rest
+  of the first cold batch.
+
+Hypothesis:
+
+- Preloading all `16` first cold down experts for `blk.60` and `blk.4` may
+  remove the whole first cold down read cluster.
+- The data budget remains small:
+  - `8 * 6.02 MiB + 8 * 7.44 MiB`, about `108 MiB`;
+  - still negligible relative to the VRAM cache budget.
+
+Theoretical bound:
+
+- The upper bound is the first cold batch tail in `blk.60` and `blk.4`.
+- 7IX shows a partial profile can move targeted experts from `~80-119 ms` down
+  to `~3-4 ms`, but the batch tail remains if any same-batch cold experts are
+  unpreloaded.
+- If the cluster is on the critical decode path, this may save several hundred
+  milliseconds. It cannot explain multi-second improvements.
+
+Experiment:
+
+- No source change.
+- Generate a `16` entry `GGML_MOE_VRAM_PROFILE`.
+- Run strict cold-start n32 with:
+  - `GGML_MOE_VRAM_PROFILE=<profile>`;
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2`;
+  - no rejected prefetch/hot overlay envs.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If n32 improves and all gates pass, repeat n32.
+- If repeat improves, run n96 before accepting.
+- If it only moves IO into TTFT or decode remains flat, reject the profile and
+  stop cold-down preload expansion.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
