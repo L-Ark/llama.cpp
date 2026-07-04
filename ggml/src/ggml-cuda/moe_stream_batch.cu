@@ -908,6 +908,8 @@ struct batch_vram_cache {
     uint64_t slot_used[16384] = {};
     uint32_t slot_hits[16384] = {};
     uint32_t slot_profile_count[16384] = {};
+    char slot_tensor[16384][128] = {};
+    int slot_expert[16384] = {};
     bool slot_pinned[16384] = {};
     bool slot_prefetch_down[16384] = {};
     bool slot_pending[16384] = {};
@@ -1730,6 +1732,10 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         std::fill_n(c->slot_used, 16384, (uint64_t)0);
         std::fill_n(c->slot_hits, 16384, (uint32_t)0);
         std::fill_n(c->slot_profile_count, 16384, (uint32_t)0);
+        for (char (&name)[128] : c->slot_tensor) {
+            name[0] = '\0';
+        }
+        std::fill_n(c->slot_expert, 16384, -1);
         std::fill_n(c->slot_pinned, 16384, false);
         std::fill_n(c->slot_prefetch_down, 16384, false);
         for (cudaEvent_t &ev : c->slot_ready) {
@@ -1796,6 +1802,10 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         }
         c->n_slots = alloc_slots;
     }
+    for (char (&name)[128] : c->slot_tensor) {
+        name[0] = '\0';
+    }
+    std::fill_n(c->slot_expert, 16384, -1);
     std::fprintf(stderr, "[moe_stream_batch] VRAM cache: %.1f GiB, %d slots (%.2f MiB each)\n",
                  alloc / (1024.0*1024.0*1024.0), c->n_slots,
                  expert_sz / (1024.0*1024.0));
@@ -1851,6 +1861,8 @@ static void batch_cache_clear_slot(batch_vram_cache *c, int slot) {
     c->slot_used[slot] = 0;
     c->slot_hits[slot] = 0;
     c->slot_profile_count[slot] = 0;
+    c->slot_tensor[slot][0] = '\0';
+    c->slot_expert[slot] = -1;
     if (c->slot_pinned[slot] && c->pinned > 0) {
         --c->pinned;
     }
@@ -1927,6 +1939,67 @@ static void cache_policy_diag_report_atexit() {
         inserted_nonzero > 0 ? (double)inserted_sum / (double)inserted_nonzero : 0.0,
         evictions, victim_nonzero,
         victim_nonzero > 0 ? (double)victim_sum / (double)victim_nonzero : 0.0);
+}
+
+static bool cache_evict_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_CACHE_EVICT_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void cache_evict_profile_record(
+        const batch_vram_cache *c,
+        int slot,
+        uintptr_t victim_key,
+        uint32_t victim_hits,
+        uint32_t victim_profile_count,
+        bool victim_pinned,
+        bool victim_prefetch_down,
+        uint64_t victim_used,
+        uintptr_t incoming_key,
+        const char *incoming_tensor,
+        int incoming_expert,
+        bool incoming_preload,
+        bool incoming_prefetch_down,
+        uint64_t incoming_profile_count) {
+    const char *path = std::getenv("GGML_MOE_CACHE_EVICT_PROFILE_OUT");
+    if (!path || !path[0] || !c || slot < 0 || slot >= c->n_slots) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,slot_sz,slot,victim_tensor,victim_expert,victim_key,victim_hits,"
+                "victim_profile_count,victim_pinned,victim_prefetch_down,victim_used,"
+                "incoming_tensor,incoming_expert,incoming_key,incoming_preload,"
+                "incoming_prefetch_down,incoming_profile_count,cache_clock\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%zu,%d,%s,%d,%lu,%u,%u,%d,%d,%lu,%s,%d,%lu,%d,%d,%lu,%lu\n",
+            (unsigned long)++seq,
+            c->slot_sz,
+            slot,
+            c->slot_tensor[slot],
+            c->slot_expert[slot],
+            (unsigned long)victim_key,
+            victim_hits,
+            victim_profile_count,
+            victim_pinned ? 1 : 0,
+            victim_prefetch_down ? 1 : 0,
+            (unsigned long)victim_used,
+            incoming_tensor ? incoming_tensor : "",
+            incoming_expert,
+            (unsigned long)incoming_key,
+            incoming_preload ? 1 : 0,
+            incoming_prefetch_down ? 1 : 0,
+            (unsigned long)incoming_profile_count,
+            (unsigned long)c->clock);
+    std::fclose(f);
 }
 
 static int expert_pack_entry_cmp(const expert_pack_entry &e, const char *tensor_name, int expert_idx, size_t nbytes) {
@@ -4340,6 +4413,7 @@ static int batch_cache_insert_slot(
     const bool lfu_lru = cache_policy_lfu_lru_enabled();
     const bool profile_lfu_lru = cache_policy_profile_lfu_lru_enabled();
     const bool hybrid_profile_lfu_lru = cache_policy_hybrid_profile_lfu_lru_enabled();
+    const bool evict_profile = cache_evict_profile_enabled();
     const bool use_profile_score =
         profile_lfu_lru || (hybrid_profile_lfu_lru && c->clock >= cache_policy_hybrid_after());
     if ((profile_lfu_lru || hybrid_profile_lfu_lru) && !g_cache_policy_diag_registered.exchange(true)) {
@@ -4379,6 +4453,13 @@ static int batch_cache_insert_slot(
     }
     if (slot < 0) return -1;
     if (!batch_cache_wait_slot_ready(c, slot)) return -1;
+    const bool replacing_slot = c->slot_key[slot] != 0;
+    const uintptr_t victim_key = c->slot_key[slot];
+    const uint32_t victim_hits = c->slot_hits[slot];
+    const uint32_t victim_profile_count = c->slot_profile_count[slot];
+    const bool victim_pinned = c->slot_pinned[slot];
+    const bool victim_prefetch_down = c->slot_prefetch_down[slot];
+    const uint64_t victim_used = c->slot_used[slot];
     if (c->slot_pinned[slot] && !pin_slot && c->pinned > 0) {
         --c->pinned;
     }
@@ -4395,10 +4476,24 @@ static int batch_cache_insert_slot(
             g_cache_policy_diag.profile_policy_victim_count_sum.fetch_add(c->slot_profile_count[slot]);
         }
     }
+    if (replacing_slot && evict_profile) {
+        cache_evict_profile_record(
+                c, slot, victim_key, victim_hits, victim_profile_count, victim_pinned,
+                victim_prefetch_down, victim_used, key, tensor_name, expert_idx, preload,
+                prefetch_down, profile_count);
+    }
     c->slot_key[slot] = key;
     c->slot_used[slot] = c->clock++;
     c->slot_hits[slot] = 0;
     c->slot_profile_count[slot] = profile_count > UINT32_MAX ? UINT32_MAX : (uint32_t)profile_count;
+    if (evict_profile) {
+        if (tensor_name && tensor_name[0]) {
+            std::snprintf(c->slot_tensor[slot], sizeof(c->slot_tensor[slot]), "%s", tensor_name);
+        } else {
+            c->slot_tensor[slot][0] = '\0';
+        }
+        c->slot_expert[slot] = expert_idx;
+    }
     if ((profile_lfu_lru || hybrid_profile_lfu_lru) && c->slot_profile_count[slot] > 0) {
         ++g_cache_policy_diag.inserted_profile_count_nonzero;
         g_cache_policy_diag.inserted_profile_count_sum.fetch_add(c->slot_profile_count[slot]);
@@ -4418,6 +4513,8 @@ static int batch_cache_insert_slot(
         c->slot_used[slot] = 0;
         c->slot_hits[slot] = 0;
         c->slot_profile_count[slot] = 0;
+        c->slot_tensor[slot][0] = '\0';
+        c->slot_expert[slot] = -1;
         if (c->slot_pinned[slot] && c->pinned > 0) {
             --c->pinned;
         }
