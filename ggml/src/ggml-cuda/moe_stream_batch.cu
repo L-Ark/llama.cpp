@@ -984,7 +984,9 @@ struct trace_prefetch_state {
     size_t prefetch_cursor = 0;
     size_t lead_events = 0;
     size_t window = 96;
+    size_t reuse_window = 96;
     int max_loads = 8;
+    int min_future_uses = 1;
     std::vector<batch_route_trace_entry> trace;
     std::mutex mu;
     uint64_t calls = 0;
@@ -994,6 +996,7 @@ struct trace_prefetch_state {
     uint64_t cached = 0;
     uint64_t missing_tensor = 0;
     uint64_t cache_unavailable = 0;
+    uint64_t reuse_skips = 0;
 };
 
 struct host_prefetch_slot {
@@ -1196,7 +1199,7 @@ static void trace_prefetch_report_atexit() {
     std::lock_guard<std::mutex> lk(g_trace_prefetch.mu);
     if (!g_trace_prefetch.enabled || g_trace_prefetch.calls == 0) return;
     std::fprintf(stderr,
-        "[moe_stream_batch] trace prefetch: calls=%lu matched=%lu resync=%lu loads=%lu cached=%lu missing_tensor=%lu cache_unavailable=%lu cursor=%zu prefetch_cursor=%zu/%zu\n",
+        "[moe_stream_batch] trace prefetch: calls=%lu matched=%lu resync=%lu loads=%lu cached=%lu missing_tensor=%lu cache_unavailable=%lu reuse_skips=%lu cursor=%zu prefetch_cursor=%zu/%zu\n",
         g_trace_prefetch.calls,
         g_trace_prefetch.matched,
         g_trace_prefetch.resync,
@@ -1204,6 +1207,7 @@ static void trace_prefetch_report_atexit() {
         g_trace_prefetch.cached,
         g_trace_prefetch.missing_tensor,
         g_trace_prefetch.cache_unavailable,
+        g_trace_prefetch.reuse_skips,
         g_trace_prefetch.cursor,
         g_trace_prefetch.prefetch_cursor,
         g_trace_prefetch.trace.size());
@@ -1225,14 +1229,17 @@ static void trace_prefetch_init_once() {
     g_trace_prefetch.window = (size_t)trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_WINDOW", 96, 1, 4096);
     g_trace_prefetch.max_loads = trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_MAX_LOADS", 8, 1, 256);
     g_trace_prefetch.lead_events = (size_t)trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS", 0, 0, 4096);
+    g_trace_prefetch.min_future_uses = trace_prefetch_env_int("GGML_MOE_TRACE_PREFETCH_MIN_FUTURE_USES", 1, 1, 64);
+    g_trace_prefetch.reuse_window = (size_t)trace_prefetch_env_int(
+            "GGML_MOE_TRACE_PREFETCH_REUSE_WINDOW", (int)g_trace_prefetch.window, 1, 4096);
     g_trace_prefetch.enabled = !g_trace_prefetch.trace.empty();
     g_trace_prefetch.inited = true;
     if (g_trace_prefetch.enabled) {
         std::atexit(trace_prefetch_report_atexit);
         std::fprintf(stderr,
-            "[moe_stream_batch] trace prefetch: loaded %zu events from %s window=%zu max_loads=%d lead_events=%zu\n",
+            "[moe_stream_batch] trace prefetch: loaded %zu events from %s window=%zu max_loads=%d lead_events=%zu min_future_uses=%d reuse_window=%zu\n",
             g_trace_prefetch.trace.size(), path, g_trace_prefetch.window, g_trace_prefetch.max_loads,
-            g_trace_prefetch.lead_events);
+            g_trace_prefetch.lead_events, g_trace_prefetch.min_future_uses, g_trace_prefetch.reuse_window);
     }
 }
 
@@ -4892,6 +4899,25 @@ static bool trace_entry_matches(const batch_route_trace_entry &e, const char *te
         tensor_name && std::strcmp(e.tensor, tensor_name) == 0;
 }
 
+static bool trace_prefetch_candidate_has_reuse(size_t trace_idx) {
+    if (g_trace_prefetch.min_future_uses <= 1) return true;
+    if (trace_idx >= g_trace_prefetch.trace.size()) return false;
+    const batch_route_trace_entry &candidate = g_trace_prefetch.trace[trace_idx];
+    int uses = 1;
+    const size_t end = std::min(g_trace_prefetch.trace.size(), trace_idx + 1 + g_trace_prefetch.reuse_window);
+    for (size_t i = trace_idx + 1; i < end; ++i) {
+        if (trace_entry_matches(
+                    g_trace_prefetch.trace[i],
+                    candidate.tensor,
+                    candidate.expert_idx,
+                    candidate.expert_bytes) &&
+                ++uses >= g_trace_prefetch.min_future_uses) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_t expert_bytes) {
     trace_prefetch_init_once();
     if (!g_trace_prefetch.enabled || !g_batch.prefetch_stream || !tensor_name || !tensor_name[0]) return;
@@ -4944,6 +4970,10 @@ static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_
     for (size_t i = g_trace_prefetch.prefetch_cursor; i < end && examined < g_trace_prefetch.max_loads; ++i, ++examined) {
         g_trace_prefetch.prefetch_cursor = i + 1;
         const batch_route_trace_entry &e = g_trace_prefetch.trace[i];
+        if (!trace_prefetch_candidate_has_reuse(i)) {
+            ++g_trace_prefetch.reuse_skips;
+            continue;
+        }
         if (job_bytes != 0 && e.expert_bytes != job_bytes) {
             continue;
         }
