@@ -41610,3 +41610,96 @@ Promotion and rollback:
   all promotion gates.
 - The next implementation phase must be written into this plan before editing
   source code.
+
+Phase 7ER result - diagnostic accepted, no SOTA promotion:
+
+- End time: 2026-07-04T02:47:00Z.
+- Commit: `4cc942838` (`docs: plan kimi phase7er bottleneck refresh`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-024459Z-n32-phase7er-sota-bottleneck-refresh`.
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `69817.98 ms`, below the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality: pass.
+- Decode:
+  - `29860.16 ms / 31`, `1.04 tok/s`;
+  - slower than historical Phase 7EB n32 `29599.64 ms / 31` by
+    `260.52 ms`;
+  - diagnostic only, no SOTA promotion.
+- Host memory at finish:
+  - `memory.current.final=14992965632`;
+  - `file=14754217984`;
+  - `inactive_file=7197040640`;
+  - `active_file=7556513792`;
+  - `kernel=234704896`;
+  - `anon=454656`;
+  - `pgmajfault=979972`;
+  - `workingset_refault_file=20684`.
+- Cache and copy counters:
+  - down cache: `slots=806`, hits `9659`, misses `3461`,
+    hit rate `73.6%`;
+  - upgate cache: `slots=1679`, hits `13019`, misses `16757`,
+    hit rate `43.7%`;
+  - main pinned staging: copies `19754`, waits `19706`,
+    `host_stage=11671.427 ms`, `h2d=4125.884 ms`,
+    `slot_wait=43.929 ms`;
+  - gate pinned staging: copies `4160`, waits `4128`,
+    `host_stage=320.375 ms`, `h2d=933.637 ms`,
+    `slot_wait=11.212 ms`;
+  - expert pack: hits `25458`, misses `192`, `iouring_reads=15024`,
+    `iouring_bytes=87082139648`, `iouring_wait_us=15316845`,
+    `direct_reads=8707`.
+- Aggregated down profile, top rows by wall time:
+  - `blk.4.ffn_down_exps.weight`: rows `31`, wall `458.643 ms`,
+    stage `433.101 ms`, jobs `169`, hits `79`, misses `169`;
+  - `blk.60.ffn_down_exps.weight`: rows `32`, wall `452.939 ms`,
+    stage `446.443 ms`, jobs `170`, hits `86`, misses `170`;
+  - `blk.16.ffn_down_exps.weight`: wall `189.908 ms`;
+  - `blk.25.ffn_down_exps.weight`: wall `186.894 ms`;
+  - `blk.23.ffn_down_exps.weight`: wall `182.627 ms`.
+- Aggregated up/gate profile, top rows by wall time:
+  - `blk.60`, type `18/18`: rows `32`, wall `574.808 ms`,
+    kernel `563.871 ms`;
+  - `blk.5`, type `18/18`: wall `311.507 ms`;
+  - `blk.6`, type `18/18`: wall `277.579 ms`;
+  - `blk.4`, type `18/18`: wall `276.599 ms`;
+  - `blk.3`, type `18/18`: wall `272.154 ms`;
+  - type `22/22` layers show large `up_wait/gate_wait`, e.g.
+    `blk.1` wall `235.274 ms`, `up_wait=218.052 ms`,
+    `gate_wait=228.717 ms`.
+- Fallback profile:
+  - decode `type=2` Q4_0 fallback: `13.351 GiB`, `2416352 us`,
+    concentrated in `blk.6/7/8/9/10/15/18` down tensors;
+  - prompt fallback remains much larger by bytes, but it affects TTFT/prompt
+    and cannot be treated as a decode token-rate target unless TTFT also stays
+    under gate.
+
+Interpretation:
+
+- The bottleneck remains movement/staging, not dense/attention compute.
+- Same-type down overlap without isolated resources is not safe enough to retry:
+  the remaining `blk.4/60` down movement is only about `0.91 s`, while Phase
+  7EP already showed the shared-resource version moves the cost into up/gate.
+- The largest exposed copy bucket is still expert-pack/pinned staging:
+  `iouring_wait_us=15.316 s`, main `host_stage=11.671 s`,
+  total H2D about `5.06 s`.
+- Decode Q4_0 fallback is a secondary but real bucket:
+  `2.416 s` and `13.351 GiB`. Previous broad Q4 GPU/down-cache attempts were
+  rejected because they increased staging traffic, so the next valid Q4 attempt
+  must avoid polluting the normal down/upgate staging rings.
+
+Decision:
+
+- Accept Phase 7ER as the bottleneck refresh.
+- Do not promote any runtime change.
+- Keep Phase 7EB as accepted SOTA.
+- Next implementation should target isolated resources, not another shared
+  same-type overlap variant.
