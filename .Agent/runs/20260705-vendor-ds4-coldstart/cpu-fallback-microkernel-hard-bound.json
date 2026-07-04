@@ -1,0 +1,51 @@
+{
+  "date": "2026-07-05",
+  "title": "Hard bound: exact CPU fallback batching/microkernel",
+  "result": "standalone_rejected_for_10_tok_s",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "inputs": {
+    "current_sota_fallback_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/fallback_profile.csv",
+    "touch_split_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T075537Z-20260704_touch_profile_split_sota44/france-touch-profile-cpu40-vram0gb/fallback_profile.csv",
+    "touch_split_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-fallback-touch-split-diagnostic.json"
+  },
+  "fixed_numbers": {
+    "accepted_decode_window_ms": 31047.44671,
+    "accepted_eval_tokens_for_rate_model": 136.608765524,
+    "target_10_tok_s_decode_window_ms": 13660.8765524,
+    "required_decode_saving_for_10_tok_s_ms": 17386.57,
+    "decode_updown_fallback_ms": 19029.457,
+    "source_page_exposed_saving_ms": 15856.166,
+    "hot_fallback_compute_after_touch_ms": 3173.291,
+    "hot_up_compute_after_touch_ms": 1589.467,
+    "hot_down_compute_after_touch_ms": 1583.824,
+    "decode_calls": 35880,
+    "hot_compute_us_per_call_after_touch": 88.442
+  },
+  "standalone_bound": {
+    "max_saving_ms": 3173.291,
+    "decode_after_ms": 27874.156,
+    "zero_overhead_tok_s": 4.9,
+    "decision": "CPU fallback batching/microkernel alone cannot reach 10 tok/s. It can only be an intermediate SOTA candidate if implementation overhead is far below its saving."
+  },
+  "combined_with_source_overlap_bound": {
+    "source_only_decode_after_ms": 15191.281,
+    "source_only_zero_overhead_tok_s": 8.993,
+    "additional_compute_saving_needed_for_10_tok_s_ms": 1530.404,
+    "fraction_of_hot_compute_needed_zero_overhead": 0.48225,
+    "if_overhead_500ms_compute_saving_needed_ms": 2030.404,
+    "if_overhead_1000ms_compute_saving_needed_ms": 2530.404,
+    "if_overhead_1500ms_compute_saving_needed_ms": 3030.404,
+    "interpretation": "A 10 tok/s path without massive VRAM expansion requires near-perfect source/page overlap plus at least about half of the hot CPU fallback compute removed at low overhead."
+  },
+  "decision": {
+    "cpu_microkernel_alone": "rejected_for_10_tok_s",
+    "cpu_microkernel_plus_source_overlap": "conditionally_viable_on_paper_but_tight",
+    "why": "The touch split shows most of the 19.029s decode fallback is source/page exposure. After that is hidden, only 3.173s of hot compute remains; removing about 1.53s is enough for 10 tok/s only if source overlap overhead is near zero.",
+    "next_step": "Write a joint async source/page overlap plus exact CPU fallback batching hard-bound/design. Do not write runtime code until it proves enough overlap budget, cgroup page-cache safety, and correctness invariance."
+  }
+}

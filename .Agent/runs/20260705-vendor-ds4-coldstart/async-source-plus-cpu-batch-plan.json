@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: joint async source/page overlap plus exact CPU fallback batching",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "source_resident_topn_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json",
+    "cpu_microkernel_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu-fallback-microkernel-hard-bound.json",
+    "reason": "Raw source-resident topN cannot hit 10 tok/s within VRAM, and CPU microkernel alone cannot hit 10 tok/s. The only remaining paper path combines source/page overlap with a meaningful reduction in hot fallback compute."
+  },
+  "required_hard_bound_before_code": {
+    "source_overlap": "Show how much of the 15856.166 ms source/page-exposed saving can be overlapped without increasing TTFT beyond 33617.688744 ms or exceeding 16GB cgroup file cache.",
+    "compute_batching": "Show whether exact batching/microkernel can save at least 1530.404 ms hot compute with low overhead; larger overhead requires proportionally larger compute saving.",
+    "combined_gate": "Reject unless combined source overlap plus compute saving exceeds 17386.57 ms decode saving with a realistic overhead budget."
+  },
+  "candidate_shapes_to_bound": [
+    {
+      "name": "async source/page preparation only",
+      "status": "previously rejected as source-only because zero-overhead ceiling was 8.993 tok/s"
+    },
+    {
+      "name": "async source/page preparation plus batched CPU vec_dot scheduling",
+      "goal": "reduce hot fallback compute by at least 48.225% after source/page overlap"
+    },
+    {
+      "name": "async source/page preparation plus small Q8_0 GPU assist for hot compute only",
+      "goal": "use the combined correctness proof but avoid raw topN residency; must include source movement and sync cost in the bound"
+    }
+  ],
+  "rules": {
+    "no_runtime_code_before_bound": true,
+    "must_preserve_correctness": "Page timing changes must not change logits; any compute change must pass fixed-text llama-results top1 before performance.",
+    "memory": "16GB host RAM includes page cache; MemorySwapMax must remain 0 in all validation/performance runs.",
+    "promotion": "Any compliant >4.4 tok/s result must be immediately recorded, committed, pushed to ssd/vendor/deepseek-token-rate-16gb, and reproduced from pushed source."
+  }
+}
