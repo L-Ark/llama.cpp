@@ -58345,3 +58345,180 @@ Expected interpretation:
   changes and look for fewer copies or better cache hits instead.
 - If slot wait or enqueue dominates, target staging ring reuse or stream/event
   synchronization, not expert-pack layout.
+
+### 7IO result
+
+- Source head:
+  `39923caba` (`docs: detail pct62 io profile experiment`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7io-n32-io-copy-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 39923caba
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7io-n32-io-copy-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_COPY_PROFILE_H2D=1
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `78191.95 ms`;
+  - decode `32163.49 ms / 31`, `0.96 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15076020224`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Note:
+  - token rate is not a performance result because `GGML_MOE_COPY_PROFILE_H2D=1`
+    adds heavy timing/event overhead.
+- Runtime counters:
+  - expert pack hits `25045`, misses `192`;
+  - iouring reads `14862`, bytes `86301917184`, wait
+    `12976458 us`;
+  - main pinned staging: copies `19380`, waits `19344`;
+  - main iouring batches `2750`, jobs `10846`, wait calls `6273`,
+    inflight average `3.49`;
+  - gate pinned staging: copies `4121`, waits `4097`;
+  - gate iouring batches `1263`, jobs `4016`, wait calls `2707`,
+    inflight average `3.03`;
+  - down overlap worker time `3985979 us`;
+  - down hit `73.4%`, slots `766`;
+  - upgate hit `45.2%`, slots `1735`.
+- `io-batch-profile.csv`:
+  - rows `4013`;
+  - `runtime_load`:
+    - rows `3153`;
+    - jobs/read jobs `11358`;
+    - average jobs per batch `3.60`;
+    - batch wall `14190.999 ms`;
+    - `wait_ms=10673.122`;
+    - `enqueue_ms=281.065`;
+    - `slot_wait_ms=22.464`;
+  - `current_down_overlap`:
+    - rows `860`;
+    - jobs/read jobs `3504`;
+    - average jobs per batch `4.07`;
+    - batch wall `3301.890 ms`;
+    - `wait_ms=2307.854`;
+    - `enqueue_ms=65.330`;
+    - `slot_wait_ms=11.092`.
+- `copy-profile.csv`:
+  - rows `23501`;
+  - per-job rows over-count shared batch wait, so use them for local outliers
+    and H2D size, not for total exposed IO time;
+  - `runtime_load` H2D sum `4115.253 ms`;
+  - `current_down_overlap` H2D sum `866.384 ms`;
+  - largest copy rows are cold or first-use iouring waits, e.g.
+    `blk.60.ffn_down_exps.weight` rows with `42-105 ms` wall.
+- 7IO conclusion:
+  - The remaining exposed batch-level cost is dominated by iouring wait:
+    `12.98 s` total batch wait versus `0.35 s` enqueue and negligible slot wait.
+  - H2D is non-zero but not the primary bottleneck for the next narrow change.
+  - Average read batch size remains small (`3.6-4.1`) even with depth `8`;
+    broad depth/refill changes were rejected historically, so do not retry them
+    without new evidence.
+  - Current CSV does not include expert-pack offsets or gaps, so it cannot tell
+    whether same-source coalescing or expert-pack layout can reduce wait.
+  - Next step should add a default-off offset-locality profile for iouring
+    batches, then decide whether layout/coalescing is mathematically worthwhile.
+
+## Phase 7IP: IO batch offset locality profile
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IO shows batch-level `io_uring` wait dominates the remaining measurable
+  movement budget.
+- The existing IO batch profile reports jobs, read jobs, inflight, wait, enqueue
+  and wall, but not the physical file layout of those jobs.
+
+Hypothesis:
+
+- If most jobs in a batch are close together in the expert pack, a narrow
+  same-source coalesced read or expert-pack layout change may reduce
+  `io_uring_wait_cqe`.
+- If offsets are far apart and source switches are common, coalescing would
+  either read too much extra data or fail to reduce random IO latency; in that
+  case the next target should not be layout/coalescing.
+
+Implementation:
+
+- Add a default-off CSV profile:
+  `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`.
+- Record one row per `expert_pack_iouring_copy_jobs()` batch after
+  `read_jobs` are known.
+- Fields:
+  - `seq`;
+  - `op`;
+  - `jobs`;
+  - `read_jobs`;
+  - `source_switches`;
+  - `unique_sources`;
+  - `read_bytes`;
+  - `span_bytes`;
+  - `gap_bytes`;
+  - `max_gap_bytes`;
+  - `adjacent_pairs`;
+  - `same_tensor`;
+  - `first_tensor`;
+  - `last_tensor`.
+- Use sorted `(source_idx, offset)` order for gap/span calculations.
+- Do not change:
+  - iouring submission order;
+  - sorting behavior;
+  - staging ring behavior;
+  - cache behavior;
+  - kernel launches.
+
+Theoretical decision rule:
+
+- Coalescing upper bound per batch is at most the reduction from `read_jobs`
+  separate reads to fewer contiguous reads.
+- Coalescing is only plausible if `gap_bytes` is small relative to
+  `read_bytes`, e.g. `gap_bytes/read_bytes < 0.25`, and `adjacent_pairs` is
+  common.
+- If `span_bytes/read_bytes` is large, coalescing would amplify IO and should
+  be rejected.
+
+Experiment after implementation:
+
+- Build CUDA target.
+- Run strict cold-start n32 with:
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`;
+  - keep `UPGATE_PCT=62` default;
+  - keep other runtime knobs equal to 7IO;
+  - no copy H2D profile, to reduce overhead.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
