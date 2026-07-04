@@ -1,0 +1,70 @@
+{
+  "artifact": "external-draft-mtp-audit",
+  "recorded_at_utc": "2026-07-04T14:05:00Z",
+  "source_head": "c4ddb41e05e0bfbb9e87d5429327f0db227be96b",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Check whether an external compatible DeepSeek draft/MTP artifact can unlock verified speculation for the current vendor DeepSeek4 cold-start SOTA path.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "current_model": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "size_bytes": 156148189760,
+    "size_gib": 145.4,
+    "ls_h": "146G",
+    "local_metadata_audit": "Previous plan records show no mtp, nextn, nextn_predict_layers, draft, or eagle keys/tensors for this accepted model."
+  },
+  "external_findings": [
+    {
+      "source": "Hugging Face",
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf/tree/main",
+      "files_observed": [
+        {
+          "name": "DeepSeek-V4-Q2.gguf",
+          "size": "56.5 GB"
+        },
+        {
+          "name": "DeepSeek-V4-Q2-MTP.gguf",
+          "size": "3.81 GB"
+        }
+      ],
+      "compatibility_status": "not_proven_for_current_vendor_sota"
+    },
+    {
+      "source": "NVIDIA Developer Forum",
+      "url": "https://forums.developer.nvidia.com/t/fully-custom-cuda-native-deepseek-4-flash-optimized-for-1x-spark-antirez-ds4/369791",
+      "observations": [
+        "The antirez DS4 thread discusses a separate custom CUDA-native DeepSeek4 runtime.",
+        "The thread describes MTP as currently broken and CUDA support as not fully ported from MLX."
+      ],
+      "compatibility_status": "not_ready_as_verified_draft_path"
+    }
+  ],
+  "why_not_immediate_candidate": [
+    "The current vendor source does not implement a DeepSeek4 MTP target-verification path.",
+    "The external MTP GGUF belongs to a different Q2 GGUF/runtime context, not the accepted FP4/FP8 vendor model path.",
+    "Tokenizer/vocab compatibility, target verification semantics, RAM/page-cache fit, and VRAM budget are unproven.",
+    "Downloading or benchmarking it now would not satisfy the current correctness-first SOTA rules."
+  ],
+  "decision": {
+    "download_now": false,
+    "benchmark_now": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "future_requirements_before_use": [
+      "Prove tokenizer/vocab compatibility with the accepted target model.",
+      "Implement or port DeepSeek4 MTP runtime in vendor source.",
+      "Define exact target verification semantics.",
+      "Account for 16GB host RAM including page cache and current VRAM cache pressure.",
+      "Pass correctness before any token-rate benchmark."
+    ]
+  }
+}

@@ -9175,3 +9175,35 @@ Decision:
 - Keep current accepted SOTA at `4.4 tok/s`.
 - Keep `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` as a useful not-accepted diagnostic result, but do not promote it.
 - If revisited, the next design must reduce TTFT independently of shrinking the gate prefill or show a repeatable TTFT pass under the same strict cold procedure before promotion.
+
+## 2026-07-04T14:05:00Z External Draft/MTP Audit
+
+Purpose:
+
+- Check whether an external compatible DeepSeek draft/MTP artifact exists that could unlock verified speculation without repeating rejected ngram/lookahead paths.
+
+Findings:
+
+- External search found `antirez/deepseek-v4-gguf` with files named:
+  - `DeepSeek-V4-Q2.gguf`, about `56.5 GB`;
+  - `DeepSeek-V4-Q2-MTP.gguf`, about `3.81 GB`.
+- This is not immediately usable for the current accepted SOTA path:
+  - the current accepted model is `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156,148,189,760 bytes` (`145.4 GiB`, `ls -lh` `146G`);
+  - the current vendor source loads/preserves NextN/MTP tensors for some architectures but does not execute a DeepSeek4 MTP verification path;
+  - previous local GGUF metadata audit for the accepted model found no `mtp`, `nextn`, `nextn_predict_layers`, `draft`, or `eagle` keys/tensors;
+  - the external forum thread for the antirez DS4 runtime explicitly describes MTP as currently broken and CUDA support as not fully ported from MLX, so this cannot be treated as a ready verified draft path.
+
+Decision:
+
+- Do not download or benchmark the external MTP GGUF as part of the current vendor SOTA path.
+- Treat external MTP as a separate future project requiring:
+  - tokenizer/vocab compatibility proof against the accepted target;
+  - DS4 MTP runtime implementation in vendor source;
+  - exact target verification semantics;
+  - 16GB host RAM/page-cache and VRAM budget accounting;
+  - correctness first, then token-rate benchmark.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/external-draft-mtp-audit.json`
