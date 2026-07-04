@@ -1,0 +1,80 @@
+{
+  "date": "2026-07-05",
+  "title": "Q8_0 up-skip overhead localization plan after strict cold performance rejection",
+  "source_head_before_plan": "93e3eb639b756c4d438930c77be4eb108e2850bf",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "triggering_rejected_run": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-up-skip-perf-validation.json",
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T204845Z-q80-cpucompat-upskip-strict-cold/france-cpu40",
+    "eval_tok_s": 1.8,
+    "prompt_tok_s": 1.3,
+    "ttft_ms": 38267.907446,
+    "q80_skip_records": 18688,
+    "correctness_ok": true,
+    "ram_ok": true,
+    "decision": "performance rejected"
+  },
+  "code_observation": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "function": "ggml_cuda_moe_stream_q80_skip",
+    "current_behavior": [
+      "For every eligible expert call, allocates std::vector<uint8_t> h_src0 and copies the full MXFP4 tensor slice.",
+      "Allocates std::vector<uint8_t> h_q80 and copies selected Q8_0 activation rows.",
+      "Calls cudaMalloc for d_src0, d_q80, and d_out on every call.",
+      "Uses synchronous cudaMemcpy H2D for src0 and q80.",
+      "Launches one small kernel, then calls cudaDeviceSynchronize.",
+      "Copies d_out D2H, scatters into dst, writes optional report, then cudaFree for all three buffers."
+    ],
+    "hypothesis": "The current correct path is dominated by per-call allocation, H2D/D2H, launch/sync, and scatter overhead, so skipping CPU fallback is slower than leaving up on CPU."
+  },
+  "instrumentation_plan": {
+    "default_off_env": "GGML_MOE_STREAM_Q80_SKIP_PROFILE=1",
+    "optional_output_env": "GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT=/path/profile.txt",
+    "required_property": "No behavior change unless GGML_MOE_STREAM_Q80_SKIP_PROFILE is enabled.",
+    "counters": [
+      "calls_entered",
+      "calls_attempted_after_filters",
+      "calls_ok",
+      "calls_failed",
+      "total_src0_bytes",
+      "total_q80_bytes",
+      "total_out_bytes"
+    ],
+    "timers_ms": [
+      "total wall time inside q80_skip",
+      "host src0 vector allocation plus memcpy",
+      "host q80 vector allocation plus row memcpy",
+      "cudaMalloc allocation time",
+      "H2D copy time",
+      "kernel launch plus cudaDeviceSynchronize time",
+      "D2H copy time",
+      "dst scatter time",
+      "report write time",
+      "cudaFree time"
+    ],
+    "reporting": "Emit one atexit summary line to stderr and, if PROFILE_OUT is set, write the same summary as key=value lines to that file. Do not write per-call traces in the default profiling mode."
+  },
+  "localization_run_plan": {
+    "type": "short correctness/performance diagnostic, not SOTA",
+    "initial_scope": "France prompt strict cold with all-up q80 skip and profile enabled, unless build time or output volume makes this too costly; if needed, cap with GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS for a bounded top1/short run.",
+    "required_constraints": {
+      "MemoryMax": 16000000000,
+      "MemorySwapMax": 0,
+      "vendor_framework": true,
+      "accepted_sota_default_path_unchanged": true
+    },
+    "pass_fail": "This run is diagnostic only. It is not promotable as SOTA even if token rate changes, because instrumentation adds overhead."
+  },
+  "hard_bound_decision_after_measurement": {
+    "if_malloc_free_dominates": "Replace per-call cudaMalloc/cudaFree with persistent slot buffers before any new benchmark; expected ceiling depends on measured alloc/free ms saved.",
+    "if_h2d_src0_dominates": "The current path reloads/copies full up expert payload per call and needs cache/reuse/batching; per-call GPU arithmetic alone is not viable.",
+    "if_kernel_sync_or_d2h_dominates": "A promotable design must batch/fuse experts or avoid the D2H/scatter boundary.",
+    "if_down_fallback_dominates_after_up_fix": "Return to down Q8_0 correctness root-cause before performance work.",
+    "rejection_threshold": "Reject any follow-up whose measured removable overhead cannot beat eval_tok_s 4.4 while keeping TTFT <= 33617.688744 ms."
+  },
+  "commit_rule": "Commit and push this plan before instrumentation. Commit and push instrumentation only after build and default-off top1/default path sanity pass. If any new compliant SOTA appears later, immediately record full repro and push source/artifacts."
+}
