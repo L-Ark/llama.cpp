@@ -11,6 +11,9 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${UPGATE_PCT:=60}"
 : "${IQ2_UPGATE_PARALLEL:=1}"
 : "${MIN_PROFILE:=1}"
+: "${MOE_IO_DEPTH:=8}"
+: "${MOE_IO_REFILL_BATCH:=4}"
+: "${MOE_PREFETCH_DOWN_DEPTH:=2}"
 : "${EXTRA_RUNTIME_ENV:=}"
 
 PROMPT="<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>"
@@ -42,14 +45,14 @@ GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l
 GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
 GGML_MOE_IO_BACKEND=iouring
 GGML_MOE_IO_BYTES=8388608
-GGML_MOE_IO_DEPTH=8
-GGML_MOE_IO_REFILL_BATCH=4
+GGML_MOE_IO_DEPTH=$MOE_IO_DEPTH
+GGML_MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH
 GGML_MOE_IO_SORT_OFFSET=1
 GGML_MOE_IO_SQPOLL=1
 GGML_MOE_MMAP_DONTNEED=1
 GGML_MOE_PARALLEL_EXPERTS=1
 GGML_MOE_PREFETCH_DOWN=1
-GGML_MOE_PREFETCH_DOWN_DEPTH=2
+GGML_MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH
 GGML_MOE_STAGE_PINNED=1
 GGML_MOE_STAGE_PINNED_SLOTS=$PINNED_SLOTS
 GGML_MOE_STREAM=1
@@ -113,6 +116,9 @@ LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl
   echo "UPGATE_PCT=$UPGATE_PCT"
   echo "IQ2_UPGATE_PARALLEL=$IQ2_UPGATE_PARALLEL"
   echo "MIN_PROFILE=$MIN_PROFILE"
+  echo "MOE_IO_DEPTH=$MOE_IO_DEPTH"
+  echo "MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH"
+  echo "MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH"
   echo "EXTRA_RUNTIME_ENV=$EXTRA_RUNTIME_ENV"
   printf '%q ' "${LLAMA_ARGS[@]}"
   echo
@@ -129,6 +135,8 @@ systemd-run --wait --collect --same-dir \\
   -p MemoryMax=15900000000 -p MemorySwapMax=0 \\
   env RUN=<new-run-dir> N=$N VRAM_MIB=$VRAM_MIB THREADS=$THREADS PINNED_SLOTS=$PINNED_SLOTS \\
       UPGATE_PCT=$UPGATE_PCT IQ2_UPGATE_PARALLEL=$IQ2_UPGATE_PARALLEL MIN_PROFILE=$MIN_PROFILE \\
+      MOE_IO_DEPTH=$MOE_IO_DEPTH MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH \\
+      MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH \\
       EXTRA_RUNTIME_ENV='<optional KEY=VALUE lines>' \\
       scripts/kimi-phase7fb-min-profile-repro.sh
 

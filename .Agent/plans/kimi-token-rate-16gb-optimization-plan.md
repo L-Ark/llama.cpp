@@ -46259,3 +46259,142 @@ Decision rule:
   claiming SOTA.
 - If it is not materially faster, record rejection and investigate other build
   differences or old artifact availability before further runtime tuning.
+
+Result: completed; accepted only as rebuilt baseline improvement, not SOTA.
+
+- End time: 2026-07-04T16:27:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-082721Z-n96-phase7ft-120a-real-upgate60`.
+- Build cache:
+  - `CMAKE_CUDA_ARCHITECTURES=120a-real`;
+  - nvcc generated `compute_120a,code=[sm_120a]`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `73424.57 ms`;
+  - decode `71619.18 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14817828864`;
+    - `kernel=248987648`;
+    - `inactive_file=2364534784`;
+    - `active_file=12452536320`;
+    - `pgmajfault=976549`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `63479`, misses `633`;
+    - `iouring_reads=37080`;
+    - `iouring_bytes=214923018240`;
+    - `iouring_wait_us=37082550`;
+  - pinned staging:
+    - main copies `49350`, waits `49314`, slots `12`;
+    - gate copies `10450`, waits `10426`, slots `12`;
+  - VRAM cache:
+    - down slots `806`, hit rate `73.4%`;
+    - upgate slots `1679`, hit rate `43.2%`.
+- Comparison:
+  - faster than Phase 7FS by `408.57 ms` decode;
+  - still slower than accepted Phase 7FB SOTA by `1531.87 ms` decode.
+
+Decision:
+
+- Keep `120a-real` as the correct rebuild target for Blackwell.
+- Do not claim a new SOTA.
+- Since file-backed memory remains near the full cgroup limit and
+  `iouring_wait_us` is still large, next phase should probe whether the
+  streaming path is limited by insufficient io_uring depth/refill or by lower
+  storage/request-level throughput.
+
+## Phase 7FU: io_uring depth/refill bottleneck probe
+
+Start time: 2026-07-04T16:34:00+08:00.
+
+Goal:
+
+- Test whether the current decode bottleneck can be reduced by allowing deeper
+  io_uring inflight work and larger refill batches.
+- Keep accepted cache split unchanged:
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`.
+- Use the `120a-real` build from Phase 7FT.
+- Keep cold-start, 16GB host RAM, France quality, TTFT, and fallback gates.
+
+Theory:
+
+- Phase 7FT still spends `37082550 us` waiting in io_uring for n96.
+- The completed iouring histograms cap at `inflight_max=8`:
+  - main `inflight_avg=3.22`, `inflight_max=8`;
+  - gate `inflight_avg=2.86`, `inflight_max=8`.
+- If the SSD and submission path have unused parallelism, increasing
+  `GGML_MOE_IO_DEPTH` from `8` to `16` and `GGML_MOE_IO_REFILL_BATCH` from `4`
+  to `8` should increase average inflight work, reduce `iouring_wait_us`, and
+  improve token rate.
+- Upper bound:
+  - n96 Phase 7FT decode is `71619.18 ms`;
+  - expert-pack wait is `37082.55 ms`;
+  - if deeper inflight removes 20% of io wait, theoretical decode upper bound
+    is roughly `71619.18 - 0.20 * 37082.55 = 64202.67 ms`, or about
+    `1.20 tok/s`;
+  - a smaller 5% wait reduction would give about `69765.05 ms`, enough to beat
+    the current SOTA if quality/TTFT/RAM gates hold.
+- If inflight average does not rise or wait does not fall, the gap is likely
+  storage bandwidth, request locality, or synchronization around selected
+  experts, not shallow queue depth.
+
+Runner change for reproducibility:
+
+- `scripts/kimi-phase7fb-min-profile-repro.sh` now exposes these overrides
+  while keeping defaults identical to Phase 7FB/7FT:
+  - `MOE_IO_DEPTH` default `8`;
+  - `MOE_IO_REFILL_BATCH` default `4`;
+  - `MOE_PREFETCH_DOWN_DEPTH` default `2`.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fu-iodepth16-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 gates pass and decode or
+`iouring_wait_us` improves materially
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7fu-iodepth16-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 passes gates and improves decode or lowers `iouring_wait_us`
+  materially, run n96.
+- If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
+  before claiming SOTA; commit and push immediately if confirmed.
+- If n32/n96 fail gates or are slower, reject the tuning, keep the runner
+  override support only if useful for reproducibility, and record the gap.
