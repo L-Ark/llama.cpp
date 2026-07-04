@@ -1345,6 +1345,15 @@ static int moe_stream_env_int(const char * name, int fallback) {
     return env && env[0] ? std::atoi(env) : fallback;
 }
 
+static bool moe_stream_q80_cpu_compat_enabled() {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = std::getenv("GGML_MOE_STREAM_Q80_CPU_COMPAT");
+        enabled = (env && env[0] && env[0] != '0') ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
 static FILE * moe_stream_q8_debug_fp() {
     static FILE * fp = nullptr;
     static int initialized = 0;
@@ -1548,6 +1557,102 @@ static __global__ void moe_stream_q80_probe_kernel(
     out[idx] = sum;
 }
 
+static __device__ __forceinline__ float moe_stream_q80_cpu_compat_hsum8(
+        const float acc1[8], const float acc2[8]) {
+    float x0 = acc1[0] + acc2[0];
+    float x1 = acc1[1] + acc2[1];
+    float x2 = acc1[2] + acc2[2];
+    float x3 = acc1[3] + acc2[3];
+    float x4 = acc1[4] + acc2[4];
+    float x5 = acc1[5] + acc2[5];
+    float x6 = acc1[6] + acc2[6];
+    float x7 = acc1[7] + acc2[7];
+
+    float r0 = x4 + x0;
+    float r1 = x5 + x1;
+    float r2 = x6 + x2;
+    float r3 = x7 + x3;
+    float s0 = r0 + r2;
+    float s1 = r1 + r3;
+    return s0 + s1;
+}
+
+static __device__ __forceinline__ void moe_stream_q80_cpu_compat_block_lanes(
+        const block_mxfp4 & x,
+        const block_q8_0 & y,
+        int lanes[8]) {
+#pragma unroll
+    for (int group = 0; group < 4; ++group) {
+        int lo = 0;
+        int hi = 0;
+#pragma unroll
+        for (int r = 0; r < 4; ++r) {
+            const int j = group * 4 + r;
+            const uint8_t q = x.qs[j];
+            lo += y.qs[j] * moe_stream_mxfp4_value_dev(q & 0x0F);
+            hi += y.qs[j + QK_MXFP4/2] * moe_stream_mxfp4_value_dev(q >> 4);
+        }
+        lanes[group] = lo;
+        lanes[group + 4] = hi;
+    }
+}
+
+static __global__ void moe_stream_q80_probe_cpu_compat_kernel(
+        const char * __restrict__ src0,
+        size_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        int64_t ne00,
+        int rows_to_probe,
+        int cols_to_probe,
+        float * __restrict__ out) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total = rows_to_probe * cols_to_probe;
+    if (idx >= total) {
+        return;
+    }
+
+    const int k = idx / cols_to_probe;
+    const int col = idx - k * cols_to_probe;
+    const block_mxfp4 * x = (const block_mxfp4 *) (src0 + (size_t) col * nb01);
+    const block_q8_0 * y = (const block_q8_0 *) (q80 + (size_t) k * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float acc1[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float acc2[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+    int64_t ib = 0;
+    for (; ib + 1 < nb; ib += 2) {
+        int p1[8];
+        int p2[8];
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 0], y[ib + 0], p1);
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 1], y[ib + 1], p2);
+
+        const float scale0 = __half2float(y[ib + 0].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+        const float scale1 = __half2float(y[ib + 1].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+#pragma unroll
+        for (int lane = 0; lane < 8; ++lane) {
+            acc1[lane] = fmaf(scale0, (float) p1[lane], acc1[lane]);
+            acc2[lane] = fmaf(scale1, (float) p2[lane], acc2[lane]);
+        }
+    }
+
+    float sum = moe_stream_q80_cpu_compat_hsum8(acc1, acc2);
+    for (; ib < nb; ++ib) {
+        int sumi1 = 0;
+        int sumi2 = 0;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4/2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            sumi1 += y[ib].qs[j] * moe_stream_mxfp4_value_dev(q & 0x0F);
+            sumi2 += y[ib].qs[j + QK_MXFP4/2] * moe_stream_mxfp4_value_dev(q >> 4);
+        }
+        const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+        sum = fmaf(scale, (float) (sumi1 + sumi2), sum);
+    }
+    out[idx] = sum;
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_probe(
     int src0_type_int,
     const char *src0_name,
@@ -1638,9 +1743,15 @@ extern "C" void ggml_cuda_moe_stream_q80_probe(
     if (ok) {
         const int threads = 128;
         const int blocks = (total + threads - 1) / threads;
-        moe_stream_q80_probe_kernel<<<blocks, threads>>>(
-                (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
-                ne00, rows_to_probe, cols_to_probe, d_out);
+        if (moe_stream_q80_cpu_compat_enabled()) {
+            moe_stream_q80_probe_cpu_compat_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, rows_to_probe, cols_to_probe, d_out);
+        } else {
+            moe_stream_q80_probe_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, rows_to_probe, cols_to_probe, d_out);
+        }
         ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
             cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
     }
@@ -1800,9 +1911,15 @@ extern "C" void ggml_cuda_moe_stream_q80_write(
     if (ok) {
         const int threads = 128;
         const int blocks = ((int) total + threads - 1) / threads;
-        moe_stream_q80_probe_kernel<<<blocks, threads>>>(
-                (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
-                ne00, (int) cne1, (int) ne01, d_out);
+        if (moe_stream_q80_cpu_compat_enabled()) {
+            moe_stream_q80_probe_cpu_compat_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, (int) cne1, (int) ne01, d_out);
+        } else {
+            moe_stream_q80_probe_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, (int) cne1, (int) ne01, d_out);
+        }
         ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
             cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
     }
@@ -1966,9 +2083,15 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
     if (ok) {
         const int threads = 128;
         const int blocks = ((int) total + threads - 1) / threads;
-        moe_stream_q80_probe_kernel<<<blocks, threads>>>(
-                (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
-                ne00, (int) cne1, (int) ne01, d_out);
+        if (moe_stream_q80_cpu_compat_enabled()) {
+            moe_stream_q80_probe_cpu_compat_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, (int) cne1, (int) ne01, d_out);
+        } else {
+            moe_stream_q80_probe_kernel<<<blocks, threads>>>(
+                    (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, (int) cne1, (int) ne01, d_out);
+        }
         ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
             cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
     }

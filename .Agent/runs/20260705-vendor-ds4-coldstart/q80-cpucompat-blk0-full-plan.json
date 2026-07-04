@@ -1,0 +1,41 @@
+{
+  "date": "2026-07-05",
+  "title": "Full blk.0 Q8_0 up-skip correctness gate with CPU-compatible CUDA arithmetic",
+  "source_head_before_experiment": "c2119b3b7397ee56dc7b1706ff1e1aaba8008752-dirty",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "prior_results": {
+    "old_scalar_full_blk0": "failed, same_top1=142/145",
+    "old_scalar_first_bad_boundary": "max_calls=104 failed at record 103 expert 62",
+    "cpu_compat_max104_output_write": "passed, same_top1=145/145, local max_abs=0",
+    "cpu_compat_max104_skip": "passed, same_top1=145/145"
+  },
+  "candidate": {
+    "name": "GGML_MOE_STREAM_Q80_CPU_COMPAT=1 full blk.0 ffn_up_exps pre-fallback skip",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "skip_name_filter": "blk.0.ffn_up_exps.weight",
+    "skip_max_cne1": 1,
+    "skip_max_calls": 0,
+    "why_this_step": "Validate that CPU-compatible arithmetic is token-stable over all eligible layer-0 up calls before expanding to more layers or benchmarking.",
+    "expected_ram_pressure": "Same 16GB/no-swap cgroup as prior verifier; no new model residency.",
+    "expected_ttft_impact": "Not evaluated in this correctness-only run."
+  },
+  "correctness_gate": {
+    "baseline_source": "Reuse the skip-disabled result.gguf from /root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean.",
+    "check": "Run llama-results --check with GGML_MOE_STREAM_Q80_CPU_COMPAT=1, GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=blk.0.ffn_up_exps.weight, GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0, and --top1-fail-on-mismatch.",
+    "pass_condition": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0.",
+    "failure_rule": "If full blk.0 fails, do not expand scope; inspect the first failing record under CPU-compatible arithmetic."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "down_skip_enabled": false,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "promotion_rule": "This correctness run cannot be promoted as SOTA. A later strict cold France benchmark is required for any token-rate claim."
+}

@@ -1,0 +1,105 @@
+{
+  "timestamp_utc": "2026-07-04T20:03:34Z",
+  "status": "cpu_compat_max104_passed",
+  "purpose": "Validate the default-off CPU-compatible CUDA MXFP4 x Q8_0 arithmetic path at the first previously failing call boundary.",
+  "source_head_before_change": "c2119b3b7397ee56dc7b1706ff1e1aaba8008752",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "files": ["ggml/src/ggml-cuda/moe_stream.cu"],
+    "default_behavior_changed": false,
+    "env_gate": "GGML_MOE_STREAM_Q80_CPU_COMPAT=1",
+    "summary": [
+      "Added a second Q8_0 CUDA kernel selected only when GGML_MOE_STREAM_Q80_CPU_COMPAT=1.",
+      "The kernel mimics the x86 AVX2 reference for ggml_vec_dot_mxfp4_q8_0: two MXFP4/Q8_0 blocks per iteration, two 8-lane accumulators, fmaf per lane, then hsum_float_8(accum1 + accum2) order.",
+      "The existing scalar q80 kernel remains the default for diagnostic q80 paths unless the new env gate is set."
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j 8",
+    "status": "passed",
+    "warnings": "existing missing-declaration/unused-parameter warnings only"
+  },
+  "output_write_gate": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T200040Z-q80-cpucompat-output-write/blk0-up-max104",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-output-write-20260704T200040Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 27.549,
+    "exit_status": 0,
+    "env": {
+      "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+      "GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER": "blk.0.ffn_up_exps.weight",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CNE1": "1",
+      "GGML_MOE_STREAM_Q80_WRITE_MAX_CALLS": "104"
+    },
+    "top1": {
+      "n_tokens": 145,
+      "same_top1": 145,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    "write_report": {
+      "records": 104,
+      "record_103": {"expert": 62, "max_abs": 0.0, "mean_abs": 0.0},
+      "records_98_to_103_max_abs": 0.0
+    },
+    "memory": {
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "memory_peak_bytes": 1028292608,
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "hashes": {
+      "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+      "write_report_sha256": "1f821c10be4ef52f4c9acec503a08232179c1efb4c4b2e74345544d6f3d6a58d",
+      "run_case_sha256": "43611f80f76c4212c598a3f4fdc5a90321c07241aa1312855549b7f48402c919"
+    }
+  },
+  "skip_gate": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T200334Z-q80-cpucompat-up-skip/blk0-up-max104",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-up-skip-20260704T200334Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 26.906,
+    "exit_status": 0,
+    "env": {
+      "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "blk.0.ffn_up_exps.weight",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "104"
+    },
+    "top1": {
+      "n_tokens": 145,
+      "same_top1": 145,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    "skip_report": {
+      "records": 104,
+      "record_103": {"expert": 62, "cne1": 1, "ne01": 2048}
+    },
+    "memory": {
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "memory_peak_bytes": 1025040384,
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "hashes": {
+      "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+      "skip_report_sha256": "9aaf1b2801c791aa81ff9afd6fd90518474766263b3ee12ef204ad873bae0e8f",
+      "run_case_sha256": "6056e890bf63a698027a927ed12ba6fc1bd57c5878a02ce41b338393da231aec"
+    }
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "keep_source": true,
+    "reason": "The CPU-compatible arithmetic path fixes the first known token-stability failure and remains default-off. It is not a performance run.",
+    "next_step": "Run full blk.0 ffn_up_exps pre-fallback skip with GGML_MOE_STREAM_Q80_CPU_COMPAT=1 under the same fixed-text top1 verifier."
+  }
+}

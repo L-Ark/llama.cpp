@@ -1,0 +1,83 @@
+{
+  "timestamp_utc": "2026-07-04T20:09:55Z",
+  "status": "full_blk0_cpu_compat_skip_passed",
+  "purpose": "Validate full layer-0 up pre-fallback skip after adding default-off CPU-compatible CUDA MXFP4 x Q8_0 arithmetic.",
+  "source_head_before_change": "c2119b3b7397ee56dc7b1706ff1e1aaba8008752",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "files": ["ggml/src/ggml-cuda/moe_stream.cu"],
+    "default_behavior_changed": false,
+    "env_gate": "GGML_MOE_STREAM_Q80_CPU_COMPAT=1",
+    "libggml_cuda_sha256": "437054e835dbc77d5e186520d863e454d07eadfbf2777c38fa764b3b516d61cf",
+    "llama_results_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10"
+  },
+  "run": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T200955Z-q80-cpucompat-up-skip/blk0-up-full",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-up-skip-full-20260704T200955Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 28.521,
+    "cpu_time_seconds": 320.308,
+    "baseline_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14",
+    "model_stat": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf 156148189760 bytes"
+  },
+  "env": {
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "blk.0.ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0",
+    "GGML_MOE_STREAM_Q80_WRITE_NAME_FILTER": "unset"
+  },
+  "top1": {
+    "n_tokens": 145,
+    "n_vocab": 129280,
+    "same_top1": 145,
+    "same_top1_ratio": 1.0,
+    "first_mismatch_pos": -1,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "nmse": 0.0
+  },
+  "skip_report": {
+    "records": 870,
+    "tensor": "blk.0.ffn_up_exps.weight",
+    "cne1": 1,
+    "ne01": 2048,
+    "last_records": [
+      {"record": 860, "expert": 127},
+      {"record": 861, "expert": 176},
+      {"record": 862, "expert": 205},
+      {"record": 863, "expert": 245},
+      {"record": 864, "expert": 52},
+      {"record": 865, "expert": 55},
+      {"record": 866, "expert": 77},
+      {"record": 867, "expert": 79},
+      {"record": 868, "expert": 174},
+      {"record": 869, "expert": 213}
+    ]
+  },
+  "runtime_constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1024987136,
+    "memory_current_bytes_after_run": 4157440,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "hashes": {
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "skip_report_sha256": "6fa6ef482e4f1c1eb6d5a56ab32ffc4b73075f22b28d32ce4b4ff7390c0ec4b2",
+    "run_case_sha256": "e8ba64242109918d820cf5b8bdfa3f7bd0725a93b2c95c68b58944317f9ef0e6"
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "keep_source": true,
+    "reason": "The default-off CPU-compatible arithmetic fixes full layer-0 up-skip correctness. This is not a strict cold performance run.",
+    "next_step": "Commit and push this correctness fix and artifacts, then expand to bounded blk.0-2 up-only top1 verification before any benchmark."
+  }
+}

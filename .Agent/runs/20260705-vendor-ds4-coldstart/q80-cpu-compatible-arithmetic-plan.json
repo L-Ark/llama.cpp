@@ -1,0 +1,58 @@
+{
+  "date": "2026-07-05",
+  "title": "Default-off CPU-compatible CUDA Q8_0 arithmetic for MXFP4 x Q8_0",
+  "source_head_before_change": "c2119b3b7397ee56dc7b1706ff1e1aaba8008752",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "bottleneck_component": {
+    "name": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "required_saving_for_10_tok_s_ms": 17386.57,
+    "max_allowed_new_overhead_ms": 1642.887
+  },
+  "root_cause_evidence": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-up-output-write-boundary-validation.json",
+    "first_bad_record": "blk.0.ffn_up_exps.weight record 103, expert 62",
+    "output_write_max_calls_103": "passes top1, same_top1=145/145",
+    "output_write_max_calls_104": "fails top1, same_top1=144/145, first_mismatch_pos=135",
+    "record_103_local_error": "max_abs=7.15255737e-7, mean_abs=4.58167051e-8",
+    "classification": "numerical/token-stability drift, not pre-fallback skip side effect"
+  },
+  "cpu_reference_semantics": {
+    "host_flags": "avx2 fma",
+    "reference_function": "ggml/src/ggml-cpu/arch/x86/quants.c::ggml_vec_dot_mxfp4_q8_0",
+    "main_loop": "For two 32-value MXFP4/Q8_0 blocks at a time, CPU creates two 8-lane float vectors p_1/p_2, applies _mm256_fmadd_ps(scale, p, accum) into separate accum1/accum2, then computes hsum_float_8(accum1 + accum2).",
+    "current_cuda_difference": "Current CUDA sums one scalar accumulator in block order with sum += d * sumi, which changes FMA/rounding and horizontal-add order."
+  },
+  "candidate": {
+    "name": "GGML_MOE_STREAM_Q80_CPU_COMPAT default-off kernel",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "implementation": [
+      "Add GGML_MOE_STREAM_Q80_CPU_COMPAT env gate.",
+      "Add a second CUDA kernel that mimics the AVX2 two-block, 8-lane accumulator structure.",
+      "Use fmaf(scale, lane_sum, acc_lane) for per-lane accumulation.",
+      "Mimic hsum_float_8(accum1 + accum2) addition order.",
+      "Use this kernel only for q80 probe/write/skip when the env gate is set."
+    ],
+    "expected_correctness_effect": "Reduce or eliminate the ~1e-7 local drift that flips top1 at output-write max_calls=104.",
+    "expected_ram_pressure": "No new model residency; temporary buffers unchanged.",
+    "expected_ttft_impact": "Not evaluated in this correctness-only step."
+  },
+  "correctness_gate": {
+    "first_gate": "Rebuild llama-results and run output-write max_calls=104 with GGML_MOE_STREAM_Q80_CPU_COMPAT=1.",
+    "pass_condition": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1.",
+    "if_passes": "Then test pre-fallback skip max_calls=104 with CPU_COMPAT=1 before any broader expansion.",
+    "if_fails": "Keep source default-off but mark this CPU-compatible attempt rejected or continue lower-level comparison; do not benchmark."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "promotion_rule": "This implementation cannot be promoted as SOTA by itself. New SOTA still requires strict cold France benchmark, 16GB page-cache accounting, TTFT gate, correctness, commit/push, and pushed-source reproduction."
+}
