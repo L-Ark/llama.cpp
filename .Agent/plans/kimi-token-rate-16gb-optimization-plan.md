@@ -54247,3 +54247,82 @@ systemd-run --wait --collect --same-dir \
   - This closes the simple `IQ2_S` VDR-up direction. Do not try a larger
     `IQ2_S` VDR without kernel resource analysis and a correctness/performance
     rationale stronger than macro sweeping.
+
+## Phase 7HR: post-revert default-off instrumentation parity check
+
+Start time: 2026-07-05T03:35:00+08:00.
+
+Goal:
+
+- Rebuild the server binary after reverting the rejected Phase 7HQ VDR=4 probe.
+- Verify the accepted Phase 7HP H2D instrumentation has no meaningful
+  production-path regression when `GGML_MOE_COPY_PROFILE_H2D` is unset.
+- Keep this as a validation/parity phase, not a new SOTA claim.
+
+Why this is required before further optimization:
+
+- Phase 7HQ built and ran a bad VDR=4 binary on the server.
+- The source was reverted and pushed, but the executable must be rebuilt before
+  any further experiment.
+- Phase 7HP is default-off, but it added extra env-gated checks in staging/copy
+  paths. Even default-off instrumentation should be validated under the strict
+  cold-start production gate before relying on it for more experiments.
+
+Expected behavior:
+
+- Source head should include:
+  - `8f4e0b9e9` rollback of VDR=4;
+  - `762a92fc8` default-off copy H2D profiling instrumentation.
+- Runtime must not set:
+  - `GGML_MOE_COPY_PROFILE_OUT`;
+  - `GGML_MOE_COPY_PROFILE_H2D`.
+- `metrics.txt` should match the normal current stable n32 shape:
+  - quality pass;
+  - decode near the current stable n32 region around `29.1-29.8s`;
+  - expert pack hits about `25458`, misses `192`;
+  - down hit rate about `73.6%`;
+  - upgate hit rate about `43.7%`.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard wici/vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment: n32 production parity
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hr-defaultoff-parity"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode is competitive with current stable n32 region and does not show the
+  Phase 7HQ VDR=4 regression shape.
+
+Decision rule:
+
+- If n32 parity fails any hard gate or decode is grossly slower than the
+  current stable n32 region, investigate/revert the default-off instrumentation
+  before any further optimization.
+- If n32 parity passes, keep the instrumentation and proceed to the next
+  optimization plan from the current n96 bottleneck profile.
