@@ -1,0 +1,118 @@
+{
+  "date": "2026-07-05",
+  "title": "Hot CPU fallback lower-bound and microkernel feasibility audit",
+  "result": "reject_large_runtime_change_without_microprobe",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "inputs": {
+    "plan": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-cpu-fallback-lower-bound-plan.json",
+    "joint_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/async-source-plus-cpu-batch-hard-bound.json",
+    "touch_split_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-fallback-touch-split-diagnostic.json",
+    "cpu_chunk_trace": "/root/lfz/runs/vendor-ds4-16gb/20260704T013715Z-20260704_cpu_chunk_trace_sota_diagnostic_full/france-cpu40-vram0gb/cpu_chunk_trace.csv"
+  },
+  "hot_path_numbers": {
+    "decode_hot_fallback_ms_after_touch": 3173.291,
+    "decode_hot_up_ms_after_touch": 1589.467,
+    "decode_hot_down_ms_after_touch": 1583.824,
+    "decode_expert_calls": 35880,
+    "decode_expert_call_gib": 148.916016,
+    "observed_hot_bandwidth_gib_s": 46.928,
+    "observed_us_per_call": 88.442,
+    "expert_payload_mib_per_call": 4.25
+  },
+  "requirements_for_joint_10_tok_s": [
+    {
+      "implementation_overhead_ms": 0,
+      "remaining_hot_ms_allowed": 1642.887,
+      "required_hot_bandwidth_gib_s": 90.643,
+      "required_us_per_call": 45.788,
+      "required_saving_ms": 1530.404,
+      "required_saving_fraction": 0.482
+    },
+    {
+      "implementation_overhead_ms": 500,
+      "remaining_hot_ms_allowed": 1142.887,
+      "required_hot_bandwidth_gib_s": 130.298,
+      "required_us_per_call": 31.853,
+      "required_saving_ms": 2030.404,
+      "required_saving_fraction": 0.64
+    },
+    {
+      "implementation_overhead_ms": 1000,
+      "remaining_hot_ms_allowed": 642.887,
+      "required_hot_bandwidth_gib_s": 231.636,
+      "required_us_per_call": 17.918,
+      "required_saving_ms": 2530.404,
+      "required_saving_fraction": 0.797
+    }
+  ],
+  "bandwidth_scenarios": [
+    {
+      "effective_hot_bandwidth_gib_s": 60,
+      "hot_time_ms": 2481.934,
+      "hot_save_ms": 691.357,
+      "enough_for_zero_overhead_joint_10": false
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 80,
+      "hot_time_ms": 1861.45,
+      "hot_save_ms": 1311.841,
+      "enough_for_zero_overhead_joint_10": false
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 90,
+      "hot_time_ms": 1654.622,
+      "hot_save_ms": 1518.669,
+      "enough_for_zero_overhead_joint_10": false
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 100,
+      "hot_time_ms": 1489.16,
+      "hot_save_ms": 1684.131,
+      "enough_for_zero_overhead_joint_10": true,
+      "slack_before_other_overhead_ms": 153.727
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 120,
+      "hot_time_ms": 1240.967,
+      "hot_save_ms": 1932.324,
+      "enough_for_zero_overhead_joint_10": true,
+      "slack_before_other_overhead_ms": 401.92
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 150,
+      "hot_time_ms": 992.773,
+      "hot_save_ms": 2180.518,
+      "enough_for_zero_overhead_joint_10": true,
+      "slack_before_other_overhead_ms": 650.114
+    },
+    {
+      "effective_hot_bandwidth_gib_s": 200,
+      "hot_time_ms": 744.58,
+      "hot_save_ms": 2428.711,
+      "enough_for_zero_overhead_joint_10": true,
+      "slack_before_other_overhead_ms": 898.307
+    }
+  ],
+  "code_inspection": {
+    "active_kernel": "ggml/src/ggml-cpu/arch/x86/quants.c:918 ggml_vec_dot_mxfp4_q8_0",
+    "type_mapping": "ggml/src/ggml-cpu/ggml-cpu.c:1415-1418 maps GGML_TYPE_MXFP4 to ggml_vec_dot_mxfp4_q8_0 with Q8_0 activation",
+    "fallback_chunking": "ggml/src/ggml-cpu/ggml-cpu.c uses the normal 20-thread chunked mul_mat_id fallback path; this is not the generic scalar MXFP4 path."
+  },
+  "chunk_trace_summary": {
+    "trace_rows": 909952,
+    "sum_chunk_ms": 507993.63,
+    "up_sum_chunk_ms": 247226.335,
+    "down_sum_chunk_ms": 260767.295,
+    "note": "Chunk times are summed over worker threads and are not wall time, but they confirm the current path already fans out work over many small thread chunks."
+  },
+  "decision": {
+    "large_cpu_batch_runtime_change_now": "rejected",
+    "reason": "The joint 10 tok/s path needs at least 90.6 GiB/s effective hot expert throughput with zero overhead, and 130+ GiB/s with only 500 ms overhead. Current hot path is 46.9 GiB/s and already uses the x86 MXFP4 x Q8_0 kernel with 20-thread chunking. There is not enough evidence to justify a large runtime rewrite.",
+    "allowed_next": "Only a small default-off microprobe or benchmark plan is allowed next, to measure whether an alternative exact batched loop can approach 100+ GiB/s without changing output order. If not, reject the joint async-source plus CPU-batch path."
+  }
+}

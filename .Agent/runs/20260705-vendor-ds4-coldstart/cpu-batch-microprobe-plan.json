@@ -1,0 +1,32 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: default-off CPU batch microprobe before runtime rewrite",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "hot_cpu_lower_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-cpu-fallback-lower-bound.json",
+    "required_effective_hot_bandwidth_zero_overhead_gib_s": 90.643,
+    "required_effective_hot_bandwidth_with_500ms_overhead_gib_s": 130.298,
+    "observed_effective_hot_bandwidth_gib_s": 46.928
+  },
+  "candidate": {
+    "type": "diagnostic only",
+    "goal": "measure whether exact MXFP4 x Q8_0 batched CPU execution can approach 100+ GiB/s on hot expert data without changing logits",
+    "implementation_rule": "If implemented, keep it default-off and isolated from accepted runtime; no performance SOTA benchmark until fixed-text top1 passes."
+  },
+  "required_before_code": [
+    "Inspect x86 MXFP4 kernel nrows support and whether batching multiple rows/experts can preserve the exact accumulation order already proven by CPU fallback.",
+    "Define a bounded microprobe that times hot data only and reports effective GiB/s, us/call, and max_abs/mean_abs against the current CPU fallback for sampled experts.",
+    "Reject if the probe cannot plausibly reach at least 90.6 GiB/s with less than 500 ms total integration overhead."
+  ],
+  "not_a_sota": true,
+  "runtime_constraints_if_later_benchmarked": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "correctness": "fixed-text llama-results top1 equality and coherent France output",
+    "promotion": "commit/push/reproduce immediately if a compliant >4.4 tok/s result appears"
+  }
+}
