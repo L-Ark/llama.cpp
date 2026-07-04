@@ -58662,6 +58662,99 @@ Next target:
   theory must account for the fact that previous broad coalescer and extra
   depth experiments regressed.
 
+## Phase 7IT: conservative route-trace VRAM prefetch probe
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IS proved physical layout/locality alone is not enough:
+  `span/read` improved sharply but repeat decode regressed to `29465.58 ms`.
+- Remaining exposed cost is still many iouring waits during cache miss handling.
+
+Existing mechanism:
+
+- Runtime already has a default-off `GGML_MOE_TRACE_PREFETCH` path.
+- It reads route-trace events and preloads future experts into the VRAM cache
+  on `g_batch.prefetch_stream`.
+- It is called from `batch_route_profile_hit()`, so it follows actual route
+  progress and can resynchronize if the trace cursor drifts.
+
+Hypothesis:
+
+- A conservative trace prefetch can convert some future runtime misses into
+  cache hits, reducing exposed `runtime_load` waits.
+- It may regress if it:
+  - evicts useful current experts;
+  - consumes the same staging ring and IO queue as the foreground runtime load;
+  - increases H2D/IO pressure enough to delay compute;
+  - prefetches too far ahead and harms locality.
+
+Theoretical bound:
+
+- The upper bound is the foreground iouring wait budget that can be turned into
+  hidden prefetch work.
+- In 7IS repeat, total iouring wait is `14.561 s`; this is an absolute upper
+  bound, not a realistic target.
+- Because trace prefetch uses the same staging ring, practical improvement is
+  only possible if prefetch work overlaps compute/down time and does not delay
+  foreground `runtime_load`.
+- The first probe should use a small window/load count:
+  - `GGML_MOE_TRACE_PREFETCH_WINDOW=32`;
+  - `GGML_MOE_TRACE_PREFETCH_MAX_LOADS=2`;
+  - `GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=8`.
+
+Experiment:
+
+- No source change.
+- Use current head and accepted pct62 runtime knobs.
+- Do not use the rejected hot replacement overlay.
+- Run strict cold-start n32 with:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7it-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7it-trace-prefetch-small
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_TRACE_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace/route-trace.csv
+GGML_MOE_TRACE_PREFETCH_WINDOW=32
+GGML_MOE_TRACE_PREFETCH_MAX_LOADS=2
+GGML_MOE_TRACE_PREFETCH_LEAD_EVENTS=8
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If decode improves and all gates pass, run a repeat n32 before accepting.
+- If trace prefetch reports many loads but runtime wait/decode do not improve,
+  reject broad trace prefetch and do not increase window/load count.
+- If trace prefetch reports low matching/cursor drift, fix trace alignment
+  before any larger prefetch experiment.
+- If foreground `runtime_load` wait rises or down overlap worker time rises,
+  reject this path as staging/IO contention.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
