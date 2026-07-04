@@ -44348,3 +44348,84 @@ Decision:
 - Next source experiment should target reducing or overlapping CPU fallback /
   prompt-side fallback work, or reducing total route misses, not changing
   iouring batch thresholds.
+
+## Phase 7FH: current-SOTA CPU thread contention check
+
+Start time: 2026-07-04T08:48:00Z.
+
+Goal:
+
+- Check whether the accepted slots12 runtime is oversubscribing CPU work during
+  decode.
+- This is an env-only diagnostic; no source change.
+- Preserve strict gates:
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - France quality pass;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Current bottleneck:
+
+- Phase 7FD/7FE show remaining decode time is a mix of:
+  - expert-pack/iouring waits;
+  - pinned host staging;
+  - H2D;
+  - bounded Q4_0 CPU fallback.
+- Phase 7FF/7FG showed changing iouring/direct thresholds moves time between
+  `iouring_wait_us` and `host_stage`, but does not improve wall time.
+- CPU fallback and the staging/iouring worker paths share host CPU resources.
+  The current production runner uses:
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - current-down overlap enabled.
+
+Why retest thread count now:
+
+- Historical `THREADS=28` and `THREADS=40` probes were rejected on older
+  runtime surfaces, mostly with `PINNED_SLOTS=8` or `16`.
+- The accepted production SOTA is now `PINNED_SLOTS=12`, which changed staging
+  pressure and made minimal-profile results reproducible.
+- A lower decode thread count could reduce contention for:
+  - io_uring completion handling;
+  - pinned host staging;
+  - current-down overlap worker;
+  - CUDA launch/enqueue side work.
+
+Theory and upper bound:
+
+- If 32 CPU threads oversubscribe the host, reducing to `THREADS=28` may:
+  - lower `host_stage`;
+  - lower `iouring_wait_us`;
+  - lower `fallback_t0` wall contribution despite fewer compute threads, if
+    the current bottleneck is contention rather than raw CPU compute.
+- Hard upper bound is the host-side exposed bucket:
+  - about `14-16 s` iouring wait;
+  - about `11-12 s` main host staging;
+  - about `2.5 s` Q4_0 fallback.
+- Practical expected bound is small, likely `0.3-1.0 s` on n32.
+- If `fallback_t0` rises more than movement time falls, reject.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fh-threads28-diag"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=28 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- Accept only if n32 diagnostic passes all gates and improves decode versus
+  Phase 7FD `29610.75 ms` with a plausible host-side explanation.
+- If n32 diagnostic passes, run n32 minimal-profile confirmation with
+  `THREADS=28`.
+- If confirmation beats Phase 7FB n32 references, run n96 twice and compare
+  against Phase 7FB best `70087.31 ms / 77`.
+- If any gate fails or the result is slower, keep `THREADS=32` and record the
+  rejection.
