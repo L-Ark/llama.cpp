@@ -35603,6 +35603,110 @@ Decision rule:
   - require immediate commit and push only when a changed implementation passes
     the gates and reproduces.
 
+Phase 7EN result - baseline reproduced, diagnostic only:
+
+- result timestamp: 2026-07-04T01:49Z.
+- plan commit:
+  `6835528be` (`docs: plan kimi phase7en sota reproducibility`).
+- source status:
+  - no source patch;
+  - exact accepted Phase 7EB runtime recipe;
+  - no rollback required.
+- runs:
+  - repro-a:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-014058Z-n32-phase7en-sota-repro-a`;
+  - repro-b:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-014357Z-n32-phase7en-sota-repro-b`.
+- command shape for both:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+- hard gates:
+  - both exit `0`;
+  - both cold-start runs were inside `MemoryMax=15900000000` and
+    `MemorySwapMax=0`;
+  - both `memory.peak=15899996160`;
+  - both `oom=0`, `oom_kill=0`;
+  - both `read_failures=0`, `iouring_fallbacks=0`;
+  - TTFT:
+    - repro-a `76760.61 ms`;
+    - repro-b `74646.21 ms`;
+    - both below the `106331.72 ms` gate.
+- output for both:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- manual quality:
+  pass; it is coherent and semantically correct. The final clause is truncated
+  only because this n32 run stops at the fixed output token budget.
+- decode:
+  - repro-a `29658.58 ms / 31`, `1.05 tok/s`;
+  - repro-b `30284.80 ms / 31`, `1.02 tok/s`;
+  - historical Phase 7EB n32 is `29599.64 ms / 31`;
+  - repro-a is only `58.94 ms` slower than the historical n32, so the accepted
+    SOTA baseline is reproducible;
+  - repro-b shows about `626.22 ms` n32 cold-start spread even with identical
+    route/cache counters.
+- identical route/cache counters in both runs:
+  - down cache `slots=806`, `hits=9659`, `misses=3461`, `preloads=3664`,
+    `hit_rate=73.6%`;
+  - upgate cache `slots=1679`, `hits=13019`, `misses=16757`,
+    `hit_rate=43.7%`;
+  - expert pack `iouring_reads=15024`, `iouring_bytes=87082139648`,
+    `entries=31599`;
+  - current-down overlap `planned_jobs=3664`, `completed_jobs=3664`,
+    `cache_hits=3528`, `missing_tensor=93`, `missing_pack=36`.
+- main differences between repro-a and repro-b:
+  - expert-pack wait:
+    - repro-a `14917929 us`;
+    - repro-b `15141613 us`;
+  - main pinned host stage:
+    - repro-a `11333.839 ms`;
+    - repro-b `11808.904 ms`;
+  - up/gate profile:
+    - repro-a `7.422 ms/call`;
+    - repro-b `7.700 ms/call`;
+  - current-down worker:
+    - repro-a `3307227 us`;
+    - repro-b `3427534 us`;
+  - down aggregate profile is slightly lower in repro-b
+    (`37.817 ms/call` vs `39.221 ms/call`), so the slower wall time is not
+    explained by more down work.
+- memory final:
+  - repro-a:
+    - `memory.current.final=14992420864`;
+    - `file=14753677312`;
+    - `inactive_file=2159198208`;
+    - `active_file=12593823744`;
+    - `anon=442368`;
+    - `kernel=234930176`;
+  - repro-b:
+    - `memory.current.final=14990458880`;
+    - `file=14751076352`;
+    - `inactive_file=6003257344`;
+    - `active_file=8747192320`;
+    - `anon=446464`;
+    - `kernel=234823680`.
+
+Decision:
+
+- Phase 7EN is diagnostic only and does not change SOTA.
+- Keep Phase 7EB as accepted SOTA:
+  - n32 gate remains the historical accepted `29599.64 ms / 31`;
+  - n96 gate remains `74201.57 ms / 77`.
+- Future source changes must beat the historical n32 gate and then reproduce;
+  one n32 win near the `0.6 s` observed spread is not sufficient.
+- Next optimization should not target route/cache policy first, because counters
+  were deterministic across the repro pair. The remaining bottleneck is exposed
+  movement/staging variance and up/gate wait/host-stage overlap, so the next
+  implementation must reduce critical-path staging rather than merely reshuffle
+  cache residency.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
