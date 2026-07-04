@@ -1,0 +1,113 @@
+{
+  "artifact": "lightning-indexer-repeat-candidate",
+  "recorded_at_utc": "2026-07-04T14:21:00Z",
+  "source_head_before_docs_commit": "53ab321589db3a3c3b1e6d2faa07128db50eb8b8",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "source_patch": "none; existing default-off environment flag only",
+  "candidate": {
+    "name": "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1",
+    "class": "no-source fused attention indexer probe",
+    "status": "candidate_pending_pushed_state_reproduction",
+    "not_10_tok_s_primary_path": true,
+    "reason_not_primary": "Does not remove the 19029.457 ms decode up/down CPU fallback bottleneck."
+  },
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "previous_lightning_probe": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T134008Z-20260704_lightning_indexer_probe/france-lightning-indexer-cpu40-vram0gb",
+    "eval_tok_s": 4.5,
+    "ttft_ms": 33788.731578,
+    "verdict": "rejected_not_accepted_sota_due_ttft_gate"
+  },
+  "run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260704T135703Z-20260704_lightning_indexer_repeat",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T135703Z-20260704_lightning_indexer_repeat/france-lightning-indexer-repeat-cpu40-vram0gb",
+    "strict_cold": true,
+    "drop_caches_before_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb_arg": 0,
+    "extra_env": {
+      "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER": "1",
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct"
+    },
+    "cli_tail": "-c 256 -b 16 -ub 16 -t 20 -tb 20"
+  },
+  "metrics": {
+    "eval_tok_s": 4.5,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 33285.240047,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_margin_ms": 332.448697,
+    "elapsed_seconds": 64.19,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15093157888,
+    "memory_max_events": 17306,
+    "pgmajfault": 270990,
+    "workingset_refault_file": 1607582,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "counters": {
+    "vram_cache": {
+      "hits": 33265,
+      "misses": 1886,
+      "hit_rate_percent": 94.6
+    },
+    "expert_pack": {
+      "hits": 4886,
+      "misses": 0,
+      "reads": 4886,
+      "bytes": 21774204928,
+      "failures": 0,
+      "direct_enabled": true,
+      "direct_reads": 4886,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "prefill": {
+      "loaded": 3313,
+      "limit": 3000,
+      "attempted": 3000,
+      "inserted": 3000,
+      "bytes": 13369344000,
+      "elapsed_ms": 4935.206,
+      "pack_misses": 0,
+      "read_failures": 0
+    }
+  },
+  "hashes_sha256": {
+    "summary_json": "6214c32afd7e0dafcaa142aaac6a4f9bedccf281ed6d7f07d915f0d9469ab269",
+    "stdout_txt": "6caa64b64339cfed28e081aa1871d2b030bf8a271bab675be4f18d49ed904d18",
+    "stderr_txt": "cab8342a98191b90af5c755659accbf31a992de0c7da2d94b48c771d77c56f0a",
+    "combined_txt": "d4fa2ae1c621e868b07c1bcdbb5c476657d946b8607f4b6c78372f912935c3e5",
+    "environment_txt": "e5a75511ef0f255315f9ac6d9379102b146e673341f160b761e09e7793756fab",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "resource_samples_tsv": "864f0daca72c99081c8849be91091921c68b2bfa1319d1f35c815b40d0b80974",
+    "memory_stat": "cf6aa8d04a805b78fd2fa076b7b7dc48b9c46fa69f8ecfdb177fd4ef99568f69"
+  },
+  "decision": {
+    "promote_now": false,
+    "reason": "This run passes candidate gates but must be reproduced from pushed state before promotion.",
+    "required_next_step": "Commit and push this candidate record, then run one strict cold pushed-state reproduction with the same config."
+  }
+}

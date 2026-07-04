@@ -9207,3 +9207,48 @@ Decision:
 Artifact:
 
 - `.Agent/runs/20260704-vendor-ds4-coldstart/external-draft-mtp-audit.json`
+
+## 2026-07-04T14:16:00Z Lightning Indexer Same-Config Repeat Check
+
+Purpose:
+
+- The first `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` strict cold run reached `4.5 tok/s` but missed the TTFT promotion gate by only `171.042834 ms`.
+- This section allows exactly one same-config repeat to determine whether the TTFT failure was cold prefill variance or a repeatable regression.
+- This is not a parameter sweep:
+  - do not change prefill limit;
+  - do not change gate cache size;
+  - do not change CLI batch/context/thread settings;
+  - do not change runtime source.
+
+Validation command:
+
+- Same accepted SOTA config as before plus `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`.
+- Strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`.
+
+Acceptance/rejection:
+
+- If this repeat has `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `ram_ok=true`, and France correctness passes, record it as a candidate and immediately push records, then run one pushed-state reproduction before promoting as accepted SOTA.
+- If it ties/regresses, fails correctness/RAM, or TTFT remains above the gate, close lightning indexer as not accepted for now and keep only rejected records.
+
+Result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-repeat-candidate.json`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T135703Z-20260704_lightning_indexer_repeat/france-lightning-indexer-repeat-cpu40-vram0gb`
+- Source patch: none; existing `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` env flag only.
+- Metrics:
+  - `eval_tok_s=4.5`
+  - `prompt_tok_s=1.8`
+  - `TTFT=33285.240047 ms`, inside promotion gate
+  - `elapsed_seconds=64.19`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15093157888`
+  - `ram_ok=true`
+  - `correctness_ok=true`, France output is semantic/coherent/complete
+  - gate cache counters unchanged: `hits=33265`, `misses=1886`, `hit_rate=94.6%`
+  - prefill: `attempted=3000`, `inserted=3000`, `bytes=13369344000`, `elapsed_ms=4935.206`
+
+Decision:
+
+- This is a candidate only, not yet promoted.
+- Immediately commit/push the plan and candidate artifact, then run one strict cold pushed-state reproduction with the same config.
+- Promote `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` to accepted SOTA only if the pushed-state reproduction also has `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict 16GB RAM/page-cache pass, and France correctness pass.
