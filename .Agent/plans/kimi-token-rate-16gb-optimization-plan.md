@@ -52650,3 +52650,40 @@ Decision rule:
 - If n96 sort-off improves token rate under all gates, update the reproduction
   script default, commit, push, and record exact commands and metrics.
 - If n32 or n96 regresses, reject sort-off and keep `GGML_MOE_IO_SORT_OFFSET=1`.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-151436Z-n32-phase7hg-sort-off`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76437.72 ms`;
+  - decode `29748.58 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Aggregate profile:
+  - overall io_uring wait `15515.126 ms`, wait calls `12040`, inflight avg
+    `3.11`;
+  - `runtime_load`: calls `3142`, wait `12762.628 ms`, wall
+    `13117.554 ms`, weighted inflight avg `3.061`;
+  - `current_down_overlap`: calls `860`, wait `2758.458 ms`, wall
+    `2823.505 ms`, weighted inflight avg `3.275`;
+  - sort flag in CSV: `0` for all rows.
+- Comparison to Phase 7HE v2 sort-on n32:
+  - 7HE v2 decode `29258.34 ms`;
+  - 7HG sort-off decode `29748.58 ms`, worse by `490.24 ms`;
+  - io wait is nearly unchanged and within run noise.
+- Decision:
+  - Reject sort-off.
+  - Keep `GGML_MOE_IO_SORT_OFFSET=1` in the production reproduction script.
+  - Do not run n96 because n32 already regressed decode without a clear IO wait
+    improvement.
+  - Continue with Phase 7HF, but implementation must preserve up-first compute
+    overlap; a naive combined-stage return-after-all design remains rejected.
