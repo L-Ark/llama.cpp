@@ -6921,6 +6921,118 @@ Decision:
   - or a per-layer/per-phase Q4_0 hotset that produces high hit rate with much
     less than 512 MiB.
 
+## Phase 7EI: current SOTA copy-profile bottleneck refresh
+
+Start time:
+
+- 2026-07-04T08:23:00+08:00.
+
+Current bottleneck:
+
+- Phase 7EG and 7EH show Q4_0 GPU activation is not the next useful direction.
+- The accepted SOTA remains Phase 7EB:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Existing SOTA counters still point to movement/staging as the largest bucket:
+  - Phase 7EB n96 expert-pack wait `27283237 us`;
+  - Phase 7EB n96 main pinned host_stage `30534.248 ms`;
+  - Phase 7EB n96 h2d `10344.570 ms`;
+  - upgate hit rate remains low enough that misses dominate.
+- The next implementation should not be chosen from broad guesses. Re-profile
+  current SOTA with per-copy attribution to determine whether the next source
+  patch should target:
+  - upgate copy grouping/staging;
+  - down copy grouping/staging;
+  - route order / prefetch timing;
+  - type-specific compute only if copy time is no longer dominant.
+
+Diagnostic hypothesis:
+
+- Enable only `GGML_MOE_COPY_PROFILE_OUT` on top of the current SOTA profiling
+  script.
+- This will add overhead, so the run is diagnostic-only and cannot be promoted.
+- The useful output is not absolute token rate; it is the per-copy attribution:
+  - `op`;
+  - `tensor`;
+  - `bytes`;
+  - `pack_hit`;
+  - `iouring`;
+  - `slot_wait_ms`;
+  - `host_ms`;
+  - `io_wait_ms`;
+  - `enqueue_ms`;
+  - `wall_ms`.
+
+Theory and expected bound:
+
+- If most wall time is concentrated in a small set of `runtime_load` tensors or
+  byte sizes, the next optimization can target that path with an upper bound
+  equal to the measured copy-profile wall/host/io time for those rows.
+- If copy-profile wall is spread across many upgate misses with no small hotset,
+  the next optimization should be scheduling/prefetch-oriented rather than
+  adding more cache or a type-specific kernel.
+- Because copy-profile itself adds file appends and locking, do not compare its
+  decode time directly to SOTA except for hard-gate sanity.
+
+Implementation:
+
+- Env-only diagnostic; no source patch.
+- Use current SOTA source after Phase 7EH revert.
+- Start from `/tmp/run_phase7eb_repro.sh`.
+- Append:
+
+```sh
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard f43204169
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ei_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7ei_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv\nEOF\n|' /tmp/run_phase7ei_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ei-copy-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ei_repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- TTFT `<=106331.72 ms`;
+- quality pass on the France prompt;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- `copy-profile.csv` exists and has rows.
+
+Analysis required after run:
+
+- Aggregate `copy-profile.csv` by:
+  - `op`;
+  - `op,tensor`;
+  - `op,bytes`;
+  - `op,pack_hit,iouring`;
+  - top tensors by `wall_ms`, `host_ms`, and `io_wait_ms`.
+- Compare with `up-gate-profile.csv`, `down-batch-profile.csv`, and route
+  hit/miss counters.
+- Write an explicit recommendation for Phase 7EJ:
+  - source-level target;
+  - expected upper bound in ms and tok/s;
+  - rollback criteria.
+
+Decision:
+
+- This phase cannot be promoted as SOTA.
+- Keep Phase 7EB as current SOTA unless a later implementation passes all
+  promotion gates.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
