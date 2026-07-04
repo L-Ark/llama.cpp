@@ -45361,3 +45361,80 @@ Decision rule:
 - Accept only if n96 beats Phase 7FB best `70087.31 ms / 77`.
 - If n32 does not beat `29182.49 ms`, revert the source patch, record the
   result here, commit and push the rejection.
+
+Result: rejected.
+
+- End time: 2026-07-04T15:05:00+08:00.
+- Important build note:
+  - the remote `build-cuda-batch` directory had to be recreated after it was
+    accidentally removed during source sync;
+  - the valid rebuild command was:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+rm -rf build-cuda-batch
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=89
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-070059Z-n32-phase7fm-iq3-parallel-min-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-070059Z-n32-phase7fm-iq3-parallel-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_IQ3_PARALLEL_UP_GATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Metrics:
+
+- quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `114502.55 ms`, which violates the allowed `106331.72 ms`;
+- decode `35316.47 ms / 31`, `0.88 tok/s`;
+- memory peak `15899996160`, swap max `0`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- expert pack io_uring:
+  - reads `15024`;
+  - bytes `87082139648`;
+  - wait `16811111 us`;
+  - batches `4002`;
+  - inflight max `8`;
+- cache:
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+
+Validity checks:
+
+- `stderr.txt` confirms:
+  - `IQ3_XXS parallel up/gate streams active`;
+  - expert pack paths loaded;
+  - MoE stream batch compiled and active.
+- `MIN_PROFILE=1` intentionally omitted per-call profile CSV files, so this is
+  a production-style timing run rather than an operator attribution run.
+
+Decision:
+
+- Reject.
+- Reasons:
+  - TTFT gate failed: `114502.55 ms > 106331.72 ms`;
+  - decode `35316.47 ms` is much slower than accepted Phase 7FB n32
+    confirmations (`28673.82 ms`, `29182.49 ms`);
+  - no n96 run is allowed after the n32 gate failure.
+- Action:
+  - revert `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - rebuild production source after revert;
+  - keep Phase 7FB as current accepted SOTA;
+  - next practice must first record a new bottleneck-driven phase.
