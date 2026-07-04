@@ -1,0 +1,29 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: hot CPU fallback lower-bound and microkernel feasibility audit",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "basis": {
+    "joint_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/async-source-plus-cpu-batch-hard-bound.json",
+    "hot_compute_after_touch_ms": 3173.291,
+    "minimum_hot_compute_saving_needed_ms": 1530.404,
+    "required_saving_fraction_at_zero_overhead": 0.482,
+    "required_saving_fraction_with_1000ms_overhead": 0.797
+  },
+  "audit_steps_before_code": [
+    "Use existing touch-split fallback profile to compute decode hot bytes: 148.916 GiB for 35880 expert calls.",
+    "Estimate hot compute lower bounds under plausible CPU memory bandwidth values and compare to the 1530-2530 ms required saving band.",
+    "Inspect existing chunk trace to estimate per-call fixed overhead versus row-dot work, and decide whether batching experts could remove enough overhead without changing arithmetic order.",
+    "Reject runtime implementation unless the lower-bound shows at least 1.53s saving with realistic overhead and a path to fixed-text top1 equality."
+  ],
+  "runtime_rules_if_bound_positive": {
+    "default_off": true,
+    "correctness_gate": "fixed-text llama-results top1 equality before any strict cold benchmark",
+    "memory_gate": "MemoryMax=16000000000 and MemorySwapMax=0, including page cache",
+    "promotion_gate": "eval_tok_s > 4.4, TTFT <= 33617.688744 ms, correctness ok, commit/push/reproduce"
+  },
+  "not_a_runtime_change": true
+}

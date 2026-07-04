@@ -1,0 +1,137 @@
+{
+  "date": "2026-07-05",
+  "title": "Hard bound: joint async source/page overlap plus exact CPU fallback batching",
+  "result": "no_runtime_code_yet_too_tight",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "decode_window_ms": 31047.44671,
+    "decode_tokens_for_rate_model": 136.608765524
+  },
+  "inputs": {
+    "cpu_microkernel_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu-fallback-microkernel-hard-bound.json",
+    "predictive_source_overlap_bound": ".Agent/runs/20260704-vendor-ds4-coldstart/predictive-source-overlap-hard-bound.json",
+    "parallel_touch_result": ".Agent/runs/20260704-vendor-ds4-coldstart/parallel-touch-decode-profile-result.json",
+    "touch_split_artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu-fallback-touch-split-diagnostic.json",
+    "current_sota_fallback_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/fallback_profile.csv",
+    "accepted_one_trace": "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/one_trace.csv"
+  },
+  "measured_components": {
+    "accepted_decode_window_ms": 31047.44671,
+    "decode_updown_fallback_ms": 19029.457,
+    "non_updown_fallback_decode_window_ms": 12017.99,
+    "source_page_exposed_saving_ms": 15856.166,
+    "hot_cpu_fallback_after_touch_ms": 3173.291,
+    "hot_up_after_touch_ms": 1589.467,
+    "hot_down_after_touch_ms": 1583.824,
+    "accepted_gate_one_stream_total_ms_profile_run": 8236.5,
+    "accepted_gate_one_stream_src0_ms_profile_run": 6883.619,
+    "accepted_gate_one_stream_hits_profile_run": 33265,
+    "accepted_gate_one_stream_misses_profile_run": 1886,
+    "parallel_touch_decode_result_eval_tok_s": 3,
+    "parallel_touch_ttft_ms": 32157.262724,
+    "parallel_touch_decode_fallback_after_touch_ms": 3690.044,
+    "parallel_touch_wall_regression_vs_accepted_s": 13.38
+  },
+  "perfect_source_overlap_scenarios": [
+    {
+      "hot_compute_saved_pct": 0,
+      "hot_compute_saved_ms": 0,
+      "decode_after_ms": 15191.281,
+      "zero_overhead_tok_s": 8.993,
+      "slack_to_10_tok_s_ms": -1530.404
+    },
+    {
+      "hot_compute_saved_pct": 25,
+      "hot_compute_saved_ms": 793.323,
+      "decode_after_ms": 14397.958,
+      "zero_overhead_tok_s": 9.488,
+      "slack_to_10_tok_s_ms": -737.081
+    },
+    {
+      "hot_compute_saved_pct": 50,
+      "hot_compute_saved_ms": 1586.646,
+      "decode_after_ms": 13604.635,
+      "zero_overhead_tok_s": 10.041,
+      "slack_to_10_tok_s_ms": 56.241
+    },
+    {
+      "hot_compute_saved_pct": 75,
+      "hot_compute_saved_ms": 2379.968,
+      "decode_after_ms": 12811.312,
+      "zero_overhead_tok_s": 10.663,
+      "slack_to_10_tok_s_ms": 849.564
+    },
+    {
+      "hot_compute_saved_pct": 100,
+      "hot_compute_saved_ms": 3173.291,
+      "decode_after_ms": 12017.99,
+      "zero_overhead_tok_s": 11.367,
+      "slack_to_10_tok_s_ms": 1642.887
+    }
+  ],
+  "source_overlap_sensitivity": [
+    {
+      "source_overlap_pct": 80,
+      "source_save_ms": 12684.933,
+      "required_hot_save_ms_for_10": 4701.637,
+      "required_hot_save_fraction": 1.482,
+      "decision": "impossible_even_if_all_hot_compute_removed"
+    },
+    {
+      "source_overlap_pct": 90,
+      "source_save_ms": 14270.549,
+      "required_hot_save_ms_for_10": 3116.021,
+      "required_hot_save_fraction": 0.982,
+      "decision": "requires_almost_all_hot_compute_removed_at_zero_overhead"
+    },
+    {
+      "source_overlap_pct": 100,
+      "source_save_ms": 15856.166,
+      "required_hot_save_ms_for_10": 1530.404,
+      "required_hot_save_fraction": 0.482,
+      "decision": "mathematically_positive_but_tight"
+    }
+  ],
+  "overhead_sensitivity_at_perfect_source_overlap": [
+    {
+      "implementation_overhead_ms": 0,
+      "required_hot_save_ms_for_10": 1530.404,
+      "required_hot_save_fraction": 0.482
+    },
+    {
+      "implementation_overhead_ms": 500,
+      "required_hot_save_ms_for_10": 2030.404,
+      "required_hot_save_fraction": 0.64
+    },
+    {
+      "implementation_overhead_ms": 1000,
+      "required_hot_save_ms_for_10": 2530.404,
+      "required_hot_save_fraction": 0.797
+    },
+    {
+      "implementation_overhead_ms": 1500,
+      "required_hot_save_ms_for_10": 3030.404,
+      "required_hot_save_fraction": 0.955
+    },
+    {
+      "implementation_overhead_ms": 2000,
+      "required_hot_save_ms_for_10": 3530.404,
+      "required_hot_save_fraction": 1.113
+    }
+  ],
+  "dependency_and_memory_constraints": {
+    "exact_route_known_overlap": "Routes for a layer are available only at that layer's MoE section. Exact same-op page preparation has already been tested as parallel touch and regressed to 3.0 tok/s despite preserving correctness and TTFT.",
+    "predictive_route_overlap": "Using a prior France route schedule could prefetch before routes are known and does not change logits if predictions are wrong, but it is prompt/run-specific and must be bounded against 16GB page-cache churn.",
+    "page_cache": "Accepted SOTA already uses about 15.10GB file cache inside the 16GB cgroup. Any async source queue must be tightly bounded and still account for file cache, refaults, and gate pack behavior.",
+    "ttft": "Accepted TTFT is 32892.55329 ms with only about 725 ms acceptance slack. Prompt-phase source prefetch cannot be allowed to move cold work into TTFT unless explicitly recorded as rejected."
+  },
+  "decision": {
+    "same_op_exact_async_source_plus_cpu_batch": "rejected",
+    "predictive_source_plus_cpu_batch": "not_implemented_without_hot_compute_lower_bound",
+    "reason": "The only mathematically positive 10 tok/s case requires near-perfect source overlap and at least about 50% hot compute reduction with almost no overhead. Existing exact same-op touch regressed badly, and no current evidence proves the required hot compute reduction.",
+    "next_step": "Before runtime code, write and execute a hot CPU fallback lower-bound/microkernel feasibility audit: estimate the minimum possible hot fallback time from bytes, memory bandwidth, thread scheduling, and existing chunk traces. If it cannot save at least 1.53-2.53s, reject the joint path."
+  }
+}
