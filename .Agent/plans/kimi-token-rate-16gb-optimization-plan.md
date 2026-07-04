@@ -51886,3 +51886,73 @@ Next direction:
   - increase useful overlap around up/gate compute and down movement;
   - avoid cache-policy changes that only increase hit rate by changing output
     semantics.
+
+## Phase 7HB: current-head production baseline after mmap fix
+
+Start time: 2026-07-04T22:09:18+08:00.
+
+Goal:
+
+- Re-establish the current production baseline after the source-specific
+  expert-pack mmap correctness fix.
+- Run without diagnostic trace and without the rejected combined overlay.
+- Use the accepted production overlay:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Locate the current bottleneck using the actual current head before designing
+  the next optimization.
+
+Why this is required:
+
+- Phase 7HA changed source code in `moe_stream_batch.cu`.
+- The change should not affect the accepted single-overlay production path, but
+  this must be verified under the strict 16GB cold-start gate.
+- Recent experiments with trace/combined overlay are not valid production
+  baselines:
+  - trace changes logging and lookup path;
+  - combined overlay is rejected for token rate;
+  - n96 combined overlay decode `72180.32 ms / 77` is not a SOTA candidate.
+
+Experiment: n96 current-head production baseline
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hb-current-prod-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Bottleneck fields to record:
+
+- decode ms/runs/token rate;
+- TTFT;
+- output;
+- memory peak/final/file/active_file/inactive_file;
+- expert pack hits/misses/read count/bytes/wait/submit;
+- pinned staging copies/waits and iouring wait calls;
+- current-down worker time;
+- down/upgate slots and hit rates;
+- CPU fallback pack mmap hits/misses if present.
+
+Decision rule:
+
+- If current-head baseline beats `70087.31 ms / 77` with all gates passing,
+  accept as SOTA and push the result immediately.
+- If it passes gates but does not beat SOTA, use it as the bottleneck baseline
+  for the next optimization phase.
+- If it fails quality/RAM/TTFT/fallback gates, revert the source-specific mmap
+  patch and return to the last accepted source state.
