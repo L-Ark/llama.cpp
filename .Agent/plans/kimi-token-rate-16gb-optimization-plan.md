@@ -47070,6 +47070,64 @@ Decision rule:
 - If n32 reduces direct reads / non-iouring pack-hit count and improves decode,
   run a no-copy-profile n32 confirmation.
 - Only run n96 if no-profile n32 improves materially under all gates.
+
+Result A: n32 copy-profile probe completed; proceed to no-profile n32.
+
+- End time: 2026-07-04T17:39:08+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-093701Z-n32-phase7gb-split-mixed-pack`.
+- Code head:
+  `4c7a12fc1`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74241.88 ms`;
+  - decode `29285.79 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14827118592`;
+    - `kernel=234450944`;
+    - `inactive_file=8490225664`;
+    - `active_file=6336102400`;
+    - `pgmajfault=992484`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `direct_reads=8502`;
+    - `iouring_reads=15229`;
+    - `iouring_bytes=88151605248`;
+    - `iouring_wait_us=15313906`.
+- Copy-profile comparison versus Phase 7GA:
+  - direct reads decreased `8707 -> 8502`;
+  - iouring reads increased `15024 -> 15229`;
+  - runtime non-iouring pack-hit count decreased `8574 -> 8369`;
+  - runtime non-iouring pack-hit wall decreased `10784.871 -> 10017.277`;
+  - decode improved `30231.64 -> 29285.79`.
+- Decision:
+  - The split mixed-batch routing is directionally correct and passes gates.
+  - Because copy-profile has diagnostic overhead, run a no-copy-profile n32
+    confirmation before considering n96.
+
+Experiment B: no-copy-profile n32 confirmation
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gb-split-mixed-pack-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If no-profile n32 is not materially faster than the current rebuilt baseline
+  range (`29140-29795 ms`), reject for SOTA and do not run n96.
+- If no-profile n32 improves materially and gates pass, run n96.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
