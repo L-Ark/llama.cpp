@@ -41703,3 +41703,110 @@ Decision:
 - Keep Phase 7EB as accepted SOTA.
 - Next implementation should target isolated resources, not another shared
   same-type overlap variant.
+
+## Phase 7ES: isolate current-down overlap pinned staging ring
+
+Start time:
+
+- 2026-07-04T03:05:00Z.
+
+Current bottleneck:
+
+- Phase 7ER shows the remaining exposed movement/staging buckets:
+  - expert-pack `iouring_wait_us=15.316 s`;
+  - main pinned `host_stage=11.671 s`;
+  - total H2D about `5.06 s`;
+  - current-down overlap worker `3.398 s`;
+  - top down staged tensors `blk.4/60` total about `0.91 s`;
+  - decode Q4_0 fallback `2.416 s`, but broad Q4 GPU/down-cache attempts were
+    previously rejected.
+- Phase 7EP showed that shared-resource same-type current-down overlap reduces
+  local down movement but shifts cost into up/gate. The root issue is likely
+  shared staging/cache resource contention, not the idea of overlap itself.
+
+Hypothesis:
+
+- Keep current SOTA scheduling, but add a default-off option:
+
+```text
+GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1
+```
+
+- When enabled, current-down overlap copies use `stage_ring_up_aux` instead of
+  the main `stage_ring`.
+- This gives current-down overlap a separate pinned-slot ring and separate
+  io_uring queue while keeping the same CUDA prefetch stream and same VRAM
+  cache slot ownership.
+- It should reduce contention with normal up/down runtime loads without
+  changing numerical kernels or routing.
+
+Theoretical upper bound:
+
+- The absolute local target is the remaining current-down staged movement:
+  `blk.4/60` about `0.91 s` on n32 plus smaller down rows.
+- The realistic ceiling is lower, about `0.2-0.8 s`, because:
+  - SSD bandwidth and CUDA copy engines remain shared;
+  - current-down overlap is already partly hidden;
+  - extra aux pinned slots add host memory pressure under the strict 16GB gate.
+- If decode improves by more than this, inspect counters carefully for a
+  measurement artifact or a cache-residency side effect before promoting.
+
+Implementation:
+
+- Source patch, default off.
+- Add helper:
+  - `current_down_overlap_aux_ring_enabled()`.
+- In `start_current_down_overlap`, choose the staging ring:
+  - default: `bc.stage_ring`;
+  - aux mode: `bc.stage_ring_up_aux`.
+- Log one activation line:
+
+```text
+[moe_stream_batch] current down overlap aux staging ring active
+```
+
+- Do not change cache policy, prefetch stream, expert-pack lookup, or numerical
+  kernels.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7es-current-down-aux-ring"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Acceptance gates:
+
+- Build succeeds.
+- Hard gates:
+  - exit `0`;
+  - memory peak below the 16GB cgroup limit, including page cache and extra
+    pinned slots;
+  - `oom=0`, `oom_kill=0`;
+  - cold start;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - stderr contains the aux-ring activation line;
+  - pinned staging report shows `up_aux` copies for current-down overlap.
+- Promotion:
+  - first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+  - second n32 confirmation must also beat `29599.64 ms / 31`;
+  - only then run n96 candidate and confirmation;
+  - both n96 runs must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- If build fails, hard gates fail, quality fails, TTFT exceeds the gate, or the
+  first n32 is slower than SOTA, revert the source patch immediately.
+- If first n32 wins but confirmation fails, revert the source patch and record
+  the first run as diagnostic only.
