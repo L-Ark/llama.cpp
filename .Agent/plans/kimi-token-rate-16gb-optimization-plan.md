@@ -47437,6 +47437,56 @@ Decision rule:
 - If missing packs concentrate in overlay gaps, inspect expert-pack coverage.
 - If most layers are healthy and misses are unavoidable, do not add current-down
   code yet; move to a different bottleneck.
+
+Result: n32 completed; profile identifies early missing tensors.
+
+- End time: 2026-07-04T18:02:29+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-100058Z-n32-phase7ge-current-down-tensor-profile`.
+- Code head:
+  `c096eaa72`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76145.60 ms`;
+  - decode `29380.20 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=462848`;
+    - `file=14842118144`;
+    - `kernel=234643456`;
+    - `inactive_file=192741376`;
+    - `active_file=14648778752`;
+    - `pgmajfault=973473`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - current-down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - worker_us `3410940`.
+- Per-tensor findings:
+  - `missing_tensor` is entirely concentrated in three early down tensors:
+    - `blk.7.ffn_down_exps.weight`: calls `31`, missing_tensor `31`;
+    - `blk.8.ffn_down_exps.weight`: calls `31`, missing_tensor `31`;
+    - `blk.9.ffn_down_exps.weight`: calls `31`, missing_tensor `31`.
+  - highest `missing_pack` is small and spread:
+    - `blk.55.ffn_down_exps.weight`: `6`;
+    - `blk.14/41/49/51/54.ffn_down_exps.weight`: `3` each.
+  - highest planned jobs:
+    - `blk.29`: `166`;
+    - `blk.28`: `164`;
+    - `blk.51`: `148`.
+- Decision:
+  - Next investigate why down tensors for layers 7-9 are not registered for
+    current-down overlap.
+  - If those tensors exist and are only skipped by registration policy, add a
+    targeted registration fix and test n32.
+  - If they are absent from expert pack or intentionally excluded, do not force
+    them into overlap.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
