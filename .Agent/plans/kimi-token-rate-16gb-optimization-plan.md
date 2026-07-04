@@ -54326,3 +54326,158 @@ Decision rule:
   before any further optimization.
 - If n32 parity passes, keep the instrumentation and proceed to the next
   optimization plan from the current n96 bottleneck profile.
+
+Result: accepted as production-path parity.
+
+- Plan commit:
+  `44b159520` (`docs: plan default-off instrumentation parity`).
+- Server source:
+  `44b159520`.
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard wici/vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - success at source head `44b159520`;
+  - only pre-existing warning classes were reported.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-171157Z-n32-phase7hr-defaultoff-parity`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-171157Z-n32-phase7hr-defaultoff-parity
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `82427.84 ms`;
+  - decode `29598.42 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15069212672`;
+  - swap max `0`;
+  - anon `462848`;
+  - file `14830223360`;
+  - kernel `234426368`;
+  - inactive file `9161482240`;
+  - active file `5668220928`;
+  - major faults `1023540`;
+  - file workingset refaults `20851`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert pack / staging counters:
+  - expert pack hits `25458`, misses `192`;
+  - `direct_reads=8707`;
+  - `direct_fallbacks=0`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_submit_us=38752`;
+  - `iouring_wait_us=15094676`;
+  - `iouring_h2d_enqueues=15024`;
+  - expert pack entries `31599`;
+  - global iouring batches `4002`, submit calls `4002`, wait calls `12130`,
+    CQEs `15024`, inflight avg `3.08`, max `8`;
+  - global batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - main pinned staging copies `19754`, waits `19718`, slots `12`,
+    slot size `7.44 MiB`;
+  - main iouring batches `2743`, jobs `10969`, submit calls `2743`,
+    wait calls `8658`, CQEs `10969`, inflight avg `3.19`, max `8`;
+  - gate pinned staging copies `4160`, waits `4136`, slots `12`;
+  - gate iouring batches `1259`, jobs `4055`, submit calls `1259`,
+    wait calls `3472`, CQEs `4055`, inflight avg `2.80`, max `8`.
+- Current-down overlap:
+  - calls `992`;
+  - planned jobs `3664`;
+  - completed jobs `3664`;
+  - cache hits `3528`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - submitted batches `896`;
+  - failed batches `0`;
+  - mark failed `0`;
+  - max jobs `8`;
+  - worker `3379120 us`;
+  - hist `1:40,2-4:525,5-8:331`.
+- VRAM cache:
+  - down slots `806`, hits `9659`, misses `3461`, preloads `3664`,
+    hit rate `73.6%`;
+  - upgate slots `1679`, hits `13019`, misses `16757`, hit rate `43.7%`.
+- Decision:
+  - Accept the default-off H2D instrumentation as production-path neutral.
+  - The run matches the normal stable n32 shape: decode is in the `29.1-29.8s`
+    region, expert hits/misses returned to `25458/192`, and the rejected
+    Phase 7HQ VDR=4 shape is gone.
+  - Keep the instrumentation default-off and continue with n96 current-head
+    parity before accepting or designing another larger optimization.
+
+## Phase 7HS: current-head n96 cold-start parity
+
+Start time: 2026-07-05T04:02:00+08:00.
+
+Goal:
+
+- Re-establish the current n96 production baseline after the accepted
+  default-off H2D instrumentation and rejected VDR=4 rollback.
+- This is not a new SOTA attempt; it is the required long-output stability
+  check before the next source optimization.
+- Preserve strict reproducibility: cold start, same runner, fixed env,
+  MemoryMax below 16 GB, MemorySwapMax `0`, and recorded output text.
+
+Bottleneck hypothesis being checked:
+
+- Phase 7HO and 7HP show H2D timing is measurable but not the dominant
+  critical-path bottleneck; summed iouring wait and call-boundary-limited
+  runtime-load batching remain the largest observed movement terms.
+- Before changing batching or compute kernels again, verify the current
+  production binary still lands in the historical n96 stable region.
+
+Experiment: n96 production parity
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hs-currenthead-parity"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode should be in the current rebuilt n96 stable region
+  around `70.2-71.6s / 77`.
+
+Decision rule:
+
+- If n96 fails any hard gate, stop and investigate before any optimization.
+- If n96 passes but does not beat SOTA, record as parity only.
+- If n96 unexpectedly beats historical Phase 7FB `70087.31 ms / 77`, run a
+  second n96 repeat before accepting any SOTA claim.
