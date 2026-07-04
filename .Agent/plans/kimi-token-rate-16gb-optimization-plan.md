@@ -6623,6 +6623,112 @@ Rollback:
   proven unchanged.
 - Only run n96 if n32 beats SOTA and all gates pass.
 
+Result:
+
+- End time: 2026-07-04T08:06:00+08:00.
+- Status: rejected; source patch reverted; no n96 confirmation run.
+- Source commits tested:
+  - `005d4073e` (`cuda: add gated q40 down cache pool`);
+  - `1ad5bae96` (`cpu: gate q40 down moe batch eligibility`).
+- Revert:
+  - both source commits are reverted in the follow-up result commit;
+  - keep Phase 7EB as current SOTA.
+
+Run 1:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-235411Z-n32-phase7eg-q40-pool256`.
+- Commit: `005d4073e`.
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `78061.36 ms`;
+  - memory peak `15899996160`;
+  - decode `30775.08 ms / 31`, `1.01 tok/s`.
+- Activation failed:
+  - no `down Q4_0 isolated cache MMVQ path active` line;
+  - no `VRAM cache q4_0_down` line;
+  - down profile contained only type `11` and type `23`.
+- Diagnosis:
+  - CUDA-side Q4_0 support was present, but CPU-side
+    `ggml_cuda_moe_stream_supports_down_batch()` still rejected Q4_0 before
+    calling the CUDA path.
+  - This run is not a valid Q4_0 performance result.
+
+Run 2:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260703-235955Z-n32-phase7eg-q40-pool256-r2`.
+- Commit: `1ad5bae96`.
+- Command deltas:
+  - `GGML_MOE_STREAM_DOWN_Q4_0=1`;
+  - `GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE=6-10,15,18`;
+  - `GGML_MOE_VRAM_CACHE_Q40_MIB=256`;
+  - `VRAM_MIB=15000`, `PINNED_SLOTS=16`, `UPGATE_PCT=60`.
+- Hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - TTFT `78685.13 ms`, within the gate;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Activation:
+  - stderr contains:
+    `down Q4_0 isolated cache MMVQ path active: range=6-10,15,18`;
+  - stderr contains:
+    `VRAM cache q4_0_down: 0.2 GiB, 32 slots (7.88 MiB each)`;
+  - normal down slot did stay isolated at `7.44 MiB`.
+- Performance:
+  - decode `40713.57 ms / 31`, `0.76 tok/s`;
+  - much slower than Phase 7EB n32 SOTA `29599.64 ms / 31`.
+- Cache and movement counters:
+  - normal down: `772` slots, `7.44 MiB`, hit rate `72.0%`;
+  - upgate: `1679` slots, `5.36 MiB`, hit rate `40.1%`;
+  - q4_0_down: `32` slots, `7.88 MiB`, hits `0`, misses `1736`,
+    hit rate `0.0%`;
+  - expert-pack iouring bytes increased to `93833478144`;
+  - expert-pack wait increased to `16856404 us`;
+  - main pinned staging slot became `7.88 MiB`;
+  - main pinned host_stage increased to `22926.878 ms`;
+  - gate pinned host_stage increased to `2702.389 ms`;
+  - down profile:
+    - type `2` Q4_0: `217` rows, `1736` staged jobs, wall `2695.432 ms`,
+      stage `2661.747 ms`, kernel `18.368 ms`;
+    - total down rows `1861`, wall `8898.464 ms`, stage `8525.235 ms`,
+      kernel `212.491 ms`, jobs `5436`;
+  - upgate profile regressed to wall `8954.359 ms`, kernel `8851.517 ms`.
+
+Gap analysis:
+
+- The third VRAM cache pool did prevent normal down slot-size pollution, but
+  the Q4_0 pool was far too small for the access pattern:
+  - `32` slots;
+  - `1736` Q4_0 misses;
+  - `0` Q4_0 hits.
+- The implementation still shared the main/gate pinned staging rings. Once Q4_0
+  activated, those rings resized from `7.44 MiB` to `7.88 MiB`, increasing
+  staging cost even though the normal down cache stayed isolated.
+- Q4_0 GPU compute itself was cheap (`18.368 ms` kernel for the type-2 rows),
+  but movement dominated (`2661.747 ms` type-2 stage, plus higher global
+  host_stage and iouring wait).
+- The measured result is worse than the upper-bound expectation because this
+  patch removed CPU fallback by replacing it with a high-miss SSD/H2D path,
+  without giving Q4_0 enough cache residency or a separate staging ring.
+
+Decision:
+
+- Reject Phase 7EG.
+- Revert both source commits.
+- Do not run n96.
+- Keep Phase 7EB as current SOTA:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Future Q4_0 work must not just add a third VRAM pool. It would need either:
+  - enough Q4_0 residency to create actual hits;
+  - a separate Q4_0 staging ring so Q4_0 does not resize the normal rings;
+  - or a route/layer subset where expected reuse is proven before activation.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
