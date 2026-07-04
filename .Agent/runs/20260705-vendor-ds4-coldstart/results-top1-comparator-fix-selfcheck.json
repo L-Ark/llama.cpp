@@ -1,0 +1,62 @@
+{
+  "timestamp_utc": "2026-07-04T17:14:36Z",
+  "status": "fixed_and_selfcheck_passed",
+  "purpose": "Repair and validate llama-results comparator mode before any Q8_0 logit-changing candidate is benchmarked.",
+  "source_head_before_fix": "e6c1aae187ad9ae7a4aee8c391a0f0ca5a38a79f",
+  "bug": {
+    "symptom": "llama-results with --output result.gguf and --top1-report segfaulted with status 139 before writing result.gguf.",
+    "failed_run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T171004Z-results-top1-current-selfcheck/selfcheck",
+    "failed_baseline_status": 139,
+    "failed_check_status": 139,
+    "oom": 0,
+    "oom_kill": 0,
+    "root_cause": "The GGUF output writer re-read logits from llama_get_logits_ith(lctx, i) after get_logits() had already materialized logits_calc. In sequential-logits mode the context did not expose every historical position, so writing all positions could dereference invalid logits pointers."
+  },
+  "fix": {
+    "file": "tools/results/results.cpp",
+    "summary": "Write the result.gguf logits tensor from the already materialized logits_calc vector instead of re-reading llama_get_logits_ith() after decode.",
+    "runtime_model_path_changed": false,
+    "llama_cli_path_changed": false
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results -j 8",
+    "status": "passed"
+  },
+  "selfcheck": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T171436Z-results-top1-current-selfcheck-fixed/selfcheck",
+    "baseline_status": 0,
+    "check_status": 0,
+    "memory_peak_bytes": 12487258112,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "result_gguf_bytes": 75497472,
+    "top1_check": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 145,
+      "same_top1_ratio": 1.0,
+      "first_mismatch_pos": -1,
+      "max_abs": 0.0,
+      "mean_abs": 0.0,
+      "mismatches_preview_len": 0
+    },
+    "stdout_ok": true,
+    "systemd_result": "success",
+    "service_runtime_seconds": 57.885,
+    "cpu_time": "11min 13.164s"
+  },
+  "hashes": {
+    "run_case_sha256": "380c1e4bb3efba89ebe69dd8d18e88380c1e6e52e4e54d8f5e288401d0b046b3",
+    "environment_sha256": "5dbde0608dfe09279e2ea5ea28dea2128f77580b5fcc2a12cfc22a6992719a06",
+    "baseline_command_sha256": "525255406d8dd68df8d2b3bd3696e28290c950f0bbe5b5f6dd87cf33595b0e04",
+    "check_command_sha256": "3e6e32b2e16cd418a25752dae59841cd8a4f3a795510b4ae6df9d199da5733cc",
+    "top1_baseline_sha256": "86dec7104bb0b16c32f5a6e2f30668375a61c34e928397cd9b65f2db852ccff5",
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "result_gguf_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14",
+    "combined_stderr_sha256": "876914145c0483bab5e7f63675f56b98ea1bd12b0726dd70ea0bdb32cf92e3a5"
+  },
+  "decision": "Keep the verifier fix. Future Q8_0/direct-pool compute candidates must use this comparator mode and pass same_top1 == n_tokens before any long France benchmark or SOTA promotion."
+}

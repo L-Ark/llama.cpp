@@ -494,12 +494,7 @@ int main(int argc, char ** argv) {
         ggml_tensor * t_logits = ggml_new_tensor_2d(ggml_ctx_calc.get(), GGML_TYPE_F32, tokens_calc.size(), n_vocab);
         ggml_set_name(t_logits, "logits");
         float * logits_data = ggml_get_data_f32(t_logits);
-        for (uint32_t i = 0; i < tokens_calc.size(); i++) {
-            const float * logits_ith = llama_get_logits_ith(lctx, i);
-            for (uint32_t j = 0; j < n_vocab; j++) {
-                logits_data[i*n_vocab + j] = logits_ith[j];
-            }
-        }
+        std::copy(logits_calc.begin(), logits_calc.end(), logits_data);
         gguf_add_tensor(gguf_ctx.get(), t_logits);
     }
     LOG_INF("%s: writing results to %s...\n", __func__, params.out_file.c_str());

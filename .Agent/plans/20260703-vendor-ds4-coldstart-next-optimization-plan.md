@@ -9860,3 +9860,78 @@ Decision:
 - Next plan must either:
   - make direct prefill overlapped/async/hidden enough to recover about `1.0s` TTFT, or
   - proceed to exact MXFP4 x Q8_0 op/top1 scaffolding while treating synchronous prefill as TTFT-rejected until overlap exists.
+
+### 2026-07-05 Exact Q8_0 Correctness Scaffold Plan
+
+Purpose:
+
+- Move from source/pool infrastructure to correctness-first exact MXFP4 x Q8_0 validation.
+- The previous Q8_0 up-only token verifier failed (`same_top1=136/145`, first mismatch at position `4`), even though an op-level compare showed small per-op deltas. Therefore the next work must tighten the correctness gate before any performance path is wired.
+
+Existing evidence to respect:
+
+- `llama-results` top1 verifier exists and passed self-check: `.Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-verifier-implementation.json`.
+- Prior Q8_0 up-only top1 candidate failed: `.Agent/runs/20260704-vendor-ds4-coldstart/q80-up-top1-probe-result.json`.
+- Prior op compare was not enough to promote correctness: `.Agent/runs/20260704-vendor-ds4-coldstart/q80-up-compare-probe-result.json`.
+- CPU reference semantics remain MXFP4 x Q8_0 via `ggml_vec_dot_mxfp4_q8_0` and Q8_0 activation.
+
+Implementation boundary for this step:
+
+1. Do not connect the direct hot pool to runtime compute in `llama-cli`.
+2. Do not run a long France performance benchmark.
+3. Inspect current source and prior diffs to identify why the earlier Q8_0 up-only top1 verifier failed.
+4. Build or refresh the diagnostic correctness tooling only:
+   - `llama-results` top1 verifier build/self-check, or
+   - a minimal op/top1 scaffold that is default-off and diagnostic-only.
+5. Any future logit-changing path must pass `same_top1 == n_positions` before it can be benchmarked.
+
+This step can be accepted as progress only if it produces one of:
+
+- a reproducible verifier/self-check record from current pushed source, or
+- a precise reject/replan artifact explaining why the current Q8_0 path cannot yet satisfy top1 and what source change is required next.
+
+SOTA status:
+
+- Current accepted SOTA remains `4.4 tok/s`.
+- No result in this section can promote SOTA because it is diagnostic/correctness infrastructure only.
+
+### 2026-07-05 Exact Q8_0 Correctness Scaffold Result
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/results-top1-comparator-fix-selfcheck.json`
+
+Finding:
+
+- The existing `llama-results` single-run top1 report worked, but comparator mode with `--output result.gguf --check --top1-fail-on-mismatch` was not actually usable in the current sequential-logits path.
+- Failed run: `/root/lfz/runs/vendor-ds4-16gb/20260704T171004Z-results-top1-current-selfcheck/selfcheck`
+- Failure: baseline and check both exited `139` after writing the single top1 report, before writing/reading `result.gguf`.
+- This was not an OOM kill: `oom=0`, `oom_kill=0`.
+
+Root cause:
+
+- `tools/results/results.cpp` materialized logits in `logits_calc`, but when writing `result.gguf` it called `llama_get_logits_ith(lctx, i)` again for every historical token position.
+- In `--sequential-logits` mode those historical logits are not all valid in the context after the loop, so output writing could dereference invalid pointers and segfault.
+
+Fix:
+
+- Write the GGUF logits tensor directly from the already materialized `logits_calc` vector.
+- This does not touch `llama-cli` or model runtime behavior.
+
+Validation:
+
+- Build command: `cmake --build build-ds4-moe-stream --target llama-results -j 8`
+- Build result: passed.
+- Passing selfcheck run: `/root/lfz/runs/vendor-ds4-16gb/20260704T171436Z-results-top1-current-selfcheck-fixed/selfcheck`
+- Baseline status: `0`
+- Check status: `0`
+- Host cgroup memory peak: `12487258112`
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+- `result.gguf` size: `75497472 bytes`
+- Comparator report: `n_tokens=145`, `n_vocab=129280`, `same_top1=145`, `first_mismatch_pos=-1`, `max_abs=0`, `mean_abs=0`
+
+Decision:
+
+- Keep this verifier fix. It is required before any future exact Q8_0/direct-pool compute candidate can be safely tested.
+- Future logit-changing candidates must produce a baseline `result.gguf`, run `--check --top1-report --top1-fail-on-mismatch`, and pass `same_top1 == n_tokens` before any long France benchmark or SOTA promotion.
+- Current accepted SOTA remains `4.4 tok/s`.
