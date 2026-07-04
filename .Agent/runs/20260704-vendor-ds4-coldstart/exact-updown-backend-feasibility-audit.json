@@ -1,0 +1,179 @@
+{
+  "artifact": "exact-updown-backend-feasibility-audit",
+  "created_utc": "2026-07-04T14:22:11Z",
+  "source_head_before_audit": "9b2e748bd5a1f3ba6746a58578fe1eecdcda8ac7",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "planning_audit_no_runtime_source_change",
+  "purpose": "Check whether any currently built or existing backend path can directly support exact near-full decode up/down CPU fallback removal for the vendor DeepSeek4 16GB cold-start SOTA path.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_acceptance_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "hard_bound_inputs": {
+    "accepted_decode_window_ms_estimate": 31047.44671,
+    "accepted_decoded_tokens_estimate": 136.608766,
+    "decode_updown_cpu_fallback_ms": 19029.457,
+    "target_decode_window_for_10_tok_s_ms": 13660.8765524,
+    "required_decode_saving_for_10_tok_s_ms": 17386.570158,
+    "full_decode_updown_removal_theoretical_tok_s_no_overhead": 11.367023,
+    "overhead_budget_after_full_decode_updown_removal_ms": 1642.886842,
+    "best_current_nonduplicate_hotset_bound_tok_s": 5.612,
+    "estimated_on_demand_updown_source_bandwidth_required_gib_s": 90.6,
+    "primary_artifacts": [
+      ".Agent/runs/20260704-vendor-ds4-coldstart/fresh-sota44-bottleneck-hard-bound.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json"
+    ]
+  },
+  "build_backend_evidence": {
+    "cmake_cache": {
+      "CMAKE_BUILD_TYPE": "Release",
+      "GGML_CPU": "ON",
+      "GGML_CUDA": "ON",
+      "GGML_CUDA_MOE_STREAM": "ON",
+      "GGML_CUDA_MOE_STREAM_BATCH": "OFF",
+      "GGML_OPENCL": "OFF",
+      "GGML_VULKAN": "OFF",
+      "GGML_SYCL": "OFF",
+      "GGML_CUDA_GRAPHS": "ON",
+      "GGML_CUDA_LIBURING": "/usr/lib/x86_64-linux-gnu/liburing.so",
+      "GGML_CUDA_COMPRESSION_MODE": "size"
+    },
+    "built_runtime_libraries": [
+      "build-ds4-moe-stream/bin/libggml-base.so.0.10.0",
+      "build-ds4-moe-stream/bin/libggml-cpu.so.0.10.0",
+      "build-ds4-moe-stream/bin/libggml-cuda.so.0.10.0",
+      "build-ds4-moe-stream/bin/libggml.so.0.10.0",
+      "build-ds4-moe-stream/bin/llama-cli"
+    ],
+    "source_hashes_sha256": {
+      "build-ds4-moe-stream/CMakeCache.txt": "7b87c229ca87e74a92bd973bb7cc9910c92e9904cb700e4cdde542212c101d44",
+      "ggml/src/ggml-cuda/moe_stream.cu": "106ef0dfcfd0844d00a4c2dc1773f5a9d4a1a1864c8b0ab668712806f077d5f6",
+      "ggml/src/ggml-cuda/moe_stream_batch.cu": "34e75b02573ce88296bbdb2391715fdf2f971eba194a488b4215fd989a44509b",
+      "ggml/src/ggml-cuda/mmq.cu": "78aadefe004acee851ba21d86facf890a62b55d479c68c61886fd75b9b03b884",
+      "ggml/src/ggml-cpu/ggml-cpu.c": "295494b501b2dc97dc6ab212eb116426fcefbdfd4bd9696fa6a65912ea04f777",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/fresh-sota44-bottleneck-hard-bound.json": "968449a8f672d7c044ba43b23e9ce922cabc1ae58a317d73c406e76e58725ed6",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json": "d97f52ca6f58eb945e12b4473158f07c16d0e412a690f895f9a5eb2e7f9dcf78"
+    }
+  },
+  "backend_findings": [
+    {
+      "backend_or_path": "accepted CUDA one-stream path",
+      "source_refs": [
+        "ggml/src/ggml-cuda/moe_stream.cu:1120",
+        "ggml/src/ggml-cuda/moe_stream.cu:1145",
+        "ggml/src/ggml-cuda/moe_stream.cu:1164",
+        "ggml/src/ggml-cuda/moe_stream.cu:1222",
+        "ggml/src/ggml-cuda/moe_stream.cu:1255",
+        "ggml/src/ggml-cpu/ggml-cpu.c:2966",
+        "ggml/src/ggml-cpu/ggml-cpu.c:2980"
+      ],
+      "facts": [
+        "The one-stream function requires src1_f32 and rejects calls without F32 activation input.",
+        "The one-stream workspace stages F32 activation and uses Q8_1-sized activation storage for the CUDA MMVQ path.",
+        "The CPU call site computes wdata_stream and row_size_stream but passes NULL/0 for prequantized activation, so no Q8_0 activation path is active.",
+        "The accepted SOTA cache is gate-only; using this path for broad up/down requires a separate source/cache solution."
+      ],
+      "exactness_status": "not_exact_replacement_for_cpu_mxfp4_q8_0",
+      "performance_status": "cannot_reach_10_tok_s_without_solving_updown_source_residency_or_streaming_bound",
+      "decision": "Do not promote existing one-stream Q8_1 path as exact up/down fallback removal."
+    },
+    {
+      "backend_or_path": "accepted CPU fallback",
+      "source_refs": [
+        "ggml/src/ggml-cpu/ggml-cpu.c:1340",
+        "ggml/src/ggml-cpu/ggml-cpu.c:1342",
+        "ggml/src/ggml-cpu/ggml-cpu.c:1343"
+      ],
+      "facts": [
+        "GGML_TYPE_MXFP4 CPU fallback uses ggml_vec_dot_mxfp4_q8_0.",
+        "The vec_dot_type for MXFP4 is GGML_TYPE_Q8_0."
+      ],
+      "exactness_status": "reference_exact_path_for_current_outputs",
+      "performance_status": "decode fallback costs about 19029.457 ms, which is the dominant open removable component",
+      "decision": "Any GPU/offload replacement must either preserve this effective token-level behavior or pass deterministic top1/output verification before benchmarking."
+    },
+    {
+      "backend_or_path": "generic CUDA MMQ Blackwell native FP4",
+      "source_refs": [
+        "ggml/src/ggml-cuda/mmq.cu:125",
+        "ggml/src/ggml-cuda/mmq.cu:136",
+        "ggml/src/ggml-cuda/mmq.cu:201"
+      ],
+      "facts": [
+        "Generic CUDA MMQ can use native MXFP4 activation quantization on Blackwell when src0 is GGML_TYPE_MXFP4.",
+        "This path quantizes activation to FP4/MMQ storage rather than the CPU fallback Q8_0 activation format.",
+        "It is not wired into the accepted one-stream expert-pack/cache path."
+      ],
+      "exactness_status": "approximate_relative_to_cpu_mxfp4_q8_0_until_verified",
+      "performance_status": "compute may be fast, but this alone does not solve cold source/cache pressure for full up/down experts",
+      "decision": "Possible future diagnostic only. It needs a plan update, token-level top1 verifier, and source/cache hard-bound before any strict cold benchmark."
+    },
+    {
+      "backend_or_path": "CUDA MoE batch/io_uring path",
+      "source_refs": [
+        "ggml/src/ggml-cuda/CMakeLists.txt:139",
+        "build-ds4-moe-stream/CMakeCache.txt:670",
+        "ggml/src/ggml-cuda/moe_stream_batch.cu:1830",
+        "ggml/src/ggml-cuda/moe_stream_batch.cu:3048"
+      ],
+      "facts": [
+        "The batch path contains direct and io_uring expert-pack read support.",
+        "The accepted build has GGML_CUDA_MOE_STREAM_BATCH=OFF, so this code is not in the accepted runtime path.",
+        "io_uring only changes submission/overlap of source reads; it does not reduce the total up/down source volume or provide exact compute by itself."
+      ],
+      "exactness_status": "not_currently_active",
+      "performance_status": "closed_as_io_only_10_tok_s_candidate_by_90_6_gib_s_source_bandwidth_bound",
+      "decision": "Do not attempt an io_uring-only or batch-build-only experiment without a new source-volume/cache solution and hard-bound."
+    },
+    {
+      "backend_or_path": "OpenCL/Vulkan/SYCL alternatives",
+      "source_refs": [
+        "build-ds4-moe-stream/CMakeCache.txt"
+      ],
+      "facts": [
+        "OpenCL, Vulkan, and SYCL are all OFF in the accepted build.",
+        "No corresponding runtime library is present in build-ds4-moe-stream/bin."
+      ],
+      "exactness_status": "not_available_in_current_runtime",
+      "performance_status": "a backend switch would be a separate candidate requiring full correctness, memory, TTFT, and source/cache proof",
+      "decision": "Do not treat these backends as immediate SOTA candidates."
+    }
+  ],
+  "closed_by_this_audit": [
+    "reuse existing CUDA one-stream Q8_1 path as exact MXFP4 x Q8_0 fallback removal",
+    "io_uring-only cold-start optimization for up/down experts",
+    "batch-build-only experiment without source-volume reduction",
+    "Blackwell native FP4 strict-cold performance run without top1 verification and cache/source hard-bound",
+    "OpenCL/Vulkan/SYCL backend switch without a new plan and full validation"
+  ],
+  "remaining_open_candidate_classes": [
+    {
+      "name": "exact compact resident representation",
+      "required_proof_before_source_edit": "Show that enough up/down decode fallback can be represented within 16GB host/page-cache plus current VRAM constraints while preserving gate cache benefit, with theoretical token rate above 10 after overhead."
+    },
+    {
+      "name": "verified exact or token-stable GPU MXFP4 x Q8_0 path",
+      "required_proof_before_source_edit": "Design a CUDA path whose arithmetic and activation quantization match CPU fallback or pass fixed-text top1 verification before any performance run, and solve the source/cache bound."
+    },
+    {
+      "name": "predictive cross-op overlap",
+      "required_proof_before_source_edit": "Demonstrate that overlapped preparation can hide a large fraction of the 19029.457 ms decode fallback without increasing TTFT beyond 33617.688744 ms or exceeding the 16GB cgroup file-cache budget."
+    }
+  ],
+  "next_action": {
+    "plan_update_required_before_code": true,
+    "recommended_next_step": "Write a hard-bound design for one remaining open candidate class, preferably predictive cross-op overlap or exact compact residency. Reject it on paper if it cannot remove at least 17386.570 ms decode time with less than 1642.887 ms new overhead.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  }
+}

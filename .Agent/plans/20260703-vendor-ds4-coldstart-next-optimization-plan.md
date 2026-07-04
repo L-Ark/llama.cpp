@@ -54,6 +54,27 @@ Current execution plan:
 5. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promoting.
 6. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
 
+### 2026-07-04 Exact Up/Down Backend Feasibility Audit
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/exact-updown-backend-feasibility-audit.json`.
+
+Result: no existing built backend path is an immediate exact 10 tok/s candidate. This is a planning/audit result only; runtime source is unchanged and accepted SOTA remains `4.4 tok/s`.
+
+Key findings:
+
+- Accepted build has CUDA and CPU only; `GGML_CUDA_MOE_STREAM_BATCH=OFF`, OpenCL/Vulkan/SYCL are off, and only `libggml-base`, `libggml-cpu`, `libggml-cuda`, `libggml`, and `llama-cli` are present in the accepted build output.
+- Accepted CUDA one-stream requires F32 `src1` and stages/quantizes activation to Q8_1. The accepted CPU MXFP4 fallback uses `ggml_vec_dot_mxfp4_q8_0` with Q8_0 activation semantics, so the existing one-stream Q8_1 path is not an exact replacement for CPU fallback up/down.
+- Generic CUDA MMQ has a Blackwell native MXFP4 activation path, but it quantizes activation to FP4/MMQ storage, is not wired into one-stream expert-pack/cache, and is approximate relative to the CPU Q8_0 fallback until a token-level top1 verifier proves stability.
+- The batch path contains direct/io_uring read support, but it is disabled in the accepted build and is an IO/source-submission mechanism only. It does not solve the measured on-demand up/down source requirement of about `90.6 GiB/s`.
+- Therefore, the closed set now explicitly includes: one-stream Q8_1-as-exact, io_uring-only, batch-build-only, Blackwell FP4 performance run without top1/source hard-bound, and backend switch experiments without full validation.
+
+Next plan after this audit:
+
+1. Keep the accepted `4.4 tok/s` runtime path unchanged.
+2. Before writing runtime code, choose exactly one remaining candidate class and write a hard-bound design: exact compact resident representation, verified exact/token-stable GPU MXFP4 x Q8_0 with source/cache solution, or predictive cross-op overlap.
+3. Reject that candidate on paper unless it can plausibly remove at least `17386.570 ms` decode time while adding less than `1642.887 ms` overhead, keeping 16GB cgroup page-cache accounting and TTFT `<=33617.688744 ms`.
+4. Any numerically different path must pass fixed-text token-level top1 verification before a strict cold performance benchmark.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.
