@@ -6849,6 +6849,78 @@ Rollback:
   the result.
 - Do not run n96 unless n32 beats SOTA and all gates pass.
 
+Result:
+
+- End time: 2026-07-04T08:18:00+08:00.
+- Status: rejected; source patch reverted; no n96 confirmation run.
+- Source commit tested:
+  - `ef5a8c499` (`cuda: isolate q40 down staging ring`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-001253Z-n32-phase7eh-q40-stageaux-pool512`.
+- Hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - TTFT `70863.27 ms`, within the gate;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Activation and intended mechanism:
+  - Q4_0 path active;
+  - q4_0_down pool `0.5 GiB`, `65` slots, `7.88 MiB`;
+  - q4_0_down hits `519`, misses `1217`, hit rate `29.9%`;
+  - this exactly matches the route-trace simulation for a 64-slot global LRU;
+  - main pinned staging stayed at `7.44 MiB`;
+  - gate pinned staging stayed at `7.44 MiB`;
+  - Q4_0 copies moved to aux rings:
+    - `up_aux` slot `7.88 MiB`, host_stage `351.774 ms`;
+    - `gate_aux` slot `7.88 MiB`, host_stage `449.853 ms`.
+- Performance:
+  - decode `38405.60 ms / 31`, `0.81 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31`.
+- Cache and movement counters:
+  - normal down: `737` slots, hit rate `71.6%`;
+  - upgate: `1679` slots, hit rate `40.1%`;
+  - expert-pack iouring bytes `91153563648`;
+  - expert-pack wait `15481477 us`;
+  - main pinned host_stage `21177.395 ms`;
+  - gate pinned host_stage `2146.636 ms`;
+  - down profile total: `1861` rows, wall `8247.488 ms`,
+    stage `7925.320 ms`, kernel `212.299 ms`, jobs `4973`;
+  - down by type:
+    - type `2` Q4_0: hits `519`, misses `1217`, wall `2198.785 ms`,
+      stage `2170.011 ms`, kernel `18.420 ms`;
+    - type `11`: misses `1862`, wall `2890.538 ms`;
+    - type `23`: misses `1894`, wall `3158.165 ms`;
+  - upgate profile: wall `8368.575 ms`, kernel `8290.454 ms`.
+
+Gap analysis:
+
+- The 7EH patch fixed the two measured 7EG mechanism failures:
+  - Q4_0 cache hit rate was no longer `0%`;
+  - main/gate staging rings were not resized to `7.88 MiB`.
+- It still failed the promotion gate because Q4_0 movement is not the dominant
+  remaining bottleneck once the 512 MiB pool is carved out:
+  - normal down slots dropped to `737`;
+  - normal down misses and preload traffic increased;
+  - Q4_0 still had `1217` SSD/H2D misses;
+  - total expert-pack bytes and wait remained high.
+- The Q4_0 kernel is cheap, but replacing CPU fallback with a partially cached
+  SSD/H2D GPU path does not beat the accepted SOTA under the 15GB VRAM split.
+
+Decision:
+
+- Reject Phase 7EH.
+- Revert `ef5a8c499`.
+- Do not run n96.
+- Keep Phase 7EB as current SOTA:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Stop Q4_0 GPU activation work unless a future design can prove either:
+  - no reduction to normal down/upgate residency;
+  - or a per-layer/per-phase Q4_0 hotset that produces high hit rate with much
+    less than 512 MiB.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
