@@ -1,0 +1,795 @@
+{
+  "accepted_sota": {
+    "cuda_free_mib_from_breakdown": 238,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "generation_time_s_estimate": 31.047446709999996,
+    "generation_tokens_estimate_from_rounded_rate": 136.60876552399998,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "best_partial_layer_knapsack": [
+    {
+      "best_gpu_mib": 191.25,
+      "best_rows_saved": 17,
+      "budget_mib": 238,
+      "chosen_layers": [
+        {
+          "gpu_mib": 191.25,
+          "k": 8,
+          "layer": 6,
+          "rows_saved": 17
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.409174323218443,
+      "optimistic_fallback_seconds_saved": 0.06460150820641727,
+      "rows_saved_pct_of_trace": 0.0025136773621174035
+    },
+    {
+      "best_gpu_mib": 484.5,
+      "best_rows_saved": 58,
+      "budget_mib": 492,
+      "chosen_layers": [
+        {
+          "gpu_mib": 191.25,
+          "k": 8,
+          "layer": 6,
+          "rows_saved": 17
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.431458829379243,
+      "optimistic_fallback_seconds_saved": 0.22040514564542363,
+      "rows_saved_pct_of_trace": 0.008576075706047612
+    },
+    {
+      "best_gpu_mib": 1020.0,
+      "best_rows_saved": 130,
+      "budget_mib": 1024,
+      "chosen_layers": [
+        {
+          "gpu_mib": 140.25,
+          "k": 4,
+          "layer": 6,
+          "rows_saved": 10
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 7,
+          "rows_saved": 38
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 27,
+          "rows_saved": 41
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.471142597686388,
+      "optimistic_fallback_seconds_saved": 0.49401153334319087,
+      "rows_saved_pct_of_trace": 0.019222238651486027
+    },
+    {
+      "best_gpu_mib": 2040.0,
+      "best_rows_saved": 240,
+      "budget_mib": 2048,
+      "chosen_layers": [
+        {
+          "gpu_mib": 140.25,
+          "k": 4,
+          "layer": 4,
+          "rows_saved": 9
+        },
+        {
+          "gpu_mib": 140.25,
+          "k": 4,
+          "layer": 6,
+          "rows_saved": 10
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 7,
+          "rows_saved": 38
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 8,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 14,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 27,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 36,
+          "rows_saved": 34
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.533162005533873,
+      "optimistic_fallback_seconds_saved": 0.9120212923258909,
+      "rows_saved_pct_of_trace": 0.03548720981812805
+    },
+    {
+      "best_gpu_mib": 4092.75,
+      "best_rows_saved": 464,
+      "budget_mib": 4096,
+      "chosen_layers": [
+        {
+          "gpu_mib": 140.25,
+          "k": 4,
+          "layer": 4,
+          "rows_saved": 9
+        },
+        {
+          "gpu_mib": 140.25,
+          "k": 4,
+          "layer": 6,
+          "rows_saved": 10
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 7,
+          "rows_saved": 38
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 8,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 11,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 12,
+          "rows_saved": 32
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 13,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 14,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 24,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 27,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 28,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 31,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 36,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 39,
+          "rows_saved": 31
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.66492988224797,
+      "optimistic_fallback_seconds_saved": 1.763241165163389,
+      "rows_saved_pct_of_trace": 0.0686086056483809
+    },
+    {
+      "best_gpu_mib": 8109.0,
+      "best_rows_saved": 824,
+      "budget_mib": 8192,
+      "chosen_layers": [
+        {
+          "gpu_mib": 191.25,
+          "k": 8,
+          "layer": 4,
+          "rows_saved": 15
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 5,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 6,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 7,
+          "rows_saved": 38
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 8,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 10,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 11,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 12,
+          "rows_saved": 32
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 13,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 14,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 17,
+          "rows_saved": 27
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 18,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 20,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 21,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 22,
+          "rows_saved": 26
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 24,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 25,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 27,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 28,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 29,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 31,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 32,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 33,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 36,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 37,
+          "rows_saved": 21
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 38,
+          "rows_saved": 27
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 39,
+          "rows_saved": 31
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 4.89353474621382,
+      "optimistic_fallback_seconds_saved": 3.131273103652225,
+      "rows_saved_pct_of_trace": 0.12183942037557297
+    },
+    {
+      "best_gpu_mib": 11730.0,
+      "best_rows_saved": 1061,
+      "budget_mib": 11730,
+      "chosen_layers": [
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 0,
+          "rows_saved": 18
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 1,
+          "rows_saved": 18
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 2,
+          "rows_saved": 18
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 3,
+          "rows_saved": 19
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 4,
+          "rows_saved": 24
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 5,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 6,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 7,
+          "rows_saved": 38
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 8,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 9,
+          "rows_saved": 18
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 10,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 11,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 12,
+          "rows_saved": 32
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 13,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 14,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 15,
+          "rows_saved": 20
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 16,
+          "rows_saved": 19
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 17,
+          "rows_saved": 27
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 18,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 19,
+          "rows_saved": 21
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 20,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 21,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 22,
+          "rows_saved": 26
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 23,
+          "rows_saved": 20
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 24,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 25,
+          "rows_saved": 23
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 26,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 27,
+          "rows_saved": 41
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 28,
+          "rows_saved": 31
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 29,
+          "rows_saved": 29
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 30,
+          "rows_saved": 19
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 31,
+          "rows_saved": 33
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 32,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 33,
+          "rows_saved": 28
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 34,
+          "rows_saved": 18
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 35,
+          "rows_saved": 20
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 36,
+          "rows_saved": 34
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 37,
+          "rows_saved": 21
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 38,
+          "rows_saved": 27
+        },
+        {
+          "gpu_mib": 293.25,
+          "k": 16,
+          "layer": 39,
+          "rows_saved": 31
+        }
+      ],
+      "optimistic_eval_tok_s_no_overhead": 5.056671157052093,
+      "optimistic_fallback_seconds_saved": 4.0318941298240425,
+      "rows_saved_pct_of_trace": 0.15688304007097442
+    }
+  ],
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "decision": {
+    "h0_pass": false,
+    "next_direction": "Do not run current DS4 hot-dispatch as a token-rate candidate. Next work should target a mechanism that actually removes CPU fallback work without stealing gate-cache VRAM, or a deeper layout/compute change with a better hard bound.",
+    "performance_h2_should_run": false,
+    "reason": "Preserving accepted gate cache leaves only about 238 MiB; best partial hot dispatch within that budget saves negligible CPU rows. Full-layer k values need 4.1-11.7 GiB and still have optimistic no-overhead ceilings around the current SOTA to about 5 tok/s while requiring severe gate-cache reduction. This cannot plausibly move toward 10 tok/s and should be rejected before verifier/performance runs.",
+    "verifier_h1_should_run": false
+  },
+  "full_layer_by_k": [
+    {
+      "hot_pick_pct": 0.11192434210526316,
+      "hot_picks": 4083,
+      "k": 1,
+      "layers": 40,
+      "max_layer_gpu_mib": 102.0,
+      "optimistic_eval_tok_s_no_overhead": 4.3999999999999995,
+      "optimistic_fallback_seconds_saved": 0.0,
+      "rows_saved_pct": 0.0,
+      "total_gpu_mib": 4080.0,
+      "total_picks": 36480,
+      "total_rows_after": 6763,
+      "total_rows_before": 6763,
+      "total_rows_saved": 0
+    },
+    {
+      "hot_pick_pct": 0.1981907894736842,
+      "hot_picks": 7230,
+      "k": 2,
+      "layers": 40,
+      "max_layer_gpu_mib": 114.75,
+      "optimistic_eval_tok_s_no_overhead": 4.433644993664256,
+      "optimistic_fallback_seconds_saved": 0.23560550051752183,
+      "rows_saved_pct": 0.009167529203016413,
+      "total_gpu_mib": 4590.0,
+      "total_picks": 36480,
+      "total_rows_after": 6701,
+      "total_rows_before": 6763,
+      "total_rows_saved": 62
+    },
+    {
+      "hot_pick_pct": 0.3151041666666667,
+      "hot_picks": 11495,
+      "k": 4,
+      "layers": 40,
+      "max_layer_gpu_mib": 140.25,
+      "optimistic_eval_tok_s_no_overhead": 4.500811424735285,
+      "optimistic_fallback_seconds_saved": 0.6954162353984917,
+      "rows_saved_pct": 0.027058997486322636,
+      "total_gpu_mib": 5610.0,
+      "total_picks": 36480,
+      "total_rows_after": 6580,
+      "total_rows_before": 6763,
+      "total_rows_saved": 183
+    },
+    {
+      "hot_pick_pct": 0.45652412280701754,
+      "hot_picks": 16654,
+      "k": 8,
+      "layers": 40,
+      "max_layer_gpu_mib": 191.25,
+      "optimistic_eval_tok_s_no_overhead": 4.6456388391348264,
+      "optimistic_fallback_seconds_saved": 1.6416383261866037,
+      "rows_saved_pct": 0.0638769776726305,
+      "total_gpu_mib": 7650.0,
+      "total_picks": 36480,
+      "total_rows_after": 6331,
+      "total_rows_before": 6763,
+      "total_rows_saved": 432
+    },
+    {
+      "hot_pick_pct": 0.6054824561403509,
+      "hot_picks": 22088,
+      "k": 16,
+      "layers": 40,
+      "max_layer_gpu_mib": 293.25,
+      "optimistic_eval_tok_s_no_overhead": 5.056671157052093,
+      "optimistic_fallback_seconds_saved": 4.0318941298240425,
+      "rows_saved_pct": 0.15688304007097442,
+      "total_gpu_mib": 11730.0,
+      "total_picks": 36480,
+      "total_rows_after": 5702,
+      "total_rows_before": 6763,
+      "total_rows_saved": 1061
+    }
+  ],
+  "implementation_finding": {
+    "activation": "DS4_HOT_PROFILE_JSON=<profile.json> plus DS4_HOT_DISPATCH=1",
+    "cold_path": "CPU cold path remaps hot picks to a shared cold sentinel and masks their outputs; it can reduce CPU unique rows via dedup but does not eliminate the cold path.",
+    "hot_path": "GPU hot subset tensors for gate/up/down with K+P+1 slots.",
+    "risk": "Any useful k consumes VRAM that currently belongs to the accepted gate one-stream cache; smaller k has almost no CPU-row saving."
+  },
+  "inputs": {
+    "accepted_summary_json": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb/summary.json",
+    "accepted_summary_sha256": "cca15940de41427cdba1d6457d702888195fbd2cf7ce3a434f9644ce723b1423",
+    "deepseek4_cpp_sha256": "a9523834805da4975dba0b7daba945e26867f11c0a868f38139837d7e1b2c863",
+    "hot_cpp_sha256": "d163606e32bdb72b241a567061bdf85865960fbcf7fb3c329f33ba721adbdee2",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "n_picks_assumed": 6,
+    "route_bound_json": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/runs/20260703-vendor-ds4-coldstart/ds4-hot-route-vram-bound.json",
+    "route_bound_sha256": "9b4df88e70a27572fa2acdb955a1965f0e6dd3547b0f7da78f50506def8b2f6c",
+    "source_trace": "/root/lfz/runs/vendor-ds4-16gb/20260703T113716Z-20260703T-route-trace-accepted-diagnostic/france-cpu40-vram0gb/route_trace.csv"
+  },
+  "phase": "H0 profile and VRAM feasibility",
+  "profile_json_scan": {
+    "conclusion": "No ready DS4_HOT_PROFILE_JSON profile was found; generation would be needed only if H0 bound justified a run.",
+    "hot_json_candidates": [
+      "./.Agent/profiles/vendor-ds4/hot-updown64-profile-summary.json",
+      "./.Agent/runs/20260703-vendor-ds4-coldstart/ds4-hot-route-vram-bound.json",
+      "./.Agent/runs/20260704-vendor-ds4-coldstart/hot-updown64-require-profile-result.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260701T140952Z-20260701T_selective-hot-updown64-stream/hot_updown64_allowlist.meta.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260701T141433Z-20260701T_selective-hot-updown128-stream/hot_updown128_allowlist.meta.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260701T_selective-hot-updown128-profile/hot_updown128_allowlist.meta.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260701T_selective-hot-updown64-profile/hot_updown64_allowlist.meta.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260703_ds4_hot_route_coverage_analysis.json",
+      "/root/lfz/runs/vendor-ds4-16gb/20260703_ds4_hot_route_vram_bound.json"
+    ],
+    "valid_ds4_hot_profiles": []
+  },
+  "remote_target": "https://github.com/wici-ai/ssd-llama.git branch vendor/deepseek-token-rate-16gb",
+  "source_head": "2f1adade6245586d25d86a33ce29b58dccdaa13b",
+  "timestamp_utc": "2026-07-04T03:24:51Z"
+}

@@ -7609,3 +7609,39 @@ Rollback and promotion:
 - Runtime source changes are not required for H0/H1 because the dual-dispatch code already exists and is default-off. If any source patch becomes necessary, update this plan again before implementing it.
 - On verifier failure, performance regression, correctness failure, RAM violation, TTFT gate violation for an accepted candidate, or gate-cache collapse, revert any runtime source patch immediately and keep only rejected records/docs.
 - On a compliant new SOTA, stop exploration immediately, write full reproduction metadata, commit and push source/plan/artifacts/profiles to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild and reproduce from pushed source before declaring it accepted.
+
+### 2026-07-04T04:45Z DS4 Hot-Dispatch H0 Bound Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/ds4-hot-dispatch-h0-bound-analysis.json`
+- sha256: `ffc79d774f17e239d846268f1c4f6b9928d0967610b09a0fff4776a7f15294ba`
+- source head: `2f1adade6245586d25d86a33ce29b58dccdaa13b`
+
+Result:
+
+- H0 does not pass. Do not run H1 verifier or H2 performance for the current DS4 hot-dispatch implementation.
+- No ready `DS4_HOT_PROFILE_JSON` profile was found. A profile could be generated from route/profile data, but H0 shows it is not worth generating for the current implementation.
+- Accepted SOTA VRAM shape leaves only about `238 MiB` free with the `13568 MiB` gate cache.
+- Best partial hot-dispatch placement within `238 MiB` is one `k=8` layer using `191.25 MiB`; it saves only `17 / 6763 = 0.25%` CPU rows, with an optimistic no-overhead ceiling of `4.409 tok/s`.
+- If the gate cache is shrunk enough to free `492 MiB`, the best placement saves `58 / 6763 = 0.86%` CPU rows, with an optimistic no-overhead ceiling of `4.431 tok/s`. This is not enough to justify risking gate-cache misses.
+- Full-layer profiles are also poor:
+  - `k=1`: `4080 MiB`, `0` rows saved, optimistic ceiling `4.40 tok/s`
+  - `k=2`: `4590 MiB`, `62` rows saved, optimistic ceiling `4.43 tok/s`
+  - `k=4`: `5610 MiB`, `183` rows saved, optimistic ceiling `4.50 tok/s`
+  - `k=8`: `7650 MiB`, `432` rows saved, optimistic ceiling `4.65 tok/s`
+  - `k=16`: `11730 MiB`, `1061` rows saved, optimistic ceiling `5.06 tok/s`
+- These ceilings assume zero graph overhead, zero extra GPU contention, no verifier drift, and no penalty from stealing VRAM from the accepted gate cache. Real performance would be lower.
+
+Conclusion:
+
+- The current default-off DS4 hot-dispatch path is closed as a token-rate candidate under the present 16GB/VRAM constraints.
+- It does not plausibly move toward `10 tok/s`; even the unrealistic all-layer `k=16` upper bound is only about `5.06 tok/s` before overhead and requires about `11.7 GiB` VRAM.
+- Do not spend a model run on this path unless a future source design changes the cold path so hot picks are truly skipped without requiring large GPU hot subsets or gate-cache sacrifice.
+
+Next read-only direction:
+
+1. Analyze whether a true CPU fallback skip/zero-row mechanism can remove work for already GPU-handled/pruned picks without allocating large hot expert subsets.
+2. Compute the hard upper bound from route trace rows and current fallback timing before writing code.
+3. If and only if the bound can plausibly exceed the current `4.4 tok/s` SOTA by a meaningful margin and preserve correctness by construction, update this plan with the exact source design and verifier sequence.
+4. Otherwise close that path too and move to deeper CPU MXFP4/layout work.
