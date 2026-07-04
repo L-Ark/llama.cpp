@@ -1,0 +1,62 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: source-resident plus batched/fused Q8_0 after combined correctness proof",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "prerequisite": {
+    "combined_correctness_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-updown-validation.json",
+    "result": "passed",
+    "same_top1": "145/145",
+    "skip_records": 69600
+  },
+  "bottleneck_basis": {
+    "current_accepted_decode_cpu_updown_fallback_ms": 19029.457,
+    "required_decode_saving_for_10_tok_s_ms": 17386.57,
+    "allowed_overhead_for_10_tok_s_ms": 1642.887,
+    "rejected_per_call_q80_profile": {
+      "attempted_calls": 18688,
+      "total_ms": 58687.042,
+      "host_src0_ms": 28106.781,
+      "h2d_ms": 6062.462,
+      "kernel_sync_ms": 20341.664,
+      "cuda_alloc_free_ms": 3796.468
+    },
+    "combined_correctness_runtime": {
+      "wall_time": "2min 42.269s",
+      "skip_records": 69600,
+      "interpretation": "Correctness is solved for CPU-compatible Q8_0 arithmetic, but the current per-call implementation is too slow to benchmark as SOTA."
+    }
+  },
+  "hotset_diagnostic": {
+    "existing_top768_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+    "payload_bytes": 3422552064,
+    "payload_gib": 3.188,
+    "entries": 768,
+    "combined_record_hit_rate": 0.470172,
+    "up_record_hit_rate": 0.469425,
+    "down_record_hit_rate": 0.47092,
+    "decision": "The existing top768 manifest is a starting point only; a promotable design needs a weighted hard-bound using measured fallback time, not record-count coverage alone."
+  },
+  "next_analysis_steps_before_code": [
+    "Build a combined-hotset bound from the 69600-record q80 skip report and the existing CPU fallback timing traces.",
+    "For topN candidates, record payload bytes, expected VRAM pressure, hit coverage, estimated removable fallback time, and required kernel/batching overhead.",
+    "Reject any topN/source-resident design whose zero-overhead bound cannot exceed the current 4.4 tok/s SOTA and whose 10 tok/s bound cannot save at least 17386.57 ms with less than 1642.887 ms overhead.",
+    "Only if the hard-bound is positive, implement a default-off resident source pool keyed by tensor+expert and a batched/fused Q8_0 kernel path that removes full host src0 copy, H2D, per-call cudaMalloc/free, and per-call device sync."
+  ],
+  "implementation_constraints_if_bound_positive": {
+    "default_behavior_unchanged": true,
+    "required_env_gate": "new explicit envs; no effect unless enabled",
+    "correctness_gate": "fixed-text llama-results top1 must pass before any performance benchmark",
+    "runtime_constraints": {
+      "MemoryMax": 16000000000,
+      "MemorySwapMax": 0,
+      "framework": "vendor DeepSeek"
+    },
+    "promotion_gate": "eval_tok_s > 4.4, TTFT <= 33617.688744 ms, RAM including page cache <=16GB, no swap, coherent France output, committed and pushed source/artifacts, then clean pushed-source reproduction"
+  },
+  "rollback_rule": "If the hard-bound is negative, do not write runtime code for this candidate. If runtime code later fails correctness or performance gates, keep it default-off or revert runtime source and retain only rejected documentation."
+}
