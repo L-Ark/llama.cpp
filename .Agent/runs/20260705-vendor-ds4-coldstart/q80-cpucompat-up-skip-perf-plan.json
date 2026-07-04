@@ -1,0 +1,85 @@
+{
+  "date": "2026-07-05",
+  "title": "Strict cold performance benchmark for all-up Q8_0 CPU-compatible skip",
+  "source_head_before_experiment": "8f0335091ea9654f6314c4ce6356839d76a7c2ee",
+  "planned_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T204845Z-q80-cpucompat-upskip-strict-cold/france-cpu40",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "bottleneck": {
+    "component": "Decode CPU up/down fallback plus source/page behavior",
+    "current_decode_cpu_updown_fallback_ms": 19029.457,
+    "saving_required_for_10_tok_s_ms": 17386.57,
+    "max_total_overhead_budget_ms": 1642.887,
+    "this_candidate_scope": "Remove CPU fallback for ffn_up_exps.weight only. ffn_down_exps remains on CPU because down Q8_0 token-level correctness failed."
+  },
+  "hard_bound": {
+    "all_up_down_removal_ceiling_tok_s": 11.367,
+    "candidate_ceiling": "Strictly below 11.367 tok/s because down fallback remains. This benchmark is expected to quantify how much up-only CPU-compatible skip removes from the current 19029.457 ms fallback bucket; it is not assumed to reach 10 tok/s.",
+    "promotion_threshold": "Accepted only if eval_tok_s > 4.4 and all gates pass."
+  },
+  "correctness_prerequisite": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-up-validation.json",
+    "result": "passed",
+    "same_top1": "145/145",
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "skip_records": 34800
+  },
+  "strict_cold_procedure": {
+    "before_systemd_run": "sync; echo 3 > /proc/sys/vm/drop_caches",
+    "systemd": {
+      "MemoryMax": 16000000000,
+      "MemorySwapMax": 0,
+      "collect": true,
+      "wait": true
+    },
+    "ram_guard": "The run script samples memory.current and kills the process if it exceeds 16000000000 bytes; memory.peak, memory.stat file bytes, and memory.events are recorded."
+  },
+  "env_delta_from_accepted_sota": {
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0",
+    "GGML_MOE_STREAM_Q80_SKIP_REPORT": "planned_run/q80-skip-report.csv"
+  },
+  "accepted_sota_env_to_preserve": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_VRAM_CACHE_GB": "0"
+  },
+  "command_skeleton": "llama-cli -m DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -t 20 -tb 20",
+  "acceptance_gates": {
+    "eval_tok_s": "> 4.4",
+    "ttft_ms": "<= 33617.688744",
+    "ram": "memory_peak_bytes <= 16000000000 with file page cache counted in memory.stat",
+    "swap": "MemorySwapMax=0 and Swaps=0",
+    "oom": "memory.events oom=0 and oom_kill=0",
+    "correctness": "France answer must be semantic, coherent, and complete; exact output is recorded in summary.json",
+    "repro": "If accepted, immediately commit+push source/artifacts, clean-rebuild, and reproduce from pushed source before promotion."
+  },
+  "rejection_rule": "If eval_tok_s <= 4.4, TTFT exceeds the gate, RAM/page-cache violates 16GB, OOM/swap occurs, or France output is incoherent/incorrect, record as rejected and do not change accepted SOTA.",
+  "post_run_analysis": "Compare prompt/eval token rate, TTFT, memory_file_bytes, one-stream hit/miss counters, q80 skip records, and stderr CPU/GPU timing against the accepted SOTA. If up-only skip is insufficient, the next bottleneck is remaining down fallback/source behavior, not another up-only scope expansion."
+}
