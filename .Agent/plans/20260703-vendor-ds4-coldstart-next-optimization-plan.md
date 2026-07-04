@@ -13,11 +13,46 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `fd6c486fb81ccd14ce0acb45cef280730bf862cd` (`vendor-ds4: plan parallel fallback touch probe`)
+- Latest pushed head before this document update: `7ca04affeaa0bb8aecd327e2cb6484df5189ec3b` (`vendor-ds4: reject lightning pushed repro`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
 - Correctness answer for the accepted SOTA is semantic, coherent, and complete for `Please introduce France in a short paragraph.`
+
+### 2026-07-04 Latest Active Plan Override
+
+本节是当前生效计划，覆盖下面较早的 Phase 计划中已经被实验关闭的方向。旧记录保留为历史证据。
+
+当前 accepted SOTA 仍为 `4.4 tok/s`，不是 lightning `4.5`：
+
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Accepted constraints: strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, vendor DeepSeek, `cpu_moe=40`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Promotion gate remains: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB RAM including page cache, no swap, France output coherent and semantically correct, and pushed-source reproduction passes.
+
+Recent closed diagnostics:
+
+- Lightning indexer no-source path is closed for now. Repeat candidate reached `4.5 tok/s` with acceptable TTFT once, but pushed-source reproduction only reached `4.4 tok/s` and had `TTFT=33618.90603 ms`, which is `1.217286 ms` over the acceptance gate. Therefore it is recorded as rejected/tie, not promoted.
+- External MTP/draft path is closed for now. The available external DS4 MTP artifact is for a different Q2 model family and the reported implementation status is not compatible with the current vendor FP4/FP8 SOTA path. The accepted local model metadata still has no usable `mtp`, `draft`, `eagle`, `spec`, or `next` tensors.
+- Re-running low-ceiling variants is prohibited unless a new hard-bound is written first: same-op serial/parallel page touch, synchronous direct/mmap staging, top-N up/down residency, route-specific/dedup CPU down prefetch, `mul_mat_id` src1 conversion skip, scalar Q8_0 CUDA one-stream, Q8_1 CUDA up/down stream, CPU repack/transient repack/hotset repack, CUDA graph, no-source ngram/lookahead/speculative, and chunk/affinity scheduler-only tuning are closed.
+- Existing build/backend facts matter: the active build has CUDA and CPU backends only; OpenCL/Vulkan/SYCL are not built. `GGML_CUDA_MOE_STREAM_BATCH=OFF`, so the io_uring implementation in `moe_stream_batch.cu` is not on the accepted runtime path. The current one-stream CUDA path quantizes F32 activations to Q8_1, while the accepted CPU fallback uses MXFP4 x Q8_0 semantics. Generic CUDA has a Blackwell native FP4 MMQ path, but it is approximate relative to CPU fallback, not wired into one-stream, and cannot be promoted without token-level top1/output verification.
+
+Fresh hard-bound for the next step:
+
+- Current decode CPU up/down fallback is about `19029.457 ms`; accepted decode window estimate is about `31.04744671 s`.
+- To reach `10 tok/s`, decode time must fall to about `13.6608765524 s`, so the required saving is about `17386.570 ms`.
+- Removing all decode CPU up/down fallback gives a theoretical no-overhead ceiling of about `11.367 tok/s`, leaving only about `1642.887 ms` overhead budget.
+- A top-N resident hotset under the current gate-cache/VRAM budget is not enough: best bounded nonduplicate allocation is only about `5.612 tok/s`.
+- Streaming all up/down weights on demand would require about `90.6 GiB/s` effective source bandwidth before kernel, D2H, scatter, and sync overhead; io_uring or prefetch alone is therefore not a 10 tok/s path.
+
+Current execution plan:
+
+1. Do not code another low-ceiling source/prefetch/scheduler variant. Before every new experiment, update this plan with the bottleneck component, removable time, hard upper bound, expected RAM/page-cache pressure, and expected TTFT impact.
+2. First write and push an exact up/down backend feasibility audit. It must record the current build facts, one-stream Q8_1 vs CPU Q8_0 semantic mismatch, Blackwell native FP4 limitations, disabled batch/io_uring path, and why these existing backends are or are not usable for exact full decode fallback removal.
+3. Only after that audit, consider a new source-level candidate if it has a credible path to remove near-full decode up/down fallback within the `1642.887 ms` overhead budget. Candidate classes are limited to: an exact compact resident representation that fits the 16GB host/page-cache and VRAM budget, a verified exact or token-stable GPU MXFP4 x Q8_0 path with a source/cache solution, or a predictive cross-op overlap design whose hard-bound shows positive slack.
+4. Every logit-changing or numerically different path must first pass the fixed-text token-level top1 verifier or an equivalent deterministic correctness gate before any long performance run. For France, the final answer must remain semantically correct, coherent, and complete.
+5. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promoting.
+6. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
 
 Current bottleneck conclusion:
 
