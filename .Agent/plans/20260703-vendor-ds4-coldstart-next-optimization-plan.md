@@ -7340,3 +7340,88 @@ Promotion discipline for every future candidate:
 - Host RAM/page cache must stay inside the 16GB cgroup, with no OOM kill.
 - On any compliant new SOTA, stop exploration immediately, record full reproduction metadata, commit source/plan/artifacts/profiles, push to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild and reproduce from pushed source before declaring it accepted.
 - If performance regresses, correctness fails, TTFT exceeds the accepted gate, or RAM exceeds the cgroup limit, revert runtime source immediately and keep only rejected records/docs.
+
+### 2026-07-04T02:55Z GPU Up/Down Output Drift Audit Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json`
+- sha256: `42b9dc08cc8edd93571fc7a4a964643af410738b86bce7be5957bcf20e6fa02b`
+- source head at audit: `7990911a557077ad4f434676890e145b64366ddb`
+- audit type: offline existing runs only; no model run performed; no runtime source modified.
+
+Accepted reference:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`
+- `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Gate pack counters: `hits=4886`, `misses=0`, `direct_failures=0`, `direct_fallbacks=0`
+- VRAM cache counters: `hits=33265`, `misses=1886`, `hit_rate=94.6%`
+- Manual correctness: pass; France answer is semantic, coherent, and complete.
+
+Rejected no-filter GPU up/down:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb`
+- `eval_tok_s=1.8`, `prompt_tok_s=1.2`, `TTFT=36713.048232 ms`
+- RAM gate passes, but TTFT exceeds the accepted gate and token rate is far below SOTA.
+- Manual correctness: fail; answer is about France but ends incomplete after `with a thriving economy and`.
+- Counter signature: pack `misses=53774`, VRAM cache `hits=43544`, `misses=56319`, `hit_rate=43.6%`.
+- Diagnosis: broad up/down one-stream makes too many no-pack/no-cache source loads, collapses cache behavior, and is not a candidate for larger sweeps.
+
+Rejected profile-gated hot up/down64:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T005617Z-20260704_hot_updown64_require_profile_candidate/france-cpu40-vram0gb`
+- `eval_tok_s=3.6`, `prompt_tok_s=1.8`, `TTFT=33432.591735 ms`
+- RAM and TTFT gates pass, but token rate is below `4.4` and correctness fails.
+- Manual correctness: fail; answer says France is often called the `City of Light`, which is a nickname for Paris, not France.
+- Counter signature: pack `misses=1131`, VRAM cache `hits=57702`, `misses=3776`, `hit_rate=93.9%`.
+- Diagnosis: profile gating avoids the no-filter cache collapse, but still changes the generated answer and remains slower than the accepted gate-only SOTA.
+
+CPU-vs-GPU sampled numerical compare:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/updown-gpu-compare-result.json`, sha256 `3fde8d52bced459efd0270e0a5b6d1acaa51be6a02089bf0f6fb12b385eab03a`
+- Gate max_abs about `1.907e-6`, up max_abs about `1.907e-6`, down max_abs about `7.629e-6`; mean_abs is around `1e-8` to `1e-7`.
+- Interpretation: there is no evidence of a gross single-op arithmetic bug, but tiny per-op differences are still enough to change greedy decode trajectories. Full-sequence correctness remains the acceptance gate.
+
+Verdict:
+
+- Close current GPU up/down offload classes.
+- Do not rerun no-filter one-stream up/down.
+- Do not scale profile-gated hot64/topN on the current shared gate cache.
+- Do not continue independent down-cache sizing under the current VRAM budget.
+- Do not run larger hotset experiments unless there is a new deterministic correctness mechanism and hard-bound design first.
+
+### 2026-07-04T03:00Z Active Plan After GPU Up/Down Audit
+
+Current state:
+
+- Accepted strict cold SOTA remains `4.4 tok/s`.
+- Local source/page/scheduling/offload tweaks tried so far do not provide a viable path to `10 tok/s`:
+  - chunk scheduling/affinity bound is too small;
+  - source movement/direct/page prefetch bound is negative under measured bandwidth;
+  - no compatible local draft/MTP/NextN artifact is present;
+  - current GPU up/down offload classes fail correctness or performance.
+
+Next allowed design work:
+
+1. Exact verifier feasibility inspection:
+   - inspect current `llama-cli`, `llama-speculative`, `llama-lookahead`, and DeepSeek4 graph code for an existing way to force/evaluate a known token sequence or dump top logits per step;
+   - determine whether a candidate GPU up/down path can be checked token-by-token against the accepted CPU-fallback path without relying on semantic eyeballing only;
+   - this inspection is code/read-only first and does not require a model run.
+2. If an exact verifier path exists:
+   - write a default-off design for a full-output verifier;
+   - calculate the extra memory, runtime, and TTFT cost;
+   - run it only as diagnostic evidence, not as SOTA promotion.
+3. If no exact verifier path exists:
+   - record that local work is at an artifact/model-support boundary;
+   - next practical progress requires either a compatible DeepSeek draft/MTP/NextN model artifact, or a fundamentally new exact GPU up/down implementation with a correctness proof stronger than sampled per-op closeness.
+
+Hard rule for the next implementation candidate:
+
+- No source patch is allowed until the plan records:
+  - the exact bottleneck it targets;
+  - the hard upper bound in seconds and expected token-rate ceiling;
+  - the correctness mechanism;
+  - RAM/page-cache accounting under the 16GB cgroup;
+  - TTFT impact estimate;
+  - the rollback criteria.
