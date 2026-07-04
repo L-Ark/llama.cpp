@@ -7671,3 +7671,79 @@ Verdict:
 - Close true skip/zero-row as a token-rate optimization path.
 - Any additional row removal is approximate top-k pruning, not exact correctness-preserving skipping. Relevant top2 variants already failed trajectory/correctness/performance (`late10-last10-top2`, `late10-last5-top2`, `late10-last10-up-only-top2`).
 - Next active direction must target exact elimination of remaining up/down CPU fallback through compute/offload/layout changes. If it can change logits, it must use the lightweight top1 verifier before any performance benchmark.
+
+### 2026-07-04T03:45Z Current Plan Update: Exact Up/Down Fallback Elimination
+
+Current accepted SOTA remains unchanged:
+
+- `eval_tok_s=4.4`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Reproduction source branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Source head at this plan update: `1bc0ad58ad162598a26a2427c29344dc2afb5b53`
+- Promotion gate remains strict: cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, France answer semantic/coherent, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, clean pack/cache counters, and pushed-source reproduction.
+
+Current bottleneck:
+
+- The remaining useful bottleneck is exact removal or acceleration of up/down CPU fallback work.
+- Current fallback profile artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json`
+- Measured remaining fallback time: `26438.059 ms`
+  - up: `12786.863 ms`
+  - down: `13651.196 ms`
+  - decode fallback: `19029.457 ms`
+  - prompt fallback: `7408.602 ms`
+- Hard-bound reference:
+  - removing all decode up/down CPU fallback alone reaches only about `8.86 tok/s`, below the `10 tok/s` goal;
+  - reaching `10 tok/s` requires stacking exact up/down fallback removal with another exact gain, most likely source/gate stall reduction or algorithmic multi-token execution.
+
+Closed or rejected paths that should not be repeated without new evidence:
+
+- DS4 hot-dispatch as currently implemented: H0 bound fails; preserving the accepted gate cache leaves only about `238 MiB` VRAM free and the optimistic ceiling is only `4.409 tok/s`.
+- True skip/zero-row elimination: remaining CPU fallback already matches `pruned0`; perfect zero/group elimination ceiling is only `4.412 tok/s`.
+- One-stream GPU up/down cache variants: either regress token rate, collapse cache/source behavior, or change the France answer.
+- Current CUDA graph attempt: strict cold run tied/regressed around `4.1 tok/s`; no promotion.
+- Existing CPU repack / no-repack / transient down-repack variants: tied or regressed; transient down-repack also produced incomplete output.
+- Page/source prewarm variants already tried (`WILLNEED`, blocking touch, dense mmap/page drop, compact mmap packs, synchronous O_DIRECT staging): tied, regressed, or had a negative bandwidth/overlap bound.
+- CPU chunk/affinity variants: tied, regressed, or violated the 16GB cgroup.
+- Approximate top-k pruning beyond the accepted path: relevant top2 variants failed correctness, trajectory, or performance.
+- Algorithmic speculative/MTP/lookahead without a compatible DeepSeek draft or MTP/NextN tensors: closed for the current local model inventory.
+
+Immediate design step before any new runtime patch:
+
+1. Create an `exact-updown-candidate-screening.json` artifact under `.Agent/runs/20260704-vendor-ds4-coldstart/`.
+2. The artifact must aggregate the accepted SOTA metrics, fallback profile, hard-bound table, DS4 hot-dispatch H0 rejection, skip/zero rejection, GPU up/down drift audit, algorithmic-support inspection, source-movement bound, CUDA graph result, and repack/page/chunk rejected evidence.
+3. For each candidate class, record:
+   - exact code path it would change;
+   - whether it is exact or can change logits;
+   - expected removable milliseconds from hard measurements;
+   - VRAM cost and whether it steals from the accepted `GGML_MOE_STREAM_ONE_CACHE_MIB=13568` gate cache;
+   - host RAM impact including page cache inside the 16GB cgroup;
+   - theoretical token-rate ceiling;
+   - verifier needed before performance;
+   - accept/reject decision.
+4. Do not start a model run for a candidate whose no-overhead ceiling is only a tie, whose VRAM plan reduces the gate cache without a larger modeled gain, or whose correctness cannot be verified.
+
+Candidate classes still allowed for future work:
+
+1. Exact up/down compute/offload/layout redesign:
+   - Goal: remove a large fraction of the measured `26438.059 ms` fallback without changing logits.
+   - This cannot be the current DS4 hot-dispatch implementation unless the design changes so hot/cold routing avoids large duplicated GPU hot subsets and does not sacrifice the gate cache.
+   - A candidate must show a hard ceiling above the current SOTA before implementation, and should have a credible stackable path toward `10 tok/s`.
+2. Source/gate stall reduction only with a positive bandwidth/overlap model:
+   - Existing source movement attempts are closed; a new attempt must explain why it avoids the previous negative O_DIRECT staging bound and why it preserves the gate pack hit behavior.
+3. Algorithmic multi-token execution:
+   - Only reopen if a compatible DeepSeek draft model, MTP/NextN tensors, or another exact/token-verified mechanism is available.
+   - Any such path must pass the lightweight top1 verifier or an equivalent token-level check before throughput is measured.
+
+Execution sequence for any candidate that passes screening:
+
+1. Update this plan with the candidate-specific theory and hard upper bound before code changes.
+2. Implement the smallest default-off source change possible.
+3. Run the lightweight sequential top1 verifier on the accepted fixed France text if logits can change.
+4. Only after verifier pass, run the strict cold France benchmark under the 16GB cgroup.
+5. Record all metrics: `eval_tok_s`, `prompt_tok_s`, TTFT, full output, correctness judgment, elapsed time, cgroup memory/file/page-cache stats, OOM counters, pack/cache counters, VRAM cache counters, build hashes, source head, exact env, exact command, and run directory.
+6. If it is a compliant new SOTA, immediately commit and push source, plan, artifacts, scripts, and profiles to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduce from pushed source before declaring it accepted.
+7. If token rate regresses, correctness fails, TTFT exceeds the accepted gate for a promoted result, RAM exceeds 16GB including page cache, or counters show hidden fallback/cache collapse, revert runtime source changes and keep only rejected records/docs.
+
+Current next action:
+
+- Produce the screening artifact first. If no candidate clears the screening gate, do not write speculative runtime code; the next plan update must explicitly state the missing hard bound or missing exact mechanism needed to continue toward `10 tok/s`.
