@@ -46643,6 +46643,19 @@ Planned next practice:
 3. Use the counters to decide whether to implement cross-call down-only
    staging or cross-tensor up/gate staging first.
 
+Implementation notes:
+
+- Add `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- When enabled, each pinned staging ring records:
+  - call count;
+  - average and max `jobs.size()`;
+  - average and max `read_jobs.size()`;
+  - average and max effective io depth;
+  - average slot count.
+- Default behavior remains unchanged because the env flag defaults to off.
+- Emit the summary through the existing pinned staging atexit report so
+  `metrics.txt` captures it with the existing regex.
+
 Acceptance gates for instrumentation:
 
 - quality `pass`;

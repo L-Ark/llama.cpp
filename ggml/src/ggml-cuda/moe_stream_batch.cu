@@ -236,6 +236,14 @@ struct pinned_stage_ring {
     uint64_t iouring_inflight_samples = 0;
     uint64_t iouring_inflight_max = 0;
     uint64_t iouring_batch_hist[6] = {};
+    uint64_t granularity_calls = 0;
+    uint64_t granularity_total_jobs = 0;
+    uint64_t granularity_read_jobs = 0;
+    uint64_t granularity_depth_sum = 0;
+    uint64_t granularity_slots_sum = 0;
+    uint64_t granularity_max_jobs = 0;
+    uint64_t granularity_max_read_jobs = 0;
+    uint64_t granularity_max_depth = 0;
 };
 
 struct batch_ctx {
@@ -1953,6 +1961,10 @@ static bool expert_pack_env_bool(const char *name, bool default_value) {
     return env[0] != '0';
 }
 
+static bool stage_granularity_profile_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STAGE_GRANULARITY_PROFILE", false);
+}
+
 static size_t expert_pack_io_bytes() {
     return expert_pack_env_size("GGML_MOE_IO_BYTES", 2ULL * 1024ULL * 1024ULL,
             expert_pack_direct_alignment(), 64ULL * 1024ULL * 1024ULL);
@@ -3383,6 +3395,20 @@ static void pinned_stage_report_atexit() {
                 ring.iouring_batch_hist[0], ring.iouring_batch_hist[1], ring.iouring_batch_hist[2],
                 ring.iouring_batch_hist[3], ring.iouring_batch_hist[4], ring.iouring_batch_hist[5]);
         }
+        if (ring.granularity_calls > 0) {
+            const double calls = (double)ring.granularity_calls;
+            std::fprintf(stderr,
+                "[moe_stream_batch] pinned staging%s granularity: calls=%lu avg_jobs=%.2f avg_read_jobs=%.2f "
+                "avg_depth=%.2f avg_slots=%.2f max_jobs=%lu max_read_jobs=%lu max_depth=%lu\n",
+                name, ring.granularity_calls,
+                (double)ring.granularity_total_jobs / calls,
+                (double)ring.granularity_read_jobs / calls,
+                (double)ring.granularity_depth_sum / calls,
+                (double)ring.granularity_slots_sum / calls,
+                ring.granularity_max_jobs,
+                ring.granularity_max_read_jobs,
+                ring.granularity_max_depth);
+        }
     };
     report_ring("", g_batch.stage_ring);
     report_ring(" gate", g_batch.stage_ring_gate);
@@ -3633,6 +3659,16 @@ static bool expert_pack_iouring_copy_jobs(
             continue;
         }
         read_jobs.push_back(i);
+    }
+    if (stage_granularity_profile_enabled()) {
+        ++ring.granularity_calls;
+        ring.granularity_total_jobs += jobs.size();
+        ring.granularity_read_jobs += read_jobs.size();
+        ring.granularity_depth_sum += depth;
+        ring.granularity_slots_sum += ring.slots.size();
+        ring.granularity_max_jobs = std::max<uint64_t>(ring.granularity_max_jobs, (uint64_t)jobs.size());
+        ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)read_jobs.size());
+        ring.granularity_max_depth = std::max<uint64_t>(ring.granularity_max_depth, (uint64_t)depth);
     }
     if (read_jobs.empty()) {
         return true;
