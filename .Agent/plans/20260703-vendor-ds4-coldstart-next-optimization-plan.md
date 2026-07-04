@@ -133,6 +133,30 @@ Next required artifact before any runtime code:
 - Write a concrete design for optimized exact MXFP4 x Q8_0 CUDA plus source/cache solution, or reject it on paper.
 - That design must include arithmetic mapping to CPU fallback semantics, source/cache plan, expected overhead under `1642.887 ms`, fixed-text top1 verifier command, and rejection thresholds.
 
+### 2026-07-04 Optimized Q8_0 Compute+Source Design
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/optimized-q80-compute-source-design.json`.
+
+Result: optimized exact MXFP4 x Q8_0 CUDA is arithmetically designable, but it is rejected before runtime source changes because the current source/cache and VRAM allocation do not have a 10 tok/s ceiling after gate-cache penalty.
+
+Design facts:
+
+- CPU reference semantics are MXFP4 weight x Q8_0 activation: `ggml_vec_dot_mxfp4_q8_0`, scale `q8_0.d * mxfp4.e`, 32-element blocks.
+- CUDA has reusable pieces (`quantize_f32_q8_0_block`, Q8_0 row quantization, MXFP4 nibble lookup, `dp4a`), but no existing MXFP4 x Q8_0 MMVQ path.
+- A correct implementation would need a default-off CUDA helper accepting Q8_0 activation rows, a new `vec_dot_mxfp4_q8_0` device function, and fixed-text top1 verification before performance.
+
+Hard-bound result:
+
+- Perfect source/page overlap alone gives only `8.993 tok/s`.
+- Combining source overlap with a resident top-K hot residual exact GPU subset only crosses 10 if `1.6-2.2 GiB` additional CUDA memory can be found without reducing gate cache, and even then slack is only about `61-243 ms` before any kernel/D2H/scatter/sync overhead.
+- Current accepted runs have only about `238 MiB` CUDA free. If the hot up/down subset steals gate cache, the best zero-overhead combo is top256: `9.588 tok/s`, below target.
+
+Decision:
+
+- Do not implement Q8_0 CUDA kernel under the current VRAM allocation.
+- Do not reduce gate cache to fund up/down residency unless a new bound exceeds `10 tok/s` after gate penalty and implementation overhead.
+- Next candidate class is VRAM budget recovery or a genuinely new exact compression/resident representation, because compute-kernel work alone is not currently the limiting proof.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.

@@ -1,0 +1,177 @@
+{
+  "artifact": "optimized-q80-compute-source-design",
+  "created_utc": "2026-07-04T14:52:53Z",
+  "source_head_before_design": "b7931afd2c898e375ce8348d0c1ae914c6508651",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "rejected_before_runtime_source_change",
+  "purpose": "Write the required concrete design for optimized exact MXFP4 x Q8_0 CUDA plus source/cache handling, then decide whether it has enough hard-bound slack to justify code changes.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "arithmetic_design": {
+    "reference_cpu_semantics": [
+      "ggml/src/ggml-cpu/ggml-cpu.c:1340 maps GGML_TYPE_MXFP4 to ggml_vec_dot_mxfp4_q8_0 and GGML_TYPE_Q8_0 activation.",
+      "ggml/src/ggml-cpu/quants.c:252 implements generic MXFP4 x Q8_0 as sum over 32-element blocks.",
+      "ggml/src/ggml-cpu/arch/x86/quants.c:918 implements the x86 optimized version with int dot plus scale y.d * mxfp4.e."
+    ],
+    "cuda_reusable_parts": [
+      "ggml/src/ggml-cuda/cpy-utils.cuh:137 has quantize_f32_q8_0_block.",
+      "ggml/src/ggml-cuda/set-rows.cu:292 can quantize rows to Q8_0.",
+      "ggml/src/ggml-cuda/vecdotq.cuh:34 has get_int_from_table_16 for MXFP4 nibble lookup.",
+      "ggml/src/ggml-cuda/vecdotq.cuh:446 implements MXFP4 x Q8_1 using dp4a, but not Q8_0."
+    ],
+    "required_new_code_if_implemented": [
+      "Add a default-off CUDA helper for MXFP4 x Q8_0 rows that accepts prequantized Q8_0 activation rows from params->wdata or a CUDA Q8_0 quantization buffer.",
+      "Add a vec_dot_mxfp4_q8_0 device function: lookup 16 MXFP4 nibbles into signed int8 values, dp4a against Q8_0 qs, then scale by ggml_cuda_e8m0_to_fp32(block_mxfp4.e) * half_to_float(block_q8_0.d).",
+      "Wire the CPU mul_mat_id call site to pass Q8_0 activation data only under an explicit diagnostic env, preserving the accepted gate-only SOTA path by default.",
+      "First run the fixed-text top1 verifier; no strict cold token-rate benchmark is allowed until top1 is identical."
+    ],
+    "correctness_risk": "The arithmetic can be made closer to CPU fallback than Q8_1 one-stream, but exact top1 is still not guaranteed because prior Q8_0 scalar probe failed same_top1=136/145 and first mismatch at position 4. Any implementation must prove token-level stability before performance."
+  },
+  "source_cache_design_options": [
+    {
+      "name": "full up/down resident exact GPU path",
+      "decision": "not_viable",
+      "reason": "All decode up/down unique payload is about 22.3295 GiB. Current accepted gate cache is 13.25 GiB and observed accepted CUDA free is about 238 MiB, so full exact residency cannot fit while preserving the accepted gate path."
+    },
+    {
+      "name": "stream all up/down weights on demand",
+      "decision": "not_viable",
+      "reason": "Existing hard-bound requires about 90.6 GiB/s effective H2D/source bandwidth before kernel, D2H, scatter, and sync overhead."
+    },
+    {
+      "name": "host pinned or host page-cache resident hotset",
+      "decision": "not_viable",
+      "reason": "Host RAM is strictly capped at 16GB including page cache and current accepted run already uses about 15.10GB file cache. Host-resident GPU compute still pays H2D per call unless the weights are in VRAM."
+    },
+    {
+      "name": "source/page overlap plus small exact GPU hot-residual subset",
+      "decision": "screened_below_10_after_gate_penalty",
+      "reason": "This is the only plausible combined design. It assumes page/source stalls are perfectly hidden, then places a top-K subset of the remaining hot CPU fallback in VRAM. However, the top-K payload must steal gate-cache slots because only about 238 MiB CUDA free is available."
+    }
+  ],
+  "combined_source_plus_hot_compute_bound": {
+    "assumptions": [
+      "Use serial touch residual as the hot CPU fallback lower-bound: source/page exposure hidden leaves 3173.291 ms decode fallback.",
+      "Perfect source/page overlap saves 15856.166 ms from the accepted decode window.",
+      "Resident exact GPU top-K removes the selected hot residual fallback with zero kernel/D2H/scatter/sync overhead.",
+      "Up/down resident payload consumes 4.25 MiB slots. The first 238 MiB uses observed free CUDA memory; the rest is taken from the accepted top3000 gate cache.",
+      "Gate-cache loss penalty uses the existing gate profile and 1.024052 ms per lost hit."
+    ],
+    "base_numbers": {
+      "decoded_tokens_estimate": 136.608765524,
+      "accepted_decode_window_ms": 31047.44671,
+      "target_decode_window_ms_for_10_tok_s": 13660.8765524,
+      "source_overlap_save_ms": 15856.166,
+      "observed_cuda_free_mib": 238,
+      "slot_mib": 4.25,
+      "gate_top3000_score": 33239,
+      "gate_extra_ms_per_lost_hit": 1.024052203321064
+    },
+    "rows": [
+      {
+        "updown_k": 0,
+        "payload_mib": 0.0,
+        "hot_compute_save_ms": 0.0,
+        "gate_k_est": 3000,
+        "gate_penalty_ms": 0.0,
+        "new_decode_ms_zero_overhead": 15191.281,
+        "tok_s_zero_overhead": 8.993
+      },
+      {
+        "updown_k": 128,
+        "payload_mib": 544.0,
+        "hot_compute_save_ms": 960.446,
+        "gate_k_est": 2928,
+        "gate_penalty_ms": 147.464,
+        "new_decode_ms_zero_overhead": 14378.298,
+        "tok_s_zero_overhead": 9.501
+      },
+      {
+        "updown_k": 256,
+        "payload_mib": 1088.0,
+        "hot_compute_save_ms": 1353.345,
+        "gate_k_est": 2800,
+        "gate_penalty_ms": 409.621,
+        "new_decode_ms_zero_overhead": 14247.557,
+        "tok_s_zero_overhead": 9.588
+      },
+      {
+        "updown_k": 384,
+        "payload_mib": 1632.0,
+        "hot_compute_save_ms": 1591.525,
+        "gate_k_est": 2672,
+        "gate_penalty_ms": 671.778,
+        "new_decode_ms_zero_overhead": 14271.534,
+        "tok_s_zero_overhead": 9.572
+      },
+      {
+        "updown_k": 512,
+        "payload_mib": 2176.0,
+        "hot_compute_save_ms": 1773.973,
+        "gate_k_est": 2544,
+        "gate_penalty_ms": 933.936,
+        "new_decode_ms_zero_overhead": 14351.243,
+        "tok_s_zero_overhead": 9.519
+      },
+      {
+        "updown_k": 1024,
+        "payload_mib": 4352.0,
+        "hot_compute_save_ms": 2252.032,
+        "gate_k_est": 2032,
+        "gate_penalty_ms": 2424.956,
+        "new_decode_ms_zero_overhead": 15364.204,
+        "tok_s_zero_overhead": 8.891
+      }
+    ],
+    "best_row_after_gate_penalty": {
+      "updown_k": 256,
+      "payload_mib": 1088.0,
+      "tok_s_zero_overhead": 9.588,
+      "new_decode_ms_zero_overhead": 14247.557
+    },
+    "no_gate_penalty_reference": [
+      {
+        "updown_k": 384,
+        "payload_mib_needed_without_gate_loss": 1632.0,
+        "tok_s_zero_overhead": 10.045,
+        "slack_ms_to_10_tok_s": 61.0
+      },
+      {
+        "updown_k": 512,
+        "payload_mib_needed_without_gate_loss": 2176.0,
+        "tok_s_zero_overhead": 10.181,
+        "slack_ms_to_10_tok_s": 243.0
+      }
+    ],
+    "interpretation": "The combined design only has a 10 tok/s ceiling if at least about 1.6-2.2 GiB of additional VRAM can be found without reducing the accepted gate cache, and even then the zero-overhead slack is very small. With current measured free VRAM and gate-cache penalty, it does not reach 10."
+  },
+  "decision": {
+    "implement_runtime_source_now": false,
+    "reason": "The concrete optimized Q8_0 compute design is arithmetically plausible but has no acceptable source/cache allocation under the current VRAM budget. The best combined source-overlap plus hot exact-compute row is only 9.588 tok/s with zero overhead after gate-cache penalty, so it fails the plan requirement before any code change.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  },
+  "next_required_work": {
+    "do_not_do": [
+      "Do not implement the Q8_0 CUDA kernel just to run a benchmark under the current VRAM allocation.",
+      "Do not reduce gate cache to fund up/down residency unless a new hard-bound exceeds 10 tok/s after gate penalty and implementation overhead.",
+      "Do not repeat scalar Q8_0 or Q8_1 one-stream probes."
+    ],
+    "only_paths_that_reopen_q80_design": [
+      "Free at least 1.6-2.2 GiB of CUDA memory without reducing the accepted gate cache or changing correctness.",
+      "Find a new exact compression/resident representation that fits the hot subset below the 238 MiB current free budget.",
+      "Add a verified source/cache mechanism that removes gate-cache penalty as well as up/down source stalls, then recompute the bound."
+    ],
+    "next_candidate_class": "VRAM budget recovery or exact compression, because compute-kernel work alone is no longer the limiting proof."
+  }
+}
