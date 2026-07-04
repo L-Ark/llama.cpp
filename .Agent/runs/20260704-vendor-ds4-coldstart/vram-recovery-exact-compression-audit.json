@@ -1,0 +1,113 @@
+{
+  "artifact": "vram-recovery-exact-compression-audit",
+  "created_utc": "2026-07-04T15:05:00Z",
+  "source_head_before_audit": "bb875c7bfe34b67da86bf17c09e270796f99fa86",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "rejected_before_runtime_source_change",
+  "purpose": "Check whether VRAM budget recovery or exact compression can reopen the optimized Q8_0 compute+source path.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "vram_budget_findings": {
+    "gpu": "RTX 5090, about 32109 MiB VRAM reported by llama runtime",
+    "accepted_memory_breakdown": "CUDA0 32109 = 238 free + (17362 self = 17339 model + 18 context + 4 compute) + 14508 unaccounted",
+    "interpretation": [
+      "The only large reclaimable-looking region is unaccounted memory, but it corresponds primarily to the accepted 13568 MiB one-stream gate cache plus allocator/runtime overhead.",
+      "Context and compute buffers are tiny; lowering context from 256 to 128 left GPU free essentially unchanged at about 237 MiB.",
+      "The accepted path already sets GGML_CUDA_DISABLE_GRAPHS=1, so CUDA graph reserve is not a practical GiB-scale source.",
+      "Preserving the accepted gate cache leaves only about 238 MiB, and tiny 256 MiB down-cache probes failed or had zero useful reuse."
+    ],
+    "closed_recovery_options": [
+      {
+        "name": "context/KV reduction",
+        "evidence": "2026-07-03 Context-Size VRAM Free Probe: -c 128 still max used/free about 31873/237 MiB",
+        "decision": "closed"
+      },
+      {
+        "name": "independent tiny down/up cache with gate preserved",
+        "evidence": "256 MiB down cache allocation fell back to about 34 slots and 0.0% hit rate; corrected 60-slot down path still below SOTA",
+        "decision": "closed"
+      },
+      {
+        "name": "allocator/unaccounted recovery without touching gate",
+        "evidence": "Repeated accepted-shape runs show free about 236-238 MiB, model about 17362 MiB, unaccounted about 14508-14510 MiB. Existing probes identify this as gate cache dominated.",
+        "decision": "no_known_gib_scale_recovery"
+      }
+    ]
+  },
+  "exact_compression_findings": {
+    "minimum_hot_residual_payloads": [
+      {
+        "updown_k": 384,
+        "raw_payload_mib": 1632.0,
+        "zero_overhead_tok_s_without_gate_penalty": 10.045,
+        "slack_ms_before_overhead": 61.0,
+        "required_ratio_to_fit_238_mib": 6.857
+      },
+      {
+        "updown_k": 512,
+        "raw_payload_mib": 2176.0,
+        "zero_overhead_tok_s_without_gate_penalty": 10.181,
+        "slack_ms_before_overhead": 243.0,
+        "required_ratio_to_fit_238_mib": 9.143
+      },
+      {
+        "updown_k": 1024,
+        "raw_payload_mib": 4352.0,
+        "zero_overhead_tok_s_without_gate_penalty": 10.558,
+        "slack_ms_before_overhead": 721.0,
+        "required_ratio_to_fit_238_mib": 18.286
+      }
+    ],
+    "zstd_samples": [
+      {
+        "pack": "ds4-france-decode-top128-updown-20260703.pack",
+        "sample_bytes": 268435456,
+        "zstd_level": 1,
+        "compressed_bytes": 258056930,
+        "ratio": 1.040218
+      },
+      {
+        "pack": "ds4-france-gate-miss-firstorder-20260702.pack",
+        "sample_bytes": 268435456,
+        "zstd_level": 1,
+        "compressed_bytes": 257462004,
+        "ratio": 1.042622
+      }
+    ],
+    "interpretation": [
+      "Generic exact compression is about 1.04x on sampled packed expert payloads, far below the 6.9x-9.1x minimum needed for the smallest useful hot subset to fit in the current 238 MiB free VRAM.",
+      "Even if such compression existed, decompression overhead would have to fit inside only 61-243 ms zero-overhead slack for top384/top512.",
+      "A custom exact compression path is therefore not a near-term implementation candidate without a new model-specific proof."
+    ]
+  },
+  "decision": {
+    "vram_recovery_reopens_q80_design": false,
+    "exact_compression_reopens_q80_design": false,
+    "reason": "No known GiB-scale VRAM can be recovered without reducing gate cache, and sampled exact compression is two orders of magnitude short of the ratio needed to fit a useful hot subset in the current free VRAM.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  },
+  "next_required_work": {
+    "remaining_nonclosed_classes": [
+      "algorithmic multi-token/speculative path with compatible DeepSeek4 draft/MTP/NextN support",
+      "a fundamentally different exact GPU memory layout that shares gate and up/down residency without losing gate hit rate, with a new hard-bound",
+      "model/runtime-level change that reduces the fixed 17.3 GiB GPU model footprint without changing correctness"
+    ],
+    "do_not_repeat": [
+      "context-size VRAM probes",
+      "tiny independent down/up cache probes",
+      "generic exact compression of MXFP4 packs",
+      "Q8_0 kernel implementation without a new VRAM/source proof"
+    ]
+  }
+}

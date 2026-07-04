@@ -157,6 +157,25 @@ Decision:
 - Do not reduce gate cache to fund up/down residency unless a new bound exceeds `10 tok/s` after gate penalty and implementation overhead.
 - Next candidate class is VRAM budget recovery or a genuinely new exact compression/resident representation, because compute-kernel work alone is not currently the limiting proof.
 
+### 2026-07-04 VRAM Recovery And Exact Compression Audit
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/vram-recovery-exact-compression-audit.json`.
+
+Result: VRAM budget recovery and generic exact compression do not reopen the Q8_0 compute+source path.
+
+Key findings:
+
+- Accepted VRAM shape is about `32109 MiB total = 238 MiB free + 17362 MiB self/model/context/compute + 14508 MiB unaccounted`.
+- The large unaccounted region is gate-cache dominated; context/compute buffers are tiny. Reducing context to `-c 128` still left only about `237 MiB` free.
+- Tiny independent down-cache probes with gate preserved either failed allocation, had only tiny fallback allocations, or produced `0.0%` useful hit rate.
+- To make source-overlap + hot exact compute cross `10 tok/s` without reducing gate cache, the smallest useful hot subset needs about `1.6-2.2 GiB` raw payload. Fitting that into the current `238 MiB` free VRAM requires about `6.9x-9.1x` exact compression.
+- zstd samples on packed expert payloads are only about `1.04x`, far below the required ratio; even a hypothetical compression path would have only `61-243 ms` zero-overhead slack for decompression/kernel overhead.
+
+Decision:
+
+- Do not pursue context-size VRAM probes, tiny independent up/down cache probes, generic exact compression, or Q8_0 kernel implementation without a new VRAM/source proof.
+- Remaining nonclosed classes are higher-level: compatible multi-token/speculative path, a fundamentally different shared gate+up/down residency structure with a new hard-bound, or a model/runtime-level change that reduces the fixed GPU model footprint without changing correctness.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.
