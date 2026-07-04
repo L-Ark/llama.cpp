@@ -44641,3 +44641,52 @@ Decision rule:
 - If confirmation passes, run n96 twice and compare against Phase 7FB best
   `70087.31 ms / 77`.
 - If any gate fails, revert the source patch and record rejection.
+
+Result - 2026-07-04 06:00Z:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-060024Z-n32-phase7fi-admit2-scratch`.
+- Repro command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fi-admit2-scratch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      GGML_MOE_VRAM_CACHE_ADMIT_AFTER=2 \
+      GGML_MOE_VRAM_SCRATCH_SLOTS_UPGATE=16 \
+      GGML_MOE_VRAM_SCRATCH_SLOTS_DOWN=8 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gates:
+  - quality: pass;
+  - output: `France is a country in Western Europe known for its rich
+    history, culture, and influence on art, fashion, and cuisine. Its capital,
+    Paris, is famous`;
+  - TTFT: `75347.65 ms`, below the `106331.72 ms` limit;
+  - decode: `30481.02 ms / 31`, `1.02 tok/s`;
+  - memory peak: `15899996160` bytes;
+  - swap: `0`;
+  - expert pack: `read_failures=0`, `iouring_fallbacks=0`.
+- Diagnostics:
+  - down cache: `hits=9308`, `misses=1814`, hit rate `83.7%`;
+  - upgate cache: `hits=12340`, `misses=7724`, hit rate `61.5%`;
+  - scratch: `bypasses=11710`, `copies=11710`, `bytes=59.317 GiB`,
+    `no_slot=0`, `admit_inserts=9538`;
+  - expert pack: `iouring_reads=15357`, `iouring_bytes=89198592000`,
+    `iouring_wait_us=15021914`;
+  - pinned staging main: `host_stage=12152.020 ms`, `h2d=4262.753 ms`;
+  - pinned staging gate: `host_stage=367.552 ms`, `h2d=994.697 ms`.
+- Decision: rejected and reverted.
+  - It is slower than Phase 7FD diagnostic `29610.75 ms` and the current
+    Phase 7FB n32 confirmation `29182.49 ms`.
+  - The scratch path avoided persistent cache pollution, but it did not avoid
+    the copy itself: `59.317 GiB` still went through staging/H2D.
+  - Delaying admission reduced immediate persistent residency and did not
+    lower iouring wait enough; `iouring_wait_us=15021914` remained comparable
+    to the current SOTA diagnostic.
+  - Since token rate fell, the source patch must not be accepted.
