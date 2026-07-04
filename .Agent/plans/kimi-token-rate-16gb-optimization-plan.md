@@ -52593,3 +52593,60 @@ Acceptance gates:
 - if n32 improves, run strict n96 and commit/push only if n96 improves under all
   gates;
 - if n32 regresses or quality fails, reject the implementation and record why.
+
+## Phase 7HG: io_uring offset-sort ablation before source scheduler changes
+
+Start time: 2026-07-04T23:10:00+08:00.
+
+Goal:
+
+- Before implementing the more invasive multi-stream coalescer, isolate the
+  effect of `GGML_MOE_IO_SORT_OFFSET=1`.
+- Determine whether per-call offset sorting is helping SSD locality or adding
+  completion/H2D tail latency for the small `1-8` expert batches seen in Phase
+  7HE.
+
+Theory and upper bound:
+
+- Phase 7HE shows most io_uring calls contain only `1-4` or `5-8` read jobs.
+- Sorting by offset may improve cold SSD access locality, but it also changes
+  which expert's H2D is enqueued first inside a batch.
+- Because current `copy_stage_jobs` waits for the whole up or gate stage before
+  launching that tensor's compute, the expected effect is bounded by per-call
+  read tail latency rather than by compute overlap.
+- If sort-off reduces n96 io wait by `3%`, upper-bound decode improvement is
+  about `1.1 s` from the Phase 7HB `37.550 s` io wait baseline. If it increases
+  random-read wait, reject it and keep sort-on.
+
+Experiment: n32 offset-sort ablation
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hg-sort-off"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_SORT_OFFSET=0 GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- compare n32 decode and io wait against Phase 7HE v2.
+
+Decision rule:
+
+- If n32 sort-off is faster without gate failures, run strict n96 sort-off.
+- If n96 sort-off improves token rate under all gates, update the reproduction
+  script default, commit, push, and record exact commands and metrics.
+- If n32 or n96 regresses, reject sort-off and keep `GGML_MOE_IO_SORT_OFFSET=1`.
