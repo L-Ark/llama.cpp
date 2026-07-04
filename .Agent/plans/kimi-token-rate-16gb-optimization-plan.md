@@ -46823,6 +46823,89 @@ Decision for next practice:
 - Do not keep adding up/gate combined variants without a new timing breakdown.
 - First add targeted low-overhead timing for staging phases, then choose
   whether to attack down staging or cache/refault behavior.
+
+## Phase 7GA: copy-profile baseline timing
+
+Start time: 2026-07-04T17:26:00+08:00.
+
+Goal:
+
+- Use existing `GGML_MOE_COPY_PROFILE_OUT` to get a low-level copy timing
+  breakdown without adding new code.
+- Run default SOTA runtime, not combined staging.
+- Determine whether the next implementation should target:
+  - down staging;
+  - up/gate staging;
+  - slot reuse waits;
+  - page-cache/refault behavior.
+
+Theory:
+
+- Previous aggregate counters show io wait is large, but failed combined
+  staging proves that reducing io wait alone is insufficient.
+- `copy-profile.csv` records per copy:
+  - `op`;
+  - `tensor`;
+  - `iouring`;
+  - `slot_wait_ms`;
+  - `host_ms`;
+  - `io_wait_ms`;
+  - `enqueue_ms`;
+  - `h2d_ms`;
+  - `wall_ms`.
+- A n32 run should be enough to rank which copy class dominates visible wall.
+- Because this writes one CSV row per copy, it is diagnostic only; overhead must
+  be measured against the n32 baseline and not treated as SOTA.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ga-copy-profile-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Postprocess:
+
+```bash
+python3 - <<'PY' "$RUN/copy-profile.csv"
+import csv, sys
+from collections import defaultdict
+path = sys.argv[1]
+agg = defaultdict(lambda: defaultdict(float))
+with open(path) as f:
+    for row in csv.DictReader(f):
+        key = (row["op"], row["iouring"], row["pack_hit"], row["ram_hit"])
+        agg[key]["count"] += 1
+        for k in ["slot_wait_ms","host_ms","io_wait_ms","enqueue_ms","h2d_ms","wall_ms"]:
+            agg[key][k] += float(row[k])
+for key, vals in sorted(agg.items(), key=lambda kv: kv[1]["wall_ms"], reverse=True):
+    print(key, dict(vals))
+PY
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If diagnostic overhead is too high (>5% n32 decode), use only the breakdown
+  directionally and do not compare token rate.
+- Choose the next implementation based on the largest `wall_ms` and
+  `io_wait_ms` buckets, not on aggregate assumptions.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
