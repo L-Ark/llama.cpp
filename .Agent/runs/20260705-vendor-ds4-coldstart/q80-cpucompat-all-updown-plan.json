@@ -1,0 +1,38 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: combined all ffn_up_exps and ffn_down_exps Q8_0 CPU-compatible pre-fallback skip",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "prerequisite": {
+    "all_up_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-up-validation.json",
+    "all_down_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-down-validation.json",
+    "result": "both passed",
+    "same_top1": "145/145 for all-up and all-down individually"
+  },
+  "candidate": {
+    "type": "correctness gate only",
+    "env": {
+      "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+      "GGML_MOE_STREAM_Q80_ALLOW_DOWN": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "ffn_",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0"
+    },
+    "filter_reason": "`ffn_` matches up/down names, while the q80 skip allow-list still restricts execution to ffn_up_exps and ffn_down_exps; gate experts are not skipped by this path."
+  },
+  "correctness_gate": {
+    "command": "llama-results fixed-text top1 check against existing baseline result.gguf",
+    "pass_condition": "exit 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0",
+    "failure_rule": "If combined up+down fails, binary-search up/down interaction by layer group and do not run strict cold performance."
+  },
+  "runtime_constraints": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "framework": "vendor DeepSeek"
+  },
+  "not_a_sota": true,
+  "next_if_passes": "Do not rerun the known slow per-call strict cold performance path blindly. Write a hard-bound plan for source-resident plus batched/fused Q8_0 using the combined correctness proof."
+}
