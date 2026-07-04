@@ -51956,3 +51956,121 @@ Decision rule:
   for the next optimization phase.
 - If it fails quality/RAM/TTFT/fallback gates, revert the source-specific mmap
   patch and return to the last accepted source state.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-140743Z-n96-phase7hb-current-prod-baseline`.
+- Current head:
+  `5817178a3` docs head with source from `a953b7693`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `76555.24 ms`;
+  - decode `71177.58 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15066165248`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Bottleneck metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37550460`;
+  - `iouring_submit_us=99349`;
+  - main pinned copies `49350`;
+  - main pinned waits `49314`;
+  - main iouring wait calls `21139`, inflight average `3.22`, max `8`;
+  - gate pinned copies `10450`;
+  - gate pinned waits `10426`;
+  - gate iouring wait calls `8651`, inflight average `2.82`, max `8`;
+  - current-down worker `8464516 us`;
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`.
+- Decision:
+  - Passes all gates but does not beat Phase 7FB SOTA
+    `70087.31 ms / 77`.
+  - Use this as the current production bottleneck baseline.
+  - Do not revert the source-specific mmap correctness fix.
+- Bottleneck interpretation:
+  - Rare CPU fallback miss cleanup is not the limiter.
+  - The current limiter remains visible expert movement:
+    `214.9 GB` through expert-pack/io_uring/H2D, `37080` reads, and almost
+    every pinned copy waiting.
+  - Next work must locate which layers/tensors create the exposed waits before
+    changing scheduling or cache policy.
+
+## Phase 7HC: detailed movement profile for current bottleneck
+
+Start time: 2026-07-04T22:16:04+08:00.
+
+Goal:
+
+- Run a detailed profiling pass on current head to attribute the remaining
+  movement bottleneck by tensor/layer/stage.
+- Use the accepted production environment and l1/l2 overlay.
+- Keep this as a diagnostic phase only; do not claim SOTA from profiling runs.
+
+Why this is required:
+
+- The current production baseline still shows:
+  - `37080` io_uring reads;
+  - `214923018240` bytes moved;
+  - `49314` main pinned waits;
+  - `10426` gate pinned waits;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Prior sweeps of pinned slots, refill batch, VRAM size, cache split, and RAM
+  tier have been rejected.
+- The next optimization must be based on which tensors/layers dominate exposed
+  waits, not on another blind parameter sweep.
+
+Experiment: n32 detailed profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hc-current-detailed-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- profile CSV/log files exist.
+
+Data to inspect:
+
+- `down-batch-profile.csv`;
+- `up-gate-profile.csv`;
+- `route-profile.csv`;
+- `fallback-profile.csv`;
+- `ttft-trace.csv`;
+- stderr profile summaries for stage, quant, up/gate compute, wait, H2D, and
+  wall gaps.
+
+Decision rule:
+
+- If one or a small set of layers/tensors dominates exposed wait, plan a
+  targeted scheduling/cache/preload optimization for those tensors.
+- If profile shows waits are uniformly spread across many misses, prioritize a
+  scheduler-level change that reduces wait calls or increases effective
+  in-flight depth.
+- If profile overhead breaks quality or RAM, reject the profile run and reduce
+  profile scope before trying again.
