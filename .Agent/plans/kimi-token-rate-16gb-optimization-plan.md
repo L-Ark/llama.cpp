@@ -44941,3 +44941,89 @@ Result - 2026-07-04 06:24Z:
   - Keep only the default-empty runner `EXTRA_RUNTIME_ENV` hook if retained
     for future reproducible env-gated experiments; it must not change
     production behavior when unset.
+
+## Phase 7FK: io_uring depth/refill wait-reduction sweep
+
+Start time: 2026-07-04T14:40:00Z.
+
+Goal:
+
+- Reduce expert-pack wait time without changing compute kernels, cache split,
+  Q4_0 policy, down overlap, or CPU threads.
+- Keep the experiment env-only and reproducible through the default-empty
+  `EXTRA_RUNTIME_ENV` runner hook.
+
+Current bottleneck evidence:
+
+- Current accepted SOTA remains Phase 7FB:
+  - n32 confirmation:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-042209Z-n32-phase7fb-slots12-min-profile-confirm`;
+  - decode `29182.49 ms / 31`;
+  - TTFT `73438.91 ms`;
+  - quality pass;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Phase 7FD diagnostic:
+  - decode `29610.75 ms / 31`;
+  - expert pack:
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=14744321`;
+    - `inflight_avg=3.08`;
+    - `inflight_max=8`;
+    - batch hist: `1:335`, `2-4:2425`, `5-8:1242`.
+- The current runner fixes:
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_IO_BYTES=8388608`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - pinned staging slots remain `12`.
+
+Theory and upper bound:
+
+- `iouring_wait_us` is a large measured component of decode-time movement.
+- Depth `8` caps outstanding expert-pack reads; the detail counters show
+  `inflight_max=8`, so the cap is reached.
+- Increasing depth to `16` and refill batch to `8` may reduce read wait if the
+  SSD and io_uring path can keep more requests in flight.
+- Hard upper bound:
+  - cannot save more than the measured wait bucket, about `14.7 s` in the n32
+    diagnostic;
+  - realistic improvement is much smaller because H2D, host staging, CPU
+    fallback, and kernels still remain.
+- Acceptance target:
+  - n32 diagnostic must beat Phase 7FD `29610.75 ms`;
+  - preferably beat current Phase 7FB n32 confirmation `29182.49 ms`;
+  - must not raise TTFT beyond `106331.72 ms`;
+  - must keep `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - must keep `read_failures=0`, `iouring_fallbacks=0`;
+  - France output must remain semantically correct.
+- Failure modes:
+  - higher depth may increase queue contention or CPU overhead;
+  - larger refill bursts may worsen copy scheduling or pinned-stage slot waits;
+  - higher read concurrency may increase page-cache/file pressure under the
+    16GB cgroup even if direct expert-pack reads are used.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fk-iodepth16-refill8"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_DEPTH=16\nGGML_MOE_IO_REFILL_BATCH=8' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 is slower than current SOTA or violates quality/TTFT/RAM/pack gates,
+  record rejection and keep production depth/refill unchanged.
+- If n32 improves:
+  1. run n32 minimal-profile confirmation;
+  2. run n96 twice;
+  3. accept only if n96 beats Phase 7FB best `70087.31 ms / 77`.
+- If accepted, update the production runner env, commit, and push immediately
+  with all reproduction commands and paths recorded here.
