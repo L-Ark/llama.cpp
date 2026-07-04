@@ -53823,3 +53823,107 @@ Result:
     adjacent runtime-load calls within a safe boundary, without repeating the
     rejected shared coalescer that reduced wait but damaged compute/copy
     overlap.
+
+## Phase 7HP: lightweight io_uring H2D timing instrumentation
+
+Start time: 2026-07-05T02:45:00+08:00.
+
+Goal:
+
+- Add default-off instrumentation that reports real CUDA H2D time for
+  io_uring-backed copy-profile rows.
+- Keep behavior unchanged unless both:
+  - `GGML_MOE_COPY_PROFILE_OUT` is set;
+  - `GGML_MOE_COPY_PROFILE_H2D=1` is set.
+- Use the result to decide whether the next performance source change should
+  target:
+  - read wait / io_uring scheduling; or
+  - H2D copy overlap / stream ordering.
+
+Why this is needed:
+
+- Phase 7HO shows the remaining bottleneck is `runtime_load` movement:
+  - `runtime_load` copy-profile wall `56976.55 ms`;
+  - `runtime_load` io wait `45469.53 ms`;
+  - `runtime_load` slot wait only `20.93 ms`.
+- But current copy-profile records `h2d_ms=-1` for io_uring rows, so the profile
+  cannot quantify whether H2D is hidden, exposed, or competing with compute.
+- Existing pinned-stage CUDA event timing already exists, but it is tied to
+  broad full-profile paths rather than a focused copy-profile flag.
+
+Source design:
+
+- Add:
+
+```c
+static bool copy_profile_h2d_enabled()
+```
+
+  returning true only when `GGML_MOE_COPY_PROFILE_H2D=1`.
+- In `pinned_stage_ensure`, create per-slot `copy_start`/`copy_done` CUDA events
+  when either:
+  - the existing pinned-stage profile is enabled; or
+  - copy-profile H2D timing is enabled.
+- In both staged copy paths:
+  - record `copy_start` before `cudaMemcpyAsync`;
+  - record `copy_done` after `cudaMemcpyAsync`;
+  - keep the existing `slot.done` event unchanged;
+  - only synchronize `copy_done` for profile reporting when the flag is enabled.
+- For io_uring `copy_profile_record`, replace `h2d_ms=-1` with measured H2D
+  time when available.
+- Default behavior without `GGML_MOE_COPY_PROFILE_H2D=1` must remain unchanged.
+
+Risk:
+
+- This is diagnostic instrumentation, not a token-rate optimization.
+- Enabling the flag adds CUDA event work and synchronization for profiling, so
+  decode from this run cannot be compared directly to SOTA.
+- It must still pass quality, TTFT, RAM, swap, and fallback gates.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment: n32 H2D copy-profile diagnostic
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hp-copy-h2d-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_COPY_PROFILE_H2D=1
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Diagnostic gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `copy-profile.csv` exists and has rows;
+- io_uring rows in `copy-profile.csv` have non-negative `h2d_ms`.
+
+Decision rule:
+
+- If H2D time is small compared with io wait, plan a performance source change
+  around read scheduling / call-boundary batching.
+- If H2D time is large or strongly exposed in a few op/tensor groups, plan a
+  stream/copy-overlap optimization instead.
+- If instrumentation breaks any hard gate, revert the source patch and record
+  rejection.
+- If instrumentation passes, keep it default-off and commit/push because it
+  improves reproducibility of future bottleneck decisions.
