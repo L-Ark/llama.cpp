@@ -42882,3 +42882,104 @@ LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
 
 - Do not retest `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1` as a new idea; it is
   already part of the accepted runner.
+
+## Phase 7EZ: CPU fallback pack-mmap dontneed after use
+
+Start time:
+
+- 2026-07-04T05:18:00Z.
+
+Reason for this phase:
+
+- Current SOTA already uses CPU fallback expert-pack mmap:
+  - 7EX n96 A: `hits=4286`, `misses=26`, `bytes=35391799296`.
+- This avoids scattered GGUF tensor page faults for most residual decode
+  fallback, but the expert-pack mmap pages still enter file cache.
+- 7EX still reaches the 16GB cgroup cap and shows high direct reclaim:
+  - n96 `memory.events max +34323/+32573`;
+  - n96 `pgscan +32694486/+31847907`;
+  - n96 `pgsteal +21531241/+21543720`.
+- The next low-risk source experiment is to release only the expert-pack mmap
+  ranges used by CPU fallback after the fallback compute for that op finishes.
+
+Theoretical expectation:
+
+- Each accepted 7EX n96 run reads about `35.39 GiB` through CPU fallback
+  expert-pack mmap.
+- The current mmap path keeps those pages eligible to remain in file cache.
+- Calling `madvise(MADV_DONTNEED)` on used expert-pack mmap ranges after the
+  op can reduce file-cache pressure and cgroup direct reclaim.
+- Upper bound:
+  - this cannot reduce GPU H2D or expert-pack io_uring waits directly;
+  - it can only recover reclaim/page-fault variance;
+  - realistic n32 upside is likely `0.0-0.5 s`;
+  - if the same fallback expert is reused soon, this can increase refaults and
+    slow decode.
+
+Implementation design:
+
+- Add a default-off env:
+
+```bash
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_DONTNEED=1
+```
+
+- Extend CPU fallback pack-mmap state with:
+  - `dontneed_enabled`;
+  - `dontneed_calls`;
+  - `dontneed_bytes`;
+  - `dontneed_failures`.
+- In `ggml_kimi_cpu_fallback_pack_mmap_prepare()`:
+  - keep the current decode-only behavior;
+  - track only non-null pack-mmap pointers.
+- After the CPU fallback loop completes and all threads reach a barrier:
+  - on `ith == 0`, call `madvise(ptr, expert_bytes, MADV_DONTNEED)` for each
+    non-null `fallback_pack_mmap_ptrs[cur_a]` with nonzero
+    `matrix_row_counts[cur_a]`;
+  - align the range to page boundaries before calling `madvise`;
+  - record counters in the existing `[kimi_cpu_fallback_pack_mmap]` summary.
+
+Correctness:
+
+- This does not change tensor values or compute order.
+- It only tells the kernel the used file-backed pages can be discarded.
+- The pointer remains valid because `MADV_DONTNEED` on a file-backed mapping
+  does not unmap the virtual address.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ez-packmmap-dontneed"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      GGML_MOE_CPU_FALLBACK_PACK_MMAP_DONTNEED=1 \
+      /tmp/run_phase7ew_cgroup_timeline.sh
+```
+
+Hard gates:
+
+- build succeeds;
+- exit `0`;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Decision rule:
+
+- First n32 must beat the accepted 7EX n32 confirmation
+  `29462.94 ms / 31`.
+- If first n32 is slower or hard gates fail:
+  - revert the source patch;
+  - record the rejection and push the docs.
+- If first n32 beats the gate:
+  - run one additional n32 cold-start confirmation;
+  - then run two n96 cold-start confirmations;
+  - promote only if both n96 runs are not slower than accepted 7EX and all
+    hard gates pass.
