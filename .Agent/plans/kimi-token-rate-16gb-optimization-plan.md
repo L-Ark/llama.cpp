@@ -58242,3 +58242,106 @@ Next experiment candidate:
 - Decision rule:
   - Only implement an IO batching/layout change if the profile shows a repeated
     exposed wait bucket with a clear upper bound and a narrow code path.
+
+### 7IO experiment design
+
+Implementation status:
+
+- No source behavior change.
+- Use current default `UPGATE_PCT=62` from
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 90cdd70b2
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7io-n32-io-copy-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_COPY_PROFILE_H2D=1
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Analysis script:
+
+```bash
+python3 - <<'PY'
+import csv, collections
+run = "/root/lfz/runs/vendor-kimi-token-rate/20260705-7io-n32-io-copy-profile"
+
+def fl(r, k):
+    try:
+        return float(r.get(k, 0) or 0)
+    except Exception:
+        return 0.0
+
+with open(run + "/io-batch-profile.csv", newline="") as f:
+    rows = list(csv.DictReader(f))
+print("io_rows", len(rows))
+by_op = collections.defaultdict(lambda: collections.Counter())
+for r in rows:
+    op = r.get("op", "")
+    by_op[op]["jobs"] += int(float(r.get("jobs", 0) or 0))
+    by_op[op]["read_jobs"] += int(float(r.get("read_jobs", 0) or 0))
+    by_op[op]["wait_ms"] += fl(r, "wait_ms")
+    by_op[op]["enqueue_ms"] += fl(r, "enqueue_ms")
+    by_op[op]["slot_wait_ms"] += fl(r, "slot_wait_ms")
+    by_op[op]["wall_ms"] += fl(r, "wall_ms")
+print("io_by_op")
+for op, c in by_op.items():
+    print(op, dict(c))
+
+with open(run + "/copy-profile.csv", newline="") as f:
+    rows = list(csv.DictReader(f))
+print("copy_rows", len(rows))
+by_copy = collections.defaultdict(lambda: collections.Counter())
+for r in rows:
+    op = r.get("op", "")
+    by_copy[op]["bytes"] += int(float(r.get("bytes", 0) or 0))
+    by_copy[op]["host_ms"] += fl(r, "host_ms")
+    by_copy[op]["io_wait_ms"] += fl(r, "io_wait_ms")
+    by_copy[op]["enqueue_ms"] += fl(r, "enqueue_ms")
+    by_copy[op]["h2d_ms"] += fl(r, "h2d_ms")
+    by_copy[op]["slot_wait_ms"] += fl(r, "slot_wait_ms")
+    by_copy[op]["wall_ms"] += fl(r, "wall_ms")
+print("copy_by_op")
+for op, c in by_copy.items():
+    print(op, dict(c))
+
+print("top_io_wait")
+for r in sorted(rows, key=lambda r: fl(r, "io_wait_ms"), reverse=True)[:20]:
+    print(r)
+PY
+```
+
+Expected interpretation:
+
+- If `io-batch-profile.csv` shows most exposed wall in `wait_ms` and batches
+  remain mostly `2-4` jobs with low inflight, the next implementation candidate
+  is a narrow refill/depth or same-source coalescing change.
+- If `copy-profile.csv` shows H2D dominates after IO wait, avoid IO scheduling
+  changes and look for fewer copies or better cache hits instead.
+- If slot wait or enqueue dominates, target staging ring reuse or stream/event
+  synchronization, not expert-pack layout.
