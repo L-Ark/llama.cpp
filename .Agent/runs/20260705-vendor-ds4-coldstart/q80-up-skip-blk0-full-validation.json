@@ -1,0 +1,95 @@
+{
+  "timestamp_utc": "2026-07-04T19:07:09Z",
+  "status": "rejected_top1_failed",
+  "purpose": "Validate whether the default-off Q8_0 CUDA up-skip path can cover all eligible blk.0 ffn_up_exps calls before CPU fallback.",
+  "source_head": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "pre_run_note": {
+    "canceled_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T190009Z-q80-up-skip-top1/blk0-up-full",
+    "reason": "The first script hashed the full 145.42 GiB model before running the verifier, which added irrelevant source/page-cache work. It was stopped before baseline/check outputs were produced.",
+    "systemd_runtime_seconds": 304.622,
+    "termination": "operator stopped with SIGTERM"
+  },
+  "clean_validation_run": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean",
+    "systemd_unit": "vendor-ds4-q80-up-skip-blk0-full-clean-20260704T190709Z.service",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "source_head_file": "source_head.txt",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+    "model_stat": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf 156148189760 bytes"
+  },
+  "env": {
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_VRAM_CACHE_GB": "0",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "blk.0.ffn_up_exps.weight",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0"
+  },
+  "commands": {
+    "baseline": "llama-results -m MODEL -f fixed-france-text.txt --sequential-logits -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts --output result.gguf --top1-report top1-baseline.json",
+    "check": "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=blk.0.ffn_up_exps.weight GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1 GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0 GGML_MOE_STREAM_Q80_SKIP_REPORT=q80-skip-report.csv llama-results -m MODEL -f fixed-france-text.txt --sequential-logits -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts --output result.gguf --check --top1-report top1-check.json --top1-fail-on-mismatch"
+  },
+  "results": {
+    "baseline_exit_status": 0,
+    "check_exit_status": 1,
+    "skip_records": 870,
+    "skip_tensor": "blk.0.ffn_up_exps.weight",
+    "skip_cne1": 1,
+    "skip_ne01": 2048,
+    "top1": {
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "same_top1": 142,
+      "same_top1_ratio": 0.97931,
+      "first_mismatch_pos": 71,
+      "max_abs": 4.73417,
+      "mean_abs": 0.107156,
+      "nmse": 0.0008062,
+      "mismatch_positions": [71, 109, 135]
+    },
+    "memory": {
+      "memory_peak_bytes": 11989463040,
+      "memory_current_bytes_after_run": 10969972736,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "timing": {
+      "baseline_elapsed_seconds": 30.90,
+      "check_elapsed_seconds": 29.11,
+      "baseline_max_rss_kb": 50512512,
+      "check_max_rss_kb": 50207140,
+      "baseline_major_page_faults": 44447,
+      "check_major_page_faults": 1295,
+      "baseline_file_system_inputs": 60520160,
+      "check_file_system_inputs": 40735024
+    },
+    "moe_stream": {
+      "baseline_cache_hit_rate": "92.8%",
+      "check_cache_hit_rate": "92.8%",
+      "check_expert_pack_direct_failures": 0,
+      "check_expert_pack_direct_fallbacks": 0
+    }
+  },
+  "hashes": {
+    "run_case_sha256": "3bd31d80559d13abc4718e5664872b4b250675ccae4d00e49dfe41bc4bdfe0cc",
+    "top1_check_sha256": "0eb397b9ddb3f3633b231e41d79d3f8bb068d3786f68a511532128afa7e80be2",
+    "q80_skip_report_sha256": "6fa6ef482e4f1c1eb6d5a56ab32ffc4b73075f22b28d32ce4b4ff7390c0ec4b2",
+    "result_gguf_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14"
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "keep_source": true,
+    "reason": "The default path is unchanged, but full layer-0 up skip is not token-stable. The candidate fails the mandatory fixed-text top1 gate.",
+    "next_step": "Run a call-limit sweep between the last passing max_calls=64 and the failed full 870-record coverage to locate the instability threshold and guide root-cause work."
+  }
+}

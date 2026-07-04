@@ -1,0 +1,61 @@
+{
+  "timestamp_utc": "2026-07-04T19:24:07Z",
+  "status": "completed_boundary_narrowed",
+  "purpose": "Narrow the Q8_0 blk.0 up-skip top1 boundary from 96-128 to a smaller call range.",
+  "source_head": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "run": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T192407Z-q80-up-skip-calllimit-fine-sweep/blk0-up",
+    "systemd_unit": "vendor-ds4-q80-up-skip-calllimit-fine-sweep-20260704T192407Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 187.938,
+    "cpu_time_seconds": 2121.659,
+    "baseline_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+    "model_stat": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf 156148189760 bytes"
+  },
+  "runtime_constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1025413120,
+    "memory_current_bytes_after_run": 9138176,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "summary": [
+    {"max_calls": 100, "exit_status": 0, "same_top1": 145, "n_tokens": 145, "first_mismatch_pos": -1, "max_abs": 0.0, "mean_abs": 0.0, "skip_records": 100, "elapsed": "0:26.73", "max_rss_kb": 50447688},
+    {"max_calls": 104, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 104, "elapsed": "0:26.70", "max_rss_kb": 50412080},
+    {"max_calls": 108, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 108, "elapsed": "0:26.36", "max_rss_kb": 50413060},
+    {"max_calls": 112, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 112, "elapsed": "0:26.89", "max_rss_kb": 50412576},
+    {"max_calls": 116, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 116, "elapsed": "0:26.71", "max_rss_kb": 50412020},
+    {"max_calls": 120, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 120, "elapsed": "0:26.79", "max_rss_kb": 50412512},
+    {"max_calls": 124, "exit_status": 1, "same_top1": 144, "n_tokens": 145, "first_mismatch_pos": 135, "max_abs": 4.67701, "mean_abs": 0.10113, "skip_records": 124, "elapsed": "0:26.90", "max_rss_kb": 50413072}
+  ],
+  "boundary_records": {
+    "max_calls_100_last_record": {"record": 99, "tensor": "blk.0.ffn_up_exps.weight", "expert": 108, "cne1": 1, "ne01": 2048},
+    "max_calls_104_added_records": [
+      {"record": 100, "tensor": "blk.0.ffn_up_exps.weight", "expert": 114, "cne1": 1, "ne01": 2048},
+      {"record": 101, "tensor": "blk.0.ffn_up_exps.weight", "expert": 157, "cne1": 1, "ne01": 2048},
+      {"record": 102, "tensor": "blk.0.ffn_up_exps.weight", "expert": 29, "cne1": 1, "ne01": 2048},
+      {"record": 103, "tensor": "blk.0.ffn_up_exps.weight", "expert": 62, "cne1": 1, "ne01": 2048}
+    ]
+  },
+  "hashes": {
+    "summary_csv_sha256": "c83e5cb5c539c61b9279e47a158a6f7c49377dd22c6ca06ca653be2bb73023c8",
+    "max_calls_100_top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "max_calls_104_top1_sha256": "1c6fa6a926f0fe3d937f3584ce387b5936f9243eb5c4a8c8c03108bb3b27bbb0"
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "highest_passing_max_calls": 100,
+    "lowest_failing_max_calls": 104,
+    "reason": "This is a correctness/root-cause diagnostic only. It identifies the first failing region but does not provide a promotable performance path.",
+    "next_step": "Run exact max_calls=101,102,103 to identify the first bad skipped record."
+  }
+}

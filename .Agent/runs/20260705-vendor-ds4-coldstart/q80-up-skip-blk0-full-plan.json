@@ -1,0 +1,48 @@
+{
+  "date": "2026-07-05",
+  "title": "Expand Q8_0 up-only pre-fallback skip to full blk.0 ffn_up_exps top1 gate",
+  "source_head_before_experiment": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "bottleneck_component": {
+    "name": "DeepSeek decode CPU up/down fallback plus source/page behavior",
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "required_saving_for_10_tok_s_ms": 17386.57,
+    "max_allowed_new_overhead_ms": 1642.887
+  },
+  "prior_gate": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-up-skip-subset-validation.json",
+    "result": "blk.0.ffn_up_exps.weight with max_calls=64 passed fixed-text top1, same_top1=145/145, first_mismatch_pos=-1, NMSE=0",
+    "limitation": "Only 64 pre-fallback skip calls were tested, so it is not enough coverage for a performance benchmark."
+  },
+  "candidate": {
+    "name": "Q8_0 CUDA up skip before CPU fallback, full blk.0 ffn_up_exps coverage",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "skip_name_filter": "blk.0.ffn_up_exps.weight",
+    "skip_max_cne1": 1,
+    "skip_max_calls": 0,
+    "why_this_step": "This expands the first passing pre-fallback skip path to all eligible blk.0 up calls before touching additional layers or running a strict cold benchmark.",
+    "expected_ram_pressure": "Same 16GB cgroup as prior verifier; additional temporary CUDA/host buffers scale with one up tensor call at a time, not with full model residency.",
+    "expected_ttft_impact": "Not evaluated in this correctness-only run.",
+    "hard_upper_bound": "No new token-rate bound is claimed by this run. The broader Q8_0 up-skip family can only become a performance candidate after expanded top1 correctness is stable."
+  },
+  "correctness_gate": {
+    "text": "fixed France text used by the previous llama-results verifier",
+    "baseline": "skip disabled, write result.gguf and top1-baseline.json",
+    "check": "skip enabled with GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=blk.0.ffn_up_exps.weight, GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1, GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0, --check, --top1-fail-on-mismatch",
+    "pass_condition": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1",
+    "failure_rule": "If top1 fails or the process OOMs, keep this as rejected evidence and do not expand beyond blk.0."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "down_skip_enabled": false,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "promotion_rule": "This run cannot be promoted as SOTA. A later strict cold benchmark is required, with drop_caches, full cgroup memory/page-cache logging, TTFT, prompt/eval token rates, exact France output, correctness decision, commit/push, and pushed-source reproduction."
+}

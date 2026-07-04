@@ -1,0 +1,57 @@
+{
+  "timestamp_utc": "2026-07-04T19:33:08Z",
+  "status": "completed_first_bad_record_identified",
+  "purpose": "Identify the exact first Q8_0 blk.0 up-skip call that changes token-level top1.",
+  "source_head": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "run": {
+    "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T193308Z-q80-up-skip-calllimit-exact-sweep/blk0-up",
+    "systemd_unit": "vendor-ds4-q80-up-skip-calllimit-exact-sweep-20260704T193308Z.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 80.510,
+    "cpu_time_seconds": 912.193,
+    "baseline_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean",
+    "baseline_result_sha256": "0c43a1f4a1e3a67dedecf1104df18531b3f362459d4165b9ace5d602247b1b14"
+  },
+  "runtime_constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1024626688,
+    "memory_current_bytes_after_run": 7921664,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "summary": [
+    {"max_calls": 101, "exit_status": 0, "same_top1": 145, "n_tokens": 145, "first_mismatch_pos": -1, "max_abs": 0.0, "mean_abs": 0.0, "skip_records": 101, "elapsed": "0:26.56", "max_rss_kb": 50445704},
+    {"max_calls": 102, "exit_status": 0, "same_top1": 145, "n_tokens": 145, "first_mismatch_pos": -1, "max_abs": 0.0, "mean_abs": 0.0, "skip_records": 102, "elapsed": "0:26.84", "max_rss_kb": 50446672},
+    {"max_calls": 103, "exit_status": 0, "same_top1": 145, "n_tokens": 145, "first_mismatch_pos": -1, "max_abs": 0.0, "mean_abs": 0.0, "skip_records": 103, "elapsed": "0:26.55", "max_rss_kb": 50448124}
+  ],
+  "boundary": {
+    "highest_passing_max_calls": 103,
+    "lowest_failing_max_calls": 104,
+    "first_bad_record": {
+      "record": 103,
+      "tensor": "blk.0.ffn_up_exps.weight",
+      "expert": 62,
+      "cne1": 1,
+      "ne01": 2048,
+      "evidence": "max_calls=103 passes, max_calls=104 fails identically to the fine sweep"
+    }
+  },
+  "hashes": {
+    "summary_csv_sha256": "e78121302fb3118f95fd201f5143e6bfcad4abd41f0651cec75a9a66a82ca45b",
+    "max_calls_101_top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "max_calls_102_top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "max_calls_103_top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "reason": "This exact sweep is only a correctness/root-cause diagnostic. It identifies the first non-token-stable skipped call but does not prove a performance improvement.",
+    "next_step": "Compare output-write/probe behavior at max_calls=104 to determine whether record 103 fails because of numerical MXFP4 x Q8_0 drift or a skip-path side effect."
+  }
+}

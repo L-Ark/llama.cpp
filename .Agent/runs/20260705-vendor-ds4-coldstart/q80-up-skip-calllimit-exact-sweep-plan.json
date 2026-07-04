@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-05",
+  "title": "Exact call-limit sweep for first failing Q8_0 up-skip record",
+  "source_head_before_experiment": "cf5534d8daf414f5ef8426198cadb7b1799d152d",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "prior_results": {
+    "highest_passing_max_calls": 100,
+    "lowest_failing_max_calls": 104,
+    "fine_sweep_validation_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-up-skip-calllimit-fine-sweep-validation.json",
+    "candidate_records": [
+      {"record": 100, "expert": 114},
+      {"record": 101, "expert": 157},
+      {"record": 102, "expert": 29},
+      {"record": 103, "expert": 62}
+    ]
+  },
+  "candidate": {
+    "name": "Exact call-limit sweep for Q8_0 CUDA up skip before CPU fallback",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "skip_name_filter": "blk.0.ffn_up_exps.weight",
+    "skip_max_cne1": 1,
+    "skip_max_calls_values": [101, 102, 103],
+    "why_this_step": "Determine whether adding record 100, 101, 102, or 103 is the first event that changes top1, so the next source instrumentation can focus on one call.",
+    "expected_ram_pressure": "Same 16GB/no-swap cgroup; no new residency or benchmark path.",
+    "expected_ttft_impact": "Not evaluated in this correctness-only run."
+  },
+  "correctness_gate": {
+    "baseline_source": "Reuse the skip-disabled result.gguf from /root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean.",
+    "check": "For each max_calls value, run llama-results --check --top1-report with --top1-fail-on-mismatch.",
+    "pass_condition_per_value": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1",
+    "failure_rule": "The lowest failing max_calls identifies the first skipped record that is not token-stable under the current arithmetic."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "down_skip_enabled": false,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "promotion_rule": "This exact sweep cannot be promoted as SOTA. It only guides a source-level correctness fix or instrumentation."
+}
