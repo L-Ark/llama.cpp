@@ -46666,3 +46666,75 @@ Acceptance gates for instrumentation:
 - `read_failures=0`;
 - `iouring_fallbacks=0`;
 - instrumentation overhead on n32 decode <= 5%.
+
+Result: implemented and n32 validated.
+
+- End time: 2026-07-04T16:54:21+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-085206Z-n32-phase7fw-stage-granularity`.
+- Code state:
+  - local commit `8f8c6d2a6`;
+  - server test was run from `fe5a83327-dirty` because GitHub DNS failed
+    during push, so the committed files were copied directly to the server
+    worktree for validation.
+- Runtime:
+  - default SOTA split/runtime;
+  - `EXTRA_RUNTIME_ENV="GGML_MOE_STAGE_GRANULARITY_PROFILE=1"`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `79997.71 ms`;
+  - decode `29816.41 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14841520128`;
+    - `kernel=234487808`;
+    - `inactive_file=7675084800`;
+    - `active_file=7166132224`;
+    - `pgmajfault=985688`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15441298`;
+  - main ring granularity:
+    - calls `2743`;
+    - `avg_jobs=4.00`;
+    - `avg_read_jobs=4.00`;
+    - `avg_depth=8.00`;
+    - `avg_slots=12.00`;
+    - `max_jobs=8`;
+    - `max_read_jobs=8`;
+  - gate ring granularity:
+    - calls `1259`;
+    - `avg_jobs=3.22`;
+    - `avg_read_jobs=3.22`;
+    - `avg_depth=8.00`;
+    - `avg_slots=12.00`;
+    - `max_jobs=8`;
+    - `max_read_jobs=8`.
+- Acceptance:
+  - quality/RAM/TTFT/fallback gates pass;
+  - instrumentation overhead is acceptable for diagnostic use:
+    - compared with Phase 7FO `29794.86 ms`, overhead is `21.55 ms`;
+    - compared with Phase 7FU `29140.36 ms`, overhead is `676.05 ms`,
+      about `2.3%`;
+    - both are under the 5% diagnostic overhead gate.
+- Parser fix:
+  - `scripts/kimi-phase7fb-min-profile-repro.sh` now keeps the last 8
+    `pinned_staging` matches instead of 4, because granularity lines can
+    otherwise displace the main iouring lines from `metrics.txt`.
+- Conclusion:
+  - The immediate queue-depth ceiling is confirmed to be staging granularity,
+    not `GGML_MOE_IO_DEPTH`.
+  - Main and gate staging are both capped at 8 jobs, with average jobs far
+    below 8.
+  - The next performance implementation should aggregate compatible jobs across
+    staging calls, likely main+gate or cross-layer down, rather than increasing
+    the per-call queue depth.

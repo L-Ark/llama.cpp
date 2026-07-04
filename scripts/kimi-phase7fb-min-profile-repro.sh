@@ -210,7 +210,8 @@ patterns = [
     (r"VRAM cache upgate: ([^\n]+)", "vram_upgate"),
 ]
 for pattern, name in patterns:
-    for i, match in enumerate(re.findall(pattern, stderr)[-4:]):
+    limit = 8 if name == "pinned_staging" else 4
+    for i, match in enumerate(re.findall(pattern, stderr)[-limit:]):
         metrics.append(f"{name}_{i}={match}")
 (run / "metrics.txt").write_text("\n".join(metrics) + "\n")
 PY
