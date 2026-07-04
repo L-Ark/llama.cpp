@@ -1,0 +1,102 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: Q8_0 up-skip overhead profile diagnostic",
+  "result": "diagnostic_completed",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "8f7791d3f22da9bed8fbd865478a940b8e1de4cd",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "run": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T211727Z-q80-upskip-overhead-profile/france-cpu40",
+    "systemd_unit": "vendor-ds4-q80-upskip-profile-20260704T211727Z.service",
+    "service_result": "success",
+    "service_runtime": "1min 54.475s",
+    "cpu_time": "22min 8.094s",
+    "strict_cold": true,
+    "profiling_enabled": true,
+    "profile_env": {
+      "GGML_MOE_STREAM_Q80_SKIP_PROFILE": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT": "q80-skip-profile.txt"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 1.8,
+    "prompt_tok_s": 1.2,
+    "ttft_ms": 39227.12188,
+    "elapsed_seconds": 114.19,
+    "q80_skip_records": 18688,
+    "q80_skip_bad_records": 0,
+    "correctness_ok": true,
+    "ram_ok": true
+  },
+  "profile": {
+    "calls_entered": 38222,
+    "calls_attempted": 18688,
+    "calls_ok": 18688,
+    "calls_failed": 0,
+    "src0_bytes": 83282100224,
+    "q80_bytes": 81330176,
+    "out_bytes": 153092096,
+    "total_ms": 58687.042,
+    "host_src0_ms": 28106.781,
+    "host_q80_ms": 17.58,
+    "cuda_alloc_ms": 2181.436,
+    "h2d_ms": 6062.462,
+    "kernel_sync_ms": 20341.664,
+    "d2h_ms": 184.696,
+    "scatter_ms": 17.111,
+    "report_ms": 160.279,
+    "cuda_free_ms": 1615.032,
+    "avg_total_us": 3140.36,
+    "avg_alloc_us": 116.729,
+    "avg_h2d_us": 324.404,
+    "avg_kernel_sync_us": 1088.488,
+    "avg_d2h_us": 9.883,
+    "avg_free_us": 86.421
+  },
+  "cgroup": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15079346176,
+    "memory_max_events": 17462,
+    "oom_seen": false,
+    "swaps": 0,
+    "pgmajfault": 194613,
+    "workingset_refault_file": 1646262
+  },
+  "correctness": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "analysis": {
+    "dominant_bottleneck": "The replacement path copies full MXFP4 up expert payloads from host and runs one small synchronized CUDA kernel per expert call.",
+    "host_src0_share_of_profiled_q80_time": 0.4789,
+    "kernel_sync_share_of_profiled_q80_time": 0.3466,
+    "h2d_share_of_profiled_q80_time": 0.1033,
+    "cuda_alloc_free_share_of_profiled_q80_time": 0.0647,
+    "persistent_buffer_only_bound": "At most about 3.796s removable from cudaMalloc/free, which is far too small to recover the ~50s regression versus SOTA.",
+    "source_only_bound": "Removing host_src0 and H2D would save about 34.169s but still leave about 24.5s of profiled Q8_0 overhead before considering remaining down fallback; source-only is insufficient.",
+    "next_required_design": "A viable follow-up must combine source residency/cache reuse with batched or fused Q8_0 compute that avoids per-call cudaDeviceSynchronize. Otherwise pivot to down correctness/source analysis."
+  },
+  "hashes": {
+    "summary_json_sha256": "e6dbc098df0e1dd2a3ce0d36369f6beff69120fe638def8e1a5b482a36f6471f",
+    "q80_skip_profile_sha256": "f704c06550d75e5f534d13e775429bc0db25138dd0262293710f199a492bd0f3",
+    "run_case_sha256": "06b1de3dc7652c3d00137e1579c1787fbc635a15b0b3b871c903337447a23bce",
+    "stderr_sha256": "74e6aa0d894518ae9427dcab2ffbbf87d915d5a2d51d88fbb66dbc74cf6e448f",
+    "stdout_sha256": "676e41ce4a68aa0b86c4c813d9effc5ad87d89a18bdaedb689b70e05792b7d03",
+    "q80_skip_report_sha256": "a2d449a0130d14a58cdc875061661b9129733a1ee502ae626f9081e4443077b5",
+    "one_trace_sha256": "fa753c6cf9de97c601820303e575b4362e79821ee6e02d56fb20695e1547ca2f"
+  }
+}
