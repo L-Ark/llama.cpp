@@ -614,6 +614,10 @@ struct expert_pack_source {
 #if !defined(_WIN32)
     int fd_direct = -1;
 #endif
+    void *mmap_base = nullptr;
+    size_t mmap_size = 0;
+    bool mmap_attempted = false;
+    bool mmap_enabled = false;
     char path[512] = {};
 };
 
@@ -624,10 +628,6 @@ struct expert_pack_state {
 #endif
     std::vector<expert_pack_source> sources;
     std::vector<expert_pack_entry> entries;
-    void *mmap_base = nullptr;
-    size_t mmap_size = 0;
-    bool mmap_attempted = false;
-    bool mmap_enabled = false;
     std::atomic<uint64_t> mmap_hits{0};
     std::atomic<uint64_t> mmap_misses{0};
     std::atomic<uint64_t> mmap_bytes{0};
@@ -2624,44 +2624,50 @@ static void current_down_missing_profile_record(
 }
 
 
-static bool expert_pack_mmap_ensure() {
+static expert_pack_source * expert_pack_mmap_ensure(const expert_pack_entry * entry) {
     expert_pack_init_once();
-    if (!g_expert_pack.enabled || g_expert_pack.mmap_base) {
-        return g_expert_pack.mmap_base != nullptr;
+    expert_pack_source * source = expert_pack_source_for_entry(entry);
+    if (!g_expert_pack.enabled || !source) {
+        return nullptr;
     }
-    if (g_expert_pack.mmap_attempted) {
-        return false;
+    if (source->mmap_base) {
+        return source;
     }
-    g_expert_pack.mmap_attempted = true;
+    if (source->mmap_attempted) {
+        return nullptr;
+    }
+    source->mmap_attempted = true;
 #if !defined(_WIN32)
     const char *env = std::getenv("GGML_MOE_CPU_FALLBACK_PACK_MMAP");
     if (!env || !env[0] || env[0] == '0') {
-        return false;
+        return nullptr;
     }
-    if (!g_expert_pack.file) {
-        return false;
+    if (!source->file) {
+        return nullptr;
     }
-    const int fd = fileno(g_expert_pack.file);
+    const int fd = fileno(source->file);
     if (fd < 0) {
-        return false;
+        return nullptr;
     }
     struct stat st = {};
     if (fstat(fd, &st) != 0 || st.st_size <= 0) {
-        return false;
+        return nullptr;
     }
     void *base = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_SHARED, fd, 0);
     if (base == MAP_FAILED) {
-        std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: mmap failed\n");
-        return false;
+        std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: mmap failed: %s\n", source->path);
+        return nullptr;
     }
-    g_expert_pack.mmap_base = base;
-    g_expert_pack.mmap_size = (size_t) st.st_size;
-    g_expert_pack.mmap_enabled = true;
-    std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: enabled size=%.2f MiB\n",
-                 g_expert_pack.mmap_size / (1024.0 * 1024.0));
-    return true;
+    source->mmap_base = base;
+    source->mmap_size = (size_t) st.st_size;
+    source->mmap_enabled = true;
+    std::fprintf(stderr, "[moe_stream_batch] expert pack mmap: enabled source=%d size=%.2f MiB path=%s\n",
+                 entry ? entry->source_idx : -1,
+                 source->mmap_size / (1024.0 * 1024.0),
+                 source->path);
+    return source;
 #else
-    return false;
+    return nullptr;
 #endif
 }
 
@@ -2669,21 +2675,22 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *tensor_na
     if (!tensor_name || !tensor_name[0] || nbytes == 0) {
         return nullptr;
     }
-    if (!expert_pack_mmap_ensure()) {
-        return nullptr;
-    }
     const expert_pack_entry *entry = expert_pack_lookup(tensor_name, expert_idx, nbytes);
     if (!entry) {
         ++g_expert_pack.mmap_misses;
         return nullptr;
     }
-    if (entry->offset > g_expert_pack.mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > g_expert_pack.mmap_size) {
+    expert_pack_source * source = expert_pack_mmap_ensure(entry);
+    if (!source) {
+        return nullptr;
+    }
+    if (entry->offset > source->mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > source->mmap_size) {
         ++g_expert_pack.mmap_misses;
         return nullptr;
     }
     ++g_expert_pack.mmap_hits;
     g_expert_pack.mmap_bytes.fetch_add(nbytes);
-    return (const char *) g_expert_pack.mmap_base + entry->offset;
+    return (const char *) source->mmap_base + entry->offset;
 }
 
 extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
@@ -2708,7 +2715,8 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
         }
         return nullptr;
     }
-    if (!expert_pack_mmap_ensure()) {
+    expert_pack_init_once();
+    if (!g_expert_pack.enabled) {
         if (reason) {
             *reason = "mmap_unavailable";
         }
@@ -2734,13 +2742,20 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
         }
         return nullptr;
     }
+    expert_pack_source * source = expert_pack_mmap_ensure(entry);
+    if (!source) {
+        if (reason) {
+            *reason = "mmap_unavailable";
+        }
+        return nullptr;
+    }
     if (entry_nbytes) {
         *entry_nbytes = (size_t) entry->nbytes;
     }
     if (entry_offset) {
         *entry_offset = entry->offset;
     }
-    if (entry->offset > g_expert_pack.mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > g_expert_pack.mmap_size) {
+    if (entry->offset > source->mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > source->mmap_size) {
         ++g_expert_pack.mmap_misses;
         if (reason) {
             *reason = "range_invalid";
@@ -2749,7 +2764,7 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
     }
     ++g_expert_pack.mmap_hits;
     g_expert_pack.mmap_bytes.fetch_add(nbytes);
-    return (const char *) g_expert_pack.mmap_base + entry->offset;
+    return (const char *) source->mmap_base + entry->offset;
 }
 
 static bool trace_entry_matches(const batch_route_trace_entry &e, const char *tensor_name, int expert_idx, size_t expert_bytes);
