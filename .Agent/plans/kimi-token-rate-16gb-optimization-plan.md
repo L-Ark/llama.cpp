@@ -48113,6 +48113,152 @@ Decision rule:
   the forced missing-down preload path; instead investigate graph/fallback
   eligibility for these layers.
 
+Result: n32 diagnostic completed; gates pass and pack metadata is sufficient for
+a partial pack-only preload implementation.
+
+- End time: 2026-07-04T18:47:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-104451Z-n32-phase7gi-current-down-missing-profile`.
+- Code head:
+  `c345d54b0`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73366.13 ms`;
+  - decode `28967.28 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=462848`;
+    - `file=14842150912`;
+    - `kernel=234635264`;
+    - `inactive_file=2355814400`;
+    - `active_file=12485881856`;
+    - `pgmajfault=963084`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15264610`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - failed_batches `0`;
+    - worker_us `3357330`.
+- Diagnostic CSV:
+  - `current-down-profile.csv` confirms missing tensors:
+    - `blk.7.ffn_down_exps.weight`: calls `31`, missing_tensor `31`;
+    - `blk.8.ffn_down_exps.weight`: calls `31`, missing_tensor `31`;
+    - `blk.9.ffn_down_exps.weight`: calls `31`, missing_tensor `31`.
+  - `current-down-missing.csv` shows each tensor has expert-pack metadata:
+    - `blk.7`: `pack_entries=190`;
+    - `blk.8`: `pack_entries=188`;
+    - `blk.9`: `pack_entries=195`;
+    - `min_bytes=max_bytes=8257536`, `unique_bytes=1` for every row.
+  - active expert coverage:
+    - most rows have `active_pack_entries=8`, `all_active_present=1`;
+    - four rows have `active_pack_entries=7`, `all_active_present=0`;
+    - therefore a safe implementation must preload only pack-present active
+      experts and skip missing active experts.
+- Conclusion:
+  - Missing current-down metadata is not a pack absence problem.
+  - It is safe to plan an env-gated implementation that uses expert-pack
+    metadata only for `registered_missing` current-down tensors.
+  - Because pack coverage is not complete for all active experts, the
+    implementation must be partial and must not assume all 8 active experts are
+    loadable.
+
+## Phase 7GJ: pack-only preload for registered-missing current-down tensors
+
+Start time: 2026-07-04T18:49:00+08:00.
+
+Goal:
+
+- Recover most of the `93` missing current-down overlap calls for
+  `blk.7/8/9.ffn_down_exps.weight` by staging the active experts that exist in
+  expert pack.
+- Keep the behavior behind
+  `GGML_MOE_CURRENT_DOWN_PACK_ONLY=1`.
+- Do not change accepted SOTA runtime unless the result passes reproducibility
+  gates.
+
+Theory / upper bound:
+
+- Phase 7GI shows the missing tensors have unique pack byte size
+  `8257536`, so a correct VRAM cache size class can be selected without GGUF
+  registered metadata.
+- Potential additional current-down overlap work:
+  - maximum `93 * 8 = 744` active expert jobs;
+  - observed pack-present jobs are `740` because four rows miss one active
+    expert in pack;
+  - these jobs are currently not preloaded in current-down overlap and may
+    become visible down runtime loads later.
+- Upper bound:
+  - if all `740` pack-present jobs replace later visible staging, n32 could
+    improve by the exposed runtime-load time of early Q4_0 down layers;
+  - if the normal down path never uses these cache entries, or if added IO
+    contends with up/gate staging, decode can regress.
+- Expected risk:
+  - extra IO can lower token rate if it preloads experts that are not consumed;
+  - partial coverage means correctness must not depend on every active expert
+    being present.
+
+Implementation plan:
+
+- Add helper to collect pack entries for a tensor and active expert list:
+  - scan `g_expert_pack.entries` by tensor name;
+  - require exactly one expert byte size for all selected jobs;
+  - include only active experts that have a pack entry;
+  - skip active experts without pack entries.
+- In `start_current_down_overlap()`:
+  - when registered down metadata is missing;
+  - if `GGML_MOE_CURRENT_DOWN_PACK_ONLY=1`;
+  - build pack-only jobs using pack metadata;
+  - select `batch_cache_get(pack_bytes)`;
+  - insert cache slots with `do_copy=false` and null GGUF host pointer;
+  - submit the same current-down overlap worker using pack entries.
+- Do not use GGUF `src0->data` for this path.
+- Do not count skipped missing-pack active experts as failures.
+- Keep default behavior unchanged when the flag is off.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gj-current-down-pack-only"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_PACK_ONLY=1 GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 fails gates, output quality changes, TTFT rises too much, or decode is
+  slower than the rebuilt n32 range, revert the implementation.
+- If n32 improves below the rebuilt n32 range, run one n32 repeat.
+- If repeat reproduces, write the n96 command to plan and run n96 confirmation.
+- Only accept as SOTA after n96 beats Phase 7FB `70087.31 ms` and a second n96
+  confirmation reproduces.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
