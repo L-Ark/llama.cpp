@@ -1942,8 +1942,11 @@ static void cache_policy_diag_report_atexit() {
 }
 
 static bool cache_evict_profile_enabled() {
-    const char *env = std::getenv("GGML_MOE_CACHE_EVICT_PROFILE_OUT");
-    return env && env[0];
+    static const bool enabled = []() {
+        const char *env = std::getenv("GGML_MOE_CACHE_EVICT_PROFILE_OUT");
+        return env && env[0];
+    }();
+    return enabled;
 }
 
 static void cache_evict_profile_record(
