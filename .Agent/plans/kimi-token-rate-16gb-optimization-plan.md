@@ -49866,3 +49866,70 @@ Decision rule:
   reproduction.
 - If n96 fails speed, quality, TTFT, RAM, or fallback gates, reject and keep
   default LRU.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T20:05:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-120156Z-n32-phase7gq-lfu-lru`.
+- Code head:
+  `e383b04550a728fa393726483bbde469e6ff09d1`.
+- Runtime:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_POLICY=lfu_lru"`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-120156Z-n32-phase7gq-lfu-lru
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_POLICY=lfu_lru" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - runner quality field `pass`, but manual semantic quality `fail`;
+  - output:
+    `France is a country in Western Europe known as a major global, its the largest city is, its a country, its is, the country, its largest,`;
+  - TTFT `78130.54 ms`;
+  - decode `77341.51 ms / 31`, `0.40 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Cache / movement metrics:
+  - expert pack hits `27619`, misses `8253`;
+  - `iouring_reads=8771`;
+  - `iouring_bytes=52873117696`;
+  - `iouring_wait_us=9644856`;
+  - current-down overlap jobs `4386`, cache hits `2806`,
+    missing pack `1187`, worker `12624678 us`;
+  - down slots `806`, hits `4658`, misses `8462`, hit rate `35.5%`;
+  - upgate slots `1679`, hits `8520`, misses `21256`, hit rate `28.6%`.
+- Decision:
+  - Reject `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+  - Do not run n96.
+  - Keep default LRU.
+- Gap analysis:
+  - LFU/LRU destroys both down and upgate hit rates under the current streaming
+    access pattern.
+  - The much lower `iouring_wait_us` is misleading because many more expert
+    accesses fall into non-pack/fallback paths and decode wall explodes.
+  - The output is semantically broken even though the runner's simple quality
+    parser reports `pass`. For all future experiments, the France answer must
+    be manually checked against the semantic/coherence gate.
+  - Do not retry broad cache-policy changes (`lfu_lru`, `profile_lfu_lru`, or
+    hybrid) without a narrow tensor/layer-scoped design.
