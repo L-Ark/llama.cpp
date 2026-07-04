@@ -7966,3 +7966,54 @@ Implementation gate:
    - gate pack direct failures appear or cache counters collapse;
    - counters show missing down tensor registration for most decode calls.
 6. If the probe produces a compliant new SOTA, immediately record full reproduction metadata, commit and push source/plan/scripts/artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduce from pushed source before promotion.
+
+### 2026-07-04T04:38Z CPU Down Prefetch First Strict Run
+
+Implementation:
+
+- Added a default-off page-timing probe in `ggml/src/ggml-cpu/ggml-cpu.c`.
+- Env flag: `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP=1`.
+- The default path remains disabled unless the env flag is set.
+- The patch registers `ffn_down_exps` tensor metadata by layer and, when `ffn_up_exps` CPU fallback is about to begin, asks the kernel to prefetch the matching routed down expert pages.
+- The patch does not change routing, top-k, tensor values, dot products, accumulation order, or CPU/GPU compute split.
+- Prefetch is issued by `ith==0` after the existing fallback-preparation barrier and without adding a new all-thread barrier, so the request can overlap with other CPU fallback workers.
+
+First strict cold run:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T043504Z-20260704_cpu_down_prefetch_from_up_probe/france-cpu40-vram0gb`
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-from-up-candidate-result.json`
+- artifact sha256: `f022f8d90c2792a889b9b2ec6a0c82333b0aeb48109ed186dadabe7844432294`
+- Source head during run: `fad73383c89edb39e3b290f98b95f0fc5ab783b6` with `ggml/src/ggml-cpu/ggml-cpu.c` dirty.
+- Build hashes:
+  - `llama-cli`: `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`
+  - `libggml_cpu`: `b357ca59f1d73c2fa290a384dfecc4004b16aae5425b84725a690ebc37b7dc89`
+  - `libggml_cuda`: `eaeb2b8d199c6542f7bba83959e3f21732b721620cf87dec10ac53a0c1facbbc`
+
+Metrics:
+
+- `eval_tok_s=4.6`
+- `prompt_tok_s=1.9`
+- `TTFT=32564.078089 ms`
+- `TTFT_limit=33617.688744 ms`
+- `elapsed_seconds=62.5`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15095713792`
+- `ram_ok=true`
+- `oom_seen=false`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+- France answer is semantic, coherent, and complete.
+
+Counters:
+
+- Gate pack: `hits=4886`, `misses=0`, `direct_reads=4886`, `direct_failures=0`, `direct_fallbacks=0`.
+- Gate prefill: `attempted=3000`, `inserted=3000`, `pack_misses=0`, `read_failures=0`, `elapsed_ms=4691.859`.
+- VRAM cache: `hits=33265`, `misses=1886`, `hit_rate=94.6%`.
+- CPU down prefetch: `enabled=1`, `entries=40`, `down_registered=40`, `down_updated=5600`, `calls=5640`, `matched=5600`, `missing=40`, `advised_experts=18974`, `advised_bytes=84556644352`, `madvise_failures=0`.
+
+Pre-push decision:
+
+- This is a compliant candidate SOTA versus the previous accepted `4.4 tok/s`: throughput improved, TTFT stayed below the gate, RAM stayed within the strict 16GB cgroup including page cache, pack/cache counters are clean, and correctness passed.
+- It is not final accepted SOTA yet because the first run was from dirty source.
+- Required immediate action: commit and push source, plan, and candidate artifact to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, then rebuild/rerun the same strict cold command from the pushed source.
+- Promote only if pushed-source reproduction remains `eval_tok_s > 4.4` with all gates passing.
