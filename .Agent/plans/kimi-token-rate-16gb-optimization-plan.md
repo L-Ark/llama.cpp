@@ -52829,3 +52829,71 @@ Result:
     submission overhead that it loses on wall time. A future coalescer would need
     to be lower-level, likely integrated with the existing per-stream copy
     functions or use persistent read queues, not a per-call host thread wrapper.
+
+## Phase 7HI: current stable n96 rebuilt-baseline before next source work
+
+Start time: 2026-07-05T00:08:00+08:00.
+
+Goal:
+
+- Establish the current stable source/build n96 baseline after rejecting the
+  high-level multi-stream coalescer and reverting its source changes.
+- Use this as the rebuilt-build comparison point for any future source change.
+- Keep the historical accepted Phase 7FB n96 SOTA (`70087.31 ms / 77`) as the
+  promotion target; this phase is a baseline, not an optimization claim.
+
+Why this is required:
+
+- Recent phases proved several local improvements do not transfer to wall-clock
+  decode:
+  - sort-off regressed;
+  - high-level read coalescing reduced io wait but regressed wall decode;
+  - larger coalescer slots did not fix it.
+- The server binary has now been restored to the stable source at `1df93d9e9`
+  with the Blackwell `120a` build path.
+- Before another source optimization, the current n96 baseline must be measured
+  under the same strict cold-start/16GB gates, otherwise future n96 comparisons
+  can mix build artifacts and become invalid.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hi-current-stable-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates for the baseline:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass for the France answer;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Data to record:
+
+- decode time, token rate, TTFT, output text;
+- cgroup memory split including `file`, `inactive_file`, `active_file`;
+- expert pack hits/misses, read bytes, io_uring wait, batch hist;
+- pinned staging counters;
+- VRAM cache hit rates for down and upgate;
+- current-down overlap counters.
+
+Decision rule:
+
+- If the run fails any gate, fix the baseline/build/runtime before attempting
+  further optimizations.
+- If it passes, record it as the current rebuilt-build n96 baseline.
+- Future changes must first beat this baseline under n32 or n96, then beat the
+  historical Phase 7FB n96 best `70087.31 ms / 77` before being accepted as a
+  new SOTA.
