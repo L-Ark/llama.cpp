@@ -6850,3 +6850,75 @@ Acceptance / rejection:
   - top experts/layers by chunk ms;
   - gap between aggregate `fallback_t0` and summed chunk ms.
 - If the trace shows no `>1s` scheduling/tail bound, do not implement another chunk-size or affinity tweak.
+
+### 2026-07-04T01:35Z CPU Chunk Trace Diagnostic Result: Truncated
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T013256Z-20260704_cpu_chunk_trace_sota_diagnostic/france-cpu40-vram0gb`
+
+Metrics:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.9`
+- `TTFT=32439.477620 ms`
+- `elapsed_seconds=63.87`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15077658624`
+- `pgmajfault=248618`
+- `workingset_refault_file=1957406`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Key counters:
+
+- gate VRAM cache: `hits=33265 misses=1886 hit_rate=94.6%`
+- down profile: `calls=16920 total=2.023 ms/call fallback_t0=1.507 ms/call cuda_single=0.503 single_accept=35151 single_decline=38222`
+- fallback profile rows: `7030`
+- `cpu_chunk_trace.csv` lines: `250001`
+
+Artifact hashes:
+
+- `summary.json`: `3a9ce3ed8d4ef324195f32f2fd2db847bd6cb9b0d390068901dd7a1c81515139`
+- `stdout.txt`: `f84715c5b51cf052276191e2c2b18ba3bb69da1378ebfbcbd6b8868f18e4d947`
+- `stderr.txt`: `d02401fbc2e40c569cfa13a7743ad9b2751dfdcd7ecebc840208ddc5d6d5bbc5`
+- `environment.txt`: `b12808c3199a75a59c255ba2cf8c78f2efd2056c413f254cecf6733a862b38c3`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `cpu_chunk_trace.csv`: `39584432431372a8dcb900faa89a235130bf7b73f8e4923716881719f77b16d7`
+- `fallback_profile.csv`: `bba7869287d9eb25ea254b0ca6d3de73909994a1362a361b3d11b2427660389d`
+- `one_trace.csv`: `d573f4b69b1d9636a7bd990782fa31f488c1c500dbfad7f2cd42b4bb5bcd18d2`
+- `resource_samples.tsv`: `b79136ae9f7b20c7fd46f3235cd1e70fdba26de0cd9267d2295f11860f46722b`
+
+Verdict:
+
+- Valid for RAM/TTFT/correctness sanity, but insufficient for full chunk-distribution analysis.
+- `cpu_chunk_trace.csv` hit the configured `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=250000`, so per-thread totals, role totals, and tail-gap analysis are truncated.
+- Do not use this trace to make a scheduling decision.
+
+### 2026-07-04T01:42Z Next Run: Full CPU Chunk Trace Diagnostic
+
+Rationale:
+
+- The previous run proved chunk trace overhead still preserves RAM/correctness, but the trace limit was too low.
+- Rerun the same strict cold diagnostic with a higher trace cap before deciding whether scheduling/chunk work has a real `>1s` bound.
+
+Run config changes from the truncated run:
+
+- `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=1000000`
+- run name: `20260704_cpu_chunk_trace_sota_diagnostic_full`
+
+Acceptance / rejection:
+
+- Diagnostic only.
+- Must pass RAM and correctness gates.
+- Trace is usable only if row count is below the configured cap.
+- If the trace still hits the cap, stop using row-level full trace and add a lower-overhead aggregate instrumentation plan instead.
