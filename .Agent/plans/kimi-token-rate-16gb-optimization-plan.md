@@ -58295,6 +58295,72 @@ Acceptance rule:
   gate, or expert-pack reads fail, reject the reordered pack and do not use it
   as SOTA.
 
+### Preflight storage result
+
+Timestamp: 2026-07-05.
+
+Command:
+
+```bash
+df -hT
+du -sh /root/lfz/runs/vendor-kimi-token-rate \
+  /root/lfz/runs/ik_llama/kimi-iq3s-assets
+```
+
+Result:
+
+- root filesystem `/dev/root`: size `993G`, used `900G`, available `93G`;
+- `/root/lfz/runs/vendor-kimi-token-rate`: `3.1G`;
+- `/root/lfz/runs/ik_llama/kimi-iq3s-assets`: `414G`;
+- current main pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  size `175133036544` bytes;
+- current overlay pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`
+  size `4844539904` bytes.
+
+Decision:
+
+- Do not attempt full main-pack reorder yet: available disk `93G` is below the
+  required `~175G` output size plus temporary safety margin.
+- Do not delete existing assets without explicit approval, because they are
+  model/pack artifacts used by previous experiments.
+- Continue with an overlay-only first-use reorder probe:
+  - validates the repacker on a real `GGMLMOEPACKv1` artifact;
+  - can run a strict cold-start n32 gate with the original main pack and
+    reordered overlay;
+  - expected speedup is small because the main pack remains in current order;
+  - if it regresses, reject overlay-only reorder.
+- Full main-pack reorder remains the intended 7IR experiment once at least
+  `190G` extra free disk is available or an external target path is provided.
+
+### Overlay-only probe
+
+Reproduction plan:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard b2b4c6b1c
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse
+mkdir -p "$RUN"
+python3 scripts/kimi-reorder-expert-pack.py \
+  --trace /root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace/io-read-trace.csv \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out "$RUN/kimi-iq3s-l1l2down-overlay-firstuse.expert-pack" \
+  --mode first-use
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN/n32" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY=$RUN/kimi-iq3s-l1l2down-overlay-firstuse.expert-pack
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates remain the same as 7IR.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
