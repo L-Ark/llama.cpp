@@ -46398,3 +46398,136 @@ Decision rule:
   before claiming SOTA; commit and push immediately if confirmed.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T16:39:42+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-083731Z-n32-phase7fu-iodepth16-refill8`.
+- Code head:
+  `2622f3ef1`.
+- Runtime overrides:
+  - `MOE_IO_DEPTH=16`;
+  - `MOE_IO_REFILL_BATCH=8`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76991.25 ms`;
+  - decode `29140.36 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=462848`;
+    - `file=14844252160`;
+    - `kernel=234618880`;
+    - `inactive_file=5847101440`;
+    - `active_file=8996634624`;
+    - `pgmajfault=973390`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=14728461`;
+  - io_uring histograms:
+    - global/main batches remained capped at `inflight_max=8`;
+    - main `inflight_avg=3.19`, `inflight_max=8`;
+    - gate `inflight_avg=2.83`, `inflight_max=8`;
+    - no `9-16` batches observed.
+- Analysis:
+  - env overrides were correctly written to `env.txt`, so the lack of
+    `inflight_max > 8` is not a runner propagation problem.
+  - Code computes real depth as `min(GGML_MOE_IO_DEPTH, ring.slots.size())`;
+    with `PINNED_SLOTS=12`, depth could have exceeded 8.
+  - The observed cap is therefore dominated by per-call `read_jobs.size()` /
+    selected expert miss grouping, not by the io_uring queue depth parameter.
+  - Increasing single-call queue depth does not attack the current bottleneck.
+- Decision:
+  - Reject `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8` as a performance
+    optimization.
+  - Do not run n96 confirmation.
+  - Keep the runner override support because defaults remain unchanged and it
+    makes the negative result reproducible.
+
+## Phase 7FV: down prefetch depth overlap probe
+
+Start time: 2026-07-04T16:45:00+08:00.
+
+Goal:
+
+- Test whether increasing down prefetch lookahead can hide more SSD wait behind
+  up/gate compute or earlier layer work.
+- Keep cache split unchanged:
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`.
+- Use `120a-real` build from Phase 7FT.
+
+Theory:
+
+- Phase 7FU showed that increasing per-copy io_uring queue depth does not
+  raise inflight work because each stage call usually has at most 8 misses.
+- The current path already overlaps current down movement with up/gate compute,
+  but prefetch depth remains `2`.
+- Increasing `GGML_MOE_PREFETCH_DOWN_DEPTH` to `4` may issue future down reads
+  earlier across layer boundaries, which can lower visible down staging wait
+  without changing cache split or model semantics.
+- Upper bound:
+  - Phase 7FP n32 down path showed about `4658.85 ms` down wall, mostly
+    staging (`4371.57 ms`);
+  - if deeper lookahead hides 15% of down staging, expected n32 decode gain is
+    roughly `650 ms`;
+  - if it only increases contention with upgate reads, decode will slow or
+    TTFT may rise, and the change must be rejected.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fv-prefetchdown4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=4 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 gates pass and decode improves
+materially
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7fv-prefetchdown4"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=4 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 does not materially improve decode versus the current rebuilt n32
+  baseline range (`29140-29795 ms`), reject and do not run n96.
+- If n32 improves materially, run n96.
+- If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
+  before claiming SOTA; commit and push immediately if confirmed.
