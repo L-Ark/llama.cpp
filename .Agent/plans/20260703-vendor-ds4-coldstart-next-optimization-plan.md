@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `7ca04affeaa0bb8aecd327e2cb6484df5189ec3b` (`vendor-ds4: reject lightning pushed repro`)
+- Latest pushed execution/audit head before this document update: `b52881a2bb52eb77b82a4c9b4b4e5fb970705ea1` (`vendor-ds4: audit vram recovery compression`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -47,12 +47,13 @@ Fresh hard-bound for the next step:
 
 Current execution plan:
 
-1. Do not code another low-ceiling source/prefetch/scheduler variant. Before every new experiment, update this plan with the bottleneck component, removable time, hard upper bound, expected RAM/page-cache pressure, and expected TTFT impact.
-2. First write and push an exact up/down backend feasibility audit. It must record the current build facts, one-stream Q8_1 vs CPU Q8_0 semantic mismatch, Blackwell native FP4 limitations, disabled batch/io_uring path, and why these existing backends are or are not usable for exact full decode fallback removal.
-3. Only after that audit, consider a new source-level candidate if it has a credible path to remove near-full decode up/down fallback within the `1642.887 ms` overhead budget. Candidate classes are limited to: an exact compact resident representation that fits the 16GB host/page-cache and VRAM budget, a verified exact or token-stable GPU MXFP4 x Q8_0 path with a source/cache solution, or a predictive cross-op overlap design whose hard-bound shows positive slack.
-4. Every logit-changing or numerically different path must first pass the fixed-text token-level top1 verifier or an equivalent deterministic correctness gate before any long performance run. For France, the final answer must remain semantically correct, coherent, and complete.
-5. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promoting.
-6. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
+1. Keep the accepted `4.4 tok/s` runtime path unchanged unless a candidate first has a written hard-bound above the promotion gate. The completed and pushed audits now close the cheap paths: exact backend switch, source-only overlap, layout-only exact residency, Q8_0 compute without a source/cache solution, and generic VRAM/compression recovery.
+2. Do not code another low-ceiling source/prefetch/scheduler/cache-size variant. Before every new experiment, update this plan with the bottleneck component, removable time, hard upper bound, expected RAM/page-cache pressure, expected TTFT impact, and rollback criteria.
+3. The immediate next step is a model-footprint VRAM recovery audit. It must verify whether `cpu_moe=40` is already the minimal GPU model footprint, use existing `cpu_moe=39/38/37/36` memory evidence, check whether reducing dense/attention GPU layers could free useful VRAM without destroying token rate, and reject the path on paper unless it can free at least `1.6-2.2 GiB` usable CUDA memory without losing enough compute to fall below `10 tok/s`.
+4. If model-footprint recovery is closed, the next plan must pick exactly one higher-level class and write a hard-bound before source changes: compatible multi-token/speculative execution, a fundamentally different shared gate+up/down residency structure, or a correctness-preserving model/runtime-level footprint reduction.
+5. Every logit-changing or numerically different path must first pass the fixed-text token-level top1 verifier or an equivalent deterministic correctness gate before any long performance run. For France, the final answer must remain semantically correct, coherent, and complete.
+6. If a compliant new SOTA appears, stop exploration immediately and record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, TTFT, prompt/eval token rates, counters, exact output, and correctness decision. Commit and push source plus artifacts immediately to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promoting.
+7. If a candidate regresses throughput, violates RAM/page-cache, fails correctness, or exceeds TTFT gate for an accepted result, revert runtime source to the accepted SOTA path and keep only the rejected documentation/artifacts.
 
 ### 2026-07-04 Exact Up/Down Backend Feasibility Audit
 
@@ -175,6 +176,32 @@ Decision:
 
 - Do not pursue context-size VRAM probes, tiny independent up/down cache probes, generic exact compression, or Q8_0 kernel implementation without a new VRAM/source proof.
 - Remaining nonclosed classes are higher-level: compatible multi-token/speculative path, a fundamentally different shared gate+up/down residency structure with a new hard-bound, or a model/runtime-level change that reduces the fixed GPU model footprint without changing correctness.
+
+### 2026-07-04 Active Next Plan After VRAM Audit
+
+Current accepted SOTA remains `4.4 tok/s`; runtime source is unchanged by the latest audits. The current pushed execution/audit head before this plan update is `b52881a2bb52eb77b82a4c9b4b4e5fb970705ea1` on `ssd/vendor/deepseek-token-rate-16gb`.
+
+The immediate bottleneck decision is now VRAM/source constrained, not kernel-arithmetic constrained:
+
+- To make exact GPU up/down fallback removal useful, the current design needs at least about `1.6-2.2 GiB` additional usable CUDA memory while preserving the gate cache. The accepted run has only about `238 MiB` free.
+- Context/compute buffers are too small to recover meaningful memory; `-c 128` still leaves only about `237 MiB` free.
+- Generic exact compression is not useful; representative expert-pack samples compress only about `1.04x`, while the smallest useful hot subset would need about `6.9x-9.1x` compression to fit.
+- Reducing gate cache to fund up/down residency is currently rejected because the best zero-overhead bound after gate penalty is below `10 tok/s`.
+
+Next required artifact:
+
+- Write `.Agent/runs/20260704-vendor-ds4-coldstart/model-footprint-vram-recovery-audit.json`.
+- It must record whether accepted `cpu_moe=40` is already the minimal GPU model footprint, using existing evidence that `cpu_moe=39/38/37/36` increase model/self VRAM instead of freeing it.
+- It must inspect whether moving dense/attention layers from GPU to CPU can free enough VRAM for a hot exact up/down subset, and must include a hard-bound for the CPU dense/attention cost before any runtime benchmark.
+- It must reject this class unless the resulting design can free at least `1.6-2.2 GiB` usable CUDA memory, preserve enough gate-cache hit rate, keep host RAM including page cache under `16GB`, and keep accepted TTFT `<=33617.688744 ms`.
+
+Execution rule for the next implementation attempt:
+
+1. First update this plan and write the model-footprint audit artifact.
+2. If the audit shows no credible `>10 tok/s` ceiling, do not run a benchmark for that path; mark it rejected and push the documentation.
+3. If it shows a credible ceiling, run only a bounded diagnostic first under strict cgroup (`MemoryMax=16000000000`, `MemorySwapMax=0`) and strict cold `drop_caches`.
+4. Any numerically different path must pass the fixed-text token-level top1 verifier before a long France run.
+5. A result can be promoted only if it exceeds `4.4 tok/s`, has TTFT within gate, has `ram_ok=true` with file page cache counted, has coherent France output, is committed and pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, and is reproduced from pushed source.
 
 Current bottleneck conclusion:
 
