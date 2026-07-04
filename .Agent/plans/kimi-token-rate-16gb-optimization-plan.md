@@ -57744,3 +57744,175 @@ Decision rule:
   misses, iouring bytes, iouring wait, H2D time, and cache capacity.
 - If the second run shifts costs materially, do not code an optimization yet;
   add a third run or finer profile before changing behavior.
+
+### 7IK result
+
+- Source head:
+  `ed087e7bb` (`docs: record upgate wait attribution`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-202810Z-n32-phase7ik-upgate-repeat`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard ed087e7bb
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-202810Z-n32-phase7ik-upgate-repeat
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1
+GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=64" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77605.78 ms`;
+  - decode `30065.47 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15058391040`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Runtime counters:
+  - expert pack hits `25458`, misses `192`;
+  - iouring reads `15024`, bytes `87082139648`, wait
+    `15426945 us`;
+  - main pinned staging: copies `19754`, waits `19718`,
+    slot wait `45.381 ms`, host stage `12038.255 ms`,
+    enqueue `301.452 ms`, H2D `4143.470 ms`;
+  - gate pinned staging: copies `4160`, waits `4136`,
+    slot wait `11.266 ms`, host stage `356.054 ms`,
+    enqueue `74.106 ms`, H2D `917.690 ms`;
+  - down overlap worker time `3518634 us`;
+  - down hit `73.6%`;
+  - upgate hit `43.7%`.
+- CPU MoE wrapper profile:
+  - down calls `2038`, total `39.608 ms/call`,
+    `cuda_batch=2.301 ms/call`, fallback `37.259 ms/call`,
+    accept `1644`, decline `52`.
+- `up-gate-profile.csv`:
+  - exists and has `869` decode rows;
+  - all rows have `mode=decode`;
+  - grouped by type pair:
+    - `(22,22)`: calls `558`, wall `3471.592 ms`,
+      stage `28.016 ms`, up wait `3202.562 ms`,
+      gate wait `3343.002 ms`, kernel `3415.126 ms`,
+      up misses `2605`, gate misses `2606`;
+    - `(18,18)`: calls `311`, wall `2987.907 ms`,
+      stage `15.652 ms`, up wait `0.000 ms`,
+      gate wait `0.000 ms`, kernel `2931.612 ms`,
+      up misses `1549`, gate misses `1548`.
+  - `seq=1`, `blk.60`, type `(18,18)` repeats as the first decode outlier:
+    kernel `338.978 ms`, wall `365.243 ms`.
+  - The broad recurring wait remains `(22,22)`:
+    top wait rows include `blk.19`, `blk.10`, `blk.25`, `blk.16`,
+    `blk.26`, all with `4-8` misses and `14-20 ms` wall.
+- 7IK conclusion:
+  - The cold first-use `blk.60` `(18,18)` outlier repeats, but its magnitude is
+    hundreds of milliseconds, not the multi-second steady-state budget.
+  - `(18,18)` remains compute/kernel dominated; do not target it with cache
+    work.
+  - `(22,22)` remains movement/wait dominated and is the next practical target.
+  - Because prior broad cache/profile/tier policy changes regressed, the next
+    experiment should be the smallest cache split change suggested by trace
+    replay, not a new cache policy.
+
+## Phase 7IL: narrow upgate cache split probe at `UPGATE_PCT=62`
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- The accepted SOTA-style runtime uses:
+  - upgate cache: `1679` slots, `5.36 MiB`, `43.7%` hit;
+  - down cache: `806` slots, `7.44 MiB`, `73.6%` hit.
+- 7IJ and 7IK show `(22,22)` up/gate has stable `3.2-3.3 s` wait budget,
+  while `(18,18)` is kernel dominated.
+
+Simulation input:
+
+- Route profile/trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-014357Z-n32-phase7en-sota-repro-b/route-profile.csv`
+  and `route-trace.csv`.
+- Local reproduction:
+
+```bash
+python3 scripts/moe-route-cache-sim.py \
+  .Agent/tmp/phase7il/route-profile.csv \
+  --trace .Agent/tmp/phase7il/route-trace.csv \
+  --budget-mib 15000 \
+  --upgate-pct 60 \
+  --sweep --sweep-min 50 --sweep-max 70 --sweep-step 1 \
+  --policy lru --preload none
+```
+
+Simulation result:
+
+- Trace replay recommends `UPGATE_PCT=62`:
+  - pct `60`: up hit `43.72%`, down hit `45.67%`,
+    up miss `79.64 GiB`, down miss `44.34 GiB`,
+    total miss `123.98 GiB`;
+  - pct `61`: up hit `44.67%`, down hit `45.67%`,
+    up miss `78.30 GiB`, down miss `44.34 GiB`,
+    total miss `122.64 GiB`;
+  - pct `62`: up hit `45.23%`, down hit `45.48%`,
+    up miss `77.48 GiB`, down miss `44.49 GiB`,
+    total miss `121.97 GiB`;
+  - pct `63`: up hit `45.26%`, down hit `44.72%`,
+    up miss `77.45 GiB`, down miss `45.10 GiB`,
+    total miss `122.55 GiB`.
+- Theoretical upper bound:
+  - pct `60 -> 62` saves about `2.16 GiB` upgate miss traffic and costs about
+    `0.15 GiB` down miss traffic in trace replay;
+  - using 7IK's `(22,22)` up/gate wait as the exposed budget, the expected gain
+    is modest and likely below a large SOTA jump;
+  - the experiment is still worth one strict n32 run because it is a runtime
+    knob, does not change correctness logic, and directly targets the measured
+    movement wait.
+
+Experiment:
+
+- No source behavior change.
+- Run strict cold-start n32 with production/min-profile settings and
+  `UPGATE_PCT=62`.
+- Keep all other knobs equal to the accepted runtime:
+  `VRAM_MIB=15000`, `THREADS=32`, `PINNED_SLOTS=12`,
+  `IQ2_UPGATE_PARALLEL=1`, `MOE_IO_DEPTH=8`,
+  `MOE_IO_REFILL_BATCH=4`, `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Use `MIN_PROFILE=1` without heavy CSV profiling to measure real token rate.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If token rate improves and all gates pass, run a repeat n32; only commit/push
+  a runtime change after the improvement is reproducible.
+- If token rate is flat or worse, reject `UPGATE_PCT=62` and keep pct `60`.
+- If down hit loss causes decode regression, do not test pct `63` in this
+  sequence because trace replay already predicts down miss growth past pct `62`.
