@@ -1,0 +1,109 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: individual blk.1 and blk.2 Q8_0 CPU-compatible up-skip correctness gates",
+  "result": "passed",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "df733da0cb6a1406de1e2db3f7a2b5c16a4fa5be",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "commit_identity_required": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "run": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T201929Z-q80-cpucompat-up-skip-individual/blk1-blk2",
+    "systemd_unit": "vendor-ds4-q80-cpucompat-blk1-blk2-20260704T201929Z.service",
+    "runtime_seconds": 57.439,
+    "cpu_time": "10min 43.123s",
+    "framework": "vendor DeepSeek",
+    "performance_candidate_this_step": false
+  },
+  "environment": {
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0",
+    "filters": [
+      "blk.1.ffn_up_exps.weight",
+      "blk.2.ffn_up_exps.weight"
+    ],
+    "down_skip_enabled": false
+  },
+  "correctness": {
+    "baseline_result": "/root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean/result.gguf",
+    "pass_condition": "llama-results exits 0 with same_top1 == n_tokens and first_mismatch_pos == -1",
+    "results": [
+      {
+        "filter": "blk.1.ffn_up_exps.weight",
+        "status": 0,
+        "same_top1": 145,
+        "n_tokens": 145,
+        "same_top1_ratio": 1.0,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "skip_records": 870,
+        "elapsed_seconds": 28.40,
+        "max_rss_kb": 50448792,
+        "top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "skip_report_sha256": "d33fd780c441fb2315defd82a06658afe36e0d8398a38bb3267b03d8ea42b26f",
+        "last_skip_records": [
+          "865,blk.1.ffn_up_exps.weight,25,1,2048",
+          "866,blk.1.ffn_up_exps.weight,32,1,2048",
+          "867,blk.1.ffn_up_exps.weight,76,1,2048",
+          "868,blk.1.ffn_up_exps.weight,82,1,2048",
+          "869,blk.1.ffn_up_exps.weight,151,1,2048"
+        ]
+      },
+      {
+        "filter": "blk.2.ffn_up_exps.weight",
+        "status": 0,
+        "same_top1": 145,
+        "n_tokens": 145,
+        "same_top1_ratio": 1.0,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "skip_records": 870,
+        "elapsed_seconds": 28.54,
+        "max_rss_kb": 50448832,
+        "top1_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "skip_report_sha256": "07fe0dd3758746b82687f2b540c976eca7a214933c9c841eb065953d1c348f0d",
+        "last_skip_records": [
+          "865,blk.2.ffn_up_exps.weight,84,1,2048",
+          "866,blk.2.ffn_up_exps.weight,128,1,2048",
+          "867,blk.2.ffn_up_exps.weight,146,1,2048",
+          "868,blk.2.ffn_up_exps.weight,159,1,2048",
+          "869,blk.2.ffn_up_exps.weight,195,1,2048"
+        ]
+      }
+    ]
+  },
+  "cgroup": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 1025572864,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "hashes": {
+    "summary_csv_sha256": "faf577feaca3ceca199b1937e08d0b481de89836453fea80050c34270b382625",
+    "run_case_sha256": "7e0bc48ba9a7bac74fad4f385527b565b14beebfbafbdcbdce603a425f894a90",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10"
+  },
+  "decision": {
+    "accepted_for_correctness_expansion": true,
+    "sota_status": "not a performance benchmark; current accepted SOTA remains 4.4 tok/s",
+    "next_step": "Write q80-cpucompat-all-up-plan.json, then run all-up ffn_up_exps.weight fixed-text top1 verification under 16GB/no-swap cgroup before any strict cold performance benchmark."
+  }
+}

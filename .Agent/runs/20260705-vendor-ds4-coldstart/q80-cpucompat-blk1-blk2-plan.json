@@ -1,0 +1,40 @@
+{
+  "date": "2026-07-05",
+  "title": "Individual blk.1 and blk.2 Q8_0 up-skip correctness gates with CPU-compatible arithmetic",
+  "source_head_before_experiment": "df733da0cb6a1406de1e2db3f7a2b5c16a4fa5be",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "prior_results": {
+    "cpu_compat_blk0_full": "passed, same_top1=145/145, 870 skipped calls",
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-blk0-full-validation.json"
+  },
+  "candidate": {
+    "name": "Individual full-layer up skip for blk.1 and blk.2",
+    "default_behavior_changed": false,
+    "performance_candidate_this_step": false,
+    "filters": ["blk.1.ffn_up_exps.weight", "blk.2.ffn_up_exps.weight"],
+    "cpu_compat": true,
+    "skip_max_cne1": 1,
+    "skip_max_calls": 0,
+    "why_this_step": "The current name filter is substring-only, so exact blk.0-2 combined coverage is not expressible yet. Individual layer checks expand correctness coverage while keeping failures attributable.",
+    "expected_ram_pressure": "Same 16GB/no-swap cgroup; no new residency.",
+    "expected_ttft_impact": "Not evaluated in this correctness-only run."
+  },
+  "correctness_gate": {
+    "baseline_source": "Reuse the skip-disabled result.gguf from /root/lfz/runs/vendor-ds4-16gb/20260704T190709Z-q80-up-skip-top1/blk0-up-full-clean.",
+    "check": "Run llama-results --check twice, once per filter, with GGML_MOE_STREAM_Q80_CPU_COMPAT=1 and --top1-fail-on-mismatch.",
+    "pass_condition_per_filter": "llama-results exits 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0.",
+    "failure_rule": "If either layer fails, do not add multi-filter/all-up support; inspect the first failing layer/record."
+  },
+  "runtime_constraints": {
+    "framework": "vendor DeepSeek",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "down_skip_enabled": false,
+    "accepted_sota_path_must_remain_default": true
+  },
+  "promotion_rule": "This correctness run cannot be promoted as SOTA. It only decides whether to proceed to combined/all-up verification."
+}
