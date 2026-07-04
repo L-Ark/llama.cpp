@@ -52391,3 +52391,205 @@ Commit/push rule:
 - Commit and push diagnostic-only code if it is default-off and passes gates.
 - Commit and push any performance change only if it improves a strict n96 run
   under all gates and includes the exact reproduction command and metrics.
+
+Result:
+
+- Diagnostic code:
+  - added default-off `GGML_MOE_IO_BATCH_PROFILE_OUT` CSV in
+    `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - records one row per `expert_pack_iouring_copy_jobs` call;
+  - columns include `op`, first/last tensor, `jobs`, `read_jobs`, depth, slots,
+    refill batch, submit/wait/cqe counts, weighted inflight, slot wait, submit
+    time, io wait, enqueue time, wall time, and offset-sort state;
+  - production behavior is unchanged unless the env var is set.
+- Build:
+  - command: `cmake --build build-cuda-batch --target llama-completion -j$(nproc)`;
+  - result: success.
+- First run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-144026Z-n32-phase7he-iouring-granularity`.
+  - Gates passed, but CSV `enqueue_ms` was invalid because the diagnostic-only
+    enqueue timer used a default time point when copy profiling was disabled.
+  - This run is not used for scheduler decisions.
+- Fixed diagnostic and reran:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-144618Z-n32-phase7he-iouring-granularity-v2`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7he-iouring-granularity-v2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75243.06 ms`;
+- decode `29258.34 ms / 31`, `1.06 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `io-batch-profile.csv` exists, rows `4002`.
+
+Aggregate profile:
+
+- Overall expert-pack io_uring counters:
+  - batches `4002`;
+  - submit calls `4002`;
+  - wait calls `12096`;
+  - cqes `15024`;
+  - inflight avg `3.09`, max `8`;
+  - batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`.
+- `runtime_load`:
+  - calls `3142`;
+  - jobs/read jobs `11529`;
+  - wait calls `9534`;
+  - cqes `11529`;
+  - wait `12835.498 ms`;
+  - submit `30.061 ms`;
+  - enqueue `297.148 ms`;
+  - slot wait `24.549 ms`;
+  - wall `13188.855 ms`;
+  - weighted inflight avg `3.046`;
+  - hist `1:295,2-4:1919,5-8:928`.
+- `current_down_overlap`:
+  - calls `860`;
+  - jobs/read jobs `3495`;
+  - wait calls `2562`;
+  - cqes `3495`;
+  - wait `2741.349 ms`;
+  - submit `12.680 ms`;
+  - enqueue `46.706 ms`;
+  - slot wait `10.849 ms`;
+  - wall `2811.423 ms`;
+  - weighted inflight avg `3.263`;
+  - hist `1:40,2-4:506,5-8:314`.
+- Top wait groups:
+  - `runtime_load blk.4.ffn_down_exps.weight`: calls `62`, reads `169`,
+    wait `303.477 ms`, enqueue `118.960 ms`, wall `423.788 ms`;
+  - `runtime_load blk.24.ffn_down_exps.weight`: calls `62`, reads `162`,
+    wait `286.058 ms`, wall `288.641 ms`;
+  - `runtime_load blk.5.ffn_down_exps.weight`: calls `62`, reads `190`,
+    wait `276.119 ms`, wall `279.655 ms`;
+  - `runtime_load blk.23.ffn_down_exps.weight`: calls `61`, reads `145`,
+    wait `269.912 ms`, wall `272.225 ms`;
+  - `runtime_load blk.25.ffn_down_exps.weight`: calls `60`, reads `142`,
+    wait `260.175 ms`, wall `262.570 ms`;
+  - `runtime_load blk.1.ffn_down_exps.weight`: calls `62`, reads `174`,
+    wait `258.882 ms`, wall `262.217 ms`;
+  - `runtime_load blk.26.ffn_down_exps.weight`: calls `61`, reads `138`,
+    wait `258.240 ms`, wall `260.409 ms`;
+  - `runtime_load blk.20.ffn_down_exps.weight`: calls `62`, reads `138`,
+    wait `252.543 ms`, wall `254.979 ms`;
+  - `runtime_load blk.58.ffn_down_exps.weight`: calls `61`, reads `138`,
+    wait `251.469 ms`, wall `254.003 ms`;
+  - `runtime_load blk.60.ffn_down_exps.weight`: calls `63`, reads `170`,
+    wait `249.710 ms`, enqueue `71.827 ms`, wall `322.904 ms`.
+
+Decision:
+
+- The low average inflight is primarily a consequence of per-tensor job counts
+  being small and then draining completions. For an 8-job batch with no refill,
+  average observed in-flight during waits is bounded near `(8+1)/2 = 4.5`; for
+  the dominant 2-4 job batches it is inherently much lower.
+- Global `MOE_IO_DEPTH`, `MOE_IO_REFILL_BATCH`, and pinned slot increases are
+  not supported by this evidence; most calls never have enough jobs to use more
+  than depth `8`, and slot wait is only `35.398 ms` total.
+- Submit overhead is negligible (`42.741 ms` total), so SQPOLL/syscall tuning is
+  not a high-priority token-rate lever.
+- The exposed wait is still mostly read wait, but improving it requires batching
+  across tensor boundaries while preserving separate H2D/compute streams. The
+  previously rejected combined-stage path serialized useful overlap, so any new
+  implementation must be a read-coalescer only: combine io_uring reads across
+  up/gate/down-ready jobs, then enqueue each completed H2D to its original stream
+  and keep the original compute dependencies.
+- Do not promote a performance change from Phase 7HE; this phase is accepted as
+  default-off diagnostic infrastructure and bottleneck evidence.
+
+## Phase 7HF: multi-stream read-only coalescer design
+
+Start time: 2026-07-04T22:58:00+08:00.
+
+Goal:
+
+- Reduce exposed `runtime_load` io wait by batching reads across tensor
+  boundaries without serializing H2D or compute.
+- Preserve the existing separate stream behavior for up, gate, and current-down
+  H2D/compute.
+
+Theory and upper bound:
+
+- Phase 7HE n32 measured `runtime_load` wait `12835.498 ms`; n96 Phase 7HB
+  measured total io_uring wait `37.550 s`.
+- Since batch calls are mostly `1-4` or `5-8` jobs, a read-only coalescer that
+  combines adjacent up/gate/down reads could raise effective in-flight depth
+  only where multiple tensors are known before compute starts.
+- If it reduces exposed n96 io wait by `5%`, the upper-bound decode improvement
+  is about `1.9 s` (`37.550 s * 0.05`), moving `71177.58 ms / 77` from
+  `1.08 tok/s` toward about `1.11 tok/s` before overhead.
+- Larger gains require preserving overlap; if coalescing delays the first H2D or
+  compute launch, TTFT/decode can regress, as previous combined-stage attempts
+  showed.
+
+Implementation constraints:
+
+1. The coalescer must be default-off behind a new env var.
+2. It must not change tensor contents or cache keys.
+3. It must enqueue each H2D on the original target stream, not a single combined
+   stream.
+4. It must record per-call diagnostics so regressions can be explained.
+5. It must be tested first on n32, then n96 only if n32 passes quality/RAM/TTFT
+   and does not regress decode.
+6. If n32 regresses, revert or leave the feature disabled and record rejection.
+
+Candidate implementation path:
+
+- Add a small `multi_stream_stage_copy_job` wrapper carrying:
+  - destination pointer;
+  - pack entry;
+  - tensor name;
+  - expert index;
+  - target CUDA stream;
+  - target staging ring.
+- Add an env-gated `expert_pack_iouring_copy_multi_stream_jobs` that submits
+  reads from one shared ring, but on each CQE enqueues `cudaMemcpyAsync` to the
+  job's original stream and records the slot's done event on that same stream.
+- Use it only in the up/gate parallel-stage path initially, because that is the
+  cleanest place where two independent tensor job lists are already known before
+  compute starts.
+- Do not apply it to current-down overlap in the first implementation; down has
+  separate worker/overlap timing and should be optimized separately after the
+  up/gate path is proven.
+
+First experiment command after implementation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hf-multistream-read-coalesce"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_MULTI_STREAM_COALESCE=1 GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- same quality, TTFT, memory, swap, and fallback gates as previous phases;
+- n32 decode must not regress versus Phase 7HE v2 by more than noise;
+- if n32 improves, run strict n96 and commit/push only if n96 improves under all
+  gates;
+- if n32 regresses or quality fails, reject the implementation and record why.

@@ -3490,6 +3490,81 @@ static void copy_profile_record(
     std::fclose(f);
 }
 
+static bool io_batch_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_IO_BATCH_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void io_batch_profile_record(
+        const char *op,
+        const char *first_tensor,
+        const char *last_tensor,
+        size_t jobs,
+        size_t read_jobs,
+        size_t depth,
+        size_t slots,
+        size_t refill_batch,
+        size_t initial_submit_jobs,
+        uint64_t submit_calls,
+        uint64_t wait_calls,
+        uint64_t cqes,
+        uint64_t inflight_sum,
+        uint64_t inflight_samples,
+        uint64_t inflight_max,
+        double slot_wait_ms,
+        double submit_ms,
+        double wait_ms,
+        double enqueue_ms,
+        double wall_ms,
+        bool sort_by_offset) {
+    const char *path = std::getenv("GGML_MOE_IO_BATCH_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,first_tensor,last_tensor,jobs,read_jobs,ram_or_prefetch_jobs,depth,slots,refill_batch,"
+                "initial_submit_jobs,submit_calls,wait_calls,cqes,inflight_avg,inflight_max,"
+                "slot_wait_ms,submit_ms,wait_ms,enqueue_ms,wall_ms,sort_by_offset\n");
+        header_written = true;
+    }
+
+    const double inflight_avg = inflight_samples > 0 ?
+        (double)inflight_sum / (double)inflight_samples : 0.0;
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%lu,%lu,%lu,%.6f,%lu,"
+            "%.6f,%.6f,%.6f,%.6f,%.6f,%d\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            first_tensor ? first_tensor : "",
+            last_tensor ? last_tensor : "",
+            jobs,
+            read_jobs,
+            jobs >= read_jobs ? jobs - read_jobs : 0,
+            depth,
+            slots,
+            refill_batch,
+            initial_submit_jobs,
+            (unsigned long)submit_calls,
+            (unsigned long)wait_calls,
+            (unsigned long)cqes,
+            inflight_avg,
+            (unsigned long)inflight_max,
+            slot_wait_ms,
+            submit_ms,
+            wait_ms,
+            enqueue_ms,
+            wall_ms,
+            sort_by_offset ? 1 : 0);
+    std::fclose(f);
+}
+
 static bool expert_pack_ram_tier_copy_h2d(
         const expert_pack_entry *pack_entry,
         void *dst,
@@ -3813,6 +3888,8 @@ static bool expert_pack_iouring_copy_jobs(
     const size_t read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
     const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
     if (depth == 0 || read_sz == 0) return false;
+    const bool profile_io_batch = io_batch_profile_enabled();
+    const auto io_batch_start = profile_io_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     std::vector<size_t> read_jobs;
     read_jobs.reserve(jobs.size());
@@ -3874,7 +3951,19 @@ static bool expert_pack_iouring_copy_jobs(
         ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)read_jobs.size());
         ring.granularity_max_depth = std::max<uint64_t>(ring.granularity_max_depth, (uint64_t)depth);
     }
+    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
     if (read_jobs.empty()) {
+        if (profile_io_batch) {
+            const auto io_batch_end = std::chrono::steady_clock::now();
+            io_batch_profile_record(
+                    trace_op,
+                    jobs.empty() ? "" : jobs.front().tensor,
+                    jobs.empty() ? "" : jobs.back().tensor,
+                    jobs.size(), read_jobs.size(), depth, ring.slots.size(), 0, 0,
+                    0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0,
+                    std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
+                    sort_by_offset);
+        }
         return true;
     }
     expert_pack_record_iouring_batch(read_jobs.size());
@@ -3893,7 +3982,6 @@ static bool expert_pack_iouring_copy_jobs(
     };
 
     std::vector<size_t> job_order;
-    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
     if (sort_by_offset && read_jobs.size() > 1) {
         job_order.resize(read_jobs.size());
         for (size_t i = 0; i < read_jobs.size(); ++i) {
@@ -3940,15 +4028,28 @@ static bool expert_pack_iouring_copy_jobs(
 
     const bool profile_stage = pinned_stage_profile_enabled();
     const bool profile_copy = copy_profile_enabled();
+    double io_batch_slot_wait_ms = 0.0;
+    double io_batch_submit_ms = 0.0;
+    double io_batch_wait_ms = 0.0;
+    double io_batch_enqueue_ms = 0.0;
+    uint64_t io_batch_submit_calls = 0;
+    uint64_t io_batch_wait_calls = 0;
+    uint64_t io_batch_cqes = 0;
+    uint64_t io_batch_inflight_sum = 0;
+    uint64_t io_batch_inflight_samples = 0;
+    uint64_t io_batch_inflight_max = 0;
     auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
         const Job &job = jobs[job_idx];
         pinned_stage_slot &slot = ring.slots[slot_idx];
         if (slot.pending) {
-            const auto wait_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            const auto wait_start = (profile_stage || profile_io_batch) ?
+                std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
-            if (profile_stage) {
+            if (profile_stage || profile_io_batch) {
                 const auto wait_end = std::chrono::steady_clock::now();
-                ring.slot_wait_ms += std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+                const double slot_wait_ms = std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+                if (profile_stage) ring.slot_wait_ms += slot_wait_ms;
+                if (profile_io_batch) io_batch_slot_wait_ms += slot_wait_ms;
             }
             slot.pending = false;
             ++ring.waits;
@@ -3998,8 +4099,13 @@ static bool expert_pack_iouring_copy_jobs(
     ++g_expert_pack.iouring_submit_calls;
     ++ring.iouring_submit_calls;
     const auto submit_end = std::chrono::steady_clock::now();
-    g_expert_pack.iouring_submit_us.fetch_add(
-            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(submit_end - submit_start).count());
+    const double initial_submit_ms = std::chrono::duration<double, std::milli>(submit_end - submit_start).count();
+    g_expert_pack.iouring_submit_us.fetch_add((uint64_t)(initial_submit_ms * 1000.0));
+    if (profile_io_batch) {
+        io_batch_submit_ms += initial_submit_ms;
+        ++io_batch_submit_calls;
+    }
+    const size_t initial_submit_jobs = next_job;
 
     size_t completed = 0;
     while (completed < read_jobs.size()) {
@@ -4010,6 +4116,13 @@ static bool expert_pack_iouring_copy_jobs(
         ++ring.iouring_inflight_samples;
         if (ring.iouring_inflight_max < inflight) {
             ring.iouring_inflight_max = inflight;
+        }
+        if (profile_io_batch) {
+            io_batch_inflight_sum += inflight;
+            ++io_batch_inflight_samples;
+            if (io_batch_inflight_max < inflight) {
+                io_batch_inflight_max = inflight;
+            }
         }
         auto handle_cqe = [&](io_uring_cqe *cqe) -> bool {
             const uint64_t data = io_uring_cqe_get_data64(cqe);
@@ -4027,7 +4140,7 @@ static bool expert_pack_iouring_copy_jobs(
             ++g_expert_pack.iouring_cqes;
             ++ring.iouring_cqes;
 
-            const bool measure_enqueue = profile_stage || profile_copy;
+            const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch;
             const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (profile_stage && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
@@ -4055,12 +4168,17 @@ static bool expert_pack_iouring_copy_jobs(
             } else if (profile_copy) {
                 const auto enqueue_end = std::chrono::steady_clock::now();
                 enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+            } else if (profile_io_batch) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
+            if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
             slot.pending = true;
             ++ring.copies;
             ++g_expert_pack.iouring_reads;
             g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
             ++g_expert_pack.iouring_h2d_enqueues;
+            if (profile_io_batch) ++io_batch_cqes;
 
             if (done.copy_start != std::chrono::steady_clock::time_point{}) {
                 const auto copy_end = std::chrono::steady_clock::now();
@@ -4106,9 +4224,15 @@ static bool expert_pack_iouring_copy_jobs(
                 ++submitted;
             }
             if (submitted > 0) {
+                const auto refill_submit_start = profile_io_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 if (io_uring_submit(ring_io) < 0) {
                     ++g_expert_pack.iouring_fallbacks;
                     return false;
+                }
+                if (profile_io_batch) {
+                    const auto refill_submit_end = std::chrono::steady_clock::now();
+                    io_batch_submit_ms += std::chrono::duration<double, std::milli>(refill_submit_end - refill_submit_start).count();
+                    ++io_batch_submit_calls;
                 }
                 ++g_expert_pack.iouring_submit_calls;
                 ++ring.iouring_submit_calls;
@@ -4120,10 +4244,12 @@ static bool expert_pack_iouring_copy_jobs(
         io_uring_cqe *cqe = nullptr;
         ++g_expert_pack.iouring_wait_calls;
         ++ring.iouring_wait_calls;
+        if (profile_io_batch) ++io_batch_wait_calls;
         const int wait_rc = io_uring_wait_cqe(ring_io, &cqe);
         const auto wait_end = std::chrono::steady_clock::now();
-        g_expert_pack.iouring_wait_us.fetch_add(
-                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(wait_end - wait_start).count());
+        const double wait_ms = std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+        g_expert_pack.iouring_wait_us.fetch_add((uint64_t)(wait_ms * 1000.0));
+        if (profile_io_batch) io_batch_wait_ms += wait_ms;
         if (wait_rc != 0 || !cqe) {
             ++g_expert_pack.iouring_fallbacks;
             return false;
@@ -4145,6 +4271,19 @@ static bool expert_pack_iouring_copy_jobs(
         }
     }
 
+    if (profile_io_batch) {
+        const auto io_batch_end = std::chrono::steady_clock::now();
+        io_batch_profile_record(
+                trace_op,
+                jobs.empty() ? "" : jobs.front().tensor,
+                jobs.empty() ? "" : jobs.back().tensor,
+                jobs.size(), read_jobs.size(), depth, ring.slots.size(), refill_batch, initial_submit_jobs,
+                io_batch_submit_calls, io_batch_wait_calls, io_batch_cqes,
+                io_batch_inflight_sum, io_batch_inflight_samples, io_batch_inflight_max,
+                io_batch_slot_wait_ms, io_batch_submit_ms, io_batch_wait_ms, io_batch_enqueue_ms,
+                std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
+                sort_by_offset);
+    }
     return true;
 #else
     (void)jobs;
