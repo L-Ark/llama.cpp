@@ -49340,3 +49340,94 @@ Decision rule:
 - If combined staging mainly increases gate wait or down/current-down worker
   time, plan a down-side or ring-contention fix instead.
 - Do not make a source change until this profile comparison is recorded.
+
+Result: completed; diagnostic accepted, no source change.
+
+- End time: 2026-07-04T19:45:00+08:00.
+- Code head:
+  `c8549696288a662e1d2f274c91ffa37116e3c2b2`.
+- Baseline run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-114120Z-n32-phase7gn-upgate-profile-baseline`.
+- Combined run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-114331Z-n32-phase7gn-upgate-profile-combined`.
+- Baseline gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74292.81 ms`;
+  - decode `30312.02 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Combined gates:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75659.00 ms`;
+  - decode `30209.31 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Baseline movement/profile counters:
+  - `iouring_wait_us=15381945`;
+  - overall inflight avg `3.10`, max `8`;
+  - main ring batches `2743`, jobs `10969`, inflight avg `3.21`, max `8`;
+  - gate ring batches `1259`, jobs `4055`, inflight avg `2.82`, max `8`;
+  - current-down worker `3403795 us`;
+  - up/gate decode profile:
+    - rows `869`;
+    - `up_wait=3315.557 ms`;
+    - `gate_wait=3466.930 ms`;
+    - `up_compute=97.232 ms`;
+    - `gate_compute=63.996 ms`;
+    - `up_ms=4932.362 ms`;
+    - `gate_ms=1415.967 ms`;
+    - `kernel=6397.555 ms`;
+    - `wall=6471.405 ms`;
+    - type `22,22` wall `3584.030 ms`;
+    - type `18,18` wall `2887.375 ms`.
+- Combined movement/profile counters:
+  - `iouring_wait_us=12600594`;
+  - overall inflight avg `3.98`, max `12`;
+  - main ring batches `2743`, jobs `13487`, inflight avg `4.28`, max `12`;
+  - gate ring batches `721`, jobs `1537`, inflight avg `1.83`, max `4`;
+  - batch histogram includes `9-16:281`;
+  - current-down worker `3338050 us`;
+  - up/gate decode profile:
+    - rows `869`;
+    - `up_wait=3465.937 ms`;
+    - `gate_wait=3518.345 ms`;
+    - `up_compute=74.725 ms`;
+    - `gate_compute=66.544 ms`;
+    - `up_ms=5050.819 ms`;
+    - `gate_ms=1373.103 ms`;
+    - `kernel=6411.041 ms`;
+    - `wall=6504.730 ms`;
+    - type `22,22` wall `3646.077 ms`;
+    - type `18,18` wall `2858.653 ms`.
+- Comparison:
+  - combined reduces summed `iouring_wait_us` by `2781.351 ms`;
+  - combined increases up/gate profile wall by `33.325 ms`;
+  - combined n32 decode is only `102.71 ms` faster under heavy profile
+    overhead, not a material or promotable improvement;
+  - TTFT increases by `1366.19 ms`, still within the 20% gate but not useful.
+- Decision:
+  - Accept 7GN only as a diagnostic.
+  - Do not promote combined staging and do not run n96.
+  - Do not implement another whole up+gate aggregation variant.
+- Updated bottleneck interpretation:
+  - `iouring_wait_us` is a summed wait counter across staging calls/threads; a
+    reduction there does not necessarily mean critical-path decode wall is
+    released.
+  - The critical-path up/gate wall is about `6.5 s` under full profile and does
+    not improve with combined staging.
+  - The next source optimization should be based on wall-time profiles, not
+    summed io wait alone. Candidate targets are:
+    - down path wall/fallback time, because up/gate aggregation is not exposing
+      enough wall;
+    - reducing the number of runtime loads or improving cache hit rate without
+      increasing host RAM above 16GB;
+    - kernel-side compute for type `18,18` and `22,22`, if a low-overhead n96
+      profile confirms the same distribution without profile distortion.
