@@ -42983,3 +42983,98 @@ Decision rule:
   - then run two n96 cold-start confirmations;
   - promote only if both n96 runs are not slower than accepted 7EX and all
     hard gates pass.
+
+Phase 7EZ result - pack-mmap dontneed rejected and reverted:
+
+- End time: 2026-07-04T05:37:00Z.
+- Source commits tested:
+  - `909422855 feat: add kimi fallback pack mmap dontneed`;
+  - `d393c0e61 fix: include mman before kimi dontneed helper`.
+- Build:
+  - first build failed because `sys/mman.h` was included after the helper that
+    uses `madvise`;
+  - fixed by `d393c0e61`;
+  - remote build then succeeded for `build-cuda-batch/bin/llama-completion`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-040531Z-n32-phase7ez-packmmap-dontneed`.
+- Command delta:
+
+```bash
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_DONTNEED=1
+PINNED_SLOTS=12
+VRAM_MIB=15000
+THREADS=32
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+```
+
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `77525.42 ms`;
+  - decode `31432.40 ms / 31`, `0.99 tok/s`;
+  - slower than accepted 7EX n32 confirmation `29462.94 ms / 31` by
+    `1969.46 ms`;
+  - memory peak `15899996160`;
+  - final `file=14815764480`, `inactive_file=5309198336`,
+    `active_file=9506004992`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+- Pack-mmap dontneed counters:
+  - `enabled=1`;
+  - `hits=1727`, `misses=9`;
+  - `bytes=14260764672`;
+  - `dontneed_enabled=1`;
+  - `dontneed_calls=1727`;
+  - `dontneed_bytes=14260764672`;
+  - `dontneed_failures=0`.
+- Movement/profile counters:
+  - expert pack `iouring_wait_us=15086359`;
+  - main pinned `slot_wait=48.946 ms`, `host_stage=11843.439 ms`,
+    `h2d=4147.301 ms`;
+  - gate pinned `slot_wait=11.386 ms`, `host_stage=362.269 ms`,
+    `h2d=943.136 ms`;
+  - down profile `39.372 ms/call`;
+  - down fallback `36.845 ms/call`.
+- Timeline:
+  - `memory.events max +29219`;
+  - `pgscan +30724057`;
+  - `pgsteal +19979693`;
+  - `pgmajfault +985181`;
+  - `workingset_refault_file +23145`.
+
+Interpretation:
+
+- The new `MADV_DONTNEED` path worked mechanically:
+  - all `1727` decode fallback pack-mmap hits were advised away;
+  - no `madvise` failures.
+- It did not improve token rate.
+- Although `memory.events max` dropped versus some 7EX runs, decode became
+  much slower and major faults remained high.
+- The likely cause is immediate or near-future refault of fallback expert-pack
+  pages combined with the extra synchronization/madvise work.
+
+Decision:
+
+- Reject `GGML_MOE_CPU_FALLBACK_PACK_MMAP_DONTNEED=1`.
+- Revert source commits `d393c0e61` and `909422855`.
+- Keep Phase 7EX as current SOTA:
+
+```bash
+VRAM_MIB=15000
+THREADS=32
+PINNED_SLOTS=12
+UPGATE_PCT=60
+IQ2_UPGATE_PARALLEL=1
+GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1
+GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
+LLAMA_DROP_DENSE_MMAP_CACHE=1
+LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+```
+
+- Do not release expert-pack mmap pages immediately after each fallback op.
+- If revisiting this axis later, only consider route-aware delayed/batched
+  release after proving reuse distance is large enough.
