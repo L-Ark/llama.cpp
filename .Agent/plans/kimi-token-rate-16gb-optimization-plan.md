@@ -46040,3 +46040,55 @@ Decision rule:
 - If confirmed, run n96 twice.
 - Accept only if n96 beats Phase 7FB `70087.31 ms / 77` with quality pass and
   TTFT within limit.
+
+Result: rejected for SOTA.
+
+- End time: 2026-07-04T15:59:30+08:00.
+- n32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-074819Z-n32-phase7fr-upgate62`.
+  - quality `pass`;
+  - TTFT `74739.29 ms`;
+  - decode `29016.29 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - down slots `766`, hit rate `73.4%`;
+  - upgate slots `1735`, hit rate `45.2%`.
+- n32 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-075109Z-n32-phase7fr-upgate62-confirm`.
+  - quality `pass`;
+  - TTFT `69893.26 ms`;
+  - decode `28770.78 ms / 31`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - down slots `766`, hit rate `73.4%`;
+  - upgate slots `1735`, hit rate `45.2%`.
+- n96 run A:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-075344Z-n96-phase7fr-upgate62-a`.
+  - quality `pass`;
+  - TTFT `70704.43 ms`;
+  - decode `72017.43 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output was coherent and semantically correct.
+- n96 run B:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-075712Z-n96-phase7fr-upgate62-b`.
+  - quality `pass`;
+  - TTFT `70015.68 ms`;
+  - decode `70927.03 ms / 77`, `1.09 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output was coherent and semantically correct.
+
+Decision:
+
+- Reject `UPGATE_PCT=62` as a production SOTA setting.
+- Reason:
+  - n32 improved over rebuilt baseline and was stable;
+  - both n96 runs were slower than Phase 7FB `70087.31 ms / 77`;
+  - the result shows n32 is not predictive enough for split changes;
+  - upgate-heavy splits improve short decode but do not beat long decode.
+- Action:
+  - keep accepted production split at `UPGATE_PCT=60`;
+  - before testing lower or higher splits, rerun current `UPGATE_PCT=60` n96
+    on the rebuilt `sm_120a` build to establish an apples-to-apples long-decode
+    baseline.
