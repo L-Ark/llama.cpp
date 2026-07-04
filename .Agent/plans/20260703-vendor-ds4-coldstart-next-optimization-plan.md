@@ -8320,3 +8320,44 @@ Rollback / source rule:
 
 - No source changes are planned for the verifier probes; only env changes and artifacts.
 - Any later source change must be default-off, pass this verifier first when it changes arithmetic/offload, then pass strict cold France correctness/RAM/TTFT/token-rate gates.
+
+### 2026-07-04T06:18Z Split Up/Down Top1 Invalid Filter Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/split-updown-top1-invalid-filter-result.json`
+- artifact sha256: `6f5bed6fd01370d082ae6b2b92f62826a86a028e1f996e9b5fb3bb00115d6b20`
+
+Runs:
+
+- Invalid up-filter run: `/root/lfz/runs/vendor-ds4-16gb/20260704T055054Z-20260704_split_up_only_top1/france-cpu40-vram0gb`
+- Invalid down-filter run: `/root/lfz/runs/vendor-ds4-16gb/20260704T055356Z-20260704_split_down_only_top1/france-cpu40-vram0gb`
+
+Observed metrics for both invalid runs:
+
+- `same_top1=138/145`
+- `first_mismatch_pos=4`
+- `memory_peak_bytes=16000000000`
+- `ram_ok=true`
+- `oom_seen=false`
+- Candidate top1 sha256: `0a650ac7f8b686a619eb99ff13c8948368b056e1a3fedcc288aca376086abf56`
+
+Why these runs are invalid:
+
+- `GGML_MOE_STREAM_ONE_NAME_FILTER` currently supports only a single substring:
+  `return name && strstr(name, filter) != nullptr`.
+- The planned comma values `ffn_gate_exps,ffn_up_exps` and `ffn_gate_exps,ffn_down_exps` match no tensor names.
+- Stderr contained only `[moe_stream] enabled...` and no one-expert-pack / VRAM-cache lines, proving one-stream expert pack/cache did not run.
+- Therefore these runs did not test up-only or down-only offload. They are diagnostic only and cannot be used to reject split up/down.
+
+Next source candidate before rerun:
+
+- Add comma-list support to `moe_stream_one_name_filter_allows()` behind the existing env behavior:
+  - if the filter has no comma, preserve the current exact `strstr(name, filter)` behavior;
+  - if the filter contains commas, split into tokens and allow if any non-empty token is a substring of the tensor name;
+  - no env/default behavior change;
+  - accepted SOTA `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` must remain behaviorally unchanged.
+- This is a small diagnostic source patch, not a SOTA optimization by itself.
+- After the patch, rebuild `llama-results`, rerun the two verifier-only probes, and record whether top1 passes.
+- If both split probes fail top1, revert the source patch and keep only artifacts/docs.
+- If one split probe passes top1, update this plan with a strict cold performance-bound section before running any full token-rate benchmark.

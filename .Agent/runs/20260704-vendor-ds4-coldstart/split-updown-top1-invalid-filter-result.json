@@ -1,0 +1,309 @@
+{
+  "artifact": "split-updown-top1-invalid-filter-result",
+  "implementation_evidence": {
+    "behavior": "return name && strstr(name, filter) != nullptr",
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "function": "moe_stream_one_name_filter_allows"
+  },
+  "next_action": "Implement a default-compatible comma-list name filter or restore profile-gated require-admit before rerunning split up/down top1 verifier. Do not use these invalid runs to reject up-only/down-only offload.",
+  "reason": "GGML_MOE_STREAM_ONE_NAME_FILTER uses a single strstr substring. Comma-separated values match neither ffn_gate_exps nor ffn_up/down_exps, so both probes disabled one-stream expert pack/cache and produced the same candidate top1 report.",
+  "runs": {
+    "invalid_down_filter": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T055356Z-20260704_split_down_only_top1/france-cpu40-vram0gb",
+      "filter": "ffn_gate_exps,ffn_down_exps",
+      "memory_events": "low 0\nhigh 0\nmax 49616\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "stderr_moe_stream_lines": [
+        "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)"
+      ],
+      "stderr_sha256": "622fbc3cbe694563f1cb54a1b77da2baeabdb656ef4af1bf7210154ef2cc6780",
+      "summary": {
+        "artifact": "split-down-only-top1-result",
+        "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+        "candidate": "/root/lfz/runs/vendor-ds4-16gb/20260704T055356Z-20260704_split_down_only_top1/france-cpu40-vram0gb/top1-candidate.json",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T055356Z-20260704_split_down_only_top1/france-cpu40-vram0gb",
+        "config_delta": {
+          "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_down_exps"
+        },
+        "counter_lines": {
+          "pack": [],
+          "vram": []
+        },
+        "first_mismatch_pos": 4,
+        "hashes": {
+          "baseline": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+          "candidate": "0a650ac7f8b686a619eb99ff13c8948368b056e1a3fedcc288aca376086abf56"
+        },
+        "max_abs_top1_logit_delta": 1.2989999999999995,
+        "mean_abs_top1_logit_delta": 0.23699655172413817,
+        "memory_current_bytes": 15175536640,
+        "memory_events": "low 0\nhigh 0\nmax 49616\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "memory_peak_bytes": 16000000000,
+        "mismatch_examples": [
+          {
+            "base_margin": 0.00125313,
+            "base_top1": {
+              "id": 47468,
+              "logit": 24.6524,
+              "piece": " concise"
+            },
+            "cand_margin": 0.0131264,
+            "cand_top1": {
+              "id": 2767,
+              "logit": 24.6685,
+              "piece": " few"
+            },
+            "pos": 4
+          },
+          {
+            "base_margin": 0.208698,
+            "base_top1": {
+              "id": 295,
+              "logit": 23.1186,
+              "piece": " in"
+            },
+            "cand_margin": 0.223284,
+            "cand_top1": {
+              "id": 396,
+              "logit": 22.998,
+              "piece": " that"
+            },
+            "pos": 6
+          },
+          {
+            "base_margin": 0.0479832,
+            "base_top1": {
+              "id": 983,
+              "logit": 28.4661,
+              "piece": " It"
+            },
+            "cand_margin": 0.358717,
+            "cand_top1": {
+              "id": 5795,
+              "logit": 28.7955,
+              "piece": " From"
+            },
+            "pos": 42
+          },
+          {
+            "base_margin": 0.29962,
+            "base_top1": {
+              "id": 5785,
+              "logit": 31.1945,
+              "piece": " culture"
+            },
+            "cand_margin": 0.145372,
+            "cand_top1": {
+              "id": 6262,
+              "logit": 30.9725,
+              "piece": " science"
+            },
+            "pos": 89
+          },
+          {
+            "base_margin": 0.668116,
+            "base_top1": {
+              "id": 25714,
+              "logit": 29.6463,
+              "piece": " democratic"
+            },
+            "cand_margin": 0.204741,
+            "cand_top1": {
+              "id": 36737,
+              "logit": 29.5199,
+              "piece": " republic"
+            },
+            "pos": 95
+          },
+          {
+            "base_margin": 2.93202,
+            "base_top1": {
+              "id": 5970,
+              "logit": 34.5081,
+              "piece": " modern"
+            },
+            "cand_margin": 0.229805,
+            "cand_top1": {
+              "id": 15874,
+              "logit": 34.5613,
+              "piece": " contemporary"
+            },
+            "pos": 128
+          },
+          {
+            "base_margin": 0.0763092,
+            "base_top1": {
+              "id": 18826,
+              "logit": 21.2808,
+              "piece": "||"
+            },
+            "cand_margin": 0.0500507,
+            "cand_top1": {
+              "id": 1004,
+              "logit": 20.9747,
+              "piece": " \n\n"
+            },
+            "pos": 144
+          }
+        ],
+        "n_tokens_base": 145,
+        "n_tokens_candidate": 145,
+        "oom_seen": false,
+        "ram_ok": true,
+        "same_top1": 138,
+        "same_top1_ratio": 0.9517241379310345,
+        "status": "fail"
+      },
+      "top1_candidate_sha256": "0a650ac7f8b686a619eb99ff13c8948368b056e1a3fedcc288aca376086abf56"
+    },
+    "invalid_up_filter": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T055054Z-20260704_split_up_only_top1/france-cpu40-vram0gb",
+      "filter": "ffn_gate_exps,ffn_up_exps",
+      "memory_events": "low 0\nhigh 0\nmax 50058\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "stderr_moe_stream_lines": [
+        "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)"
+      ],
+      "stderr_sha256": "8ee2080eba24e40c6aa221ee0c5316355db5ebf643721b8ee3dd709dad2b941a",
+      "summary": {
+        "artifact": "split-up-only-top1-result",
+        "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+        "candidate": "/root/lfz/runs/vendor-ds4-16gb/20260704T055054Z-20260704_split_up_only_top1/france-cpu40-vram0gb/top1-candidate.json",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T055054Z-20260704_split_up_only_top1/france-cpu40-vram0gb",
+        "config_delta": {
+          "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_up_exps"
+        },
+        "counter_lines": {
+          "pack": [],
+          "vram": []
+        },
+        "first_mismatch_pos": 4,
+        "hashes": {
+          "baseline": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+          "candidate": "0a650ac7f8b686a619eb99ff13c8948368b056e1a3fedcc288aca376086abf56"
+        },
+        "max_abs_top1_logit_delta": 1.2989999999999995,
+        "mean_abs_top1_logit_delta": 0.23699655172413817,
+        "memory_current_bytes": 15161356288,
+        "memory_events": "low 0\nhigh 0\nmax 50058\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "memory_peak_bytes": 16000000000,
+        "mismatch_examples": [
+          {
+            "base_margin": 0.00125313,
+            "base_top1": {
+              "id": 47468,
+              "logit": 24.6524,
+              "piece": " concise"
+            },
+            "cand_margin": 0.0131264,
+            "cand_top1": {
+              "id": 2767,
+              "logit": 24.6685,
+              "piece": " few"
+            },
+            "pos": 4
+          },
+          {
+            "base_margin": 0.208698,
+            "base_top1": {
+              "id": 295,
+              "logit": 23.1186,
+              "piece": " in"
+            },
+            "cand_margin": 0.223284,
+            "cand_top1": {
+              "id": 396,
+              "logit": 22.998,
+              "piece": " that"
+            },
+            "pos": 6
+          },
+          {
+            "base_margin": 0.0479832,
+            "base_top1": {
+              "id": 983,
+              "logit": 28.4661,
+              "piece": " It"
+            },
+            "cand_margin": 0.358717,
+            "cand_top1": {
+              "id": 5795,
+              "logit": 28.7955,
+              "piece": " From"
+            },
+            "pos": 42
+          },
+          {
+            "base_margin": 0.29962,
+            "base_top1": {
+              "id": 5785,
+              "logit": 31.1945,
+              "piece": " culture"
+            },
+            "cand_margin": 0.145372,
+            "cand_top1": {
+              "id": 6262,
+              "logit": 30.9725,
+              "piece": " science"
+            },
+            "pos": 89
+          },
+          {
+            "base_margin": 0.668116,
+            "base_top1": {
+              "id": 25714,
+              "logit": 29.6463,
+              "piece": " democratic"
+            },
+            "cand_margin": 0.204741,
+            "cand_top1": {
+              "id": 36737,
+              "logit": 29.5199,
+              "piece": " republic"
+            },
+            "pos": 95
+          },
+          {
+            "base_margin": 2.93202,
+            "base_top1": {
+              "id": 5970,
+              "logit": 34.5081,
+              "piece": " modern"
+            },
+            "cand_margin": 0.229805,
+            "cand_top1": {
+              "id": 15874,
+              "logit": 34.5613,
+              "piece": " contemporary"
+            },
+            "pos": 128
+          },
+          {
+            "base_margin": 0.0763092,
+            "base_top1": {
+              "id": 18826,
+              "logit": 21.2808,
+              "piece": "||"
+            },
+            "cand_margin": 0.0500507,
+            "cand_top1": {
+              "id": 1004,
+              "logit": 20.9747,
+              "piece": " \n\n"
+            },
+            "pos": 144
+          }
+        ],
+        "n_tokens_base": 145,
+        "n_tokens_candidate": 145,
+        "oom_seen": false,
+        "ram_ok": true,
+        "same_top1": 138,
+        "same_top1_ratio": 0.9517241379310345,
+        "status": "fail"
+      },
+      "top1_candidate_sha256": "0a650ac7f8b686a619eb99ff13c8948368b056e1a3fedcc288aca376086abf56"
+    }
+  },
+  "source_head": "e8eca95a00550f315e19a330318c90a2af12012b",
+  "timestamp_utc": "2026-07-04T05:59:01Z",
+  "verdict": "invalid_probe_not_up_or_down_specific"
+}
