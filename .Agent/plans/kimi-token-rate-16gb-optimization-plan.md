@@ -52897,3 +52897,109 @@ Decision rule:
 - Future changes must first beat this baseline under n32 or n96, then beat the
   historical Phase 7FB n96 best `70087.31 ms / 77` before being accepted as a
   new SOTA.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-154632Z-n96-phase7hi-current-stable-baseline`.
+- Source/build:
+  - repo head `5d16a2f1191679a429975cc432a8d7fd3e967885`;
+  - clean worktree recorded in `git.txt`;
+  - stable source after reverting rejected coalescer;
+  - Blackwell `120a` build restored before this run.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `65123.97 ms`;
+  - decode `70221.94 ms / 77`, `1.10 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory final:
+  - `anon=458752`;
+  - `file=14815461376`;
+  - `kernel=249085952`;
+  - `inactive_file=13733937152`;
+  - `active_file=1080958976`;
+  - `pgmajfault=889791`;
+  - `workingset_refault_file=45649`.
+- Expert pack and staging:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37971269`;
+  - `iouring_submit_us=91853`;
+  - iouring batches `9846`, wait calls `29865`, cqes `37080`, inflight avg
+    `3.12`, max `8`;
+  - batch hist `1:805,2-4:5991,5-8:3050,9-16:0`;
+  - main pinned copies `49350`, waits `49314`;
+  - gate pinned copies `10450`, waits `10426`.
+- Cache and overlap:
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`;
+  - current-down overlap calls `2464`, planned/completed jobs `9109`, cache
+    hits `8755`, submitted batches `2224`, worker `8370478 us`.
+- Comparison:
+  - historical accepted Phase 7FB n96 SOTA: `70087.31 ms / 77`;
+  - Phase 7HI current stable baseline: `70221.94 ms / 77`;
+  - gap: `134.63 ms`, about `0.19%` slower.
+- Decision:
+  - Baseline is valid and passes all strict gates.
+  - Current rebuilt/stable source is close enough to historical SOTA that a
+    repeat n96 baseline is useful before making another source change; the gap
+    is within plausible cold-start variance.
+  - Do not claim new SOTA from this single run.
+
+## Phase 7HJ: current stable n96 repeat for variance bound
+
+Start time: 2026-07-05T00:20:00+08:00.
+
+Goal:
+
+- Repeat the strict n96 current stable baseline once to estimate cold-start
+  variance near the historical SOTA boundary.
+- Avoid starting a new source optimization until the current stable baseline gap
+  to Phase 7FB is known to be real rather than run variance.
+
+Theory:
+
+- Phase 7HI is only `134.63 ms` slower than the historical best n96 run.
+- This difference is much smaller than the regressions seen in rejected source
+  experiments and can plausibly be cold-start/device variance.
+- A repeat can clarify the acceptance threshold for the next optimization:
+  - if repeat is also around `70.2s`, future changes must beat that rebuilt
+    baseline and historical `70.087s`;
+  - if repeat beats `70.087s`, current stable source/build has effectively
+    recovered the historical SOTA without a new algorithmic change.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hj-current-stable-repeat"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- same strict quality, semantic output, TTFT, memory, swap, and fallback gates
+  as Phase 7HI.
+
+Decision rule:
+
+- If repeat fails any gate, investigate baseline instability before source work.
+- If repeat passes and beats `70087.31 ms / 77`, record current stable as
+  matching/recovering the historical SOTA but do not label it a new source
+  optimization.
+- If repeat passes and remains slower, record the two-run rebuilt baseline range
+  and use it for future comparisons.
