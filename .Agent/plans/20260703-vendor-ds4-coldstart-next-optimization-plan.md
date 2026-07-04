@@ -5802,3 +5802,135 @@ Deliverable:
 
 - Write `.Agent/runs/20260704-vendor-ds4-coldstart/sota-trace-breakdown.json`.
 - Append the numeric bottleneck result and next source experiment recommendation to this plan before making the next code change.
+
+### 2026-07-04T00:34Z SOTA Trace Bottleneck Decomposition Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/sota-trace-breakdown.json`
+- artifact sha256: `f6678bb53e3c737639b6a09f85c6f6ab4c60659278918cf19edaf08fe0cba80e`
+
+Inputs:
+
+- Accepted SOTA:
+  `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Bounded-defer candidate:
+  `/root/lfz/runs/vendor-ds4-16gb/20260704T001016Z-20260704_bounded_defer_top3000_candidate/france-cpu40-vram0gb`
+
+Accepted SOTA summary:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=32892.55329 ms`
+- `elapsed_seconds=63.94`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `ram_ok=true`
+- `correctness_ok=true`
+
+SOTA trace totals:
+
+- row count: `35151`
+- trace span: `44636.433 ms`
+- sum of row `total_ms`: `8050.224 ms`
+- component sums:
+  - `src0_ms=6707.771 ms` (`83.3%` of row total)
+  - `sync_ms=628.240 ms` (`7.8%`)
+  - `kernel_ms=317.330 ms` (`3.9%`)
+  - `src1_ms=162.351 ms` (`2.0%`)
+  - `d2h_ms=105.292 ms` (`1.3%`)
+  - `dontneed_ms=74.877 ms` (`0.9%`)
+  - `scatter_ms=49.787 ms` (`0.6%`)
+
+Important refinement:
+
+- `seq=0` includes the top3000 prefill and contributes about `4502 ms` inside `src0_ms`.
+- Excluding `seq=0`, SOTA visible row time is only `3547.910 ms`.
+- Excluding `seq=0`, component sums are:
+  - `src0_ms=2206.068 ms` (`62.2%`)
+  - `sync_ms=628.234 ms` (`17.7%`)
+  - `kernel_ms=316.797 ms` (`8.9%`)
+  - `src1_ms=162.300 ms` (`4.6%`)
+  - `d2h_ms=105.283 ms` (`3.0%`)
+  - `dontneed_ms=74.867 ms` (`2.1%`)
+  - `scatter_ms=49.785 ms` (`1.4%`)
+
+Cache-hit/miss split:
+
+- SOTA cache hits: `33265`
+- SOTA cache misses: `1886`
+- Miss-only rows:
+  - total `2536.444 ms`
+  - `src0_ms=2187.637 ms` (`86.2%`)
+  - `sync_ms=297.174 ms` (`11.7%`)
+- Hit rows excluding `seq=0`:
+  - total `1011.466 ms`
+  - `sync_ms=331.060 ms` (`32.7%`)
+  - `kernel_ms=287.413 ms` (`28.4%`)
+  - `src1_ms=154.883 ms` (`15.3%`)
+  - `d2h_ms=99.049 ms` (`9.8%`)
+  - `dontneed_ms=68.955 ms` (`6.8%`)
+  - `scatter_ms=47.207 ms` (`4.7%`)
+
+Bounded-defer comparison:
+
+- Bounded-defer `eval_tok_s=4.3`, delta `-0.1 tok/s`.
+- Bounded-defer TTFT was `31965.574447 ms`, about `927 ms` lower than SOTA.
+- Bounded-defer row `total_ms` sum was `7413.899 ms`, about `636 ms` lower than SOTA because sync/scatter moved outside row trace.
+- Despite lower row-visible time, wall throughput regressed, proving that row-local timing alone is not enough for the next batching change.
+
+Conclusion:
+
+- `src0_ms` dominates visible SOTA row timing, but a large part is `seq=0` prefill and therefore mostly TTFT-side.
+- After excluding prefill, trace-visible time is only about `3.55s`, far below the `63.94s` run wall time and the `44.64s` trace span.
+- The next bottleneck is likely outside the per-row CUDA trace:
+  - CPU-side expert loop overhead;
+  - CPU fallback path for non-accepted experts/tensors;
+  - final stream sync/drain timing;
+  - thread barrier/wait time;
+  - file-backed page-cache/refault behavior not captured as individual row timing.
+- Do not start another CUDA batching optimization until these wall-time gaps are instrumented.
+
+### 2026-07-04T00:41Z Next Plan: CPU-Side MoE Wall-Time Instrumentation
+
+Goal:
+
+- Add low-overhead optional timers around the CPU-side MoE path to account for wall time missing from `one_trace.csv`.
+- The purpose is diagnostic first: identify the next high-leverage token-rate optimization without changing default SOTA behavior.
+
+Bottleneck hypothesis:
+
+- Accepted SOTA row trace accounts for only about `8.05s` total row work, and only `3.55s` after removing the prefill row.
+- The model run wall time is `63.94s`, and trace span is `44.64s`.
+- Therefore the current bottleneck is probably CPU-side loop/fallback/barrier/wait behavior around the streamed experts rather than row-local CUDA sync/scatter alone.
+
+Implementation plan:
+
+- Add optional profiling gated by a new env, e.g. `GGML_MOE_STREAM_CPU_TRACE_OUT`.
+- In `ggml/src/ggml-cpu/ggml-cpu.c`, around the `use_gpu_stream` branch:
+  - time the whole CPU-side streamed MoE block for `ith == 0`;
+  - time the per-expert loop;
+  - count accepted vs declined `ggml_cuda_moe_stream_one()` calls;
+  - time `ggml_cuda_moe_stream_sync()`;
+  - time the post-CUDA threadpool barrier;
+  - record `src0->name`, `n_as`, total rows, accepted count, declined count, and elapsed microseconds.
+- Keep the profiler disabled by default and write only when env is set.
+- Do not change compute behavior, cache policy, pack path, prefill, or default SOTA path.
+
+Practice config:
+
+- Build source candidate with instrumentation.
+- Run strict cold accepted SOTA top3000 config with the new CPU trace env set.
+- Keep `GGML_MOE_STREAM_ONE_TRACE_OUT` enabled so row trace and CPU trace can be aligned.
+
+Acceptance / rejection:
+
+- This is diagnostic, not a SOTA promotion unless it unexpectedly improves throughput.
+- It must preserve correctness, RAM, and pack direct behavior.
+- If token rate drops materially due to profiling overhead, mark the run diagnostic-only and do not treat it as SOTA.
+- If the instrumentation changes behavior or breaks correctness, revert source immediately.
+
+Deliverable:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-moe-walltrace-result.json`
+- Append the wall-time breakdown and next optimization recommendation to this plan before any subsequent source optimization.
