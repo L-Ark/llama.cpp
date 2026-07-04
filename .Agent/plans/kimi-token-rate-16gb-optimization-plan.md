@@ -45438,3 +45438,70 @@ Decision:
   - rebuild production source after revert;
   - keep Phase 7FB as current accepted SOTA;
   - next practice must first record a new bottleneck-driven phase.
+
+## Phase 7FN: rebuilt production baseline validation
+
+Start time: 2026-07-04T15:11:00+08:00.
+
+Goal:
+
+- Re-establish a valid production baseline after the remote
+  `build-cuda-batch` directory was recreated.
+- Do not change source.
+- Confirm that the current production source, rebuilt with CUDA arch `89` and
+  `GGML_CUDA_MOE_STREAM_BATCH=ON`, still satisfies the strict gates under
+  16GB host RAM.
+
+Why this is required:
+
+- The previous accepted SOTA measurements were produced with an older existing
+  build artifact.
+- During Phase 7FM setup the build directory was accidentally removed and then
+  recreated.
+- Future optimization comparisons must not mix old-build and new-build
+  measurements without a fresh baseline.
+
+Build used:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=89
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fn-rebuilt-production-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 is close to Phase 7FB confirmations (`28673.82-29182.49 ms`), keep
+  Phase 7FB as the active comparison baseline.
+- If n32 is materially slower, record the new rebuilt-build baseline and treat
+  further experiments as needing both:
+  - comparison against the rebuilt baseline;
+  - eventual n96 confirmation against the accepted Phase 7FB SOTA before any
+    source change can be accepted.
