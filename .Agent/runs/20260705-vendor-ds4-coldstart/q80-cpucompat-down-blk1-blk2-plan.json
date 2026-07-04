@@ -1,0 +1,40 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: individual full blk.1 and blk.2 ffn_down_exps Q8_0 CPU-compatible pre-fallback skip",
+  "source_head_before_experiment": "current docs-plan head after this artifact is committed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "prerequisite": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-down-blk0-full-validation.json",
+    "result": "passed",
+    "same_top1": "145/145",
+    "skip_records": 870
+  },
+  "candidate": {
+    "type": "correctness gate only",
+    "filters": [
+      "blk.1.ffn_down_exps.weight",
+      "blk.2.ffn_down_exps.weight"
+    ],
+    "env_common": {
+      "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+      "GGML_MOE_STREAM_Q80_ALLOW_DOWN": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+      "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0"
+    }
+  },
+  "correctness_gate": {
+    "command": "llama-results fixed-text top1 check against existing baseline result.gguf, run separately per filter",
+    "pass_condition": "each filter exits 0, same_top1 == n_tokens, first_mismatch_pos == -1, max_abs == 0, mean_abs == 0",
+    "failure_rule": "If either layer fails, binary-search that layer's call limit and do not expand down skip beyond the last passing scope."
+  },
+  "runtime_constraints": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "framework": "vendor DeepSeek"
+  },
+  "not_a_sota": true,
+  "next_if_passes": "Plan all-down or early-layer grouped down correctness only after this artifact has a passed validation record."
+}
