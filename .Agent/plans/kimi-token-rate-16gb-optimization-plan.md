@@ -58258,6 +58258,138 @@ Decision rule:
   reject CQE batching/refill as the next direction and move to a different
   bottleneck.
 
+### 7JB result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `170a54832 ggml: trace moe iouring wait distribution`.
+
+Build command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 170a54832
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+```
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jb-io-wait-trace`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jb-io-wait-trace
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `77272.37 ms`, below `106331.72 ms`;
+- decode `28022.90 ms / 31`, `1.11 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15077081088` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14862`, bytes `86301917184`;
+- iouring wait `14329393 us`;
+- iouring wait calls `11938`;
+- iouring CQEs `14862`;
+- main staging:
+  - batches `2750`;
+  - jobs `10846`;
+  - wait calls `8484`;
+  - inflight average `3.16`;
+- gate staging:
+  - batches `1263`;
+  - jobs `4016`;
+  - wait calls `3454`;
+  - inflight average `2.77`;
+- current down overlap worker `3314558 us`;
+- down hit `73.4%`;
+- upgate hit `45.2%`.
+
+Wait trace summary:
+
+- `io-wait-trace.csv` rows `11938`;
+- traced wait sum `14335.264 ms`, matching runtime iouring wait;
+- wait distribution:
+  - p50 `0.861755 ms`;
+  - p75 `1.908709 ms`;
+  - p90 `2.793193 ms`;
+  - p95 `3.317545 ms`;
+  - p99 `4.356240 ms`;
+  - max `9.794553 ms`;
+- by op:
+  - `runtime_load`: rows `9340`, wait `11741.149 ms`,
+    average `1.257 ms`;
+  - `current_down_overlap`: rows `2598`, wait `2594.115 ms`,
+    average `0.999 ms`;
+- by drained CQEs after one blocking wait:
+  - `drained_cqes=1`: rows `9570`, wait `11395.193 ms`;
+  - `drained_cqes=2`: rows `1893`, wait `2282.806 ms`;
+  - `drained_cqes>=3`: rows `475`, wait `657.265 ms`;
+- first-CQE versus tail:
+  - first wait in batch: rows `4013`, wait `9646.318 ms`,
+    average `2.404 ms`;
+  - tail waits after at least one CQE completed: rows `7925`,
+    wait `4688.946 ms`, average `0.592 ms`;
+- tiny waits:
+  - `<0.1 ms`: rows `1307`, total `66.672 ms`;
+  - `<0.25 ms`: rows `2837`, total `322.152 ms`;
+  - `<0.5 ms`: rows `4468`, total `922.428 ms`;
+  - `<1.0 ms`: rows `6411`, total `2338.691 ms`.
+
+Interpretation:
+
+- `io_uring_wait_cqe` syscall overhead is not the main bottleneck:
+  all waits under `0.1 ms` sum to only `66.672 ms`, and waits under `0.25 ms`
+  sum to `322.152 ms`.
+- Waiting for larger CQE batches is unlikely to help:
+  - `drained_cqes=1` accounts for `79.2%` of wait rows and `79.5%` of wait
+    time;
+  - p90 wait is already `2.79 ms`, so waiting for more CQEs would likely add
+    latency rather than remove overhead.
+- Refill tuning is not the high-priority target:
+  - most total wait is first-CQE latency before any refill can matter;
+  - tail waits are smaller (`4.689 s`) and average `0.592 ms`.
+- The actionable bottleneck is the number of foreground batches and first-CQE
+  storage latencies, not CQE polling mechanics.
+
+Decision:
+
+- Reject `wait_cqes`/CQE batching/syscall-reduction as the next optimization.
+- Do not implement a wait batching behavior change.
+- Keep `GGML_MOE_IO_WAIT_TRACE_OUT` as default-off diagnostic infrastructure;
+  default runtime behavior is unchanged when the env is unset.
+- Next useful implementation must reduce the number of foreground read batches,
+  reduce foreground misses, or submit required reads earlier without adding
+  extra IO. Prior rejected paths mean this must be a narrow, evidence-backed
+  design step before coding.
+
 ### Result
 
 Timestamp: 2026-07-05.
