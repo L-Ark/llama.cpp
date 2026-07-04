@@ -59291,6 +59291,167 @@ Analysis:
     target a lower-level reduction in per-read foreground wait or accept that
     IO is variance-bound under current hardware/16GB RAM constraints.
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `991639a28 docs: plan foreground io attribution`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7iw-foreground-io-attribution`
+
+Gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `62424.15 ms`, below `106331.72 ms`;
+- decode `28409.35 ms / 31`, `1.09 tok/s`;
+- host RAM peak `15899996160` bytes, final `15076270080` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring reads `14862`, bytes `86301917184`, wait `14539639 us`;
+- down hit `73.4%`;
+- upgate hit `45.2%`.
+
+Batch-level IO profile:
+
+- `runtime_load`:
+  - rows `3153`;
+  - read jobs `11358`;
+  - wait `11965.832 ms`;
+  - wall `12687.158 ms`;
+  - average read jobs `3.60`;
+- `current_down_overlap`:
+  - rows `860`;
+  - read jobs `3504`;
+  - wait `2579.514 ms`;
+  - wall `2738.852 ms`;
+  - average read jobs `4.07`.
+
+Per-copy profile note:
+
+- `copy-profile.csv` over-counts shared batch waits because each row in a batch
+  sees the same batch-level wait.
+- Use it for distribution/top-outlier attribution, not for absolute summed wait.
+
+Per-copy distribution:
+
+- By op:
+  - `runtime_load`: rows `19828`, bytes `100.537 GiB`,
+    summed row wait `42939.268 ms`;
+  - `current_down_overlap`: rows `3673`, bytes `21.578 GiB`,
+    summed row wait `10459.171 ms`.
+- By class:
+  - `runtime_load/gate`: rows `8154`, wait `15005.234 ms`;
+  - `runtime_load/up`: rows `8153`, wait `14457.098 ms`;
+  - `runtime_load/down`: rows `3521`, wait `13476.937 ms`;
+  - `current_down_overlap/down`: rows `3673`, wait `10459.171 ms`.
+- Top layers are broad rather than concentrated:
+  - `runtime_load layer 1`: `4.74%` of summed row wait;
+  - `layer 24`: `4.12%`;
+  - `layer 4`: `4.08%`;
+  - `layer 60`: `3.92%`;
+  - `layer 5`: `3.80%`.
+- Top tensors are also not concentrated:
+  - `blk.4.ffn_down_exps.weight`: `2.20%`;
+  - `blk.60.ffn_down_exps.weight`: `1.99%`;
+  - `blk.1.ffn_gate_exps.weight`: `1.87%`;
+  - `blk.1.ffn_up_exps.weight`: `1.75%`.
+
+Cold outliers:
+
+- The largest single rows are early cold reads:
+  - `blk.60.ffn_down_exps.weight` experts `298,49,161,23`:
+    `~119 ms` each;
+  - `blk.4.ffn_down_exps.weight` experts `335,214,141,127`:
+    `~116 ms` each.
+- These are narrow enough to test with an env-only `GGML_MOE_VRAM_PROFILE`
+  preload without changing runtime code.
+
+Decision:
+
+- Foreground wait is broad and mostly proportional to misses, so broad
+  cache/preload/layout changes remain unattractive.
+- There is one narrow possible probe: preload the first cold outlier experts
+  using existing `GGML_MOE_VRAM_PROFILE`.
+- This probe has a low data budget, about `8` down experts:
+  - four `blk.60` down experts at `6.02 MiB` each;
+  - four `blk.4` down experts at `7.44 MiB` each;
+  - total under `60 MiB`.
+- It may reduce the first decode outlier without meaningfully changing RAM/VRAM
+  budget. It may also just move the cost into TTFT; TTFT has gate headroom, but
+  the run must still remain below `106331.72 ms`.
+
+## Phase 7IX: env-only preload for first cold down outliers
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IW shows no small tensor/layer group dominates total foreground wait.
+- The top actionable outlier is the first cold down read cluster in
+  `blk.60` and `blk.4`.
+
+Hypothesis:
+
+- Existing `GGML_MOE_VRAM_PROFILE` preload can move the first cold down experts
+  into VRAM before they are needed by decode.
+- If the slow `~115-119 ms` first-read cluster is on the critical path, this
+  may shave a few hundred milliseconds from decode.
+- If it only shifts the same IO into TTFT or evicts useful up/gate entries, the
+  run will not improve and must be rejected.
+
+Theoretical bound:
+
+- The direct upper bound is the top cold cluster visible in 7IW:
+  - `4 * ~119 ms` for `blk.60 down`;
+  - `4 * ~116 ms` for `blk.4 down`;
+  - row-level waits over-count batch wait, so practical upper bound is lower
+    than `~940 ms`.
+- Preloaded bytes are under `60 MiB`, so VRAM pressure should be negligible
+  compared with the existing cache.
+
+Implementation:
+
+- No source change.
+- Generate a small profile CSV:
+  - `rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor`;
+  - entries:
+    - `blk.60.ffn_down_exps.weight`: experts `298,49,161,23`;
+    - `blk.4.ffn_down_exps.weight`: experts `335,214,141,127`.
+- Run strict cold-start n32 with:
+  - `GGML_MOE_VRAM_PROFILE=<small-profile>`;
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=2`;
+  - normal accepted pct62 knobs;
+  - no rejected trace prefetch/hot overlay.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If decode improves and TTFT remains inside the gate, repeat n32.
+- If repeat passes and improves, validate n96 before accepting as SOTA.
+- If decode is flat/worse or TTFT rises materially without decode gain, reject
+  the preload profile.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
