@@ -1,0 +1,79 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: default-off Q8_0 up-skip overhead profiling instrumentation",
+  "result": "passed",
+  "promoted_to_sota": false,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head_before_commit": "9d00c361b97640a9bf1037255369c249bb901a46",
+    "modified_file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off": true
+  },
+  "instrumentation": {
+    "enable_env": "GGML_MOE_STREAM_Q80_SKIP_PROFILE=1",
+    "optional_output_env": "GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT=/path/profile.txt",
+    "summary_line_prefix": "[moe_stream_q80_skip_profile]",
+    "timed_fields": [
+      "total_ms",
+      "host_src0_ms",
+      "host_q80_ms",
+      "cuda_alloc_ms",
+      "h2d_ms",
+      "kernel_sync_ms",
+      "d2h_ms",
+      "scatter_ms",
+      "report_ms",
+      "cuda_free_ms"
+    ],
+    "counters": [
+      "calls_entered",
+      "calls_attempted",
+      "calls_ok",
+      "calls_failed",
+      "src0_bytes",
+      "q80_bytes",
+      "out_bytes"
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "status": "passed",
+    "build_info_commit": "9d00c361b-dirty"
+  },
+  "default_off_sanity": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T211049Z-q80-profile-defaultoff/top1",
+    "systemd_unit": "vendor-ds4-q80-profile-defaultoff-20260704T211049Z.service",
+    "service_result": "success",
+    "service_runtime": "1min 6.876s",
+    "cpu_time": "12min 18.497s",
+    "check_exit_status": 0,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "profile_output_present": false,
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "run_case_sha256": "5ab39cc9161499fb3baef5d89f8c2e772e778b58ff2c2aaca74b7cfc97e7e3a2",
+    "binary_sha256": "ed7459e577a0b3bca4e274eaaec1df8d9429970f1b6208eb05e912713addacdf",
+    "stderr_sha256": "a3db6b58c8018391c1cefbeaea779a327f5476de092ca800e6125368d081f580"
+  },
+  "cgroup": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 16953,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    }
+  },
+  "decision": {
+    "source_ready_to_commit": true,
+    "accepted_sota_unchanged": "4.4 tok/s",
+    "next_step": "Run a profiling-enabled diagnostic with all-up Q8_0 CPU-compatible skip to measure stage overhead. That diagnostic is not promotable because profiling adds overhead."
+  }
+}

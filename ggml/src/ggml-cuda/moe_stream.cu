@@ -2000,6 +2000,99 @@ static FILE * moe_stream_q80_skip_report_fp() {
 static std::atomic<uint64_t> g_q80_skip_calls{0};
 static std::atomic<uint64_t> g_q80_skip_reports{0};
 
+struct q80_skip_profile_state {
+    std::atomic<uint64_t> calls_entered{0};
+    std::atomic<uint64_t> calls_attempted{0};
+    std::atomic<uint64_t> calls_ok{0};
+    std::atomic<uint64_t> calls_failed{0};
+    std::atomic<uint64_t> src0_bytes{0};
+    std::atomic<uint64_t> q80_bytes{0};
+    std::atomic<uint64_t> out_bytes{0};
+    std::atomic<uint64_t> total_ns{0};
+    std::atomic<uint64_t> host_src0_ns{0};
+    std::atomic<uint64_t> host_q80_ns{0};
+    std::atomic<uint64_t> cuda_alloc_ns{0};
+    std::atomic<uint64_t> h2d_ns{0};
+    std::atomic<uint64_t> kernel_sync_ns{0};
+    std::atomic<uint64_t> d2h_ns{0};
+    std::atomic<uint64_t> scatter_ns{0};
+    std::atomic<uint64_t> report_ns{0};
+    std::atomic<uint64_t> cuda_free_ns{0};
+};
+
+static q80_skip_profile_state g_q80_skip_profile;
+
+static uint64_t q80_skip_profile_ns(
+        std::chrono::steady_clock::time_point a,
+        std::chrono::steady_clock::time_point b) {
+    return (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(b - a).count();
+}
+
+static void q80_skip_profile_report_atexit() {
+    const uint64_t calls = g_q80_skip_profile.calls_attempted.load();
+    if (calls == 0) {
+        return;
+    }
+
+    const uint64_t total_ns = g_q80_skip_profile.total_ns.load();
+    const auto ns_to_ms = [](uint64_t ns) { return (double) ns / 1000000.0; };
+    const auto avg_us = [calls](uint64_t ns) { return calls ? (double) ns / (double) calls / 1000.0 : 0.0; };
+
+    char line[2048];
+    std::snprintf(line, sizeof(line),
+        "[moe_stream_q80_skip_profile] calls_entered=%lu calls_attempted=%lu calls_ok=%lu calls_failed=%lu"
+        " src0_bytes=%lu q80_bytes=%lu out_bytes=%lu"
+        " total_ms=%.3f host_src0_ms=%.3f host_q80_ms=%.3f cuda_alloc_ms=%.3f"
+        " h2d_ms=%.3f kernel_sync_ms=%.3f d2h_ms=%.3f scatter_ms=%.3f report_ms=%.3f cuda_free_ms=%.3f"
+        " avg_total_us=%.3f avg_alloc_us=%.3f avg_h2d_us=%.3f avg_kernel_sync_us=%.3f avg_d2h_us=%.3f avg_free_us=%.3f\n",
+        g_q80_skip_profile.calls_entered.load(),
+        calls,
+        g_q80_skip_profile.calls_ok.load(),
+        g_q80_skip_profile.calls_failed.load(),
+        g_q80_skip_profile.src0_bytes.load(),
+        g_q80_skip_profile.q80_bytes.load(),
+        g_q80_skip_profile.out_bytes.load(),
+        ns_to_ms(total_ns),
+        ns_to_ms(g_q80_skip_profile.host_src0_ns.load()),
+        ns_to_ms(g_q80_skip_profile.host_q80_ns.load()),
+        ns_to_ms(g_q80_skip_profile.cuda_alloc_ns.load()),
+        ns_to_ms(g_q80_skip_profile.h2d_ns.load()),
+        ns_to_ms(g_q80_skip_profile.kernel_sync_ns.load()),
+        ns_to_ms(g_q80_skip_profile.d2h_ns.load()),
+        ns_to_ms(g_q80_skip_profile.scatter_ns.load()),
+        ns_to_ms(g_q80_skip_profile.report_ns.load()),
+        ns_to_ms(g_q80_skip_profile.cuda_free_ns.load()),
+        avg_us(total_ns),
+        avg_us(g_q80_skip_profile.cuda_alloc_ns.load()),
+        avg_us(g_q80_skip_profile.h2d_ns.load()),
+        avg_us(g_q80_skip_profile.kernel_sync_ns.load()),
+        avg_us(g_q80_skip_profile.d2h_ns.load()),
+        avg_us(g_q80_skip_profile.cuda_free_ns.load()));
+    std::fputs(line, stderr);
+
+    const char * path = std::getenv("GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT");
+    if (path && path[0]) {
+        if (FILE * fp = std::fopen(path, "w")) {
+            std::fputs(line, fp);
+            std::fclose(fp);
+        } else {
+            std::fprintf(stderr, "[moe_stream_q80_skip_profile] failed to open profile out: %s\n", path);
+        }
+    }
+}
+
+static bool q80_skip_profile_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_Q80_SKIP_PROFILE");
+        const int value = (env && env[0] && env[0] != '0') ? 1 : 0;
+        if (value) {
+            std::atexit(q80_skip_profile_report_atexit);
+        }
+        return value;
+    }();
+    return enabled != 0;
+}
+
 extern "C" bool ggml_cuda_moe_stream_q80_skip(
     int src0_type_int,
     const char *src0_name,
@@ -2015,6 +2108,10 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
     float *dst,
     size_t dst_nb1, size_t dst_nb2,
     const ggml_moe_row_mapping *rows) {
+    const bool profile = q80_skip_profile_enabled();
+    if (profile) {
+        g_q80_skip_profile.calls_entered.fetch_add(1, std::memory_order_relaxed);
+    }
     if (!moe_stream_q80_skip_name_allows(src0_name)) {
         return false;
     }
@@ -2048,8 +2145,14 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
         return false;
     }
 
+    const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    if (profile) {
+        g_q80_skip_profile.calls_attempted.fetch_add(1, std::memory_order_relaxed);
+    }
+
     std::vector<uint8_t> h_src0((size_t) ne01 * nb01);
     std::memcpy(h_src0.data(), src0_data, h_src0.size());
+    const auto t_src0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     std::vector<uint8_t> h_q80((size_t) cne1 * src1_q8_0_row_size);
     for (int64_t k = 0; k < cne1; ++k) {
@@ -2064,6 +2167,7 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
         const char * q80_row = (const char *) src1_q8_0 + (size_t) (i11 + i12 * src1_ne1) * src1_q8_0_row_size;
         std::memcpy(h_q80.data() + (size_t) k * src1_q8_0_row_size, q80_row, src1_q8_0_row_size);
     }
+    const auto t_q80 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     void * d_src0 = nullptr;
     void * d_q80 = nullptr;
@@ -2076,10 +2180,12 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
     bool ok = cudaMalloc(&d_src0, src0_bytes) == cudaSuccess &&
         cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
         cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+    const auto t_alloc = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     if (ok) {
         ok = cudaMemcpy(d_src0, h_src0.data(), src0_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
             cudaMemcpy(d_q80, h_q80.data(), q80_bytes, cudaMemcpyHostToDevice) == cudaSuccess;
     }
+    const auto t_h2d = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     if (ok) {
         const int threads = 128;
         const int blocks = ((int) total + threads - 1) / threads;
@@ -2092,9 +2198,13 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
                     (const char *) d_src0, nb01, (const char *) d_q80, src1_q8_0_row_size,
                     ne00, (int) cne1, (int) ne01, d_out);
         }
-        ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
-            cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+        ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess;
     }
+    const auto t_kernel = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    if (ok) {
+        ok = cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+    }
+    const auto t_d2h = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     if (ok) {
         for (int64_t k = 0; k < cne1; ++k) {
@@ -2102,7 +2212,10 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
             const float * out_row = h_out.data() + (size_t) k * ne01;
             std::memcpy(dst_row, out_row, (size_t) ne01 * sizeof(float));
         }
+    }
+    const auto t_scatter = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
+    if (ok) {
         if (FILE * fp = moe_stream_q80_skip_report_fp()) {
             const uint64_t report_idx = g_q80_skip_reports.fetch_add(1, std::memory_order_relaxed);
             flockfile(fp);
@@ -2119,6 +2232,7 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
         std::fprintf(stderr, "[moe_stream_q80_skip] CUDA skip failed for %s expert=%" PRId64 "\n",
                 src0_name ? src0_name : "", expert_index);
     }
+    const auto t_report = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     if (d_src0) {
         cudaFree(d_src0);
@@ -2128,6 +2242,28 @@ extern "C" bool ggml_cuda_moe_stream_q80_skip(
     }
     if (d_out) {
         cudaFree(d_out);
+    }
+    const auto t_free = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+
+    if (profile) {
+        g_q80_skip_profile.src0_bytes.fetch_add((uint64_t) src0_bytes, std::memory_order_relaxed);
+        g_q80_skip_profile.q80_bytes.fetch_add((uint64_t) q80_bytes, std::memory_order_relaxed);
+        g_q80_skip_profile.out_bytes.fetch_add((uint64_t) out_bytes, std::memory_order_relaxed);
+        g_q80_skip_profile.host_src0_ns.fetch_add(q80_skip_profile_ns(t0, t_src0), std::memory_order_relaxed);
+        g_q80_skip_profile.host_q80_ns.fetch_add(q80_skip_profile_ns(t_src0, t_q80), std::memory_order_relaxed);
+        g_q80_skip_profile.cuda_alloc_ns.fetch_add(q80_skip_profile_ns(t_q80, t_alloc), std::memory_order_relaxed);
+        g_q80_skip_profile.h2d_ns.fetch_add(q80_skip_profile_ns(t_alloc, t_h2d), std::memory_order_relaxed);
+        g_q80_skip_profile.kernel_sync_ns.fetch_add(q80_skip_profile_ns(t_h2d, t_kernel), std::memory_order_relaxed);
+        g_q80_skip_profile.d2h_ns.fetch_add(q80_skip_profile_ns(t_kernel, t_d2h), std::memory_order_relaxed);
+        g_q80_skip_profile.scatter_ns.fetch_add(q80_skip_profile_ns(t_d2h, t_scatter), std::memory_order_relaxed);
+        g_q80_skip_profile.report_ns.fetch_add(q80_skip_profile_ns(t_scatter, t_report), std::memory_order_relaxed);
+        g_q80_skip_profile.cuda_free_ns.fetch_add(q80_skip_profile_ns(t_report, t_free), std::memory_order_relaxed);
+        g_q80_skip_profile.total_ns.fetch_add(q80_skip_profile_ns(t0, t_free), std::memory_order_relaxed);
+        if (ok) {
+            g_q80_skip_profile.calls_ok.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            g_q80_skip_profile.calls_failed.fetch_add(1, std::memory_order_relaxed);
+        }
     }
     return ok;
 }
