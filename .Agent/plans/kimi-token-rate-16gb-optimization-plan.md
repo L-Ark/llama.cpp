@@ -41986,3 +41986,79 @@ Decision rule:
 - If the profile is noisy or only confirms known movement limits, do not
   implement another up/gate patch. Instead design a different non-overlap
   movement reduction.
+
+Phase 7ET result - diagnostic accepted, no SOTA promotion:
+
+- End time: 2026-07-04T03:10:00Z.
+- Commit: `98a771113` (`docs: plan kimi phase7et upgate profile`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-030732Z-n32-phase7et-upgate-layer-profile`.
+- Hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `74068.90 ms`, below the `106331.72 ms` gate;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - France output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - quality: pass.
+- Decode:
+  - `29348.56 ms / 31`, `1.06 tok/s`;
+  - faster than historical Phase 7EB n32 `29599.64 ms / 31` by
+    `251.08 ms`;
+  - not promotable because this run intentionally enabled diagnostic layer
+    profiling and does not represent a production env change.
+- Memory at finish:
+  - `memory.current.final=14967074816`;
+  - `file=14726983680`;
+  - `inactive_file=7304560640`;
+  - `active_file=7421820928`;
+  - `kernel=234840064`;
+  - `anon=446464`.
+- Movement counters:
+  - expert pack `iouring_wait_us=15116912`;
+  - main pinned `host_stage=11573.182 ms`, `h2d=4150.445 ms`;
+  - gate pinned `host_stage=322.821 ms`, `h2d=933.868 ms`;
+  - down cache hit rate `73.6%`;
+  - upgate cache hit rate `43.7%`;
+  - current-down overlap `planned_jobs=3664`, `worker_us=3338477`.
+- Up/gate layer profile, top rows:
+  - `blk.60` type `18/18`: rows `32`, wall `471.230 ms`,
+    kernel `461.332 ms`, up `321.236 ms`, gate `135.695 ms`;
+  - `blk.5` type `18/18`: wall `313.384 ms`, kernel `311.228 ms`;
+  - `blk.6` type `18/18`: wall `283.159 ms`, kernel `281.107 ms`;
+  - `blk.4` type `18/18`: wall `280.526 ms`, kernel `278.537 ms`;
+  - `blk.3` type `18/18`: wall `278.997 ms`, kernel `277.056 ms`;
+  - `blk.1` type `22/22`: wall `240.126 ms`, kernel `237.776 ms`,
+    `up_wait=222.766 ms`, `gate_wait=233.483 ms`;
+  - `blk.10` type `22/22`: wall `226.675 ms`, kernel `224.366 ms`,
+    `up_wait=214.393 ms`, `gate_wait=220.075 ms`.
+- Type profile:
+  - type `18/18`: `311` calls, wall `9.325 ms/call`, kernel
+    `9.234 ms/call`;
+  - type `22/22`: `558` calls, wall `6.202 ms/call`, kernel
+    `6.129 ms/call`, `up_wait=5.760 ms/call`,
+    `gate_wait=5.997 ms/call`.
+
+Interpretation:
+
+- The top type `18/18` layers are compute/kernel dominated, not staging
+  dominated. There is no obvious copy-order change to extract a large win.
+- Type `22/22` has high `up_wait/gate_wait` counters, but the wall time is
+  still lower than type `18/18`; these waits appear to be the expected timing
+  shape of the accepted parallel path, not a standalone exposed stall.
+- The faster wall decode is within the observed n32 cold-start variance band
+  and cannot be promoted because diagnostic profiling was enabled.
+- A source change targeting up/gate from this evidence would be speculative.
+
+Decision:
+
+- Accept Phase 7ET as a diagnostic.
+- Do not promote `GGML_MOE_UP_GATE_LAYER_PROFILE=1`.
+- Do not implement an up/gate patch based only on this run.
+- Keep Phase 7EB as accepted SOTA.
+- Next step should be a production-env reproducibility check around the fast
+  observation before selecting another source target.
