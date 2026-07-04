@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `e6090ffaeb6ad623c8e3fb13d108262df96d6dd8` (`vendor-ds4: validate results top1 verifier`)
+- Latest pushed head before this document update: `d558a10bdb85d4d8bc83da7652cfde37a785aa09` (`vendor-ds4: record exact updown screening`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -26,7 +26,8 @@ Current bottleneck conclusion:
 - Source movement/pack/direct/page prefetch variants are closed for now by the async-bound artifact: measured bytes and direct-read bandwidth make top64/top128/top256 staging negative after overlap.
 - No compatible local draft/MTP/NextN path exists; no-source speculative/lookahead/ngram paths are closed unless a compatible draft/MTP artifact appears.
 - GPU up/down drift audit and lightweight sequential top1 verifier are complete. The verifier self-check passed under the 16GB cgroup, so the next active work may use token-level top1 matching before any performance benchmark.
-- The next active candidate is the default-off DS4 hot-expert dual dispatch path (`DS4_HOT_PROFILE_JSON` + `DS4_HOT_DISPATCH=1`), not the rejected one-stream/profile-gated up/down path. It must be investigated verifier-first and may not run a throughput benchmark until it passes the fixed France top1 verifier.
+- The current default-off DS4 hot-expert dual dispatch implementation is closed by the exact-up/down screening artifact: preserving the accepted gate cache leaves only about `238 MiB` CUDA free and gives only a `4.409 tok/s` no-overhead ceiling.
+- The next active candidate is route-specific CPU down prefetch from the up CPU fallback path. It is an exact page-timing candidate, not a compute change: prefetch the actual routed `ffn_down_exps` expert pages while the preceding `ffn_up_exps` CPU fallback is running, then benchmark only if a hard-bound artifact shows a real ceiling above `4.4 tok/s`.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -44,13 +45,13 @@ Current bottleneck conclusion:
 - 2026-07-04 corrected down-batch compare 已完成：恢复 `tmp_dst_rows=max(dst_cols,n_active)` 后，MXFP4 down batch 与 CPU compare 数值一致（`max_abs_max=1.1920929e-07`），但性能仍只有 `2.6 tok/s`，down-cache hit rate 约 `0.0%`，stage `4.740 ms/call`，因此性能方向拒绝，probe source 已回退。
 - 2026-07-04 CPU fallback top128 O_DIRECT staging 已拒绝：正确率/RAM/TTFT 通过，但同步 direct staging 读取 `44.79GB`，`eval_tok_s=2.9`，说明同步 O_DIRECT 不是可用 movement model。
 - 2026-07-04 lightweight sequential top1 verifier 已完成并 push：固定 France 文本在 accepted SOTA path 下 `same_top1=145/145`，`first_mismatch_pos=-1`，16GB cgroup 无 OOM。后续 GPU/offload 候选必须先过这个 verifier 或等价 token-level correctness gate。
-- 当前最新计划：只调查 DS4 hot-expert dual dispatch 的 verifier-first 可行性。该路径与已拒绝的 one-stream/profile-gated hot up/down 不同；它通过 GPU pinned hot subset + CPU cold path 双路求和减少 CPU fallback，而不是把 up/down 纳入 one-stream source-load/cache 逻辑。
+- 当前最新计划：先做 route-specific CPU down prefetch from up fallback 的 hard-bound artifact，再决定是否实现默认关闭的 runtime 开关。该路径只改变 page-in 时机，不改变 logits；它与已拒绝的 broad `WILLNEED`、blocking touch、packmmap/packdirect、one-stream up/down cache、DS4 hot-dispatch 都不同。
 - 下一阶段目标：稳定超过 `4.4 tok/s`；未超过 `4.4 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `current_pushed_head_before_this_update`: `e6090ffa` (`vendor-ds4: validate results top1 verifier`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `d558a10b` (`vendor-ds4: record exact updown screening`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -7807,3 +7808,102 @@ Next active work:
    - top1 verifier requirement;
    - strict cold benchmark command.
 4. If no source-level exact mechanism can be found, record that evidence explicitly and pivot only to a new external artifact class, such as a compatible DeepSeek draft/MTP model. Do not promote or claim progress from closed/tie candidates.
+
+### 2026-07-04T04:15Z Current Plan Update: Route-Specific CPU Down Prefetch Bound
+
+Current accepted SOTA remains unchanged:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=32892.55329 ms`
+- `TTFT_limit=33617.688744 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `ram_ok=true`
+- `correctness_ok=true`
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- reproduction branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- source head before this plan update: `d558a10bdb85d4d8bc83da7652cfde37a785aa09`
+
+New bottleneck reading from source inspection:
+
+- Active SOTA is gate-only one-stream cache. The gate tensor is streamed/cached; `ffn_up_exps` and `ffn_down_exps` are still CPU fallback.
+- `cpu-moe-walltrace-result.json` shows gate rows accepted by the stream path, while up/down rows are declined and handled by CPU fallback.
+- Current fallback profile remains the dominant measured cost:
+  - total up/down CPU fallback: `26438.059 ms`
+  - up fallback: `12786.863 ms`
+  - down fallback: `13651.196 ms`
+  - decode fallback: `19029.457 ms`
+  - prompt fallback: `7408.602 ms`
+- No-drop diagnostic shows page/source stalls are a real part of the cold penalty, but cannot be promoted because global warm page cache violates the strict cold-start rule.
+- The most relevant cold-vs-no-drop deltas for this candidate are:
+  - down total delta: `6276.748 ms`
+  - down decode delta: `5023.621 ms`
+  - up decode delta: `5464.241 ms`
+
+Candidate under design:
+
+- Name: `route_specific_cpu_down_prefetch_from_up`.
+- Exact code path: `ggml_compute_forward_mul_mat_id` in `ggml/src/ggml-cpu/ggml-cpu.c`, only for MoE tensors whose names identify `ffn_up_exps` and `ffn_down_exps`.
+- Mechanism: after routing is known for an `ffn_up_exps` CPU fallback, prefetch the same layer's routed `ffn_down_exps` expert pages before the down op runs. The expected overlap window is the current up fallback plus activation/gate scheduling before the down fallback consumes those pages.
+- Math/correctness: this must not change any tensor value, routing decision, expert order, top-k value, quantized dot product, or accumulation order. It only asks the kernel to make future mapped pages resident sooner. If implementation stays page-timing-only, the France semantic correctness check is still mandatory and the top1 verifier is optional. If any compute/layout/logit path changes, the lightweight sequential top1 verifier is mandatory before performance.
+- Why it is distinct from rejected paths:
+  - not broad `GGML_MOE_CPU_WILLNEED=1`, because that prefetched the current tensor just before compute and already regressed;
+  - not blocking touch, because it must not synchronously read pages before compute;
+  - not packmmap/packdirect/O_DIRECT staging, because it does not copy expert payload into a new source buffer;
+  - not one-stream up/down cache or DS4 hot-dispatch, because it does not consume VRAM or change CPU/GPU split of expert compute.
+
+Hard-bound requirement before code:
+
+1. Create `.Agent/run-tools/analyze_cpu_down_prefetch_bound.py`.
+2. Generate `.Agent/runs/20260704-vendor-ds4-coldstart/cpu-down-prefetch-overlap-bound.json`.
+3. The artifact must include input hashes, source head, accepted SOTA metrics, cold/no-drop fallback deltas, prior broad `WILLNEED` rejection, and a clear verdict.
+4. Minimum theoretical model:
+   - if all down decode page/source delta (`5023.621 ms`) can be hidden with no overhead, optimistic eval ceiling is about `5.25 tok/s`;
+   - if all down total delta (`6276.748 ms`) can be hidden with no overhead, optimistic ceiling is about `5.5 tok/s`;
+   - this is not a path to `10 tok/s` by itself. It is only a possible incremental SOTA candidate that may stack with a later exact up/source/gate or algorithmic improvement.
+5. Do not patch runtime source or run a full model benchmark if the bound artifact says the ceiling is a tie, if overlap is not plausible, or if page-cache pressure is likely to erase the gain under the 16GB cgroup.
+
+Implementation plan if the bound passes:
+
+1. Add a default-off env flag, for example `GGML_MOE_CPU_PREFETCH_DOWN_FROM_UP=1`.
+2. Add a small CPU-side registry for MoE up/down tensor metadata: tensor name, data pointer, expert count, expert stride/bytes, and layer/tensor identity.
+3. Register `ffn_up_exps` and `ffn_down_exps` tensors at the beginning of `ggml_compute_forward_mul_mat_id`.
+4. On `ith == 0`, after routing counts are available for an up tensor, find the matching down tensor and call the existing `ggml_moe_cpu_willneed_pages()` only for actually routed experts.
+5. Add counters printed at exit or trace time: calls, advised experts, advised bytes, missing matching down tensors, and failures. These counters must be recorded in the run artifact.
+6. Keep the default runtime path unchanged unless the env flag is set.
+
+Strict benchmark gate if implemented:
+
+- Use the same accepted SOTA strict runner config:
+  - cold `drop_caches`
+  - 16GB cgroup including page cache
+  - `MemorySwapMax=0`
+  - `cpu_moe=40`
+  - `GGML_MOE_VRAM_CACHE_GB=0`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`
+  - gate-only `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`
+  - O_DIRECT gate expert pack
+  - `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`
+  - CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Promotion requires all of:
+  - `eval_tok_s > 4.4`
+  - `TTFT <= 33617.688744 ms`
+  - `memory_peak_bytes <= 16000000000`
+  - page cache included in cgroup memory accounting
+  - `oom=0`, `oom_kill=0`, `ram_limit_killed=false`
+  - France output semantic, coherent, and complete
+  - no gate pack direct failures or hidden cache collapse
+- If it improves throughput but TTFT exceeds the accepted gate, record and commit it as `not_accepted`, then continue working to reduce TTFT. Do not promote.
+
+Required record/push discipline:
+
+1. Before implementation, commit and push the bound artifact plus this plan update to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+2. If implementation produces a compliant new SOTA, immediately record all reproduction metadata: source head, build hashes, env, command, run directory, full metrics, full France output, cgroup memory/page-cache stats, OOM counters, cache/pack counters, and artifact hashes.
+3. Immediately commit and push source, plan, scripts, profiles, and run artifacts to the same `ssd/vendor/deepseek-token-rate-16gb` branch.
+4. Rebuild/re-run from the pushed source and only then declare the SOTA accepted.
+5. If the candidate regresses, fails correctness, exceeds RAM, or violates TTFT for promotion, revert runtime source changes and keep only rejected records/docs.
+
+Next action:
+
+- Produce `cpu-down-prefetch-overlap-bound.json` first. If it passes the hard-bound gate, implement the smallest default-off prefetch patch and run one strict cold France benchmark. If it fails, do not implement this path; return to exact up/down compute/offload redesign or a new compatible DeepSeek draft/MTP artifact.
