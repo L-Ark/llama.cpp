@@ -56906,3 +56906,184 @@ Decision rule:
   scheduling/movement instead.
 - If the profiler itself adds unacceptable overhead or fails gates, reject the
   run and do not base source changes on it.
+
+### 7IF result
+
+- Source head:
+  `4db92c723` (`ggml: report split profile backend totals`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)` on the server passed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-194235Z-n32-phase7if-split-backend-totals`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 4db92c723
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-194235Z-n32-phase7if-split-backend-totals
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76968.35 ms`;
+  - decode `29481.60 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15065219072`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory final:
+  - `anon=450560`;
+  - `file=14827823104`;
+  - `kernel=234790912`;
+  - `inactive_file=1048973312`;
+  - `active_file=13778468864`.
+- Movement/counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15758874`;
+  - iouring batches `4002`, wait calls `12118`, inflight avg `3.10`;
+  - main ring batches `2743`, jobs `10969`, inflight avg `3.21`;
+  - gate ring batches `1259`, jobs `4055`, inflight avg `2.82`;
+  - down hit `73.6%`;
+  - up/gate hit `43.7%`.
+- Graph profile:
+  - submit calls `32`, total `105236.927 ms`, avg `3288.654 ms/call`;
+  - sync calls `192`, total `24.722 ms`;
+  - decode sync calls `31`, total `24.509 ms`, avg `0.791 ms/call`.
+- Split profile totals:
+  - all: signatures `244`, calls `3904`, wall `105222.339 ms`;
+  - all CPU: calls `1952`, nodes `3990`, wall `104602.285 ms`;
+  - all CUDA0: calls `1952`, nodes `143680`, wall `620.054 ms`;
+  - prompt: signatures `122`, calls `122`, wall `75784.899 ms`;
+  - prompt CPU: calls `61`, nodes `239`, wall `75319.991 ms`;
+  - prompt CUDA0: calls `61`, nodes `4490`, wall `464.908 ms`;
+  - decode: signatures `122`, calls `3782`, wall `29437.440 ms`;
+  - decode CPU: calls `1891`, nodes `3751`, wall `29282.294 ms`;
+  - decode CUDA0: calls `1891`, nodes `139190`, wall `155.146 ms`.
+- Decode CPU share:
+  - CPU backend is `29282.294 / 29437.440 = 99.47%` of split decode wall;
+  - CUDA0 backend is only `0.53%`.
+- Decode top rows:
+  - top1: CPU `ffn_moe_swiglu-9` to `ffn_moe_down-9`,
+    `940.909 ms`, `31` calls, `30.352 ms/call`;
+  - top2: CPU `ffn_moe_swiglu-7` to `ffn_moe_down-7`,
+    `883.984 ms`, `31` calls, `28.516 ms/call`;
+  - top3: CPU `ffn_moe_swiglu-8` to `ffn_moe_down-8`,
+    `846.822 ms`, `31` calls, `27.317 ms/call`;
+  - top4: CPU `ffn_moe_swiglu-6` to `ffn_moe_down-6`,
+    `817.459 ms`, `31` calls, `26.370 ms/call`;
+  - top5: CPU `ffn_moe_swiglu-4` to `ffn_moe_down-4`,
+    `739.311 ms`, `31` calls, `23.849 ms/call`;
+  - top32 remains CPU `ffn_moe_swiglu-*` to `ffn_moe_down-*`,
+    `429.635 ms`, `13.859 ms/call`.
+- 7IF conclusion:
+  - The profiler passes all gates and is kept.
+  - Current n32 decode is almost entirely CPU backend MoE split wall.
+  - The theoretical upper bound for eliminating decode CPU split wall is large:
+    if the full `29.282 s` CPU decode wall could be eliminated, n32 would move
+    from `31 / 29.482 = 1.05 tok/s` toward an unrealistic upper bound of
+    `31 / (29.482 - 29.282) = 155 tok/s`; this bound only proves dominance, not
+    attainability.
+  - A more realistic next target is to route the decode MoE swiglu/down work to
+    existing CUDA batched paths or avoid redundant CPU graph execution after the
+    custom CUDA path has produced the result.
+  - Next design must identify why `ffn_moe_swiglu-*` and `ffn_moe_down-*` remain
+    assigned/executed on CPU during decode despite CUDA MoE streaming counters
+    being active.
+
+## Phase 7IG: identify why decode MoE swiglu/down remains CPU-assigned
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IF attributes `99.47%` of decode split wall to CPU backend.
+- The dominant split signatures are `ffn_moe_swiglu-*` to `ffn_moe_down-*`.
+- CUDA split wall exists but is only `155.146 ms` for the whole n32 decode.
+
+Questions to answer before optimization:
+
+- Are these CPU splits performing the actual MoE math, or are they redundant
+  fallback graph nodes left after a custom CUDA side path already computed the
+  same tensors?
+- Which scheduler/backend support decision places `ffn_moe_swiglu` and
+  `ffn_moe_down` on CPU?
+- Is the reason:
+  - CUDA device `supports_op` returning false for the relevant op/type/shape;
+  - tensor buffer placement keeping expert weights on host;
+  - graph callback/backend assignment forcing MoE node CPU;
+  - custom CUDA path not replacing the graph node result from the scheduler's
+    perspective;
+  - or a deliberate CPU fallback path for unsupported quant types?
+
+Implementation plan:
+
+- Add default-off assignment/support diagnostics around scheduler split creation
+  or existing split profile:
+  - for decode-phase CPU split rows whose first/last names contain
+    `ffn_moe_swiglu` or `ffn_moe_down`;
+  - print op names, tensor names, source tensor names, source buffer backend
+    names, assigned backend, and whether CUDA backend reports `supports_op` for
+    the node.
+- Keep output capped to avoid large logs:
+  - env: `GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE=1`;
+  - max rows default `256`.
+- No execution behavior changes in this phase.
+
+Experiment:
+
+- Build on server.
+- Run strict cold-start n32 with:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=16`;
+  - `GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE=1`.
+- Runtime knobs remain identical to 7IF.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- logs must identify the support/assignment reason for at least the top decode
+  CPU MoE split family.
+
+Decision rule:
+
+- If CUDA support is false only because of a conservative type/shape gate, next
+  phase implements the minimal support-path change and derives the upper bound
+  from the affected CPU wall.
+- If the CPU split is redundant after custom CUDA MoE streaming, next phase
+  tests a guarded bypass/identity replacement for those decode nodes.
+- If host expert buffer placement forces CPU assignment, next phase targets
+  tensor backend assignment or a GPU-resident proxy tensor path.
+- If unsupported quant type fallback is the root cause, next phase targets the
+  exact quant kernels/types rather than broad scheduler changes.
