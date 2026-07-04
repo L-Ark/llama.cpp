@@ -54578,3 +54578,88 @@ systemd-run --wait --collect --same-dir \
     slower than historical Phase 7FB `70087.31 ms / 77`.
   - The run still passes correctness, TTFT, RAM, swap, and fallback gates, so
     the default-off H2D instrumentation remains accepted.
+
+## Phase 7HT: CPU thread contention probe with THREADS=24
+
+Start time: 2026-07-05T04:30:00+08:00.
+
+Goal:
+
+- Test whether reducing llama CPU worker threads from `32` to `24` improves
+  decode by leaving more CPU scheduling headroom for io_uring submission,
+  pinned staging, current-down overlap workers, and CUDA driver work.
+- Keep all model/cache/io parameters unchanged.
+- This is a runtime-parameter probe, not a source change.
+
+Why this is not repeating rejected paths:
+
+- Do not change RAM tier, VRAM split, pinned slot count, io depth/refill,
+  prefetch depth, current-down early overlap, coalescer, VDR, or quant kernels.
+- Previous accepted evidence shows:
+  - n96 parity still has large movement counters:
+    `iouring_wait_us=36182837`, current-down worker `8441747 us`;
+  - global iouring batches remain call-boundary-limited:
+    inflight avg `3.10`, hist `1:805,2-4:5991,5-8:3050`;
+  - H2D itself is not dominant, so CPU-side scheduling/contention is still a
+    plausible small-gain lever.
+
+Theoretical upper bound:
+
+- Reducing CPU threads cannot remove the full iouring wait because storage and
+  call-boundary batching remain fixed.
+- It can only reduce CPU contention around submit/wait, staging worker, CUDA
+  driver, and memcpy/scatter paths.
+- A realistic upper bound is therefore bounded by the exposed non-GPU movement
+  overhead and run-to-run variance: roughly `0-2s` on n96, not a multi-x gain.
+- TTFT risk exists because prompt fallback still uses CPU threads. The hard cap
+  remains `106331.72 ms`; any TTFT rise near or beyond this rejects the probe.
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ht-threads24"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=24 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32 acceptance gates:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode must be competitive with the current n32 stable region
+  `29.1-29.8s / 31`.
+
+Experiment B: n96 candidate, only if n32 passes and is not slower
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7ht-threads24"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=24 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails any gate or is slower than the stable n32 region, reject without
+  n96.
+- If n32 passes but n96 does not beat historical Phase 7FB
+  `70087.31 ms / 77`, record as rejected or parity-only and keep default
+  `THREADS=32`.
+- If n96 beats SOTA, repeat n96 once before accepting; only then update runner
+  defaults and push a result commit.
