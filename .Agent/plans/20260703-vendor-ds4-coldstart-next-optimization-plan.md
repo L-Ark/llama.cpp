@@ -6444,3 +6444,107 @@ Decision rules:
 - If up/down GPU error is materially larger than gate error, fix up/down GPU correctness before further performance work.
 - If numeric error is similar to gate but output still changes, treat the optimization as quality-risky and prefer CPU fallback pruning/packing instead.
 - Do not promote any up/down GPU path until France output is manually correct and token rate exceeds `4.4` under the full strict gates.
+
+### 2026-07-04T01:31Z Up/Down GPU Numerical Audit Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/updown-gpu-compare-result.json`
+- artifact sha256: `3fde8d52bced459efd0270e0a5b6d1acaa51be6a02089bf0f6fb12b385eab03a`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T010527Z-20260704_updown_gpu_compare_diagnostic/france-cpu40-vram0gb`
+
+Config:
+
+- Diagnostic only, not a SOTA candidate.
+- no-filter stream so gate/up/down are accepted by GPU.
+- `GGML_MOE_STREAM_COMPARE_CPU_OUT={case_dir}/compare_cpu.csv`
+- `GGML_MOE_STREAM_COMPARE_CPU_LIMIT=256`
+- short generation budget with `-n 32`.
+
+Metrics:
+
+- `eval_tok_s=1.8`
+- `prompt_tok_s=1.2`
+- `TTFT=39417.875482 ms`
+- `elapsed_seconds=53.86`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15147261952`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+
+Compare samples:
+
+- total compare rows: `256`
+- gate samples: `118`
+  - `max_abs_max=1.90734863e-06`
+  - `mean_abs_mean=2.4726709927118645e-08`
+  - `max_rel_max=2.35010323e-06`
+- up samples: `69`
+  - `max_abs_max=1.90734863e-06`
+  - `mean_abs_mean=2.4209747195652175e-08`
+  - `max_rel_max=3.80231751e-06`
+- down samples: `69`
+  - `max_abs_max=7.62939453e-06`
+  - `mean_abs_mean=8.09173102936232e-08`
+  - `max_rel_max=2.12846114e-06`
+
+Artifact hashes:
+
+- `summary.json`: `e15b25ccedf1b2c1aa595d869b750fd3333e38d97fecc94c72bdf4ade9aac01e`
+- `stdout.txt`: `9e65bcbe303b297ed6580d051bf3de1acd5c887c4b65032d2f4856fcf25b5351`
+- `stderr.txt`: `1a7db6ebdbc925d12dd251efb40a160aed7f33e94c4e0eab7494b5f21b9a1fa0`
+- `environment.txt`: `5166357e2f7199a318c08e2b68ded310aaf3fa96749b6aedae8a2157f9564672`
+- `exact_command.txt`: `7b26647ca30b68074a5b1d3d0356b71c6282cf647618a4a70ed6d81418e68a10`
+- `compare_cpu.csv`: `382356e7880b0cc7a8669976c4d02fe4778f03299d9d0c645f08954848776390`
+- `resource_samples.tsv`: `f870b344759b4bb3f95aa817fb39f85365e9bf8e0a12b31bdcfc0f9a0ca65010`
+
+Conclusion:
+
+- Sampled gate/up/down GPU stream outputs are numerically close to CPU fallback.
+- Up/down GPU output-quality regressions are not explained by a large single-op numerical bug in the sampled rows.
+- They are more likely caused by accumulated small differences and altered generation/routing trajectory.
+- Because the strict user requirement prioritizes correct France output, do not promote up/down GPU streaming unless the full prompt output is manually correct and `eval_tok_s > 4.4`.
+
+### 2026-07-04T01:36Z Next Plan: Refresh Current SOTA CPU Fallback Profile
+
+Goal:
+
+- Re-measure the current accepted gate-only SOTA with CPU fallback profiling enabled.
+- Identify the exact up/down CPU fallback distribution by tensor/layer/expert before making another CPU-side optimization.
+
+Rationale:
+
+- Gate-side CUDA/cache work has been repeatedly optimized and now accounts for less of wall time.
+- Up/down GPU streaming is numerically close per op but output-quality risky and slower in full prompt tests.
+- The remaining practical path is CPU fallback reduction or CPU fallback scheduling/packing, so we need current fallback distribution under the exact accepted SOTA config.
+
+Experiment design:
+
+- No source change.
+- Use accepted SOTA config:
+  - gate-only stream filter;
+  - current gate cache profile;
+  - gate O_DIRECT pack;
+  - top-k config `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `10-39=>3`;
+  - strict cold `drop_caches`;
+  - 16GB cgroup.
+- Enable existing profiling:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`
+  - if available, fallback/profile envs already in this codebase.
+- Keep France prompt and correctness check.
+
+Acceptance / rejection:
+
+- Diagnostic only; not a SOTA candidate unless throughput unexpectedly exceeds `4.4` and all gates pass.
+- Must not change source.
+- Record stderr profile, summary metrics, and any generated profile artifacts.
+
+Deliverable:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json`
+- Append next optimization recommendation based on measured fallback profile.
