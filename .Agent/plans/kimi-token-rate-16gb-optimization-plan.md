@@ -53474,3 +53474,39 @@ n96 acceptance gates:
 - if accepted, update the runner default, commit, and push immediately with the
   exact reproduction commands and result paths;
 - if rejected, keep production `UPGATE_PCT=60` and record the metrics.
+
+Experiment 1 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-162027Z-n32-phase7hn-upgate61`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74962.55 ms`;
+  - decode `28976.78 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Counters:
+  - expert pack hits `25175`, misses `192`;
+  - `iouring_reads=14859`;
+  - `iouring_bytes=86247555072`;
+  - `iouring_wait_us=14988176`;
+  - iouring inflight avg `3.03`, max `8`;
+  - current-down overlap jobs `3664`, worker `3275677 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `44.7%`.
+- Comparison:
+  - Phase 7HK depth1 n32: `29087.31 ms / 31`;
+  - Phase 7HM depth3 n32: `29512.94 ms / 31`;
+  - Phase 7HN upgate61 n32: `28976.78 ms / 31`.
+- Decision:
+  - n32 passes all hard gates and is competitive enough to promote to strict
+    n96.
+  - Do not change production defaults yet; promotion still requires n96 to beat
+    historical Phase 7FB `70087.31 ms / 77`.
