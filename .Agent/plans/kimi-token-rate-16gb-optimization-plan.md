@@ -49154,3 +49154,92 @@ Decision rule:
   lower `iouring_wait_us`, run n96.
 - If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
   before claiming SOTA; commit and push immediately if confirmed.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T19:36:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-113354Z-n32-phase7fx-combined-upgate-stage-refresh`.
+- Code head:
+  `83cb9580bfe55ba51fd8b811c8b80df69a103d5d`.
+- Runtime:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=16`;
+  - `MOE_IO_REFILL_BATCH=8`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1"`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-113354Z-n32-phase7fx-combined-upgate-stage-refresh
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74497.72 ms`;
+  - decode `29756.45 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14805680128`;
+    - `kernel=234692608`;
+    - `inactive_file=8393072640`;
+    - `active_file=6411792384`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert movement counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=13103274`;
+  - overall io_uring batches `3464`, submit calls `3702`, wait calls `11338`,
+    inflight avg `4.08`, max `12`;
+  - batch histogram includes `9-16:281`, proving aggregation created larger
+    batches.
+- Staging granularity:
+  - main ring:
+    - calls `2743`;
+    - avg jobs/read jobs `4.92`;
+    - max jobs/read jobs `16`;
+    - inflight avg `4.38`, max `12`;
+  - gate ring:
+    - calls `721`;
+    - avg jobs/read jobs `2.13`;
+    - max jobs/read jobs `4`;
+    - inflight avg `1.83`, max `4`.
+- Comparison:
+  - 7FX lowers `iouring_wait_us` versus 7GM from `15373647` to `13103274`,
+    about `2.27 s` less wait.
+  - n32 decode remains within the rebuilt baseline range (`29140-29795 ms`) and
+    is not materially better than the best recent n32 run `29140.36 ms`.
+- Decision:
+  - Reject combined up/gate staging for current SOTA.
+  - Do not run n96 because n32 did not materially improve decode.
+  - No source rollback is needed because the implementation is behind
+    `GGML_MOE_UP_GATE_COMBINED_STAGE=1` and default behavior remains unchanged.
+- Gap analysis:
+  - The experiment proves larger io_uring batches are possible and do reduce
+    raw io wait.
+  - It also serializes more of the up/gate path: up compute starts only after
+    the combined up+gate copy finishes, and gate compute waits on the same
+    combined-copy event.
+  - The lost copy/compute overlap consumes the IO wait reduction, so future
+    aggregation must preserve early up compute or target down/current-down
+    movement where copy can be hidden behind up/gate compute.
