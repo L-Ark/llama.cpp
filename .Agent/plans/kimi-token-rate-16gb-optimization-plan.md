@@ -53510,3 +53510,61 @@ Experiment 1 result:
     n96.
   - Do not change production defaults yet; promotion still requires n96 to beat
     historical Phase 7FB `70087.31 ms / 77`.
+
+Experiment 2 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-162435Z-n96-phase7hn-upgate61`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `76438.74 ms`;
+  - decode `69638.95 ms / 77`, `1.11 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Counters:
+  - expert pack hits `63204`, misses `633`;
+  - `iouring_reads=36994`;
+  - `iouring_bytes=214675177472`;
+  - `iouring_wait_us=36838385`;
+  - iouring inflight avg `3.10`, max `8`;
+  - current-down overlap jobs `9177`, worker `8384569 us`;
+  - down hit rate `73.2%`;
+  - upgate hit rate `43.8%`.
+- Comparison:
+  - historical Phase 7FB target: `70087.31 ms / 77`;
+  - Phase 7HI current stable baseline: `70221.94 ms / 77`;
+  - Phase 7HN first n96: `69638.95 ms / 77`.
+- Decision:
+  - First n96 run beats the historical target by `448.36 ms`.
+  - Because accepted improvements must be reproducible, run one cold-start n96
+    repeat with the exact same environment before changing production defaults.
+
+Experiment 3: n96 repeat for reproducibility
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7hn-upgate61-repeat"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=61 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Repeat acceptance gates:
+
+- all hard gates pass;
+- semantic output remains correct and coherent;
+- decode beats historical Phase 7FB `70087.31 ms / 77`;
+- if repeat fails the target, reject `UPGATE_PCT=61` as not reproducible and
+  keep production `UPGATE_PCT=60`;
+- if repeat passes, update the runner default to `UPGATE_PCT=61`, commit, and
+  push immediately with both n96 run paths as the reproduction record.
