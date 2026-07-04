@@ -54885,3 +54885,80 @@ Decision rule:
   record as parity-only and keep `THREADS=32`.
 - If n96 beats SOTA, repeat n96 once before accepting; only then update runner
   defaults and push the result.
+
+Experiment A result: rejected; do not run n96.
+
+- Plan commit:
+  `94fbd0b28` (`docs: plan threads40 upper-bound probe`).
+- Server source:
+  `94fbd0b28`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-173915Z-n32-phase7hu-threads40`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-173915Z-n32-phase7hu-threads40
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=40 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `61349.00 ms`;
+  - decode `89859.70 ms / 31`, `0.34 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15077699584`;
+  - swap max `0`;
+  - anon `454656`;
+  - file `14842421248`;
+  - kernel `232361984`;
+  - inactive file `2923388928`;
+  - active file `11918811136`;
+  - major faults `756062`;
+  - file workingset refaults `18878`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_submit_us=52168`;
+  - `iouring_wait_us=17653861`;
+  - global iouring batches `4002`, submit calls `4002`, wait calls `11527`,
+    CQEs `15024`, inflight avg `3.13`, max `8`;
+  - main iouring jobs `10969`, wait calls `8242`, inflight avg `3.24`;
+  - gate iouring jobs `4055`, wait calls `3285`, inflight avg `2.84`;
+  - current-down worker `3907520 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Comparison:
+  - 7HR n32 THREADS=32 parity: `29598.42 ms / 31`, TTFT `82427.84 ms`;
+  - 7HT n32 THREADS=24: `29728.74 ms / 31`, TTFT `88134.62 ms`;
+  - 7HU n32 THREADS=40: `89859.70 ms / 31`, TTFT `61349.00 ms`;
+  - THREADS=40 improves TTFT but catastrophically regresses decode by
+    `60261.28 ms` versus 7HR.
+- Gap analysis:
+  - The decode regression is not caused by missing expert pack data, RAM limit,
+    or correctness failures: hit/miss counts and fallback gates match normal.
+  - `THREADS=40` likely starves or contends with the decode-side staging,
+    current-down overlap, CUDA runtime, or OS IO scheduling even though prompt
+    CPU work benefits.
+  - This brackets the simple CPU-thread tuning direction:
+    - `24` threads hurts TTFT and n96 decode;
+    - `40` threads helps TTFT but breaks n32 decode;
+    - keep production `32` threads.
+- Decision:
+  - Reject THREADS=40.
+  - Do not run n96.
+  - Keep runner default `THREADS=32`.
+  - No source rollback is needed because this was a runtime-only probe.
