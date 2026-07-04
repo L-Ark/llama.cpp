@@ -56313,3 +56313,177 @@ GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+Result: accepted diagnostic; next target is the unprofiled decode gap.
+
+### Experiment A: up/gate and staging granularity
+
+- Plan head:
+  `1e15ed2e2` (`docs: plan stage breakdown refresh`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-190919Z-n32-phase7ic-stage-breakdown`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-190919Z-n32-phase7ic-stage-breakdown
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `72284.67 ms`;
+  - decode `29322.96 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15073402880`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Profile artifacts:
+  - `up-gate-profile.csv`: `177 KiB`, complete;
+  - `down-batch-profile.csv`: missing.
+- Root cause for missing down CSV:
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT` only records when down batch CUDA event
+    profiling is enabled by `GGML_MOE_BATCH_PROFILE=1`;
+  - the first run intentionally kept `MIN_PROFILE=1`, so it did not set
+    `GGML_MOE_BATCH_PROFILE=1`.
+- Stage granularity:
+  - main ring: calls `2743`, avg jobs `4.00`, avg read jobs `4.00`,
+    max jobs/read jobs `8`;
+  - gate ring: calls `1259`, avg jobs `3.22`, avg read jobs `3.22`,
+    max jobs/read jobs `8`.
+- Movement/counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15240719`;
+  - iouring batches `4002`, wait calls `12067`, inflight avg `3.09`;
+  - batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - main ring host stage `11855.136 ms`, H2D `4146.454 ms`;
+  - gate ring host stage `340.613 ms`, H2D `936.630 ms`.
+- Up/gate profile summary:
+  - calls `869`, avg active `8`;
+  - avg stage `0.031 ms`;
+  - avg up `5.419 ms`;
+  - avg gate `1.589 ms`;
+  - avg up wait `3.687 ms`;
+  - avg gate wait `3.859 ms`;
+  - avg up compute `0.110 ms`;
+  - avg gate compute `0.074 ms`;
+  - avg fuse `0.008 ms`;
+  - avg kernel `7.057 ms`;
+  - avg wall `7.145 ms`;
+  - total up/gate wall is about `6.21 s`.
+- Up/gate type split:
+  - `type 18/18`: `311` calls, wall `8.814 ms/call`, up/gate waits `0`;
+  - `type 22/22`: `558` calls, wall `6.215 ms/call`, up wait
+    `5.743 ms/call`, gate wait `6.010 ms/call`.
+
+### Experiment B: down stage profile follow-up
+
+- Plan head:
+  `08124ea27` (`docs: add down stage profile follow-up`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-191405Z-n32-phase7ic-down-stage-breakdown`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-191405Z-n32-phase7ic-down-stage-breakdown
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `82190.91 ms`;
+  - decode `28325.03 ms / 31`, `1.09 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15078465536`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Profile artifacts:
+  - `down-batch-profile.csv`: `157 KiB`, complete, rows `1644`.
+- Down profile totals:
+  - stage `3796.783 ms`, avg `2.309 ms/call`;
+  - quant `1.867 ms`, avg `0.001 ms/call`;
+  - kernel `191.730 ms`, avg `0.117 ms/call`;
+  - D2H `30.554 ms`, avg `0.019 ms/call`;
+  - scatter `38.556 ms`, avg `0.023 ms/call`;
+  - wall `4123.684 ms`, avg `2.508 ms/call`;
+  - cache hits `9659`, misses `3493`, staged jobs `3493`.
+- Top down tensors by wall/stage:
+  - `blk.4.ffn_down_exps.weight`: wall `407.360 ms`,
+    stage `381.235 ms`, calls `31`, misses/staged `169`;
+  - `blk.60.ffn_down_exps.weight`: wall `326.649 ms`,
+    stage `313.306 ms`, calls `32`, misses/staged `170`;
+  - `blk.25.ffn_down_exps.weight`: wall `170.656 ms`,
+    stage `166.150 ms`, calls `31`, misses/staged `147`;
+  - `blk.16.ffn_down_exps.weight`: wall `170.549 ms`,
+    stage `165.385 ms`, calls `31`, misses/staged `147`;
+  - `blk.24.ffn_down_exps.weight`: wall `164.645 ms`,
+    stage `159.922 ms`, calls `31`, misses/staged `162`;
+  - `blk.5.ffn_down_exps.weight`: wall `159.716 ms`,
+    stage `154.040 ms`, calls `31`, misses/staged `190`.
+- Down kernel is not the bottleneck:
+  - total kernel is only `191.730 ms` across the n32 run;
+  - largest per-tensor kernel totals are around `4 ms`.
+- Stage granularity:
+  - main ring: calls `2743`, avg jobs `4.00`, avg read jobs `4.00`;
+  - gate ring: calls `1259`, avg jobs `3.22`, avg read jobs `3.22`.
+- Movement/counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=13775726`;
+  - iouring batches `4002`, wait calls `12136`, inflight avg `3.07`;
+  - batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - main ring host stage `11812.262 ms`, H2D `4174.912 ms`;
+  - gate ring host stage `326.093 ms`, H2D `931.214 ms`.
+
+### 7IC conclusion
+
+- Down compute is not a promising next target:
+  - down kernel total is only `0.192 s`;
+  - down wall total is `4.124 s`, almost all stage/movement.
+- Up/gate compute is also small:
+  - up compute about `0.110-0.171 ms/call`;
+  - gate compute about `0.074-0.118 ms/call`;
+  - up/gate wall is mostly wait/stage around expert movement.
+- The visible MoE batch work explains only part of decode:
+  - n32 decode is `28-29 s`;
+  - down wall is `~4.1 s`;
+  - up/gate wall is `~5.7-6.2 s`;
+  - a large non-profiled decode gap remains.
+- Next phase should measure the non-MoE / graph scheduler / CPU fallback gap
+  before implementing another read coalescer:
+  - broad coalescer already reduced summed IO wait but regressed wall time;
+  - down/up kernels are too small to justify kernel-first work;
+  - current evidence points to expert movement plus unprofiled graph/scheduler
+    overhead rather than a single MoE matvec kernel.
