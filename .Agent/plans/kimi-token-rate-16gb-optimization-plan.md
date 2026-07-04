@@ -55911,3 +55911,72 @@ systemd-run --wait --collect --same-dir \
   - Next optimization should target call-boundary-limited `runtime_load`
     scheduling/batching without increasing total copy bytes or disturbing the
     proven current-down overlap path.
+
+## Phase 7IA: current-head n96 parity after eviction diagnostic
+
+Start time: 2026-07-05T02:51:27+08:00.
+
+Goal:
+
+- Establish the current cold-start n96 baseline after adding the default-off
+  cache eviction diagnostic.
+- Do this before another source optimization because Phase 7HZ default-unset
+  n32 produced a fast `28774.37 ms / 31` run while preserving all counters.
+- Confirm that default-off instrumentation has no n96 regression and determine
+  whether the current head is already within the best accepted n96 band.
+
+Current facts:
+
+- The production runner already includes:
+  - `GGML_MOE_IO_SORT_OFFSET=1`;
+  - `GGML_MOE_IO_SQPOLL=1`;
+  - `GGML_MOE_IO_DEPTH=8`;
+  - `GGML_MOE_IO_REFILL_BATCH=4`;
+  - `GGML_MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`.
+- Phase 7HZ default-unset n32:
+  - decode `28774.37 ms / 31`;
+  - TTFT `73004.80 ms`;
+  - quality pass and semantic pass;
+  - memory peak `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - down/upgate hit rates unchanged.
+- This n32 result is not accepted as SOTA by itself because n96 must confirm
+  the longer-run behavior.
+
+Experiment: n96 current-head parity
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7ia-current-head-parity"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start;
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass for the France answer;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 is slower than the current accepted band, treat Phase 7HZ n32 as
+  variance and continue source-level batching/scheduling work.
+- If n96 beats the accepted n96 reference, immediately run a second cold n96
+  confirmation before claiming SOTA.
+- Accept the current head as the new reproducible SOTA only if both n96 runs
+  pass all gates and the France outputs remain semantically correct.
+- If any gate fails, reject the run and keep the previous accepted runtime.
