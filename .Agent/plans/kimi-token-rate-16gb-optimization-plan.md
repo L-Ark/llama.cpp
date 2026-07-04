@@ -8033,6 +8033,120 @@ Decision:
 - Keep this as evidence that thresholded down staging is promising but not
   reproducible enough with a fixed `min_jobs=5`.
 
+## Phase 7EM: serial batched down staging for all down miss batches
+
+Start time:
+
+- 2026-07-04T09:58:00Z.
+
+Current evidence:
+
+- Phase 7EL `min_jobs=5` had one strong n32 candidate but failed confirmation.
+- Detailed comparison:
+  - candidate decode `28055.21 ms / 31`;
+  - confirmation decode `30215.97 ms / 31`;
+  - both had identical cache hit rates and selected-expert shape;
+  - the difference was mostly staging/io/fallback variance.
+- Phase 7EL only changed the `1` and `2-4` staged-job buckets. The largest
+  down bucket remains `5-8` staged jobs:
+  - Phase 7EB n96 `5-8`: `982` rows, wall `6894.884 ms`,
+    stage `6717.400 ms`;
+  - Phase 7EI n32 `5-8`: `399` rows, wall `2926.525 ms`,
+    stage `2836.430 ms`.
+- Phase 7X disabled down parallel staging globally and regressed, but that path
+  copied each miss inline during slot lookup. It did not test a serial
+  **batched** down copy after planning all misses.
+
+Hypothesis:
+
+- Reintroduce the default-preserving `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS`
+  patch.
+- Test:
+
+```sh
+GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=9
+```
+
+- Since Kimi down has at most `8` active experts in these decode batches, this
+  makes every down miss batch use the single-stream serial **batched** copy path:
+  - still plans all miss jobs first;
+  - still uses `expert_pack_iouring_copy_jobs()` for a batch;
+  - avoids spawning two copy threads per down call;
+  - avoids splitting one logical down miss batch across main/gate rings;
+  - preserves cache slot assignment and math.
+- This is different from `GGML_MOE_DOWN_PARALLEL_STAGE=0`, which performs
+  copies inline at insertion time and loses batched planning.
+
+Theory and upper bound:
+
+- The maximum affected n96 down bucket is all staged-job rows:
+  - `1`, `2-4`, and `5-8` buckets total about `10.49 s` wall;
+  - actual recoverable overhead is much smaller because SSD/H2D transfer
+    remains.
+- Potential upside:
+  - better iouring batch cohesion;
+  - fewer host threads;
+  - less contention with up/gate staging;
+  - lower gate-ring host_stage pollution from down work.
+- Risk:
+  - losing true parallel H2D/copy overlap for `5-8` batches could regress wall
+    time;
+  - if the candidate win is variance only, n32 confirmation will fail like
+    Phase 7EL.
+
+Implementation:
+
+- Same default-preserving source patch shape as Phase 7EL:
+  - default `min_jobs=1`, so SOTA behavior is unchanged unless env is set;
+  - if total planned down jobs are less than `min_jobs`, merge the planned
+    down jobs and run `copy_down_stage_jobs(..., st, bc.stage_ring)`;
+  - otherwise keep current two-thread/two-ring behavior.
+- Test with env `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=9`.
+- If first n32 improves and gates pass, immediately commit/push source and
+  result, then run n32 confirmation.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7em_repro.sh
+sed -i '/GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS/d' /tmp/run_phase7em_repro.sh
+perl -0pi -e 's|GGML_MOE_DOWN_PARALLEL_STAGE=1\n|GGML_MOE_DOWN_PARALLEL_STAGE=1\nGGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=9\n|' /tmp/run_phase7em_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7em-down-minjobs9"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7em_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - memory peak `<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains `GGML_MOE_DOWN_PARALLEL_STAGE_MIN_JOBS=9`;
+  - stderr contains `down parallel stage threshold active: min_jobs=9`.
+- Promotion:
+  - first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+  - if it beats, run n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- If build fails, activation is missing, hard gates fail, quality fails, or
+  first n32 is slower, revert source and record rejection.
+- If n32 candidate passes but confirmation fails, revert source and record
+  rejection, as with Phase 7EL.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
