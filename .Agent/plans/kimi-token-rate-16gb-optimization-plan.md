@@ -45616,3 +45616,65 @@ Decision rule:
   record the failure.
 - Even if accepted, this is a build correctness restoration; it is not a new
   model token-rate SOTA unless n96 later beats Phase 7FB `70087.31 ms / 77`.
+
+Result: accepted as build restoration, not a new SOTA.
+
+- End time: 2026-07-04T15:21:30+08:00.
+- Source change:
+  - added `GGML_CUDA_LIGHTNING_INDEXER`, default `ON`;
+  - when `OFF`, `lightning-indexer.cu` is removed from CUDA sources;
+  - when `OFF`, CUDA dispatch reports `GGML_OP_LIGHTNING_INDEXER` unsupported
+    and avoids the missing symbol.
+- Build:
+  - `CMAKE_CUDA_ARCHITECTURES=120a`;
+  - `GGML_CUDA_LIGHTNING_INDEXER=OFF`;
+  - `GGML_CUDA_MOE_STREAM_BATCH=ON`;
+  - `CMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc`;
+  - build target `llama-completion` succeeded.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-071859Z-n32-phase7fo-blackwell-baseline`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-071859Z-n32-phase7fo-blackwell-baseline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Metrics:
+
+- quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76037.93 ms`, below the allowed `106331.72 ms`;
+- decode `29794.86 ms / 31`, `1.04 tok/s`;
+- memory peak `15899996160`, swap max `0`;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- expert pack io_uring:
+  - reads `15024`;
+  - bytes `87082139648`;
+  - wait `15220248 us`;
+  - inflight max `8`;
+- cache:
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+
+Decision:
+
+- Accept and push the CMake build gate because it restores a valid RTX 5090
+  `sm_120a` build and avoids the unrelated `lightning-indexer.cu` clean-build
+  failure.
+- This is not a new model-token-rate SOTA:
+  - n32 decode `29794.86 ms` is faster than the invalid `sm_89` baseline
+    `35817.52 ms`;
+  - but it is still slower than accepted Phase 7FB n32 confirmations
+    (`28673.82 ms`, `29182.49 ms`);
+  - no n96 SOTA claim is made.
+- Next step:
+  - use the `sm_120a` build as the local rebuilt-build baseline;
+  - future source optimizations must beat this rebuilt baseline first, then
+    prove n96 against Phase 7FB `70087.31 ms / 77` before being called SOTA.
