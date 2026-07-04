@@ -43781,3 +43781,88 @@ Decision:
   reduction with a theoretical upper bound.
 - If fallback compute dominates, next plan should target Q4_0 fallback support
   or a safer partial GPU path only if the refreshed upper bound justifies it.
+
+Phase 7FD result - diagnostic bottleneck refreshed:
+
+- End time: 2026-07-04T07:18:00Z.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-045603Z-n32-phase7fd-sota-profile-refresh`.
+- Source status:
+  - no source patch;
+  - diagnostic mode only;
+  - no SOTA promotion.
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `73875.13 ms`;
+  - decode `29610.75 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - final `file=14816886784`;
+  - `inactive_file=4275863552`;
+  - `active_file=10540335104`;
+  - `pgmajfault=990014`;
+  - `workingset_refault_file=21841`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert movement:
+  - expert-pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14744321`;
+  - iouring detail `inflight_avg=3.08`, `inflight_max=8`,
+    no `9-16` batches.
+- Pinned staging:
+  - main copies `19754`, waits `19718`;
+  - main `slot_wait=48.627 ms`;
+  - main `host_stage=11455.176 ms`;
+  - main `h2d=4154.902 ms`;
+  - gate copies `4160`, waits `4136`;
+  - gate `slot_wait=11.720 ms`;
+  - gate `host_stage=354.900 ms`;
+  - gate `h2d=935.307 ms`.
+- Down profile:
+  - calls `2038`;
+  - total `36.747 ms/call`;
+  - CUDA batch `2.368 ms/call`;
+  - fallback `34.335 ms/call`;
+  - batch accepted `1644`, declined `52`.
+- Cache:
+  - down slots `806`, hit rate `73.6%`;
+  - upgate slots `1679`, hit rate `43.7%`.
+- Decode down fallback aggregation:
+  - decode down fallback pairs `572`;
+  - total count/calls `1736`;
+  - total fallback `2499.208 ms`;
+  - routed `13.351 GiB`;
+  - all remaining decode down fallback is `src0_type=2` (`Q4_0`).
+- Q4_0 fallback by tensor:
+  - `blk.9.ffn_down_exps.weight`: `407.208 ms`, `1.907 GiB`;
+  - `blk.6.ffn_down_exps.weight`: `395.032 ms`, `1.907 GiB`;
+  - `blk.7.ffn_down_exps.weight`: `387.776 ms`, `1.907 GiB`;
+  - `blk.10.ffn_down_exps.weight`: `369.016 ms`, `1.907 GiB`;
+  - `blk.18.ffn_down_exps.weight`: `336.800 ms`, `1.907 GiB`;
+  - `blk.15.ffn_down_exps.weight`: `312.448 ms`, `1.907 GiB`;
+  - `blk.8.ffn_down_exps.weight`: `290.928 ms`, `1.907 GiB`.
+
+Interpretation:
+
+- The remaining exposed buckets are:
+  - expert-pack/iouring movement, about `14.7 s`;
+  - main pinned host staging, about `11.5 s`;
+  - main H2D, about `4.15 s`;
+  - Q4_0 decode down CPU fallback, about `2.5 s` ideal upper bound.
+- Q4_0 fallback is real but bounded; prior partial-row Q4_0 was rejected by
+  upper-bound math, and this refresh still does not justify broad Q4 GPU work.
+- The iouring queue still does not naturally use depths above `8`; previous
+  `IO_DEPTH=16` experiments failed for the same reason.
+- Next optimization should target movement scheduling or eliminate unnecessary
+  movement, not larger global VRAM, naive iouring depth, or immediate mmap
+  page release.
+
+Decision:
+
+- Keep Phase 7FB as current production SOTA.
+- Use Phase 7FD as the current diagnostic baseline for the next source/env
+  plan.
