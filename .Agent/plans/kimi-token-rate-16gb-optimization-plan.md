@@ -45027,3 +45027,56 @@ Decision rule:
   3. accept only if n96 beats Phase 7FB best `70087.31 ms / 77`.
 - If accepted, update the production runner env, commit, and push immediately
   with all reproduction commands and paths recorded here.
+
+Result - 2026-07-04 06:32Z:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-063220Z-n32-phase7fk-iodepth16-refill8`.
+- Gates:
+  - `$RUN/env.txt` contained both original values and overrides:
+    - original `GGML_MOE_IO_DEPTH=8`;
+    - original `GGML_MOE_IO_REFILL_BATCH=4`;
+    - override `GGML_MOE_IO_DEPTH=16`;
+    - override `GGML_MOE_IO_REFILL_BATCH=8`;
+  - stderr confirmed expert pack opened with `depth=16`;
+  - quality: pass;
+  - output: `France is a country in Western Europe known for its rich
+    history, culture, and influence on art, fashion, and cuisine. Its capital,
+    Paris, is famous`;
+  - TTFT: `73436.88 ms`;
+  - decode: `30104.68 ms / 31`, `1.03 tok/s`;
+  - memory peak: `15899996160`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Diagnostics:
+  - expert pack:
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15144612`;
+    - `inflight_avg=3.10`;
+    - `inflight_max=8`;
+    - batch hist unchanged: `1:335`, `2-4:2425`, `5-8:1242`,
+      `9-16:0`.
+  - pinned staging main:
+    - `host_stage=11951.654 ms`;
+    - `h2d=4140.274 ms`;
+  - pinned staging gate:
+    - `host_stage=342.823 ms`;
+    - `h2d=928.464 ms`;
+  - down profile:
+    - `cuda_batch=2.365 ms/call`;
+    - `fallback_t0=35.432 ms/call`.
+- Interpretation:
+  - Raising `GGML_MOE_IO_DEPTH` to `16` did not increase practical inflight
+    depth; the expert-pack path still reported `inflight_max=8` and no
+    `9-16` batches.
+  - The limiting factor is not the global io_uring depth env alone; batching /
+    ring submission shape or per-call job count still caps usable concurrency.
+  - Host staging worsened versus Phase 7FD (`11951.654 ms` vs
+    `11455.176 ms`), and decode regressed.
+- Decision: rejected.
+  - Slower than Phase 7FD diagnostic `29610.75 ms`;
+  - slower than current Phase 7FB n32 confirmation `29182.49 ms`;
+  - keep production `GGML_MOE_IO_DEPTH=8` and
+    `GGML_MOE_IO_REFILL_BATCH=4`;
+  - do not run n32 confirmation or n96.
