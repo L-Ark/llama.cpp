@@ -55980,3 +55980,74 @@ Decision rule:
 - Accept the current head as the new reproducible SOTA only if both n96 runs
   pass all gates and the France outputs remain semantically correct.
 - If any gate fails, reject the run and keep the previous accepted runtime.
+
+Result: accepted as parity, not SOTA.
+
+- Plan/source head:
+  `e0eba20fa` (`docs: plan current-head n96 parity`).
+- Server build:
+  `cmake --build build-cuda-batch -j$(nproc)`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-185307Z-n96-phase7ia-current-head-parity`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-185307Z-n96-phase7ia-current-head-parity
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `75318.95 ms`;
+  - decode `71552.04 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15063842816`;
+  - swap max `0`;
+  - anon `454656`;
+  - file `14811357184`;
+  - kernel `248770560`;
+  - inactive file `4354256896`;
+  - active file `10456383488`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - cgroup OOM counters all `0`.
+- Expert/cache counters:
+  - expert pack hits `63479`, misses `633`;
+  - `direct_reads=22113`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_submit_us=91062`;
+  - `iouring_wait_us=37915188`;
+  - global iouring batches `9846`, wait calls `29902`, CQEs `37080`,
+    inflight avg `3.11`, max `8`;
+  - global batch hist `1:805,2-4:5991,5-8:3050,9-16:0,17-32:0,gt32:0`;
+  - main iouring jobs `26993`, batches `6737`, inflight avg `3.22`;
+  - gate iouring jobs `10087`, batches `3109`, inflight avg `2.83`;
+  - current-down overlap jobs `9109`, cache hits `8755`,
+    missing tensor `231`, missing pack `99`, worker `8419353 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`;
+  - down prefetch useful rate `100.0%`, `evicted_unused=0`.
+- Decision:
+  - Do not run a second n96 confirmation because this run is slower than the
+    best accepted/near-accepted n96 band.
+  - Treat Phase 7HZ default-unset n32 `28774.37 ms / 31` as variance.
+  - Default-off eviction instrumentation remains acceptable because n96 parity
+    passed all correctness, TTFT, RAM, and fallback gates.
+  - Continue with a source-level batching/scheduling plan; the n96 counters
+    still show the same call-boundary-limited shape:
+    - `9846` iouring batches for `37080` reads;
+    - no batches above `8`;
+    - inflight avg only `3.11`;
+    - `iouring_wait_us=37.915 s`.
