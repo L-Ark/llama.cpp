@@ -43078,3 +43078,56 @@ LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
 - Do not release expert-pack mmap pages immediately after each fallback op.
 - If revisiting this axis later, only consider route-aware delayed/batched
   release after proving reuse distance is large enough.
+
+## Phase 7FA: CPU fallback pack-mmap reuse diagnostic
+
+Start time:
+
+- 2026-07-04T05:42:00Z.
+
+Reason for this phase:
+
+- Phase 7EZ proved immediate `MADV_DONTNEED` after every CPU fallback
+  pack-mmap use is harmful:
+  - `dontneed_calls=1727`;
+  - `dontneed_bytes=14260764672`;
+  - decode regressed to `31432.40 ms / 31`.
+- Before considering any delayed/batched release, quantify how much fallback
+  pack-mmap data is reused within a run.
+- If repeated fallback expert use is high, immediate release is expected to
+  refault and should stay rejected.
+
+Design-stage diagnostic:
+
+- No source patch.
+- Use existing accepted/rejected run artifacts:
+  - accepted 7EX n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-033254Z-n32-phase7ex-slots12-timeline/fallback-profile.csv`;
+  - rejected 7EZ n32:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-040531Z-n32-phase7ez-packmmap-dontneed/fallback-profile.csv`.
+- Parse `fallback-profile.csv` rows with:
+  - `phase=decode`;
+  - `tensor` containing `ffn_down_exps.weight`;
+  - rows that are CPU fallback, not GPU-accepted rows.
+- Record:
+  - number of unique `(tensor, expert_idx)` pairs;
+  - total `count`, `calls`, `expert_bytes`, and `fallback_us`;
+  - how many pairs have `count > 1`;
+  - bytes/time covered by repeated pairs;
+  - top repeated fallback pairs.
+
+Interpretation rule:
+
+- If most fallback bytes/time come from repeated pairs, then per-use
+  `MADV_DONTNEED` is structurally wrong.
+- A future release design would need a reuse-distance threshold or end-of-run
+  cleanup, neither of which can improve decode unless it lowers in-run direct
+  reclaim without causing refault.
+- If repeated fallback is low, consider a delayed release policy with a
+  minimum token/layer distance.
+
+Decision:
+
+- This phase is diagnostic only and cannot promote SOTA.
+- It should decide whether to spend engineering time on route-aware delayed
+  pack-mmap release, or abandon this axis.
