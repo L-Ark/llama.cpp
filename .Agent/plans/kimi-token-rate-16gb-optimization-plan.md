@@ -57909,6 +57909,190 @@ Required gates:
 - manual semantic quality `pass` for
   `Please introduce France in a short paragraph.`
 
+### Result
+
+Timestamp: 2026-07-05.
+
+Source commit: `be0865d9a ggml: add moe io locality profile`.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard be0865d9a
+cmake --build build-cuda-batch --target llama-completion -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate results:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `70578.77 ms`, below `106331.72 ms`;
+- decode `27953.27 ms / 31`, `1.11 tok/s`;
+- host RAM peak `15899996160` bytes, final `15076872192` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14862`, bytes `86301917184`, wait `14720045 us`;
+- main pinned staging copies `19380`, waits `19344`;
+- main iouring batches `2750`, jobs `10846`, wait calls `8550`,
+  inflight average `3.13`;
+- gate pinned staging copies `4121`, waits `4097`;
+- gate iouring batches `1263`, jobs `4016`, wait calls `3415`,
+  inflight average `2.77`;
+- current down overlap worker `3355414 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Locality profile:
+
+- `io-locality-profile.csv` rows `4013`;
+- `runtime_load`:
+  - rows `3153`;
+  - read jobs `11358`;
+  - source switches `0`;
+  - unique source sum `3153`;
+  - read bytes `64199245824`;
+  - span bytes `1778968576000`;
+  - gap bytes `1714769330176`;
+  - max gap bytes `1123762454528`;
+  - adjacent pairs `190`;
+  - same tensor rows `3153`;
+  - average read jobs per row `3.60`;
+  - `span/read = 27.71`;
+  - `gap/read = 26.71`;
+  - `adjacent/read_jobs = 0.0167`;
+- `current_down_overlap`:
+  - rows `860`;
+  - read jobs `3504`;
+  - source switches `0`;
+  - unique source sum `860`;
+  - read bytes `22102671360`;
+  - span bytes `536601640960`;
+  - gap bytes `514498969600`;
+  - max gap bytes `310263726080`;
+  - adjacent pairs `76`;
+  - same tensor rows `860`;
+  - average read jobs per row `4.07`;
+  - `span/read = 24.28`;
+  - `gap/read = 23.28`;
+  - `adjacent/read_jobs = 0.0217`;
+- gap ratio histogram:
+  - `>=16`: `3053`;
+  - `<16`: `585`;
+  - `0`: `351`;
+  - `<4`: `23`;
+  - `<1`: `1`;
+- rows plausibly safe for same-source coalescing
+  (`gap/read < 0.25` and `read_jobs > 1`):
+  - rows `3`;
+  - read jobs `6`;
+  - read bytes `31424512`;
+  - gap bytes `0`.
+
+Decision:
+
+- Reject direct same-source runtime coalescing for the current pack layout.
+- Reason: batches are usually one tensor and one source, but selected expert
+  offsets are physically far apart; coalescing would expand IO by about
+  `24-28x` for the dominant rows.
+- The narrow coalescing opportunity is too small to matter: only `3` rows and
+  `6` read jobs meet the safe coalescing rule.
+- The next high-priority direction is route-aware expert-pack layout/repacking,
+  not runtime coalescing. The pack loader indexes entries by key and source
+  offset, so physical data order can be changed without changing model math if
+  the pack index remains correct.
+
+## Phase 7IQ: route-aware expert-pack layout simulation
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IP shows the remaining IO wait comes from many small expert reads whose
+  offsets are far apart inside each tensor.
+- The current pack layout is key-sorted by tensor/expert. It is not optimized
+  for the actual routed expert groups observed during decode.
+
+Hypothesis:
+
+- If experts that are commonly requested together in the same batch are stored
+  physically adjacent in the expert pack, then future narrow read coalescing or
+  filesystem/device locality may reduce exposed wait.
+- Because direct coalescing on the current layout would read too much padding,
+  the first step must be an offline simulation that estimates the best possible
+  `span/read`, `gap/read`, and `adjacent_pairs` under a route-aware layout.
+
+Implementation plan:
+
+- Add a default-off analysis script, not runtime code:
+  `scripts/kimi-pack-layout-sim.py`.
+- Inputs:
+  - 7IP `io-locality-profile.csv` for requested expert groups;
+  - one or more `GGMLMOEPACKv1` pack files for current entry sizes and current
+    offsets.
+- The script should:
+  - parse current pack index entries;
+  - group entries by tensor;
+  - reconstruct each profiled batch as a tensor plus selected expert IDs by
+    matching current offsets back to pack entries;
+  - compute current layout locality metrics;
+  - compute candidate layouts:
+    - current key order;
+    - first-use order per tensor;
+    - frequency order per tensor;
+    - greedy pair-adjacency order using co-occurrence edges;
+  - report `read_bytes`, `span_bytes`, `gap_bytes`, `adjacent_pairs`,
+    coalescing-plausible rows, and estimated IO amplification for each layout.
+
+Theoretical bound:
+
+- If route-aware layout cannot reduce `gap/read` below `1.0`, runtime
+  coalescing is still not safe.
+- If route-aware layout reduces `gap/read` close to `0` for a large fraction of
+  read jobs, then a follow-up repacker plus narrow same-tensor coalescing may
+  save part of the current `~12-15 s` iouring wait budget.
+- The absolute upper bound for layout-only work is the currently exposed
+  iouring wait budget, but the practical target is much smaller because H2D,
+  compute, and scheduling remain.
+
+Reproducibility requirement:
+
+- The simulation must print the exact input files, commit hash, and command.
+- Any later repacked pack test must be cold-start, under
+  `MemoryMax=15900000000`, with the France quality gate, TTFT gate,
+  `read_failures=0`, and `iouring_fallbacks=0`.
+
+Acceptance rule for this phase:
+
+- Commit and push only the analysis script and recorded results.
+- Do not change runtime behavior in this phase.
+- Proceed to a real pack repack only if the simulation shows a large, concrete
+  locality improvement over current layout.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
