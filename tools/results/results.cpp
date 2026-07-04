@@ -17,6 +17,7 @@
 struct results_extra_params {
     std::string top1_report;
     bool        top1_fail_on_mismatch = false;
+    bool        sequential_logits = false;
 };
 
 static bool parse_results_extra_args(
@@ -41,6 +42,10 @@ static bool parse_results_extra_args(
         }
         if (arg == "--top1-fail-on-mismatch") {
             extra.top1_fail_on_mismatch = true;
+            continue;
+        }
+        if (arg == "--sequential-logits") {
+            extra.sequential_logits = true;
             continue;
         }
         args_storage.push_back(arg);
@@ -71,29 +76,37 @@ static double nmse(const std::vector<float> & a, const std::vector<float> & b) {
 }
 
 static std::vector<float> get_logits(
-        llama_model * model, llama_context * lctx, const std::vector<llama_token> & tokens) {
+        llama_model * model, llama_context * lctx, const std::vector<llama_token> & tokens, const bool sequential_logits) {
     const uint32_t n_vocab  = llama_vocab_n_tokens(llama_model_get_vocab(model));
     const uint32_t n_ctx    = llama_n_ctx(lctx);
+    const uint32_t n_batch  = llama_n_batch(lctx);
     const uint32_t n_tokens = tokens.size();
-    llama_batch batch = llama_batch_init(n_ctx, 0, 1);
     GGML_ASSERT(n_tokens <= n_ctx);
-    for (uint32_t pos = 0; pos < n_tokens; pos++) {
-        common_batch_add(batch, tokens[pos], pos, {0}, true);
-    }
-    batch.n_tokens = n_tokens;
-    if (llama_decode(lctx, batch)) {
-        llama_batch_free(batch);
-        throw std::runtime_error("failed to decode batch");
-    }
+
+    llama_batch batch = llama_batch_init(n_batch, 0, 1);
 
     std::vector<float> ret;
     ret.reserve(n_tokens*n_vocab);
-    for (uint32_t i = 0; i < n_tokens; i++) {
-        const float * logits_ith = llama_get_logits_ith(lctx, i);
-        for (uint32_t j = 0; j < n_vocab; j++) {
-            ret.push_back(logits_ith[j]);
+    const uint32_t step = sequential_logits ? 1 : n_batch;
+    for (uint32_t pos = 0; pos < n_tokens; pos += step) {
+        const uint32_t n_cur = std::min(step, n_tokens - pos);
+        common_batch_clear(batch);
+        for (uint32_t i = 0; i < n_cur; ++i) {
+            common_batch_add(batch, tokens[pos + i], pos + i, {0}, true);
+        }
+        if (llama_decode(lctx, batch)) {
+            llama_batch_free(batch);
+            throw std::runtime_error("failed to decode batch");
+        }
+
+        for (uint32_t i = 0; i < n_cur; i++) {
+            const float * logits_ith = llama_get_logits_ith(lctx, i);
+            for (uint32_t j = 0; j < n_vocab; j++) {
+                ret.push_back(logits_ith[j]);
+            }
         }
     }
+
     llama_batch_free(batch);
     return ret;
 }
@@ -283,6 +296,68 @@ static top1_report_summary write_top1_report(
     return summary;
 }
 
+static void write_single_top1_report(
+        const std::string & path,
+        const llama_context * ctx,
+        const uint32_t n_vocab,
+        const std::vector<llama_token> & tokens,
+        const std::vector<float> & logits) {
+    GGML_ASSERT(logits.size() == tokens.size() * (size_t) n_vocab);
+
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("failed to open top1 report: " + path);
+    }
+
+    uint32_t next_matches = 0;
+    std::vector<top2_result> tops;
+    tops.reserve(tokens.size());
+    for (uint32_t pos = 0; pos < tokens.size(); ++pos) {
+        const float * row = logits.data() + (size_t) pos * n_vocab;
+        tops.push_back(get_top2(row, n_vocab));
+        if (pos + 1 < tokens.size()) {
+            next_matches += tops.back().top1_id == tokens[pos + 1];
+        }
+    }
+
+    out << "{\n";
+    out << "  \"mode\": \"single\",\n";
+    out << "  \"n_tokens\": " << tokens.size() << ",\n";
+    out << "  \"n_vocab\": " << n_vocab << ",\n";
+    out << "  \"next_token_positions\": " << (tokens.empty() ? 0 : tokens.size() - 1) << ",\n";
+    out << "  \"top1_matches_next_token\": " << next_matches << ",\n";
+    out << "  \"positions\": [";
+    for (uint32_t pos = 0; pos < tokens.size(); ++pos) {
+        if (pos > 0) {
+            out << ",";
+        }
+        out << "\n    {";
+        out << "\"position\":" << pos << ",";
+        out << "\"predicts_token_position\":";
+        if (pos + 1 < tokens.size()) {
+            out << (pos + 1) << ",";
+            write_token_info(out, ctx, "actual_next_token", tokens[pos + 1], 0.0f);
+            out << ",";
+            out << "\"top1_matches_next_token\":" << (tops[pos].top1_id == tokens[pos + 1] ? "true" : "false") << ",";
+        } else {
+            out << "null,";
+            out << "\"actual_next_token\":null,";
+            out << "\"top1_matches_next_token\":null,";
+        }
+        write_token_info(out, ctx, "top1", tops[pos].top1_id, tops[pos].top1_logit);
+        out << ",";
+        write_token_info(out, ctx, "top2", tops[pos].top2_id, tops[pos].top2_logit);
+        out << ",";
+        out << "\"margin\":" << (tops[pos].top1_logit - tops[pos].top2_logit);
+        out << "}";
+    }
+    if (!tokens.empty()) {
+        out << "\n  ";
+    }
+    out << "]\n";
+    out << "}\n";
+}
+
 int main(int argc, char ** argv) {
     common_params params;
     params.escape = false;
@@ -298,12 +373,8 @@ int main(int argc, char ** argv) {
     if (!common_params_parse((int) args_forward.size(), args_forward.data(), params, LLAMA_EXAMPLE_RESULTS)) {
         return 1;
     }
-    if (params.out_file.empty()) {
+    if (params.out_file.empty() && (params.check || extra.top1_report.empty())) {
         LOG_ERR("%s: an output file must be specified", __func__);
-        return 1;
-    }
-    if (!extra.top1_report.empty() && !params.check) {
-        LOG_ERR("%s: --top1-report is only supported together with --check\n", __func__);
         return 1;
     }
     llama_backend_init();
@@ -318,14 +389,8 @@ int main(int argc, char ** argv) {
     const uint32_t n_vocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
 
     const std::vector<llama_token> tokens_calc = common_tokenize(lctx, params.prompt, true);
-    const std::vector<float> logits_calc = get_logits(model, lctx, tokens_calc);
+    const std::vector<float> logits_calc = get_logits(model, lctx, tokens_calc, extra.sequential_logits);
     GGML_ASSERT(logits_calc.size() == tokens_calc.size()*n_vocab);
-
-    struct gguf_init_params gguf_params = {
-        /*.no_alloc   =*/ true,
-        /*.ctx        =*/ nullptr,
-    };
-    gguf_context_ptr gguf_ctx_model(gguf_init_from_file(params.model.path.c_str(), gguf_params));
 
     if (params.check) {
         LOG_INF("%s: loading results from %s...\n", __func__, params.out_file.c_str());
@@ -392,6 +457,14 @@ int main(int argc, char ** argv) {
 
         printf("\033[1;32mOK\033[0m\n");
         return 0;
+    }
+
+    if (!extra.top1_report.empty()) {
+        write_single_top1_report(extra.top1_report, lctx, n_vocab, tokens_calc, logits_calc);
+        LOG_INF("%s: wrote top1 report to %s\n", __func__, extra.top1_report.c_str());
+        if (params.out_file.empty()) {
+            return 0;
+        }
     }
 
     ggml_context_ptr ggml_ctx_calc;

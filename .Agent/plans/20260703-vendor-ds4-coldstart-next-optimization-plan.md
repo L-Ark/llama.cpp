@@ -7515,3 +7515,45 @@ Status:
   - create a baseline `llama-results` GGUF from accepted SOTA env/config;
   - rerun `--check --top1-report --top1-fail-on-mismatch` against the same accepted path;
   - confirm `same_top1 == n_tokens`, `first_mismatch_pos == -1`, no cgroup OOM, and report memory/elapsed time.
+
+### 2026-07-04T03:45Z `llama-results` Verifier Self-Check Result
+
+Initial validation attempts:
+
+- Full-result `llama-results` with SOTA `-b 16` first hit the original tool assumption `n_tokens_all <= cparams.n_batch`.
+- After chunking by `llama_n_batch(ctx)`, the full-logits GGUF path still segfaulted under the 16GB cgroup near the end of baseline evaluation.
+- Root cause for this path is practical verifier design, not a SOTA runtime regression: full logits materialization / all-logits result writing is not stable enough for DS4 under the strict 16GB cgroup.
+
+Final verifier design:
+
+- Added `--sequential-logits` to evaluate fixed text one token at a time.
+- Allowed `--top1-report <json>` without `--check` or `--output` to write a lightweight per-position top1/top2/margin report.
+- DS4 verifier self-check compares two lightweight top1 reports instead of writing full logits GGUF.
+
+Final source/tool state:
+
+- Changed files: `tools/results/results.cpp`, `tools/results/README.md`.
+- `llama-cli` and accepted SOTA runtime path remain unchanged.
+- `build-ds4-moe-stream/bin/llama-results` sha256: `d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9`.
+- Updated implementation artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-verifier-implementation.json`, sha256 `69cbf324653cd92366cd5b6ab9bdc3d38f3e9a23b6593a2abf379d499d22ee2c`.
+
+Passing DS4 self-check:
+
+- Result artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-selfcheck-light-result.json`
+- sha256: `26fc0f157f6f35a1a96f7d807ff85c3eb54a4afa1d714f43532ebf29b785419b`
+- Case dir: `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light`
+- Config: accepted SOTA env/config, fixed text = accepted France prompt + accepted France answer, `--sequential-logits`, `--top1-report`, 16GB cgroup with `MemorySwapMax=0`.
+- `n_tokens=145`
+- `same_top1=145`
+- `same_top1_ratio=1.0`
+- `first_mismatch_pos=-1`
+- `baseline_top1_report_sha256=e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef`
+- `check_top1_report_sha256=e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef`
+- `memory_peak_bytes=16000000000`
+- `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+
+Verdict:
+
+- The lightweight sequential top1 verifier is usable for future DS4 correctness diagnostics under the 16GB cgroup.
+- This is not a token-rate improvement and cannot be promoted as SOTA.
+- Before any future GPU/offload candidate can run a performance benchmark, it must first pass this verifier or an equivalent token-level correctness check on the accepted France fixed text.

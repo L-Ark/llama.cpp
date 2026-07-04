@@ -1,0 +1,40 @@
+{
+  "artifact": "llama-results-top1-selfcheck-light-result",
+  "artifacts_sha256": {
+    "baseline.stderr": "77de29276f661d6cd6e7153f348f5c9618d2006be9fcec1cfcd882ae20ae1791",
+    "check.stderr": "25a25075c2a8548d2145036d4ad100f2255e7bc9fcf462427494b09685965c3f",
+    "fixed-france-text.txt": "6504bcedd48f2587016aeac360c1202241e4ccd3e989b7d91b67f1a67b0ef1c2",
+    "one-trace-baseline.csv": "3f435cffcffdc1f4752a22bbff42e2aebe127196d2385c859e794a77f75b39be",
+    "one-trace-check.csv": "d2b6273040fe76ab464b49a2dddcef8e2ea9a013402fe25db1c19411d3f6b21c",
+    "summary.json": "9834590ba99521d0d348d00c85afc5e9a63415b64eeb1df9a62b173306030fd6",
+    "top1-baseline.json": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "top1-check.json": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef"
+  },
+  "binary_sha256": {
+    "build-ds4-moe-stream/bin/llama-results": "d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9"
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light",
+  "diagnostic_only_not_sota": true,
+  "model_run_performed": true,
+  "source_head_before_commit": "20ab1fcc17b2358c55249badcba4530da8df924d",
+  "status": "pass",
+  "strict_cgroup": "systemd-run MemoryMax=16000000000 MemorySwapMax=0",
+  "summary": {
+    "baseline_top1_matches_next_token": 119,
+    "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light",
+    "check_n_tokens": 145,
+    "check_top1_matches_next_token": 119,
+    "check_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "first_mismatch_pos": -1,
+    "memory_current_bytes": 15183454208,
+    "memory_peak_bytes": 16000000000,
+    "n_tokens": 145,
+    "oom_events": "low 0\nhigh 0\nmax 39446\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "same_top1": 145,
+    "same_top1_ratio": 1.0,
+    "status": "pass"
+  },
+  "timestamp_utc": "2026-07-04T03:04:08Z",
+  "verdict": "pass: same_top1=145/145, first_mismatch_pos=-1, no cgroup OOM/OOM kill"
+}
