@@ -2304,7 +2304,9 @@ ggml_status llama_context::graph_compute(
 
     const bool graph_profile = kimi_graph_profile_enabled();
     const int64_t t_submit_start_us = graph_profile ? ggml_time_us() : 0;
+    ggml_backend_sched_kimi_set_profile_phase(batched ? 1 : 2);
     auto status = ggml_backend_sched_graph_compute_async(sched.get(), gf);
+    ggml_backend_sched_kimi_set_profile_phase(0);
     if (graph_profile) {
         const uint64_t submit_us = (uint64_t) (ggml_time_us() - t_submit_start_us);
         g_kimi_graph_profile.submit_calls.fetch_add(1, std::memory_order_relaxed);

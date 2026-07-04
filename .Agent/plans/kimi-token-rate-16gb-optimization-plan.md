@@ -56596,3 +56596,151 @@ Commit/push rule:
   reproduction details, commit, and push immediately.
 - If the experiment fails correctness, RAM, TTFT, fallback, or cold-start gates,
   mark it rejected and do not use it as the baseline for later phases.
+
+### 7ID result
+
+- Plan head:
+  `37ab762ca` (`docs: plan graph split attribution`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-192522Z-n32-phase7id-graph-split-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 37ab762ca
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-192522Z-n32-phase7id-graph-split-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `77078.70 ms`;
+  - decode `29894.07 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15078637568`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory final:
+  - `anon=458752`;
+  - `file=14839705600`;
+  - `kernel=234627072`;
+  - `inactive_file=4327227392`;
+  - `active_file=10511761408`.
+- Movement/counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15499515`;
+  - iouring batches `4002`, wait calls `12048`, inflight avg `3.09`;
+  - main ring batches `2743`, jobs `10969`, inflight avg `3.19`;
+  - gate ring batches `1259`, jobs `4055`, inflight avg `2.83`;
+  - down hit `73.6%`;
+  - up/gate hit `43.7%`.
+- Graph profile:
+  - submit calls `32`, total `105742.455 ms`, avg `3304.452 ms/call`;
+  - sync calls `192`, total `24.775 ms`;
+  - decode sync calls `31`, total `24.463 ms`, avg `0.789 ms/call`;
+  - prompt sync total `0.150 ms`;
+  - conclusion: backend work is effectively inside graph submit, not delayed
+    into the explicit synchronize calls.
+- Split profile:
+  - total signatures `242`, calls `3904`, wall `105726.064 ms`;
+  - top rows are prompt single-call CPU MoE ranges, for example
+    `ffn_moe_gate-13` to `ffn_moe_down-13` at `4065.556 ms`;
+  - top32 is entirely prompt-like single-call CPU MoE rows, so it cannot
+    expose decode-only split attribution.
+- 7ID conclusion:
+  - The run passes all hard gates but is diagnostic only, not SOTA.
+  - Graph sync is not the unprofiled decode bottleneck.
+  - Existing split profile confirms total graph submit time but is not granular
+    enough because prompt rows dominate sorted output.
+  - Next step is a default-off decode-only split profile phase marker so prompt
+    single-call rows do not hide decode top splits.
+
+## Phase 7IE: decode-only split profile attribution
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Rationale:
+
+- Phase 7ID proves that graph submit accounts for the full measured work, while
+  explicit sync is only `24.775 ms`.
+- The existing split profiler aggregates the whole run and sorts by total wall,
+  so prompt single-call CPU MoE rows hide decode rows even with `TOP=32`.
+- We need decode-only split attribution before changing movement/cache logic,
+  otherwise the next source change would still be based on an incomplete time
+  breakdown.
+
+Implementation:
+
+- Add a default-off phase marker for the existing split profiler:
+  - `0 = idle`;
+  - `1 = prompt`;
+  - `2 = decode`.
+- `llama_context::graph_compute()` sets the phase to prompt when `batched=true`
+  and decode when `batched=false`, then resets to idle after
+  `ggml_backend_sched_graph_compute_async()`.
+- `ggml_backend.cpp` includes the phase in the split profile key and reports
+  separate top rows for:
+  - `phase=all`;
+  - `phase=prompt`;
+  - `phase=decode`;
+  - `phase=idle` if any idle rows exist.
+- No execution policy, cache policy, copy path, or kernel changes are allowed in
+  this phase. The expected token-rate upper bound is unchanged. The value is
+  attribution: if overhead is low, the next phase can target the largest
+  measured decode split bucket.
+
+Experiment:
+
+- Build on server from the source commit.
+- Run strict cold-start n32 with:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=32`.
+- Keep all runtime knobs identical to 7ID.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- log must include `phase=decode` split rows.
+
+Decision rule:
+
+- If the profile overhead is small and quality/RAM/TTFT gates pass, keep the
+  instrumentation and record the decode split attribution.
+- If output quality, RAM, TTFT, or fallback gates fail, reject the run and do not
+  use the attribution.
+- If `phase=decode` rows show a dominant CPU split, next design targets CPU
+  fallback/source path.
+- If `phase=decode` rows show CUDA split submission/movement dominance, next
+  design targets decode split scheduling or movement overlap.
+- If decode rows are still too broad, implement a narrower decode-only split
+  node classification before optimization.

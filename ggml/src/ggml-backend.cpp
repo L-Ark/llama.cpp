@@ -1712,6 +1712,7 @@ static bool ggml_backend_sched_moe_cache_prime_last_enabled() {
 }
 
 struct ggml_kimi_split_profile_key {
+    int phase = 0;
     std::string backend;
     std::string first;
     std::string last;
@@ -1719,8 +1720,8 @@ struct ggml_kimi_split_profile_key {
     int i_end = 0;
 
     bool operator<(const ggml_kimi_split_profile_key & other) const {
-        return std::tie(backend, first, last, i_start, i_end) <
-               std::tie(other.backend, other.first, other.last, other.i_start, other.i_end);
+        return std::tie(phase, backend, first, last, i_start, i_end) <
+               std::tie(other.phase, other.backend, other.first, other.last, other.i_start, other.i_end);
     }
 };
 
@@ -1732,6 +1733,11 @@ struct ggml_kimi_split_profile_value {
 
 static std::mutex g_kimi_split_profile_mutex;
 static std::map<ggml_kimi_split_profile_key, ggml_kimi_split_profile_value> g_kimi_split_profile;
+static int g_kimi_split_profile_phase = 0;
+
+void ggml_backend_sched_kimi_set_profile_phase(int phase) {
+    g_kimi_split_profile_phase = phase >= 0 && phase <= 2 ? phase : 0;
+}
 
 static int ggml_kimi_split_profile_top() {
     const char * env = getenv("GGML_KIMI_SPLIT_PROFILE_TOP");
@@ -1760,33 +1766,52 @@ static void ggml_kimi_split_profile_report() {
     std::sort(rows.begin(), rows.end(), [](const auto & a, const auto & b) {
         return a.second.wall_us > b.second.wall_us;
     });
-    uint64_t total_us = 0;
-    uint64_t total_calls = 0;
-    for (const auto & row : rows) {
-        total_us += row.second.wall_us;
-        total_calls += row.second.calls;
-    }
-    GGML_LOG_INFO(
-        "[kimi_split_profile] total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
-        rows.size(), total_calls, (double) total_us / 1000.0);
-    const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) rows.size());
-    for (int i = 0; i < top; ++i) {
-        const auto & key = rows[i].first;
-        const auto & val = rows[i].second;
+    auto report_phase = [&](const char * label, int phase_filter) {
+        uint64_t total_us = 0;
+        uint64_t total_calls = 0;
+        size_t signatures = 0;
+        std::vector<size_t> indexes;
+        indexes.reserve(rows.size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (phase_filter >= 0 && rows[i].first.phase != phase_filter) {
+                continue;
+            }
+            total_us += rows[i].second.wall_us;
+            total_calls += rows[i].second.calls;
+            signatures++;
+            indexes.push_back(i);
+        }
+        if (signatures == 0) {
+            return;
+        }
         GGML_LOG_INFO(
-            "[kimi_split_profile] top%d: backend=%s range=%d:%d nodes_avg=%.2f calls=%" PRIu64
-            " wall=%.3f ms avg=%.3f ms/call first=%s last=%s\n",
-            i + 1,
-            key.backend.c_str(),
-            key.i_start,
-            key.i_end,
-            val.calls == 0 ? 0.0 : (double) val.nodes / (double) val.calls,
-            val.calls,
-            (double) val.wall_us / 1000.0,
-            val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls,
-            key.first.c_str(),
-            key.last.c_str());
-    }
+            "[kimi_split_profile] phase=%s total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
+            label, signatures, total_calls, (double) total_us / 1000.0);
+        const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) indexes.size());
+        for (int i = 0; i < top; ++i) {
+            const auto & row = rows[indexes[i]];
+            const auto & key = row.first;
+            const auto & val = row.second;
+            GGML_LOG_INFO(
+                "[kimi_split_profile] phase=%s top%d: backend=%s range=%d:%d nodes_avg=%.2f calls=%" PRIu64
+                " wall=%.3f ms avg=%.3f ms/call first=%s last=%s\n",
+                label,
+                i + 1,
+                key.backend.c_str(),
+                key.i_start,
+                key.i_end,
+                val.calls == 0 ? 0.0 : (double) val.nodes / (double) val.calls,
+                val.calls,
+                (double) val.wall_us / 1000.0,
+                val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls,
+                key.first.c_str(),
+                key.last.c_str());
+        }
+    };
+    report_phase("all", -1);
+    report_phase("prompt", 1);
+    report_phase("decode", 2);
+    report_phase("idle", 0);
 }
 
 static bool ggml_kimi_split_profile_enabled() {
@@ -1809,6 +1834,7 @@ static void ggml_kimi_split_profile_record(
         return;
     }
     ggml_kimi_split_profile_key key;
+    key.phase = g_kimi_split_profile_phase;
     key.backend = ggml_backend_name(backend);
     key.i_start = split->i_start;
     key.i_end = split->i_end;
