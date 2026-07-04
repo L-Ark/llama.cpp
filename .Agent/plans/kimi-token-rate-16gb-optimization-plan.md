@@ -50418,3 +50418,105 @@ Decision rule:
 - If n96 passes and beats Phase 7FB, run an n96 repeat. Accept only if repeat
   also passes all gates, then update runner default, commit, and push
   immediately.
+
+Result: n32 passed, n96 rejected.
+
+- End time: 2026-07-04T20:45:00+08:00.
+- Plan commit:
+  `5474f3186` (`docs: plan iouring refill batch probe`).
+- No source or runner default was changed.
+- Production default remains `MOE_IO_REFILL_BATCH=4`.
+
+Experiment A: n32 gate
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-123602Z-n32-phase7gt-refill8`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-123602Z-n32-phase7gt-refill8
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - manual semantic quality `pass` for the generated n32 prefix;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76670.55 ms`;
+  - decode `29105.32 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14993573`;
+  - expert-pack wait calls `12060`;
+  - current-down overlap worker `3328787 us`;
+  - down cache hit rate `73.6%`;
+  - upgate cache hit rate `43.7%`.
+- Decision:
+  - n32 passed and did not regress versus current rebuilt range.
+  - Continue to n96.
+
+Experiment B: n96 confirmation
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-123848Z-n96-phase7gt-refill8`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-123848Z-n96-phase7gt-refill8
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `77373.86 ms`;
+  - decode `72315.68 ms / 77`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37547790`;
+  - expert-pack wait calls `29840`;
+  - current-down overlap worker `8499401 us`;
+  - down cache hit rate `73.4%`;
+  - upgate cache hit rate `43.2%`.
+- Decision:
+  - Reject `MOE_IO_REFILL_BATCH=8`.
+  - It does not beat Phase 7FB n96 SOTA `70087.31 ms / 77`.
+  - Do not run n96 repeat.
+  - Keep production default `MOE_IO_REFILL_BATCH=4`.
+- Gap analysis:
+  - `refill_batch=8` slightly lowered some n32 wait counters, but n96 decode
+    regressed.
+  - Average inflight rose only marginally (`3.09 -> 3.11` at expert-pack level),
+    so the submission loop was not the critical limiter.
+  - Current-down worker time increased versus pinned16 and remains in the same
+    broad range as baseline, indicating the bottleneck is still the amount and
+    placement of streamed expert movement rather than refill granularity.
+  - Do not retry simple iouring refill/depth/slot runtime sweeps without a new
+    batch construction mechanism that increases useful work per submission.
