@@ -1,0 +1,512 @@
+{
+  "accepted_sota": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "pushed_branch": "vendor/deepseek-token-rate-16gb",
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_limit_ms": 33617.688744,
+    "ttft_ms": 32892.55329
+  },
+  "artifact": "exact-updown-candidate-screening",
+  "candidate_classes": [
+    {
+      "code_path": [
+        "src/llama-deepseek4-hot.*",
+        "src/models/deepseek4.cpp"
+      ],
+      "decision": "rejected_before_model_run",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/ds4-hot-dispatch-h0-bound-analysis.json",
+        "If 492 MiB is freed by risking gate cache, ceiling is 4.431 tok/s only"
+      ],
+      "exactness": "intended exact hot/cold split, but still requires top1 verifier before performance",
+      "expected_removable_ms": 64.60150820641728,
+      "host_ram_impact": "no model run; H0 bound only",
+      "name": "current_ds4_hot_dispatch",
+      "reason": "Preserving accepted gate cache leaves only about 238 MiB; best partial hot dispatch within that budget saves negligible CPU rows. Full-layer k values need 4.1-11.7 GiB and still have optimistic no-overhead ceilings around the current SOTA to about 5 tok/s while requiring severe gate-cache reduction. This cannot plausibly move toward 10 tok/s and should be rejected before verifier/performance runs.",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": 4.409174323218443,
+      "verifier_before_perf": true,
+      "vram_cost": "best preserving accepted gate cache: 191.25 MiB used under 238 MiB free"
+    },
+    {
+      "code_path": [
+        "ggml/src/ggml-cpu/ggml-cpu.c:ggml_compute_forward_mul_mat_id"
+      ],
+      "decision": "rejected_bound_too_small",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/true-skip-zero-row-bound-analysis.json"
+      ],
+      "exactness": "exact only for rows already pruned by current keep_topk policy",
+      "expected_removable_ms": 82.008,
+      "host_ram_impact": "none",
+      "name": "true_skip_zero_row",
+      "reason": "There are no remaining exact pruned rows to skip in the CPU fallback loop; pruned rows are already zeroed before fallback. The only exact skip/zero saving is the historical grouping/zero-fill cost around 82 ms. Skipping more rows would be approximate top-k pruning, and the relevant top2 variants already failed trajectory/correctness or performance.",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": 4.411652836679607,
+      "verifier_before_perf": false,
+      "vram_cost": "none"
+    },
+    {
+      "code_path": [
+        "ggml/src/ggml-cuda/*moe*",
+        "ggml/src/ggml.c graph path"
+      ],
+      "decision": "rejected_correctness_and_performance",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json",
+        "hot64 measured 3.6 tok/s with manual semantic failure",
+        "nofilter measured 1.8 tok/s with incomplete generation"
+      ],
+      "exactness": "can change generation trajectory; must pass full-output/top1 correctness",
+      "expected_removable_ms": null,
+      "host_ram_impact": "strict cold runs stayed within 16GB but refault/cache counters worsened",
+      "name": "existing_one_stream_gpu_updown_cache_classes",
+      "reason": "No already-tested GPU up/down class is worth another run. The next run would need a new deterministic correctness mechanism and hard-bound design, not a larger hotset sweep.",
+      "steals_gate_cache": true,
+      "theoretical_tok_s_ceiling": null,
+      "verifier_before_perf": true,
+      "vram_cost": "uses same VRAM pressure class as gate cache and can collapse cache/source behavior"
+    },
+    {
+      "code_path": [
+        "ggml/src/ggml-cuda/common.cuh graph capture path",
+        ".Agent/run-tools/llama-cli-cuda-graphs-enabled.sh"
+      ],
+      "decision": "rejected_measured_tie_regress",
+      "evidence": [
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 64.12,
+          "eval_tok_s": 4.1,
+          "exists": true,
+          "first_answer_ms": 30535.957676,
+          "memory_file_bytes": 15042371584,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T091200Z-20260703T091200Z-cuda-graphs-enabled-sota-probe/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.5,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 30535.957676
+        }
+      ],
+      "exactness": "should not change logits; performance-only launch overhead probe",
+      "expected_removable_ms": null,
+      "host_ram_impact": "strict cold run within 16GB",
+      "name": "cuda_graph_enabled_on_current_sota",
+      "reason": "strict cold run measured 4.1 tok/s, below accepted 4.4 tok/s",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": 4.1,
+      "verifier_before_perf": false,
+      "vram_cost": "none expected"
+    },
+    {
+      "code_path": [
+        ".Agent/run-tools/mxfp4_transient_repack_harness.cpp",
+        "ggml/src/ggml-cpu/ggml-cpu.c MXFP4 fallback path"
+      ],
+      "decision": "rejected_microbench_or_full_model",
+      "evidence": [
+        ".Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-transient-repack-harness-summary.json",
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 63.11,
+          "eval_tok_s": 4.1,
+          "exists": true,
+          "first_answer_ms": 29617.28187,
+          "memory_file_bytes": 15084883968,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T054431Z-20260703T054431Z-sota-no-repack-diagnostic/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 29617.28187
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is renowned for its ",
+          "correctness_ok": true,
+          "elapsed_seconds": 85.81,
+          "eval_tok_s": 3.4,
+          "exists": true,
+          "first_answer_ms": 29319.203769,
+          "memory_file_bytes": 15051288576,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T105753Z-20260703T-transient-down-repack-probe/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.5,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 29319.203769
+        }
+      ],
+      "exactness": "microbench exact, but runtime variants either slower or disturbed cold page/cache behavior",
+      "expected_removable_ms": null,
+      "host_ram_impact": "transient full-model run stayed within 16GB but increased page/refault pressure",
+      "name": "cpu_repack_and_transient_repack",
+      "reason": "Rejected at microbench stage. Transient per-op repack is numerically exact but slower than row-wise current runtime dot once repack cost is paid every iteration, failing the >=1.15x threshold. No runtime source candidate or full model run is justified. Full-model transient down-repack measured 3.4 tok/s.",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": null,
+      "verifier_before_perf": true,
+      "vram_cost": "none persistent for transient; persistent/hotset repack has unacceptable memory/page-cache tradeoff"
+    },
+    {
+      "code_path": [
+        "one-stream expert pack direct-read path",
+        "CPU fallback pack mmap/direct diagnostic paths",
+        "madvise/page-touch prewarm diagnostics"
+      ],
+      "decision": "rejected_negative_io_bound",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json",
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 77.74,
+          "eval_tok_s": 2.9,
+          "exists": true,
+          "first_answer_ms": 31516.236517,
+          "memory_file_bytes": 15075065856,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T212905Z-20260704_cpu_fallback_packdirect_top128_updown/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.5,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 31516.236517
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 62.33,
+          "eval_tok_s": 4.1,
+          "exists": true,
+          "first_answer_ms": 29132.34718,
+          "memory_file_bytes": 15100948480,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T210008Z-20260704_cpu_fallback_packmmap_top128_updown/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 29132.34718
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 64.52,
+          "eval_tok_s": 4.0,
+          "exists": true,
+          "first_answer_ms": 30381.522449,
+          "memory_file_bytes": 15101743104,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T205623Z-20260704_cpu_fallback_packmmap_top256_updown/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 30381.522449
+        }
+      ],
+      "exactness": "performance-only if routing and math unchanged",
+      "expected_removable_ms": null,
+      "host_ram_impact": "must fit 16GB including page cache; tested variants did but tied/regressed",
+      "name": "page_source_prewarm_packmmap_packdirect",
+      "reason": "Prior O_DIRECT staging moved tens of GiB and measured effective direct bandwidth under the 16GB cgroup is far below the bandwidth needed for top64/top128/top256 to save >1-2s after accounting for the ~3s hot-compute overlap window.",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": null,
+      "verifier_before_perf": false,
+      "vram_cost": "none; host page cache or direct-read byte volume is the issue"
+    },
+    {
+      "code_path": [
+        "ggml/src/ggml-cpu/ggml-cpu.c thread/chunk partitioning",
+        ".Agent/run-tools/llama-cli-taskset-0-19.sh"
+      ],
+      "decision": "rejected_bound_or_ram",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-chunk-trace-full-result.json",
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 66.17,
+          "eval_tok_s": 3.5,
+          "exists": true,
+          "first_answer_ms": 27902.340278,
+          "memory_file_bytes": 15096217600,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T123416Z-20260703_moe_cpu_chunk32_probe/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 27902.340278
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": null,
+          "eval_tok_s": 4.0,
+          "exists": true,
+          "first_answer_ms": 29651.842642,
+          "memory_file_bytes": 15089168384,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T052405Z-20260703T052405Z-single-row-chunks40-candidate/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": true,
+          "ram_ok": false,
+          "ttft_estimate_ms": 29651.842642
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 62.66,
+          "eval_tok_s": 4.1,
+          "exists": true,
+          "first_answer_ms": 29008.648567,
+          "memory_file_bytes": 15078158336,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T050107Z-20260703T050107Z-odirect-sota-thread18-probe/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.5,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 29008.648567
+        },
+        {
+          "answer_prefix": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its ic",
+          "correctness_ok": true,
+          "elapsed_seconds": 62.37,
+          "eval_tok_s": 4.1,
+          "exists": true,
+          "first_answer_ms": 28949.464863,
+          "memory_file_bytes": 15078350848,
+          "memory_peak_bytes": 16000000000,
+          "oom_seen": false,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T050239Z-20260703T050239Z-odirect-sota-thread22-probe/france-cpu40-vram0gb/summary.json",
+          "prompt_tok_s": 1.6,
+          "ram_limit_killed": false,
+          "ram_ok": true,
+          "ttft_estimate_ms": 28949.464863
+        }
+      ],
+      "exactness": "performance-only if chunking preserves arithmetic order per output",
+      "expected_removable_ms": 2940.874,
+      "host_ram_impact": "single-row chunks40 violated RAM; chunk32/affinity stayed within 16GB but regressed",
+      "name": "chunk_affinity_scheduler_only",
+      "reason": "do not repeat chunk-size or affinity probes; use lower-overhead dot/page split evidence or move to algorithmic correctness-preserving speculation/offload only with a clear >1-2s bound",
+      "steals_gate_cache": false,
+      "theoretical_tok_s_ceiling": null,
+      "verifier_before_perf": false,
+      "vram_cost": "none"
+    },
+    {
+      "code_path": [
+        "examples/speculative*",
+        "examples/lookahead",
+        "DeepSeek4 MTP/NextN runtime hooks"
+      ],
+      "decision": "closed_missing_compatible_artifact",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/algorithmic-support-inspection.json"
+      ],
+      "exactness": "can change target sequence unless verified by target model",
+      "expected_removable_ms": null,
+      "host_ram_impact": "unknown; no compatible local artifact",
+      "name": "algorithmic_multi_token_without_local_draft_or_mtp",
+      "reason": true,
+      "steals_gate_cache": "unknown",
+      "theoretical_tok_s_ceiling": null,
+      "verifier_before_perf": true,
+      "vram_cost": "unknown; no compatible local artifact"
+    }
+  ],
+  "correctness_gate": {
+    "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-selfcheck-light-result.json",
+    "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "first_mismatch_pos": -1,
+    "lightweight_top1_verifier_status": "pass",
+    "n_tokens": 145,
+    "same_top1": 145
+  },
+  "current_bottleneck": {
+    "chunk_trace_conclusion": {
+      "evidence": [
+        "trace_sum_ms/20 is close to stderr fallback wall estimate, leaving only about 1-2s attributable to non-chunk overhead/tail at this granularity",
+        "per-thread total spread is about 2.94s across the whole run, not enough to explain the gap to 10 tok/s",
+        "top tensors are early-layer up/down experts, matching CPU fallback compute/source pressure rather than gate cache failure",
+        "gate pack and VRAM cache counters remain healthy; RAM and correctness pass"
+      ],
+      "next_recommendation": "do not repeat chunk-size or affinity probes; use lower-overhead dot/page split evidence or move to algorithmic correctness-preserving speculation/offload only with a clear >1-2s bound",
+      "primary": "chunk scheduling is not the dominant bottleneck under current 4.4 tok/s SOTA config"
+    },
+    "decode_fallback_ms": 19029.457,
+    "down_fallback_ms": 13651.196,
+    "fallback_counts": {
+      "down": 19760,
+      "up": 19760
+    },
+    "primary": "up/down CPU fallback, especially early layers and prompt-phase fallback",
+    "prompt_fallback_ms": 7408.602,
+    "total_fallback_ms": 26438.058999999997,
+    "up_fallback_ms": 12786.863
+  },
+  "hard_bounds": {
+    "all_decode_updown_and_one_stream_source_removed": {
+      "candidate": "all CPU up/down decode fallback + all one-stream source time removed",
+      "caveat": "not a single feasible implementation; shows 10 tok/s needs stacked wins or speculation",
+      "removable_decode_ms": 23325.91300000426,
+      "required_extra": "requires eliminating CPU fallback plus gate source stalls",
+      "theoretical_tok_s": 13.355756053622908
+    },
+    "all_decode_updown_removed": {
+      "candidate": "all CPU up/down decode fallback removed",
+      "caveat": "ideal upper bound; still below 10 tok/s by itself",
+      "removable_decode_ms": 18089.280000000068,
+      "required_extra": "~22.3 GiB unique decode payload if naively resident",
+      "theoretical_tok_s": 8.863621666413545
+    },
+    "all_remaining_updown_fallback_reference": {
+      "optimistic_eval_tok_s_no_overhead": 29.637074188319925,
+      "seconds_saved": 26.438059,
+      "verdict": "large enough, but this requires exact compute/offload/layout work, not skip/zero pruning"
+    }
+  },
+  "inputs": {
+    "external_summary_json": [
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T091200Z-20260703T091200Z-cuda-graphs-enabled-sota-probe/france-cpu40-vram0gb/summary.json",
+        "sha256": "0c39666e3fad8162651ba560402fe7baa74071d68a1e1b7cfcafdd665276062f"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T054431Z-20260703T054431Z-sota-no-repack-diagnostic/france-cpu40-vram0gb/summary.json",
+        "sha256": "b50f8ce33305d301efa29545626c0399c233641b4aa4e56cfa28ea6bdf00fca4"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T105753Z-20260703T-transient-down-repack-probe/france-cpu40-vram0gb/summary.json",
+        "sha256": "a0b0f0d7f71b526ebe3fd2797ace0da1592abe607516aabd88867612560d8bf2"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T123416Z-20260703_moe_cpu_chunk32_probe/france-cpu40-vram0gb/summary.json",
+        "sha256": "b305cef2829d5fb8d3f3123bbc042383e7b501fae4c61b9e40fe3dbb2b4310e4"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T052405Z-20260703T052405Z-single-row-chunks40-candidate/france-cpu40-vram0gb/summary.json",
+        "sha256": "4fb002d1caa29968586d4c88480bc9c42aa2acab5a0c2761529371b8a538a3bc"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T050107Z-20260703T050107Z-odirect-sota-thread18-probe/france-cpu40-vram0gb/summary.json",
+        "sha256": "b489839bb5e86bde1c7a208bfe2a0e3e2385f76b83f842db77384912c74296af"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T050239Z-20260703T050239Z-odirect-sota-thread22-probe/france-cpu40-vram0gb/summary.json",
+        "sha256": "45d7f64e1670958bbe2475e7cd0d32e73890f9fbcbb3e046fac124676c22c2b6"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T212905Z-20260704_cpu_fallback_packdirect_top128_updown/france-cpu40-vram0gb/summary.json",
+        "sha256": "adde60e49ba67e264294e7c9ab606196b1f087ed7ced3c2326173b878b0f702e"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T210008Z-20260704_cpu_fallback_packmmap_top128_updown/france-cpu40-vram0gb/summary.json",
+        "sha256": "768e29c9c3c00608d447b6ed1412487f66cd280b30a4cd835cbbab6b8d500e76"
+      },
+      {
+        "exists": true,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T205623Z-20260704_cpu_fallback_packmmap_top256_updown/france-cpu40-vram0gb/summary.json",
+        "sha256": "d0979da52cdff27e96f50596eb249bdc98f98ca084bd601a7d7eff2909ffc6d3"
+      }
+    ],
+    "tracked_json": [
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/gate-prefill-top3000-pushed-repro-result.json",
+        "sha256": "9052b6f3ecc4cc748a76a314e31fe0508206c93849c26448a664fdb0b2c4a658"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-fallback-profile.json",
+        "sha256": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/phaseB-current-sota-hard-bound-table.json",
+        "sha256": "5dc1daf9dcccfbee09695e70cdf9ca148d106f7b963eae45ba781c8ef972fea2"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/ds4-hot-dispatch-h0-bound-analysis.json",
+        "sha256": "ffc79d774f17e239d846268f1c4f6b9928d0967610b09a0fff4776a7f15294ba"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/true-skip-zero-row-bound-analysis.json",
+        "sha256": "0af36aa32980612a7ea52917bf884fa9c6553a40de295678f967377323275228"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json",
+        "sha256": "42b9dc08cc8edd93571fc7a4a964643af410738b86bce7be5957bcf20e6fa02b"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/algorithmic-support-inspection.json",
+        "sha256": "b9f62ac35891d87d65e1b40ff94b1a2b626718e08a98e66e5ee7fa1083c59f6d"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json",
+        "sha256": "d97f52ca6f58eb945e12b4473158f07c16d0e412a690f895f9a5eb2e7f9dcf78"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/llama-results-top1-selfcheck-light-result.json",
+        "sha256": "26fc0f157f6f35a1a96f7d807ff85c3eb54a4afa1d714f43532ebf29b785419b"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-chunk-trace-full-result.json",
+        "sha256": "84e84e10d866286461cd03bd711e279beefe03c4402f7ca66f8a25f4eef5c8eb"
+      },
+      {
+        "exists": true,
+        "path": ".Agent/runs/20260703-vendor-ds4-coldstart/mxfp4-transient-repack-harness-summary.json",
+        "sha256": "b86cafb8f5e9f1e348811396d9d6328e8400de016cc84c92e89b8199e2c58295"
+      }
+    ]
+  },
+  "screening_result": {
+    "concrete_runtime_candidate_passes_gate": false,
+    "next_required_work": [
+      "Inspect the active CPU fallback code path to identify a new exact mechanism that reduces actual up/down source/dot work instead of only changing scheduling.",
+      "A viable design must explain how it avoids the rejected hot-dispatch VRAM/gate-cache tradeoff and rejected repack/page-refault regressions.",
+      "If the design can change logits, run the lightweight top1 verifier before any strict cold token-rate run."
+    ],
+    "passing_candidates": [],
+    "verdict": "No already-defined concrete runtime candidate passes the plan's screening gate. Do not run another full model benchmark until a new exact compute/offload/layout mechanism has a hard bound above tie and a correctness-verification path."
+  },
+  "source": {
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head": "ff9e2e8acb0bdace45dfc6792f094b2b09152fdc",
+    "remote_ssd_vendor_deepseek_token_rate_16gb": "ff9e2e8acb0bdace45dfc6792f094b2b09152fdc\trefs/heads/vendor/deepseek-token-rate-16gb"
+  },
+  "timestamp_utc": "2026-07-04T03:53:50Z"
+}

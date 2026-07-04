@@ -7747,3 +7747,63 @@ Execution sequence for any candidate that passes screening:
 Current next action:
 
 - Produce the screening artifact first. If no candidate clears the screening gate, do not write speculative runtime code; the next plan update must explicitly state the missing hard bound or missing exact mechanism needed to continue toward `10 tok/s`.
+
+### 2026-07-04T03:55Z Exact Up/Down Candidate Screening Result
+
+Artifacts:
+
+- `.Agent/run-tools/analyze_exact_updown_candidates.py`
+- `.Agent/runs/20260704-vendor-ds4-coldstart/exact-updown-candidate-screening.json`
+- screening JSON sha256: `b80a28749cadddd56473608b00379481a18fff6508f041835565ec8f85062768`
+- source head for artifact: `ff9e2e8acb0bdace45dfc6792f094b2b09152fdc`
+
+Current accepted SOTA remains unchanged:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=32892.55329 ms`
+- `TTFT_limit=33617.688744 ms`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15102607360`
+- `ram_ok=true`
+- `correctness_ok=true`
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+
+Screening verdict:
+
+- No already-defined concrete runtime candidate passes the plan's screening gate.
+- Do not run another full-model benchmark until a new exact compute/offload/layout mechanism has:
+  - hard measured/theoretical bound above tie;
+  - explicit VRAM budget that does not silently steal the accepted gate cache;
+  - 16GB cgroup RAM plan including page cache;
+  - correctness verifier path before performance if logits can change.
+
+Candidate decisions recorded:
+
+- `current_ds4_hot_dispatch`: rejected before model run. Preserving the accepted gate cache gives only `64.60 ms` optimistic fallback saving and `4.409 tok/s` ceiling.
+- `true_skip_zero_row`: rejected by bound. Perfect existing zero/group elimination saves only `82.008 ms` and reaches only `4.412 tok/s`.
+- `existing_one_stream_gpu_updown_cache_classes`: rejected for correctness and performance. Hot64 produced a semantic France error at `3.6 tok/s`; no-filter produced incomplete output at `1.8 tok/s`.
+- `cuda_graph_enabled_on_current_sota`: rejected/tie-regress. Strict cold run measured `4.1 tok/s`.
+- `cpu_repack_and_transient_repack`: rejected. Per-op transient repack fails microbench threshold, and full-model transient down-repack measured `3.4 tok/s`.
+- `page_source_prewarm_packmmap_packdirect`: rejected by negative I/O/page-source bound. Direct/mmap variants either tied or regressed.
+- `chunk_affinity_scheduler_only`: rejected by bound or RAM. Thread spread is about `2.94s`, chunk32 regressed to `3.5 tok/s`, and single-row chunks40 violated the RAM gate.
+- `algorithmic_multi_token_without_local_draft_or_mtp`: closed because no compatible local DeepSeek draft model or MTP/NextN GGUF exists.
+
+Next active work:
+
+1. Inspect the active CPU fallback code path, especially `ggml_compute_forward_mul_mat_id`, DS4 fused up/gate fallback, MXFP4 dot dispatch, source tensor access, and thread chunk construction.
+2. Identify a new exact mechanism that reduces actual up/down source/dot work. It must be materially different from:
+   - current DS4 hot-dispatch;
+   - one-stream GPU up/down cache;
+   - persistent or transient repack;
+   - page-touch/madvise/packmmap/packdirect;
+   - chunk-size or affinity scheduling.
+3. Before implementation, write a candidate-specific plan section with:
+   - exact code path;
+   - mathematical/logical correctness argument;
+   - expected removable milliseconds;
+   - VRAM/RAM/page-cache budget;
+   - theoretical token-rate ceiling;
+   - top1 verifier requirement;
+   - strict cold benchmark command.
+4. If no source-level exact mechanism can be found, record that evidence explicitly and pivot only to a new external artifact class, such as a compatible DeepSeek draft/MTP model. Do not promote or claim progress from closed/tie candidates.
