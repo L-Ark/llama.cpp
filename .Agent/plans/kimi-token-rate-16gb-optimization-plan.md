@@ -44207,3 +44207,83 @@ Decision:
 - Do not run minimal-profile confirmation or n96 for this patch.
 - Next plan should avoid converting small direct fallback work to iouring unless
   it also reduces wait calls or combines the converted jobs into fewer waits.
+
+## Phase 7FG: avoid one-job io_uring batches
+
+Start time: 2026-07-04T08:32:00Z.
+
+Goal:
+
+- Reduce iouring wait overhead by skipping io_uring for very small copy batches,
+  while preserving the existing batched io_uring path for larger groups.
+- Keep the strict gates:
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - France quality pass;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Current bottleneck:
+
+- Phase 7FF proved that increasing iouring use is not automatically faster:
+  - direct reads fell by `338`;
+  - main host-stage fell by about `263 ms`;
+  - but `iouring_wait_us` rose by about `1.42 s`;
+  - decode regressed by about `278 ms`.
+- Phase 7FD/7FE/7FF all show many small iouring batches:
+  - Phase 7FD expert-pack batch histogram had `1:335`;
+  - Phase 7FF had `1:349`;
+  - no `9-16` batches appear, so the queue is not naturally deep.
+
+Theory and upper bound:
+
+- A single-job io_uring batch pays submit/wait overhead without amortizing it
+  across multiple reads.
+- The existing direct/staged path may be cheaper for these isolated reads,
+  especially because Phase 7FF showed some direct reads are cheaper than extra
+  io_uring waits.
+- The practical upper bound is small but measurable:
+  - only about `335` single-job batches are affected;
+  - if each avoids a few milliseconds of wait, n32 could save roughly
+    `0.3-1.0 s`;
+  - if direct reads add more host-stage than they remove from iouring waits,
+    the patch must be rejected.
+
+Implementation plan:
+
+1. Add `GGML_MOE_IO_MIN_BATCH`, default `1`, clamped to `1..8`.
+2. In `expert_pack_iouring_copy_jobs()`:
+   - after RAM-tier/host-prefetch filtering has produced `read_jobs`;
+   - if `read_jobs.size() < GGML_MOE_IO_MIN_BATCH`, copy only those remaining
+     read jobs via the existing staged fallback path and return success;
+   - do not increment `iouring_fallbacks` for this intentional bypass.
+3. Test with `GGML_MOE_IO_MIN_BATCH=2` only; do not change the production
+   runner unless the n32 and n96 gates pass.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fg-io-min-batch2"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      GGML_MOE_IO_MIN_BATCH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- Accept only if n32 diagnostic passes gates and shows lower decode time with a
+  plausible movement explanation:
+  - fewer iouring one-job batches;
+  - lower `iouring_wait_us`;
+  - no offsetting `host_stage` increase.
+- If n32 diagnostic passes, run minimal-profile n32 confirmation.
+- If confirmed, run n96 twice and compare against Phase 7FB best
+  `70087.31 ms / 77`.
+- If any gate fails or n96 is slower, revert the source patch and record the
+  rejection.
