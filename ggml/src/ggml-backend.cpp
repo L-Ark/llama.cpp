@@ -1771,15 +1771,22 @@ static void ggml_kimi_split_profile_report() {
         uint64_t total_calls = 0;
         size_t signatures = 0;
         std::vector<size_t> indexes;
+        std::map<std::string, ggml_kimi_split_profile_value> backend_totals;
         indexes.reserve(rows.size());
         for (size_t i = 0; i < rows.size(); ++i) {
             if (phase_filter >= 0 && rows[i].first.phase != phase_filter) {
                 continue;
             }
-            total_us += rows[i].second.wall_us;
-            total_calls += rows[i].second.calls;
+            const auto & key = rows[i].first;
+            const auto & val = rows[i].second;
+            total_us += val.wall_us;
+            total_calls += val.calls;
             signatures++;
             indexes.push_back(i);
+            ggml_kimi_split_profile_value & backend_val = backend_totals[key.backend];
+            backend_val.calls += val.calls;
+            backend_val.nodes += val.nodes;
+            backend_val.wall_us += val.wall_us;
         }
         if (signatures == 0) {
             return;
@@ -1787,6 +1794,19 @@ static void ggml_kimi_split_profile_report() {
         GGML_LOG_INFO(
             "[kimi_split_profile] phase=%s total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
             label, signatures, total_calls, (double) total_us / 1000.0);
+        for (const auto & backend_kv : backend_totals) {
+            const auto & backend = backend_kv.first;
+            const auto & val = backend_kv.second;
+            GGML_LOG_INFO(
+                "[kimi_split_profile] phase=%s backend=%s total: calls=%" PRIu64
+                " nodes=%" PRIu64 " wall=%.3f ms avg=%.3f ms/call\n",
+                label,
+                backend.c_str(),
+                val.calls,
+                val.nodes,
+                (double) val.wall_us / 1000.0,
+                val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls);
+        }
         const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) indexes.size());
         for (int i = 0; i < top; ++i) {
             const auto & row = rows[indexes[i]];

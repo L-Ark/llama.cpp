@@ -56744,3 +56744,165 @@ Decision rule:
   design targets decode split scheduling or movement overlap.
 - If decode rows are still too broad, implement a narrower decode-only split
   node classification before optimization.
+
+### 7IE result
+
+- Source head:
+  `a00af9b6e` (`ggml: add decode split profile phase`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)` on the server passed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-193630Z-n32-phase7ie-decode-split-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard a00af9b6e
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-193630Z-n32-phase7ie-decode-split-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `78904.47 ms`;
+  - decode `30250.89 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15051677696`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Memory final:
+  - `anon=458752`;
+  - `file=14813917184`;
+  - `kernel=234463232`;
+  - `inactive_file=13089189888`;
+  - `active_file=1724157952`.
+- Movement/counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15299990`;
+  - iouring batches `4002`, wait calls `12039`, inflight avg `3.10`;
+  - main ring batches `2743`, jobs `10969`, inflight avg `3.20`;
+  - gate ring batches `1259`, jobs `4055`, inflight avg `2.83`;
+  - down hit `73.6%`;
+  - up/gate hit `43.7%`.
+- Graph profile:
+  - submit calls `32`, total `107819.913 ms`, avg `3369.372 ms/call`;
+  - sync calls `192`, total `24.409 ms`;
+  - decode sync calls `31`, total `24.197 ms`, avg `0.781 ms/call`.
+- Split profile totals:
+  - all: signatures `244`, calls `3904`, wall `107803.357 ms`;
+  - prompt: signatures `122`, calls `122`, wall `77598.044 ms`;
+  - decode: signatures `122`, calls `3782`, wall `30205.313 ms`.
+- Decode top rows:
+  - top1: CPU `ffn_moe_swiglu-7` to `ffn_moe_down-7`,
+    `956.842 ms`, `31` calls, `30.866 ms/call`;
+  - top2: CPU `ffn_moe_swiglu-9` to `ffn_moe_down-9`,
+    `896.921 ms`, `31` calls, `28.933 ms/call`;
+  - top3: CPU `ffn_moe_swiglu-6` to `ffn_moe_down-6`,
+    `891.366 ms`, `31` calls, `28.754 ms/call`;
+  - top4: CPU `ffn_moe_swiglu-8` to `ffn_moe_down-8`,
+    `851.746 ms`, `31` calls, `27.476 ms/call`;
+  - top5: CPU `ffn_moe_swiglu-10` to `ffn_moe_down-10`,
+    `751.833 ms`, `31` calls, `24.253 ms/call`;
+  - top32 is still CPU `ffn_moe_swiglu-*` to `ffn_moe_down-*`,
+    with top32 `445.315 ms`, `14.365 ms/call`.
+- 7IE conclusion:
+  - The instrumentation passes all gates and is kept.
+  - The previously unprofiled n32 decode wall is now attributed to scheduler
+    split wall: decode split wall `30205.313 ms` versus measured decode
+    `30250.89 ms`.
+  - The dominant visible decode bucket is CPU backend MoE swiglu/down fallback,
+    not explicit CUDA synchronize.
+  - The current top32 output proves CPU decode MoE is a major bottleneck, but it
+    does not quantify the full CPU/CUDA/backend split total because only top rows
+    are printed.
+  - Next phase should add phase/backend totals or run a wider top output before
+    changing execution policy. The target is to quantify how much of the full
+    `30.2 s` decode split wall is CPU MoE fallback and which layers dominate.
+
+## Phase 7IF: decode split backend totals before CPU-fallback optimization
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Rationale:
+
+- 7IE shows `phase=decode` split wall matches measured decode wall:
+  `30205.313 ms` split versus `30250.89 ms` measured.
+- The top visible decode rows are CPU backend MoE swiglu/down splits.
+- However, top32 only covers the largest rows. Before implementing a fallback
+  elimination path, we need exact phase/backend totals so the theoretical upper
+  bound is grounded:
+  - if decode CPU total is close to `30 s`, moving/removing it is the dominant
+    opportunity;
+  - if CPU total is only the top slice and CUDA/movement dominates the rest, the
+    optimization must be different.
+
+Implementation:
+
+- Extend the default-off split profiler report with phase/backend summary rows:
+  - label: `all`, `prompt`, `decode`, `idle`;
+  - backend name;
+  - signatures;
+  - calls;
+  - wall milliseconds.
+- No scheduling, cache, copy, or kernel behavior may change.
+- The token-rate upper bound from this diagnostic alone is unchanged. Its output
+  will define the upper bound for the next real optimization:
+  - removable decode CPU wall upper bound is
+    `decode_cpu_wall_ms / measured_decode_ms`;
+  - if the largest removable CPU portion is `>= 10 s` on n32, a successful
+    elimination could theoretically move n32 from about `1.02 tok/s` toward
+    `31 / (30.25 - 10) = 1.53 tok/s`, before secondary overheads.
+
+Experiment:
+
+- Build on server.
+- Run strict cold-start n32 with the same 7IE profile env:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=32`.
+- Keep runtime knobs identical to 7IE.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- logs must include `phase=decode backend=CPU` total.
+
+Decision rule:
+
+- If decode CPU backend total is dominant, next design targets why decode MoE
+  swiglu/down remains on CPU and how to route it through the existing GPU
+  batched path or eliminate the CPU split.
+- If decode CUDA/backend non-CPU totals dominate, next design targets CUDA split
+  scheduling/movement instead.
+- If the profiler itself adds unacceptable overhead or fails gates, reject the
+  run and do not base source changes on it.
