@@ -1,0 +1,387 @@
+{
+  "accepted_sota_reference": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true,
+    "decode_window_ms_estimate": 31047.44671,
+    "decoded_tokens_estimate": 136.608766,
+    "elapsed_seconds": 63.94,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_limit_ms": null,
+    "ttft_ms": 32892.55329
+  },
+  "comparison": {
+    "accepted_elapsed_seconds": 63.94,
+    "accepted_eval_tok_s": 4.4,
+    "accepted_ttft_ms": 32892.55329,
+    "baseline_decode_fallback_ms": 19029.457,
+    "eval_tok_s_delta_vs_accepted": -1.4,
+    "interpretation": "Parallel decode-only touch reduces some in-loop page-fault exposure, but the additional parallel touch/barrier/system pressure still increases end-to-end wall time. Since a profiled no-touch run was already near the accepted SOTA class, this regression is attributable to the parallel touch mechanism, not profile output alone.",
+    "parallel_decode_fallback_after_touch_ms": 3690.044,
+    "parallel_decode_summed_worker_touch_ms": 48312.036,
+    "serial_touch_decode_fallback_after_touch_ms": 3173.291,
+    "serial_touch_decode_summed_touch_ms": 41626.545,
+    "wall_regression_vs_accepted_seconds": 13.38
+  },
+  "config_delta": {
+    "GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT": "{case_dir}/fallback_profile.csv",
+    "GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH": "1",
+    "GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH_DECODE_ONLY": "implicit default true"
+  },
+  "decision": {
+    "next_direction": "Do not pursue same-op pre-touch. If source/page work is revisited, it needs predictive overlap before the consuming op/layer, or a different exact compute path; same-op parallel touch is closed.",
+    "source_patch_verdict": "revert_runtime_source"
+  },
+  "generated_at_utc": "2026-07-04T12:41:03.767701+00:00",
+  "input_hashes_sha256": {
+    "cpu-fallback-touch-split-diagnostic.json": "9be90deef85afb244cfbd629f04d72fc269f3c84556c7ff4928556f79a153d37",
+    "current-sota-cpu-fallback-profile.json": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+    "fallback_profile.csv": "3b5ccc1a7c3b4d16dd68e939d1b374cc76701d11d70e7e02b42aaa9c2908cc07",
+    "fresh-sota44-bottleneck-hard-bound.json": "968449a8f672d7c044ba43b23e9ce922cabc1ae58a317d73c406e76e58725ed6",
+    "memory.events": "479706e42fd19c1256d54850a7859f4df0c9adeeb4115a9b4d8f2f5cf74a63fb",
+    "memory.stat": "2fa489b6e8fda196b734a1aad91b3eeabde44413f743987371d7574618d96357",
+    "one_trace.csv": "29e296cb61b74274c2dc58612e95278f9e01a662351bf417f350f262816eb6c4",
+    "stderr.txt": "3bc720a3812247277aaf4ddf527707f3a1115ce7c7701a6282f1ef094601f8f2",
+    "stdout.txt": "be46f9beca09439943574a88d7b0a19ffe5696bcd3a88ec71f704cfc42682fc9",
+    "summary.json": "a1d0dca6a080f3e0f14381b391867157ee985466445c856ac8b2d3d07a33d75e"
+  },
+  "reason": "Default-off decode-only parallel touch preserved RAM and correctness, and TTFT stayed inside the accepted gate, but eval_tok_s=3.0 is below the accepted 4.4 tok/s SOTA.",
+  "run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T123650Z-20260704_parallel_touch_decode_profile/france-parallel-touch-cpu40-vram0gb",
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260704T123650Z-20260704_parallel_touch_decode_profile",
+    "summary": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "correctness_ok": true,
+      "elapsed_seconds": 77.32,
+      "eval_tok_s": 3.0,
+      "memory_file_bytes": 15101444096,
+      "memory_peak_bytes": 16000000000,
+      "pgmajfault": 158740,
+      "prompt_tok_s": 1.8,
+      "ram_ok": true,
+      "ttft_ms": 32157.262724,
+      "workingset_refault_file": 1609468
+    }
+  },
+  "schema": "parallel-touch-decode-profile-result/v1",
+  "source_diff_sha256": "b74fcee491f4fc4622cf3320101a8aec37e6fe2c297ca1b0f585250ba08bfda4",
+  "source_head": "fd6c486fb81ccd14ce0acb45cef280730bf862cd",
+  "source_status": "M ggml/src/ggml-cpu/ggml-cpu.c",
+  "split_table": {
+    "all": {
+      "avg_fallback_us_per_call_after_parallel_touch": 295.542096,
+      "avg_summed_touch_us_per_call": 1263.985035,
+      "calls": 38222,
+      "count": 39520,
+      "entries": 0,
+      "expert_call_gib": 158.63623,
+      "fallback_ms_after_parallel_touch": 11296.21,
+      "gguf_calls": 38222,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 48312.036
+    },
+    "decode": {
+      "avg_fallback_us_per_call_after_parallel_touch": 102.844036,
+      "avg_summed_touch_us_per_call": 1346.489298,
+      "calls": 35880,
+      "count": 35880,
+      "entries": 0,
+      "expert_call_gib": 148.916016,
+      "fallback_ms_after_parallel_touch": 3690.044,
+      "gguf_calls": 35880,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 48312.036
+    },
+    "down": {
+      "avg_fallback_us_per_call_after_parallel_touch": 327.050704,
+      "avg_summed_touch_us_per_call": 1271.744231,
+      "calls": 19111,
+      "count": 19760,
+      "entries": 0,
+      "expert_call_gib": 79.318115,
+      "fallback_ms_after_parallel_touch": 6250.266,
+      "gguf_calls": 19111,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 24304.304
+    },
+    "down:decode": {
+      "avg_fallback_us_per_call_after_parallel_touch": 102.303512,
+      "avg_summed_touch_us_per_call": 1354.754961,
+      "calls": 17940,
+      "count": 17940,
+      "entries": 2627,
+      "expert_call_gib": 74.458008,
+      "fallback_ms_after_parallel_touch": 1835.325,
+      "gguf_calls": 17940,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 24304.304
+    },
+    "down:prompt": {
+      "avg_fallback_us_per_call_after_parallel_touch": 3770.231426,
+      "avg_summed_touch_us_per_call": 0.0,
+      "calls": 1171,
+      "count": 1820,
+      "entries": 888,
+      "expert_call_gib": 4.860107,
+      "fallback_ms_after_parallel_touch": 4414.941,
+      "gguf_calls": 1171,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 0.0
+    },
+    "prompt": {
+      "avg_fallback_us_per_call_after_parallel_touch": 3247.722459,
+      "avg_summed_touch_us_per_call": 0.0,
+      "calls": 2342,
+      "count": 3640,
+      "entries": 0,
+      "expert_call_gib": 9.720215,
+      "fallback_ms_after_parallel_touch": 7606.166,
+      "gguf_calls": 2342,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 0.0
+    },
+    "up": {
+      "avg_fallback_us_per_call_after_parallel_touch": 264.033489,
+      "avg_summed_touch_us_per_call": 1256.225839,
+      "calls": 19111,
+      "count": 19760,
+      "entries": 0,
+      "expert_call_gib": 79.318115,
+      "fallback_ms_after_parallel_touch": 5045.944,
+      "gguf_calls": 19111,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 24007.732
+    },
+    "up:decode": {
+      "avg_fallback_us_per_call_after_parallel_touch": 103.38456,
+      "avg_summed_touch_us_per_call": 1338.223634,
+      "calls": 17940,
+      "count": 17940,
+      "entries": 2627,
+      "expert_call_gib": 74.458008,
+      "fallback_ms_after_parallel_touch": 1854.719,
+      "gguf_calls": 17940,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 24007.732
+    },
+    "up:prompt": {
+      "avg_fallback_us_per_call_after_parallel_touch": 2725.213493,
+      "avg_summed_touch_us_per_call": 0.0,
+      "calls": 1171,
+      "count": 1820,
+      "entries": 888,
+      "expert_call_gib": 4.860107,
+      "fallback_ms_after_parallel_touch": 3191.225,
+      "gguf_calls": 1171,
+      "pack_mmap_calls": 0,
+      "summed_worker_touch_ms": 0.0
+    }
+  },
+  "status": "rejected",
+  "top_touch_entries": [
+    {
+      "calls": 1,
+      "count": 1,
+      "expert_idx": 220,
+      "fallback_ms": 0.115,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 208.575,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 159,
+      "fallback_ms": 0.23,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 198.147,
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 7,
+      "fallback_ms": 0.178,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 182.599,
+      "tensor": "blk.30.ffn_up_exps.weight"
+    },
+    {
+      "calls": 10,
+      "count": 10,
+      "expert_idx": 179,
+      "fallback_ms": 0.914,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 173.774,
+      "tensor": "blk.27.ffn_down_exps.weight"
+    },
+    {
+      "calls": 1,
+      "count": 1,
+      "expert_idx": 205,
+      "fallback_ms": 0.11,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 161.654,
+      "tensor": "blk.7.ffn_down_exps.weight"
+    },
+    {
+      "calls": 8,
+      "count": 8,
+      "expert_idx": 189,
+      "fallback_ms": 0.831,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 110.876,
+      "tensor": "blk.37.ffn_down_exps.weight"
+    },
+    {
+      "calls": 1,
+      "count": 1,
+      "expert_idx": 48,
+      "fallback_ms": 0.115,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 89.598,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "calls": 6,
+      "count": 6,
+      "expert_idx": 30,
+      "fallback_ms": 0.64,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 61.917,
+      "tensor": "blk.12.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 185,
+      "fallback_ms": 0.154,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 45.089,
+      "tensor": "blk.12.ffn_up_exps.weight"
+    },
+    {
+      "calls": 4,
+      "count": 4,
+      "expert_idx": 17,
+      "fallback_ms": 0.395,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 34.468,
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 94,
+      "fallback_ms": 0.193,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 33.781,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 46,
+      "fallback_ms": 0.192,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 33.077,
+      "tensor": "blk.2.ffn_up_exps.weight"
+    },
+    {
+      "calls": 3,
+      "count": 3,
+      "expert_idx": 150,
+      "fallback_ms": 0.292,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 33.004,
+      "tensor": "blk.2.ffn_up_exps.weight"
+    },
+    {
+      "calls": 5,
+      "count": 5,
+      "expert_idx": 121,
+      "fallback_ms": 0.487,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 32.756,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 3,
+      "count": 3,
+      "expert_idx": 150,
+      "fallback_ms": 0.285,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 32.173,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 46,
+      "fallback_ms": 0.193,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 31.453,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 5,
+      "count": 5,
+      "expert_idx": 23,
+      "fallback_ms": 0.478,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 30.816,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 2,
+      "count": 2,
+      "expert_idx": 204,
+      "fallback_ms": 0.187,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 30.476,
+      "tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "calls": 4,
+      "count": 4,
+      "expert_idx": 231,
+      "fallback_ms": 0.348,
+      "phase": "decode",
+      "role": "down",
+      "summed_worker_touch_ms": 29.901,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "calls": 5,
+      "count": 5,
+      "expert_idx": 162,
+      "fallback_ms": 0.474,
+      "phase": "decode",
+      "role": "up",
+      "summed_worker_touch_ms": 28.508,
+      "tensor": "blk.16.ffn_up_exps.weight"
+    }
+  ]
+}

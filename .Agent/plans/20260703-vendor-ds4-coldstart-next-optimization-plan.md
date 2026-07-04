@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `becd957f458e3316cac6221cdca4b0c0aa97b964` (`vendor-ds4: add fresh sota44 bottleneck bound`)
+- Latest pushed head before this document update: `fd6c486fb81ccd14ce0acb45cef280730bf862cd` (`vendor-ds4: plan parallel fallback touch probe`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -8812,6 +8812,47 @@ Source-level design for the next source patch:
 - Promotion rules:
   - only promote if a strict cold run without diagnostic overhead beats `4.4 tok/s`, has `TTFT<=33617.688744 ms`, passes correctness, stays within 16GB including page cache, and is reproduced after push.
 
+Parallel decode-only touch result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/parallel-touch-decode-profile-result.json`
+- Artifact sha256: `a19ecf1747c4ff672958450f41439293f269f4fb6b55c2fc2a5209a93ee5f2ea`
+- Run root: `/root/lfz/runs/vendor-ds4-16gb/20260704T123650Z-20260704_parallel_touch_decode_profile`
+- Case dir: `/root/lfz/runs/vendor-ds4-16gb/20260704T123650Z-20260704_parallel_touch_decode_profile/france-parallel-touch-cpu40-vram0gb`
+- Temporary source patch: default-off `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1` in `ggml/src/ggml-cpu/ggml-cpu.c`; decode-only by default; no math/top-k/routing changes.
+- Build: succeeded. After rejection, runtime source was reverted and `build-ds4-moe-stream` rebuilt on clean source.
+- Diagnostic config: accepted SOTA env plus `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1`, `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback_profile.csv`.
+
+Result:
+
+- `eval_tok_s=3.0`
+- `prompt_tok_s=1.8`
+- `TTFT=32157.262724 ms`, inside accepted TTFT gate but not enough for promotion because token rate regressed
+- `elapsed_seconds=77.32`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15101444096`
+- `ram_ok=true`
+- `correctness_ok=true`, France answer semantic/coherent/complete
+- `pgmajfault=158740`, lower than accepted SOTA but wall time still regressed
+
+Split comparison:
+
+| Metric | Baseline/profile | Parallel touch diagnostic |
+| --- | ---: | ---: |
+| accepted SOTA eval tok/s | `4.4` | `3.0` |
+| accepted SOTA elapsed | `63.94s` | `77.32s` |
+| decode fallback wall | `19029.457 ms` | `3690.044 ms` after parallel touch |
+| decode touch worker-time sum | n/a | `48312.036 ms` |
+| wall delta vs accepted | n/a | `+13.38s` |
+
+Decision:
+
+- Reject and close same-op pre-touch, including serial and parallel variants.
+- The mechanism proved that page-fault placement matters, but moving the faults into the same op with a barrier creates too much system pressure and wall-time regression.
+- Do not run a no-profile SOTA attempt for this patch; the profiled no-touch baseline was already near SOTA class, while this profiled parallel-touch diagnostic is far below SOTA.
+- Runtime source was reverted; keep only artifact/docs.
+
 Next concrete work item:
 
-- Implement the default-off `GGML_MOE_CPU_FALLBACK_PARALLEL_TOUCH=1` patch exactly as above, rebuild, then run a strict cold France diagnostic with fallback profile enabled. If it cannot beat the source/page hard-bound or violates gates, revert runtime source and commit only rejected artifacts/docs.
+- Rebuild the candidate list again from the current hard-bound table after closing same-op pre-touch.
+- If source/page work is revisited, it must be predictive overlap before the consuming `mul_mat_id` op/layer, not same-op pre-touch.
+- Otherwise move to a different exact compute path that can remove near-full decode up/down fallback while passing fixed-text top1 before any token-rate benchmark.
