@@ -53927,3 +53927,123 @@ Decision rule:
   rejection.
 - If instrumentation passes, keep it default-off and commit/push because it
   improves reproducibility of future bottleneck decisions.
+
+Implementation:
+
+- Plan commit:
+  `ce07d3732` (`docs: plan copy h2d profiling`).
+- Source commit:
+  `762a92fc8` (`cuda: add copy profile h2d timing`).
+- Source changes:
+  - added default-off `copy_profile_h2d_enabled()`;
+  - `pinned_stage_ensure` now creates per-slot timing events when either the
+    existing pinned-stage profile is enabled or
+    `GGML_MOE_COPY_PROFILE_H2D=1` is enabled;
+  - staged copy and io_uring CQE H2D paths record `copy_start`/`copy_done` when
+    the new flag is enabled;
+  - copy-profile rows now receive non-negative `h2d_ms` when H2D timing is
+    enabled;
+  - default behavior remains unchanged when `GGML_MOE_COPY_PROFILE_H2D` is
+    unset.
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - success;
+  - target `llama-completion` built at source head `762a92fc8`;
+  - only pre-existing warning classes were reported.
+
+Experiment result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-165250Z-n32-phase7hp-copy-h2d-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-165250Z-n32-phase7hp-copy-h2d-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_COPY_PROFILE_H2D=1
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73971.59 ms`;
+  - decode `32441.87 ms / 31`, `0.96 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Profile validation:
+  - `copy-profile.csv`: `2.8 MiB`;
+  - `io-batch-profile.csv`: `600 KiB`;
+  - copy-profile rows `23914`;
+  - iouring rows `15024`;
+  - iouring rows with non-negative `h2d_ms`: `15024`;
+  - instrumentation is active and complete.
+- High-level counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=13323177`;
+  - expert-pack iouring avg inflight `3.39`, max `8`;
+  - current-down overlap worker `3924590 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Copy-profile H2D aggregate:
+  - `runtime_load`:
+    - rows `20250`;
+    - iouring rows `11529`;
+    - bytes `102.523 GiB`;
+    - io wait `47770.991 ms`;
+    - H2D `4206.057 ms`;
+    - enqueue `350.242 ms`;
+    - wall `61600.195 ms`.
+  - `current_down_overlap`:
+    - rows `3664`;
+    - iouring rows `3495`;
+    - bytes `21.525 GiB`;
+    - io wait `12017.551 ms`;
+    - H2D `866.538 ms`;
+    - enqueue `69.267 ms`;
+    - wall `12629.566 ms`.
+- Top tensors by H2D:
+  - `runtime_load blk.24.ffn_down_exps.weight`: H2D `50.417 ms`;
+  - `runtime_load blk.4.ffn_down_exps.weight`: H2D `48.840 ms`;
+  - `runtime_load blk.25.ffn_down_exps.weight`: H2D `47.230 ms`;
+  - `runtime_load blk.16.ffn_down_exps.weight`: H2D `47.044 ms`;
+  - `runtime_load blk.23.ffn_down_exps.weight`: H2D `46.499 ms`;
+  - `runtime_load blk.5.ffn_down_exps.weight`: H2D `45.307 ms`;
+  - `runtime_load blk.20.ffn_down_exps.weight`: H2D `44.000 ms`;
+  - `runtime_load blk.26.ffn_down_exps.weight`: H2D `43.586 ms`.
+- Decision:
+  - Keep the instrumentation because it is default-off and passed all hard
+    gates.
+  - The diagnostic run is not a token-rate candidate because H2D profiling adds
+    CUDA event synchronization and slows decode.
+  - H2D is measurable but not the dominant exposed bucket:
+    - runtime-load H2D is about `4.21 s`;
+    - runtime-load io wait is about `47.77 s`;
+    - current-down H2D is about `0.87 s`;
+    - current-down io wait is about `12.02 s`.
+  - The next performance source plan should continue to target read wait and
+    call-boundary batching, not H2D stream optimization.
+  - Because the rejected Phase 7HF shared coalescer already proved that wide
+    reads alone can regress wall time, the next design must preserve the current
+    up-first launch behavior and avoid a shared staging ring.
