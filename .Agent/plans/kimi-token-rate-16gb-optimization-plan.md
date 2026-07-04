@@ -43502,3 +43502,77 @@ LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
   down/upgate profile CSVs.
 - Stable repo reproduction runner:
   `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+## Phase 7FC: production SOTA small VRAM cache increase to 15100 MiB
+
+Start time:
+
+- 2026-07-04T06:45:00Z.
+
+Reason for this phase:
+
+- Current production SOTA 7FB uses `VRAM_MIB=15000`.
+- User constraint says to use VRAM as fully as possible while staying correct
+  and reproducible under the 16GB host-RAM cold-start gate.
+- Historical larger-cache attempts were risky:
+  - `VRAM_MIB=15300` on the older slots16 diagnostic SOTA was rejected;
+  - larger VRAM cache can improve hit rate, but it can also hurt CUDA memory
+    headroom, staging, or scheduling.
+- Retest a smaller step, `15100 MiB`, on the accepted production/min-profile
+  slots12 SOTA.
+
+Theoretical expectation:
+
+- Extra cache: `+100 MiB`.
+- Approximate capacity:
+  - down slot `7.44 MiB`, so at most about `13` additional down slots if the
+    split allocates them there;
+  - up/gate slot `5.36 MiB`, so at most about `18` additional up/gate slots if
+    the split allocates them there.
+- Maximum possible benefit is bounded by current miss traffic:
+  - n32 expert-pack bytes remain `87082139648` in 7FB;
+  - n96 expert-pack bytes remain `214923018240` in 7FB.
+- Realistic improvement should be small unless those extra slots catch hot
+  misses. If cache admission changes create extra movement or GPU memory
+  pressure, reject immediately.
+
+Experiment:
+
+- Env-only; no source patch.
+- Use stable repo runner:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
+- Change only:
+  - `VRAM_MIB=15000` -> `VRAM_MIB=15100`.
+- Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fc-vram15100-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15100 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- strict cold start;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Decision rule:
+
+- If first n32 is slower than accepted 7FB n32 B `29182.49 ms / 31`, reject
+  immediately.
+- If first n32 beats `29182.49 ms / 31`, run one additional n32 cold-start
+  confirmation.
+- Only if both n32 runs beat `29182.49 ms / 31`, run two n96 cold-start
+  confirmations.
+- Both n96 confirmations must beat accepted 7FB n96 B `70087.31 ms / 77`.
+- Promotion requires all hard gates plus reproducible quality.
