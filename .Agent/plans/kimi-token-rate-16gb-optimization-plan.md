@@ -57087,3 +57087,163 @@ Decision rule:
   tensor backend assignment or a GPU-resident proxy tensor path.
 - If unsupported quant type fallback is the root cause, next phase targets the
   exact quant kernels/types rather than broad scheduler changes.
+
+### 7IG result
+
+- Source head:
+  `f89505c80` (`ggml: add moe split assignment profile`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)` on the server passed.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-195017Z-n32-phase7ig-moe-assign-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard f89505c80
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-195017Z-n32-phase7ig-moe-assign-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=16
+GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `79090.07 ms`;
+  - decode `29650.02 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15040724992`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Split profile totals:
+  - all: wall `107512.155 ms`;
+  - all CPU: wall `106988.605 ms`;
+  - all CUDA0: wall `523.550 ms`;
+  - prompt CPU: wall `77569.806 ms`;
+  - decode: wall `29596.735 ms`;
+  - decode CPU: wall `29418.799 ms`;
+  - decode CUDA0: wall `177.936 ms`.
+- Assignment profile finding:
+  - decode CPU split shape is consistently two nodes:
+    `ffn_moe_swiglu-*` then `ffn_moe_down-*`;
+  - `ffn_moe_swiglu-*`:
+    - op `MOE_FUSED_UP_GATE`;
+    - type `f32`;
+    - output buffer `CUDA_Host`;
+    - `supports=[CUDA0:0,CPU:1]`;
+    - src0/src1 expert weights are `CPU_Mapped`, usually `iq2_s` or
+      `iq3_xxs`;
+    - activation/topk srcs are `CUDA_Host`;
+  - `ffn_moe_down-*`:
+    - op `MUL_MAT_ID`;
+    - type `f32`;
+    - output buffer `CUDA_Host`;
+    - `supports=[CUDA0:1,CPU:1]`;
+    - src0 down weights are `CPU_Mapped`, with types including `q3_K`,
+      `q4_0`, and `iq4_xs`;
+    - src1 is the CPU-assigned `ffn_moe_swiglu-*` output.
+- Root cause:
+  - CUDA backend does not declare support for `GGML_OP_MOE_FUSED_UP_GATE`;
+  - therefore the fused up/gate node is assigned to CPU;
+  - down supports CUDA, but it consumes the CPU-assigned up/gate output, so the
+    scheduler keeps the two-node MoE split on CPU.
+- Important nuance:
+  - the CPU implementation of `MOE_FUSED_UP_GATE` already calls
+    `ggml_cuda_moe_stream_up_gate_batch()` through the weak-symbol custom path
+    when eligible;
+  - after success it clears row counts, so it should not run the CPU fallback
+    matmul for those rows;
+  - therefore the large CPU split wall may be CPU wrapper time around CUDA batch
+    waits, barriers, and the following CPU-backend down path, not necessarily
+    pure scalar CPU math.
+- 7IG conclusion:
+  - The assignment diagnosis passes all gates and is kept.
+  - Directly adding `supports_op` for `MOE_FUSED_UP_GATE` is not sufficient by
+    itself because CUDA graph execution also needs an implementation case for
+    that op.
+  - Before changing backend support, measure the CPU MoE wrapper stages with the
+    existing CPU MoE profiler to separate:
+    - CUDA batch time;
+    - CPU fallback time;
+    - barriers;
+    - routing/conversion;
+    - down wrapper time.
+
+## Phase 7IH: CPU MoE wrapper stage attribution
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IF/7IG show decode split wall is almost entirely CPU backend.
+- 7IG shows the CPU assignment is caused by `MOE_FUSED_UP_GATE`
+  `supports=[CUDA0:0,CPU:1]`.
+- However, the CPU implementation can still invoke CUDA custom batch paths, so
+  CPU split wall must be decomposed before source changes.
+
+Hypothesis:
+
+- If `GGML_KIMI_CPU_MOE_PROFILE` shows most decode wall in
+  `cuda_batch_us`/post-CUDA barrier, the next optimization should reduce wrapper
+  synchronization or move the op into true CUDA backend execution.
+- If it shows significant `fallback_us`, the next optimization should remove
+  actual CPU fallback rows/types.
+- If down dominates despite CUDA support, the next optimization should focus on
+  why down remains in the CPU split and whether it can consume the custom CUDA
+  up/gate output without host round trips.
+
+Experiment:
+
+- No source change.
+- Run strict cold-start n32 with:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=16`;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32`.
+- Do not enable assignment profile in this run; 7IG already captured the support
+  reason and assignment logs add noise.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- logs must include `[kimi_cpu_moe_profile] up_gate` and
+  `[kimi_cpu_moe_profile] down`.
+
+Decision rule:
+
+- If up_gate `cuda_batch_us` plus barriers dominate, next source design targets
+  true CUDA backend support for `MOE_FUSED_UP_GATE` or an asynchronous wrapper
+  that avoids blocking the CPU split.
+- If down `cuda_batch_us`/fallback dominates, next source design targets down
+  path consumption and fallback elimination.
+- If fallback is near zero and wall is CUDA wait, do not optimize CPU scalar
+  kernels; target synchronization/stream boundaries.
