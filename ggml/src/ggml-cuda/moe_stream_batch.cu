@@ -3613,6 +3613,58 @@ static bool io_batch_profile_enabled() {
     return env && env[0];
 }
 
+static bool io_wait_trace_enabled() {
+    const char *env = std::getenv("GGML_MOE_IO_WAIT_TRACE_OUT");
+    return env && env[0];
+}
+
+static void io_wait_trace_record(
+        const char *op,
+        size_t read_jobs,
+        size_t completed_before,
+        size_t inflight_before,
+        size_t next_job_before,
+        size_t depth,
+        size_t refill_batch,
+        double wait_ms,
+        size_t drained_cqes,
+        double enqueue_ms,
+        size_t completed_after,
+        size_t inflight_after) {
+    const char *path = std::getenv("GGML_MOE_IO_WAIT_TRACE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,read_jobs,completed_before,inflight_before,next_job,depth,refill_batch,"
+                "wait_ms,drained_cqes,enqueue_ms,completed_after,inflight_after\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%zu,%zu,%zu,%zu,%zu,%zu,%.6f,%zu,%.6f,%zu,%zu\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            read_jobs,
+            completed_before,
+            inflight_before,
+            next_job_before,
+            depth,
+            refill_batch,
+            wait_ms,
+            drained_cqes,
+            enqueue_ms,
+            completed_after,
+            inflight_after);
+    std::fclose(f);
+}
+
 static void io_batch_profile_record(
         const char *op,
         const char *first_tensor,
@@ -4340,6 +4392,7 @@ static bool expert_pack_iouring_copy_jobs(
     double io_batch_submit_ms = 0.0;
     double io_batch_wait_ms = 0.0;
     double io_batch_enqueue_ms = 0.0;
+    double io_wait_enqueue_ms = 0.0;
     uint64_t io_batch_submit_calls = 0;
     uint64_t io_batch_wait_calls = 0;
     uint64_t io_batch_cqes = 0;
@@ -4416,6 +4469,7 @@ static bool expert_pack_iouring_copy_jobs(
     const size_t initial_submit_jobs = next_job;
 
     size_t completed = 0;
+    const bool profile_io_wait = io_wait_trace_enabled();
     while (completed < read_jobs.size()) {
         g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
         ++g_expert_pack.iouring_inflight_samples;
@@ -4448,7 +4502,7 @@ static bool expert_pack_iouring_copy_jobs(
             ++g_expert_pack.iouring_cqes;
             ++ring.iouring_cqes;
 
-            const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch;
+            const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch || profile_io_wait;
             const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if ((profile_stage || profile_copy_h2d) && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
@@ -4483,6 +4537,7 @@ static bool expert_pack_iouring_copy_jobs(
                 enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
             if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
+            if (profile_io_wait) io_wait_enqueue_ms += enqueue_ms;
             slot.pending = true;
             ++ring.copies;
             ++g_expert_pack.iouring_reads;
@@ -4559,6 +4614,10 @@ static bool expert_pack_iouring_copy_jobs(
         };
 
         const auto wait_start = std::chrono::steady_clock::now();
+        const size_t wait_completed_before = completed;
+        const size_t wait_inflight_before = inflight;
+        const size_t wait_next_job_before = next_job;
+        const double wait_enqueue_before = io_wait_enqueue_ms;
         io_uring_cqe *cqe = nullptr;
         ++g_expert_pack.iouring_wait_calls;
         ++ring.iouring_wait_calls;
@@ -4572,7 +4631,9 @@ static bool expert_pack_iouring_copy_jobs(
             ++g_expert_pack.iouring_fallbacks;
             return false;
         }
+        size_t drained_cqes = 0;
         if (!handle_cqe(cqe)) return false;
+        ++drained_cqes;
         if (refill_batch == 1 && !refill_pending()) return false;
 
         while (completed < read_jobs.size() && inflight > 0) {
@@ -4582,7 +4643,23 @@ static bool expert_pack_iouring_copy_jobs(
                 break;
             }
             if (!handle_cqe(extra_cqe)) return false;
+            ++drained_cqes;
             if (refill_batch == 1 && !refill_pending()) return false;
+        }
+        if (profile_io_wait) {
+            io_wait_trace_record(
+                    trace_op,
+                    read_jobs.size(),
+                    wait_completed_before,
+                    wait_inflight_before,
+                    wait_next_job_before,
+                    depth,
+                    refill_batch,
+                    wait_ms,
+                    drained_cqes,
+                    io_wait_enqueue_ms - wait_enqueue_before,
+                    completed,
+                    inflight);
         }
         if (refill_batch > 1 && !refill_pending()) {
             return false;
