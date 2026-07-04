@@ -956,11 +956,21 @@ static bool g_profile_enabled = false;
 static std::vector<profile_entry> g_prompt_profile;
 static bool g_prompt_profile_loaded = false;
 static bool g_prompt_profile_enabled = false;
+static std::vector<profile_entry> g_exact_pin_profile;
+static bool g_exact_pin_profile_loaded = false;
+static bool g_exact_pin_profile_enabled = false;
 static std::mutex g_profile_mu;
 static std::mutex g_profile_pinned_mu;
 static char g_preloaded_tensors[256][128] = {};
 static int g_n_preloaded_tensors = 0;
+static char g_exact_pin_preloaded_tensors[256][128] = {};
+static int g_n_exact_pin_preloaded_tensors = 0;
 static std::atomic<int> g_profile_preload_calls{0};
+static std::atomic<uint64_t> g_exact_pin_attempts{0};
+static std::atomic<uint64_t> g_exact_pin_loaded{0};
+static std::atomic<uint64_t> g_exact_pin_cached{0};
+static std::atomic<uint64_t> g_exact_pin_failed{0};
+static std::atomic<uint64_t> g_exact_pin_tensors{0};
 
 struct batch_route_profile_entry {
     int expert_idx = -1;
@@ -1446,6 +1456,15 @@ static void batch_cache_report_atexit() {
     if (async_prefetch_waits > 0) {
         std::fprintf(stderr, "[moe_stream_batch] async prefetch waits=%lu\n", async_prefetch_waits);
     }
+    const uint64_t exact_attempts = g_exact_pin_attempts.load();
+    const uint64_t exact_loaded = g_exact_pin_loaded.load();
+    const uint64_t exact_cached = g_exact_pin_cached.load();
+    const uint64_t exact_failed = g_exact_pin_failed.load();
+    if (exact_attempts || exact_loaded || exact_cached || exact_failed) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] exact pin preload: tensors=%lu attempts=%lu loaded=%lu cached=%lu failed=%lu\n",
+            g_exact_pin_tensors.load(), exact_attempts, exact_loaded, exact_cached, exact_failed);
+    }
 }
 
 static bool profile_protect_enabled() {
@@ -1554,6 +1573,27 @@ static bool tensor_already_preloaded(const char *name) {
     return false;
 }
 
+static bool exact_pin_tensor_already_preloaded(const char *name) {
+    if (!name || !name[0]) return true;
+    for (int i = 0; i < g_n_exact_pin_preloaded_tensors; ++i) {
+        if (std::strcmp(g_exact_pin_preloaded_tensors[i], name) == 0) return true;
+    }
+    static bool max_inited = false;
+    static long max_tensors = 0;
+    if (!max_inited) {
+        const char *max_env = std::getenv("GGML_MOE_VRAM_EXACT_PIN_MAX_TENSORS");
+        max_tensors = (max_env && max_env[0]) ? std::atol(max_env) : 0;
+        max_inited = true;
+    }
+    if (max_tensors > 0 && g_n_exact_pin_preloaded_tensors >= max_tensors) return true;
+    if (g_n_exact_pin_preloaded_tensors < (int)(sizeof(g_exact_pin_preloaded_tensors) / sizeof(g_exact_pin_preloaded_tensors[0]))) {
+        std::snprintf(g_exact_pin_preloaded_tensors[g_n_exact_pin_preloaded_tensors++],
+                sizeof(g_exact_pin_preloaded_tensors[0]), "%s", name);
+        ++g_exact_pin_tensors;
+    }
+    return false;
+}
+
 static bool profile_has_tensor_locked(const std::vector<profile_entry> &entries, const char *name) {
     if (!name || !name[0]) return false;
     for (const profile_entry &e : entries) {
@@ -1633,6 +1673,15 @@ static void load_prompt_profile_once() {
     const char *path = std::getenv("GGML_MOE_VRAM_PROFILE_PROMPT");
     g_prompt_profile_enabled = load_profile_file(path, g_prompt_profile, "prompt profile");
     g_prompt_profile_loaded = true;
+}
+
+static void load_exact_pin_profile_once() {
+    if (g_exact_pin_profile_loaded) return;
+    std::lock_guard<std::mutex> lk(g_profile_mu);
+    if (g_exact_pin_profile_loaded) return;
+    const char *path = std::getenv("GGML_MOE_VRAM_EXACT_PIN_PROFILE");
+    g_exact_pin_profile_enabled = load_profile_file(path, g_exact_pin_profile, "exact pin profile");
+    g_exact_pin_profile_loaded = true;
 }
 
 static int batch_cache_id_for_size(size_t expert_sz) {
@@ -4618,10 +4667,11 @@ static int batch_cache_insert_slot(
         bool allow_evict, bool preload, const int *avoid_slots = nullptr, int n_avoid_slots = 0,
         bool do_copy = true, const char *tensor_name = nullptr, int expert_idx = -1,
         bool prefetch_down = false, bool pin_preload = true, bool async_prefetch = false,
-        uint64_t profile_count = 0) {
+        uint64_t profile_count = 0, bool force_pin = false) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
-    const bool pin_slot = preload && pin_preload && profile_protect_enabled();
-    if (pin_slot && c->pinned >= profile_preload_slot_budget(c)) return -1;
+    const bool pin_slot = preload && pin_preload && (profile_protect_enabled() || force_pin);
+    const size_t pin_budget = force_pin && !profile_protect_enabled() ? (size_t)c->n_slots : profile_preload_slot_budget(c);
+    if (pin_slot && c->pinned >= pin_budget) return -1;
 
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
@@ -4858,14 +4908,62 @@ static void preload_profile_entries_for_tensor(
     }
 }
 
+static void preload_exact_pin_for_tensor(
+        const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
+    load_exact_pin_profile_once();
+    if (!g_exact_pin_profile_enabled || !tensor_name || !tensor_name[0]) return;
+    batch_vram_cache *cache = batch_cache_get(src0_bytes);
+    if (!cache) return;
+    std::lock_guard<std::mutex> lk(g_profile_mu);
+    if (exact_pin_tensor_already_preloaded(tensor_name)) return;
+
+    int loaded = 0;
+    int cached = 0;
+    int failed = 0;
+    for (const profile_entry &e : g_exact_pin_profile) {
+        if (e.expert_bytes != 0 && e.expert_bytes != src0_bytes) continue;
+        if (std::strcmp(e.tensor, tensor_name) != 0) continue;
+        if (e.expert_idx < 0 || e.expert_idx >= n_as) continue;
+        ++g_exact_pin_attempts;
+        const uintptr_t key = batch_key_hash(tensor_name, e.expert_idx);
+        const int existing_slot = batch_cache_find_slot(cache, key);
+        if (existing_slot >= 0) {
+            if (!cache->slot_pinned[existing_slot]) {
+                cache->slot_pinned[existing_slot] = true;
+                ++cache->pinned;
+                profile_pinned_key_record((uint64_t)key);
+            }
+            ++cached;
+            ++g_exact_pin_cached;
+            continue;
+        }
+        const char *expert_host = (const char *)src0_data + (size_t)e.expert_idx * nb02;
+        const int slot = batch_cache_insert_slot(cache, key, expert_host, src0_bytes, st, true, true,
+                nullptr, 0, true, tensor_name, e.expert_idx, false, true, false, e.count, true);
+        if (slot >= 0) {
+            ++loaded;
+            ++g_exact_pin_loaded;
+        } else {
+            ++failed;
+            ++g_exact_pin_failed;
+        }
+    }
+    if (loaded > 0 || cached > 0 || failed > 0) {
+        std::fprintf(stderr, "[moe_stream_batch] exact pin preload: %s loaded=%d cached=%d failed=%d\n",
+                tensor_name, loaded, cached, failed);
+    }
+}
+
 static void preload_profile_for_tensor(
         const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
     load_profile_once();
-    if (!g_profile_enabled) return;
-    std::lock_guard<std::mutex> lk(g_profile_mu);
-    preload_profile_entries_for_tensor(
-        g_profile, "profile", tensor_name, src0_data, n_as, nb02, src0_bytes, st,
-        true, profile_preload_evict_enabled(), true, true, profile_preload_slot_budget(batch_cache_get(src0_bytes)));
+    if (g_profile_enabled) {
+        std::lock_guard<std::mutex> lk(g_profile_mu);
+        preload_profile_entries_for_tensor(
+            g_profile, "profile", tensor_name, src0_data, n_as, nb02, src0_bytes, st,
+            true, profile_preload_evict_enabled(), true, true, profile_preload_slot_budget(batch_cache_get(src0_bytes)));
+    }
+    preload_exact_pin_for_tensor(tensor_name, src0_data, n_as, nb02, src0_bytes, st);
 }
 
 static void preload_prompt_profile_for_tensor(
