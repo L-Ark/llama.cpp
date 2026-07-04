@@ -8462,3 +8462,69 @@ Next active direction:
    - only after exact or top1-equivalent arithmetic is proven, revisit any up/down offload benchmark.
 4. If arithmetic equivalence cannot be made exact cheaply, return to an exact CPU-side fallback reduction path with a new hard-bound, such as asynchronous source movement that does not displace the accepted gate cache and does not rely on global warm page cache.
 5. Every new candidate still must pass RAM <=16GB including page cache, France correctness, TTFT <=`33617.688744 ms` for promotion, and pushed-source reproduction before becoming SOTA.
+
+### 2026-07-04 Q8_0 CUDA Up/Down Path Screening
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/q80-cuda-updown-path-screening.json`
+- Artifact sha256: `5db42dce9f8302f55db00b56364132cfe4b23fd597d087d8c1c2d21cbe4aac91`
+
+Why the split verifier failed:
+
+- Existing historical compare artifact `.Agent/runs/20260704-vendor-ds4-coldstart/updown-gpu-compare-result.json` showed individual streamed ops are close to CPU fallback (`~1e-6` max-abs scale), so this is not a gross CUDA kernel bug.
+- The new fixed-text top1 verifier is stricter and failed at low-margin positions. That means the small numerical differences are still enough to alter token-level logits after multiple layers.
+- Source inspection explains the mismatch:
+  - CPU MXFP4 fallback uses `ggml_vec_dot_mxfp4_q8_0` with activation type `GGML_TYPE_Q8_0`.
+  - CUDA MMVQ MXFP4 uses `quantize_row_q8_1_cuda` and `vec_dot_mxfp4_q8_1`.
+  - `ggml_cuda_moe_stream_one()` currently requires F32 `src1` and ignores the nominal `src1_q8_1` parameters.
+  - CUDA has a block-level `quantize_f32_q8_0_block` helper, but there is no current MXFP4 x Q8_0 MMVQ path.
+
+Hard bound for this candidate class:
+
+- Current accepted SOTA decode window estimate: `31.04744671 s`.
+- Decoded token estimate: `136.608765524`.
+- Target `10 tok/s` decode window: `13.6608765524 s`.
+- Required decode saving: `17.3865701576 s`.
+- Ideal full decode up/down fallback removal: `19.029457 s`, ceiling `11.367 tok/s`.
+- Therefore a full decode up/down offload path has only about `1.6428868424 s` total overhead budget to still reach `10 tok/s`.
+
+Decision:
+
+- Close the existing Q8_1 one-stream up/down path for SOTA work unless an exact verifier later proves top1 stability.
+- Do not spend more time on source movement/direct/prefetch variants; `source-movement-async-bound.json` already shows top64/top128/top256 direct movement is net negative under the 16GB cgroup.
+- The next exact GPU/offload candidate is a default-off MXFP4 x Q8_0 one-stream path for up/down:
+  - pass CPU `params->wdata` Q8_0 rows and row size from `ggml-cpu.c` into the CUDA one-stream call under an explicit env gate;
+  - add a specialized CUDA MXFP4 x Q8_0 rows helper instead of the current Q8_1 helper;
+  - keep accepted gate-only SOTA behavior unchanged by default;
+  - first run the fixed-text `llama-results` top1 verifier, not a token-rate benchmark.
+
+Implementation rules for this candidate:
+
+1. Before source edits, write a source-level design section that names the exact files/functions and workspace sizes.
+2. The first source patch must be default-off and must not change `ffn_gate_exps` accepted SOTA behavior.
+3. The first run is a short arithmetic/top1 verifier. Passing means `same_top1=145/145`, no OOM, and 16GB cgroup compliance.
+4. Only after top1 passes may a strict cold France benchmark run.
+5. If the Q8_0 CUDA path is too slow to plausibly keep overhead under the `1.64s` budget, reject it after diagnostic artifacts and do not promote.
+
+Source-level design before implementation:
+
+- Env gate: `GGML_MOE_STREAM_ONE_MXFP4_Q80=1`. With this env unset, `ggml_cuda_moe_stream_one()` and the CPU call site must preserve current behavior exactly.
+- CPU call site: `ggml/src/ggml-cpu/ggml-cpu.c`, inside `ggml_compute_forward_mul_mat_id()` one-stream branch.
+  - Current call passes `(const float *) src1->data` and `NULL, 0` for the quantized activation parameters.
+  - New diagnostic path should pass `wdata_stream` and `row_size_stream` for Q8_0 activation rows when `src0->type==GGML_TYPE_MXFP4`, `src1->type==GGML_TYPE_F32`, and the env gate is enabled.
+  - Matrix row mapping must still select the exact `(i11, i12)` activation row corresponding to each routed row.
+- CUDA entry point: `ggml/src/ggml-cuda/moe_stream.cu`, `ggml_cuda_moe_stream_one()`.
+  - Add a Q8_0 activation branch only for MXFP4 under the env gate.
+  - Copy only the selected Q8_0 activation rows to a per-slot `d_src1_q80` workspace. Q8_0 row bytes should be `ggml_row_size(GGML_TYPE_Q8_0, ne00)` from the CPU side; do not infer it from Q8_1 padding.
+  - Reuse existing src0 VRAM cache / expert pack behavior; do not change gate pack/prefill/cache semantics.
+- CUDA kernel/helper: add a specialized MXFP4 x Q8_0 rows helper rather than modifying the generic Q8_1 MMVQ path first.
+  - It may live in `ggml/src/ggml-cuda/moe_stream.cu` for the diagnostic patch or in `ggml/src/ggml-cuda/mmvq.cu` if reusing the existing MMVQ launch structure is cleaner.
+  - It must produce F32 output layout identical to the current one-stream branch so scatter code remains unchanged.
+- Workspace budget:
+  - Persistent extra device workspace should be per slot and proportional to `cne1 * row_size_q80`, plus `d_dst`; it must not allocate another expert-sized cache.
+  - Host RAM must remain inside the 16GB cgroup, including page cache. No new persistent host pack/cache is allowed for this verifier.
+- Verification sequence:
+  - Build only after `git diff --check`.
+  - Run fixed-text `llama-results --sequential-logits --top1-report` with the Q8_0 env enabled and a narrow up/down filter.
+  - Record source diff hash, binary/lib hashes, top1 result, cgroup stats, and cache counters before deciding whether any benchmark is allowed.

@@ -1,0 +1,124 @@
+{
+  "accepted_sota": {
+    "decode_window_seconds": 31.047446709999996,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "artifact": "q80-cuda-updown-path-screening",
+  "candidate": {
+    "main_risks": [
+      "Implementation is not a small filter patch; generic CUDA MMVQ assumes Q8_1 activation layout.",
+      "The 10 tok/s overhead budget is only about 1.64s if all decode up/down fallback is removed, so a naive kernel will not be enough.",
+      "Any added VRAM workspace must not steal the accepted 13.2GiB gate cache or break the 16GB host cgroup including page cache."
+    ],
+    "minimum_design": [
+      "Extend CPU call site to pass params->wdata Q8_0 rows and row_size_stream to ggml_cuda_moe_stream_one when an explicit diagnostic env is set.",
+      "Add a specialized CUDA MXFP4 x Q8_0 MMVQ/rows helper instead of using the existing Q8_1 helper.",
+      "Keep the accepted gate-only SOTA path unchanged by default.",
+      "First run llama-results top1 verifier; only if 145/145 passes, run strict cold token-rate benchmark."
+    ],
+    "name": "default-off MXFP4 x Q8_0 CUDA one-stream path for up/down",
+    "screening_decision": "worth designing as the next exact compute/offload candidate; do not implement as a blind full benchmark",
+    "why_possible": "It would use the same Q8_0 activation quantization semantics as CPU fallback, removing the Q8_1 drift that can flip low-margin top1 positions, while targeting the only remaining bottleneck class with a 10 tok/s no-overhead ceiling."
+  },
+  "created_utc": "2026-07-04T06:34:53Z",
+  "hard_bound_rows": {
+    "all_decode_updown_removed": {
+      "class_": "exact_compute_or_offload_ideal",
+      "name": "all decode up/down fallback removed",
+      "removable_ms": 19029.457,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 11.367023006379325
+    },
+    "decode_down_removed": {
+      "class_": "exact_compute_or_offload",
+      "name": "decode down fallback removed",
+      "removable_ms": 9332.332,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 6.290952976688191
+    },
+    "decode_up_removed": {
+      "class_": "exact_compute_or_offload",
+      "name": "decode up fallback removed",
+      "removable_ms": 9697.125,
+      "source": "current-sota-cpu-fallback-profile",
+      "theoretical_tok_s_no_overhead": 6.398440612724613
+    }
+  },
+  "source_facts": [
+    {
+      "evidence_lines": "type_traits_cpu[GGML_TYPE_MXFP4]",
+      "fact": "CPU MXFP4 fallback uses ggml_vec_dot_mxfp4_q8_0 and vec_dot_type GGML_TYPE_Q8_0",
+      "file": "ggml/src/ggml-cpu/ggml-cpu.c"
+    },
+    {
+      "evidence_lines": "ggml_cuda_moe_stream_mmvq_rows_dev / vec_dot_mxfp4_q8_1",
+      "fact": "CUDA MMVQ MXFP4 path uses quantize_row_q8_1_cuda and vec_dot_mxfp4_q8_1",
+      "file": "ggml/src/ggml-cuda/mmvq.cu and ggml/src/ggml-cuda/vecdotq.cuh"
+    },
+    {
+      "evidence_lines": "if (!src1_f32) return false; build warnings for unused parameters",
+      "fact": "ggml_cuda_moe_stream_one currently requires src1_f32 and ignores src1_q8_1/src1_padded_num_cols parameters",
+      "file": "ggml/src/ggml-cuda/moe_stream.cu"
+    },
+    {
+      "evidence_lines": "quantize_f32_q8_0_block exists; grep found no vec_dot_mxfp4_q8_0 CUDA path",
+      "fact": "CUDA has a block-level quantize_f32_q8_0 helper, but no existing MMVQ MXFP4 x Q8_0 activation path",
+      "file": "ggml/src/ggml-cuda/cpy-utils.cuh / set-rows.cu"
+    }
+  ],
+  "source_head": "dd20d7c835bc83b5916909d954baf420e261ad66",
+  "source_status_short": "",
+  "split_top1_verifier": {
+    "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/split-updown-top1-listfilter-result.json",
+    "artifact_sha256": "71a1655c09011a7256c70658bfd3e655d4768c38d4e1d4b9e7d34c35debf60ad",
+    "cases": [
+      {
+        "filter": "ffn_gate_exps,ffn_up_exps",
+        "first_mismatch_pos": 9,
+        "label": "split-up-only-top1-listfilter",
+        "memory_peak_bytes": 16000000000,
+        "n_positions_base": 145,
+        "oom_seen": false,
+        "pack_counter": [
+          "[moe_stream] one expert pack: hits=4497 misses=19563 reads=4497 bytes=20040646656 failures=0 entries=4599 direct_enabled=1 direct_reads=4497 direct_failures=0 direct_fallbacks=0"
+        ],
+        "same_top1": 139,
+        "status": "fail",
+        "vram_counter": [
+          "[moe_stream] VRAM cache: hits=32590 misses=21060 hit_rate=60.7%"
+        ]
+      },
+      {
+        "filter": "ffn_gate_exps,ffn_down_exps",
+        "first_mismatch_pos": 4,
+        "label": "split-down-only-top1-listfilter",
+        "memory_peak_bytes": 16000000000,
+        "n_positions_base": 145,
+        "oom_seen": false,
+        "pack_counter": [
+          "[moe_stream] one expert pack: hits=4474 misses=19567 reads=4474 bytes=19938148352 failures=0 entries=4599 direct_enabled=1 direct_reads=4474 direct_failures=0 direct_fallbacks=0"
+        ],
+        "same_top1": 134,
+        "status": "fail",
+        "vram_counter": [
+          "[moe_stream] VRAM cache: hits=32609 misses=21041 hit_rate=60.8%"
+        ]
+      }
+    ],
+    "decision": "existing Q8_1 one-stream up/down path fails token-level top1; no token-rate benchmark allowed",
+    "overall_status": "fail"
+  },
+  "target_math": {
+    "all_decode_updown_fallback_removable_seconds": 19.029456999999997,
+    "max_total_overhead_seconds_for_10_tok_s_if_all_decode_updown_removed": 1.6428868423999994,
+    "overhead_budget_fraction_of_removable": 0.08633387922734735,
+    "required_decode_saving_seconds": 17.386570157599998,
+    "target_decode_window_seconds": 13.660876552399998,
+    "target_tok_s": 10.0
+  }
+}
