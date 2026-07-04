@@ -1,0 +1,1190 @@
+{
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "artifact_hashes_sha256": {
+    "cpu_chunk_trace.csv": "00da07e04e501d618b94f9ba17403d757ed6c27d3e3e1c12903bdb919d1bf18a",
+    "environment.txt": "fd686423f67c2982cb0f6b1d07508f5082aef50273088ee784dcf55a1e4e862d",
+    "exact_command.txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "fallback_profile.csv": "5665dafac561926aca569839faeb6de7c5dc4722b3ae6b50582a40656f64939e",
+    "one_trace.csv": "158f12157bbdbf597faa4dc145a2a23120cd74a673f274f931f3a7ec4948143a",
+    "resource_samples.tsv": "4d6a7d811d6c1b4135ae4fc5b2c75c4c13993fd91bc64f3e4483b7bdc151c098",
+    "stderr.txt": "b697c56b42f9f1a75b5b7d0f11bc50b6b1bf528ec4105849736b008b3a1e26d9",
+    "stdout.txt": "f4dc6b468a3c87d99d713f3cdbb9574de1b59b2d5ff72aa73aa2d20f67188cc3",
+    "summary.json": "e9693163d6598d5c55ababf27836a3da35030887c1bc3cb8d1082cfd585ec1ac"
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T013715Z-20260704_cpu_chunk_trace_sota_diagnostic_full/france-cpu40-vram0gb",
+  "conclusion": {
+    "evidence": [
+      "trace_sum_ms/20 is close to stderr fallback wall estimate, leaving only about 1-2s attributable to non-chunk overhead/tail at this granularity",
+      "per-thread total spread is about 2.94s across the whole run, not enough to explain the gap to 10 tok/s",
+      "top tensors are early-layer up/down experts, matching CPU fallback compute/source pressure rather than gate cache failure",
+      "gate pack and VRAM cache counters remain healthy; RAM and correctness pass"
+    ],
+    "next_recommendation": "do not repeat chunk-size or affinity probes; use lower-overhead dot/page split evidence or move to algorithmic correctness-preserving speculation/offload only with a clear >1-2s bound",
+    "primary": "chunk scheduling is not the dominant bottleneck under current 4.4 tok/s SOTA config"
+  },
+  "diagnostic_only": true,
+  "experiment": "current-sota-cpu-chunk-trace-full",
+  "role_thread_spread": {
+    "down": {
+      "max_ms": 14073.149,
+      "min_ms": 12625.152,
+      "spread_ms": 1447.997
+    },
+    "up": {
+      "max_ms": 13387.504,
+      "min_ms": 11894.627,
+      "spread_ms": 1492.877
+    }
+  },
+  "role_totals": {
+    "down": {
+      "max_ms": 40.959,
+      "p50_ms": 0.061,
+      "p95_ms": 1.764,
+      "p99_ms": 10.48,
+      "rows": 482048,
+      "sum_ms": 260767.295,
+      "sum_ms_div_20": 13038.365
+    },
+    "up": {
+      "max_ms": 104.473,
+      "p50_ms": 0.054,
+      "p95_ms": 1.831,
+      "p99_ms": 11.81,
+      "rows": 427904,
+      "sum_ms": 247226.335,
+      "sum_ms_div_20": 12361.317
+    }
+  },
+  "summary_metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 66.55,
+    "eval_tok_s": 4.1,
+    "memory_file_bytes": 15096012800,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 256425,
+    "prompt_tok_s": 1.8,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 33425.093549,
+    "workingset_refault_file": 1670050
+  },
+  "thread_totals": {
+    "bottom": [
+      {
+        "ith": 4,
+        "max_ms": 25.571,
+        "rows": 45467,
+        "sum_ms": 25236.724
+      },
+      {
+        "ith": 11,
+        "max_ms": 39.698,
+        "rows": 45909,
+        "sum_ms": 25230.032
+      },
+      {
+        "ith": 13,
+        "max_ms": 25.48,
+        "rows": 45658,
+        "sum_ms": 25133.889
+      },
+      {
+        "ith": 9,
+        "max_ms": 40.166,
+        "rows": 45476,
+        "sum_ms": 25128.375
+      },
+      {
+        "ith": 8,
+        "max_ms": 103.687,
+        "rows": 45341,
+        "sum_ms": 25124.655
+      },
+      {
+        "ith": 6,
+        "max_ms": 25.489,
+        "rows": 46273,
+        "sum_ms": 25073.603
+      },
+      {
+        "ith": 12,
+        "max_ms": 25.354,
+        "rows": 45517,
+        "sum_ms": 24981.528
+      },
+      {
+        "ith": 7,
+        "max_ms": 104.473,
+        "rows": 45685,
+        "sum_ms": 24901.715
+      },
+      {
+        "ith": 1,
+        "max_ms": 24.666,
+        "rows": 45494,
+        "sum_ms": 24817.431
+      },
+      {
+        "ith": 0,
+        "max_ms": 25.286,
+        "rows": 46568,
+        "sum_ms": 24519.779
+      }
+    ],
+    "count": 20,
+    "max_ms": 27460.653,
+    "mean_ms": 25399.681,
+    "min_ms": 24519.779,
+    "spread_ms": 2940.874,
+    "sum_ms": 507993.63,
+    "top": [
+      {
+        "ith": 19,
+        "max_ms": 26.801,
+        "rows": 44490,
+        "sum_ms": 27460.653
+      },
+      {
+        "ith": 18,
+        "max_ms": 25.845,
+        "rows": 44894,
+        "sum_ms": 26637.944
+      },
+      {
+        "ith": 17,
+        "max_ms": 39.575,
+        "rows": 45976,
+        "sum_ms": 25726.925
+      },
+      {
+        "ith": 10,
+        "max_ms": 39.978,
+        "rows": 45496,
+        "sum_ms": 25657.91
+      },
+      {
+        "ith": 15,
+        "max_ms": 24.934,
+        "rows": 45072,
+        "sum_ms": 25651.31
+      },
+      {
+        "ith": 16,
+        "max_ms": 40.73,
+        "rows": 45112,
+        "sum_ms": 25562.409
+      },
+      {
+        "ith": 14,
+        "max_ms": 25.315,
+        "rows": 45242,
+        "sum_ms": 25305.285
+      },
+      {
+        "ith": 3,
+        "max_ms": 40.127,
+        "rows": 45435,
+        "sum_ms": 25304.688
+      },
+      {
+        "ith": 5,
+        "max_ms": 25.99,
+        "rows": 45472,
+        "sum_ms": 25281.344
+      },
+      {
+        "ith": 2,
+        "max_ms": 40.71,
+        "rows": 45375,
+        "sum_ms": 25257.431
+      }
+    ]
+  },
+  "timestamp_utc": "2026-07-04T01:49:00Z",
+  "top_chunks": [
+    {
+      "cne1": 1,
+      "expert": 9,
+      "ir0_end": 824,
+      "ir0_start": 721,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 7,
+      "ms": 104.473,
+      "role": "up",
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 9,
+      "ir0_end": 927,
+      "ir0_start": 824,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 8,
+      "ms": 103.687,
+      "role": "up",
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 1845,
+      "ir0_start": 1640,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 8,
+      "ms": 40.959,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 25,
+      "ir0_end": 3485,
+      "ir0_start": 3280,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 16,
+      "ms": 40.73,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 615,
+      "ir0_start": 410,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 2,
+      "ms": 40.71,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 2050,
+      "ir0_start": 1845,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 9,
+      "ms": 40.166,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 820,
+      "ir0_start": 615,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 3,
+      "ms": 40.127,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 2255,
+      "ir0_start": 2050,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 10,
+      "ms": 39.978,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 32,
+      "ir0_end": 2460,
+      "ir0_start": 2255,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 11,
+      "ms": 39.698,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 25,
+      "ir0_end": 3690,
+      "ir0_start": 3485,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 17,
+      "ms": 39.575,
+      "role": "down",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 120,
+      "ir0_end": 3485,
+      "ir0_start": 3280,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 16,
+      "ms": 33.045,
+      "role": "down",
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 120,
+      "ir0_end": 3690,
+      "ir0_start": 3485,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 17,
+      "ms": 31.946,
+      "role": "down",
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 12,
+      "ir0_end": 2048,
+      "ir0_start": 1957,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 26.801,
+      "role": "up",
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 187,
+      "ir0_end": 4096,
+      "ir0_start": 3895,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 26.539,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 52,
+      "ir0_end": 2048,
+      "ir0_start": 1957,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 26.462,
+      "role": "up",
+      "tensor": "blk.26.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 2,
+      "expert": 10,
+      "ir0_end": 3440,
+      "ir0_start": 3424,
+      "ir1_end": 2,
+      "ir1_start": 0,
+      "ith": 5,
+      "ms": 25.99,
+      "role": "down",
+      "tensor": "blk.34.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 106,
+      "ir0_end": 2048,
+      "ir0_start": 1957,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 25.976,
+      "role": "up",
+      "tensor": "blk.36.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 167,
+      "ir0_end": 2048,
+      "ir0_start": 1957,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 25.957,
+      "role": "up",
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 24,
+      "ir0_end": 1957,
+      "ir0_start": 1854,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 18,
+      "ms": 25.845,
+      "role": "up",
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 80,
+      "ir0_end": 1751,
+      "ir0_start": 1648,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 16,
+      "ms": 25.671,
+      "role": "up",
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 1025,
+      "ir0_start": 820,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 4,
+      "ms": 25.571,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 24,
+      "ir0_end": 2048,
+      "ir0_start": 1957,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 19,
+      "ms": 25.554,
+      "role": "up",
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 1845,
+      "ir0_start": 1640,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 8,
+      "ms": 25.545,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 1230,
+      "ir0_start": 1025,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 5,
+      "ms": 25.539,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 1640,
+      "ir0_start": 1435,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 7,
+      "ms": 25.513,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 1435,
+      "ir0_start": 1230,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 6,
+      "ms": 25.489,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 2870,
+      "ir0_start": 2665,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 13,
+      "ms": 25.48,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 24,
+      "ir0_end": 1854,
+      "ir0_start": 1751,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 17,
+      "ms": 25.437,
+      "role": "up",
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 3690,
+      "ir0_start": 3485,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 17,
+      "ms": 25.436,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "cne1": 1,
+      "expert": 200,
+      "ir0_end": 820,
+      "ir0_start": 615,
+      "ir1_end": 1,
+      "ir1_start": 0,
+      "ith": 3,
+      "ms": 25.428,
+      "role": "down",
+      "tensor": "blk.20.ffn_down_exps.weight"
+    }
+  ],
+  "top_experts": [
+    {
+      "expert": 10,
+      "max_ms": 25.99,
+      "rows": 296,
+      "sum_ms": 724.708,
+      "tensor": "blk.34.ffn_down_exps.weight"
+    },
+    {
+      "expert": 120,
+      "max_ms": 25.039,
+      "rows": 2320,
+      "sum_ms": 574.251,
+      "tensor": "blk.33.ffn_up_exps.weight"
+    },
+    {
+      "expert": 72,
+      "max_ms": 22.65,
+      "rows": 2280,
+      "sum_ms": 554.516,
+      "tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "expert": 45,
+      "max_ms": 21.964,
+      "rows": 80,
+      "sum_ms": 549.517,
+      "tensor": "blk.1.ffn_up_exps.weight"
+    },
+    {
+      "expert": 73,
+      "max_ms": 18.916,
+      "rows": 280,
+      "sum_ms": 540.43,
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "expert": 90,
+      "max_ms": 18.952,
+      "rows": 80,
+      "sum_ms": 527.738,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "expert": 55,
+      "max_ms": 21.098,
+      "rows": 336,
+      "sum_ms": 526.136,
+      "tensor": "blk.37.ffn_down_exps.weight"
+    },
+    {
+      "expert": 128,
+      "max_ms": 18.734,
+      "rows": 160,
+      "sum_ms": 520.426,
+      "tensor": "blk.1.ffn_up_exps.weight"
+    },
+    {
+      "expert": 21,
+      "max_ms": 18.739,
+      "rows": 296,
+      "sum_ms": 510.136,
+      "tensor": "blk.35.ffn_down_exps.weight"
+    },
+    {
+      "expert": 101,
+      "max_ms": 18.674,
+      "rows": 416,
+      "sum_ms": 494.658,
+      "tensor": "blk.28.ffn_down_exps.weight"
+    },
+    {
+      "expert": 108,
+      "max_ms": 24.706,
+      "rows": 228,
+      "sum_ms": 489.448,
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "expert": 150,
+      "max_ms": 19.056,
+      "rows": 376,
+      "sum_ms": 484.634,
+      "tensor": "blk.5.ffn_down_exps.weight"
+    },
+    {
+      "expert": 161,
+      "max_ms": 23.165,
+      "rows": 296,
+      "sum_ms": 484.25,
+      "tensor": "blk.4.ffn_down_exps.weight"
+    },
+    {
+      "expert": 200,
+      "max_ms": 25.571,
+      "rows": 20,
+      "sum_ms": 479.228,
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "expert": 112,
+      "max_ms": 18.709,
+      "rows": 256,
+      "sum_ms": 474.307,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "expert": 183,
+      "max_ms": 22.681,
+      "rows": 552,
+      "sum_ms": 469.967,
+      "tensor": "blk.18.ffn_down_exps.weight"
+    },
+    {
+      "expert": 29,
+      "max_ms": 25.13,
+      "rows": 20,
+      "sum_ms": 469.692,
+      "tensor": "blk.21.ffn_down_exps.weight"
+    },
+    {
+      "expert": 10,
+      "max_ms": 17.663,
+      "rows": 1160,
+      "sum_ms": 462.859,
+      "tensor": "blk.31.ffn_down_exps.weight"
+    },
+    {
+      "expert": 44,
+      "max_ms": 21.058,
+      "rows": 128,
+      "sum_ms": 461.929,
+      "tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "expert": 249,
+      "max_ms": 23.453,
+      "rows": 100,
+      "sum_ms": 459.538,
+      "tensor": "blk.17.ffn_down_exps.weight"
+    },
+    {
+      "expert": 77,
+      "max_ms": 16.116,
+      "rows": 2376,
+      "sum_ms": 459.483,
+      "tensor": "blk.23.ffn_down_exps.weight"
+    },
+    {
+      "expert": 103,
+      "max_ms": 23.811,
+      "rows": 208,
+      "sum_ms": 456.324,
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "expert": 78,
+      "max_ms": 24.139,
+      "rows": 20,
+      "sum_ms": 456.324,
+      "tensor": "blk.25.ffn_up_exps.weight"
+    },
+    {
+      "expert": 53,
+      "max_ms": 24.719,
+      "rows": 260,
+      "sum_ms": 455.854,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "expert": 104,
+      "max_ms": 19.099,
+      "rows": 1240,
+      "sum_ms": 454.325,
+      "tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "expert": 253,
+      "max_ms": 23.451,
+      "rows": 2360,
+      "sum_ms": 452.633,
+      "tensor": "blk.30.ffn_down_exps.weight"
+    },
+    {
+      "expert": 164,
+      "max_ms": 21.702,
+      "rows": 1060,
+      "sum_ms": 452.146,
+      "tensor": "blk.11.ffn_down_exps.weight"
+    },
+    {
+      "expert": 86,
+      "max_ms": 18.483,
+      "rows": 1600,
+      "sum_ms": 451.021,
+      "tensor": "blk.5.ffn_down_exps.weight"
+    },
+    {
+      "expert": 158,
+      "max_ms": 21.892,
+      "rows": 80,
+      "sum_ms": 450.538,
+      "tensor": "blk.2.ffn_up_exps.weight"
+    },
+    {
+      "expert": 142,
+      "max_ms": 23.984,
+      "rows": 416,
+      "sum_ms": 448.378,
+      "tensor": "blk.12.ffn_down_exps.weight"
+    }
+  ],
+  "top_layer_roles": [
+    {
+      "layer": 0,
+      "max_ms": 104.473,
+      "role": "up",
+      "rows": 12688,
+      "sum_ms": 18058.429
+    },
+    {
+      "layer": 1,
+      "max_ms": 40.959,
+      "role": "down",
+      "rows": 13672,
+      "sum_ms": 16109.596
+    },
+    {
+      "layer": 2,
+      "max_ms": 21.954,
+      "role": "up",
+      "rows": 12776,
+      "sum_ms": 15617.654
+    },
+    {
+      "layer": 0,
+      "max_ms": 21.163,
+      "role": "down",
+      "rows": 13456,
+      "sum_ms": 15008.175
+    },
+    {
+      "layer": 2,
+      "max_ms": 22.022,
+      "role": "down",
+      "rows": 13672,
+      "sum_ms": 14985.687
+    },
+    {
+      "layer": 1,
+      "max_ms": 23.07,
+      "role": "up",
+      "rows": 12776,
+      "sum_ms": 13144.894
+    },
+    {
+      "layer": 3,
+      "max_ms": 22.134,
+      "role": "up",
+      "rows": 13088,
+      "sum_ms": 9387.486
+    },
+    {
+      "layer": 4,
+      "max_ms": 23.967,
+      "role": "down",
+      "rows": 14024,
+      "sum_ms": 9087.165
+    },
+    {
+      "layer": 9,
+      "max_ms": 21.673,
+      "role": "down",
+      "rows": 15340,
+      "sum_ms": 9031.343
+    },
+    {
+      "layer": 3,
+      "max_ms": 33.045,
+      "role": "down",
+      "rows": 14496,
+      "sum_ms": 8256.187
+    },
+    {
+      "layer": 6,
+      "max_ms": 24.883,
+      "role": "up",
+      "rows": 13212,
+      "sum_ms": 7946.624
+    },
+    {
+      "layer": 6,
+      "max_ms": 19.788,
+      "role": "down",
+      "rows": 15004,
+      "sum_ms": 7770.879
+    },
+    {
+      "layer": 9,
+      "max_ms": 25.957,
+      "role": "up",
+      "rows": 13420,
+      "sum_ms": 7766.425
+    },
+    {
+      "layer": 4,
+      "max_ms": 20.67,
+      "role": "up",
+      "rows": 12872,
+      "sum_ms": 7741.103
+    },
+    {
+      "layer": 21,
+      "max_ms": 21.255,
+      "role": "up",
+      "rows": 9900,
+      "sum_ms": 7492.12
+    },
+    {
+      "layer": 22,
+      "max_ms": 19.524,
+      "role": "down",
+      "rows": 11552,
+      "sum_ms": 7267.167
+    },
+    {
+      "layer": 19,
+      "max_ms": 23.533,
+      "role": "up",
+      "rows": 9628,
+      "sum_ms": 7251.015
+    },
+    {
+      "layer": 19,
+      "max_ms": 24.345,
+      "role": "down",
+      "rows": 10396,
+      "sum_ms": 7214.893
+    },
+    {
+      "layer": 5,
+      "max_ms": 20.053,
+      "role": "down",
+      "rows": 15260,
+      "sum_ms": 7138.799
+    },
+    {
+      "layer": 21,
+      "max_ms": 25.13,
+      "role": "down",
+      "rows": 11180,
+      "sum_ms": 7107.655
+    },
+    {
+      "layer": 8,
+      "max_ms": 19.964,
+      "role": "down",
+      "rows": 15044,
+      "sum_ms": 7078.202
+    },
+    {
+      "layer": 35,
+      "max_ms": 21.863,
+      "role": "down",
+      "rows": 11672,
+      "sum_ms": 7056.853
+    },
+    {
+      "layer": 10,
+      "max_ms": 24.841,
+      "role": "down",
+      "rows": 10512,
+      "sum_ms": 7025.261
+    },
+    {
+      "layer": 5,
+      "max_ms": 24.508,
+      "role": "up",
+      "rows": 13340,
+      "sum_ms": 6848.434
+    },
+    {
+      "layer": 7,
+      "max_ms": 21.399,
+      "role": "up",
+      "rows": 13320,
+      "sum_ms": 6659.699
+    },
+    {
+      "layer": 20,
+      "max_ms": 26.539,
+      "role": "down",
+      "rows": 11120,
+      "sum_ms": 6443.738
+    },
+    {
+      "layer": 8,
+      "max_ms": 24.719,
+      "role": "up",
+      "rows": 13252,
+      "sum_ms": 6242.493
+    },
+    {
+      "layer": 10,
+      "max_ms": 24.257,
+      "role": "up",
+      "rows": 9616,
+      "sum_ms": 6178.323
+    },
+    {
+      "layer": 18,
+      "max_ms": 18.952,
+      "role": "up",
+      "rows": 10036,
+      "sum_ms": 6162.932
+    },
+    {
+      "layer": 35,
+      "max_ms": 23.982,
+      "role": "up",
+      "rows": 10136,
+      "sum_ms": 6092.45
+    }
+  ],
+  "top_tensors": [
+    {
+      "max_ms": 104.473,
+      "rows": 12688,
+      "sum_ms": 18058.429,
+      "tensor": "blk.0.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 40.959,
+      "rows": 13672,
+      "sum_ms": 16109.596,
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 21.954,
+      "rows": 12776,
+      "sum_ms": 15617.654,
+      "tensor": "blk.2.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 21.163,
+      "rows": 13456,
+      "sum_ms": 15008.175,
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 22.022,
+      "rows": 13672,
+      "sum_ms": 14985.687,
+      "tensor": "blk.2.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 23.07,
+      "rows": 12776,
+      "sum_ms": 13144.894,
+      "tensor": "blk.1.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 22.134,
+      "rows": 13088,
+      "sum_ms": 9387.486,
+      "tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 23.967,
+      "rows": 14024,
+      "sum_ms": 9087.165,
+      "tensor": "blk.4.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 21.673,
+      "rows": 15340,
+      "sum_ms": 9031.343,
+      "tensor": "blk.9.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 33.045,
+      "rows": 14496,
+      "sum_ms": 8256.187,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 24.883,
+      "rows": 13212,
+      "sum_ms": 7946.624,
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 19.788,
+      "rows": 15004,
+      "sum_ms": 7770.879,
+      "tensor": "blk.6.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 25.957,
+      "rows": 13420,
+      "sum_ms": 7766.425,
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 20.67,
+      "rows": 12872,
+      "sum_ms": 7741.103,
+      "tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 21.255,
+      "rows": 9900,
+      "sum_ms": 7492.12,
+      "tensor": "blk.21.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 19.524,
+      "rows": 11552,
+      "sum_ms": 7267.167,
+      "tensor": "blk.22.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 23.533,
+      "rows": 9628,
+      "sum_ms": 7251.015,
+      "tensor": "blk.19.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 24.345,
+      "rows": 10396,
+      "sum_ms": 7214.893,
+      "tensor": "blk.19.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 20.053,
+      "rows": 15260,
+      "sum_ms": 7138.799,
+      "tensor": "blk.5.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 25.13,
+      "rows": 11180,
+      "sum_ms": 7107.655,
+      "tensor": "blk.21.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 19.964,
+      "rows": 15044,
+      "sum_ms": 7078.202,
+      "tensor": "blk.8.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 21.863,
+      "rows": 11672,
+      "sum_ms": 7056.853,
+      "tensor": "blk.35.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 24.841,
+      "rows": 10512,
+      "sum_ms": 7025.261,
+      "tensor": "blk.10.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 24.508,
+      "rows": 13340,
+      "sum_ms": 6848.434,
+      "tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 21.399,
+      "rows": 13320,
+      "sum_ms": 6659.699,
+      "tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 26.539,
+      "rows": 11120,
+      "sum_ms": 6443.738,
+      "tensor": "blk.20.ffn_down_exps.weight"
+    },
+    {
+      "max_ms": 24.719,
+      "rows": 13252,
+      "sum_ms": 6242.493,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 24.257,
+      "rows": 9616,
+      "sum_ms": 6178.323,
+      "tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 18.952,
+      "rows": 10036,
+      "sum_ms": 6162.932,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "max_ms": 23.982,
+      "rows": 10136,
+      "sum_ms": 6092.45,
+      "tensor": "blk.35.ffn_up_exps.weight"
+    }
+  ],
+  "trace": {
+    "chunk_ms": {
+      "max": 104.473,
+      "p50": 0.058,
+      "p95": 1.797,
+      "p99": 11.14549
+    },
+    "complete": true,
+    "configured_limit": 1000000,
+    "rows": 909952,
+    "stderr_fallback_wall_ms_estimate": 27072.0,
+    "sum_chunk_ms": 507993.63,
+    "sum_chunk_ms_div_20_threads": 25399.682,
+    "wall_minus_thread_avg_ms_estimate": 1672.318
+  }
+}

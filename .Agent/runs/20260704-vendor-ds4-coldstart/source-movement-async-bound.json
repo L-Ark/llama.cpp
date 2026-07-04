@@ -1,0 +1,71 @@
+{
+  "conclusion": {
+    "async_source_overlap_is_worth_implementing_now": false,
+    "decision": "Close pack/direct/page-source variants for now; next optimization should pivot to correctness-preserving algorithmic work or a fundamentally different offload path with exact-token verification.",
+    "do_not_repeat": [
+      "compact mmap pack",
+      "synchronous O_DIRECT staging",
+      "willneed/page-touch prewarm",
+      "chunk-size/affinity scheduling",
+      "early-layer top-k pruning",
+      "broad up/down GPU stream without full output correctness"
+    ],
+    "reason": "Prior O_DIRECT staging moved tens of GiB and measured effective direct bandwidth under the 16GB cgroup is far below the bandwidth needed for top64/top128/top256 to save >1-2s after accounting for the ~3s hot-compute overlap window."
+  },
+  "experiment": "source-movement-async-bound",
+  "inputs": {
+    "accepted_time_s": 43.63636363636363,
+    "accepted_tok_s": 4.4,
+    "accepted_tokens": 192,
+    "current_chunk_thread_avg_s": 25.399682,
+    "current_fallback_wall_s": 27.072,
+    "hot_cpu_math_lower_bound_s_from_touch_trace": 3.047106,
+    "measured_direct_bw_gib_s": 2.2462331984790875,
+    "measured_direct_extra_s": 18.571346999999996,
+    "required_bw_top128_no_overlap_gib_s": 10.702319579156947,
+    "required_bw_top128_with_hot_overlap_gib_s": 6.006637688891855,
+    "scheduling_gap_s": 1.6723180000000006,
+    "top128_covered_fallback_s": 3.897807,
+    "top128_direct_bytes": 44791758848,
+    "top128_direct_gib": 41.715576171875
+  },
+  "scenarios": [
+    {
+      "best_case_net_saved_s": -3.7385674999999985,
+      "bytes_gib": 20.8577880859375,
+      "covered_fallback_s": 2.5,
+      "hot_compute_overlap_window_s": 3.047106,
+      "ideal_new_tok_s_if_positive": 4.4,
+      "measured_io_time_s_at_prior_direct_bw": 9.285673499999998,
+      "name": "top64_estimate",
+      "net_io_penalty_after_overlap_s": 6.2385674999999985,
+      "passes_1s_bound": false,
+      "passes_2s_bound": false
+    },
+    {
+      "best_case_net_saved_s": -11.626433999999996,
+      "bytes_gib": 41.715576171875,
+      "covered_fallback_s": 3.897807,
+      "hot_compute_overlap_window_s": 3.047106,
+      "ideal_new_tok_s_if_positive": 4.4,
+      "measured_io_time_s_at_prior_direct_bw": 18.571346999999996,
+      "name": "top128_recorded",
+      "net_io_penalty_after_overlap_s": 15.524240999999996,
+      "passes_1s_bound": false,
+      "passes_2s_bound": false
+    },
+    {
+      "best_case_net_saved_s": -16.107967746393392,
+      "bytes_gib": 55.710693359375,
+      "covered_fallback_s": 5.646756,
+      "hot_compute_overlap_window_s": 3.047106,
+      "ideal_new_tok_s_if_positive": 4.4,
+      "measured_io_time_s_at_prior_direct_bw": 24.80182974639339,
+      "name": "top256_recorded",
+      "net_io_penalty_after_overlap_s": 21.754723746393392,
+      "passes_1s_bound": false,
+      "passes_2s_bound": false
+    }
+  ],
+  "timestamp_utc": "2026-07-04T02:04:00Z"
+}

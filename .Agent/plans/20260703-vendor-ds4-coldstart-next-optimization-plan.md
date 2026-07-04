@@ -6922,3 +6922,246 @@ Acceptance / rejection:
 - Must pass RAM and correctness gates.
 - Trace is usable only if row count is below the configured cap.
 - If the trace still hits the cap, stop using row-level full trace and add a lower-overhead aggregate instrumentation plan instead.
+
+### 2026-07-04T01:49Z Full CPU Chunk Trace Diagnostic Result
+
+Artifacts:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-chunk-trace-analysis.json`
+  - sha256: `95ea0ba1fb9dac338c6b2354638f6ed0e346b90568d12b5f895cf24337e76024`
+- `.Agent/runs/20260704-vendor-ds4-coldstart/current-sota-cpu-chunk-trace-full-result.json`
+  - sha256: `84e84e10d866286461cd03bd711e279beefe03c4402f7ca66f8a25f4eef5c8eb`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T013715Z-20260704_cpu_chunk_trace_sota_diagnostic_full/france-cpu40-vram0gb`
+
+Metrics:
+
+- `eval_tok_s=4.1`
+- `prompt_tok_s=1.8`
+- `TTFT=33425.093549 ms`
+- `elapsed_seconds=66.55`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15096012800`
+- `pgmajfault=256425`
+- `workingset_refault_file=1670050`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Trace completeness:
+
+- `cpu_chunk_trace.csv` rows: `909952`
+- configured limit: `1000000`
+- complete: true
+
+Key trace numbers:
+
+- total chunk CPU-thread time: `507993.630 ms`
+- divided by 20 threads: `25399.682 ms`
+- stderr fallback wall estimate: `27072.000 ms`
+- gap between fallback wall and thread-average compute: `1672.318 ms`
+- chunk time:
+  - p50 `0.058 ms`
+  - p95 `1.797 ms`
+  - p99 `11.14549 ms`
+  - max `104.473 ms`
+- role totals:
+  - down: `260767.295 ms` thread-sum, `13038.365 ms / 20`
+  - up: `247226.335 ms` thread-sum, `12361.317 ms / 20`
+- thread totals:
+  - min `24519.779 ms`
+  - max `27460.653 ms`
+  - spread `2940.874 ms`
+  - mean `25399.681 ms`
+
+Top tensors by chunk thread-sum:
+
+- `blk.0.ffn_up_exps.weight`: `18058.429 ms`
+- `blk.1.ffn_down_exps.weight`: `16109.596 ms`
+- `blk.2.ffn_up_exps.weight`: `15617.654 ms`
+- `blk.0.ffn_down_exps.weight`: `15008.175 ms`
+- `blk.2.ffn_down_exps.weight`: `14985.687 ms`
+- `blk.1.ffn_up_exps.weight`: `13144.894 ms`
+- `blk.3.ffn_up_exps.weight`: `9387.486 ms`
+- `blk.4.ffn_down_exps.weight`: `9087.165 ms`
+
+Artifact hashes:
+
+- `summary.json`: `e9693163d6598d5c55ababf27836a3da35030887c1bc3cb8d1082cfd585ec1ac`
+- `stdout.txt`: `f4dc6b468a3c87d99d713f3cdbb9574de1b59b2d5ff72aa73aa2d20f67188cc3`
+- `stderr.txt`: `b697c56b42f9f1a75b5b7d0f11bc50b6b1bf528ec4105849736b008b3a1e26d9`
+- `environment.txt`: `fd686423f67c2982cb0f6b1d07508f5082aef50273088ee784dcf55a1e4e862d`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `cpu_chunk_trace.csv`: `00da07e04e501d618b94f9ba17403d757ed6c27d3e3e1c12903bdb919d1bf18a`
+- `fallback_profile.csv`: `5665dafac561926aca569839faeb6de7c5dc4722b3ae6b50582a40656f64939e`
+- `one_trace.csv`: `158f12157bbdbf597faa4dc145a2a23120cd74a673f274f931f3a7ec4948143a`
+- `resource_samples.tsv`: `4d6a7d811d6c1b4135ae4fc5b2c75c4c13993fd91bc64f3e4483b7bdc151c098`
+
+Verdict:
+
+- Diagnostic accepted as evidence; not a SOTA candidate.
+- Correctness, RAM, and TTFT gates pass, but trace overhead lowers token rate to `4.1`.
+- Current accepted strict cold SOTA remains `4.4 tok/s`.
+
+Bottleneck conclusion:
+
+- CPU fallback scheduling/chunk imbalance is not the dominant bottleneck:
+  - `sum_chunk_ms / 20 = 25399.682 ms`;
+  - aggregate fallback wall estimate is `27072.000 ms`;
+  - the remaining gap is only about `1672 ms`.
+- Per-thread run-wide spread is about `2941 ms`, which is too small to explain the gap to `10 tok/s`.
+- The dominant residual work is still up/down source/page movement plus MXFP4 dot over active fallback experts.
+- This current-SOTA trace agrees with the earlier 4.2-era split trace:
+  - hot CPU fallback math after serial source touch was only about `3.0s`;
+  - cold source/page movement dominated;
+  - mmap pack, synchronous O_DIRECT staging, `willneed`, and early-layer top-k pruning all failed or were rejected.
+
+Decision:
+
+- Do not run more `GGML_MOE_CPU_CHUNK_SIZE`, overpartition, affinity, or chunk scheduling probes unless a future low-overhead trace shows a new `>1-2s` scheduling bound.
+- Do not repeat compact mmap, synchronous O_DIRECT staging, page-touch/willneed, early-layer top-k pruning, or broad up/down GPU stream under the current evidence.
+
+### 2026-07-04T02:00Z Next Plan: Source Movement Bound Or Algorithmic Pivot
+
+Goal:
+
+- Continue toward `10 tok/s` without repeating rejected local optimizations.
+- Before any new source experiment, compute a hard upper bound for the only still-plausible source-movement variant: true asynchronous overlap of up/down source reads with hot CPU fallback math.
+
+Known hard numbers:
+
+- Current accepted SOTA: `4.4 tok/s`, about `43.64s` for 192 generated tokens.
+- Current full trace:
+  - fallback wall estimate about `27.1s`;
+  - chunk CPU-thread average about `25.4s`;
+  - scheduling/tail gap about `1.7s`.
+- Earlier touch split:
+  - hot CPU fallback math lower bound about `3.0s`;
+  - source/page movement dominates the cold fallback wall time.
+- Earlier top128 O_DIRECT staging:
+  - moved about `44.79GB`;
+  - regressed to `2.9 tok/s`;
+  - synchronous IO cost dominated.
+
+Next design step:
+
+1. Estimate async-overlap feasibility before coding:
+   - derive bytes that would need to be staged for top64/top128/top256 up/down;
+   - estimate minimum IO time under measured direct-read throughput from prior runs;
+   - compare that IO time to the measured hot compute overlap window (`~3.0s`) and per-token ordering constraints.
+2. If async overlap cannot plausibly save `>1-2s` under the 16GB cgroup and TTFT gate:
+   - close the source-movement family for now;
+   - pivot to algorithmic work only.
+3. Algorithmic candidates must preserve correctness:
+   - no lossy top-k pruning without full France correctness;
+   - no MTP/NextN unless the model/runtime has real compatible heads;
+   - any speculative/lookahead path must verify every accepted token with the exact model path before being accepted.
+4. If a source or algorithmic candidate passes the hard-bound screen:
+   - append exact implementation plan before code;
+   - implement default-off;
+   - run strict cold France;
+   - promote only if `eval_tok_s > 4.4`, RAM/correctness/TTFT pass, and reproduction info is committed and pushed.
+
+Immediate deliverable before coding:
+
+- Write a small bound artifact that uses current trace plus historical direct-staging bytes/results to decide whether async source overlap is worth implementing.
+- If the bound is negative, document the pivot and do not spend another run on pack/direct/page-source variants.
+
+### 2026-07-04T02:04Z Source Movement Async Bound Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json`
+- sha256: `d97f52ca6f58eb945e12b4473158f07c16d0e412a690f895f9a5eb2e7f9dcf78`
+
+Inputs:
+
+- accepted SOTA: `4.4 tok/s`
+- accepted generation estimate: `43.636s` for 192 generated tokens
+- current fallback wall estimate: `27.072s`
+- current chunk thread-average estimate: `25.400s`
+- scheduling gap estimate: `1.672s`
+- hot CPU fallback math lower bound from touch split: `3.047s`
+- historical top128 O_DIRECT direct-staging bytes: `44,791,758,848` bytes (`41.716 GiB`)
+- historical top128 covered fallback time: `3.898s`
+- measured direct-staging extra time under 16GB cgroup: `18.571s`
+- measured direct throughput from that rejected run: `2.246 GiB/s`
+- required top128 bandwidth without overlap: `10.702 GiB/s`
+- required top128 bandwidth with full `3.047s` hot-compute overlap: `6.007 GiB/s`
+
+Scenarios:
+
+| Scenario | Bytes | Covered fallback | Measured IO time | Overlap window | Best-case net saved |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| top64 estimate | `20.858 GiB` | `2.500s` | `9.286s` | `3.047s` | `-3.739s` |
+| top128 recorded | `41.716 GiB` | `3.898s` | `18.571s` | `3.047s` | `-11.626s` |
+| top256 recorded | `55.711 GiB` | `5.647s` | `24.802s` | `3.047s` | `-16.108s` |
+
+Conclusion:
+
+- Do not implement async pack/direct/page-source staging now.
+- The hard-bound screen is negative: prior direct staging moved too many bytes, and measured effective direct throughput under the strict 16GB cgroup is far below the bandwidth needed to save even `1-2s` after accounting for the hot compute overlap window.
+- Close these source-movement variants for now:
+  - compact mmap pack;
+  - synchronous O_DIRECT staging;
+  - async O_DIRECT staging without a fundamentally smaller byte volume;
+  - `willneed` / page-touch prewarm;
+  - chunk-size / affinity scheduling;
+  - early-layer top-k pruning.
+
+### 2026-07-04T02:08Z Next Plan: Exact-Verification Algorithmic Pivot
+
+Goal:
+
+- Continue toward `10 tok/s` after closing local source/page/scheduling tweaks.
+- Any algorithmic speedup must preserve exact-model correctness for every accepted token, not just produce a plausible-looking paragraph.
+
+Why this pivot is required:
+
+- Local CPU fallback work cannot reach `10 tok/s`:
+  - scheduling bound is only about `1-2s`;
+  - hot CPU math lower bound is about `3s`;
+  - source movement variants are negative under measured IO bandwidth;
+  - lossy top-k changes failed correctness/performance;
+  - broad up/down GPU stream changed output quality or regressed throughput.
+- To reach `10 tok/s` from `4.4 tok/s`, the run needs roughly a `2.27x` effective decode speedup, which requires either:
+  - multiple tokens accepted per expensive target-model step; or
+  - a fundamentally different exact offload path for missed experts.
+
+Next inspection before any code:
+
+1. Inspect current vendor support for:
+   - `llama-speculative`;
+   - `llama-lookahead`;
+   - n-gram speculative decoding;
+   - any DeepSeek MTP/NextN tensor metadata in the GGUF;
+   - graph assumptions that previously made lookahead incompatible.
+2. Decide whether an exact verifier can run with the current DeepSeek/vendor graph:
+   - draft proposals may be approximate;
+   - final accepted tokens must be verified by the exact target model under the accepted SOTA config.
+3. If no compatible draft/MTP/lookahead path exists:
+   - record the blocker;
+   - do not fake speculative speedup with unverified tokens;
+   - next viable work must be a source-level exact verifier or a fundamentally correct up/down GPU/offload path.
+
+Acceptance gates for any algorithmic candidate:
+
+- Strict cold `drop_caches`.
+- 16GB cgroup including page cache.
+- `MemorySwapMax=0`.
+- France answer must be semantic, coherent, complete, and manually reviewed.
+- For speculative paths, every emitted token must be target-verified.
+- `TTFT <= 33617.688744 ms` for accepted SOTA.
+- `eval_tok_s > 4.4`.
+- New compliant SOTA must be recorded in full, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from pushed source.
