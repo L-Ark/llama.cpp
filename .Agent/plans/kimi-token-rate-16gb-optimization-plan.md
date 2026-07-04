@@ -6729,6 +6729,126 @@ Decision:
   - a separate Q4_0 staging ring so Q4_0 does not resize the normal rings;
   - or a route/layer subset where expected reuse is proven before activation.
 
+## Phase 7EH: Q4_0 isolated staging ring and 512 MiB pool probe
+
+Start time:
+
+- 2026-07-04T08:10:00+08:00.
+
+Current bottleneck and new evidence:
+
+- Phase 7EG r2 activated Q4_0 GPU down, but failed:
+  - q4_0_down pool: `32` slots, `1736` misses, `0` hits;
+  - main pinned staging slot grew from `7.44 MiB` to `7.88 MiB`;
+  - main pinned host_stage increased to `22926.878 ms`;
+  - decode regressed to `40713.57 ms / 31`.
+- Offline simulation of the r2 route trace for Q4_0 layers
+  `6,7,8,9,10,15,18`:
+
+```text
+events=1736 unique=608
+global LRU cap16  hit_rate=0.0%
+global LRU cap32  hit_rate=0.0%
+global LRU cap64  hit_rate=29.9%
+global LRU cap128 hit_rate=41.9%
+global LRU cap256 hit_rate=56.3%
+global LRU cap512 hit_rate=64.6%
+```
+
+- Per-layer simulation shows reuse exists inside each layer, but global layer
+  interleaving destroys the 32-slot pool:
+
+```text
+layer 6:  cap32=58.5%, cap64=66.9%
+layer 7:  cap32=54.4%, cap64=61.7%
+layer 8:  cap32=60.5%, cap64=65.7%
+layer 9:  cap32=46.8%, cap64=58.5%
+layer 10: cap32=50.4%, cap64=60.1%
+layer 15: cap32=56.9%, cap64=66.5%
+layer 18: cap32=58.9%, cap64=66.9%
+```
+
+Hypothesis:
+
+- Re-test Q4_0 only if both missing pieces from Phase 7EG are fixed:
+  - increase Q4_0 pool to `512 MiB`, about `64` slots;
+  - route Q4_0 staging through auxiliary pinned staging rings so the normal
+    down/upgate staging rings stay at `7.44 MiB` and `5.36 MiB`.
+- Keep normal down slot isolation from Phase 7EG.
+- Keep the feature default-off.
+
+Theory and upper bound:
+
+- With 64 slots, route-trace simulation predicts about `519` Q4_0 hits and
+  `1217` misses instead of `1736` misses.
+- Phase 7EG type-2 Q4_0 stage was `2661.747 ms` for `1736` staged jobs. A
+  linear miss reduction gives an optimistic Q4_0 stage estimate:
+  - `2661.747 * 1217 / 1736 = 1865 ms`.
+- The Q4_0 kernel cost is small: `18.368 ms`, so movement dominates.
+- The upper bound is still modest because the original CPU fallback bucket was
+  only a few seconds on n32, and 512 MiB must be subtracted from the normal down
+  pool. This phase can only pass if:
+  - Q4_0 misses fall as predicted;
+  - normal down misses do not rise enough to erase the Q4_0 gain;
+  - main/gate staging rings remain uninflated.
+
+Implementation plan:
+
+- Source patch, default-off:
+  - reintroduce third cache pool for gated Q4_0 down;
+  - reintroduce CPU-side Q4_0 down eligibility gate;
+  - add Q4_0 to down MMVQ only under the gate;
+  - when `down_q40_requested`, use auxiliary staging rings for Q4_0 copies
+    instead of `stage_ring` / `stage_ring_gate`;
+  - keep normal down and upgate staging rings untouched.
+- Use:
+
+```sh
+GGML_MOE_STREAM_DOWN_Q4_0=1
+GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE=6-10,15,18
+GGML_MOE_VRAM_CACHE_Q40_MIB=512
+```
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase7eh-commit>
+cmake --build build-cuda-batch -j 32 --target llama-completion
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7eh_repro.sh
+sed -i '/GGML_MOE_COPY_PROFILE_OUT/d' /tmp/run_phase7eh_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7eh-q40-stageaux-pool512"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_DOWN_Q4_0=1 \
+      GGML_MOE_STREAM_DOWN_Q4_0_LAYER_RANGE=6-10,15,18 \
+      GGML_MOE_VRAM_CACHE_Q40_MIB=512 \
+      /tmp/run_phase7eh_repro.sh
+```
+
+Acceptance gates:
+
+- exit `0`;
+- cold start;
+- memory peak `<=15899996160`;
+- TTFT `<=106331.72 ms`;
+- quality pass on the France prompt;
+- `read_failures=0`, `iouring_fallbacks=0`;
+- Q4_0 path active;
+- q4_0_down pool has at least `64` slots;
+- q4_0_down hit rate materially above `0%`;
+- main pinned staging slot remains `7.44 MiB`;
+- gate pinned staging slot remains `7.44 MiB`;
+- n32 decode beats Phase 7EB n32 `29599.64 ms / 31`.
+
+Rollback:
+
+- If n32 is slower or fails any hard gate, revert the source patch and record
+  the result.
+- Do not run n96 unless n32 beats SOTA and all gates pass.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
