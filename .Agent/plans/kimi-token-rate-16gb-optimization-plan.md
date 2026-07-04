@@ -54481,3 +54481,100 @@ Decision rule:
 - If n96 passes but does not beat SOTA, record as parity only.
 - If n96 unexpectedly beats historical Phase 7FB `70087.31 ms / 77`, run a
   second n96 repeat before accepting any SOTA claim.
+
+Result: accepted as parity only; not SOTA.
+
+- Plan/result commit before run:
+  `c15b75c70` (`docs: record default-off parity and plan n96 check`).
+- Server source:
+  `c15b75c70`.
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard wici/vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - success at source head `c15b75c70`;
+  - no source rebuild was required beyond normal relink/config checks.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-171944Z-n96-phase7hs-currenthead-parity`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-171944Z-n96-phase7hs-currenthead-parity
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `77844.60 ms`;
+  - decode `71758.68 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15067959296`;
+  - swap max `0`;
+  - anon `446464`;
+  - file `14814773248`;
+  - kernel `248840192`;
+  - inactive file `2219249664`;
+  - active file `12594892800`;
+  - major faults `999769`;
+  - file workingset refaults `44839`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert pack / staging counters:
+  - expert pack hits `63479`, misses `633`;
+  - `direct_reads=22113`;
+  - `direct_fallbacks=0`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_submit_us=104304`;
+  - `iouring_wait_us=36182837`;
+  - `iouring_h2d_enqueues=37080`;
+  - global iouring batches `9846`, submit calls `9846`, wait calls `29942`,
+    CQEs `37080`, inflight avg `3.10`, max `8`;
+  - global batch hist `1:805,2-4:5991,5-8:3050,9-16:0,17-32:0,gt32:0`;
+  - main pinned staging copies `49350`, waits `49314`, slots `12`,
+    slot size `7.44 MiB`;
+  - main iouring batches `6737`, jobs `26993`, submit calls `6737`,
+    wait calls `21300`, CQEs `26993`, inflight avg `3.21`, max `8`;
+  - gate pinned staging copies `10450`, waits `10426`, slots `12`;
+  - gate iouring batches `3109`, jobs `10087`, submit calls `3109`,
+    wait calls `8642`, CQEs `10087`, inflight avg `2.82`, max `8`.
+- Current-down overlap:
+  - calls `2464`;
+  - planned jobs `9109`;
+  - completed jobs `9109`;
+  - cache hits `8755`;
+  - missing tensor `231`;
+  - missing pack `99`;
+  - submitted batches `2224`;
+  - failed batches `0`;
+  - mark failed `0`;
+  - max jobs `8`;
+  - worker `8441747 us`;
+  - hist `1:104,2-4:1283,5-8:837`.
+- VRAM cache:
+  - down slots `806`, hits `23934`, misses `8690`, preloads `9109`,
+    hit rate `73.4%`;
+  - upgate slots `1679`, hits `31967`, misses `41969`, hit rate `43.2%`.
+- Decision:
+  - Accept as current-head n96 parity only.
+  - Do not claim SOTA and do not run a repeat because `71758.68 ms / 77` is
+    slower than historical Phase 7FB `70087.31 ms / 77`.
+  - The run still passes correctness, TTFT, RAM, swap, and fallback gates, so
+    the default-off H2D instrumentation remains accepted.
