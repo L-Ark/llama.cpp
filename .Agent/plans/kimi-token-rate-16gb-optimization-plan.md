@@ -47487,6 +47487,69 @@ Result: n32 completed; profile identifies early missing tensors.
     targeted registration fix and test n32.
   - If they are absent from expert pack or intentionally excluded, do not force
     them into overlap.
+
+## Phase 7GF: diagnose missing early down registrations
+
+Start time: 2026-07-04T18:06:00+08:00.
+
+Goal:
+
+- Determine why current-down overlap cannot find registered down tensors for:
+  - `blk.7.ffn_down_exps.weight`;
+  - `blk.8.ffn_down_exps.weight`;
+  - `blk.9.ffn_down_exps.weight`.
+- Avoid changing code until we know whether this is:
+  - a registration timing issue;
+  - an unsupported down batch path;
+  - missing expert-pack coverage;
+  - or intentional CPU fallback.
+
+Theory:
+
+- Down tensors are registered inside `ggml_cuda_moe_stream_batch()` when the
+  down batch path is entered.
+- Current-down overlap runs from the up/gate path and looks up the matching
+  down tensor in `g_registered_tensors`.
+- If layers 7-9 never enter the down batch path, registration will never occur.
+- If they enter it later, then current-down overlap misses only because the
+  first decode calls happen before registration.
+
+Experiment: n32 diagnostic with decline debug
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gf-early-down-decline-debug"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_DECLINE_DEBUG=1 GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Postprocess:
+
+```bash
+grep -n "blk\\.7\\.ffn_down\\|blk\\.8\\.ffn_down\\|blk\\.9\\.ffn_down\\|down batch declined" "$RUN/stderr.txt" > "$RUN/early-down-debug.txt" || true
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If layers 7-9 are declined due to unsupported type or route shape, do not
+  force registration; consider down path support separately.
+- If layers 7-9 enter down batch but registration is too late, consider
+  earlier registration from tensor metadata or a first-call retry path.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
