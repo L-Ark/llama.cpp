@@ -45930,3 +45930,57 @@ Decision rule:
 - If confirmed, run n96 twice.
 - It is a new SOTA only if n96 beats Phase 7FB `70087.31 ms / 77` with quality
   pass and TTFT within limit.
+
+Result: rejected for SOTA.
+
+- End time: 2026-07-04T15:45:30+08:00.
+- n32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-073355Z-n32-phase7fq-upgate65`.
+  - quality `pass`;
+  - TTFT `73320.28 ms`;
+  - decode `28758.17 ms / 31`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - down slots `705`, hit rate `71.3%`;
+  - upgate slots `1819`, hit rate `45.3%`.
+- n32 confirmation:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-073702Z-n32-phase7fq-upgate65-confirm`.
+  - quality `pass`;
+  - TTFT `74647.02 ms`;
+  - decode `28987.64 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - down slots `705`, hit rate `71.3%`;
+  - upgate slots `1819`, hit rate `45.3%`.
+- n96 run A:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-073929Z-n96-phase7fq-upgate65-a`.
+  - quality `pass`;
+  - TTFT `73796.14 ms`;
+  - decode `70572.83 ms / 77`, `1.09 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output was coherent and semantically correct.
+- n96 run B:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-074258Z-n96-phase7fq-upgate65-b`.
+  - quality `pass`;
+  - TTFT `74860.03 ms`;
+  - decode `71316.59 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - output was coherent and semantically correct.
+
+Decision:
+
+- Reject `UPGATE_PCT=65` as the production SOTA setting.
+- Reason:
+  - n32 improved over Phase 7FO rebuilt baseline;
+  - but both n96 runs were slower than Phase 7FB best
+    `70087.31 ms / 77`;
+  - shifting 5 percentage points to upgate increased upgate hit rate
+    `43.7% -> 45.3%`, but reduced down hit rate `73.6% -> 71.3%`;
+  - the n96 down miss penalty is large enough to erase the n32-local gain.
+- Action:
+  - keep accepted production split at `UPGATE_PCT=60`;
+  - do not claim a new SOTA;
+  - next split experiment should test an intermediate point rather than a
+    larger upgate shift.
