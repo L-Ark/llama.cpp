@@ -58137,3 +58137,108 @@ Decision rule:
   keep pct `62` as the new SOTA baseline and record the exact command/result.
 - If n96 regresses materially, revert the script default to pct `60`, record the
   rejection, commit/push the revert, and keep pct `62` only as an optional knob.
+
+### 7IN result
+
+- Source head:
+  `66c504cd9` (`scripts: default upgate cache split to 62`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-210710Z-n96-phase7in-upgate-pct62-default`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 66c504cd9
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-210710Z-n96-phase7in-upgate-pct62-default
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Default verification:
+  - command omits `UPGATE_PCT`;
+  - `command.txt` records `UPGATE_PCT=62`;
+  - `env.txt` records `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `79250.57 ms`;
+  - decode `72282.91 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15066337280`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Runtime counters:
+  - expert pack hits `63050`, misses `633`;
+  - iouring reads `36992`, bytes `214835740672`, wait
+    `36653460 us`;
+  - main pinned staging: copies `48963`, waits `48927`;
+  - main iouring batches `6737`, jobs `26940`, wait calls `21359`,
+    inflight average `3.20`;
+  - gate pinned staging: copies `10408`, waits `10384`;
+  - gate iouring batches `3112`, jobs `10052`, wait calls `8583`,
+    inflight average `2.80`;
+  - down overlap worker time `8635550 us`;
+  - down hit `73.0%`, slots `766`;
+  - upgate hit `44.1%`, slots `1735`.
+- 7IN conclusion:
+  - n96 passes all gates with semantically correct output.
+  - Token rate `1.07 tok/s` is a new accepted n96 baseline under the strict
+    16GB cold-start gate.
+  - Keep `UPGATE_PCT=62` as the default in
+    `scripts/kimi-phase7fb-min-profile-repro.sh`.
+  - The improvement mechanism remains cache-split tuning:
+    pct `62` gives more upgate slots and fewer upgate iouring reads while down
+    hit rate remains acceptable.
+
+## Phase 7IO: next bottleneck after pct62 acceptance
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- n96 pct62 still spends most decode time in expert movement and CPU wrapper
+  paths:
+  - iouring bytes `214.84 GB`;
+  - iouring wait `36.65 s`;
+  - main pinned copies `48963`;
+  - gate pinned copies `10408`;
+  - current down overlap worker time `8.64 s`;
+  - upgate hit `44.1%`, down hit `73.0%`.
+
+Priority:
+
+- Do not broaden cache split further: trace replay already showed pct `63`
+  starts increasing down misses.
+- Do not retry RAM tier 5GB/10GB, Q4_0 down GPU/cache, combined/split staging,
+  broad profile cache policies, or GPU handoff; those were rejected earlier.
+- The next useful design should profile exposed iouring wait vs overlapped wait
+  at pct62 and look for a narrow improvement in read batching or expert-pack
+  layout, not more cache capacity.
+
+Next experiment candidate:
+
+- Run a pct62 n32 copy/IO batch profile with:
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`;
+  - `GGML_MOE_COPY_PROFILE_H2D=1`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Keep n32 first because the profile is heavy.
+- Required question:
+  - Is the remaining exposed time dominated by `io_uring_wait_cqe`, H2D enqueue,
+    H2D transfer, or slot reuse synchronization?
+- Decision rule:
+  - Only implement an IO batching/layout change if the profile shows a repeated
+    exposed wait bucket with a clear upper bound and a narrow code path.
