@@ -7519,6 +7519,145 @@ Final Phase 7EJ decision:
   - or target CPU fallback/page-cache behavior without using generated-token
     route traces as an oracle.
 
+## Phase 7EK: down-only protected VRAM profile hotset on slots16 SOTA
+
+Start time:
+
+- 2026-07-04T09:22:00Z.
+
+Current bottleneck:
+
+- Phase 7EJ proved prompt route-trace eviction is not robust and was rolled
+  back.
+- Phase 7EI/7EB profiles show the next large trace-independent bucket is down
+  expert movement:
+  - Phase 7EB n96 down-batch stage `10648.390 ms`;
+  - Phase 7EB n96 decode Q4_0 CPU fallback `4118.440 ms`;
+  - Phase 7EB n96 up/gate summed wall is about `16604.603 ms`, but broad
+    up/gate scheduling knobs have already regressed.
+- Down stage is concentrated by tensor:
+  - top 20 down tensors cover about `8850.086 ms` of n96 down stage;
+  - examples:
+    - `blk.4.ffn_down_exps.weight`: stage `808.647 ms`;
+    - `blk.60.ffn_down_exps.weight`: stage `723.790 ms`;
+    - `blk.25.ffn_down_exps.weight`: stage `447.225 ms`;
+    - `blk.26.ffn_down_exps.weight`: stage `443.369 ms`.
+
+Hypothesis:
+
+- Use an env-only down profile with the existing VRAM profile preloader.
+- Generate a profile from the accepted Phase 7EB n96 route profile, filtered to
+  `.ffn_down_exps.weight`, sorted by observed route count.
+- Preload/protect only the top `512` down expert entries:
+
+```sh
+GGML_MOE_VRAM_PROFILE=<phase7ek-down-hot512-profile.csv>
+GGML_MOE_VRAM_PROFILE_UPGATE=0
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS=294
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=24
+```
+
+- With Phase 7EB down cache `806` slots, this leaves about `294` unpinned down
+  slots for non-profile runtime misses, avoiding the all-pinned failure mode.
+- Upgate cache is a separate split-cache pool, and
+  `GGML_MOE_VRAM_PROFILE_UPGATE=0` avoids consuming upgate bandwidth for this
+  experiment.
+
+Theory and upper bound:
+
+- If the top512 down entries hit repeatedly, the hard upper bound is a fraction
+  of Phase 7EB n96 down stage `10.65 s`.
+- Because the profile preloader uses the same SSD/H2D path, it does not remove
+  first-load cost; it only changes residency and eviction.
+- Realistic n32 upside is modest, likely `0.5-1.5 s`, unless the protected
+  hotset prevents repeated stage misses in the top down tensors.
+- Main risks:
+  - preloading during prompt can raise TTFT;
+  - pinning too many down slots can increase non-profile down misses;
+  - preloading can add IO/H2D earlier without reducing total exposed wall.
+
+Implementation:
+
+- Env-only experiment; no source patch.
+- Generate reproducible profile:
+
+```bash
+SRC=/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm/route-profile.csv
+OUT=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ek-down-hot512-profile.csv
+python3 - "$SRC" "$OUT" <<'PY'
+import csv, sys
+src, out = sys.argv[1], sys.argv[2]
+rows = []
+with open(src, newline="") as f:
+    for r in csv.DictReader(f):
+        if ".ffn_down_exps.weight" not in r["tensor"]:
+            continue
+        rows.append(r)
+rows.sort(key=lambda r: (-int(r["count"]), r["tensor"], int(r["expert_idx"])))
+rows = rows[:512]
+cumulative = 0
+with open(out, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["rank","count","expert_bytes","cumulative_bytes","tensor_base","expert_idx","tensor"])
+    for i, r in enumerate(rows, 1):
+        b = int(r["expert_bytes"])
+        cumulative += b
+        w.writerow([i, r["count"], b, cumulative, "0x0", r["expert_idx"], r["tensor"]])
+PY
+```
+
+- Create `/tmp/run_phase7ek_repro.sh` from `/tmp/run_phase7eb_repro.sh`.
+- Append the four profile env variables above.
+- Keep all Phase 7EB SOTA env:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `PINNED_SLOTS=16`;
+  - `THREADS=32`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - current-down overlap, down parallel stage, pack-mmap CPU fallback, SQPOLL
+    io_uring, dense/expert mmap drop.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ek-down-hot512"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ek_repro.sh
+```
+
+Acceptance gates:
+
+- Hard gates:
+  - exit `0`;
+  - cold start;
+  - memory peak `<=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - France output coherent and semantically correct.
+- Activation:
+  - `env.txt` contains the profile env vars;
+  - stderr reports `profile preload: loaded 512 entries` or equivalent per
+    tensor loads adding up near the intended budget;
+  - `VRAM cache down` shows nonzero pinned count and still has free runtime
+    slots.
+- Promotion:
+  - first n32 must beat Phase 7EB n32 `29599.64 ms / 31`;
+  - if it beats, run a second cold n32 confirmation;
+  - only if both n32 runs beat, run n96 candidate and confirmation;
+  - n96 must beat Phase 7EB n96 `74201.57 ms / 77`.
+
+Rollback:
+
+- Env-only failure needs no source rollback.
+- If n32 is slower, quality fails, TTFT fails, memory fails, or activation is
+  incomplete, reject and keep Phase 7EB SOTA unchanged.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
