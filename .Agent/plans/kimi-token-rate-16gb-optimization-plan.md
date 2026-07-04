@@ -47550,6 +47550,118 @@ Decision rule:
   force registration; consider down path support separately.
 - If layers 7-9 enter down batch but registration is too late, consider
   earlier registration from tensor metadata or a first-call retry path.
+
+Result: n32 completed; early missing tensors are not direct registration wins.
+
+- End time: 2026-07-04T18:08:31+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-100700Z-n32-phase7gf-early-down-decline-debug`.
+- Code head:
+  `aa9092fb4`.
+- Metrics:
+  - quality `pass`;
+  - TTFT `76244.46 ms`;
+  - decode `29118.60 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - current-down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - worker_us `3377984`.
+- Diagnostic finding:
+  - `blk.7/8/9.ffn_down_exps.weight` do not appear in down batch declined
+    logs at all.
+  - The visible declined down tensors are mostly prompt/multirow declines for
+    other layers, not the three missing current-overlap tensors.
+  - Therefore missing `blk.7/8/9` is not a simple “down batch entered but
+    registered too late” case.
+- Decision:
+  - Do not force-register `blk.7/8/9` without more graph-level evidence.
+  - Focus on making successful current-down overlap start earlier and hide more
+    of its `~3.38 s` n32 worker time.
+
+## Phase 7GG: env-gated early current-down overlap start
+
+Start time: 2026-07-04T18:12:00+08:00.
+
+Goal:
+
+- Start current-down overlap earlier in the mixed up/gate path so its SSD/H2D
+  work can overlap with up/gate compute, not only with the later fuse/D2H tail.
+- Keep the new behavior behind
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1`.
+- Default behavior remains unchanged unless the flag is enabled.
+
+Current code behavior:
+
+- In the mixed-type up/gate path, `start_current_down_overlap()` is currently
+  called after:
+  - up tensor staging;
+  - gate tensor staging;
+  - up compute;
+  - gate compute.
+- It then overlaps mostly with:
+  - destination id copy;
+  - fused up/gate kernel;
+  - D2H copy;
+  - CPU scatter.
+
+Theory / upper bound:
+
+- Phase 7GD/7GF show current-down overlap worker time is about `3.38-3.41 s`
+  for n32.
+- Starting it before up/gate compute can expose more compute time for hiding
+  down reads.
+- Upper bound is less than the full worker time because reads may contend with
+  up/gate staging and cache ring slots.
+- If early start hides even 20-30% of worker time, n32 decode could improve by
+  about `0.7-1.0 s`.
+
+Implementation plan:
+
+- Add helper:
+  - `current_down_overlap_early_enabled()`.
+- In the mixed-type branch:
+  - after up/gate staging succeeds, if early flag is on:
+    - call `start_current_down_overlap()`;
+    - define a fail helper that joins the worker before returning;
+    - use that helper for all later failure returns in the branch.
+  - if early flag is off:
+    - preserve current start point after up/gate compute.
+- No changes to current-down worker semantics, cache selection, or model math.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gg-early-current-down"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 fails gates or regresses materially, reject and keep default-off only
+  if useful for future diagnostics.
+- If n32 improves materially versus the rebuilt baseline range, run n96.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 

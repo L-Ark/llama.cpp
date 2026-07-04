@@ -2174,6 +2174,11 @@ static bool current_down_overlap_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool current_down_overlap_early_enabled() {
+    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY");
+    return env && env[0] && env[0] != '0';
+}
+
 static bool current_down_overlap_tensor_profile_enabled() {
     const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT");
     return env && env[0];
@@ -6135,18 +6140,26 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
             return decline("mixed_stage_gate");
         }
+        const bool early_current_down_overlap = current_down_overlap_early_enabled();
+        if (early_current_down_overlap) {
+            start_current_down_overlap();
+        }
+        auto mixed_overlap_fail = [&](const char *reason) -> bool {
+            (void)join_current_down_overlap();
+            return decline(reason);
+        };
         if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
-            return decline("mixed_memset_up");
+            return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_up") : decline("mixed_memset_up");
         }
         if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
-            return decline("mixed_memset_gate");
+            return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_gate") : decline("mixed_memset_gate");
         }
         if (!launch_moe_mmvq_compact_batch(
                 src0_type,
                 (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
                 ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
                 bc.d_src1_q8_up, (float *)bc.d_up, n_active, st)) {
-            return decline("mixed_launch_up");
+            return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_up") : decline("mixed_launch_up");
         }
         if (profile) cudaEventRecord(bc.ev_up, st);
         if (!launch_moe_mmvq_compact_batch(
@@ -6154,14 +6167,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
                 ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
                 bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, st)) {
-            return decline("mixed_launch_gate");
+            return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_gate") : decline("mixed_launch_gate");
         }
         if (profile) cudaEventRecord(bc.ev_gate, st);
-        start_current_down_overlap();
-        auto mixed_overlap_fail = [&](const char *reason) -> bool {
-            (void)join_current_down_overlap();
-            return decline(reason);
-        };
+        if (!early_current_down_overlap) {
+            start_current_down_overlap();
+        }
         for (int j = 0; j < n_active; ++j) {
             bc.h_ids_dst[j] = flat_dst_ids[j];
         }
