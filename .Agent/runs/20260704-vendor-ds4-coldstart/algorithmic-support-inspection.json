@@ -1,0 +1,90 @@
+{
+  "code_inspection": {
+    "hc_head_is_mtp": false,
+    "lookahead_evidence": "examples/lookahead/lookahead.cpp uses llama_memory_seq_rm/keep/cp over W+G+1 branch sequences; historical strict runs failed with DeepSeek4 coupled-sequence divergence.",
+    "lookahead_present": [
+      "build-ds4-moe-stream/bin/llama-lookahead",
+      "build-ds4-moe-stream/examples/lookahead/CMakeFiles/llama-lookahead.dir/lookahead.cpp.o"
+    ],
+    "lookahead_uses_parallel_memory_sequences": true,
+    "lookup_present": [
+      "build-ds4-moe-stream/bin/llama-lookup",
+      "build-ds4-moe-stream/bin/llama-lookup-create",
+      "build-ds4-moe-stream/bin/llama-lookup-merge",
+      "build-ds4-moe-stream/bin/llama-lookup-stats",
+      "build-ds4-moe-stream/examples/lookup/CMakeFiles/llama-lookup-create.dir/lookup-create.cpp.o",
+      "build-ds4-moe-stream/examples/lookup/CMakeFiles/llama-lookup-merge.dir/lookup-merge.cpp.o",
+      "build-ds4-moe-stream/examples/lookup/CMakeFiles/llama-lookup-stats.dir/lookup-stats.cpp.o",
+      "build-ds4-moe-stream/examples/lookup/CMakeFiles/llama-lookup.dir/lookup.cpp.o"
+    ],
+    "nextn_evidence": "src/llama-arch.cpp comments say NextN/MTP tensors are currently ignored/reserved; src/llama-model.cpp comments say TODO when MTP is implemented; src/models/deepseek4.cpp uses hc_head as normal output head before result_norm/result_output.",
+    "nextn_mtp_runtime_implemented_for_deepseek4": false,
+    "speculative_evidence": "examples/speculative-simple/speculative-simple.cpp still exits when params.speculative.draft.mparams.path is empty; normal llama-speculative also loads a draft model and checks vocab compatibility.",
+    "speculative_examples_present": [
+      "build-ds4-moe-stream/bin/llama-speculative",
+      "build-ds4-moe-stream/bin/llama-speculative-simple",
+      "build-ds4-moe-stream/common/CMakeFiles/llama-common.dir/speculative.cpp.o",
+      "build-ds4-moe-stream/examples/speculative-simple/CMakeFiles/llama-speculative-simple.dir/speculative-simple.cpp.o",
+      "build-ds4-moe-stream/examples/speculative/CMakeFiles/llama-speculative.dir/speculative.cpp.o"
+    ],
+    "speculative_requires_draft_model": true
+  },
+  "decision": {
+    "do_not_rerun": [
+      "llama-lookahead",
+      "ngram-simple",
+      "ngram-mod",
+      "speculative without a compatible draft model"
+    ],
+    "next_viable_classes": [
+      "obtain or build a compatible DeepSeek draft model and run exact target verification",
+      "implement real DeepSeek4 MTP/NextN only if a GGUF with compatible heads exists",
+      "redesign DeepSeek4 memory to support correct branch KV state for lookahead, but this is large and likely violates the 16GB/VRAM budget unless proven otherwise",
+      "revisit GPU up/down offload only if full output correctness can be guaranteed and source movement is bounded"
+    ],
+    "no_source_algorithmic_candidate_available_now": true
+  },
+  "experiment": "algorithmic-support-inspection",
+  "gguf_metadata_observation": {
+    "deepseek_model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "note": "llama-gguf printed metadata/tensor names but aborted while reading this very large GGUF; the grep output showed no MTP/NextN keys and did show hc_head tensors. This matches prior audit records.",
+    "observed_absent": [
+      "mtp",
+      "nextn",
+      "nextn_predict_layers",
+      "draft",
+      "eagle"
+    ],
+    "observed_keys": [
+      "general.architecture",
+      "deepseek4.block_count",
+      "deepseek4.context_length",
+      "deepseek4.embedding_length",
+      "deepseek4.expert_used_count",
+      "deepseek4.expert_count",
+      "deepseek4.expert_shared_count",
+      "hc_head_base",
+      "hc_head_fn",
+      "hc_head_scale"
+    ]
+  },
+  "historical_rejections_still_apply": [
+    "target-only llama-lookahead failed with DeepSeek4 coupled-sequence divergence and collapsed gate-cache hit rate",
+    "ngram-simple all-output path stalled/replayed and then fallback-correct version only reached about 3.7 tok/s",
+    "no-draft ngram-mod accepted only 37.5% drafted tokens, increased target/checkpoint overhead, and reached 2.879 tok/s",
+    "external draft speculation is unavailable without a compatible draft model artifact"
+  ],
+  "model_inventory": [
+    "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00001-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00002-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00003-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00004-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00005-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00006-of-00007.gguf",
+    "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00007-of-00007.gguf"
+  ],
+  "model_inventory_conclusion": "No local tokenizer-compatible small DeepSeek draft GGUF was found; GLM GGUF shards are not compatible DeepSeek draft models.",
+  "timestamp_utc": "2026-07-04T02:17:00Z"
+}

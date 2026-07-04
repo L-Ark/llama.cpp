@@ -7165,3 +7165,57 @@ Acceptance gates for any algorithmic candidate:
 - `TTFT <= 33617.688744 ms` for accepted SOTA.
 - `eval_tok_s > 4.4`.
 - New compliant SOTA must be recorded in full, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb`, then rerun from pushed source.
+
+### 2026-07-04T02:17Z Algorithmic Support Inspection Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/algorithmic-support-inspection.json`
+- sha256: `b9f62ac35891d87d65e1b40ff94b1a2b626718e08a98e66e5ee7fa1083c59f6d`
+
+Code inspection:
+
+- Existing binaries are present:
+  - `build-ds4-moe-stream/bin/llama-lookahead`
+  - `build-ds4-moe-stream/bin/llama-lookup`
+  - `build-ds4-moe-stream/bin/llama-speculative`
+  - `build-ds4-moe-stream/bin/llama-speculative-simple`
+- `llama-speculative` / `llama-speculative-simple` require a draft model and check draft/target vocab compatibility.
+- Local model inventory has no tokenizer-compatible small DeepSeek draft GGUF:
+  - DeepSeek target GGUF is present;
+  - GLM GGUF shards are present but are not compatible DeepSeek draft models.
+- DeepSeek GGUF metadata grep showed DeepSeek4 keys and `hc_head_*` tensors, but no `mtp`, `nextn`, `nextn_predict_layers`, `draft`, or `eagle` keys.
+- `hc_head_*` is used in `src/models/deepseek4.cpp` as the normal output head path before `result_norm` / `result_output`; it is not an MTP head.
+- `src/llama-arch.cpp` explicitly comments that NextN/MTP tensors are currently ignored/reserved for future support.
+- `src/llama-model.cpp` has `TODO` comments around MTP implementation.
+
+Historical rejected algorithmic paths still apply:
+
+- target-only `llama-lookahead` failed with DeepSeek4 coupled-sequence divergence and collapsed gate-cache hit rate;
+- ngram-simple all-output path stalled/replayed, and the fallback-correct version only reached about `3.7 tok/s`;
+- no-draft ngram-mod accepted only `37.5%` drafted tokens, increased target/checkpoint overhead, and reached `2.879 tok/s`;
+- external draft speculation is unavailable without a compatible draft model artifact.
+
+Verdict:
+
+- No no-source algorithmic candidate is available now.
+- Do not rerun:
+  - `llama-lookahead`;
+  - ngram-simple;
+  - ngram-mod;
+  - speculative decoding without a compatible draft model.
+
+Next viable classes:
+
+1. Obtain or build a compatible DeepSeek draft model, then run exact target verification.
+2. Implement real DeepSeek4 MTP/NextN only if a GGUF with compatible heads exists.
+3. Redesign DeepSeek4 branch KV state for lookahead only if a hard memory/batch bound proves it can work under 16GB RAM and current VRAM constraints.
+4. Revisit GPU up/down offload only if full-output correctness can be guaranteed and source movement is bounded.
+
+Current next practical direction:
+
+- Since no compatible draft/MTP artifact is present, the next local engineering path is not another no-source speculative run.
+- If continuing without new model artifacts, the only remaining high-bound code path is a correctness-first GPU up/down offload investigation:
+  - start with a deterministic short compare that verifies complete France output for a smaller/hotter up/down set;
+  - require exact output correctness before any performance run;
+  - do not promote if semantic correctness drifts, even if per-op numeric error is small.
