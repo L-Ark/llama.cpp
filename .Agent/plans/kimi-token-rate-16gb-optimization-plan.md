@@ -58390,6 +58390,107 @@ Decision:
   extra IO. Prior rejected paths mean this must be a narrow, evidence-backed
   design step before coding.
 
+## Phase 7JC: foreground batch-boundary reduction analysis
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7JB proves the dominant low-level wait cost is first-CQE storage latency:
+  `9646.318 ms` across `4013` read batches.
+- CQE batching/syscall reduction has a weak upper bound:
+  waits under `0.25 ms` total only `322.152 ms`.
+- Therefore the next viable low-level direction is reducing how often decode
+  exposes a first-CQE read batch, or submitting already-required reads earlier
+  without adding new reads.
+
+Problem:
+
+- Existing traces are not directly joinable:
+  - `io-read-trace.csv` has per-read batch sequence and tensor/expert offsets;
+  - `io-wait-trace.csv` has per-wait distribution but no shared batch id;
+  - `io-batch-profile.csv` has aggregate batch rows but not read entries.
+- Before coding a runtime batch merge/pipeline change, we need a joined trace
+  that can answer:
+  - which exact tensors/experts are in high first-wait batches;
+  - whether consecutive high-wait batches are logically adjacent and could be
+    submitted together;
+  - what upper bound exists if only safe, already-required reads are merged.
+
+Hypothesis:
+
+- If a small class of adjacent foreground batches accounts for a large share of
+  first-CQE wait, a narrow merge/pipeline implementation may reduce token time
+  without extra IO.
+- If high first waits are spread across unrelated graph boundaries and required
+  only after compute dependencies, batch reduction is not a practical next path.
+
+Implementation plan:
+
+- Extend the default-off trace infrastructure with a shared batch sequence:
+  - generate one `io_batch_seq` per call to `expert_pack_iouring_copy_jobs()`
+    when any of wait/read/locality tracing is enabled;
+  - add `batch_seq` to `GGML_MOE_IO_WAIT_TRACE_OUT`;
+  - reuse the same `batch_seq` in `GGML_MOE_IO_READ_TRACE_OUT`;
+  - keep current behavior unchanged when trace envs are unset.
+- Add only diagnostic fields that do not change runtime behavior:
+  - `first_tensor`;
+  - `last_tensor`.
+- Run one strict cold-start n32 with:
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Offline analysis:
+
+- Join wait rows to read rows by `batch_seq`.
+- Reconstruct per-batch:
+  - op;
+  - tensors;
+  - read job count;
+  - first-wait time;
+  - total wait time;
+  - whether all reads are same tensor/source;
+  - whether the batch is runtime foreground or current-down overlap.
+- Compute upper bounds for candidate reductions:
+  1. merge only immediately consecutive batches with the same `op` and same
+     tensor;
+  2. merge immediately consecutive `runtime_load` batches with the same layer
+     but different up/gate tensor names;
+  3. merge foreground `runtime_load` with immediately following
+     `current_down_overlap` only as a theoretical bound, not an implementation
+     decision;
+  4. no-dependency lower bound: remove all first waits except one per op/layer
+     group, to show an unrealistic ceiling.
+
+Theoretical decision rule:
+
+- A real implementation needs at least `~1 s` reproducible n32 upper bound
+  before it is worth coding, because previous n32 variance can be several
+  hundred milliseconds.
+- If safe adjacent same-tensor/same-layer merges have an upper bound below
+  `500 ms`, reject batch-boundary reduction as too small.
+- If the only large bound requires impossible dependency violations or adding
+  extra reads, do not implement it.
+- If a safe class has a meaningful bound, write a separate implementation
+  phase with math and rollback gates before touching runtime scheduling.
+
+Required gates for the diagnostic run:
+
+- cold start through the cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
 ### Result
 
 Timestamp: 2026-07-05.
