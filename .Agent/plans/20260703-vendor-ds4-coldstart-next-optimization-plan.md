@@ -5557,3 +5557,134 @@ Next actions after this experiment:
   - quantify per-layer and per-expert latency distribution;
   - prioritize a true batched gate path only if the measured H2D/D2H/scatter cost dominates;
   - otherwise focus on CPU fallback miss path and pack read scheduling.
+
+### 2026-07-04T00:07Z Deferred Per-Expert Stream Sync Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/stream-defer-top3000-result.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T235615Z-20260704_stream_defer_top3000_candidate/france-cpu40-vram0gb`
+
+Config delta from accepted SOTA:
+
+- Added `GGML_MOE_STREAM_DEFER=1`.
+- Otherwise kept the accepted top3000 SOTA config.
+
+Metrics:
+
+- `eval_tok_s=null`
+- `prompt_tok_s=null`
+- `TTFT=null`
+- `memory_peak_bytes=null`
+- `memory_file_bytes=null`
+- `memory_max_events=0`
+- `ram_ok=false`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=false`
+- correctness reason: `missing_france,missing_europe,missing_expected_context`
+
+Observed state:
+
+- The process exceeded the TTFT gate and produced no France answer.
+- It was stopped manually after the run showed no semantic output progress.
+- `stdout.txt` contains only the loading spinner and no answer text.
+- `stderr.txt` confirms deferred mode was active:
+  `[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=1)`.
+- Prefill completed:
+  `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4602.643`.
+- Pack direct path remained clean for the partial run:
+  `direct_reads=3007 direct_failures=0 direct_fallbacks=0`.
+- Partial cache counters before termination:
+  `hits=25 misses=7 hit_rate=78.1%`.
+- `one_trace.csv` has only `33` lines; the last expert row was:
+  `31,4892.366,blk.4.ffn_gate_exps.weight,216,...,slot=7,...`.
+- Resource samples stayed under the 16GB cgroup limit, with sampled memory around `15.96GB`.
+- During the hang, GPU memory was about `31859 MiB`, GPU util was `0%`, and `llama-cli` was burning about one CPU core.
+
+Diagnosis:
+
+- Raw `GGML_MOE_STREAM_DEFER=1` is not valid as a config-only optimization for the current path.
+- `ggml_cuda_moe_stream_one()` pushes a `deferred_scatter` record and intentionally keeps the stream slot `in_use` so `h_scratch` is not overwritten.
+- `ggml_cuda_moe_stream_sync()` is called only after the CPU-side per-expert loop for the current `mul_mat_id` op.
+- A single layer can need more than the `8` stream slots before that sync point. Once slots `0..7` are occupied, `acquire_slot()` spins waiting for a slot that cannot be released until the loop reaches `ggml_cuda_moe_stream_sync()`.
+- This explains the stop at early `blk.4` trace rows and no generated answer.
+
+Artifact hashes:
+
+- `summary.json`: `8d28238db2cda2fa61f210b8e62e939408a3ac583b67b67c80e1adce59f60a09`
+- `stdout.txt`: `464a16c0f8d91cd7c2cc0e9ad065ef6ee0dccc2fbfa224272f764eec769a4f00`
+- `stderr.txt`: `1aac741247ebbdb512369b8d01d8bf17c79619d1c21363e0041d7402d390b53c`
+- `environment.txt`: `546bfbddce3af2f588c7652bcfad5ccc3b2985e5d607bc85a70343f479c9d878`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `a98374a15d42906837209fed0cfced6143334de161f488a2f814c81de56c2fcf`
+- `resource_samples.tsv`: `e6396b6fb61162bcb2e34cd1c70caadd0f8002878735ba8a6fa5093798d87ab7`
+
+Verdict:
+
+- Rejected. No token-rate result, no valid output, and TTFT gate failed.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+- This failure is still useful: it proves that deferred sync can only be tested after adding a bounded flush/release mechanism.
+
+### 2026-07-04T00:16Z Next Plan: Bounded Deferred Stream Flush
+
+Goal:
+
+- Convert raw deferred sync from an unsafe unlimited defer into a bounded batching experiment.
+- The target behavior is to submit up to `MOE_STREAM_NSLOTS` expert jobs, then synchronize/scatter/release the completed pending slots before submitting more work.
+- This keeps `h_scratch` lifetime correct while testing whether grouping several expert jobs before synchronization improves token rate.
+
+Bottleneck:
+
+- Current non-deferred SOTA synchronizes and scatters after every accepted expert invocation.
+- Raw deferred mode proved that there are more accepted expert invocations per layer than available stream slots.
+- A bounded flush can test whether the real bottleneck is per-expert immediate synchronization rather than cache misses or trace overhead.
+
+Hard-bound / expected upper limit:
+
+- The gate path has about `35151` expert invocations.
+- Batching 8 at a time can at best reduce synchronization frequency by roughly `8x`, but it still pays one sync per occupied slot during flush and still scatters every result.
+- If per-expert immediate synchronization costs `20-50 us`, a bounded flush could save roughly `0.6-1.5 s`.
+- Realistic expected token rate if this helps is `4.5-4.8 tok/s`; a larger gain would imply the GPU work was previously serialized much more than expected.
+- If GPU kernels are already small and CPU fallback/pack read dominates, bounded flush may tie or regress due to delayed scatter and extra bookkeeping.
+
+Implementation plan:
+
+- Add a helper that drains the current thread's `tls_pending` vector:
+  - synchronize each pending slot's stream;
+  - scatter from that slot's `h_scratch` into destination rows;
+  - release the slot;
+  - clear `tls_pending`.
+- In `ggml_cuda_moe_stream_one()`, before acquiring a slot in deferred mode, call the drain helper when `tls_pending.size() >= MOE_STREAM_NSLOTS`.
+- Keep the existing final `ggml_cuda_moe_stream_sync()` behavior by reusing the same drain helper.
+- Do not change cache, pack, model, prompt, top-k, prefill, cgroup, CLI batch settings, or non-deferred behavior.
+- Guard the candidate behind a new env, e.g. `GGML_MOE_STREAM_DEFER_BOUNDED=1`, so plain `GGML_MOE_STREAM_DEFER=1` behavior remains unchanged unless the new experiment flag is set.
+
+Practice config:
+
+- Build source candidate.
+- Run strict cold top3000 SOTA config with:
+  - `GGML_MOE_STREAM_DEFER=1`
+  - `GGML_MOE_STREAM_DEFER_BOUNDED=1`
+  - trace output enabled for the first candidate.
+- Keep all accepted SOTA settings unchanged otherwise.
+
+Acceptance gates:
+
+- First candidate must finish and produce a coherent France answer.
+- `eval_tok_s > 4.4`.
+- If it exceeds `4.4`, commit/push source/docs/artifacts immediately and rerun from pushed source before promotion.
+- Pushed-source rerun must also have `eval_tok_s > 4.4`.
+- `memory_peak_bytes <= 16000000000`, including page cache.
+- `ram_limit_killed=false`, `oom_seen=false`, and `ram_ok=true`.
+- `TTFT <= 33617.688744 ms`.
+- O_DIRECT pack must remain clean: `direct_failures=0` and `direct_fallbacks=0`.
+
+Rejection rules:
+
+- Reject if throughput is `<= 4.4`, correctness fails, TTFT exceeds the gate, cgroup RAM limit is violated, OOM appears, the process hangs, or direct pack failures/fallbacks appear.
+- If rejected, revert the source patch and push only the docs/artifacts.
+- Record metrics, output, counters, hashes, source diff summary, and root-cause verdict in this document.

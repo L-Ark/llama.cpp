@@ -1,0 +1,52 @@
+{
+  "timestamp_utc": "2026-07-04T00:07:00Z",
+  "experiment": "stream-defer-top3000-candidate",
+  "verdict": "rejected",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "candidate_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T235615Z-20260704_stream_defer_top3000_candidate/france-cpu40-vram0gb",
+  "candidate_config_delta": [
+    "GGML_MOE_STREAM_DEFER=1",
+    "otherwise kept top3000 accepted SOTA config"
+  ],
+  "metrics": {
+    "eval_tok_s": null,
+    "prompt_tok_s": null,
+    "ttft_estimate_ms": null,
+    "memory_peak_bytes": null,
+    "memory_file_bytes": null,
+    "memory_max_events": 0,
+    "ram_ok": false,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": false,
+    "correctness_reason": "missing_france,missing_europe,missing_expected_context"
+  },
+  "observations": {
+    "manual_stop_reason": "candidate exceeded TTFT gate and stopped making semantic output progress",
+    "stdout_state": "only model loading spinner and no France answer",
+    "stderr_key_lines": [
+      "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=1)",
+      "[moe_stream] one prefill: completed attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4602.643",
+      "[moe_stream] one expert pack: hits=3007 misses=0 reads=3007 bytes=13400539136 failures=0 entries=4599 direct_enabled=1 direct_reads=3007 direct_failures=0 direct_fallbacks=0",
+      "[moe_stream] VRAM cache: hits=25 misses=7 hit_rate=78.1%"
+    ],
+    "trace_rows": 33,
+    "trace_last_row": "31,4892.366,blk.4.ffn_gate_exps.weight,216,0x7679c4248b00,4456448,1,0,1,7,1.077,0.004,0.040,0.003,0.000,0.000,0.000,1.125",
+    "resource_sample_peak_bytes_seen": 15959769088,
+    "gpu_state_during_hang": "GPU memory used around 31859 MiB, GPU util 0%, llama-cli CPU about 98%",
+    "diagnosis": "current deferred mode records pending scatter without releasing the stream slot until ggml_cuda_moe_stream_sync at the CPU MoE boundary; the same layer can need more than 8 expert invocations, so the 8-slot pool fills and subsequent reserve waits for a slot that cannot be released before the layer-level sync"
+  },
+  "artifact_hashes_sha256": {
+    "summary.json": "8d28238db2cda2fa61f210b8e62e939408a3ac583b67b67c80e1adce59f60a09",
+    "stdout.txt": "464a16c0f8d91cd7c2cc0e9ad065ef6ee0dccc2fbfa224272f764eec769a4f00",
+    "stderr.txt": "1aac741247ebbdb512369b8d01d8bf17c79619d1c21363e0041d7402d390b53c",
+    "environment.txt": "546bfbddce3af2f588c7652bcfad5ccc3b2985e5d607bc85a70343f479c9d878",
+    "exact_command.txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace.csv": "a98374a15d42906837209fed0cfced6143334de161f488a2f814c81de56c2fcf",
+    "resource_samples.tsv": "e6396b6fb61162bcb2e34cd1c70caadd0f8002878735ba8a6fa5093798d87ab7"
+  },
+  "next_direction": "do not use raw GGML_MOE_STREAM_DEFER=1 as-is; if revisiting, implement bounded deferred flushing when the slot pool is full or reduce sync granularity safely"
+}
