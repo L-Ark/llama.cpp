@@ -53272,3 +53272,67 @@ Result:
   - Do not update `scripts/kimi-phase7fb-min-profile-repro.sh`.
   - The first depth1 run remains useful evidence that down-prefetch concurrency
     is near a variance boundary, but it is not reliable enough for acceptance.
+
+## Phase 7HM: current stable down-prefetch depth-3 probe
+
+Start time: 2026-07-05T01:08:00+08:00.
+
+Goal:
+
+- Complete the current stable down-prefetch concurrency curve by testing
+  `MOE_PREFETCH_DOWN_DEPTH=3` between accepted default depth `2` and rejected
+  depth `4`/`1` behavior.
+- Keep this env-only; do not change production defaults unless strict n96
+  promotion beats the historical SOTA.
+
+Why this is not a blind repeat:
+
+- Depth `1` on current stable showed one strong n32 and one near-SOTA n96 run,
+  but failed n96 repeat.
+- Depth `4` was previously rejected because it increased contention.
+- Depth `3` was only rejected in much older runtime phases, not after the
+  current Blackwell `120a` rebuilt baseline and source state.
+- If the concurrency knee has moved, depth `3` might hide slightly more down
+  movement than depth `2` without the full contention cost of depth `4`.
+
+Theory and upper bound:
+
+- The only expected benefit is overlap/concurrency, not less total work.
+- Current n96 current-down worker is about `8.35-8.43 s`, but only exposed
+  contention/critical-path portions can affect decode.
+- Acceptance target remains strict:
+  - n32 must first beat the current rebuilt n32 baseline range;
+  - n96 must beat historical Phase 7FB `70087.31 ms / 77` before any default
+    change.
+
+Experiment: n32 depth-3 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hm-prefetch-depth3"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=3 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 is slower than the current rebuilt baseline range or any gate fails,
+  reject depth `3` and keep production depth `2`.
+- If n32 passes and improves, run strict n96.
+- Accept only if n96 beats `70087.31 ms / 77`; otherwise record rejection.
