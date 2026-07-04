@@ -75,6 +75,25 @@ Next plan after this audit:
 3. Reject that candidate on paper unless it can plausibly remove at least `17386.570 ms` decode time while adding less than `1642.887 ms` overhead, keeping 16GB cgroup page-cache accounting and TTFT `<=33617.688744 ms`.
 4. Any numerically different path must pass fixed-text token-level top1 verification before a strict cold performance benchmark.
 
+### 2026-07-04 Predictive Source-Overlap Hard Bound
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/predictive-source-overlap-hard-bound.json`.
+
+Result: source/page-only predictive overlap is rejected before runtime implementation. It does not close all overlap ideas, but it closes any candidate that only changes page/source fault timing without reducing hot CPU up/down compute.
+
+Hard-bound result:
+
+- Baseline decode up/down CPU fallback is `19029.457 ms`.
+- Serial touch diagnostic leaves `3173.291 ms` decode fallback after source/page exposure is removed, so perfect source-only overlap can save at most `15856.166 ms`.
+- That gives a zero-overhead decode token-rate ceiling of only `8.993 tok/s`, still `1530.404 ms` short of the `10 tok/s` decode window.
+- Parallel touch residual gives an even lower zero-overhead ceiling of `8.697 tok/s`.
+- Source overlap plus the entire previously closed scheduling/tail gap reaches only `10.105 tok/s` in a zero-overhead ideal with about `142 ms` slack, so it is not credible under cgroup refault pressure, thread contention, and TTFT gate.
+
+Decision:
+
+- Do not implement source-only predictive overlap, io_uring-only overlap, same-op page touch, or scheduler-gap-only tuning.
+- The next viable class must combine source/page hiding with exact compute/offload, or use an exact compact resident representation, and must show `>17386.570 ms` decode saving with `<1642.887 ms` overhead before any runtime code is changed.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.

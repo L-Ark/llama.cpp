@@ -1,0 +1,92 @@
+{
+  "artifact": "predictive-source-overlap-hard-bound",
+  "created_utc": "2026-07-04T14:33:00Z",
+  "source_head_before_audit": "a378aa985375d030b06228b5ba5812acd0f11a50",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "rejected_without_runtime_source_change",
+  "purpose": "Screen whether a predictive cross-op overlap implementation that only hides page/source stalls, without changing arithmetic or reducing hot CPU compute, can reach the 10 tok/s target.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_acceptance_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "inputs": {
+    "decoded_tokens_estimate": 136.608765524,
+    "accepted_decode_window_ms_estimate": 31047.44671,
+    "target_decode_window_for_10_tok_s_ms": 13660.8765524,
+    "baseline_decode_updown_cpu_fallback_ms": 19029.457,
+    "serial_touch_decode_fallback_after_touch_ms": 3173.291,
+    "parallel_touch_decode_fallback_after_touch_ms": 3690.044,
+    "serial_touch_decode_summed_touch_ms": 41626.545,
+    "parallel_decode_summed_worker_touch_ms": 48312.036,
+    "chunk_scheduling_tail_gap_ms": 1672.318,
+    "artifacts": [
+      ".Agent/runs/20260704-vendor-ds4-coldstart/fresh-sota44-bottleneck-hard-bound.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/parallel-touch-decode-profile-result.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/source-movement-async-bound.json"
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "perfect_source_overlap_using_serial_touch_residual",
+      "assumption": "All page/source stall removed or hidden; hot residual CPU fallback from the serial touch diagnostic remains.",
+      "removable_ms": 15856.166,
+      "new_decode_window_ms_no_overhead": 15191.28071,
+      "theoretical_tok_s_no_overhead": 8.992577,
+      "shortfall_to_10_tok_s_ms": 1530.404158,
+      "decision": "fails_10_tok_s_bound"
+    },
+    {
+      "name": "perfect_source_overlap_using_parallel_touch_residual",
+      "assumption": "All page/source stall removed or hidden using the parallel-touch residual as the hot fallback estimate.",
+      "removable_ms": 15339.413,
+      "new_decode_window_ms_no_overhead": 15708.03371,
+      "theoretical_tok_s_no_overhead": 8.696745,
+      "shortfall_to_10_tok_s_ms": 2047.157158,
+      "decision": "fails_10_tok_s_bound"
+    },
+    {
+      "name": "source_overlap_plus_full_closed_scheduler_gap_ideal",
+      "assumption": "Source/page stall and the entire previously closed scheduling/tail gap are both removed with zero overhead.",
+      "removable_ms": 17528.484,
+      "new_decode_window_ms_no_overhead": 13518.96271,
+      "theoretical_tok_s_no_overhead": 10.104974,
+      "margin_to_10_tok_s_ms": 141.913842,
+      "decision": "not_actionable",
+      "reason": "This overcounts a scheduler/tail gap already closed as nonactionable and leaves only about 142 ms total slack before any implementation overhead, cgroup refault pressure, thread contention, or TTFT impact."
+    }
+  ],
+  "constraints_analysis": {
+    "correctness": "Pure source/page overlap should not change logits if it only changes fault timing, but it still must pass output correctness because page-cache pressure can alter scheduling and rejected probes must not be promoted.",
+    "ram": "Any page-source preparation occurs inside the 16GB cgroup file cache. Earlier same-op touch kept memory_peak at 16GB but regressed throughput, showing page-cache pressure and touch work are real costs.",
+    "ttft": "Predictive source preparation must not push accepted TTFT above 33617.688744 ms. Source-only overlap has no slack for TTFT overhead if it cannot reach 10 tok/s even with zero overhead.",
+    "dependencies": "Down experts are known only after the current layer gate/up path; next-layer routes are not known until current layer output is produced, limiting safe lookahead without changing computation."
+  },
+  "decision": {
+    "source_only_predictive_overlap_is_worth_implementing": false,
+    "reason": "Even perfect source/page overlap leaves about 3173 ms hot CPU fallback and reaches only about 8.99 tok/s with zero overhead, below the 10 tok/s target. Adding the closed scheduler gap barely crosses 10 in a zero-overhead ideal with only 142 ms slack, so it is not a credible implementation target.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4
+  },
+  "remaining_open_candidates": [
+    "combined source overlap plus exact compute/offload that removes at least an additional 1530.405 ms after all overhead",
+    "exact compact resident representation with enough coverage to remove near-full decode up/down fallback",
+    "verified exact/token-stable GPU MXFP4 x Q8_0 path paired with a source/cache solution"
+  ],
+  "next_required_work": {
+    "before_runtime_code": "Select one combined compute+source candidate and write a hard-bound showing more than 17386.570 ms decode saving with less than 1642.887 ms overhead, then define the top1/correctness gate.",
+    "do_not_repeat": [
+      "source-only predictive overlap",
+      "same-op page touch",
+      "io_uring-only overlap",
+      "scheduler-gap-only tuning"
+    ]
+  }
+}
