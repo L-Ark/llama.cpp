@@ -5688,3 +5688,117 @@ Rejection rules:
 - Reject if throughput is `<= 4.4`, correctness fails, TTFT exceeds the gate, cgroup RAM limit is violated, OOM appears, the process hangs, or direct pack failures/fallbacks appear.
 - If rejected, revert the source patch and push only the docs/artifacts.
 - Record metrics, output, counters, hashes, source diff summary, and root-cause verdict in this document.
+
+### 2026-07-04T00:22Z Bounded Deferred Stream Flush Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/bounded-defer-top3000-result.json`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T001016Z-20260704_bounded_defer_top3000_candidate/france-cpu40-vram0gb`
+
+Source patch tested:
+
+- Added `GGML_MOE_STREAM_DEFER_BOUNDED`.
+- Added a `moe_stream_drain_pending()` helper that synchronizes pending slots, scatters from `h_scratch`, releases slots, and clears `tls_pending`.
+- In deferred mode, drained when `tls_pending.size() >= MOE_STREAM_NSLOTS` before acquiring another slot.
+- Reused the same drain helper for final `ggml_cuda_moe_stream_sync()`.
+
+Config delta from accepted SOTA:
+
+- Added `GGML_MOE_STREAM_DEFER=1`.
+- Added `GGML_MOE_STREAM_DEFER_BOUNDED=1`.
+- Otherwise kept the accepted top3000 SOTA config unchanged.
+
+Metrics:
+
+- `eval_tok_s=4.3`
+- `prompt_tok_s=1.8`
+- `TTFT=31965.574447 ms`
+- `elapsed_seconds=63.55`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15083008000`
+- `memory_max_events=15846`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- `correctness_ok=true`
+
+Correctness output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.
+```
+
+Counters:
+
+- prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4578.906 pack_misses=0 read_failures=0`
+- pack: `hits=4886 misses=0 reads=4886 bytes=21774204928 direct_reads=4886 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=33265 misses=1886 hit_rate=94.6%`
+- trace rows: `35152`
+
+Artifact hashes:
+
+- `summary.json`: `32c2d3fd2f75cef0d826fc82f5d8f082e52d09fe8845a67afdfb81efb9f8fb2d`
+- `stdout.txt`: `c4c20ae6467fc4d338ebe790d8d97fa198fa7c742de96a36a637cc945c8ea7f7`
+- `stderr.txt`: `d833a22500672228e6288765efb23324b584ce5d2631e774e62502d3d65f6092`
+- `environment.txt`: `b3d8adb5b1fd49944088cdc24dbd2860adc8c4a7e65c8d02f03712663d17f273`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `7844bafe72175526381bbf1b2bb9304bc794beacc5ee0b8fd4b234f7a5f8f2a9`
+- `resource_samples.tsv`: `f3228e20d7ba563ae524b36f6beae1aa3bbcbc35c41b9209c52cfa11e14bd460`
+
+Verdict:
+
+- Rejected. The patch fixed the raw-defer hang and preserved correctness, RAM, pack direct, and TTFT gates, but token rate was `4.3`, below the accepted `4.4`.
+- The source patch must not be retained. Revert `moe_stream.cu` and rebuild the SOTA binary before pushing final rejection docs.
+- Current accepted SOTA remains `4.4 tok/s` from top3000 prefill.
+
+Gap analysis:
+
+- Bounded flush proved the slot-deadlock diagnosis correct, because the run completed and produced a valid answer.
+- It did not improve throughput, which means per-expert immediate synchronization alone is not a large enough bottleneck at the current granularity, or the delayed drain/scatter bookkeeping offsets the benefit.
+- Deferred trace rows do not include final drain sync/scatter timing, so the next step needs an explicit SOTA trace decomposition rather than relying on row totals alone.
+
+### 2026-07-04T00:28Z Next Plan: SOTA Trace Bottleneck Decomposition
+
+Goal:
+
+- Locate the current `4.4 tok/s` SOTA bottleneck precisely before attempting another source optimization.
+- Use existing accepted SOTA artifacts instead of running another model pass first.
+
+Inputs:
+
+- Accepted SOTA trace:
+  `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb/one_trace.csv`
+- Accepted SOTA stderr/summary:
+  same run directory.
+- Bounded-defer trace for comparison:
+  `/root/lfz/runs/vendor-ds4-16gb/20260704T001016Z-20260704_bounded_defer_top3000_candidate/france-cpu40-vram0gb/one_trace.csv`
+
+Analysis plan:
+
+- Parse `one_trace.csv` with column names from the header.
+- Break down totals and percentiles by:
+  - layer;
+  - `cache_hit`;
+  - `cache_inserted`;
+  - slot id;
+  - `src0`, `src1`, `kernel`, `d2h`, `sync`, `scatter`, `dontneed`, and total.
+- Compute total time in accepted SOTA rows and estimate which part is theoretically compressible.
+- Compare SOTA non-deferred trace against bounded-defer trace to estimate how much immediate sync/scatter was moved out of row timing and whether it correlates with the observed `4.3` regression.
+
+Decision rules:
+
+- If SOTA row timing is dominated by cache-miss `src0`/pack read/H2D, next source plan should target miss-side IO/read scheduling or larger effective cache admission, not sync batching.
+- If SOTA row timing is dominated by `kernel` or `src1`, next source plan should target fused/batched gate compute or src1 reuse.
+- If SOTA row timing is dominated by `sync`/`scatter`, bounded-defer needs a more precise implementation with explicit drain timing and possibly per-layer batching.
+- If trace row timing accounts for too little wall time, add explicit timers around CPU fallback, CPU-side expert loop, and `ggml_cuda_moe_stream_sync()`.
+
+Deliverable:
+
+- Write `.Agent/runs/20260704-vendor-ds4-coldstart/sota-trace-breakdown.json`.
+- Append the numeric bottleneck result and next source experiment recommendation to this plan before making the next code change.

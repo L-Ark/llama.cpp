@@ -1,0 +1,57 @@
+{
+  "timestamp_utc": "2026-07-04T00:22:00Z",
+  "experiment": "bounded-defer-top3000-candidate",
+  "verdict": "rejected",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "candidate_run": "/root/lfz/runs/vendor-ds4-16gb/20260704T001016Z-20260704_bounded_defer_top3000_candidate/france-cpu40-vram0gb",
+  "source_patch_summary": [
+    "added GGML_MOE_STREAM_DEFER_BOUNDED flag",
+    "added moe_stream_drain_pending helper for sync/scatter/release",
+    "drained pending deferred scatters when tls_pending.size() >= MOE_STREAM_NSLOTS before acquiring another slot",
+    "reused the same drain helper in ggml_cuda_moe_stream_sync"
+  ],
+  "candidate_config_delta": [
+    "GGML_MOE_STREAM_DEFER=1",
+    "GGML_MOE_STREAM_DEFER_BOUNDED=1",
+    "otherwise kept top3000 accepted SOTA config"
+  ],
+  "metrics": {
+    "eval_tok_s": 4.3,
+    "prompt_tok_s": 1.8,
+    "ttft_estimate_ms": 31965.574447,
+    "elapsed_seconds": 63.55,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15083008000,
+    "memory_max_events": 15846,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "correctness_output": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "counters": {
+    "prefill": "attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4578.906 pack_misses=0 read_failures=0",
+    "pack": "hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_enabled=1 direct_reads=4886 direct_failures=0 direct_fallbacks=0",
+    "vram_cache": "hits=33265 misses=1886 hit_rate=94.6%",
+    "trace_rows": 35152
+  },
+  "analysis": {
+    "why_rejected": "bounded defer finished correctly but was slower than the accepted 4.4 tok/s SOTA",
+    "gap": "the bounded batches remove the raw-defer slot deadlock, but they do not reduce enough cost to beat immediate per-expert sync; deferred trace timing shows compute rows, but sync/scatter time is paid in the bounded drain outside the per-row trace",
+    "implication": "per-expert immediate sync is not the dominant enough bottleneck at current 8-slot bounded granularity, or delayed flush/bookkeeping offsets the benefit"
+  },
+  "artifact_hashes_sha256": {
+    "summary.json": "32c2d3fd2f75cef0d826fc82f5d8f082e52d09fe8845a67afdfb81efb9f8fb2d",
+    "stdout.txt": "c4c20ae6467fc4d338ebe790d8d97fa198fa7c742de96a36a637cc945c8ea7f7",
+    "stderr.txt": "d833a22500672228e6288765efb23324b584ce5d2631e774e62502d3d65f6092",
+    "environment.txt": "b3d8adb5b1fd49944088cdc24dbd2860adc8c4a7e65c8d02f03712663d17f273",
+    "exact_command.txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace.csv": "7844bafe72175526381bbf1b2bb9304bc794beacc5ee0b8fd4b234f7a5f8f2a9",
+    "resource_samples.tsv": "f3228e20d7ba563ae524b36f6beae1aa3bbcbc35c41b9209c52cfa11e14bd460"
+  },
+  "rollback": "source patch rejected and must be reverted before push"
+}
