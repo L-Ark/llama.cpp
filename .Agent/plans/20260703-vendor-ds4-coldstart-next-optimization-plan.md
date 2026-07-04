@@ -9559,3 +9559,69 @@ Decision:
 - The profile generation step is complete and useful.
 - The pack/source step is currently disk-constrained.
 - Current accepted SOTA remains `4.4 tok/s`; no new performance result is promoted by this update.
+
+## 2026-07-05 Direct Reader Path Selection
+
+Purpose:
+
+- Continue the `cpu41 + top768 exact Q8_0 hot residual` path without relying on a new 3.26 GiB pack file.
+- This section is a required pre-practice plan update before touching runtime source.
+
+Decision:
+
+- Choose the direct-reader path for the next implementation step.
+- Do not generate `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top768-updown-touchresid-20260704.pack` until disk is explicitly freed or old packs are explicitly moved/deleted.
+- Do not use `/dev/shm` as a substitute pack location for accepted-SOTA work because it is RAM-backed and would weaken 16GB host/page-cache accounting.
+
+Implementation boundary for this step:
+
+1. Add only default-off source infrastructure. Accepted SOTA behavior must be byte-for-byte disabled unless the new env/config is explicitly set.
+2. Preserve the accepted gate one-stream cache exactly: `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only filter, current O_DIRECT gate pack path, and current `4.4 tok/s` run remain the rollback point.
+3. Build a separate q80 hot residual source path. It must not share the gate cache LRU and must not evict gate entries.
+4. First implement metadata/source discovery and counters, not a performance benchmark:
+   - map profile entries to GGUF tensor data offsets;
+   - verify all `768` profile entries resolve to existing up/down tensors;
+   - verify resolved byte sizes match the profile payload (`3422552064 bytes`);
+   - expose counters/logging for resolved, unresolved, bytes, and whether direct-reader mode is active.
+5. If direct GGUF tensor offsets are not readily available inside `moe_stream.cu`, add a small helper/artifact to derive an offset manifest from existing GGUF metadata and consume that manifest default-off. The manifest must be committed with hash and generation command before it can be used for strict runs.
+6. Do not implement or enable MXFP4 x Q8_0 CUDA compute until the source path is reproducible and metadata resolution passes.
+7. Do not run a long strict cold France performance benchmark in this step. The allowed validation is build/static validation and, if practical, a short metadata-resolution smoke test with the new feature disabled/enabled without changing logits.
+
+Hard gates remain:
+
+- New accepted SOTA requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `memory_peak_bytes <= 16000000000`, file page cache charged inside the cgroup, no swap/OOM, coherent France output, immediate commit/push to `ssd/vendor/deepseek-token-rate-16gb`, and pushed-source reproduction.
+- Any logit-changing path must pass op compare and fixed-text token-level top1 verification before a France benchmark.
+
+Rollback criteria:
+
+- If the default-off build changes accepted behavior, fails to build, cannot resolve top768 metadata, or requires extra host RAM/page-cache outside the 16GB cgroup, revert runtime source and keep only rejected documentation.
+
+### 2026-07-05 Direct Reader Manifest Result
+
+Result:
+
+- Added `.Agent/run-tools/create_ds4_expert_offset_manifest.py` to generate a small offset manifest from the top768 profile and GGUF metadata without copying expert payload bytes.
+- Generated manifest: `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv`
+- Summary artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/top768-direct-reader-manifest-summary.json`
+
+Validation:
+
+- Entries resolved: `768`
+- Missing tensors: `0`
+- Size mismatches: `0`
+- Payload bytes: `3422552064`
+- Payload MiB: `3264.000`
+- Residual ms sum: `2048.860`
+- Manifest rows including header: `769`
+
+Hashes:
+
+- Generator SHA256: `794d3159615668ebf4ada4b50b857f3061ebbd6a4464f0c3c25275bb425c076c`
+- Manifest SHA256: `1e4a87613b2c2bc3b6463405bc65f9a9ef704a0ca65b91afc824808c5c2698a2`
+- Summary SHA256: `8b71b5b0e268000a8969cc38386ee0f6bd897f5d502e1ba085d721faf38887fb`
+
+Decision:
+
+- Direct-reader source path is now reproducible at the metadata level and does not need a 3.26 GiB pack file.
+- This is still not a performance result and does not change accepted SOTA.
+- Next source step may consume this manifest in default-off mode to initialize a separate q80 hot residual source/pool and counters. It must first preserve accepted behavior when disabled, then pass metadata smoke validation before any logit-changing compute path is enabled.

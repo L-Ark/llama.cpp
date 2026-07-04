@@ -1,0 +1,11 @@
+{
+  "entries": 768,
+  "manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+  "missing": 0,
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "payload_bytes": 3422552064,
+  "payload_mib": 3264.0,
+  "profile": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.tsv",
+  "residual_ms_sum": 2048.86,
+  "size_mismatches": 0
+}
