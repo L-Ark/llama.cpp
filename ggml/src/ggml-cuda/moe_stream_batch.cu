@@ -7442,14 +7442,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (down_parallel_stage && first_down_parallel_stage.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down parallel CPU staging active\n");
     }
-    const bool down_parallel_stage_4way =
-        down_parallel_stage &&
-        expert_pack_env_bool("GGML_MOE_DOWN_PARALLEL_STAGE_4WAY", false) &&
-        bc.up_copy_stream && bc.gate_copy_stream && bc.ev_up_copy_aux_done && bc.ev_gate_copy_aux_done;
-    static std::atomic<int> first_down_parallel_stage_4way{0};
-    if (down_parallel_stage_4way && first_down_parallel_stage_4way.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream_batch] down four-way CPU staging active\n");
-    }
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     batch_ttft_call_scope ttft_scope("call_down", src0_name, n_active, src0_bytes);
@@ -7558,8 +7550,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
-    std::vector<down_stage_copy_job> down_jobs_c;
-    std::vector<down_stage_copy_job> down_jobs_d;
     int down_profile_cache_hits = 0;
     int down_profile_cache_misses = 0;
 
@@ -7582,21 +7572,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 job.pack_entry = pack_entry;
                 job.expert_idx = active_experts[j];
                 std::snprintf(job.tensor, sizeof(job.tensor), "%s", src0_name ? src0_name : "");
-                const size_t n_planned = down_jobs_a.size() + down_jobs_b.size() +
-                    down_jobs_c.size() + down_jobs_d.size();
-                if (down_parallel_stage_4way) {
-                    switch (n_planned & 3) {
-                        case 0: down_jobs_a.push_back(job); break;
-                        case 1: down_jobs_b.push_back(job); break;
-                        case 2: down_jobs_c.push_back(job); break;
-                        default: down_jobs_d.push_back(job); break;
-                    }
+                if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
+                    down_jobs_b.push_back(job);
                 } else {
-                    if (n_planned & 1) {
-                        down_jobs_b.push_back(job);
-                    } else {
-                        down_jobs_a.push_back(job);
-                    }
+                    down_jobs_a.push_back(job);
                 }
             }
         } else {
@@ -7618,53 +7597,25 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     bc.h_bounds[n_active] = n_active;
 
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
-        auto clear_all_down_jobs = [&]() {
-            clear_down_stage_jobs(down_jobs_a);
-            clear_down_stage_jobs(down_jobs_b);
-            clear_down_stage_jobs(down_jobs_c);
-            clear_down_stage_jobs(down_jobs_d);
-        };
-        auto copy_jobs_or_empty = [&](const std::vector<down_stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) {
-            return jobs.empty() || copy_down_stage_jobs(jobs, run_stream, ring);
-        };
         bool copy_a_ok = true;
         bool copy_b_ok = true;
-        bool copy_c_ok = true;
-        bool copy_d_ok = true;
         std::thread copy_a([&]() {
-            copy_a_ok = copy_jobs_or_empty(down_jobs_a, bc.up_stream, bc.stage_ring);
+            copy_a_ok = copy_down_stage_jobs(down_jobs_a, bc.up_stream, bc.stage_ring);
         });
         std::thread copy_b([&]() {
-            copy_b_ok = copy_jobs_or_empty(down_jobs_b, bc.gate_stream, bc.stage_ring_gate);
+            copy_b_ok = copy_down_stage_jobs(down_jobs_b, bc.gate_stream, bc.stage_ring_gate);
         });
-        std::thread copy_c;
-        std::thread copy_d;
-        if (down_parallel_stage_4way) {
-            copy_c = std::thread([&]() {
-                copy_c_ok = copy_jobs_or_empty(down_jobs_c, bc.up_copy_stream, bc.stage_ring_up_aux);
-            });
-            copy_d = std::thread([&]() {
-                copy_d_ok = copy_jobs_or_empty(down_jobs_d, bc.gate_copy_stream, bc.stage_ring_gate_aux);
-            });
-        }
         copy_a.join();
         copy_b.join();
-        if (copy_c.joinable()) copy_c.join();
-        if (copy_d.joinable()) copy_d.join();
-        if (!copy_a_ok || !copy_b_ok || !copy_c_ok || !copy_d_ok) {
-            clear_all_down_jobs();
+        if (!copy_a_ok || !copy_b_ok) {
+            clear_down_stage_jobs(down_jobs_a);
+            clear_down_stage_jobs(down_jobs_b);
             return decline("parallel_stage_copy");
         }
         if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return decline("record_up_done");
         if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return decline("record_gate_done");
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return decline("wait_up_done");
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return decline("wait_gate_done");
-        if (down_parallel_stage_4way) {
-            if (cudaEventRecord(bc.ev_up_copy_aux_done, bc.up_copy_stream) != cudaSuccess) return decline("record_up_copy_done");
-            if (cudaEventRecord(bc.ev_gate_copy_aux_done, bc.gate_copy_stream) != cudaSuccess) return decline("record_gate_copy_done");
-            if (cudaStreamWaitEvent(st, bc.ev_up_copy_aux_done, 0) != cudaSuccess) return decline("wait_up_copy_done");
-            if (cudaStreamWaitEvent(st, bc.ev_gate_copy_aux_done, 0) != cudaSuccess) return decline("wait_gate_copy_done");
-        }
     }
 
     if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_h2d");
@@ -7750,7 +7701,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                     n_active,
                     down_profile_cache_hits,
                     down_profile_cache_misses,
-                    (int)(down_jobs_a.size() + down_jobs_b.size() + down_jobs_c.size() + down_jobs_d.size()),
+                    (int)(down_jobs_a.size() + down_jobs_b.size()),
                     stage_ms,
                     quant_ms,
                     kernel_ms,
