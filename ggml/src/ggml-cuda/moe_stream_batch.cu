@@ -2505,6 +2505,87 @@ static const expert_pack_entry * expert_pack_lookup(const char *tensor_name, int
     return nullptr;
 }
 
+static void current_down_missing_profile_record(
+        const char *reason,
+        const char *tensor_name,
+        const int *active_experts,
+        int n_active) {
+    const char *path = std::getenv("GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT");
+    if (!path || !path[0] || !tensor_name || !tensor_name[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+
+    int active_min = INT_MAX;
+    int active_max = INT_MIN;
+    std::unordered_set<int> active_set;
+    if (active_experts && n_active > 0) {
+        active_set.reserve((size_t)n_active);
+        for (int i = 0; i < n_active; ++i) {
+            const int expert = active_experts[i];
+            active_set.insert(expert);
+            active_min = std::min(active_min, expert);
+            active_max = std::max(active_max, expert);
+        }
+    }
+    if (active_min == INT_MAX) active_min = -1;
+    if (active_max == INT_MIN) active_max = -1;
+
+    expert_pack_init_once();
+    uint64_t pack_entries = 0;
+    uint64_t active_pack_entries = 0;
+    size_t min_bytes = SIZE_MAX;
+    size_t max_bytes = 0;
+    std::unordered_set<size_t> unique_bytes;
+    std::unordered_set<int> active_present;
+
+    if (g_expert_pack.enabled) {
+        for (const expert_pack_entry &entry : g_expert_pack.entries) {
+            if (std::strcmp(entry.tensor, tensor_name) != 0) continue;
+            ++pack_entries;
+            const size_t nbytes = (size_t)entry.nbytes;
+            min_bytes = std::min(min_bytes, nbytes);
+            max_bytes = std::max(max_bytes, nbytes);
+            unique_bytes.insert(nbytes);
+            if (active_set.find(entry.expert_idx) != active_set.end()) {
+                ++active_pack_entries;
+                active_present.insert(entry.expert_idx);
+            }
+        }
+    }
+    if (min_bytes == SIZE_MAX) min_bytes = 0;
+    const int all_active_present = !active_set.empty() && active_present.size() == active_set.size() ? 1 : 0;
+
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,reason,tensor,n_active,active_unique,active_min,active_max,"
+                "pack_entries,active_pack_entries,active_present,all_active_present,"
+                "min_bytes,max_bytes,unique_bytes\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%d,%zu,%d,%d,%lu,%lu,%zu,%d,%zu,%zu,%zu\n",
+            (unsigned long)++seq,
+            reason ? reason : "",
+            tensor_name,
+            n_active,
+            active_set.size(),
+            active_min,
+            active_max,
+            (unsigned long)pack_entries,
+            (unsigned long)active_pack_entries,
+            active_present.size(),
+            all_active_present,
+            min_bytes,
+            max_bytes,
+            unique_bytes.size());
+    std::fclose(f);
+}
+
 
 static bool expert_pack_mmap_ensure() {
     expert_pack_init_once();
@@ -5924,6 +6005,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         }
         if (!found || !rt.data || rt.expert_bytes == 0) {
             ++g_current_down_overlap.missing_tensor;
+            current_down_missing_profile_record("registered_missing", down_name, active_experts, n_active);
             current_down_overlap_tensor_profile_record(down_name, 1, 0, 0, 1, 0, 0);
             return;
         }
@@ -5931,6 +6013,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         batch_vram_cache *down_cache = batch_cache_get(rt.expert_bytes);
         if (!down_cache) {
             ++g_current_down_overlap.missing_tensor;
+            current_down_missing_profile_record("cache_unavailable", down_name, active_experts, n_active);
             current_down_overlap_tensor_profile_record(down_name, 1, 0, 0, 1, 0, 0);
             return;
         }

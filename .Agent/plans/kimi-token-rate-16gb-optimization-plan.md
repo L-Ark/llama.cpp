@@ -48013,6 +48013,106 @@ Result B: n32 repeat completed; rejected and code path reverted.
   - revert the code path because the improvement was not reproducible;
   - keep the plan record and exact reproduction commands for later review.
 
+## Phase 7GI: diagnose missing current-down tensor metadata for blk.7/8/9
+
+Start time: 2026-07-04T18:46:00+08:00.
+
+Goal:
+
+- Explain why current-down overlap consistently reports `missing_tensor=93`
+  for:
+  - `blk.7.ffn_down_exps.weight`;
+  - `blk.8.ffn_down_exps.weight`;
+  - `blk.9.ffn_down_exps.weight`.
+- Do not change inference semantics or accepted runtime.
+- Produce enough graph/pack evidence to decide whether a future optimization can
+  safely load these down experts from expert pack without waiting for the normal
+  down batch path to register the tensor.
+
+Bottleneck and evidence:
+
+- Phase 7GE tensor profile showed the whole `missing_tensor=93` is:
+  - `31` calls for `blk.7.ffn_down_exps.weight`;
+  - `31` calls for `blk.8.ffn_down_exps.weight`;
+  - `31` calls for `blk.9.ffn_down_exps.weight`.
+- Phase 7GF decline debug showed these three tensors do not appear in down batch
+  declined logs, so they are not simply entering the CUDA down path late.
+- Current registration happens only when:
+  - up/gate batch calls `ggml_cuda_moe_stream_register_tensor()` for up/gate;
+  - down batch calls it for down tensors after passing the early down-batch
+    checks.
+- Therefore the next question is whether the expert-pack has complete
+  `blk.7/8/9` down entries and only the registered GGUF pointer/metadata is
+  missing, or whether pack/size metadata is also missing.
+
+Theory / upper bound:
+
+- If the pack has complete entries for these three tensors and their expert
+  byte size is stable, current-down overlap could potentially stage them from
+  expert pack using only pack metadata and cache keys.
+- Upper bound is limited to the current missing group:
+  - n32 has `93` missing current-down calls;
+  - each missing call can preload up to active experts for the next down tensor;
+  - if this removes a later visible runtime load for those layers, the benefit
+    is bounded by the decode fallback/runtime-load cost of `blk.7/8/9`, likely
+    hundreds of ms on n32 and larger on n96.
+- If the pack lacks entries or the bytes cannot be inferred uniquely, forcing
+  this path risks wrong cache slot sizing or wrong tensor data and must not be
+  implemented.
+
+Implementation plan:
+
+- Add default-off diagnostic CSV:
+  `GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT=<path>`.
+- When `start_current_down_overlap()` derives a down tensor name but cannot find
+  it in `g_registered_tensors`, append one row containing:
+  - tensor name;
+  - active expert count;
+  - active expert min/max;
+  - number of expert-pack entries with that tensor name;
+  - number of those entries matching active experts;
+  - min/max/unique expert byte sizes found in pack;
+  - whether all active experts are present in pack.
+- Keep the diagnostic read-only:
+  - no cache insertion;
+  - no H2D copy;
+  - no stream/event changes;
+  - no default runtime change.
+
+Experiment A: n32 diagnostic
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gi-current-down-missing-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT=$RUN/current-down-missing.csv GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If the diagnostic fails gates or meaningfully slows n32, reject and remove it.
+- If the CSV proves `blk.7/8/9` have complete, unique-size pack coverage for all
+  active experts, plan a separate env-gated implementation that stages missing
+  current-down tensors from pack metadata only.
+- If pack coverage is incomplete or byte size is ambiguous, do not implement
+  the forced missing-down preload path; instead investigate graph/fallback
+  eligibility for these layers.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
