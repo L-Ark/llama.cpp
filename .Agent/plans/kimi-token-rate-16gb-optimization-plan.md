@@ -54729,3 +54729,72 @@ systemd-run --wait --collect --same-dir \
     regression.
   - Require n96 to beat `70087.31 ms / 77` before accepting; otherwise keep
     default `THREADS=32`.
+
+Experiment B result: rejected.
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-173150Z-n96-phase7ht-threads24`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-173150Z-n96-phase7ht-threads24
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=24 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.`;
+  - TTFT `89211.74 ms`;
+  - decode `73296.36 ms / 77`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15072034816`;
+  - swap max `0`;
+  - anon `458752`;
+  - file `14819913728`;
+  - kernel `248262656`;
+  - inactive file `2312577024`;
+  - active file `12506771456`;
+  - major faults `1320964`;
+  - file workingset refaults `44061`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache counters:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_submit_us=114069`;
+  - `iouring_wait_us=38070230`;
+  - global iouring batches `9846`, submit calls `9846`, wait calls `29706`,
+    CQEs `37080`, inflight avg `3.12`, max `8`;
+  - main iouring jobs `26993`, wait calls `21090`, inflight avg `3.23`;
+  - gate iouring jobs `10087`, wait calls `8616`, inflight avg `2.82`;
+  - current-down worker `8588670 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Comparison:
+  - 7HS THREADS=32 n96 parity: `71758.68 ms / 77`, TTFT `77844.60 ms`;
+  - 7HT THREADS=24 n96: `73296.36 ms / 77`, TTFT `89211.74 ms`;
+  - historical SOTA Phase 7FB: `70087.31 ms / 77`;
+  - THREADS=24 regresses decode by `1537.68 ms` vs current-head parity and by
+    `3209.05 ms` vs SOTA; TTFT rises by `11367.14 ms` vs 7HS.
+- Gap analysis:
+  - Reducing CPU worker threads does not relieve the critical-path movement
+    bottleneck. It slightly increases iouring wait (`38.070s` vs 7HS
+    `36.183s`) and worsens prompt/TTFT.
+  - The bottleneck is not excess llama CPU worker contention at `THREADS=32`.
+    The remaining issue is still call-boundary-limited expert movement plus
+    storage/read wait.
+- Decision:
+  - Reject THREADS=24.
+  - Keep runner default `THREADS=32`.
+  - No source rollback is needed because this was a runtime-only probe.
