@@ -53709,3 +53709,117 @@ Decision rule:
   diagnostic only and do not compare decode directly to SOTA.
 - This phase can only produce a follow-up plan; it cannot accept a performance
   improvement because profiling overhead changes timing.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-163750Z-n32-phase7ho-io-copy-profile`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `72885.52 ms`;
+  - decode `29477.32 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Profile files:
+  - `copy-profile.csv`: `2.8 MiB`;
+  - `io-batch-profile.csv`: `600 KiB`;
+  - `current-down-overlap-profile.csv`: `1.6 KiB`.
+- High-level counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15409959`;
+  - expert-pack iouring avg inflight `3.13`, max `8`;
+  - main pinned iouring avg inflight `3.26`, max `8`;
+  - gate pinned iouring avg inflight `2.81`, max `8`;
+  - current-down overlap worker `3482922 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Copy-profile aggregate:
+  - `runtime_load`:
+    - rows `20250`;
+    - bytes `102.52 GiB`;
+    - wall `56976.55 ms`;
+    - io wait `45469.53 ms`;
+    - slot wait `20.93 ms`;
+    - host `11393.52 ms`;
+    - enqueue `310.75 ms`.
+  - `current_down_overlap`:
+    - rows `3664`;
+    - bytes `21.52 GiB`;
+    - wall `11483.88 ms`;
+    - io wait `10912.48 ms`;
+    - slot wait `1.01 ms`;
+    - host `567.20 ms`;
+    - enqueue `53.54 ms`.
+- Top `runtime_load` tensors by cumulative copy-profile `io_wait_ms`:
+  - `blk.4.ffn_down_exps.weight`: rows `169`, io `1089.37 ms`;
+  - `blk.1.ffn_gate_exps.weight`: rows `179`, io `1000.21 ms`;
+  - `blk.1.ffn_up_exps.weight`: rows `179`, io `992.03 ms`;
+  - `blk.10.ffn_up_exps.weight`: rows `168`, io `818.09 ms`;
+  - `blk.10.ffn_gate_exps.weight`: rows `168`, io `772.74 ms`;
+  - `blk.5.ffn_down_exps.weight`: rows `190`, io `762.77 ms`;
+  - `blk.24.ffn_up_exps.weight`: rows `163`, io `759.92 ms`;
+  - `blk.60.ffn_down_exps.weight`: rows `170`, io `745.67 ms`.
+- IO-batch aggregate:
+  - total rows `4002`;
+  - `runtime_load`:
+    - batch rows `3142`;
+    - jobs/read_jobs `11529`;
+    - wait `12705.36 ms`;
+    - wall `13286.63 ms`;
+    - submit `30.69 ms`;
+    - enqueue `225.92 ms`;
+    - slot wait `24.22 ms`;
+    - wait calls `9355`;
+    - avg inflight `2.624`;
+    - job histogram:
+      `1:295, 2:692, 3:727, 4:500, 5:354, 6:254, 7:185, 8:135`;
+    - initial-submit histogram is identical to job histogram, which means most
+      batches are small because the call boundary is small, not because refill
+      is failing to fill a larger ready queue.
+  - `current_down_overlap`:
+    - batch rows `860`;
+    - jobs/read_jobs `3495`;
+    - wait `2710.57 ms`;
+    - wall `2880.52 ms`;
+    - avg inflight `2.967`;
+    - job histogram:
+      `1:40, 2:123, 3:164, 4:219, 5:150, 6:94, 7:33, 8:37`.
+- Current-down-overlap tensor profile:
+  - rows `32`;
+  - planned jobs `3664`;
+  - completed jobs `3664`;
+  - cache hits `3528`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - top planned tensors:
+    - `blk.29.ffn_down_exps.weight`: `166`;
+    - `blk.28.ffn_down_exps.weight`: `164`;
+    - `blk.51.ffn_down_exps.weight`: `148`;
+    - `blk.32.ffn_down_exps.weight`: `146`;
+    - `blk.33.ffn_down_exps.weight`: `143`;
+    - `blk.31.ffn_down_exps.weight`: `143`.
+- Decision:
+  - Diagnostic passes all hard gates.
+  - Slot wait is again negligible (`~22 ms` copy-profile total for both ops);
+    do not revisit global pinned-slot expansion.
+  - Current-down missing-pack is tiny (`36`), so overlay/fallback coverage is
+    not the current limiter.
+  - The effective bottleneck remains `runtime_load` io wait, and io-batch
+    profiling shows the immediate cause is small per-call batches:
+    `3142` runtime-load batches for `11529` jobs, average only `3.67`
+    jobs/batch.
+  - Increasing `MOE_IO_DEPTH` or `MOE_IO_REFILL_BATCH` is unlikely to help
+    because initial-submit size already equals actual batch size.
+  - The next source plan should target an overlap-preserving way to combine
+    adjacent runtime-load calls within a safe boundary, without repeating the
+    rejected shared coalescer that reduced wait but damaged compute/copy
+    overlap.
