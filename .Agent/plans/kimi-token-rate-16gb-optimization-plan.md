@@ -43866,3 +43866,93 @@ Decision:
 - Keep Phase 7FB as current production SOTA.
 - Use Phase 7FD as the current diagnostic baseline for the next source/env
   plan.
+
+## Phase 7FE: current SOTA copy-profile movement attribution
+
+Start time: 2026-07-04T07:45:00Z.
+
+Goal:
+
+- Precisely locate the remaining movement bottleneck before another
+  implementation change.
+- Keep all strict production constraints active:
+  - cold start via `systemd-run --wait --collect --same-dir`;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - no warm cache assumption;
+  - France prompt quality must pass;
+  - TTFT must stay below `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- This is a diagnostic phase only. Do not promote wall time from this run as
+  SOTA because `GGML_MOE_COPY_PROFILE_OUT` adds CSV logging overhead.
+
+Current bottleneck:
+
+- Phase 7FD on the accepted Phase 7FB runtime exposed:
+  - expert-pack/iouring movement about `14.7 s`;
+  - main pinned host staging about `11.5 s`;
+  - main H2D about `4.15 s`;
+  - Q4_0 decode down CPU fallback about `2.5 s`.
+- The top remaining buckets are movement, not fallback compute.
+- Previous global knobs were already rejected:
+  - larger global VRAM cache `15100 MiB` failed the n96 promotion gate;
+  - lower `PINNED_SLOTS=10` regressed;
+  - deeper iouring depth did not create useful `9-16` inflight batches;
+  - immediate mmap page release hurt performance.
+
+Theory and upper bound:
+
+- If copy-profile shows that a small set of tensor/layer/op rows dominates
+  `host_ms + io_wait_ms + h2d_ms`, a targeted cache/prefetch/staging change can
+  at most save that exposed row total.
+- If copy-profile shows the cost is diffuse across many down/upgate misses,
+  the upper bound for a local scheduling change is smaller; the next source
+  change should focus on reducing total moved bytes or converting serial waits
+  into overlapped waits.
+- The hard upper bound for a pure movement fix on n32 is approximately:
+  `iouring_wait 14.7s + main host_stage 11.5s + main H2D 4.15s`, but the
+  achievable bound is only the non-overlapped subset identified by
+  `copy-profile.csv`.
+- Because Phase 7FD measured Q4_0 fallback at only about `2.5 s`, broad Q4_0
+  GPU fallback work is lower priority unless copy-profile proves movement has
+  no concentrated target.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fe-copy-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      GGML_MOE_COPY_PROFILE_OUT="$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Metrics to record:
+
+- Standard metrics from `metrics.txt`:
+  - output text and quality;
+  - TTFT;
+  - decode time/token rate;
+  - cgroup peak and final memory split;
+  - `read_failures`, `iouring_fallbacks`;
+  - expert-pack reads/bytes/wait;
+  - pinned `host_stage`, `h2d`, `slot_wait`.
+- `copy-profile.csv` aggregates:
+  - totals by `op`;
+  - totals by `tensor`;
+  - top rows by `wall_ms`, `host_ms`, `io_wait_ms`, and `h2d_ms`;
+  - hit/miss mix for `pack_hit`, `ram_hit`, and `iouring`;
+  - whether the dominant rows are down, up, or gate.
+
+Decision rule:
+
+- If gates fail, reject the diagnostic and do not use its profile.
+- If the profile identifies one concentrated movement bucket, write the next
+  implementation phase around that bucket with a numeric upper bound before
+  editing code.
+- If the profile is diffuse, do not keep sweeping cache-size or slot knobs;
+  pivot to a source-level scheduling change that reduces serial movement or
+  moved bytes, then run n32 and n96 promotion gates.
