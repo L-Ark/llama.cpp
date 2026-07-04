@@ -172,8 +172,47 @@ stderr = (run / "stderr.txt").read_text(errors="replace") if (run / "stderr.txt"
 stdout = (run / "stdout.txt").read_text(errors="replace").strip() if (run / "stdout.txt").exists() else ""
 metrics = [f"run={run}", f"exit={(run / 'exit.txt').read_text().strip() if (run / 'exit.txt').exists() else 'missing'}"]
 metrics.append(f"output={stdout[:500]}")
-quality = "France" in stdout and ("Europe" in stdout or "Paris" in stdout) and len(stdout.split()) >= 12
+
+def semantic_quality(text):
+    clean = re.sub(r"<\|[^>]+?\|>", " ", text)
+    clean = clean.replace("[end of text]", " ")
+    clean = re.sub(r"\s+", " ", clean).strip()
+    words = re.findall(r"[A-Za-z][A-Za-z'-]*", clean)
+    lower = clean.lower()
+
+    if "france" not in lower:
+        return False, "missing_france"
+    cues = ("western europe", "europe", "paris", "eiffel", "louvre", "riviera", "bordeaux")
+    if not any(cue in lower for cue in cues):
+        return False, "missing_location_or_landmark_cue"
+    if len(words) < 12:
+        return False, "too_few_words"
+
+    repeated_bad = (
+        r"\b(its|it's|is|country|largest|the)\b(?:[\s,]+(?:\b\w+\b[\s,]+){0,3}){2,}\b\1\b",
+        r"\bits\s+(?:a\s+)?country\b.*\bits\s+(?:a\s+)?country\b",
+        r"\bits\s+is\b",
+    )
+    for pattern in repeated_bad:
+        if re.search(pattern, lower):
+            return False, "repetition_collapse"
+
+    comma_fragments = [frag.strip() for frag in clean.split(",")]
+    short_fragments = sum(1 for frag in comma_fragments if 0 < len(frag.split()) <= 2)
+    if clean.endswith(",") and len(comma_fragments) >= 5 and short_fragments >= 3:
+        return False, "comma_fragment_collapse"
+
+    tail_words = [w.lower() for w in words[-4:]]
+    if tail_words and tail_words[-1] in {"and", "or", "of", "the", "a", "an", "to", "in", "for", "with"}:
+        return False, "dangling_tail"
+    if " ".join(tail_words[-2:]) in {"member of", "known for", "famous for", "one of"}:
+        return False, "dangling_tail"
+
+    return True, "ok"
+
+quality, quality_reason = semantic_quality(stdout)
 metrics.append(f"quality={'pass' if quality else 'fail'}")
+metrics.append(f"quality_reason={quality_reason}")
 mp = re.search(r"prompt eval time =\s*([0-9.]+) ms /\s*([0-9]+) tokens", stderr)
 me = re.search(r"eval time =\s*([0-9.]+) ms /\s*([0-9]+) runs\s*\([^\n]*?([0-9.]+) tokens per second\)", stderr)
 if mp:
