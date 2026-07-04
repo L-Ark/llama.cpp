@@ -58141,6 +58141,123 @@ Decision:
   phase only as documented evidence. Do not add any exact-pin env to the
   accepted runner.
 
+## Phase 7JB: foreground io_uring wait-distribution trace
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- Cache split, RAM tier expansion, GPU down, protected preload, exact-key cold
+  down pinning, physical pack locality, hot replacement overlay, and trace
+  prefetch have all failed to produce a reproducible token-rate gain.
+- The remaining repeated signal is `io_uring` wait in foreground expert loads:
+  - accepted pct62 n96 still reports `36.65 s` total iouring wait;
+  - n32 profiles typically report `14-15 s` iouring wait;
+  - `io-batch-profile.csv` shows enqueue and slot wait are tiny compared with
+    wait.
+- Existing batch profiles do not show whether wait is:
+  - dominated by the first CQE in each batch;
+  - dominated by tail CQEs after some reads already completed;
+  - many tiny waits where syscall/CQE batching could help;
+  - a few large storage-latency outliers where batching would not help.
+
+Hypothesis:
+
+- If most wait time is first-CQE latency with small batches and low inflight,
+  then `io_uring_wait_cqe` syscall batching will not materially improve token
+  rate; the bottleneck is storage read latency exposed by graph boundaries.
+- If many waits are very small and numerous, a low-risk `wait_cqes`/peek-drain
+  variant might reduce CPU/syscall overhead.
+- If tail waits dominate after the first CQE, a refill policy that maintains
+  inflight earlier may be worth testing.
+
+Implementation plan:
+
+- Add a default-off CSV trace:
+  `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`.
+- Record one row per blocking wait inside `expert_pack_iouring_copy_jobs()`:
+  - `seq`;
+  - `op`;
+  - `read_jobs`;
+  - `completed_before`;
+  - `inflight_before`;
+  - `next_job`;
+  - `depth`;
+  - `refill_batch`;
+  - `wait_ms`;
+  - `drained_cqes`, meaning the blocking CQE plus immediately available peeked
+    CQEs processed after it;
+  - `enqueue_ms` for those drained CQEs;
+  - `completed_after`;
+  - `inflight_after`.
+- Do not change submission order, queue depth, refill behavior, cache behavior,
+  H2D behavior, or kernel launches.
+
+Theoretical decision rule:
+
+- A CQE batching optimization can only help if a meaningful part of wall time
+  is CPU overhead per wait, not the measured blocking `wait_ms`.
+- If the p50/p90 wait is multi-millisecond and total wait is dominated by rows
+  with `drained_cqes=1`, waiting for more CQEs would likely increase latency.
+- If `drained_cqes>1` is common and many wait rows have sub-100us waits, then
+  replacing `wait_cqe + peek loop` with a batched wait/drain strategy may be
+  worth one default-off experiment.
+- If inflight falls well below depth before completion and tail waits dominate,
+  the next implementation should target refill timing rather than CQE syscall
+  batching.
+
+Experiment:
+
+- Build current head with the trace code.
+- Run strict cold-start n32 with accepted pct62 runtime and:
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Use `MIN_PROFILE=1` and do not enable copy H2D timing.
+
+Reproduction command shape:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7jb-commit>
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jb-io-wait-trace
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through the cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If the trace identifies a concrete low-risk wait/refill optimization with a
+  defensible upper bound, write that implementation phase before coding it.
+- If wait is dominated by storage-latency rows with no batching/refill leverage,
+  reject CQE batching/refill as the next direction and move to a different
+  bottleneck.
+
 ### Result
 
 Timestamp: 2026-07-05.
