@@ -42227,3 +42227,50 @@ Decision rule:
   - n4 smoke before n32.
 - If the upper bound fails, reject partial-row Q4_0 for the current SOTA and
   move back to movement/copy scheduling diagnostics.
+
+Phase 7EV result - partial-row Q4_0 rejected by upper bound:
+
+- End time: 2026-07-04T03:35:00Z.
+- Profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-024459Z-n32-phase7er-sota-bottleneck-refresh/fallback-profile.csv`.
+- Filtered rows:
+  - `phase=decode`;
+  - `src0_type=2`;
+  - `ffn_down_exps.weight`.
+- Total current Q4_0 decode fallback:
+  - rows `572`;
+  - fallback `2416.352 ms`;
+  - routed `13.351 GiB`;
+  - tensors: `blk.6/7/8/9/10/15/18.ffn_down_exps.weight`.
+- Per-tensor fallback:
+  - `blk.10`: `409.848 ms`;
+  - `blk.7`: `404.216 ms`;
+  - `blk.6`: `364.832 ms`;
+  - `blk.9`: `357.192 ms`;
+  - `blk.8`: `343.976 ms`;
+  - `blk.18`: `292.792 ms`;
+  - `blk.15`: `243.496 ms`.
+- Hotset upper bound:
+  - `128 MiB`: `16` slots, covered `417.673 ms`, `17.29%`,
+    ideal n32 `1.053 tok/s`;
+  - `256 MiB`: `32` slots, covered `677.557 ms`, `28.04%`,
+    ideal n32 `1.062 tok/s`;
+  - `512 MiB`: `65` slots, covered `1033.082 ms`, `42.75%`,
+    ideal n32 `1.075 tok/s`;
+  - `768 MiB`: `97` slots, covered `1257.464 ms`, `52.04%`,
+    ideal n32 `1.084 tok/s`;
+  - `1024 MiB`: `130` slots, covered `1453.313 ms`, `60.14%`,
+    ideal n32 `1.091 tok/s`;
+  - `2048 MiB`: `260` slots, covered `1985.254 ms`, `82.16%`,
+    ideal n32 `1.112 tok/s`.
+
+Decision:
+
+- Reject partial-row Q4_0 for the current SOTA.
+- It fails the pre-set implementation threshold:
+  - `512 MiB` covers only `1.033 s`, below the `1.5 s` gate;
+  - `1024 MiB` covers only `1.453 s`, below the `2.5 s` gate.
+- These are ideal ceilings before GPU cache lookup, H2D/staging, partial-row
+  scatter/merge, and 16GB host-memory pressure.
+- Do not implement partial-row Q4_0 now.
+- Return to movement/copy scheduling diagnostics for the next phase.
