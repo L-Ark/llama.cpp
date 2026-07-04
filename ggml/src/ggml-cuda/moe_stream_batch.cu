@@ -1705,6 +1705,27 @@ static int batch_cache_id_for_size(size_t expert_sz) {
     return 0;
 }
 
+static size_t exact_pin_slot_size_for_cache_id(int cid, size_t expert_sz) {
+    load_exact_pin_profile_once();
+    if (!g_exact_pin_profile_enabled) return expert_sz;
+    static bool max_inited = false;
+    static size_t max_slot_sz[2] = {};
+    if (!max_inited) {
+        std::lock_guard<std::mutex> lk(g_profile_mu);
+        if (!max_inited) {
+            for (const profile_entry &e : g_exact_pin_profile) {
+                if (e.expert_bytes == 0) continue;
+                const int e_cid = batch_cache_id_for_size(e.expert_bytes);
+                if (e_cid < 0 || e_cid > 1) continue;
+                if (e.expert_bytes > max_slot_sz[e_cid]) max_slot_sz[e_cid] = e.expert_bytes;
+            }
+            max_inited = true;
+        }
+    }
+    if (cid >= 0 && cid < 2 && max_slot_sz[cid] > expert_sz) return max_slot_sz[cid];
+    return expert_sz;
+}
+
 static size_t batch_cache_budget_mib_for_id(size_t budget_mib, int cid) {
     const char *fused_env = std::getenv("GGML_MOE_STREAM_FUSED_UP_GATE");
     const bool fused = fused_env && fused_env[0] && fused_env[0] != '0';
@@ -1775,10 +1796,11 @@ static size_t batch_cache_effective_budget_mib(size_t requested_mib) {
 
 static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     const int cid = batch_cache_id_for_size(expert_sz);
+    const size_t slot_sz = exact_pin_slot_size_for_cache_id(cid, expert_sz);
     if (g_bcache_inited[cid]) {
         batch_vram_cache *c = &g_bcaches[cid];
-        if (c->pool && expert_sz <= c->slot_sz) return c;
-        if (!c->pool || expert_sz <= c->slot_sz) return nullptr;
+        if (c->pool && slot_sz <= c->slot_sz) return c;
+        if (!c->pool || slot_sz <= c->slot_sz) return nullptr;
 
         cudaFree(c->pool);
         c->pool = nullptr;
@@ -1824,15 +1846,15 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     size_t this_budget_mib = batch_cache_budget_mib_for_id(budget_mib, cid);
     const size_t budget = this_budget_mib * 1024ULL * 1024ULL;
     batch_vram_cache *c = &g_bcaches[cid];
-    c->slot_sz = expert_sz;
-    c->n_slots = (int)(budget / expert_sz);
+    c->slot_sz = slot_sz;
+    c->n_slots = (int)(budget / slot_sz);
     if (c->n_slots > 16384) c->n_slots = 16384;
     if (c->n_slots < 1) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
     int alloc_slots = c->n_slots;
-    size_t alloc = (size_t)alloc_slots * expert_sz;
+    size_t alloc = (size_t)alloc_slots * slot_sz;
     cudaError_t alloc_err = cudaMalloc(&c->pool, alloc);
     if (alloc_err != cudaSuccess) {
         std::fprintf(stderr, "[moe_stream_batch] VRAM cache: cudaMalloc %.1f GiB FAILED; retrying smaller pool\n",
@@ -1844,7 +1866,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
             int next_slots = (alloc_slots * 7) / 8;
             if (next_slots >= alloc_slots) next_slots = alloc_slots - 1;
             alloc_slots = next_slots;
-            alloc = (size_t)alloc_slots * expert_sz;
+            alloc = (size_t)alloc_slots * slot_sz;
             alloc_err = cudaMalloc(&c->pool, alloc);
             if (alloc_err == cudaSuccess) break;
             cudaGetLastError();
@@ -1864,7 +1886,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
     std::fill_n(c->slot_expert, 16384, -1);
     std::fprintf(stderr, "[moe_stream_batch] VRAM cache: %.1f GiB, %d slots (%.2f MiB each)\n",
                  alloc / (1024.0*1024.0*1024.0), c->n_slots,
-                 expert_sz / (1024.0*1024.0));
+                 slot_sz / (1024.0*1024.0));
     std::atexit(batch_cache_report_atexit);
     g_bcache_inited[cid] = true;
     return c;
