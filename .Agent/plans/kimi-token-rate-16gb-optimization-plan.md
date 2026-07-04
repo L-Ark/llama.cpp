@@ -58022,3 +58022,118 @@ Decision rule:
   default to `UPGATE_PCT=62`, commit, push, then run n96.
 - If repeat token rate falls back to pct60 noise (`<= 1.03 tok/s`) or TTFT/RAM
   regresses, reject pct `62` and keep pct `60`.
+
+### 7IM result
+
+- Source head:
+  `24d0e0fa0` (`docs: record upgate pct62 probe`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-205755Z-n32-phase7im-upgate-pct62-repeat`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 24d0e0fa0
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-205755Z-n32-phase7im-upgate-pct62-repeat
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `79429.53 ms`;
+  - decode `29348.93 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15079854080`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Runtime counters:
+  - expert pack hits `25045`, misses `192`;
+  - iouring reads `14862`, bytes `86301917184`, wait
+    `14849100 us`;
+  - main pinned staging: copies `19380`, waits `19344`;
+  - gate pinned staging: copies `4121`, waits `4097`;
+  - down overlap worker time `3458211 us`;
+  - down hit `73.4%`, slots `766`;
+  - upgate hit `45.2%`, slots `1735`.
+- 7IM conclusion:
+  - Repeat confirms pct `62` is not a single-run artifact:
+    - 7IL: `1.05 tok/s`;
+    - 7IM: `1.06 tok/s`;
+    - both runs pass quality, TTFT, RAM, swap, and expert-pack gates.
+  - The measured cause matches the design:
+    - upgate slots increase from pct60's `1679` to `1735`;
+    - upgate hit rate increases from pct60's `43.7%` to `45.2%`;
+    - down hit rate only drops slightly from `73.6%` to `73.4%`;
+    - iouring reads drop from pct60's `15024` to `14862`.
+  - Accept pct `62` as the new runtime default for the phase7fb reproduction
+    script.
+  - This is a small confirmed improvement, not a large architectural jump.
+
+## Phase 7IN: n96 validation for accepted `UPGATE_PCT=62`
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- n32 repeat shows pct `62` improves upgate cache hit rate without violating
+  any strict gate.
+- The target remains stable n96 output with correct semantics, so the new
+  default must be validated at n96 before treating it as the next SOTA baseline.
+
+Implementation:
+
+- Change `scripts/kimi-phase7fb-min-profile-repro.sh` default from:
+  `: "${UPGATE_PCT:=60}"`
+  to:
+  `: "${UPGATE_PCT:=62}"`.
+- Keep the override mechanism intact so pct `60` remains reproducible via
+  `UPGATE_PCT=60`.
+
+Experiment:
+
+- Commit and push the script default change plus this plan update.
+- Run strict cold-start n96 with default script settings:
+  - omit `UPGATE_PCT` from the command to verify the new default is used;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If n96 improves or matches the previous accepted n96 while passing all gates,
+  keep pct `62` as the new SOTA baseline and record the exact command/result.
+- If n96 regresses materially, revert the script default to pct `60`, record the
+  rejection, commit/push the revert, and keep pct `62` only as an optional knob.
