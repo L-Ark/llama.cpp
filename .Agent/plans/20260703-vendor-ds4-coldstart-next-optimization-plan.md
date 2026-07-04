@@ -8528,3 +8528,55 @@ Source-level design before implementation:
   - Build only after `git diff --check`.
   - Run fixed-text `llama-results --sequential-logits --top1-report` with the Q8_0 env enabled and a narrow up/down filter.
   - Record source diff hash, binary/lib hashes, top1 result, cgroup stats, and cache counters before deciding whether any benchmark is allowed.
+
+### 2026-07-04 Q8_0 Scalar CUDA Probe Result
+
+Artifacts:
+
+- Top1 verifier: `.Agent/runs/20260704-vendor-ds4-coldstart/q80-up-top1-probe-result.json`
+- Top1 artifact sha256: `2c676279c4135254aff45616ea586285e154fdf63ddcf2cc16bf3b7abc56528d`
+- Compare probe: `.Agent/runs/20260704-vendor-ds4-coldstart/q80-up-compare-probe-result.json`
+- Compare artifact sha256: `2ec6449db733b6c51e7ad30bdaa009c66b274d523ae6b107af7733aa53fd7b18`
+
+Temporary source patch:
+
+- Added a default-off `GGML_MOE_STREAM_ONE_MXFP4_Q80=1` path and `_q80` CUDA entry.
+- Gate tensors were kept on the original one-stream path; Q8_0 was restricted to `ffn_up_exps` / `ffn_down_exps`.
+- Added comma-list name filter support again for the diagnostic.
+- Implemented a simple scalar MXFP4 x Q8_0 CUDA rows kernel in `moe_stream.cu`.
+- This source patch was reverted after rejection; `build-ds4-moe-stream` was rebuilt on clean source head `767533259`.
+
+Top1 verifier result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T064953Z-20260704_q80_up_top1_probe/split-up-only-q80-top1`
+- Case: `ffn_gate_exps,ffn_up_exps` with `GGML_MOE_STREAM_ONE_MXFP4_Q80=1`
+- `same_top1=136/145`
+- `first_mismatch_pos=4`
+- `memory_peak_bytes=16000000000`
+- `oom_seen=false`
+- Verdict: rejected before any token-rate benchmark.
+
+Compare probe result:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T065419Z-20260704_q80_up_compare_probe/france-q80-up-compare`
+- Command: short `llama-cli -n 4` with `GGML_MOE_STREAM_COMPARE_CPU_OUT`.
+- Systemd result: timeout at about `7min`; this is already far beyond the `1.64s` total overhead budget needed for a 10 tok/s class implementation.
+- Compare rows before timeout: `96`.
+- Up per-op error remained small: `max_abs_max=4.76837158e-06`, `mean_abs_mean=4.219115604166667e-08`.
+- Gate per-op error remained small: `max_abs_max=9.53674316e-07`.
+
+Decision:
+
+- Reject the scalar Q8_0 CUDA implementation.
+- Do not run down-only or full strict cold token-rate benchmark for this patch.
+- The failure mode is not a gross per-op arithmetic bug; it is accumulated small numerical drift plus an unusably slow scalar kernel.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+Updated next direction:
+
+1. Do not retry naive/scalar GPU up/down exactness paths.
+2. A future GPU up/down attempt must either:
+   - be a genuinely optimized MXFP4 x Q8_0 kernel with a hard performance model showing overhead plausibly below the `1.64s` budget, and pass fixed-text top1 before benchmark; or
+   - use a verification/correction mechanism that guarantees token-level output correctness while still saving enough wall time.
+3. Since source movement and existing GPU up/down classes are closed, the next design step should re-open bottleneck analysis at the algorithm level: full or near-full decode fallback removal, not top-N hotsets or page-cache tricks.
+4. Any new source probe must start from clean head `767533259` or newer pushed head and must keep accepted gate-only SOTA behavior unchanged by default.

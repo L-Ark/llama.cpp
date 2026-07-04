@@ -1,0 +1,196 @@
+{
+  "artifact": "q80-up-top1-probe-result",
+  "baseline": "/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json",
+  "binary_sha256": "d981fb8f26fb16c338e23acfe490f070e90b7b70ecad2a828bc503b65fca07a9",
+  "candidate": "/root/lfz/runs/vendor-ds4-16gb/20260704T064953Z-20260704_q80_up_top1_probe/split-up-only-q80-top1/top1-candidate.json",
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T064953Z-20260704_q80_up_top1_probe/split-up-only-q80-top1",
+  "counter_lines": {
+    "enabled": [
+      "[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)",
+      "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=1",
+      "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+      "[moe_stream] one prefill: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv limit=3000",
+      "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one prefill: completed attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4390.456",
+      "[moe_stream] cache admission: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "[moe_stream] one expert pack: hits=4490 misses=19577 reads=4490 bytes=20009451520 failures=0 entries=4599 direct_enabled=1 direct_reads=4490 direct_failures=0 direct_fallbacks=0",
+      "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=4390.456",
+      "[moe_stream] VRAM cache: hits=32583 misses=21067 hit_rate=60.7%"
+    ],
+    "pack": [
+      "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one expert pack: hits=4490 misses=19577 reads=4490 bytes=20009451520 failures=0 entries=4599 direct_enabled=1 direct_reads=4490 direct_failures=0 direct_fallbacks=0"
+    ],
+    "vram": [
+      "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+      "[moe_stream] VRAM cache: hits=32583 misses=21067 hit_rate=60.7%"
+    ]
+  },
+  "created_utc": "2026-07-04T06:51:44Z",
+  "exit_code": 0,
+  "first_mismatch_pos": 4,
+  "max_abs_top1_logit_delta": 1.3017000000000003,
+  "mean_abs_top1_logit_delta": 0.21241172413793116,
+  "memory_current_bytes": 15140356096,
+  "memory_events": {
+    "high": 0,
+    "low": 0,
+    "max": 15271,
+    "oom": 0,
+    "oom_group_kill": 0,
+    "oom_kill": 0
+  },
+  "memory_peak_bytes": 16000000000,
+  "mismatch_examples": [
+    {
+      "base_margin": 0.00125313,
+      "base_top1": {
+        "id": 47468,
+        "logit": 24.6524,
+        "piece": " concise"
+      },
+      "cand_margin": 0.554649,
+      "cand_top1": {
+        "id": 2767,
+        "logit": 25.0955,
+        "piece": " few"
+      },
+      "pos": 4
+    },
+    {
+      "base_margin": 0.208698,
+      "base_top1": {
+        "id": 295,
+        "logit": 23.1186,
+        "piece": " in"
+      },
+      "cand_margin": 0.0398941,
+      "cand_top1": {
+        "id": 14,
+        "logit": 22.6415,
+        "piece": ","
+      },
+      "pos": 6
+    },
+    {
+      "base_margin": 0.420826,
+      "base_top1": {
+        "id": 8189,
+        "logit": 22.848,
+        "piece": "ello"
+      },
+      "cand_margin": 0.393597,
+      "cand_top1": {
+        "id": 717,
+        "logit": 22.6083,
+        "piece": "ere"
+      },
+      "pos": 7
+    },
+    {
+      "base_margin": 0.0479832,
+      "base_top1": {
+        "id": 983,
+        "logit": 28.4661,
+        "piece": " It"
+      },
+      "cand_margin": 0.244186,
+      "cand_top1": {
+        "id": 5795,
+        "logit": 28.6058,
+        "piece": " From"
+      },
+      "pos": 42
+    },
+    {
+      "base_margin": 0.152248,
+      "base_top1": {
+        "id": 34161,
+        "logit": 32.1053,
+        "piece": " renowned"
+      },
+      "cand_margin": 0.0905704,
+      "cand_top1": {
+        "id": 990,
+        "logit": 31.7784,
+        "piece": " also"
+      },
+      "pos": 68
+    },
+    {
+      "base_margin": 0.181175,
+      "base_top1": {
+        "id": 16296,
+        "logit": 31.0365,
+        "piece": " philosophy"
+      },
+      "cand_margin": 0.853924,
+      "cand_top1": {
+        "id": 6262,
+        "logit": 31.6215,
+        "piece": " science"
+      },
+      "pos": 86
+    },
+    {
+      "base_margin": 0.29962,
+      "base_top1": {
+        "id": 5785,
+        "logit": 31.1945,
+        "piece": " culture"
+      },
+      "cand_margin": 0.069046,
+      "cand_top1": {
+        "id": 4342,
+        "logit": 30.9652,
+        "piece": " education"
+      },
+      "pos": 89
+    },
+    {
+      "base_margin": 0.668116,
+      "base_top1": {
+        "id": 25714,
+        "logit": 29.6463,
+        "piece": " democratic"
+      },
+      "cand_margin": 0.442421,
+      "cand_top1": {
+        "id": 36737,
+        "logit": 29.5284,
+        "piece": " republic"
+      },
+      "pos": 95
+    },
+    {
+      "base_margin": 0.0763092,
+      "base_top1": {
+        "id": 18826,
+        "logit": 21.2808,
+        "piece": "||"
+      },
+      "cand_margin": 0.461811,
+      "cand_top1": {
+        "id": 1004,
+        "logit": 21.3971,
+        "piece": " \n\n"
+      },
+      "pos": 144
+    }
+  ],
+  "n_positions_base": 145,
+  "n_positions_candidate": 145,
+  "oom_seen": false,
+  "ram_ok": true,
+  "same_top1": 136,
+  "same_top1_ratio": 0.9379310344827586,
+  "source_diff_sha256": "5b6755abab193059fb16f556ee0552b1f4447ea4e767d420c36a59232cb356a3",
+  "source_head": "7675332597297d4d83f4190bfc23147d607ecf29",
+  "source_status_short": " M ggml/src/ggml-cpu/ggml-cpu.c\n M ggml/src/ggml-cuda/moe_stream.cu\n",
+  "status": "fail",
+  "stderr_sha256": "0da0585f9ccd19a2d776fc00eb704237643ff7b0211ad7dcf4831ca4b6ecbb98",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "systemd_run_exit": 0
+}

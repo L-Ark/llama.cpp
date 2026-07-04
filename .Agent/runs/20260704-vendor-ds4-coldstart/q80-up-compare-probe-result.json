@@ -1,0 +1,76 @@
+{
+  "artifact": "q80-up-compare-probe-result",
+  "by_role": {
+    "gate": {
+      "max_abs_max": 9.53674316e-07,
+      "max_abs_p50": 2.38418579e-07,
+      "mean_abs_mean": 2.3477878123333332e-08,
+      "samples": 60,
+      "worst": {
+        "cne1": "2",
+        "count": "4096",
+        "cpu_value": "10.0311499",
+        "expert": "222",
+        "gpu_value": "10.0311489",
+        "max_abs": "9.53674316e-07",
+        "max_abs_f": 9.53674316e-07,
+        "max_col": "335",
+        "max_k": "0",
+        "max_rel": "9.50712859e-08",
+        "max_rel_f": 9.50712859e-08,
+        "max_row": "0",
+        "mean_abs": "1.9397703e-08",
+        "mean_abs_f": 1.9397703e-08,
+        "seq": "3",
+        "tensor": "blk.0.ffn_gate_exps.weight",
+        "type": "39"
+      }
+    },
+    "up": {
+      "max_abs_max": 4.76837158e-06,
+      "max_abs_p50": 6.258487705e-07,
+      "mean_abs_mean": 4.219115604166667e-08,
+      "samples": 36,
+      "worst": {
+        "cne1": "2",
+        "count": "4096",
+        "cpu_value": "10.1439085",
+        "expert": "64",
+        "gpu_value": "10.1439133",
+        "max_abs": "4.76837158e-06",
+        "max_abs_f": 4.76837158e-06,
+        "max_col": "1027",
+        "max_k": "1",
+        "max_rel": "4.70072417e-07",
+        "max_rel_f": 4.70072417e-07,
+        "max_row": "0",
+        "mean_abs": "2.88655428e-08",
+        "mean_abs_f": 2.88655428e-08,
+        "seq": "50",
+        "tensor": "blk.4.ffn_up_exps.weight",
+        "type": "39"
+      }
+    }
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T065419Z-20260704_q80_up_compare_probe/france-q80-up-compare",
+  "compare_cpu_sha256": "724d0270565f7ba881d4c35dff8e5e835d270c839a1a408d07b9db1f925c8089",
+  "compare_rows": 96,
+  "counter_lines": {
+    "pack": [
+      "[moe_stream] one expert pack: O_DIRECT payload reads enabled: /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one expert pack: loaded 4599 entries from /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "[moe_stream] one expert pack: hits=3443 misses=1598 reads=3443 bytes=15343550464 failures=0 entries=4599 direct_enabled=1 direct_reads=3443 direct_failures=0 direct_fallbacks=0"
+    ],
+    "vram": [
+      "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+      "[moe_stream] VRAM cache: hits=2268 misses=2041 hit_rate=52.6%"
+    ]
+  },
+  "created_utc": "2026-07-04T07:01:25Z",
+  "exit_code": null,
+  "memory_events_raw": "",
+  "memory_peak_bytes": null,
+  "stderr_sha256": "eefbddcf5c6170b5421a0aa46813020878c6e3411b78862020e78df35e9f0193",
+  "stdout_sha256": "273d16822a639830ef7cea864fefd0afc305c5ff6e8d2d9c722bf1b9d2a387e6",
+  "systemd_run_exit": 1
+}
