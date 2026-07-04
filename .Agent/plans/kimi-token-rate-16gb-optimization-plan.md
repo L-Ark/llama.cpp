@@ -54174,3 +54174,76 @@ Acceptance / rollback:
 - If n96 fails speed, quality, TTFT, RAM, swap, or fallback gates, revert the
   source patch and record rejection.
 - Do not update runner defaults unless both n96 runs pass.
+
+Result: n32 completed; rejected and reverted.
+
+- Plan commit:
+  `5a895cf8d` (`docs: plan iq2 vdr4 micro probe`).
+- Source probe commit:
+  `28b0d2dde` (`cuda: probe iq2 s mmvq vdr4`).
+- Rollback commit:
+  `8f4e0b9e9` (`Revert "cuda: probe iq2 s mmvq vdr4"`).
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - success at source head `28b0d2dde`;
+  - only pre-existing warning classes were reported.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-170440Z-n32-phase7hq-iq2-vdr4`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-170440Z-n32-phase7hq-iq2-vdr4
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe, renowned for its rich history, diverse culture, exquisite cuisine, and stunning landscapes—from romantic Paris to charming Provence villages,`;
+  - TTFT `74071.06 ms`;
+  - decode `51107.62 ms / 31`, `0.61 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache counters:
+  - expert pack hits `21327`, misses `2891`;
+  - `direct_reads=10547`;
+  - `iouring_reads=9174`;
+  - `iouring_bytes=53900492800`;
+  - `iouring_wait_us=9644917`;
+  - current-down overlap jobs `3364`, worker `8527766 us`;
+  - down hit rate `74.8%`;
+  - upgate hit rate `47.0%`.
+- Comparison:
+  - current stable n32 good region is around `29.1s`;
+  - Phase 7HQ VDR=4 n32 is `51107.62 ms / 31`;
+  - performance regressed by about `22s` on n32.
+- Decision:
+  - Reject `VDR_IQ2_S_Q8_1_MMVQ=4`.
+  - Do not run n96.
+  - Revert immediately; rollback commit `8f4e0b9e9` was pushed.
+- Gap analysis:
+  - VDR=4 severely slows the `IQ2_S` MMVQ path and perturbs route/cache timing:
+    expert pack hits drop from the normal `~25458` n32 shape to `21327`, and
+    misses rise to `2891`.
+  - The reduced iouring bytes/wait are misleading because fewer useful
+    pack-backed runtime loads happen while decode wall explodes.
+  - This closes the simple `IQ2_S` VDR-up direction. Do not try a larger
+    `IQ2_S` VDR without kernel resource analysis and a correctness/performance
+    rationale stronger than macro sweeping.
