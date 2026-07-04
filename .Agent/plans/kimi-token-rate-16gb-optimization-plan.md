@@ -46482,6 +46482,124 @@ systemd-run --wait --collect --same-dir \
       EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+Result B: n96 completed; rejected as SOTA.
+
+- End time: 2026-07-04T17:08:55+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-090605Z-n96-phase7fx-combined-upgate-stage`.
+- Code head:
+  `af08c4d81`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `79376.70 ms`;
+  - decode `71923.07 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=11824467968`;
+    - `kernel=241954816`;
+    - `inactive_file=5808889856`;
+    - `active_file=6014959616`;
+    - `pgmajfault=990658`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `63479`, misses `633`;
+    - `iouring_reads=37080`;
+    - `iouring_bytes=214923018240`;
+    - `iouring_wait_us=30356241`;
+    - `iouring_submit_us=80265`;
+  - global io_uring:
+    - batches `8519`;
+    - `inflight_avg=3.97`;
+    - `inflight_max=12`;
+    - batch hist `9-16:684`;
+  - main ring granularity:
+    - calls `6737`;
+    - `avg_jobs=4.93`;
+    - `avg_read_jobs=4.93`;
+    - `avg_depth=12.00`;
+    - `max_jobs=16`;
+    - `max_read_jobs=16`;
+  - gate ring granularity:
+    - calls `1782`;
+    - `avg_jobs=2.15`;
+    - `avg_read_jobs=2.15`;
+    - `max_jobs=4`;
+    - `max_read_jobs=4`.
+- Comparison:
+  - versus Phase 7FT:
+    - decode regressed from `71619.18` to `71923.07` (`+303.89 ms`);
+    - `iouring_wait_us` improved from `37082550` to `30356241`
+      (`-6726309 us`);
+    - file-backed final memory dropped from `14817828864` to `11824467968`.
+  - versus accepted Phase 7FB SOTA:
+    - decode is slower by `1835.76 ms`.
+- Decision:
+  - Reject combined up/gate staging as SOTA.
+  - Keep the env-gated implementation for now because default behavior is
+    unchanged and the experiment produced useful evidence: aggregation reduces
+    visible io wait, but single-stream combined H2D / lost up-gate overlap
+    offsets the gain.
+  - Next targeted test: raise `PINNED_SLOTS` to `16` only for combined staging,
+    because Phase 7FX now hits `max_read_jobs=16` but effective
+    `inflight_max=12` and `avg_depth=12` due to the current slot cap.
+
+## Phase 7FY: combined staging with 16 pinned slots
+
+Start time: 2026-07-04T17:10:00+08:00.
+
+Goal:
+
+- Test whether Phase 7FX is limited by `PINNED_SLOTS=12` after combined
+  staging successfully creates `max_read_jobs=16`.
+- Keep combined staging enabled and increase only the pinned staging slot count
+  from `12` to `16`.
+- Keep 16GB host RAM cgroup and all quality/TTFT/fallback gates.
+
+Theory:
+
+- Phase 7FX proves aggregation creates larger batches:
+  - `max_read_jobs=16`;
+  - but `avg_depth=12`, `inflight_max=12`, because real depth is capped by
+    `ring.slots.size()`.
+- Increasing pinned slots to 16 should allow `inflight_max=16` on the combined
+  main ring.
+- Pinned memory increase is small relative to 16GB:
+  - each slot is about `7.44 MiB`;
+  - two active rings at +4 slots each cost roughly `59.5 MiB`;
+  - even with auxiliary rings, expected additional host pinned memory remains
+    well below the cgroup margin if page cache reclaim works.
+- Upper bound:
+  - n96 Phase 7FX still spends `30356.24 ms` in io_uring wait;
+  - if slot expansion reduces that by another 5%, decode could improve by
+    about `1.5 s`;
+  - if single-stream H2D/overlap loss remains dominant, decode will not improve
+    and the change must be rejected.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fy-combined-upgate-slots16"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails any gate, reject immediately.
+- If n32 does not improve decode or does not raise `inflight_max` above 12,
+  reject and do not run n96.
+- If n32 improves materially and raises `inflight_max`, run n96 with the same
+  settings.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
