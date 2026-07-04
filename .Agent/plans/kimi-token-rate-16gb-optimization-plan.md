@@ -56124,3 +56124,68 @@ Decision rule:
 - If gates pass and counters match the accepted default shape, keep the patch.
 - Do not claim SOTA from this micro-optimization unless n96 is later confirmed.
 - If quality, TTFT, RAM, or fallback gates fail, revert immediately.
+
+Result: accepted as default-path cleanup, not SOTA.
+
+- Source commit:
+  `0cc042638` (`cuda: cache eviction profile env lookup`).
+- Build:
+  `cmake --build build-cuda-batch -j$(nproc)`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-190235Z-n32-phase7ib-evict-env-cache`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-190235Z-n32-phase7ib-evict-env-cache
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74181.14 ms`;
+  - decode `29002.35 ms / 31`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - memory final `15077965824`;
+  - swap max `0`;
+  - anon `450560`;
+  - file `14839214080`;
+  - kernel `234770432`;
+  - inactive file `4385394688`;
+  - active file `10453225472`;
+  - cgroup OOM counters all `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Default-profile check:
+  - run directory contains no `cache-evict-profile.csv`;
+  - no eviction profile output is emitted unless the env var is set.
+- Expert/cache counters:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15349306`;
+  - global iouring batches `4002`, wait calls `12039`, CQEs `15024`,
+    inflight avg `3.10`, max `8`;
+  - global batch hist `1:335,2-4:2425,5-8:1242,9-16:0,17-32:0,gt32:0`;
+  - current-down overlap jobs `3664`, cache hits `3528`,
+    missing tensor `93`, missing pack `36`, worker `3395023 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`;
+  - down prefetch useful rate `100.0%`, `evicted_unused=0`.
+- Decision:
+  - Keep the patch as cleanup: it removes a per-insert `getenv()` introduced
+    by diagnostic instrumentation while preserving the default runtime shape.
+  - Do not claim SOTA; n32 is within normal variance and n96 is not warranted
+    for this micro-change.
+  - Continue with larger scheduling/batching work aimed at reducing or hiding
+    `runtime_load` movement.
