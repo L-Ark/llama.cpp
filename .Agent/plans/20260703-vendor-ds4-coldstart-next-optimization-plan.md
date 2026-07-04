@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `f016f7e851ff007e36b50932325ac0844dfd4905` (`vendor-ds4: plan gpu updown drift audit`)
+- Latest pushed head before this document update: `e6090ffaeb6ad623c8e3fb13d108262df96d6dd8` (`vendor-ds4: validate results top1 verifier`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -25,7 +25,8 @@ Current bottleneck conclusion:
 - Full current-SOTA CPU chunk trace shows fallback wall estimate about `27.072s`, chunk thread-average about `25.400s`, and only about `1.672s` scheduling/tail gap. Chunk scheduling, affinity, and overpartitioning are therefore closed for now.
 - Source movement/pack/direct/page prefetch variants are closed for now by the async-bound artifact: measured bytes and direct-read bandwidth make top64/top128/top256 staging negative after overlap.
 - No compatible local draft/MTP/NextN path exists; no-source speculative/lookahead/ngram paths are closed unless a compatible draft/MTP artifact appears.
-- The only active local plan is an offline GPU up/down output-drift audit using already recorded runs. No new model run or source change should happen until that audit is recorded.
+- GPU up/down drift audit and lightweight sequential top1 verifier are complete. The verifier self-check passed under the 16GB cgroup, so the next active work may use token-level top1 matching before any performance benchmark.
+- The next active candidate is the default-off DS4 hot-expert dual dispatch path (`DS4_HOT_PROFILE_JSON` + `DS4_HOT_DISPATCH=1`), not the rejected one-stream/profile-gated up/down path. It must be investigated verifier-first and may not run a throughput benchmark until it passes the fixed France top1 verifier.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -42,13 +43,14 @@ Current bottleneck conclusion:
 - 2026-07-04 gate cache `13312MiB` + down cache `256MiB` + MXFP4 batch-probe 短诊断已拒绝：RAM 通过，但输出错误、`eval_tok_s=1.6`、down cache hit rate `0.0%`、gate hit rate 降到 `58.5%`、stage 增至 `5.922 ms/call`。probe source 已回退，不允许 full strict cold。
 - 2026-07-04 corrected down-batch compare 已完成：恢复 `tmp_dst_rows=max(dst_cols,n_active)` 后，MXFP4 down batch 与 CPU compare 数值一致（`max_abs_max=1.1920929e-07`），但性能仍只有 `2.6 tok/s`，down-cache hit rate 约 `0.0%`，stage `4.740 ms/call`，因此性能方向拒绝，probe source 已回退。
 - 2026-07-04 CPU fallback top128 O_DIRECT staging 已拒绝：正确率/RAM/TTFT 通过，但同步 direct staging 读取 `44.79GB`，`eval_tok_s=2.9`，说明同步 O_DIRECT 不是可用 movement model。
-- 当前最新计划：回到 accepted SOTA runtime，尝试一个更高性价比的 gate one-stream VRAM cache prefill 诊断。该候选只移动已接受 gate path 的 source-load 时间，不改模型数学；如果不能超过 `4.2 tok/s`，立即回退。
-- 下一阶段目标：稳定超过 `4.2 tok/s`；未超过 `4.2 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
+- 2026-07-04 lightweight sequential top1 verifier 已完成并 push：固定 France 文本在 accepted SOTA path 下 `same_top1=145/145`，`first_mismatch_pos=-1`，16GB cgroup 无 OOM。后续 GPU/offload 候选必须先过这个 verifier 或等价 token-level correctness gate。
+- 当前最新计划：只调查 DS4 hot-expert dual dispatch 的 verifier-first 可行性。该路径与已拒绝的 one-stream/profile-gated hot up/down 不同；它通过 GPU pinned hot subset + CPU cold path 双路求和减少 CPU fallback，而不是把 up/down 纳入 one-stream source-load/cache 逻辑。
+- 下一阶段目标：稳定超过 `4.4 tok/s`；未超过 `4.4 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `current_pushed_head_before_this_update`: `b1168731e` (`vendor-ds4: reject top128 direct staging probe`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `e6090ffa` (`vendor-ds4: validate results top1 verifier`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -7557,3 +7559,53 @@ Verdict:
 - The lightweight sequential top1 verifier is usable for future DS4 correctness diagnostics under the 16GB cgroup.
 - This is not a token-rate improvement and cannot be promoted as SOTA.
 - Before any future GPU/offload candidate can run a performance benchmark, it must first pass this verifier or an equivalent token-level correctness check on the accepted France fixed text.
+
+### 2026-07-04T04:20Z Latest Plan: DS4 Hot-Dispatch Verifier-First
+
+Current accepted SOTA remains unchanged:
+
+- `eval_tok_s=4.4`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Required promotion gate: strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, France output semantic/coherent, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, no pack direct fallback, and pushed-source reproduction.
+
+Why this is the next candidate:
+
+- Measured current bottleneck is still CPU up/down fallback, not gate pack I/O. The accepted gate-only SOTA already gets gate pack `hits=4886 misses=0` and VRAM cache `hit_rate=94.6%`.
+- Previously rejected GPU up/down candidates used one-stream/cache admission and either collapsed source/cache behavior or changed the generated answer. They are closed.
+- A separate default-off DS4 hot-expert dual dispatch path already exists in `src/llama-deepseek4-hot.*` and `src/models/deepseek4.cpp`. It routes frequent experts through GPU-resident hot subsets and keeps cold picks on the original CPU tensors, then combines hot/cold outputs. Activation is `DS4_HOT_PROFILE_JSON=<profile.json>` plus `DS4_HOT_DISPATCH=1`.
+- This path targets actual fallback compute and source stalls instead of only repacking source pages. It is different enough from the rejected one-stream up/down path to justify a narrow verifier-first investigation.
+
+Hard bounds and current evidence:
+
+- Existing `hot-updown64` profile summary shows top64 up and top64 down each cover `7484 / 25997 = 28.79%` of recorded up/down rows.
+- The rejected one-stream/profile-gated hot64 result had `eval_tok_s=3.6` and a semantic error, so it is not evidence that dual dispatch is accepted. It only gives coverage and risk data.
+- `ds4-hot-route-vram-bound.json` shows the per-layer hot-dispatch allocation shape can reach about `293.25 MiB` for one layer at `k=16`; a full profile must be summed before running because preserving the accepted `13568 MiB` gate cache is preferred unless the plan proves a larger gain.
+- Upper-bound check before any run: use current fallback timing (`~25.7s` total CPU fallback; up/down roughly `12.4s/13.4s`) and the selected profile coverage. A candidate must have a theoretical ceiling comfortably above `4.4 tok/s` after graph overhead, extra GPU memory pressure, and any gate-cache reduction. If the bound is only a tie, reject without a model run.
+
+Phase H0: Profile and VRAM feasibility, read-only:
+
+1. Find or generate the minimal DS4 hot profile JSON required by `DS4_HOT_PROFILE_JSON`. Prefer an existing profile artifact; if none exists, generate one from committed profile data and record the exact script/inputs/hash before use.
+2. Compute total hot subset VRAM bytes across all layers for candidate `k` values. Include gate/up/down hot tensors, dummy rows, remap tables, and any workspace.
+3. Confirm the candidate can fit without reducing accepted gate one-stream cache (`GGML_MOE_STREAM_ONE_CACHE_MIB=13568`). If it cannot, calculate the exact gate-slot loss and expected pack/source penalty before continuing.
+4. Record profile hash, model hash, source head, expected coverage, expected removable milliseconds, expected token-rate ceiling, and VRAM budget in an artifact.
+
+Phase H1: Token-level correctness gate before performance:
+
+1. Use the accepted fixed France text and the lightweight sequential top1 verifier.
+2. Baseline report is the accepted SOTA report from `/root/lfz/runs/vendor-ds4-16gb/20260704T030025Z-results-top1-selfcheck-light/top1-baseline.json`.
+3. Run candidate verifier under the same 16GB cgroup and accepted SOTA env, adding only `DS4_HOT_PROFILE_JSON=<profile.json>` and `DS4_HOT_DISPATCH=1`.
+4. Pass condition: `same_top1 == n_tokens`, `first_mismatch_pos == -1`, `oom=0`, `oom_kill=0`, and `memory_peak_bytes <= 16000000000`.
+5. If any top1 mismatch appears, reject this hot-dispatch profile immediately. Do not run a throughput benchmark and do not try to accept by manual semantic review.
+
+Phase H2: Strict cold performance only after H1 passes:
+
+1. Run the standard France cold-start benchmark with strict `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, accepted CLI args, accepted gate pack/profile/env, plus the verified hot-dispatch env.
+2. Record token rates, TTFT, exact output, memory stats including file/page cache, cgroup OOM counters, pack counters, VRAM cache counters, hot-dispatch logs, source head, build hashes, profile hashes, and exact command.
+3. Accept only if `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `ram_ok=true`, `correctness_ok=true`, and all counters are clean.
+4. If TTFT exceeds the gate but throughput improves, record and commit as `not accepted` only if useful for future TTFT reduction; do not promote.
+
+Rollback and promotion:
+
+- Runtime source changes are not required for H0/H1 because the dual-dispatch code already exists and is default-off. If any source patch becomes necessary, update this plan again before implementing it.
+- On verifier failure, performance regression, correctness failure, RAM violation, TTFT gate violation for an accepted candidate, or gate-cache collapse, revert any runtime source patch immediately and keep only rejected records/docs.
+- On a compliant new SOTA, stop exploration immediately, write full reproduction metadata, commit and push source/plan/artifacts/profiles to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean rebuild and reproduce from pushed source before declaring it accepted.
