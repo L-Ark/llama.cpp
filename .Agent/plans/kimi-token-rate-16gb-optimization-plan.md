@@ -50782,3 +50782,119 @@ Decision rule:
   change is only useful if it recovers default-path performance.
 - If n96 beats Phase 7FB, run one n96 repeat. Accept only if the repeat also
   beats Phase 7FB and passes all gates, then push immediately.
+
+Result: rejected and reverted.
+
+- End time: 2026-07-04T21:08:00+08:00.
+- Plan commit:
+  `0a1e31adc` (`docs: plan hot-path env gate caching`).
+- Source probe commit:
+  `c47ada125` (`cuda: cache default-off moe env gates`).
+- Rollback commit:
+  `ff5a46162` (`Revert "cuda: cache default-off moe env gates"`).
+- Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+- Build result:
+  - succeeded;
+  - `CMAKE_CUDA_ARCHITECTURES=120a-real`;
+  - no new build errors.
+
+Experiment A: n32 gate
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-125939Z-n32-phase7gv-cache-env-gates`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-125939Z-n32-phase7gv-cache-env-gates
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass` for n32 prefix;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `73804.45 ms`;
+  - decode `29808.08 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15707697`;
+  - current-down worker `3503175 us`;
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`.
+- Decision:
+  - n32 passed gates and was only `13.22 ms` above the current rebuilt upper
+    range, so n96 was run to test the actual SOTA gate.
+
+Experiment B: n96 confirmation
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-130230Z-n96-phase7gv-cache-env-gates`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-130230Z-n96-phase7gv-cache-env-gates
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `76247.01 ms`;
+  - decode `71726.56 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=36921383`;
+  - current-down worker `8542172 us`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `43.2%`.
+- Decision:
+  - Reject hot-path env gate caching.
+  - The change did not beat Phase 7FB `70087.31 ms / 77`.
+  - Revert immediately; rollback commit `ff5a46162` was pushed and rebuilt on
+    the server.
+- Gap analysis:
+  - Repeated default-off env checks are not the source of the current
+    long-decode gap.
+  - n96 is still dominated by the same movement pattern:
+    `iouring_reads=37080`, `iouring_bytes=214923018240`, and hit rates
+    unchanged from default.
+  - Further work should not focus on micro-optimizing default-off diagnostics;
+    it needs to reduce visible expert movement or recover the old build/runtime
+    conditions that produced `70087.31 ms`.
