@@ -38,8 +38,8 @@ def install_gguf_import(repo_root: Path) -> None:
         sys.path.insert(0, str(gguf_py))
 
 
-def load_existing_pack_keys(path: Path) -> set[tuple[str, int, int]]:
-    keys: set[tuple[str, int, int]] = set()
+def load_pack_entries(path: Path) -> list[dict]:
+    entries = []
     with path.open("rb") as f:
         header = f.read(PACK_HEADER.size)
         if len(header) != PACK_HEADER.size:
@@ -53,8 +53,21 @@ def load_existing_pack_keys(path: Path) -> set[tuple[str, int, int]]:
                 raise RuntimeError(f"{path}: short pack index")
             name_raw, expert_idx, _reserved, _offset, nbytes = PACK_ENTRY.unpack(raw)
             name = name_raw.split(b"\0", 1)[0].decode("utf-8")
-            keys.add((name, expert_idx, nbytes))
-    return keys
+            if _offset < data_start:
+                raise RuntimeError(f"{path}: entry offset before data_start: {name}:{expert_idx}")
+            entries.append({
+                "name": name,
+                "expert_idx": expert_idx,
+                "source_path": path,
+                "source_offset": _offset,
+                "nbytes": nbytes,
+                "source_kind": "pack",
+            })
+    return entries
+
+
+def load_existing_pack_keys(path: Path) -> set[tuple[str, int, int]]:
+    return {(e["name"], e["expert_idx"], e["nbytes"]) for e in load_pack_entries(path)}
 
 
 def find_tensors(model_paths: list[Path], wanted_names: set[str]):
@@ -105,6 +118,8 @@ def main() -> int:
                         help="Optional expected bytes per expert slice.")
     parser.add_argument("--reject-pack", action="append", type=Path, default=[],
                         help="Reject keys already present in an existing pack.")
+    parser.add_argument("--include-pack", action="append", type=Path, default=[],
+                        help="Copy all entries from an existing pack into the output first.")
     parser.add_argument("--chunk-size", type=int, default=16 * 1024 * 1024,
                         help="Copy chunk size in bytes.")
     args = parser.parse_args()
@@ -133,6 +148,17 @@ def main() -> int:
         existing_keys.update(load_existing_pack_keys(reject_pack))
 
     planned = []
+    seen_keys = set()
+    for include_pack in args.include_pack:
+        for item in load_pack_entries(include_pack):
+            key = (item["name"], item["expert_idx"], item["nbytes"])
+            if key in seen_keys:
+                raise RuntimeError(f"{include_pack}: duplicate included key {key}")
+            if key in existing_keys:
+                raise RuntimeError(f"{include_pack}: included key is present in reject pack {key}")
+            seen_keys.add(key)
+            planned.append(item)
+
     for name, expert_idx in unique_entries:
         info = tensors[name]
         tensor_nbytes = info["n_bytes"]
@@ -146,17 +172,23 @@ def main() -> int:
         if len(name.encode("utf-8")) >= 128:
             raise RuntimeError(f"{name}: tensor name is too long for pack index")
         key = (name, expert_idx, expert_bytes)
+        if key in seen_keys:
+            raise RuntimeError(f"{name}:{expert_idx}: key already present in included pack")
         if key in existing_keys:
             raise RuntimeError(f"{name}:{expert_idx}: key already present in reject pack")
+        seen_keys.add(key)
         planned.append({
             "name": name,
             "expert_idx": expert_idx,
             "source_path": info["path"],
             "source_offset": info["data_offset"] + expert_idx * expert_bytes,
             "nbytes": expert_bytes,
+            "source_kind": "gguf",
             "tensor_type": info["tensor_type"],
             "shape": info["shape"],
         })
+
+    planned.sort(key=lambda item: (item["name"], item["expert_idx"], item["nbytes"]))
 
     index_bytes = len(planned) * PACK_ENTRY.size
     data_start = align_up(PACK_HEADER.size + index_bytes)
@@ -211,7 +243,8 @@ def main() -> int:
         print(
             f"{item['name']} expert={item['expert_idx']} bytes={item['nbytes']} "
             f"pack_offset={item['pack_offset']} source={item['source_path'].name} "
-            f"source_offset={item['source_offset']} type={item['tensor_type']} shape={item['shape']}"
+            f"source_offset={item['source_offset']} source_kind={item['source_kind']} "
+            f"type={item.get('tensor_type', 'PACK')} shape={item.get('shape', '-')}"
         )
     return 0
 
