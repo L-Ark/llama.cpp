@@ -46736,6 +46736,93 @@ Decision rule:
   reject and do not run n96.
 - If n32 improves materially and keeps aggregated batch shape
   (`max_read_jobs > 8`, `inflight_max >= 12`), run n96.
+
+Result: n32 completed; rejected; implementation reverted.
+
+- End time: 2026-07-04T17:20:44+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-091914Z-n32-phase7fz-combined-per-stream`.
+- Code head:
+  `d13ba9888`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75188.78 ms`;
+  - decode `30329.18 ms / 31`, `1.02 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14843547648`;
+    - `kernel=234635264`;
+    - `inactive_file=5955698688`;
+    - `active_file=8887205888`;
+    - `pgmajfault=969614`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=13093724`;
+  - global io_uring:
+    - `inflight_avg=4.02`;
+    - `inflight_max=12`;
+    - batch hist `9-16:281`;
+  - main ring granularity:
+    - calls `2743`;
+    - `avg_read_jobs=4.92`;
+    - `max_read_jobs=16`;
+  - gate ring granularity:
+    - calls `721`;
+    - `avg_read_jobs=2.13`;
+    - `max_read_jobs=4`.
+- Comparison:
+  - slower than Phase 7FX n32 by `1341.68 ms`;
+  - slower than Phase 7FY n32 by `864.23 ms`;
+  - `iouring_wait_us` is also worse than Phase 7FX n32.
+- Decision:
+  - Reject `GGML_MOE_UP_GATE_COMBINED_STAGE_PER_STREAM`.
+  - Do not run n96.
+  - Revert commit `d13ba9888` because the optimization regressed token rate.
+  - Root cause inference:
+    - using multiple CUDA streams from one shared staging ring did not restore
+      enough useful overlap;
+    - it likely increased stream/event scheduling overhead and still waits for
+      all io completions before compute launches.
+
+## Phase 7GA: next optimization direction
+
+Start time: 2026-07-04T17:22:00+08:00.
+
+Finding so far:
+
+- Aggregating up/gate reads can reduce `iouring_wait_us`, but decode does not
+  improve at n96 because compute/H2D overlap is lost or scheduling overhead
+  increases.
+- Raising pinned slots removes `inflight_max=12` but worsens decode.
+- Per-job CUDA streams also worsens decode.
+
+Next candidates:
+
+1. Keep default SOTA path and add a lower-overhead diagnostic that separates:
+   - io wait before first H2D enqueue;
+   - H2D enqueue wall;
+   - slot wait caused by ring reuse;
+   - compute wait after staging.
+2. Optimize the down path instead of up/gate:
+   - down compute already depends on up/gate output, so there may be more room
+     to hide read latency without delaying independent compute;
+   - current down staging remains mostly host-stage bound.
+3. Revisit RAM/file cache policy:
+   - Phase 7FX lowered final file cache materially but not decode;
+   - need per-phase file-cache sampling to distinguish prompt leftovers from
+     decode refaults before changing eviction again.
+
+Decision for next practice:
+
+- Do not keep adding up/gate combined variants without a new timing breakdown.
+- First add targeted low-overhead timing for staging phases, then choose
+  whether to attack down staging or cache/refault behavior.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
