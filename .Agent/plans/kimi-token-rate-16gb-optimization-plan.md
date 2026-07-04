@@ -50669,3 +50669,116 @@ systemd-run --wait --collect --same-dir \
     unchanged and decode is slower than Phase 7FB `70087.31 ms / 77`.
   - Future experiments must use `quality_reason` plus manual semantic inspection
     before accepting any performance gain.
+
+## Phase 7GV: cache default-off hot-path env gates
+
+Start time: 2026-07-04T20:56:26+08:00.
+
+Goal:
+
+- Recover any default-path overhead introduced by recent diagnostic and rejected
+  experiment gates.
+- Keep runtime semantics unchanged for normal process lifetime:
+  env vars are read once per process, as they already effectively are for the
+  reproduction scripts.
+- Do not change model math, cache policy, iouring settings, prompt, sampling,
+  VRAM split, or default env values.
+
+Why this is the next narrow source probe:
+
+- Current HEAD default n96 remains slower than accepted Phase 7FB:
+  - Phase 7FB SOTA: `70087.31 ms / 77`;
+  - current quality-gate validation: `72330.81 ms / 77`.
+- Non-doc source diff from old Phase 7FB to current is small and mostly
+  default-off instrumentation/experiment gates in `moe_stream_batch.cu`.
+- Several new checks sit in per-token/per-staging hot paths:
+  - `stage_granularity_profile_enabled()` calls `getenv` in
+    `expert_pack_iouring_copy_jobs`;
+  - `current_down_overlap_early_enabled()` calls `getenv` in the mixed up/gate
+    path;
+  - `GGML_MOE_UP_GATE_COMBINED_STAGE` is read through `expert_pack_env_bool`
+    inside the parallel up/gate staging path;
+  - `current_down_missing_profile_record()` checks its profile path on missing
+    current-down metadata.
+- All of these flags are default off in production. Re-reading env vars on every
+  call is unnecessary and was not present in the accepted Phase 7FB code.
+
+Implementation:
+
+- Add cached helper functions for newly added default-off flags:
+  - `stage_granularity_profile_enabled()`;
+  - `current_down_overlap_early_enabled()`;
+  - `up_gate_combined_stage_enabled()`;
+  - `current_down_missing_profile_path()`.
+- Use function-local `static const` values so each env is parsed once per
+  process.
+- Leave default-on or previously existing env behavior untouched.
+- Do not change the env names or default values.
+
+Theory and upper bound:
+
+- This cannot reduce SSD bytes, VRAM misses, H2D copies, or CUDA kernel time.
+- The only possible gain is CPU-side hot-path overhead and branch/env lookup
+  overhead.
+- Hard upper bound is the current regression from Phase 7FB, about `2.24 s` on
+  the latest n96 validation.
+- Realistic gain is expected to be small:
+  - `0.1-0.5 s` on n96 if repeated `getenv` was visible under staging pressure;
+  - no improvement if the regression is dominated by build variance or IO.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment A: n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gv-cache-env-gates"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 does not regress
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gv-cache-env-gates"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- n32 and n96 exit `0`;
+- `quality=pass` and `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 must not regress materially versus the current rebuilt range
+  (`29140-29795 ms / 31`);
+- n96 must beat Phase 7FB `70087.31 ms / 77` before any SOTA claim.
+
+Decision rule:
+
+- If build fails, revert immediately.
+- If n32 regresses or fails a gate, revert the source change and record
+  rejection.
+- If n32 passes but n96 does not beat Phase 7FB, reject and revert because the
+  change is only useful if it recovers default-path performance.
+- If n96 beats Phase 7FB, run one n96 repeat. Accept only if the repeat also
+  beats Phase 7FB and passes all gates, then push immediately.
