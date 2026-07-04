@@ -44488,3 +44488,156 @@ Decision:
 - Do not run minimal-profile confirmation or n96.
 - Do not continue broad global CPU thread sweeps without a more specific
   per-op/threading mechanism.
+
+## Phase 7FI: route-admission scratch-slot design
+
+Start time: 2026-07-04T09:03:00Z.
+
+Goal:
+
+- Reduce repeated route misses without changing global VRAM split or repeating
+  rejected cache-policy sweeps.
+- Use route-trace evidence before implementation.
+- Preserve strict gates when implemented:
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - France quality pass;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Current evidence:
+
+- Current production SOTA remains Phase 7FB.
+- Phase 7FD current diagnostic:
+  - down hit rate `73.6%`;
+  - upgate hit rate `43.7%`;
+  - main `host_stage=11455.176 ms`;
+  - `iouring_wait_us=14744321`;
+  - decode `29610.75 ms / 31`.
+- Phase 7FE copy-profile showed movement is diffuse:
+  - `runtime_load` `102.523 GiB`;
+  - `current_down_overlap` `21.525 GiB`;
+  - no single tensor/layer hotset dominates.
+- Phase 7FF and 7FG proved iouring/direct thresholding is not the right lever.
+- Phase 7FH proved lowering global CPU threads is not the right lever.
+
+Route-trace simulation:
+
+- Input:
+  - profile:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-045603Z-n32-phase7fd-sota-profile-refresh/route-profile.csv`;
+  - trace:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-045603Z-n32-phase7fd-sota-profile-refresh/route-trace.csv`;
+  - stderr calibration from the same run.
+- Baseline trace simulation at `upgate_pct=60`, LRU, protected preload,
+  `admit_after=1`:
+  - upgate hit `49.12%`;
+  - down hit `51.63%`;
+  - total hit `49.89%`;
+  - miss `111.19 GiB`.
+- LRU with `admit_after=2`:
+  - upgate hit `52.14%`;
+  - down hit `54.51%`;
+  - total hit `52.86%`;
+  - miss `104.63 GiB`;
+  - bypassed `12009`;
+  - simulated reduction `6.56 GiB`.
+- LFU/LRU was worse for this trace:
+  - `lfu_lru`, `admit_after=2` miss `108.19 GiB`.
+- Reserving simulated temp slots from the normal cache made results worse:
+  - `upgate_temp_slots=8`, `down_temp_slots=0`: miss `104.86 GiB`;
+  - `upgate_temp_slots=64`, `down_temp_slots=32`: miss `107.00 GiB`.
+
+Theory and upper bound:
+
+- Many first-time or one-off misses pollute the persistent VRAM cache.
+- A no-admit path can compute those first misses without installing them into
+  the persistent cache; only the second use admits the expert.
+- Simulated upper bound:
+  - `6.56 GiB` fewer misses on n32 trace.
+- Calibrated host-stage upper bound:
+  - main pinned host-stage throughput from Phase 7FD is about
+    `12.53 GiB/s`;
+  - `6.56 GiB` avoided staging has a rough host-stage upper bound of
+    `~0.52 s`;
+  - additional iouring/H2D savings may raise practical benefit, but only if
+    scratch execution does not add new waits or reduce persistent capacity.
+
+Implementation constraints:
+
+- Do not implement this by inserting bypassed experts into normal cache slots
+  and clearing them afterward:
+  - if the cache is full, this evicts useful entries;
+  - simulation already shows taking slots away from persistent cache reduces
+    the benefit.
+- The implementation must provide a real no-admit path:
+  - separate per-size scratch slots outside the persistent slot count; or
+  - a small scratch ring not counted in upgate/down cache slots.
+- Scratch slots must be bounded and default-off:
+  - env: `GGML_MOE_VRAM_CACHE_ADMIT_AFTER=2`;
+  - env: `GGML_MOE_VRAM_SCRATCH_SLOTS_UPGATE`;
+  - env: `GGML_MOE_VRAM_SCRATCH_SLOTS_DOWN`;
+  - default behavior unchanged when unset.
+- Scratch allocation must stay inside the 16GB host RAM gate and should use
+  available VRAM without changing persistent `VRAM_MIB=15000`.
+- Scratch entries are per call / short-lived:
+  - copied to scratch;
+  - used for the current up/gate/down compute;
+  - not visible to `batch_cache_lookup_slot`;
+  - not protected/pinned/profile-counted;
+  - no persistent cache eviction.
+
+Implementation plan:
+
+1. Add a default-off scratch pool per expert size class:
+   - same slot byte sizing as the persistent cache;
+   - small ring count from env, clamped conservatively.
+2. Add route miss counters:
+   - per key miss count;
+   - if count `< admit_after`, route to scratch;
+   - if count `>= admit_after`, use existing persistent cache insertion.
+3. Wire scratch IDs into:
+   - up/gate staged jobs;
+   - down staged jobs;
+   - current-down overlap only if the scratch slot lifetime can be proven to
+     cover the asynchronous use. Otherwise leave current-down overlap on the
+     persistent path only.
+4. Add diagnostics:
+   - scratch copies;
+   - scratch bytes;
+   - scratch hits/bypasses;
+   - persistent avoided admissions;
+   - any scratch allocation failures.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fi-admit2-scratch"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      GGML_MOE_VRAM_CACHE_ADMIT_AFTER=2 \
+      GGML_MOE_VRAM_SCRATCH_SLOTS_UPGATE=16 \
+      GGML_MOE_VRAM_SCRATCH_SLOTS_DOWN=8 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- Do not implement unless the scratch lifetime is correct for async
+  current-down overlap.
+- n32 diagnostic must pass all gates and improve decode versus Phase 7FD
+  `29610.75 ms`, with:
+  - lower persistent cache misses;
+  - no quality regression;
+  - no increased `iouring_fallbacks`;
+  - scratch diagnostics proving bypassed first misses were not admitted into
+    persistent cache.
+- If n32 passes, run n32 minimal-profile confirmation.
+- If confirmation passes, run n96 twice and compare against Phase 7FB best
+  `70087.31 ms / 77`.
+- If any gate fails, revert the source patch and record rejection.
