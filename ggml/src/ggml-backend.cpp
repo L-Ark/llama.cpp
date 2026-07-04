@@ -1846,6 +1846,135 @@ static bool ggml_kimi_split_profile_enabled() {
     return enabled;
 }
 
+static bool ggml_kimi_split_moe_assign_profile_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled;
+}
+
+static int ggml_kimi_split_moe_assign_profile_limit() {
+    static const int limit = []() {
+        const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE_LIMIT");
+        int value = (env && env[0]) ? atoi(env) : 256;
+        if (value < 1) {
+            value = 1;
+        }
+        if (value > 4096) {
+            value = 4096;
+        }
+        return value;
+    }();
+    return limit;
+}
+
+static bool ggml_kimi_name_contains(const char * name, const char * needle) {
+    return name != nullptr && needle != nullptr && strstr(name, needle) != nullptr;
+}
+
+static const char * ggml_kimi_tensor_buffer_name(const ggml_tensor * tensor) {
+    if (tensor == nullptr) {
+        return "<null>";
+    }
+    ggml_backend_buffer_t buffer = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+    return buffer != nullptr ? ggml_backend_buffer_name(buffer) : "<none>";
+}
+
+static int ggml_kimi_tensor_buffer_usage(const ggml_tensor * tensor) {
+    if (tensor == nullptr) {
+        return -1;
+    }
+    ggml_backend_buffer_t buffer = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+    return buffer != nullptr ? (int) buffer->usage : -1;
+}
+
+static void ggml_kimi_split_moe_assign_profile_record(
+        ggml_backend_sched_t sched,
+        int split_id,
+        const ggml_backend_sched_split * split,
+        ggml_backend_t split_backend) {
+    if (!ggml_kimi_split_moe_assign_profile_enabled() ||
+            g_kimi_split_profile_phase != 2 ||
+            sched == nullptr || split == nullptr || split_backend == nullptr ||
+            split->graph.n_nodes <= 0) {
+        return;
+    }
+    if (strstr(ggml_backend_name(split_backend), "CPU") == nullptr) {
+        return;
+    }
+    const ggml_tensor * first = split->graph.nodes[0];
+    const ggml_tensor * last = split->graph.nodes[split->graph.n_nodes - 1];
+    const char * first_name = first && first->name[0] ? first->name : "<unnamed>";
+    const char * last_name = last && last->name[0] ? last->name : "<unnamed>";
+    const bool moe_split =
+        ggml_kimi_name_contains(first_name, "ffn_moe_swiglu") ||
+        ggml_kimi_name_contains(first_name, "ffn_moe_down") ||
+        ggml_kimi_name_contains(last_name, "ffn_moe_swiglu") ||
+        ggml_kimi_name_contains(last_name, "ffn_moe_down");
+    if (!moe_split) {
+        return;
+    }
+
+    static int emitted = 0;
+    if (emitted >= ggml_kimi_split_moe_assign_profile_limit()) {
+        return;
+    }
+    emitted++;
+
+    GGML_LOG_INFO(
+        "[kimi_moe_assign_profile] split=%d backend=%s range=%d:%d nodes=%d first=%s last=%s\n",
+        split_id,
+        ggml_backend_name(split_backend),
+        split->i_start,
+        split->i_end,
+        split->graph.n_nodes,
+        first_name,
+        last_name);
+
+    for (int node_id = 0; node_id < split->graph.n_nodes; ++node_id) {
+        const ggml_tensor * node = split->graph.nodes[node_id];
+        std::string support;
+        for (int b = 0; b < sched->n_backends; ++b) {
+            if (!support.empty()) {
+                support += ",";
+            }
+            support += ggml_backend_name(sched->backends[b]);
+            support += ":";
+            support += ggml_backend_supports_op(sched->backends[b], node) ? "1" : "0";
+        }
+        GGML_LOG_INFO(
+            "[kimi_moe_assign_profile] split=%d node=%d name=%s op=%s type=%s buf=%s usage=%d supports=[%s]\n",
+            split_id,
+            node_id,
+            node && node->name[0] ? node->name : "<unnamed>",
+            node ? ggml_op_name(node->op) : "<null>",
+            node ? ggml_type_name(node->type) : "<null>",
+            ggml_kimi_tensor_buffer_name(node),
+            ggml_kimi_tensor_buffer_usage(node),
+            support.c_str());
+        if (node == nullptr) {
+            continue;
+        }
+        for (int src_id = 0; src_id < GGML_MAX_SRC; ++src_id) {
+            const ggml_tensor * src = node->src[src_id];
+            if (src == nullptr) {
+                continue;
+            }
+            GGML_LOG_INFO(
+                "[kimi_moe_assign_profile] split=%d node=%d src=%d name=%s op=%s type=%s buf=%s usage=%d\n",
+                split_id,
+                node_id,
+                src_id,
+                src->name[0] ? src->name : "<unnamed>",
+                ggml_op_name(src->op),
+                ggml_type_name(src->type),
+                ggml_kimi_tensor_buffer_name(src),
+                ggml_kimi_tensor_buffer_usage(src));
+        }
+    }
+}
+
 static void ggml_kimi_split_profile_record(
         const ggml_backend_sched_split * split,
         ggml_backend_t backend,
@@ -2725,6 +2854,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
         if (split_profile) {
             ggml_kimi_split_profile_record(split, split_backend, (uint64_t) (ggml_time_us() - split_start_us));
         }
+        ggml_kimi_split_moe_assign_profile_record(sched, split_id, split, split_backend);
     }
 
     return GGML_STATUS_SUCCESS;
