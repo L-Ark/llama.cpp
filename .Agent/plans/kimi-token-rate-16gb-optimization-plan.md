@@ -46906,6 +46906,70 @@ Decision rule:
   directionally and do not compare token rate.
 - Choose the next implementation based on the largest `wall_ms` and
   `io_wait_ms` buckets, not on aggregate assumptions.
+
+Result: n32 completed; diagnostic accepted directionally only.
+
+- End time: 2026-07-04T17:27:53+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-092545Z-n32-phase7ga-copy-profile-baseline`.
+- Code head:
+  `8b375bff1`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75229.95 ms`;
+  - decode `30231.64 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=454656`;
+    - `file=14844022784`;
+    - `kernel=234860544`;
+    - `inactive_file=6521495552`;
+    - `active_file=8321736704`;
+    - `pgmajfault=998270`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15527200`.
+- Copy-profile summary:
+  - `runtime_load`, iouring pack-hit:
+    - count `11529`;
+    - summed `io_wait_ms=45984.171`;
+    - summed `enqueue_ms=309.803`;
+    - summed `wall_ms=45984.171`;
+  - `current_down_overlap`, iouring pack-hit:
+    - count `3495`;
+    - summed `io_wait_ms=11141.278`;
+    - summed `enqueue_ms=48.167`;
+    - summed `wall_ms=11141.278`;
+  - `runtime_load`, non-iouring pack-hit:
+    - count `8574`;
+    - summed `host_ms=10659.136`;
+    - summed `wall_ms=10784.871`;
+  - `runtime_load`, non-pack fallback:
+    - count `147`;
+    - summed `host_ms=1197.578`;
+    - summed `wall_ms=1201.170`.
+- Overhead:
+  - versus Phase 7FU `29140.36 ms`, overhead is `1091.28 ms`, about `3.7%`;
+  - versus faster accepted n32 probes it remains under the 5% diagnostic gate.
+- Important limitation:
+  - `copy-profile.csv` records one row per job, and for io_uring jobs the
+    `wall_ms/io_wait_ms` value can represent shared batch duration repeated
+    across jobs.
+  - Therefore bucket sums are useful for ranking path pressure, but not exact
+    decode wall-time accounting.
+- Decision:
+  - Do not use this run for SOTA comparison.
+  - The next implementation should avoid another up/gate combined read variant
+    unless it preserves compute overlap.
+  - Focus on either:
+    - lowering non-iouring `runtime_load` host fallback wall;
+    - or improving down/current-overlap staging, where work can be hidden
+      behind dependencies more naturally.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
