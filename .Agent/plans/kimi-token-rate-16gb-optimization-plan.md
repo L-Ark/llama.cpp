@@ -47889,6 +47889,130 @@ Decision rule:
 - If both n32 runs reproduce and n96 beats Phase 7FB `70087.31 ms`, accept,
   commit, and push immediately.
 
+Result A: n32 probe passed and is faster than the rebuilt n32 range; run repeat.
+
+- End time: 2026-07-04T18:31:54+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-102926Z-n32-phase7gh-current-down-aux-ring`.
+- Code head:
+  `d210a9789`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74459.58 ms`;
+  - decode `28555.78 ms / 31`, `1.09 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14767439872`;
+    - `kernel=234627072`;
+    - `inactive_file=5274300416`;
+    - `active_file=9492385792`;
+    - `pgmajfault=965395`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=14947635`;
+  - pinned staging split:
+    - main ring jobs `7474`;
+    - gate ring jobs `4055`;
+    - up_aux ring jobs `3495`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - submitted_batches `896`;
+    - failed_batches `0`;
+    - worker_us `3295981`;
+    - max_jobs `8`.
+- Comparison:
+  - faster than Phase 7GF `29118.60 ms` by `562.82 ms`;
+  - faster than Phase 7GG repeat `29231.83 ms` by `676.05 ms`;
+  - below the rebuilt n32 range (`29140-29795 ms`), so it qualifies for a
+    same-command n32 repeat.
+- Analysis:
+  - the optimization did not change planned/completed current-down jobs;
+  - moving current-down overlap to `up_aux` ring shifted `3495` iouring jobs
+    away from the main ring;
+  - main ring runtime-load jobs dropped from about `10969` to `7474`;
+  - current-down `worker_us` dropped from the recent `3.38-3.48 s` range to
+    `3.30 s`;
+  - this supports the ring-contention theory, but the n32 gain must reproduce
+    before n96.
+
+Experiment B: n32 repeat for reproducibility
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gh-current-down-aux-ring-repeat"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Result B: n32 repeat completed; rejected and code path reverted.
+
+- End time: 2026-07-04T18:35:08+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-103249Z-n32-phase7gh-current-down-aux-ring-repeat`.
+- Code head:
+  `d210a9789`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74940.84 ms`;
+  - decode `29252.51 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14766063616`;
+    - `kernel=234696704`;
+    - `inactive_file=8329797632`;
+    - `active_file=6435577856`;
+    - `pgmajfault=940832`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=15219815`;
+  - pinned staging split:
+    - main ring jobs `7474`;
+    - gate ring jobs `4055`;
+    - up_aux ring jobs `3495`;
+  - current down overlap:
+    - calls `992`;
+    - planned_jobs `3664`;
+    - completed_jobs `3664`;
+    - cache_hits `3528`;
+    - missing_tensor `93`;
+    - missing_pack `36`;
+    - submitted_batches `896`;
+    - failed_batches `0`;
+    - worker_us `3423774`;
+    - max_jobs `8`.
+- Reproducibility decision:
+  - first n32 run improved to `28555.78 ms`;
+  - repeat regressed to `29252.51 ms`, inside the rebuilt n32 baseline range;
+  - current-down `worker_us` also returned to the prior `~3.4 s` level.
+- Final Phase 7GH decision:
+  - reject `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1` as a performance
+    optimization;
+  - do not run n96;
+  - revert the code path because the improvement was not reproducible;
+  - keep the plan record and exact reproduction commands for later review.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.

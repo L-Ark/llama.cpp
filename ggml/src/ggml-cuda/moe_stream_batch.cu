@@ -2179,11 +2179,6 @@ static bool current_down_overlap_early_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
-static bool current_down_overlap_aux_ring_enabled() {
-    const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING");
-    return env && env[0] && env[0] != '0';
-}
-
 static bool current_down_overlap_tensor_profile_enabled() {
     const char *env = std::getenv("GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT");
     return env && env[0];
@@ -5987,16 +5982,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 rt.name, down_jobs.size(), rt.expert_bytes / (1024.0 * 1024.0));
         }
 
-        pinned_stage_ring *down_ring = current_down_overlap_aux_ring_enabled() ? &bc.stage_ring_up_aux : &bc.stage_ring;
-        current_down_overlap_thread = std::thread([&, down_cache, down_ring, down_jobs = std::move(down_jobs), expert_bytes = rt.expert_bytes]() {
+        current_down_overlap_thread = std::thread([&, down_cache, down_jobs = std::move(down_jobs), expert_bytes = rt.expert_bytes]() {
             const auto worker_start = std::chrono::steady_clock::now();
             bool copied = expert_pack_iouring_copy_jobs(down_jobs, expert_bytes, bc.prefetch_stream,
-                    *down_ring, "current_down_overlap");
+                    bc.stage_ring, "current_down_overlap");
             if (!copied) {
                 copied = true;
                 for (const stage_copy_job &job : down_jobs) {
                     batch_copy_trace copy_trace;
-                    if (!batch_cache_copy_h2d(*down_ring, job.dst, job.host_data, expert_bytes,
+                    if (!batch_cache_copy_h2d(bc.stage_ring, job.dst, job.host_data, expert_bytes,
                             bc.prefetch_stream, job.pack_entry, &copy_trace,
                             "current_down_overlap", job.tensor, job.expert_idx)) {
                         copied = false;
