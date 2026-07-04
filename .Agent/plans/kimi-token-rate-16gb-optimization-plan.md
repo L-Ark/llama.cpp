@@ -52212,3 +52212,182 @@ Decision rule:
 - If `slot_wait_ms` dominates, revisit pinned slot pressure with tensor-specific
   evidence rather than global `PINNED_SLOTS` sweeps.
 - If one op/tensor group dominates, plan a targeted fix for that group.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-142215Z-n32-phase7hd-copy-profile`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `71507.79 ms`;
+  - decode `30148.68 ms / 31`, `1.03 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15775193`;
+  - main pinned copies `19754`, waits `19718`;
+  - gate pinned copies `4160`, waits `4136`.
+- Copy-profile file:
+  - `copy-profile.csv` exists, size `2.8 MiB`;
+  - columns:
+    `seq,op,tensor,expert_idx,bytes,pack_hit,ram_hit,iouring,slot_wait_ms,host_ms,io_wait_ms,enqueue_ms,h2d_ms,wall_ms`;
+  - important limitation: for io_uring rows, `h2d_ms=-1`, so this profile
+    attributes exposed pack/io wait and enqueue, but does not yet directly time
+    the H2D portion of io_uring-backed copies.
+- Aggregated by op:
+  - `runtime_load`: rows `20250`, bytes `102.52 GiB`, wall `59028.277 ms`,
+    io wait `47052.530 ms`, slot wait `24.030 ms`, host `11846.587 ms`,
+    enqueue `417.615 ms`, pack rows `20103`, io_uring rows `11529`;
+  - `current_down_overlap`: rows `3664`, bytes `21.52 GiB`, wall
+    `11607.076 ms`, io wait `10989.839 ms`, slot wait `1.134 ms`, host
+    `612.659 ms`, enqueue `52.786 ms`, pack rows `3628`, io_uring rows
+    `3495`.
+- Top `(op,tensor)` cumulative wall groups:
+  - `runtime_load blk.4.ffn_down_exps.weight`: rows `169`, bytes
+    `1.23 GiB`, wall/io `1118.594 ms`, enqueue `102.636 ms`;
+  - `runtime_load blk.1.ffn_gate_exps.weight`: rows `179`, bytes
+    `0.78 GiB`, wall/io `1083.410 ms`;
+  - `runtime_load blk.1.ffn_up_exps.weight`: rows `179`, wall/io
+    `1039.153 ms`;
+  - `runtime_load blk.60.ffn_down_exps.weight`: rows `170`, bytes
+    `1.00 GiB`, wall/io `1038.967 ms`, enqueue `92.465 ms`;
+  - `runtime_load blk.24.ffn_gate_exps.weight`: rows `163`, wall/io
+    `796.077 ms`;
+  - `runtime_load blk.10.ffn_up_exps.weight`: rows `168`, wall
+    `781.577 ms`, io `766.344 ms`, host `15.028 ms`;
+  - `runtime_load blk.24.ffn_up_exps.weight`: rows `163`, wall/io
+    `777.050 ms`;
+  - `runtime_load blk.10.ffn_gate_exps.weight`: rows `168`, wall
+    `775.190 ms`, io `760.017 ms`;
+  - `runtime_load blk.5.ffn_down_exps.weight`: rows `190`, wall/io
+    `765.162 ms`;
+  - `runtime_load blk.24.ffn_down_exps.weight`: rows `162`, wall/io
+    `723.584 ms`.
+- Top `runtime_load` layers by cumulative wall:
+  - layer `1`: rows `532`, bytes `2.59 GiB`, wall/io `2784.497 ms`;
+  - layer `24`: rows `488`, bytes `2.60 GiB`, wall/io `2296.711 ms`;
+  - layer `4`: rows `515`, bytes `3.04 GiB`, wall/io `2279.207 ms`;
+  - layer `60`: rows `514`, bytes `2.80 GiB`, wall/io `2211.698 ms`;
+  - layer `5`: rows `582`, bytes `3.17 GiB`, wall/io `2157.861 ms`;
+  - layer `25`: rows `447`, bytes `2.38 GiB`, wall `1988.416 ms`,
+    io `1901.902 ms`, host `86.059 ms`;
+  - layer `23`: rows `446`, bytes `2.38 GiB`, wall `1957.799 ms`,
+    io `1915.971 ms`;
+  - layer `12`: rows `456`, wall `1951.894 ms`, io `1914.527 ms`;
+  - layer `16`: rows `445`, wall `1941.141 ms`, io `1825.646 ms`,
+    host `114.805 ms`;
+  - layer `26`: rows `431`, wall `1885.589 ms`, io `1839.048 ms`.
+- Top `current_down_overlap` layers by cumulative wall:
+  - layer `29`: rows `166`, wall/io `611.793 ms`;
+  - layer `28`: rows `164`, wall/io `571.904 ms`;
+  - layer `55`: rows `139`, wall `521.711 ms`, io `427.280 ms`, host
+    `93.672 ms`;
+  - layer `51`: rows `148`, wall `491.346 ms`, io `416.982 ms`, host
+    `73.800 ms`;
+  - layer `32`: rows `146`, wall `490.766 ms`, io `457.967 ms`.
+- Top individual slow rows:
+  - `runtime_load blk.4.ffn_down_exps.weight` experts `311`, `79`, `159`,
+    each about `109 ms` wall/io;
+  - `runtime_load blk.60.ffn_down_exps.weight` experts `320`, `240`, `41`,
+    `135`, each about `98 ms` wall/io;
+  - many `blk.1` gate/up rows are about `11-14 ms`.
+- Decision:
+  - Slot wait is not the bottleneck: total measured slot wait is only
+    `25.164 ms` across `23914` rows.
+  - Exposed movement wait is dominated by `runtime_load` io wait, with a
+    secondary `current_down_overlap` io wait component.
+  - Increasing global pinned slots is not supported by data.
+  - The hot exposed wait is spread across many layers, so a one-layer overlay or
+    simple hot-expert preload is unlikely to be stable; previous profile preload
+    and RAM-tier attempts already confirm that risk.
+  - The next implementation step should inspect and improve effective io_uring
+    batching/queue depth for `runtime_load`, while preserving compute/copy
+    overlap. It must not repeat the rejected combined-stage design that reduced
+    wait but serialized useful overlap.
+  - Before changing scheduling, add/inspect batch granularity evidence, because
+    current aggregate counters show max depth `8` but average in-flight only
+    about `3`, and copy profile shows many independent wait rows.
+
+## Phase 7HE: runtime-load io_uring batch granularity and overlap-preserving scheduler plan
+
+Start time: 2026-07-04T22:47:00+08:00.
+
+Goal:
+
+- Raise token rate by reducing exposed `runtime_load` io_uring wait without
+  hurting quality, TTFT, RAM, or the current up/gate/down overlap.
+- First verify why effective io_uring in-flight depth is low, then implement
+  only the smallest scheduler change supported by evidence.
+
+Theory and upper bound:
+
+- Phase 7HD n32 saw `runtime_load` io wait `47052.530 ms` and
+  `current_down_overlap` io wait `10989.839 ms`; most token time is waiting for
+  expert pack movement rather than compute.
+- Phase 7HB n96 saw `iouring_bytes=214.923 GB` and
+  `iouring_wait_us=37.550 s`. If exposed wait were reduced by `10%`, decode
+  upper-bound improvement is approximately `3.8 s` on n96, moving
+  `71177.58 ms / 77 = 1.08 tok/s` toward about `1.14 tok/s`, assuming compute
+  and quality remain unchanged.
+- If effective in-flight depth can be raised from about `3.2` toward the hard
+  depth `8` without serializing H2D/compute, the theoretical exposed IO wait
+  ceiling is bounded by SSD throughput and expert bytes. The practical target
+  for this phase is conservative: `>= 3%` n96 decode improvement with no gate
+  failure, because previous deeper/broader batching attempts lost overlap.
+
+Implementation approach:
+
+1. Inspect existing `runtime_load` and `expert_pack_iouring_copy_jobs` code paths
+   to find where batches are split and where waits happen.
+2. Add default-off diagnostics if current logs cannot explain batch shape:
+   record per-call job count, submit count, wait count, and whether the call is
+   in a latency-sensitive immediate path.
+3. Run n32 under the strict cold-start gate with the diagnostic enabled.
+4. If the diagnostic shows small batches caused by per-tensor immediate waits,
+   implement an overlap-preserving coalescing change that batches reads within
+   the same layer/op boundary but keeps downstream H2D/compute order unchanged.
+5. If the diagnostic shows batches are already full or limited by required
+   tensor availability, reject scheduler changes and plan a different bottleneck
+   target.
+
+Reproduction command for the diagnostic:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7he-iouring-granularity"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass on the France answer;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- diagnostic CSV exists and is sufficient to explain batch shape.
+
+Commit/push rule:
+
+- Commit and push this plan before touching source.
+- Commit and push diagnostic-only code if it is default-off and passes gates.
+- Commit and push any performance change only if it improves a strict n96 run
+  under all gates and includes the exact reproduction command and metrics.
