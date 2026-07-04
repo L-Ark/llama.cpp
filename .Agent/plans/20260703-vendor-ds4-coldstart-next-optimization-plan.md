@@ -9107,3 +9107,71 @@ Execution rules for the next implementation:
 Immediate next concrete action:
 
 - Produce a compact/speculation path audit artifact that ties the source evidence and historical rejected artifacts to this latest plan, then commit and push this plan update plus the artifact. After that, only proceed to source implementation if a new compact, verified-speculation, or predictive-overlap design passes the hard-bound gate above.
+
+## 2026-07-04T13:47:00Z Bounded No-Source Probe: Lightning Indexer
+
+Purpose:
+
+- Check one existing DeepSeek4 vendor code path that has not been recorded as closed in this plan: `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`.
+- This is not a 10 tok/s primary path because it does not remove the current decode up/down CPU fallback bottleneck (`19029.457 ms` decode fallback).
+- It is allowed as a one-shot no-source bounded probe because it uses an existing default-off env flag and may reduce attention indexer launch/intermediate cost without changing the accepted source tree.
+
+Theory and hard bound:
+
+- The fused `ggml_lightning_indexer` path replaces the explicit `mul_mat -> relu -> weighted-sum` indexer score pipeline in `src/models/deepseek4.cpp`.
+- It only applies when `indexer_head_dim == 128`, `indexer_n_head == 64`, `work_tokens == 1` or collapsed-q prefill, and `indexer_kv_prefix` is `F32`.
+- It does not touch MoE routing, gate expert cache, up/down CPU fallback, or the one-stream gate pack.
+- Therefore it cannot by itself approach `10 tok/s`; even perfect removal of the recorded gate one-stream total (`8050.224 ms`) would only bound to about `5.94 tok/s`, and lightning indexer is narrower than that.
+- Expected outcome range: tie/regress is most likely; a small accepted SOTA is possible only if the fused indexer removes enough per-token graph/kernel overhead without disturbing output.
+
+Validation command:
+
+- Run exactly one strict cold France benchmark with accepted SOTA config plus `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`:
+  - 16GB cgroup including page cache;
+  - `MemorySwapMax=0`;
+  - `drop_caches` before the case;
+  - `cpu_moe=40`;
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`;
+  - gate-only one-stream cache and O_DIRECT gate pack;
+  - CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`.
+
+Acceptance/rejection:
+
+- Accept only if `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `memory_peak_bytes <= 16000000000`, page cache is charged inside the cgroup, no OOM/kill appears, and France output is semantic/coherent/complete.
+- If accepted, immediately record full reproduction details, commit/push docs/config to `ssd/vendor/deepseek-token-rate-16gb`, then reproduce from pushed state before promoting.
+- Reject if it ties/regresses, fails correctness, exceeds RAM/page-cache limit, increases TTFT beyond the gate, or appears inactive/no-effect. Because this probe has no source patch, rejection only needs an artifact and plan record.
+
+Result:
+
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-probe-rejected-ttft.json`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T134008Z-20260704_lightning_indexer_probe/france-lightning-indexer-cpu40-vram0gb`
+- Source head: `b944c7a834f042ed17f3552c9aaa5e12c30b0547`
+- Source patch: none; existing env flag only.
+- Metrics:
+  - `eval_tok_s=4.5`
+  - `prompt_tok_s=1.8`
+  - `TTFT=33788.731578 ms`
+  - `elapsed_seconds=64.51`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15098261504`
+  - `ram_ok=true`
+  - `correctness_ok=true`, France output is semantic/coherent/complete
+  - gate cache counters unchanged: `hits=33265`, `misses=1886`, `hit_rate=94.6%`
+  - prefill: `attempted=3000`, `inserted=3000`, `bytes=13369344000`, `elapsed_ms=5132.426`
+- Verdict: reject as accepted SOTA because TTFT is `171.042834 ms` above the promotion gate `33617.688744 ms`, despite the rounded generation rate improving to `4.5 tok/s`.
+
+Gap analysis:
+
+- The speed improvement is not enough to accept because the TTFT gate is strict.
+- The TTFT miss appears dominated by cold prefill variance/pressure: this run's prefill took `5132.426 ms`, while the accepted SOTA record was about `4485.962 ms`.
+- A small prefill-limit reduction was modeled but not run:
+  - limit `2950` saves about `85.5 ms` prefill but is not enough for this observed TTFT gap;
+  - limit `2900` saves about `171.1 ms` prefill, but loses about `505` profile-score hits versus top3000, with an estimated gate penalty of about `517.1 ms`;
+  - lower limits have worse net estimates.
+- Therefore do not sweep prefill limits for this result without a new measured reason; it is likely to trade a tiny TTFT fix for decode regression.
+
+Decision:
+
+- Keep current accepted SOTA at `4.4 tok/s`.
+- Keep `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` as a useful not-accepted diagnostic result, but do not promote it.
+- If revisited, the next design must reduce TTFT independently of shrinking the gate prefill or show a repeatable TTFT pass under the same strict cold procedure before promotion.

@@ -1,0 +1,131 @@
+{
+  "artifact": "lightning-indexer-probe-rejected-ttft",
+  "recorded_at_utc": "2026-07-04T13:52:00Z",
+  "source_head": "b944c7a834f042ed17f3552c9aaa5e12c30b0547",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "source_patch": "none; existing default-off environment flag only",
+  "candidate": {
+    "name": "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1",
+    "class": "no-source fused attention indexer probe",
+    "not_10_tok_s_primary_path": true,
+    "reason_not_primary": "Does not remove the 19029.457 ms decode up/down CPU fallback bottleneck."
+  },
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260704T134008Z-20260704_lightning_indexer_probe",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T134008Z-20260704_lightning_indexer_probe/france-lightning-indexer-cpu40-vram0gb",
+    "strict_cold": true,
+    "drop_caches_before_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb_arg": 0,
+    "extra_env": {
+      "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER": "1"
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 4.5,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 33788.731578,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_over_gate_ms": 171.042834,
+    "elapsed_seconds": 64.51,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15098261504,
+    "memory_max_events": 17067,
+    "pgmajfault": 268506,
+    "workingset_refault_file": 1679998,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "counters": {
+    "vram_cache": {
+      "hits": 33265,
+      "misses": 1886,
+      "hit_rate_percent": 94.6
+    },
+    "expert_pack": {
+      "hits": 4886,
+      "misses": 0,
+      "reads": 4886,
+      "bytes": 21774204928,
+      "failures": 0,
+      "direct_enabled": true,
+      "direct_reads": 4886,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "prefill": {
+      "loaded": 3313,
+      "limit": 3000,
+      "attempted": 3000,
+      "inserted": 3000,
+      "bytes": 13369344000,
+      "elapsed_ms": 5132.426,
+      "pack_misses": 0,
+      "read_failures": 0
+    }
+  },
+  "hashes_sha256": {
+    "summary_json": "6fe0a70f13a30972994b8d07fc9f243e7cb4e763ffe28badeb66c6e796b766b1",
+    "stdout_txt": "864c024036b96177417ef9494b7c10a686b375a8e969c6a206a717bf4254ed83",
+    "stderr_txt": "8b1e4c296ee9de1da02468e78e2f5620170331db5fe47251f7f8997369596862",
+    "combined_txt": "7ff088ac94e90b61b4aba8d92dd9a02e4cbe179e6337bf686edb307d2611177e",
+    "environment_txt": "279e0903315281282a38a68de3e7cef07cf7bd052037286d28dca71abf81854c",
+    "exact_command_txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "resource_samples_tsv": "e6c054d301bac7463a3e00f5c443624b4eeeb38ba832e7ace6265df43f090dc4",
+    "memory_stat": "1b2fbfa9dd0289433445f492dac369959c4477406b1fd013c388342ff16dc8ed"
+  },
+  "prefill_limit_gap_model": {
+    "base_limit": 3000,
+    "observed_prefill_elapsed_ms": 5132.426,
+    "profile_score_at_3000": 33239,
+    "lost_hit_cost_ms_estimate": 1.024,
+    "limits": [
+      {
+        "limit": 2950,
+        "prefill_save_ms_estimate": 85.5,
+        "lost_profile_hits": 236,
+        "gate_penalty_ms_estimate": 241.7,
+        "net_ms_estimate": -156.1
+      },
+      {
+        "limit": 2900,
+        "prefill_save_ms_estimate": 171.1,
+        "lost_profile_hits": 505,
+        "gate_penalty_ms_estimate": 517.1,
+        "net_ms_estimate": -346.0
+      },
+      {
+        "limit": 2800,
+        "prefill_save_ms_estimate": 342.2,
+        "lost_profile_hits": 948,
+        "gate_penalty_ms_estimate": 970.8,
+        "net_ms_estimate": -628.6
+      }
+    ],
+    "decision": "Do not sweep prefill limits for this probe without a new measured reason; the hard estimate trades TTFT relief for worse decode."
+  },
+  "verdict": "rejected_not_accepted_sota_due_ttft_gate",
+  "decision": {
+    "accepted_as_new_sota": false,
+    "current_accepted_sota_eval_tok_s": 4.4,
+    "reason": "Generation rounded to 4.5 tok/s and correctness/RAM passed, but TTFT exceeded the strict promotion gate by 171.042834 ms."
+  }
+}
