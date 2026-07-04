@@ -3619,7 +3619,10 @@ static bool io_wait_trace_enabled() {
 }
 
 static void io_wait_trace_record(
+        uint64_t batch_seq,
         const char *op,
+        const char *first_tensor,
+        const char *last_tensor,
         size_t read_jobs,
         size_t completed_before,
         size_t inflight_before,
@@ -3643,14 +3646,17 @@ static void io_wait_trace_record(
     if (!f) return;
     if (!header_written) {
         std::fprintf(f,
-                "seq,op,read_jobs,completed_before,inflight_before,next_job,depth,refill_batch,"
-                "wait_ms,drained_cqes,enqueue_ms,completed_after,inflight_after\n");
+                "seq,batch_seq,op,first_tensor,last_tensor,read_jobs,completed_before,inflight_before,"
+                "next_job,depth,refill_batch,wait_ms,drained_cqes,enqueue_ms,completed_after,inflight_after\n");
         header_written = true;
     }
     std::fprintf(f,
-            "%lu,%s,%zu,%zu,%zu,%zu,%zu,%zu,%.6f,%zu,%.6f,%zu,%zu\n",
+            "%lu,%lu,%s,%s,%s,%zu,%zu,%zu,%zu,%zu,%zu,%.6f,%zu,%.6f,%zu,%zu\n",
             (unsigned long)++seq,
+            (unsigned long)batch_seq,
             op ? op : "",
+            first_tensor ? first_tensor : "",
+            last_tensor ? last_tensor : "",
             read_jobs,
             completed_before,
             inflight_before,
@@ -4272,6 +4278,10 @@ static bool expert_pack_iouring_copy_jobs(
         }
         return true;
     }
+    const bool profile_io_wait = io_wait_trace_enabled();
+    const bool trace_io_read = io_read_trace_enabled();
+    const uint64_t io_batch_seq = (profile_io_wait || trace_io_read || io_locality_profile_enabled()) ?
+        io_read_trace_next_batch_seq() : 0;
     if (io_locality_profile_enabled()) {
         std::vector<io_locality_profile_item> locality_items;
         locality_items.reserve(read_jobs.size());
@@ -4289,11 +4299,10 @@ static bool expert_pack_iouring_copy_jobs(
         }
         io_locality_profile_record(trace_op, jobs.size(), locality_items);
     }
-    if (io_read_trace_enabled()) {
+    if (trace_io_read) {
         const char *path = std::getenv("GGML_MOE_IO_READ_TRACE_OUT");
         static std::mutex trace_mu;
         static bool header_written = false;
-        const uint64_t batch_seq = io_read_trace_next_batch_seq();
         std::lock_guard<std::mutex> lk(trace_mu);
         FILE *f = std::fopen(path, "a");
         if (f) {
@@ -4311,7 +4320,7 @@ static bool expert_pack_iouring_copy_jobs(
                 }
                 std::fprintf(f,
                         "%lu,%zu,%s,%zu,%zu,%s,%d,%d,%lu,%lu\n",
-                        (unsigned long)batch_seq,
+                        (unsigned long)io_batch_seq,
                         batch_pos++,
                         trace_op ? trace_op : "",
                         jobs.size(),
@@ -4469,7 +4478,6 @@ static bool expert_pack_iouring_copy_jobs(
     const size_t initial_submit_jobs = next_job;
 
     size_t completed = 0;
-    const bool profile_io_wait = io_wait_trace_enabled();
     while (completed < read_jobs.size()) {
         g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
         ++g_expert_pack.iouring_inflight_samples;
@@ -4648,7 +4656,10 @@ static bool expert_pack_iouring_copy_jobs(
         }
         if (profile_io_wait) {
             io_wait_trace_record(
+                    io_batch_seq,
                     trace_op,
+                    jobs.empty() ? "" : jobs.front().tensor,
+                    jobs.empty() ? "" : jobs.back().tensor,
                     read_jobs.size(),
                     wait_completed_before,
                     wait_inflight_before,
