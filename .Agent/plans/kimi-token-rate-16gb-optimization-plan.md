@@ -42274,3 +42274,88 @@ Decision:
   scatter/merge, and 16GB host-memory pressure.
 - Do not implement partial-row Q4_0 now.
 - Return to movement/copy scheduling diagnostics for the next phase.
+
+## Phase 7EW: cgroup memory pressure timeline on production SOTA
+
+Start time:
+
+- 2026-07-04T03:45:00Z.
+
+Reason for this phase:
+
+- Recent production SOTA n32 runs with identical route/cache counters vary from
+  about `29.3 s` to `30.3 s` decode.
+- Final cgroup snapshots show large variation in `inactive_file` and
+  `active_file`, but the current runner only records the final `memory.stat`.
+- Under the strict `MemoryMax=15900000000` gate, direct reclaim/page-cache
+  pressure may add latency to expert-pack staging even when no OOM occurs.
+- Before changing source, collect a time series of cgroup memory state during a
+  production SOTA run.
+
+Design-stage experiment:
+
+- Env/script-only diagnostic; no source patch.
+- Copy `/tmp/run_phase7eb_repro.sh` to a new diagnostic runner that starts a
+  background sampler before `drop_caches` and stops it after the model exits.
+- Sample every `0.25 s`:
+  - wall timestamp;
+  - `memory.current`;
+  - `memory.events` `max`, `oom`, `oom_kill`;
+  - `memory.stat` fields:
+    `file`, `inactive_file`, `active_file`, `anon`, `kernel`,
+    `pgscan`, `pgsteal`, `pgmajfault`, `workingset_refault_file`.
+- Write:
+
+```text
+$RUN/memory-timeline.csv
+```
+
+- Run exact Phase 7EB production env:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=16`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ew-cgroup-timeline"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7ew_cgroup_timeline.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Diagnostic analysis:
+
+- Record decode time, TTFT, expert-pack wait, pinned host/H2D totals.
+- From `memory-timeline.csv`, compute:
+  - max/min/final `memory.current`;
+  - max `file`, `inactive_file`, `active_file`;
+  - deltas for `pgscan`, `pgsteal`, `pgmajfault`,
+    `workingset_refault_file`;
+  - whether `memory.events max` rises during decode.
+- If decode is slow and `pgscan/pgsteal/max` rise sharply, plan a memory
+  pressure mitigation phase.
+- If no reclaim signal correlates with slow decode, do not tune page-cache
+  behavior and return to expert movement scheduling.
+
+Promotion:
+
+- Phase 7EW is diagnostic only and cannot promote SOTA.
+- No source/runtime change is accepted from this phase.
