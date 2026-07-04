@@ -45984,3 +45984,59 @@ Decision:
   - do not claim a new SOTA;
   - next split experiment should test an intermediate point rather than a
     larger upgate shift.
+
+## Phase 7FR: intermediate upgate split runtime test
+
+Start time: 2026-07-04T15:46:00+08:00.
+
+Goal:
+
+- Test whether a smaller upgate reallocation improves n32 and n96 without the
+  down-miss penalty seen at `UPGATE_PCT=65`.
+- Keep source unchanged.
+- Preserve all strict 16GB/cold-start/quality/TTFT gates.
+
+Theory:
+
+- Phase 7FQ with `UPGATE_PCT=65` improved n32 but failed n96:
+  - upgate hit rate improved `43.7% -> 45.3%`;
+  - down hit rate regressed `73.6% -> 71.3%`;
+  - n96 decode was `70572.83 ms` and `71316.59 ms`, both slower than SOTA.
+- `UPGATE_PCT=62` moves about `300 MiB` from down to upgate at
+  `VRAM_MIB=15000`:
+  - upgate gains roughly `56` slots;
+  - down loses roughly `40` slots.
+- This should capture part of the upgate miss reduction while reducing the
+  down prefetch/miss penalty that hurt n96 at 65%.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fr-upgate62"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode beats Phase 7FO rebuilt baseline `29794.86 ms / 31`.
+
+Decision rule:
+
+- If n32 fails any gate or is slower than `29794.86 ms`, reject and keep
+  `UPGATE_PCT=60`.
+- If n32 improves, run one n32 confirmation.
+- If confirmed, run n96 twice.
+- Accept only if n96 beats Phase 7FB `70087.31 ms / 77` with quality pass and
+  TTFT within limit.
