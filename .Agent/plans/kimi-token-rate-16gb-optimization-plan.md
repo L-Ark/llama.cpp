@@ -58418,6 +58418,127 @@ Decision:
 - Full main-pack reorder is still untested because only `93G` free disk was
   available and the main output requires about `175G` plus safety margin.
 
+## Phase 7IS: trace-hot replacement overlay without full main-pack copy
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IR cannot create a full reordered main pack because the server has only
+  `93G` available while a full output needs about `175G` plus margin.
+- 7IQ's trace contains `8763` unique read entries totaling
+  `50967232512` bytes (`47.47 GiB`), which fits in the current free space.
+
+Hypothesis:
+
+- Instead of copying the full main pack, build a trace-hot overlay containing
+  only the entries actually read in the n32 trace, physically ordered by
+  first-use.
+- Add an explicit runtime opt-in that lets later pack sources replace earlier
+  duplicate keys. Then lookup can route hot duplicate entries to the compact
+  first-use overlay while cold/untraced entries still fall back to the original
+  main pack.
+- Keep the existing l1/l2 down overlay loaded first and load the hot replacement
+  overlay after it, so missing entries remain available and hot main entries can
+  override main entries only when present.
+
+Why this can avoid the disk blocker:
+
+- The hot overlay is about `47.47 GiB` instead of `175 GiB`.
+- It does not require deleting existing model artifacts.
+- Runtime semantics remain unchanged by default; replacement is enabled only
+  under a new env var.
+
+Theoretical upper bound:
+
+- The hot overlay covers exactly the `14862` traced iouring read jobs for the
+  n32 France run, so the maximum affected iouring budget is the current
+  `14.763 s` read wait.
+- The actual upper bound is lower because:
+  - RAM tier and VRAM cache hits bypass reads;
+  - H2D and compute remain unchanged;
+  - if O_DIRECT latency is dominated by independent random reads rather than
+    physical span, first-use physical locality may not help.
+- If replacement overlay read locality matches the simulated first-use layout,
+  the expected direction is lower span/read and possibly lower iouring wait.
+  It still does not justify full read coalescing because simulated
+  `gap/read = 6.3878`.
+
+Implementation plan:
+
+- Runtime:
+  - add `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`;
+  - add `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`;
+  - load order:
+    1. `GGML_MOE_EXPERT_PACK`;
+    2. `GGML_MOE_EXPERT_PACK_OVERLAY`;
+    3. `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`;
+  - default behavior stays strict duplicate rejection;
+  - when replacement is enabled, keep the later-source duplicate and drop the
+    earlier duplicate with the same `(tensor, expert_idx, nbytes)` key.
+- Pack tool:
+  - extend `scripts/kimi-reorder-expert-pack.py` with
+    `--only-trace-entries`;
+  - output only keys present in `io-read-trace.csv` and present in the input
+    pack;
+  - order selected entries by first-use per tensor.
+
+Experiment:
+
+- Build hot overlay from the main pack only:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7is-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7is-hot-replace-overlay
+mkdir -p "$RUN"
+python3 scripts/kimi-reorder-expert-pack.py \
+  --trace /root/lfz/runs/vendor-kimi-token-rate/20260705-7iq-n32-io-read-trace/io-read-trace.csv \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --out "$RUN/kimi-iq3s-main-hot-firstuse.expert-pack" \
+  --mode first-use \
+  --only-trace-entries
+```
+
+- Run strict cold-start n32:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN/n32" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+    IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+    MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+    EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=$RUN/kimi-iq3s-main-hot-firstuse.expert-pack
+GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1
+GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/n32/io-locality-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+    scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If decode improves and all gates pass, run a repeat n32 before accepting.
+- If decode regresses, iouring wait increases, quality fails, RAM exceeds the
+  limit, or duplicate replacement causes missing-pack/fallback growth, reject
+  this path.
+- If accepted at n32, validate with n96 before claiming SOTA.
+
 Decision rule:
 
 - If token rate improves and all gates pass, run a repeat n32; only commit/push
