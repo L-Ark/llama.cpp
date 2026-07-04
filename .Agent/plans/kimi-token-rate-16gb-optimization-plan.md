@@ -49504,3 +49504,204 @@ Decision rule:
   change that preserves critical-path wall instead of lowering summed wait.
 - The next phase must write the chosen source-change theory, expected upper
   bound, and rollback criteria before editing code.
+
+Result: completed; diagnostic accepted, no source change.
+
+- End time: 2026-07-04T19:58:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-115025Z-n96-phase7go-wall-profile-baseline`.
+- Code head:
+  `ec03098697e5cd3d0d5fb7120366270c42247ead`.
+- Runtime:
+  - `N=96`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=60`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=0`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-115025Z-n96-phase7go-wall-profile-baseline
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `78838.39 ms`;
+  - decode `75543.74 ms / 77`, `1.02 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=450560`;
+    - `file=14774530048`;
+    - `kernel=249495552`;
+    - `inactive_file=2377572352`;
+    - `active_file=12396232704`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Expert movement counters:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37821712`;
+  - overall inflight avg `3.12`, max `8`;
+  - no `9-16` batches;
+  - current-down overlap:
+    - calls `2464`;
+    - planned/completed jobs `9109`;
+    - cache hits `8755`;
+    - missing tensor `231`;
+    - worker `8670101 us`.
+- VRAM cache:
+  - down slots `806`, hits `23934`, misses `8690`, preloads `9109`,
+    hit rate `73.4%`;
+  - upgate slots `1679`, hits `31967`, misses `41969`, hit rate `43.2%`.
+- Up/gate wall profile:
+  - decode rows `2157`;
+  - `up_wait=8491.534 ms`;
+  - `gate_wait=8795.695 ms`;
+  - `up_compute=230.604 ms`;
+  - `gate_compute=161.382 ms`;
+  - `up_ms=12665.168 ms`;
+  - `gate_ms=3940.438 ms`;
+  - `kernel=16679.467 ms`;
+  - `wall=16848.110 ms`.
+- Up/gate by type:
+  - type `22,22`: rows `1386`, wall `9084.751 ms`,
+    kernel `8977.952 ms`, `up_wait=8491.534 ms`,
+    `gate_wait=8795.695 ms`;
+  - type `18,18`: rows `771`, wall `7763.360 ms`,
+    kernel `7701.515 ms`.
+- Down wall profile:
+  - rows `4082`;
+  - hits `23934`;
+  - misses `8722`;
+  - stage `10554.907 ms`;
+  - kernel `472.970 ms`;
+  - d2h `57.899 ms`;
+  - scatter `72.616 ms`;
+  - wall `11259.028 ms`.
+- Down by type:
+  - type `11`: rows `3158`, hits `20770`, misses `4494`,
+    stage `5154.417 ms`, kernel `393.607 ms`, wall `5709.978 ms`;
+  - type `23`: rows `924`, hits `3164`, misses `4228`,
+    stage `5400.490 ms`, kernel `79.362 ms`, wall `5549.050 ms`.
+- Top down tensors by wall:
+  - `blk.4.ffn_down_exps.weight`: wall `790.336 ms`, misses `435`;
+  - `blk.60.ffn_down_exps.weight`: wall `625.453 ms`, misses `380`;
+  - `blk.26.ffn_down_exps.weight`: wall `454.395 ms`, misses `334`;
+  - `blk.58.ffn_down_exps.weight`: wall `444.736 ms`, misses `334`;
+  - `blk.22.ffn_down_exps.weight`: wall `442.584 ms`, misses `342`;
+  - `blk.25.ffn_down_exps.weight`: wall `442.127 ms`, misses `377`.
+- Decision:
+  - Accept as the current n96 bottleneck profile.
+  - No SOTA claim because full profile overhead makes decode slower than
+    Phase 7FB.
+- Bottleneck interpretation:
+  - The largest exposed wall bucket is up/gate at `16.85 s`.
+  - Down is the next largest exposed bucket at `11.26 s`, and is strongly
+    stage/miss dominated (`10.55 s` stage).
+  - Up/gate type `22,22` has high wait counters, but prior combined staging
+    lowered summed IO wait without improving critical-path wall.
+  - Up/gate type `18,18` is kernel dominated and may need kernel work, but a
+    compute-side source change is higher risk than cache split tuning.
+  - The next low-risk experiment should test whether shifting VRAM from upgate
+    cache to down cache lowers down wall enough without making upgate wall worse
+    on the critical path.
+
+## Phase 7GP: wall-informed VRAM split toward down cache
+
+Start time: 2026-07-04T20:00:00+08:00.
+
+Goal:
+
+- Test whether allocating more VRAM cache to down experts improves token rate.
+- Keep model math and source code unchanged.
+- Preserve strict host RAM, TTFT, cold-start, and quality gates.
+
+Theory:
+
+- Phase 7GO n96 down profile:
+  - down wall `11259.028 ms`;
+  - down stage `10554.907 ms`;
+  - down misses `8722`;
+  - down hit rate `73.4%`;
+  - down cache slots `806`.
+- Current split:
+  - `UPGATE_PCT=60`;
+  - upgate slots `1679`;
+  - down slots `806`.
+- Reducing `UPGATE_PCT` to `55` should move roughly `750 MiB` of VRAM budget
+  from upgate to down.
+- Approximate capacity effect:
+  - down slot size is `7.44 MiB`;
+  - `750 MiB` can add about `100` down slots;
+  - upgate slot size is `5.36 MiB`;
+  - the same shift removes about `140` upgate slots.
+- Upper bound:
+  - if the additional down slots remove 10% of down stage, n96 can gain about
+    `1.05 s`;
+  - if upgate misses increase enough to add more than `1.05 s` critical-path
+    wall, decode will regress.
+- This is low risk because it is runtime-only and semantics should be unchanged,
+  but it must still pass the France quality gate.
+
+Experiment A: n32 split probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gp-upgate55"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=55 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B: n96 confirmation only if n32 materially improves decode
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gp-upgate55"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=55 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 does not materially improve decode versus the current rebuilt n32
+  baseline range (`29140-29795 ms`), reject and do not run n96.
+- If n32 improves and down hit rate rises without a large upgate hit-rate
+  collapse, run n96.
+- If n96 beats Phase 7FB decode `70087.31 ms`, run a second n96 confirmation
+  before claiming SOTA.
+- If n96 does not beat Phase 7FB or fails quality/TTFT/RAM/fallback gates,
+  reject the split and keep `UPGATE_PCT=60`.
