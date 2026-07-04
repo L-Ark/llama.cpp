@@ -58491,6 +58491,189 @@ Required gates for the diagnostic run:
 - manual semantic quality `pass` for
   `Please introduce France in a short paragraph.`
 
+### 7JC result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `505af2828 ggml: join moe io wait and read traces`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jc-joined-io-trace`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 505af2828
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jc-joined-io-trace
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `72762.42 ms`, below `106331.72 ms`;
+- decode `28844.60 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15076057088` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Trace integrity:
+
+- `io-wait-trace.csv`: `11895` rows;
+- `io-read-trace.csv`: `14863` rows;
+- `io-batch-profile.csv`: `4013` rows;
+- read batches `4014`, wait batches `4013`;
+- missing read for wait `0`;
+- missing wait for read `1`, harmless extra trace row without blocking wait.
+
+Joined-trace results:
+
+- batch first-wait sum `9784.684 ms`;
+- batch total wait sum `14722.582 ms`;
+- theoretical adjacent same-op/same-tensor merge:
+  - groups `714`;
+  - batches involved `1428`;
+  - saved first-wait upper bound `1902.900 ms`;
+- same-op/first-tensor gives the same result, meaning these are all
+  single-tensor groups;
+- adjacent `runtime_load` same-layer grouping:
+  - groups `847`;
+  - batches involved `3129`;
+  - saved first-wait upper bound `5386.639 ms`;
+  - this is not automatically safe because it mixes up/gate/down graph
+    dependencies;
+- adjacent runtime up/gate pairs:
+  - pairs `843`;
+  - saved first-wait upper bound `1750.253 ms`;
+  - prior combined-staging attempts already showed that naive up+gate merging
+    loses compute overlap and is not a safe direct implementation;
+- unrealistic op/layer grouping ceiling:
+  - groups `61`;
+  - batches involved `4008`;
+  - saved first-wait upper bound `9523.840 ms`.
+
+Important attribution:
+
+- The safe same-op/same-tensor groups are all `runtime_load/down`.
+- They come from the current down parallel stage splitting one down tensor's
+  miss jobs into two staging groups/rings.
+- Example:
+  - `blk.4.ffn_down_exps.weight`:
+    - batch `19`, first wait `10.126 ms`, experts `79,139,159,311`;
+    - batch `20`, first wait `6.429 ms`, experts `127,141,214,335`;
+    - ideal saved first wait `6.429 ms`.
+- The summed same-tensor upper bound (`1.903 s`) is meaningful enough to test,
+  but it is an upper bound over summed waits. Actual wall improvement may be
+  lower because the two rings currently run in parallel.
+
+Decision:
+
+- Do not implement broad cross-layer or up+gate batch merging; prior combined
+  staging evidence and dependency ordering make it too risky.
+- Proceed to one narrow env-gated probe for down runtime staging only:
+  use a single iouring staging batch/ring for down misses instead of splitting
+  them across two rings.
+- The probe is worthwhile because it targets the only safe joined-trace group
+  with a measurable upper bound and does not add reads.
+
+## Phase 7JD: down single-ring staging probe
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7JC shows `714` adjacent same-tensor down runtime batch pairs caused by
+  `GGML_MOE_DOWN_PARALLEL_STAGE=1` splitting down miss jobs into A/B groups.
+- This split creates two first-CQE waits for one logical down tensor stage.
+
+Hypothesis:
+
+- A single iouring batch for all down miss jobs may reduce first-CQE exposure.
+- It may regress if losing the second staging ring reduces IO/H2D overlap more
+  than it saves in first-CQE wait.
+
+Theoretical bound:
+
+- Best-case n32 summed first-wait saving: `1902.900 ms`.
+- Real wall-time bound is lower because current A/B down staging is parallel.
+- If the single-ring path improves by less than run variance or regresses,
+  reject it and keep the accepted split path.
+
+Implementation plan:
+
+- Add a default-off env:
+  `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`.
+- Only affects the existing `down_parallel_stage` path.
+- When enabled:
+  - keep `GGML_MOE_DOWN_PARALLEL_STAGE=1`;
+  - collect all down miss jobs into `down_jobs_a`;
+  - leave `down_jobs_b` empty;
+  - existing copy thread/event logic handles one real copy thread and one empty
+    thread.
+- Do not change:
+  - cache keys;
+  - math kernels;
+  - current-down overlap;
+  - accepted default runtime when the env is unset.
+
+Experiment:
+
+- Build and run strict cold-start n32 with accepted pct62 runtime plus:
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Compare against 7JC and accepted pct62 n32:
+  - decode;
+  - iouring wait;
+  - down staging wait calls;
+  - down hit rate;
+  - TTFT and quality.
+
+Required gates:
+
+- cold start through the cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If n32 improves and all gates pass, repeat n32 before considering n96.
+- If decode is flat/worse, iouring wait rises, or down worker time rises
+  materially, reject single-ring down staging.
+
 ### Result
 
 Timestamp: 2026-07-05.
