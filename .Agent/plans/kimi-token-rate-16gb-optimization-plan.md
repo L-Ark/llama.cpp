@@ -48324,6 +48324,106 @@ Result: n32 completed; rejected and implementation must be reverted.
   - keep Phase 7GI missing metadata diagnostic because it is default-off and
     produced useful evidence.
 
+## Phase 7GK: separate large-down cache for Q4_0 pack-only preload
+
+Start time: 2026-07-04T19:04:00+08:00.
+
+Goal:
+
+- Re-test the useful part of Phase 7GJ, but remove its main failure mode.
+- Keep 7.44 MiB down experts in the existing down cache.
+- Put larger Q4_0 down experts (`8257536` bytes, about `7.88 MiB`) into a
+  separate, small large-down cache when enabled.
+- Combine this with the pack-only current-down preload path only under explicit
+  env flags.
+
+Bottleneck and evidence:
+
+- Phase 7GJ proved pack-only preload can remove `missing_tensor=93`.
+- It also regressed decode from `28967.28 ms` to `30375.95 ms`.
+- The important failure was not output correctness:
+  - quality passed;
+  - RAM/TTFT/fallback gates passed.
+- The failure was resource/cache shape:
+  - expert-pack traffic increased by `6.56 GB`;
+  - `iouring_wait_us` increased by about `1.16 s`;
+  - down cache slot size grew from `7.44 MiB` to `7.88 MiB`;
+  - down cache slots dropped from `806` to `761`;
+  - down hit rate dropped from `73.6%` to `72.2%`.
+- Code evidence:
+  - `batch_cache_get()` currently frees and rebuilds an initialized cache if a
+    later expert size is larger than `slot_sz`;
+  - therefore touching `8257536` byte Q4_0 down entries can destroy the existing
+    down cache contents and capacity.
+
+Theory / upper bound:
+
+- If a separate large-down cache prevents the existing down cache from being
+  resized, the 7GJ harm from slot loss/cache reset should disappear.
+- The benefit is still bounded by whether the Q4_0 preloads are actually
+  consumed and whether their extra IO is hidden.
+- With a `512 MiB` large-down budget, Q4_0 capacity is roughly:
+  - `512 MiB / 7.88 MiB ~= 64` experts.
+- This cannot hold all `~670` added jobs, but it can test the core hypothesis
+  without reducing the main down cache.
+- Expected outcomes:
+  - if decode is still slower, the extra Q4_0 IO is simply not worth doing;
+  - if decode returns to baseline but does not improve, the separate cache fixes
+    7GJ's cache harm but not the IO bottleneck;
+  - if decode improves, repeat n32 and then n96.
+
+Implementation plan:
+
+- Add a third VRAM cache id for large down experts, default-off:
+  - `GGML_MOE_VRAM_CACHE_LARGE_DOWN=1`;
+  - `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIN_MIB=8`;
+  - `GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIB=512`.
+- Route `batch_cache_id_for_size(expert_sz)` to the large-down cache only when:
+  - large-down env is enabled;
+  - fused/split cache is enabled;
+  - `expert_sz >= min_mib`.
+- Budgeting:
+  - existing upgate/down split keeps using `VRAM_MIB=15000`;
+  - large-down cache allocates its own small budget from remaining VRAM;
+  - if allocation fails, disable only the large-down cache and reject the
+    optimization if metrics do not pass gates.
+- Reintroduce Phase 7GJ pack-only current-down preload behind:
+  `GGML_MOE_CURRENT_DOWN_PACK_ONLY=1`.
+- The accepted/default runtime remains unchanged when flags are off.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gk-large-down-cache-pack-only"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_VRAM_CACHE_LARGE_DOWN=1 GGML_MOE_VRAM_CACHE_LARGE_DOWN_MIB=512 GGML_MOE_CURRENT_DOWN_PACK_ONLY=1 GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If CUDA allocation fails, quality fails, RAM/TTFT/fallback gates fail, or
+  decode is slower than the rebuilt n32 range, reject and revert.
+- If n32 is inside baseline noise but not faster, reject as not useful and
+  revert.
+- If n32 improves below the rebuilt n32 range, run one n32 repeat.
+- Only run n96 after n32 repeat reproduces.
+
 ## Phase 7FV: down prefetch depth overlap probe
 
 Start time: 2026-07-04T16:45:00+08:00.
