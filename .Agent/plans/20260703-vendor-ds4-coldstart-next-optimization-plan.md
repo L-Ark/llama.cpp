@@ -13,7 +13,7 @@
 - `eval_tok_s=4.4`
 - Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Source/record branch: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
-- Latest pushed head before this document update: `d558a10bdb85d4d8bc83da7652cfde37a785aa09` (`vendor-ds4: record exact updown screening`)
+- Latest pushed head before this document update: `a63ad426173f4da10b5f16f3d009f7a7d288b29c` (`vendor-ds4: reject dedup down prefetch`)
 - Config: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream (`ffn_gate_exps`), O_DIRECT gate expert pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, accepted profile/top-k envs, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Metrics: `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
@@ -27,7 +27,9 @@ Current bottleneck conclusion:
 - No compatible local draft/MTP/NextN path exists; no-source speculative/lookahead/ngram paths are closed unless a compatible draft/MTP artifact appears.
 - GPU up/down drift audit and lightweight sequential top1 verifier are complete. The verifier self-check passed under the 16GB cgroup, so the next active work may use token-level top1 matching before any performance benchmark.
 - The current default-off DS4 hot-expert dual dispatch implementation is closed by the exact-up/down screening artifact: preserving the accepted gate cache leaves only about `238 MiB` CUDA free and gives only a `4.409 tok/s` no-overhead ceiling.
-- The next active candidate is route-specific CPU down prefetch from the up CPU fallback path. It is an exact page-timing candidate, not a compute change: prefetch the actual routed `ffn_down_exps` expert pages while the preceding `ffn_up_exps` CPU fallback is running, then benchmark only if a hard-bound artifact shows a real ceiling above `4.4 tok/s`.
+- The route-specific CPU down prefetch family is now closed: repeated prefetch tied at `4.4 tok/s` only after pushed-source reproduction, and deduplicated prefetch reduced advice volume but regressed to `4.1 tok/s`. Do not retry another synchronous `madvise`/page-touch variant without a genuinely new lower-pressure async source model and a new hard-bound.
+- The `mul_mat_id` src1 conversion skip candidate is also closed by the 2026-07-04T05:16Z diagnostic: `convert_t0=0.002 ms/call` over `16920` calls, only `33.84 ms` total ideal savings, giving a no-overhead ceiling of about `4.405 tok/s`.
+- The next active plan is to rebuild the candidate list around exact CPU up/down fallback reduction. Start from the accepted SOTA wall/fallback profiles, compute a hard-bound per subcomponent, then only implement candidates that can plausibly move strict cold speed above `4.4 tok/s` without changing logits, exceeding 16GB host RAM including page cache, or violating the TTFT gate.
 - Any future compliant result with `eval_tok_s > 4.4` must immediately be recorded with full reproducibility metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduced from pushed source before promotion.
 
 当前事实：
@@ -45,13 +47,13 @@ Current bottleneck conclusion:
 - 2026-07-04 corrected down-batch compare 已完成：恢复 `tmp_dst_rows=max(dst_cols,n_active)` 后，MXFP4 down batch 与 CPU compare 数值一致（`max_abs_max=1.1920929e-07`），但性能仍只有 `2.6 tok/s`，down-cache hit rate 约 `0.0%`，stage `4.740 ms/call`，因此性能方向拒绝，probe source 已回退。
 - 2026-07-04 CPU fallback top128 O_DIRECT staging 已拒绝：正确率/RAM/TTFT 通过，但同步 direct staging 读取 `44.79GB`，`eval_tok_s=2.9`，说明同步 O_DIRECT 不是可用 movement model。
 - 2026-07-04 lightweight sequential top1 verifier 已完成并 push：固定 France 文本在 accepted SOTA path 下 `same_top1=145/145`，`first_mismatch_pos=-1`，16GB cgroup 无 OOM。后续 GPU/offload 候选必须先过这个 verifier 或等价 token-level correctness gate。
-- 当前最新计划：先做 route-specific CPU down prefetch from up fallback 的 hard-bound artifact，再决定是否实现默认关闭的 runtime 开关。该路径只改变 page-in 时机，不改变 logits；它与已拒绝的 broad `WILLNEED`、blocking touch、packmmap/packdirect、one-stream up/down cache、DS4 hot-dispatch 都不同。
+- 当前最新计划：route-specific/dedup CPU down prefetch 已拒绝，`mul_mat_id` conversion skip 已因上界太小拒绝。下一步先做 fresh bottleneck table，把 CPU up/down fallback 拆成 compute、page/source、GPU-stream-decline/dispatch、sync/tail 几类；再按硬上界筛选 exact 候选。优先方向是：真正降低 CPU up/down fallback 的 exact offload 或低压力异步 source，而不是再做同步 page prefetch。
 - 下一阶段目标：稳定超过 `4.4 tok/s`；未超过 `4.4 tok/s` 的结果只能作为 diagnostic/rejected/tie，不得 promote。
 - 所有符合要求的新 SOTA 必须立刻记录完整复现信息并 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。记录必须足以未来从 push 后源码、profile、pack、runner 参数和 run artifact 完整复现。
 
 ## Current Baseline
 
-- `current_pushed_head_before_this_update`: `d558a10b` (`vendor-ds4: record exact updown screening`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
+- `current_pushed_head_before_this_update`: `a63ad4261` (`vendor-ds4: reject dedup down prefetch`)，已 push 到 `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`。
 - `accepted_runtime_source_head`: code path restored at `5484a1806` (`vendor-ds4: reject cpu prewarm touch repro`); later pushed commits are docs/artifact updates unless explicitly stated as promoted source.
 - `runtime_binary_build`: accepted `llama-cli` hash remains `c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`; source-level accepted runtime behavior is the post-rollback SOTA path.
 - `runtime_source_note`: all-output/server-speculative probes, CPU prewarm touch candidate, down batch, compact mmap, and other rejected source probes were reverted before final accepted runtime state. Committed heads include records/rejected artifacts/plan updates; runtime source is back on the accepted SOTA path.
@@ -8148,3 +8150,96 @@ Decision:
 - Runtime source must be reverted to the accepted path. Keep only bound/rejection artifacts and this plan record.
 - Current accepted SOTA remains `eval_tok_s=4.4`, run `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
 - Next work should not try another synchronous `madvise`/page-touch variant. It must either target exact compute/offload of up/down fallback or introduce a genuinely asynchronous/lower-pressure source mechanism with a new hard-bound section first.
+
+### 2026-07-04T05:32Z MulMatId Conversion Skip Bound
+
+Candidate:
+
+- Name: `delay_or_skip_mul_mat_id_src1_q8_conversion_when_gpu_stream_consumes_all_rows`.
+- Code area: `ggml_compute_forward_mul_mat_id` currently prepares `src1` into `vec_dot_type` before routing/GPU-stream decisions.
+- Reason it was considered exact: if a GPU stream path consumes all routed rows for an op, preparing the CPU fallback input can be avoided without changing routing, tensor values, dot products, accumulation order for executed rows, logits, or token selection.
+
+Diagnostic run:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260704T051642Z-20260704_mulmatid_convert_profile_diagnostic/france-cpu40-vram0gb`
+- Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/mulmatid-convert-skip-bound.json`
+- artifact sha256: `5bc6105af0072c0f1cc451a101d30fe0fcb1b50f28f8de356661a1ba6010bb6e`
+- Source head: `a63ad426173f4da10b5f16f3d009f7a7d288b29c`
+- Source dirty: `false`
+- `combined.txt` sha256: `dc42f0bb88d840681cc608337a0c293221b7b8bf6d7a515c6c83219c000a7f28`
+- `summary.json` sha256: `0275ef995c25e57f13d8196227ab565991c9d17a6bd14527bb4966a2a08617c4`
+
+Metrics:
+
+- `eval_tok_s=4.4`
+- `prompt_tok_s=1.8`
+- `TTFT=31414.364861 ms`
+- `elapsed_seconds=62.22`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15103029248`
+- `ram_ok=true`
+- `oom_seen=false`
+- `ram_limit_killed=false`
+- `correctness_ok=true`
+- France answer remained semantic, coherent, and complete.
+
+Profile line:
+
+- `[kimi_cpu_moe_profile] down calls=16920 total=2.038 ms/call convert_t0=0.002 route=0.004 route_barrier=0.001 cuda_batch=0.000 cuda_single=0.476 post_cuda_barrier=0.001 fallback_t0=1.549 batch_accept=0 batch_decline=0 single_accept=35151 single_decline=38222`
+
+Hard bound:
+
+- Calls: `16920`
+- Measured conversion component: `0.002 ms/call`
+- Total ideal removable conversion time: `33.84 ms`
+- Accepted SOTA reference decode window: `63.94s - 32.89255329s = 31.04744671s`
+- Accepted decoded-token estimate at `4.4 tok/s`: `136.608765524`
+- No-overhead ceiling if all measured conversion time disappeared: `4.404800989 tok/s`
+- Absolute ideal gain: about `0.004801 tok/s`
+
+Decision:
+
+- Reject with no source patch and no benchmark run. The candidate is exact in principle, but the measured upper bound is far below run-to-run noise and cannot become a meaningful SOTA improvement.
+- This confirms the current bottleneck is not `mul_mat_id` src1 conversion. The remaining material target is CPU up/down fallback time plus source/page stalls around those fallbacks.
+- Do not implement delayed conversion unless a future profile shows conversion time at least hundreds of milliseconds under the accepted strict cold configuration.
+
+### 2026-07-04T05:40Z Latest Next Plan After Prefetch And Conversion Closure
+
+Current accepted SOTA remains:
+
+- `eval_tok_s=4.4`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Branch for records/source: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Required git identity: `L-Ark <fliangae@connect.ust.hk>`
+- TTFT acceptance gate: `<=33617.688744 ms`
+- Host RAM gate: strict 16GB cgroup including page cache and process memory, `MemorySwapMax=0`
+
+Closed families:
+
+- Synchronous page prefetch/touch for CPU down fallback is closed: broad `WILLNEED`, route-specific repeated prefetch, and deduplicated route-specific prefetch all failed to produce a reproducible accepted SOTA.
+- `mul_mat_id` conversion skip is closed by hard-bound: ideal ceiling only about `4.405 tok/s`.
+- DS4 hot dispatch, one-stream up/down cache, corrected down batch, O_DIRECT top-k staging, compact mmap, no-draft ngram, target-only lookahead, and earlier approximate top-k pruning remain closed unless a new hard-bound and correctness gate justify reopening.
+
+Next design step:
+
+1. Build a fresh post-prefetch bottleneck table from accepted SOTA artifacts, with separate rows for:
+   - CPU up fallback prompt/decode time;
+   - CPU down fallback prompt/decode time;
+   - source/page stall delta from cold vs no-drop;
+   - GPU-stream accept/decline and dispatch overhead;
+   - synchronization/tail gap;
+   - any remaining pack/direct gate source time.
+2. For each row, compute a no-overhead token-rate ceiling using the accepted SOTA decode window. Only rows with credible ceiling above `4.4 tok/s` should advance to candidate design.
+3. Prioritize exact candidates in this order:
+   - true CPU up/down fallback reduction or offload that preserves logits and token-level top1 under the existing verifier;
+   - genuinely asynchronous/lower-pressure source movement for the exact routed up/down experts, with bounded memory and no repeated synchronous `madvise`;
+   - micro-optimizations only if the hard-bound is at least several hundred milliseconds under strict cold.
+4. Before any implementation, update this plan with the chosen candidate's theory, hard metrics, upper bound, correctness risk, RAM/VRAM budget, expected TTFT effect, rollback rule, and exact benchmark command/env.
+5. After implementation, run the token-level correctness gate first when the change touches arithmetic/offload. Then run strict cold France benchmark under the accepted 16GB cgroup.
+
+Promotion rule remains unchanged:
+
+- If a run is `eval_tok_s > 4.4`, `ram_ok=true`, `correctness_ok=true`, and `TTFT <=33617.688744 ms`, immediately commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`.
+- After pushing, rebuild from pushed source and reproduce the result before calling it accepted SOTA.
+- If pushed-source reproduction fails to exceed `4.4 tok/s`, or RAM/TTFT/correctness/cache counters fail, revert runtime source, keep rejected artifacts/docs, and push the rejection record.
+- Each accepted or rejected experiment must include run path, full env/config, binary/source hashes, output answer, token rates, TTFT, elapsed time, cgroup memory/file-cache stats, cache counters, and artifact sha256.

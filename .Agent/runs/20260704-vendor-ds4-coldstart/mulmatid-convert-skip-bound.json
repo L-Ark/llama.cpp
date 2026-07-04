@@ -1,0 +1,66 @@
+{
+  "schema": "vendor-ds4-coldstart-bound-v1",
+  "candidate": "delay_or_skip_mul_mat_id_src1_q8_conversion_when_gpu_stream_consumes_all_rows",
+  "status": "rejected_no_run",
+  "recorded_at_utc": "2026-07-04T05:32:00Z",
+  "source_head": "a63ad426173f4da10b5f16f3d009f7a7d288b29c",
+  "source_dirty": false,
+  "remote_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+  "reason": "Diagnostic profiling shows src1 conversion is not a material cold-start bottleneck. Even a perfect removal would raise the accepted SOTA estimate only from 4.400 to about 4.405 tok/s, below benchmark noise and not enough to justify a runtime patch.",
+  "accepted_sota_reference": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "elapsed_seconds": 63.94,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "diagnostic_run": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260704T051642Z-20260704_mulmatid_convert_profile_diagnostic/france-cpu40-vram0gb",
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 31414.364861,
+    "elapsed_seconds": 62.22,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15103029248,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "profile_line": "[kimi_cpu_moe_profile] down calls=16920 total=2.038 ms/call convert_t0=0.002 route=0.004 route_barrier=0.001 cuda_batch=0.000 cuda_single=0.476 post_cuda_barrier=0.001 fallback_t0=1.549 batch_accept=0 batch_decline=0 single_accept=35151 single_decline=38222",
+    "sha256": {
+      "combined_txt": "dc42f0bb88d840681cc608337a0c293221b7b8bf6d7a515c6c83219c000a7f28",
+      "summary_json": "0275ef995c25e57f13d8196227ab565991c9d17a6bd14527bb4966a2a08617c4"
+    }
+  },
+  "bound_inputs": {
+    "profile_calls": 16920,
+    "convert_ms_per_call": 0.002,
+    "accepted_eval_tok_s": 4.4,
+    "accepted_elapsed_seconds": 63.94,
+    "accepted_ttft_ms": 32892.55329
+  },
+  "bound_result": {
+    "total_convert_ms_upper_bound": 33.84,
+    "accepted_decode_window_seconds": 31.04744671,
+    "accepted_decoded_tokens_estimate": 136.608765524,
+    "no_overhead_eval_tok_s_if_all_conversion_removed": 4.4048009894944595,
+    "absolute_gain_tok_s": 0.0048009894944591736,
+    "relative_gain_percent": 0.10911339760134485
+  },
+  "decision": {
+    "implement_runtime_patch": false,
+    "run_benchmark": false,
+    "notes": [
+      "The candidate is exact in principle because it only avoids preparing CPU fallback input when the GPU stream path has already consumed all rows.",
+      "The measured conversion component is too small to move the SOTA and is not worth adding a source-level branch.",
+      "Current bottleneck remains CPU up/down fallback time plus source/page stalls, not mul_mat_id src1 conversion."
+    ]
+  },
+  "supporting_artifact_sha256": {
+    "current_sota_cpu_fallback_profile_json": "c2a9e1a5c6d8653bb909a4b5b8ea33d31eb5e78cd0986877a06ba197277f63e5",
+    "phaseB_current_sota_hard_bound_table_json": "5dc1daf9dcccfbee09695e70cdf9ca148d106f7b963eae45ba781c8ef972fea2"
+  }
+}
