@@ -46144,3 +46144,118 @@ Decision rule:
   differences before more algorithmic tuning.
 - If it is clearly faster than Phase 7FB, run a second n96 confirmation before
   calling it a new SOTA.
+
+Result: completed baseline, regression observed.
+
+- End time: 2026-07-04T16:06:00+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-080243Z-n96-phase7fs-upgate60-baseline`.
+- Metrics:
+  - quality `pass`;
+  - TTFT `76696.90 ms`;
+  - decode `72027.75 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`;
+  - output was coherent and semantically correct.
+- Comparison:
+  - old Phase 7FB n96 SOTA:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260704-042843Z-n96-phase7fb-slots12-min-profile-b`;
+  - old code head `a87da891`;
+  - old decode `70087.31 ms / 77`;
+  - current decode is slower by `1940.44 ms`.
+- Environment comparison:
+  - runtime env for old 7FB and current 7FS match for:
+    - `VRAM_MIB=15000`;
+    - `PINNED_SLOTS=12`;
+    - `UPGATE_PCT=60`;
+    - io_uring depth/refill/sort/SQPOLL;
+    - current-down overlap;
+    - mmap drop hooks.
+- Source/build finding:
+  - non-doc source diff from old `a87da891` to current is limited to:
+    - `scripts/kimi-phase7fb-min-profile-repro.sh`;
+    - `GGML_CUDA_LIGHTNING_INDEXER` CMake gate;
+    - CUDA dispatch guard for disabled lightning indexer.
+  - Kimi runtime should not execute `GGML_OP_LIGHTNING_INDEXER`.
+  - current build cache uses `CMAKE_CUDA_ARCHITECTURES=120a`.
+  - default llama.cpp Blackwell logic uses architecture-specific real targets
+    like `120a-real` and `121a-real`.
+
+Decision:
+
+- Treat current `120a` rebuilt build as a long-decode regression relative to
+  the old accepted artifact.
+- Stop split tuning until build parity is tested.
+- Next phase: rebuild with `CMAKE_CUDA_ARCHITECTURES=120a-real` and the same
+  lightning-indexer gate, then rerun n96 `UPGATE_PCT=60`.
+
+## Phase 7FT: `120a-real` build parity test
+
+Start time: 2026-07-04T16:07:00+08:00.
+
+Goal:
+
+- Test whether the long-decode regression comes from building with
+  `CMAKE_CUDA_ARCHITECTURES=120a` instead of a real-architecture Blackwell
+  target.
+- Keep runtime env unchanged at accepted `UPGATE_PCT=60`.
+- Keep source unchanged.
+
+Theory:
+
+- The old accepted artifact was likely built before the clean rebuild and may
+  have used CMake's default Blackwell real target selection.
+- Current `120a` build works but n96 is `1940.44 ms` slower than old SOTA.
+- Rebuilding with `120a-real` should remove any ambiguity about PTX/JIT or
+  architecture-specific codegen.
+- If `120a-real` restores n96, subsequent optimization should use that build
+  configuration.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+rm -rf build-cuda-batch
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7ft-120a-real-upgate60"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- quality `pass`;
+- semantic France output remains coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 is materially faster than Phase 7FS `72027.75 ms`, keep
+  `120a-real` as the rebuilt baseline configuration.
+- If it beats Phase 7FB `70087.31 ms`, run a second n96 confirmation before
+  claiming SOTA.
+- If it is not materially faster, record rejection and investigate other build
+  differences or old artifact availability before further runtime tuning.
