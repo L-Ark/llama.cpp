@@ -36137,6 +36137,112 @@ Rollback:
 - If first n32 passes but confirmation fails, revert the source patch and record
   rejection, as in Phase 7EL.
 
+Phase 7EP result - rejected:
+
+- result timestamp: 2026-07-04T02:21Z.
+- plan commit:
+  `352f51955` (`docs: plan kimi phase7ep early overlap`).
+- source status:
+  - dirty default-off source patch tested on top of `352f51955`;
+  - build passed;
+  - first n32 failed the SOTA gate;
+  - source patch reverted locally and on the server;
+  - no source commit created.
+- patch behavior:
+  - reused the Phase 7CP layer-limited same-type overlap join protection;
+  - added default-off
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_EARLY_LAYERS`;
+  - for `serial_stage_batch` same-type calls matching `4,60`, staged up and
+    gate first, started current-down overlap, then launched up/gate compute;
+  - default behavior unchanged when the env is unset.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-021510Z-n32-phase7ep-early-sametype-overlap-l4-l60`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-021510Z-n32-phase7ep-early-sametype-overlap-l4-l60"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ep_repro.sh
+```
+
+- activation:
+  - `env.txt` contains
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_SAME_TYPE_EARLY_LAYERS=4,60`;
+  - stderr contains
+    `early same-type current down overlap active: layers=4,60`;
+  - current-down overlap increased to:
+    - `calls=1055`;
+    - `planned_jobs=3995`;
+    - `completed_jobs=3995`;
+    - `worker_us=3889043`.
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `88783.40 ms`, below `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct, truncated only by n32 token budget.
+- decode:
+  - `30049.70 ms / 31`, `1.03 tok/s`;
+  - slower than Phase 7EB n32 gate `29599.64 ms / 31` by `450.06 ms`;
+  - fails first n32 promotion gate, so no confirmation or n96 was run.
+- movement counters:
+  - expert-pack `iouring_reads=15024`, unchanged;
+  - `iouring_bytes=87082139648`, unchanged;
+  - `iouring_wait_us=15037725`, worse than Phase 7EN repro-a
+    `14917929` and near repro-b `15141613`;
+  - main pinned copies increased to `19904` from Phase 7EN `19754`;
+  - main pinned host stage `11839.899 ms`, worse than Phase 7EN repro-a
+    `11333.839 ms` and close to repro-b `11808.904 ms`;
+  - gate pinned copies dropped to `4010` from Phase 7EN `4160`;
+  - down cache improved to `hits=9990`, `misses=3130`, hit rate `76.1%`
+    versus Phase 7EN `73.6%`.
+- local layer effect:
+  - `blk.60.ffn_down_exps.weight` improved:
+    - hits `248`, misses `8`, stage `219.582 ms`, wall `227.738 ms`;
+    - Phase 7EN was stage `387-459 ms`, so the local target partly worked.
+  - `blk.4.ffn_down_exps.weight` disappeared from the top down rows, but the
+    cost moved to up/gate:
+    - `blk.4.ffn_up_exps.weight` wall `585.441 ms`, kernel `293.455 ms`;
+    - Phase 7EN `blk.4` upgate wall was about `267-279 ms`.
+  - `blk.60.ffn_up_exps.weight` wall `520.209 ms`, not enough to compensate
+    for the `blk.4` upgate regression and added staging pressure.
+
+Gap analysis:
+
+- Starting the current-down overlap before same-type compute can make selected
+  down rows resident, proving the scheduling hook is active.
+- The implementation stages both up and gate before compute in the early path.
+  For `blk.4`, this destroys the previous overlap/schedule shape and roughly
+  doubles the upgate wall for that layer.
+- The local down-stage reduction therefore moves onto the upgate critical path
+  instead of reducing end-to-end decode.
+- This is the same high-level failure mode as Phases 7CP/7DQ: local down rows
+  improve, but exposed upgate/main staging regresses enough to erase the gain.
+
+Decision:
+
+- Reject Phase 7EP.
+- Do not run n32 confirmation or n96.
+- Keep the source patch reverted.
+- Keep Phase 7EB as accepted SOTA:
+  - n32 gate `29599.64 ms / 31`;
+  - n96 gate `74201.57 ms / 77`.
+- Do not retry early same-type overlap by simply widening or moving the layer
+  list. A future attempt would need to preserve the original up/gate compute
+  schedule and use a separate staging ring, otherwise the cost just moves from
+  down to upgate.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
