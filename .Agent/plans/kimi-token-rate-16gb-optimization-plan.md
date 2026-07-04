@@ -42062,3 +42062,64 @@ Decision:
 - Keep Phase 7EB as accepted SOTA.
 - Next step should be a production-env reproducibility check around the fast
   observation before selecting another source target.
+
+## Phase 7EU: production SOTA reproducibility check after fast diagnostic
+
+Start time:
+
+- 2026-07-04T03:25:00Z.
+
+Reason for this phase:
+
+- Phase 7ET produced `29348.56 ms / 31`, faster than the historical n32 SOTA,
+  but it used diagnostic layer profiling and cannot be promoted.
+- The route/cache/copy counters were unchanged from SOTA, so the likely cause is
+  cold-start variance rather than an optimization.
+- Before selecting another source target, run one production-env SOTA cold start
+  without `GGML_MOE_UP_GATE_LAYER_PROFILE` to see whether the faster timing
+  reproduces under the accepted runtime.
+
+Experiment:
+
+- Env-only, no source patch.
+- Exact Phase 7EB accepted runtime:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=60`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=16`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`.
+- Do not set `GGML_MOE_UP_GATE_LAYER_PROFILE`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7eu-production-sota-recheck"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1 \
+      /tmp/run_phase7eb_repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- host RAM below 16GB including page cache;
+- `oom=0`, `oom_kill=0`;
+- TTFT `<=106331.72 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output coherent and semantically correct.
+
+Decision rule:
+
+- This phase cannot promote a new SOTA because it has no runtime/source change.
+- If decode is again below `29599.64 ms`, record it as variance evidence and do
+  not lower the SOTA gate without a real change.
+- If decode returns to the `29.6-30.3 s` band, treat Phase 7ET's fast run as
+  diagnostic variance.
+- In either case, the next implementation phase must still be justified by a
+  concrete bottleneck, not by the fast observation alone.
