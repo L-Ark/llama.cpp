@@ -55413,3 +55413,114 @@ Decision rule:
 - Use the recorded current bottleneck to plan the next source experiment.
 - If the profile fails correctness, RAM, TTFT, or fallback gates, stop and
   investigate before any new optimization.
+
+Result: failed diagnostic; terminated for excessive runtime.
+
+- Plan commit:
+  `ec024ca2e` (`docs: plan current detailed profile refresh`).
+- Server source:
+  `ec024ca2e`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-180905Z-n32-phase7hx-current-detailed-profile`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-180905Z-n32-phase7hx-current-detailed-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Termination:
+  - systemd result `success`;
+  - main process killed with `TERM`;
+  - service runtime `12min 31.511s`;
+  - CPU time `31min 9.449s`;
+  - the run was manually terminated because it was still active far beyond
+    normal n32 runtime.
+- Partial artifacts:
+  - no `exit.txt`;
+  - no `end.txt`;
+  - no `metrics.txt`;
+  - no memory final/peak files;
+  - `stdout.txt` contains only partial output: `France`;
+  - `copy-profile.csv` only `116` rows;
+  - `down-batch-profile.csv` only `4` rows;
+  - `up-gate-profile.csv` only `5` rows;
+  - `io-batch-profile.csv` only `19` rows.
+- Decision:
+  - Do not use this run as performance evidence.
+  - The combined full route/ttft/fallback profile plus copy/io profile is too
+    heavy for this workflow.
+  - Replace it with a lighter current-head refresh that keeps `MIN_PROFILE=1`
+    and enables only copy/io/current-down CSVs.
+
+## Phase 7HY: lightweight current-head copy/io profile refresh
+
+Start time: 2026-07-05T06:25:00+08:00.
+
+Goal:
+
+- Reproduce the useful Phase 7HO style diagnostic on the current reverted head
+  without enabling full route/ttft/fallback profiling.
+- Keep `MIN_PROFILE=1` and add only:
+  - `GGML_MOE_COPY_PROFILE_OUT`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT`.
+- This should retain the low overhead profile that previously completed within
+  a normal n32 diagnostic window.
+
+Experiment: n32 lightweight copy/io profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hy-current-copy-io-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required outputs:
+
+- run exits `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- CSV files exist and are complete:
+  - `copy-profile.csv`;
+  - `io-batch-profile.csv`;
+  - `current-down-overlap-profile.csv`.
+
+Analysis to record:
+
+- Top `runtime_load` tensors by wall/io/host/bytes/rows.
+- Totals for `runtime_load` and `current_down_overlap`.
+- IO batch histogram and inflight distribution.
+- Current-down overlap per tensor.
+- Compare to Phase 7HO and 7HR to confirm whether the current head has the same
+  bottleneck shape.
+
+Decision rule:
+
+- If the shape matches Phase 7HO, use this as the current evidence base for the
+  next source plan.
+- If the lightweight profile also stalls or fails gates, do not add more
+  instrumentation; fall back to existing Phase 7HO/7HC profiles.
