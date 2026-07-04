@@ -53568,3 +53568,41 @@ Repeat acceptance gates:
   keep production `UPGATE_PCT=60`;
 - if repeat passes, update the runner default to `UPGATE_PCT=61`, commit, and
   push immediately with both n96 run paths as the reproduction record.
+
+Experiment 3 result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-162855Z-n96-phase7hn-upgate61-repeat`.
+- Gate metrics:
+  - exit `0`;
+  - quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `74191.88 ms`;
+  - decode `70238.80 ms / 77`, `1.10 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Counters:
+  - expert pack hits `63204`, misses `633`;
+  - `iouring_reads=36994`;
+  - `iouring_bytes=214675177472`;
+  - `iouring_wait_us=38147740`;
+  - iouring inflight avg `3.11`, max `8`;
+  - current-down overlap jobs `9177`, worker `8432143 us`;
+  - down hit rate `73.2%`;
+  - upgate hit rate `43.8%`.
+- Comparison:
+  - first n96: `69638.95 ms / 77`;
+  - repeat n96: `70238.80 ms / 77`;
+  - historical target: `70087.31 ms / 77`.
+- Decision:
+  - Reject `UPGATE_PCT=61` because the repeat did not beat the historical
+    target and therefore the improvement is not reproducible.
+  - Keep production `UPGATE_PCT=60`.
+  - Do not update `scripts/kimi-phase7fb-min-profile-repro.sh`.
+  - The first n96 run remains diagnostic evidence that the current cache split
+    is near a variance boundary; it is not acceptable as a new SOTA.
