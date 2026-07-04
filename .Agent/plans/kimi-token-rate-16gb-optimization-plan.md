@@ -56051,3 +56051,76 @@ systemd-run --wait --collect --same-dir \
     - no batches above `8`;
     - inflight avg only `3.11`;
     - `iouring_wait_us=37.915 s`.
+
+## Phase 7IB: remove default-off eviction-profile getenv overhead
+
+Start time: 2026-07-05T02:59:24+08:00.
+
+Goal:
+
+- Remove default-path overhead introduced by Phase 7HZ instrumentation.
+- Keep the eviction profile feature available when
+  `GGML_MOE_CACHE_EVICT_PROFILE_OUT` is set.
+- Do not change model math, routing, cache capacity, eviction policy, IO
+  policy, or runtime env defaults.
+
+Bottleneck context:
+
+- Phase 7IA confirmed the dominant bottleneck is still expert movement:
+  - n96 decode `71552.04 ms / 77`;
+  - `9846` iouring batches for `37080` reads;
+  - `iouring_wait_us=37.915 s`.
+- This phase is not expected to solve that bottleneck.
+- It only removes an avoidable per-insert `getenv()` call on the default path
+  before the next larger source experiment.
+
+Theory and upper bound:
+
+- Every cache miss insertion currently calls `cache_evict_profile_enabled()`,
+  which performs `std::getenv("GGML_MOE_CACHE_EVICT_PROFILE_OUT")`.
+- n96 Phase 7IA has `50659` cache misses plus `9109` preloads, so the upper
+  bound is limited to tens of thousands of libc env lookups.
+- Expected gain is small, likely below run-to-run variance, but the change is
+  low risk and prevents diagnostic code from taxing accepted production runs.
+
+Implementation:
+
+- Cache the env lookup in function-local static state:
+  - enabled if the env var exists and is non-empty at first use;
+  - disabled otherwise.
+- Preserve current behavior for runs that set the env before process start,
+  which is how all repro scripts work.
+- Do not alter CSV format or slot metadata behavior when enabled.
+
+Experiment: n32 default-path parity
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ib-evict-env-cache"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start;
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- no eviction CSV emitted by default.
+
+Decision rule:
+
+- If gates pass and counters match the accepted default shape, keep the patch.
+- Do not claim SOTA from this micro-optimization unless n96 is later confirmed.
+- If quality, TTFT, RAM, or fallback gates fail, revert immediately.
