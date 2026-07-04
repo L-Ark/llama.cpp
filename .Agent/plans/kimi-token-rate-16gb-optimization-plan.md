@@ -44059,3 +44059,99 @@ Decision:
   - main `host_stage` about `11.5 s`;
   - main `h2d` about `4.16 s`;
   - diffuse top tensor profile showing no narrow hotset.
+
+## Phase 7FF: partial io_uring batch fallback instead of whole-batch fallback
+
+Start time: 2026-07-04T08:08:00Z.
+
+Goal:
+
+- Reduce avoidable serial `runtime_load`/current-down movement by preventing a
+  single ineligible job from forcing an entire copy batch out of
+  `expert_pack_iouring_copy_jobs()`.
+- Preserve all strict gates:
+  - cold start;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - France answer quality pass;
+  - TTFT `<=106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - n32 improvement must be confirmed and then promoted only if n96 also
+    improves.
+
+Current bottleneck:
+
+- Phase 7FE showed:
+  - `copy-profile.csv` rows `23914`;
+  - only `183` rows had `pack_hit=0`;
+  - but `8890` rows had `iouring=0`;
+  - global direct reads were `8707`.
+- This mismatch suggests batch-level fallback amplification:
+  - `expert_pack_iouring_copy_jobs()` currently validates every job before
+    submitting;
+  - if any job lacks an expert-pack entry, direct fd, matching size, or aligned
+    offset, the helper returns `false`;
+  - the caller then falls back to per-job `batch_cache_copy_h2d()` for the whole
+    vector, so otherwise eligible pack jobs become serial/direct reads.
+
+Theory and upper bound:
+
+- The patch should keep eligible jobs in the batched io_uring path and copy only
+  ineligible jobs through the existing fallback path.
+- Expected direct benefit:
+  - convert a large share of the `8890` non-iouring rows into batched iouring
+    rows;
+  - reduce `direct_reads` and main `host_stage`;
+  - increase `iouring_reads`/`iouring_bytes` for the same total logical bytes;
+  - keep output semantics identical because the target cache slots and
+    `slot_ready` events remain unchanged.
+- Hard upper bound on n32:
+  - cannot exceed the exposed serial host-stage bucket, about `11.5 s`;
+  - practical upper bound is the serial/direct share caused by batch fallback,
+    likely a few seconds because only `183` rows are truly missing pack entries.
+- Risk:
+  - if the helper returns success after only eligible jobs and the caller does
+    not copy ineligible jobs, cache slots would contain invalid data. Therefore
+    this phase must implement internal fallback for the ineligible subset before
+    returning success.
+
+Implementation plan:
+
+1. In `expert_pack_iouring_copy_jobs()`:
+   - classify jobs into eligible and fallback subsets;
+   - do not return `false` merely because one job is ineligible;
+   - process the eligible subset with the existing io_uring machinery;
+   - process the fallback subset with the same staged copy path already used by
+     `batch_cache_copy_h2d()`.
+2. Ensure fallback subset records the same TTFT/copy profile labels and does
+   not increment `iouring_fallbacks` unless a real io_uring operation fails.
+3. Keep the change default-on only inside the helper. If the first test fails,
+   revert the source patch.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ff-partial-iouring"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Promotion rule:
+
+- n32 diagnostic must pass all gates and show:
+  - decode faster than Phase 7FD diagnostic `29610.75 ms`, or a clear movement
+    reduction that justifies a minimal-profile retest;
+  - lower `direct_reads` / lower non-iouring fallback share;
+  - no quality regression.
+- If n32 passes, run minimal-profile n32 confirmation without diagnostic
+  overhead.
+- If confirmed and faster than Phase 7FB n32 references, run n96 twice.
+- Only commit/push the source change if the confirmed production/min-profile
+  result passes n96 against Phase 7FB best `70087.31 ms / 77`.
+- If any gate fails or n96 is slower, revert the source patch and record the
+  rejection.
