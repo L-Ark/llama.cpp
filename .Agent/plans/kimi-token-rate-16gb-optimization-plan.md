@@ -50989,3 +50989,171 @@ Decision rule:
 - If build or run fails because old source lacks the current runner file, run
   the current runner from the main worktree with `REPO=/root/lfz/llama.cpp-vendor-kimi-a87`;
   do not edit old source except through its build directory.
+
+Result:
+
+- End time: 2026-07-04T21:25:40+08:00.
+- Isolated worktree:
+  `/root/lfz/llama.cpp-vendor-kimi-a87`.
+- Old source head:
+  `a87da8914f5600a9fdd876243ded2a4cb2d00f80`.
+- Build note:
+  old source does not define the current `GGML_CUDA_LIGHTNING_INDEXER` option.
+  CMake recorded it as `UNINITIALIZED=OFF`, but `lightning-indexer.cu.o` was
+  still built. This means the old-source rebuild is not build-composition
+  identical to the current main build where lightning indexer can be excluded.
+- Binary hashes:
+  - `build-cuda-batch/bin/llama-completion`:
+    `042b40698885427c5d6fdc8f71b511414e53543b5a155fe3ad629d8191c0bcab`;
+  - `build-cuda-batch/ggml/src/ggml-cuda/libggml-cuda.so`:
+    `4780475855ca706bfb63d6061ccc1e43ad759500a75abb71a704a24dce6cfa1d`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-131423Z-n96-phase7gw-a87-rebuild`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-131423Z-n96-phase7gw-a87-rebuild
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi-a87 \
+      RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `75725.53 ms`;
+  - decode `71148.49 ms / 77`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=37494138`;
+  - `iouring_submit_us=102016`;
+  - main pinned copies `49350`;
+  - main pinned waits `49314`;
+  - pinned slots `12`;
+  - pinned slot size `7.44 MiB`;
+  - main iouring wait calls `21109`, inflight average `3.23`, max `8`;
+  - gate iouring wait calls `8565`, inflight average `2.82`, max `8`;
+  - down slots `806`, hit rate `73.4%`;
+  - upgate slots `1679`, hit rate `43.2%`.
+- Decision:
+  - Do not accept as SOTA.
+  - Old source rebuilt with the current build environment improves over the
+    current hardened validation (`72330.81 ms / 77`) by about `1182 ms`, but it
+    does not restore the accepted Phase 7FB SOTA (`70087.31 ms / 77`).
+  - The result is between the prewritten decision thresholds:
+    slower than `<=70500 ms`, faster than `>=71500 ms`.
+  - Treat this as partial evidence that source/build composition matters, not
+    as proof that current source alone explains the full SOTA gap.
+- Gap analysis:
+  - Old-source rebuild gap to historical Phase 7FB:
+    `71148.49 - 70087.31 = 1061.18 ms`.
+  - Current hardened validation gap to old-source rebuild:
+    `72330.81 - 71148.49 = 1182.32 ms`.
+  - Hit rates, read counts, and total transferred bytes are unchanged, so the
+    difference is likely not from cache policy or expert residency.
+  - Because the old source still built `lightning-indexer.cu.o`, while current
+    production can exclude it, the next high-signal experiment is to isolate
+    build composition on current source before attempting deeper source edits.
+
+## Phase 7GX: current-source full CUDA build-composition parity test
+
+Start time: 2026-07-04T21:28:12+08:00.
+
+Goal:
+
+- Test whether the remaining reproducibility gap is affected by current-source
+  CUDA build composition rather than runtime policy.
+- Rebuild the current main worktree with `GGML_CUDA_LIGHTNING_INDEXER=ON` so
+  the current build includes the same extra CUDA translation unit family that
+  the old `a87da891` rebuild included.
+- Run n96 with the unchanged SOTA runtime env and the hardened quality gate.
+- If the result is slower or unchanged, restore the production build option
+  (`GGML_CUDA_LIGHTNING_INDEXER=OFF`) and stop chasing this build-composition
+  direction.
+
+Why this is plausible:
+
+- Phase 7GW showed old source rebuilt under the current environment improved
+  from current validation `72330.81 ms / 77` to `71148.49 ms / 77`, but did not
+  recover historical `70087.31 ms / 77`.
+- The old source did not support the current lightning-indexer CMake option, so
+  `lightning-indexer.cu.o` was built even though the command passed
+  `-DGGML_CUDA_LIGHTNING_INDEXER=OFF`.
+- Kimi decode should not rely on lightning indexer directly, so this is not a
+  semantic model change. The possible mechanism is binary/link/codegen/runtime
+  layout variance affecting CUDA hot path scheduling or indirect initialization
+  costs.
+- Expected upper bound is limited: this cannot reduce the unchanged
+  `214.9 GB` expert movement. It can only recover the observed build/source
+  variance window, so the theoretical best case is approximately the Phase 7FB
+  decode `70087.31 ms / 77`; a realistic useful signal is any reproducible move
+  below `71150 ms / 77`.
+
+Implementation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch origin
+git checkout vendor/kimi-moe-stream-on-vendor
+git reset --hard origin/vendor/kimi-moe-stream-on-vendor
+cmake -B build-cuda-batch \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON \
+  -DGGML_CUDA_LIGHTNING_INDEXER=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build build-cuda-batch -j"$(nproc)" --target llama-completion
+```
+
+Experiment: n96 full-CUDA current-source parity run
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n96-phase7gx-current-lightning-on"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass for the France paragraph;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- decode beats the accepted SOTA `70087.31 ms / 77` before any production
+  acceptance.
+
+Decision rule:
+
+- If decode beats `70087.31 ms / 77` with all gates passing, accept, commit any
+  source/config changes needed for reproducibility, and push immediately.
+- If decode is below `71150 ms / 77` but does not beat SOTA, record it as a
+  useful diagnostic only; do not claim a new SOTA.
+- If decode is `>=71150 ms / 77`, reject and restore the production build with
+  `GGML_CUDA_LIGHTNING_INDEXER=OFF`.
+- In all reject cases, do not change runtime defaults and do not leave the
+  server in a non-production build configuration.
