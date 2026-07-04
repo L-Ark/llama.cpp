@@ -3645,6 +3645,119 @@ static void io_batch_profile_record(
     std::fclose(f);
 }
 
+struct io_locality_profile_item {
+    int source_idx = -1;
+    uint64_t offset = 0;
+    uint64_t nbytes = 0;
+    char tensor[128] = {};
+};
+
+static bool io_locality_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_IO_LOCALITY_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void io_locality_profile_record(
+        const char *op,
+        size_t jobs,
+        const std::vector<io_locality_profile_item> &items) {
+    const char *path = std::getenv("GGML_MOE_IO_LOCALITY_PROFILE_OUT");
+    if (!path || !path[0] || items.empty()) return;
+
+    uint64_t read_bytes = 0;
+    int source_switches = 0;
+    bool same_tensor = true;
+    for (size_t i = 0; i < items.size(); ++i) {
+        read_bytes += items[i].nbytes;
+        if (i > 0 && items[i].source_idx != items[i - 1].source_idx) {
+            ++source_switches;
+        }
+        if (i > 0 && std::strcmp(items[i].tensor, items[0].tensor) != 0) {
+            same_tensor = false;
+        }
+    }
+
+    std::vector<io_locality_profile_item> sorted = items;
+    std::stable_sort(sorted.begin(), sorted.end(),
+        [](const io_locality_profile_item &a, const io_locality_profile_item &b) {
+            if (a.source_idx != b.source_idx) return a.source_idx < b.source_idx;
+            return a.offset < b.offset;
+        });
+
+    int unique_sources = 0;
+    int last_source = INT_MIN;
+    uint64_t span_bytes = 0;
+    uint64_t gap_bytes = 0;
+    uint64_t max_gap_bytes = 0;
+    uint64_t adjacent_pairs = 0;
+    uint64_t source_min = 0;
+    uint64_t source_end = 0;
+    bool have_source = false;
+
+    for (const io_locality_profile_item &item : sorted) {
+        const uint64_t item_end = item.offset + item.nbytes;
+        if (!have_source || item.source_idx != last_source) {
+            if (have_source) {
+                span_bytes += source_end - source_min;
+            }
+            have_source = true;
+            ++unique_sources;
+            last_source = item.source_idx;
+            source_min = item.offset;
+            source_end = item_end;
+            continue;
+        }
+        if (item.offset == source_end) {
+            ++adjacent_pairs;
+            source_end = item_end > source_end ? item_end : source_end;
+        } else if (item.offset > source_end) {
+            const uint64_t gap = item.offset - source_end;
+            gap_bytes += gap;
+            if (max_gap_bytes < gap) {
+                max_gap_bytes = gap;
+            }
+            source_end = item_end;
+        } else if (item_end > source_end) {
+            source_end = item_end;
+        }
+    }
+    if (have_source) {
+        span_bytes += source_end - source_min;
+    }
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,jobs,read_jobs,source_switches,unique_sources,read_bytes,"
+                "span_bytes,gap_bytes,max_gap_bytes,adjacent_pairs,same_tensor,"
+                "first_tensor,last_tensor\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%zu,%zu,%d,%d,%lu,%lu,%lu,%lu,%lu,%d,%s,%s\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            jobs,
+            items.size(),
+            source_switches,
+            unique_sources,
+            (unsigned long)read_bytes,
+            (unsigned long)span_bytes,
+            (unsigned long)gap_bytes,
+            (unsigned long)max_gap_bytes,
+            (unsigned long)adjacent_pairs,
+            same_tensor ? 1 : 0,
+            items.front().tensor,
+            items.back().tensor);
+    std::fclose(f);
+}
+
 static bool expert_pack_ram_tier_copy_h2d(
         const expert_pack_entry *pack_entry,
         void *dst,
@@ -4058,6 +4171,23 @@ static bool expert_pack_iouring_copy_jobs(
                     sort_by_offset);
         }
         return true;
+    }
+    if (io_locality_profile_enabled()) {
+        std::vector<io_locality_profile_item> locality_items;
+        locality_items.reserve(read_jobs.size());
+        for (size_t job_idx : read_jobs) {
+            const Job &job = jobs[job_idx];
+            if (!job.pack_entry) {
+                continue;
+            }
+            io_locality_profile_item item;
+            item.source_idx = job.pack_entry->source_idx;
+            item.offset = job.pack_entry->offset;
+            item.nbytes = job.pack_entry->nbytes;
+            std::snprintf(item.tensor, sizeof(item.tensor), "%s", job.tensor);
+            locality_items.push_back(item);
+        }
+        io_locality_profile_record(trace_op, jobs.size(), locality_items);
     }
     expert_pack_record_iouring_batch(read_jobs.size());
     ring.iouring_batches += 1;
