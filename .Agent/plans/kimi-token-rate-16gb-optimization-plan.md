@@ -52687,3 +52687,101 @@ Result:
     improvement.
   - Continue with Phase 7HF, but implementation must preserve up-first compute
     overlap; a naive combined-stage return-after-all design remains rejected.
+
+Result:
+
+- Source implementation:
+  - added default-off `GGML_MOE_IO_MULTI_STREAM_COALESCE=1` path;
+  - coalesces up/gate reads into one io_uring submission path;
+  - enqueues H2D to each job's original CUDA stream;
+  - notifies the main thread when all up H2D operations have been enqueued so up
+    compute can launch while gate reads/copies continue.
+- Build:
+  - command: `cmake --build build-cuda-batch --target llama-completion -j$(nproc)`;
+  - result: success.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-153319Z-n32-phase7hf-multistream-read-coalesce`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75412.84 ms`;
+  - decode `29700.44 ms / 31`, `1.04 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Aggregate profile:
+  - overall io_uring wait `12181.992 ms`, down from Phase 7HE v2
+    `15570.792 ms`;
+  - overall inflight avg `3.71`, up from `3.09`;
+  - batch hist now includes `9-16:275`, proving coalescing increases batch
+    width;
+  - `runtime_load_coalesced`: calls `539`, jobs `5005`, wait `2254.746 ms`,
+    wall `2581.321 ms`, weighted inflight avg `5.511`, hist
+    `2-4:61,5-8:203,9-16:275`;
+  - remaining `runtime_load`: calls `2055`, jobs `6362`, wait `7246.337 ms`,
+    wall `7554.574 ms`, weighted inflight avg `2.692`;
+  - `current_down_overlap`: calls `863`, jobs `3510`, wait `2686.474 ms`,
+    wall `2758.149 ms`, weighted inflight avg `3.239`;
+  - coalesced path slot wait `225.229 ms`, much higher than Phase 7HE v2 total
+    slot wait.
+- Comparison to Phase 7HE v2:
+  - 7HE v2 decode `29258.34 ms`;
+  - 7HF coalescer decode `29700.44 ms`, worse by `442.10 ms`;
+  - io wait improves by about `3.39 s`, but wall decode does not improve.
+- Decision:
+  - Do not run n96 yet; n32 violates the no-regression rule.
+  - Keep the implementation uncommitted until the slot/wall gap is understood.
+  - Root-cause hypothesis: coalescing into a single shared ring reduced total
+    up/gate staging slots from the prior two-ring layout (`12 + 12`) to one
+    12-slot ring, creating slot reuse waits and extra stream contention. The
+    coalescer proved wider reads are possible, but the first implementation is
+    not acceptable.
+
+## Phase 7HH: coalescer slot-capacity probe
+
+Start time: 2026-07-04T23:42:00+08:00.
+
+Goal:
+
+- Test whether the Phase 7HF regression comes from the single shared ring having
+  only 12 staging slots.
+- Keep the same code path but run with `PINNED_SLOTS=24`, matching the prior
+  two-ring effective up+gate slot count (`12 + 12`).
+
+Theory and upper bound:
+
+- Phase 7HF reduced io wait by `3.39 s` on n32 but added `225.229 ms` measured
+  coalesced slot wait and still regressed wall decode by `442.10 ms`.
+- If slot reuse is the main exposed gap, increasing shared coalescer slots to 24
+  should reduce slot wait and may allow some of the io wait reduction to convert
+  into wall-time improvement.
+- Host RAM risk is bounded by roughly one additional 12-slot 7.44 MiB staging
+  ring allocation, but the strict 16 GB cgroup gate is authoritative. If memory
+  exceeds the cap, reject immediately.
+
+Experiment: n32 coalescer with 24 pinned slots
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hh-coalesce-slots24"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=24 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_MULTI_STREAM_COALESCE=1 GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- same strict quality, TTFT, memory, swap, and fallback gates;
+- n32 decode must beat Phase 7HE v2 or at least remove the Phase 7HF regression
+  before any n96 run;
+- if memory reaches the cap with instability or decode still regresses, reject
+  coalescer slot scaling and do not commit the source optimization.
