@@ -6247,3 +6247,200 @@ Rejection rules:
 - Reject if token rate is `<=4.4`, correctness fails, TTFT fails, RAM fails, OOM appears, or direct failures/fallbacks appear.
 - If rejected, revert source and push docs/artifacts only.
 - If accepted, immediately commit/push source/docs/artifacts and rerun from pushed branch before promotion.
+
+### 2026-07-04T01:12Z Refined Hot Up/Down Profile Plan
+
+Reason for refinement:
+
+- `one_prefill_maybe()` can prefill only entries available in the expert pack.
+- The current pack is gate-only, so putting hot up/down entries into `GGML_MOE_STREAM_ONE_PREFILL_PROFILE` would create pack misses and reduce useful gate prefill.
+- The first hot up/down test should therefore keep the SOTA gate-only prefill profile and use hot up/down only for runtime stream/cache admission.
+
+Exact first candidate:
+
+- Add default-off stream eligibility profile support:
+  - `GGML_MOE_STREAM_ONE_REQUIRE_ADMIT=1`
+  - `GGML_MOE_STREAM_ONE_REQUIRE_PROFILE=<path>`
+- If `GGML_MOE_STREAM_ONE_REQUIRE_ADMIT=1`, `ggml_cuda_moe_stream_one()` returns `false` before acquiring a stream slot unless the tensor/expert key exists in the require profile.
+- If `GGML_MOE_STREAM_ONE_REQUIRE_PROFILE` is unset, fall back to the existing cache-admit profile for compatibility.
+- Keep `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` separate from stream eligibility.
+
+Profiles:
+
+- Build stream allow profile:
+  `.Agent/profiles/vendor-ds4/hot-updown64-stream-allow.tsv`
+  - all gate keys observed in the no-filter diagnostic trace;
+  - top64 hot up keys from the no-filter diagnostic trace;
+  - top64 hot down keys from the no-filter diagnostic trace.
+- Build cache admit profile:
+  `.Agent/profiles/vendor-ds4/hot-updown64-cache-admit.tsv`
+  - existing current SOTA gate cache profile;
+  - top64 hot up keys;
+  - top64 hot down keys.
+- Keep prefill profile unchanged:
+  `.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv`
+- Keep prefill limit unchanged:
+  `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`.
+
+Why top64 first:
+
+- Top64 up covers `28.79%` of up rows; top64 down covers `28.79%` of down rows.
+- This costs about `128` extra cache slots if all hot up/down keys are inserted, leaving some room beyond the `3000` gate prefill inside the `3192` slot cache.
+- Top128 or top192 may be tested later if top64 shows a positive trend without hurting gate hit-rate or TTFT.
+
+Expected behavior:
+
+- Gate keeps SOTA prefill behavior.
+- Gate keys outside the cache-admit profile can still stream, because the stream allow profile includes all observed gate keys.
+- Hot up/down keys stream and are admitted to VRAM cache after first use.
+- Cold up/down keys decline from stream and remain on CPU fallback.
+
+Acceptance gates:
+
+- Same as before: `eval_tok_s > 4.4`, correct complete France answer, 16GB cgroup including page cache, TTFT `<=33617.688744 ms`, no OOM, no direct failures/fallbacks.
+
+Rejection rules:
+
+- If this does not exceed `4.4 tok/s`, or if correctness/TTFT/RAM/direct gates fail, revert the source patch and push only docs/profiles/artifacts.
+
+### 2026-07-04T01:18Z Profile-Gated Hot Up/Down64 Result
+
+Artifact:
+
+- `.Agent/runs/20260704-vendor-ds4-coldstart/hot-updown64-require-profile-result.json`
+- artifact sha256: `53b688964e6ba1654661285979696d0375576f44dc23b69177130239e91b54eb`
+
+Profiles:
+
+- stream allow:
+  `.Agent/profiles/vendor-ds4/hot-updown64-stream-allow.tsv`
+  - sha256: `6388dc6b814c2fa75c3b9df35c8de81f20f4912699fbe2f1ff39f702837aadb2`
+- cache admit:
+  `.Agent/profiles/vendor-ds4/hot-updown64-cache-admit.tsv`
+  - sha256: `cb53cdc2a19d8dd5c56f9f3d34cfedaedd80e041320bc9dae182b5e65ecf94c6`
+- profile summary:
+  `.Agent/profiles/vendor-ds4/hot-updown64-profile-summary.json`
+  - sha256: `c312e6113be8f83e9704d942cc18ce7add2e1ec0849133b838ec2a844d55e426`
+
+Run:
+
+- `/root/lfz/runs/vendor-ds4-16gb/20260704T005617Z-20260704_hot_updown64_require_profile_candidate/france-cpu40-vram0gb`
+
+Source patch tested:
+
+- Added default-off `GGML_MOE_STREAM_ONE_REQUIRE_ADMIT`.
+- Added optional `GGML_MOE_STREAM_ONE_REQUIRE_PROFILE`.
+- When enabled, `ggml_cuda_moe_stream_one()` declines before stream-slot acquisition if the tensor/expert key is absent from the require profile.
+
+Source status:
+
+- Rejected source patch was reverted.
+- Build directory was rebuilt after revert; CMake reports clean commit `6e1439db0`.
+
+Metrics:
+
+- `eval_tok_s=3.6`
+- `prompt_tok_s=1.8`
+- `TTFT=33432.591735 ms`
+- `elapsed_seconds=86.09`
+- `memory_peak_bytes=16000000000`
+- `memory_file_bytes=15056429056`
+- `ram_ok=true`
+- `ram_limit_killed=false`
+- `oom_seen=false`
+- runner `correctness_ok=true`, but manual correctness fails.
+
+Manual correctness:
+
+- Rejected. The answer is complete and coherent, but it contains a semantic error:
+  it says France is often called the "City of Light"; that nickname applies to Paris, not France.
+
+Output:
+
+```text
+Here is a short paragraph introducing France:
+
+France, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is renowned for its iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is famous for its cuisine, wine, and fashion, and is often called the "City of Light" due to its historical and cultural significance. The country is a major economic and political power in Europe, with a strong industrial and agricultural sector. It is also known for its art, literature, and philosophy, and has been a center for European culture for centuries. France is a unitary state with a presidential system of government, and its capital is Paris. The official language is French, and the currency is the Euro. The country is known for its rich history, diverse landscapes, and vibrant culture, making it a popular destination for tourists worldwide.
+```
+
+Counters:
+
+- prefill: `attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4847.512 pack_misses=0 read_failures=0`
+- pack: `hits=5645 misses=1131 reads=5645 bytes=25156648960 direct_reads=5645 direct_failures=0 direct_fallbacks=0`
+- VRAM cache: `hits=57702 misses=3776 hit_rate=93.9%`
+- trace rows: `61478`
+
+Trace role split:
+
+- gate:
+  - rows `46912`
+  - cache hits `43264`
+  - cache misses `3648`
+  - cache inserted `863`
+  - `src0_ms=11591.145`
+  - `total_ms=13618.311`
+- up:
+  - rows `7283`
+  - cache hits `7219`
+  - cache misses `64`
+  - cache inserted `64`
+  - `src0_ms=283.361`
+  - `total_ms=547.662`
+- down:
+  - rows `7283`
+  - cache hits `7219`
+  - cache misses `64`
+  - cache inserted `64`
+  - `src0_ms=287.290`
+  - `total_ms=583.957`
+
+Artifact hashes:
+
+- `summary.json`: `21b39f5f5a3fe050dd0c4e5bb02f2b45ae3e03ac53d1a653f4aa734692c01519`
+- `stdout.txt`: `15f3681ac8fe32517f76f623eb26165bb0260dac21ca59f988dc99675c273b62`
+- `stderr.txt`: `37d90b38f993c03a0e3f93ba42771c1e58e3575156fd54b71b71af981c7ba591`
+- `environment.txt`: `9850e3bcb643b22512e9cfd29957a292123e638d9ce78768f2a2fc46181cc56c`
+- `exact_command.txt`: `0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7`
+- `one_trace.csv`: `897b09b1e6c4a988068b7e84f98c78f1c19e91855e59ccd91774a40d6e037a2a`
+- `resource_samples.tsv`: `c49d1348e7a171a92692b68071f2c5e4816c141ad3087a7cddb5468a2951f9e3`
+
+Verdict:
+
+- Rejected. Token rate was below SOTA and manual correctness failed.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+Gap analysis:
+
+- The profile gating mechanism worked: hot up/down each had only `64` cold misses and `7219` cache hits.
+- The performance was still lower than SOTA, and output quality changed.
+- Therefore the next up/down GPU work must first prove numerical/output correctness before trying larger hot sets, up/down packs, or cache split policies.
+
+### 2026-07-04T01:26Z Next Plan: Up/Down GPU Numerical Audit
+
+Goal:
+
+- Determine whether the existing GPU stream implementation for `ffn_up_exps` and `ffn_down_exps` is numerically close enough to CPU fallback.
+- Do this before spending more work on up/down pack/cache optimizations.
+
+Bottleneck:
+
+- CPU fallback for up/down is the main remaining wall-time bottleneck.
+- However, both full up/down stream and hot64 up/down stream changed output quality.
+- That may be because up/down GPU math differs from CPU fallback, or because the changed execution path perturbs generation enough despite acceptable numeric error.
+
+Experiment design:
+
+- Use existing `GGML_MOE_STREAM_COMPARE_CPU_OUT` compare machinery.
+- Run a short diagnostic, not a SOTA candidate:
+  - no source change if possible;
+  - no-filter stream so up/down experts are accepted by GPU;
+  - `GGML_MOE_STREAM_COMPARE_CPU_OUT={case_dir}/compare_cpu.csv`;
+  - small compare limit such as `64`;
+  - short generation budget to reduce run time.
+- Inspect max/mean absolute and relative error separately for gate/up/down.
+
+Decision rules:
+
+- If up/down GPU error is materially larger than gate error, fix up/down GPU correctness before further performance work.
+- If numeric error is similar to gate but output still changes, treat the optimization as quality-risky and prefer CPU fallback pruning/packing instead.
+- Do not promote any up/down GPU path until France output is manually correct and token rate exceeds `4.4` under the full strict gates.

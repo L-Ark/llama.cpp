@@ -1,0 +1,303 @@
+{
+  "all_trace_summary": {
+    "cache_hits": 57702,
+    "cache_inserted": 991,
+    "cache_misses": 3776,
+    "component_fractions": {
+      "d2h_ms": 0.013237079769175946,
+      "dontneed_ms": 0.03025661816699659,
+      "kernel_ms": 0.04000418985039175,
+      "scatter_ms": 0.005856298979047366,
+      "src0_ms": 0.8245324554089425,
+      "src1_ms": 0.019919958942171252,
+      "sync_ms": 0.0659070924404561
+    },
+    "component_sums_ms": {
+      "d2h_ms": 195.2459999997541,
+      "dontneed_ms": 446.28299999991145,
+      "kernel_ms": 590.0589999999669,
+      "scatter_ms": 86.3800000000169,
+      "src0_ms": 12161.796000009572,
+      "src1_ms": 293.81799999988914,
+      "sync_ms": 972.1250000002206,
+      "total_ms": 14749.929999999453
+    },
+    "rows": 61478,
+    "total_ms_max": 4862.521,
+    "total_ms_p50": 0.031,
+    "total_ms_p90": 0.051,
+    "total_ms_p99": 4.31269000000001
+  },
+  "analysis": {
+    "next_direction": "do not keep this source patch; if revisiting up/down, build an up/down pack or reduce CPU fallback by pruning/profile selection before GPU streaming",
+    "why_rejected": "eval_tok_s=3.6 is below accepted SOTA 4.4, and manual semantic correctness fails",
+    "why_slow": "hot up/down streaming reduced full-stream H2D explosion but still added many no-pack stream calls; pack misses=1131 and elapsed wall time=86.09s remain worse than gate-only SOTA"
+  },
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is renowned for its iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is famous for its cuisine, wine, and fashion, and is often called the \"City of Light\" due to its historical and cultural significance. The country is a major economic and political power in Europe, with a strong industrial and agricultural sector. It is also known for its art, literature, and philosophy, and has been a center for European culture for centuries. France is a unitary state with a presidential system of government, and its capital is Paris. The official language is French, and the currency is the Euro. The country is known for its rich history, diverse landscapes, and vibrant culture, making it a popular destination for tourists worldwide.",
+  "artifact_hashes_sha256": {
+    "environment.txt": "9850e3bcb643b22512e9cfd29957a292123e638d9ce78768f2a2fc46181cc56c",
+    "exact_command.txt": "0da8f189e64738306dd578e654382dafe5beaee60277d74c052db72c9a1bbcb7",
+    "one_trace.csv": "897b09b1e6c4a988068b7e84f98c78f1c19e91855e59ccd91774a40d6e037a2a",
+    "resource_samples.tsv": "c49d1348e7a171a92692b68071f2c5e4816c141ad3087a7cddb5468a2951f9e3",
+    "stderr.txt": "37d90b38f993c03a0e3f93ba42771c1e58e3575156fd54b71b71af981c7ba591",
+    "stdout.txt": "15f3681ac8fe32517f76f623eb26165bb0260dac21ca59f988dc99675c273b62",
+    "summary.json": "21b39f5f5a3fe050dd0c4e5bb02f2b45ae3e03ac53d1a653f4aa734692c01519"
+  },
+  "by_role": {
+    "down": {
+      "cache_hits": 7219,
+      "cache_inserted": 64,
+      "cache_misses": 64,
+      "component_fractions": {
+        "d2h_ms": 0.045040987606965954,
+        "dontneed_ms": 0.11135751433753063,
+        "kernel_ms": 0.14125526365811683,
+        "scatter_ms": 0.03317367545898167,
+        "src0_ms": 0.49197115541037806,
+        "src1_ms": 0.06799302003401131,
+        "sync_ms": 0.10879054450927464
+      },
+      "component_sums_ms": {
+        "d2h_ms": 26.30200000000065,
+        "dontneed_ms": 65.02800000000046,
+        "kernel_ms": 82.48700000000177,
+        "scatter_ms": 19.372000000000288,
+        "src0_ms": 287.2899999999741,
+        "src1_ms": 39.70500000000058,
+        "sync_ms": 63.5290000000016,
+        "total_ms": 583.9569999999918
+      },
+      "rows": 7283,
+      "total_ms_max": 8.04,
+      "total_ms_p50": 0.035,
+      "total_ms_p90": 0.056,
+      "total_ms_p99": 0.16472000000000117
+    },
+    "gate": {
+      "cache_hits": 43264,
+      "cache_inserted": 863,
+      "cache_misses": 3648,
+      "component_fractions": {
+        "d2h_ms": 0.010738556345199927,
+        "dontneed_ms": 0.02336523229642841,
+        "kernel_ms": 0.03244095394796154,
+        "scatter_ms": 0.004353843879757453,
+        "src0_ms": 0.8511440956229962,
+        "src1_ms": 0.016120868439552925,
+        "sync_ms": 0.06156196609111478
+      },
+      "component_sums_ms": {
+        "d2h_ms": 146.24099999993592,
+        "dontneed_ms": 318.19499999996265,
+        "kernel_ms": 441.7909999999575,
+        "scatter_ms": 59.291999999975474,
+        "src0_ms": 11591.145000006112,
+        "src1_ms": 219.53899999988633,
+        "sync_ms": 838.3700000001405,
+        "total_ms": 13618.310999998133
+      },
+      "rows": 46912,
+      "total_ms_max": 4862.521,
+      "total_ms_p50": 0.029,
+      "total_ms_p90": 0.049,
+      "total_ms_p99": 4.424779999999998
+    },
+    "up": {
+      "cache_hits": 7219,
+      "cache_inserted": 64,
+      "cache_misses": 64,
+      "component_fractions": {
+        "d2h_ms": 0.04145440070700799,
+        "dontneed_ms": 0.11514401218269887,
+        "kernel_ms": 0.12011240509658232,
+        "scatter_ms": 0.014088981890292056,
+        "src0_ms": 0.5174012438328921,
+        "src1_ms": 0.06313017883293484,
+        "sync_ms": 0.12822872501653265
+      },
+      "component_sums_ms": {
+        "d2h_ms": 22.70300000000067,
+        "dontneed_ms": 63.05999999999918,
+        "kernel_ms": 65.78100000000232,
+        "scatter_ms": 7.716000000000877,
+        "src0_ms": 283.36100000000016,
+        "src1_ms": 34.57400000000164,
+        "sync_ms": 70.22600000000202,
+        "total_ms": 547.6619999999822
+      },
+      "rows": 7283,
+      "total_ms_max": 6.357,
+      "total_ms_p50": 0.032,
+      "total_ms_p90": 0.049,
+      "total_ms_p99": 0.14136000000000057
+    }
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260704T005617Z-20260704_hot_updown64_require_profile_candidate/france-cpu40-vram0gb",
+  "counters": {
+    "pack": "hits=5645 misses=1131 reads=5645 bytes=25156648960 direct_reads=5645 direct_failures=0 direct_fallbacks=0",
+    "prefill": "attempted=3000 inserted=3000 bytes=13369344000 elapsed_ms=4847.512 pack_misses=0 read_failures=0",
+    "vram_cache": "hits=57702 misses=3776 hit_rate=93.9%"
+  },
+  "experiment": "hot-updown64-require-profile-candidate",
+  "manual_correctness_ok": false,
+  "manual_correctness_reason": "complete and coherent, but contains a semantic error: it says France is often called the City of Light; that nickname applies to Paris, not France",
+  "profile_stats": {
+    "all_gate_unique": 5204,
+    "cache_admit_entries": 3441,
+    "cache_admit_profile": ".Agent/profiles/vendor-ds4/hot-updown64-cache-admit.tsv",
+    "coverage": {
+      "down_top64_fraction": 0.28787937069661884,
+      "down_top64_rows": 7484,
+      "up_top64_fraction": 0.28787937069661884,
+      "up_top64_rows": 7484
+    },
+    "gate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "hot_down_unique": 64,
+    "hot_up_unique": 64,
+    "role_counts": {
+      "down": 25997,
+      "gate": 47869,
+      "up": 25997
+    },
+    "source_trace": "/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb/one_trace.csv",
+    "stream_allow_entries": 5332,
+    "stream_allow_profile": ".Agent/profiles/vendor-ds4/hot-updown64-stream-allow.tsv",
+    "top10_down": [
+      [
+        "blk.37.ffn_down_exps.weight",
+        162,
+        188
+      ],
+      [
+        "blk.32.ffn_down_exps.weight",
+        124,
+        183
+      ],
+      [
+        "blk.27.ffn_down_exps.weight",
+        24,
+        182
+      ],
+      [
+        "blk.24.ffn_down_exps.weight",
+        184,
+        181
+      ],
+      [
+        "blk.25.ffn_down_exps.weight",
+        135,
+        181
+      ],
+      [
+        "blk.29.ffn_down_exps.weight",
+        56,
+        180
+      ],
+      [
+        "blk.33.ffn_down_exps.weight",
+        120,
+        177
+      ],
+      [
+        "blk.30.ffn_down_exps.weight",
+        253,
+        173
+      ],
+      [
+        "blk.23.ffn_down_exps.weight",
+        72,
+        170
+      ],
+      [
+        "blk.24.ffn_down_exps.weight",
+        12,
+        168
+      ]
+    ],
+    "top10_up": [
+      [
+        "blk.37.ffn_up_exps.weight",
+        162,
+        188
+      ],
+      [
+        "blk.32.ffn_up_exps.weight",
+        124,
+        183
+      ],
+      [
+        "blk.27.ffn_up_exps.weight",
+        24,
+        182
+      ],
+      [
+        "blk.24.ffn_up_exps.weight",
+        184,
+        181
+      ],
+      [
+        "blk.25.ffn_up_exps.weight",
+        135,
+        181
+      ],
+      [
+        "blk.29.ffn_up_exps.weight",
+        56,
+        180
+      ],
+      [
+        "blk.33.ffn_up_exps.weight",
+        120,
+        177
+      ],
+      [
+        "blk.30.ffn_up_exps.weight",
+        253,
+        173
+      ],
+      [
+        "blk.23.ffn_up_exps.weight",
+        72,
+        170
+      ],
+      [
+        "blk.24.ffn_up_exps.weight",
+        12,
+        168
+      ]
+    ],
+    "top_n_down": 64,
+    "top_n_up": 64
+  },
+  "profiles": {
+    "cache_admit": ".Agent/profiles/vendor-ds4/hot-updown64-cache-admit.tsv",
+    "cache_admit_sha256": "cb53cdc2a19d8dd5c56f9f3d34cfedaedd80e041320bc9dae182b5e65ecf94c6",
+    "prefill": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "profile_summary": ".Agent/profiles/vendor-ds4/hot-updown64-profile-summary.json",
+    "profile_summary_sha256": "c312e6113be8f83e9704d942cc18ce7add2e1ec0849133b838ec2a844d55e426",
+    "stream_allow": ".Agent/profiles/vendor-ds4/hot-updown64-stream-allow.tsv",
+    "stream_allow_sha256": "6388dc6b814c2fa75c3b9df35c8de81f20f4912699fbe2f1ff39f702837aadb2"
+  },
+  "source_patch_summary": [
+    "added default-off GGML_MOE_STREAM_ONE_REQUIRE_ADMIT",
+    "added optional GGML_MOE_STREAM_ONE_REQUIRE_PROFILE stream allow-list",
+    "declines stream before slot acquisition when require-admit is enabled and key is absent"
+  ],
+  "summary_metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 86.09,
+    "eval_tok_s": 3.6,
+    "memory_file_bytes": 15056429056,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "prompt_tok_s": 1.8,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 33432.591735
+  },
+  "timestamp_utc": "2026-07-04T01:18:00Z",
+  "trace_rows": 61478,
+  "trace_span_ms": 66774.6,
+  "verdict": "rejected"
+}

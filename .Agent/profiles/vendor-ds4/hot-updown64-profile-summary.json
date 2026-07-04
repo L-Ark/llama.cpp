@@ -1,0 +1,128 @@
+{
+  "all_gate_unique": 5204,
+  "cache_admit_entries": 3441,
+  "cache_admit_profile": ".Agent/profiles/vendor-ds4/hot-updown64-cache-admit.tsv",
+  "coverage": {
+    "down_top64_fraction": 0.28787937069661884,
+    "down_top64_rows": 7484,
+    "up_top64_fraction": 0.28787937069661884,
+    "up_top64_rows": 7484
+  },
+  "gate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+  "hot_down_unique": 64,
+  "hot_up_unique": 64,
+  "role_counts": {
+    "down": 25997,
+    "gate": 47869,
+    "up": 25997
+  },
+  "source_trace": "/root/lfz/runs/vendor-ds4-16gb/20260704T003804Z-20260704_updown_stream_nofilter_top3000_probe/france-cpu40-vram0gb/one_trace.csv",
+  "stream_allow_entries": 5332,
+  "stream_allow_profile": ".Agent/profiles/vendor-ds4/hot-updown64-stream-allow.tsv",
+  "top10_down": [
+    [
+      "blk.37.ffn_down_exps.weight",
+      162,
+      188
+    ],
+    [
+      "blk.32.ffn_down_exps.weight",
+      124,
+      183
+    ],
+    [
+      "blk.27.ffn_down_exps.weight",
+      24,
+      182
+    ],
+    [
+      "blk.24.ffn_down_exps.weight",
+      184,
+      181
+    ],
+    [
+      "blk.25.ffn_down_exps.weight",
+      135,
+      181
+    ],
+    [
+      "blk.29.ffn_down_exps.weight",
+      56,
+      180
+    ],
+    [
+      "blk.33.ffn_down_exps.weight",
+      120,
+      177
+    ],
+    [
+      "blk.30.ffn_down_exps.weight",
+      253,
+      173
+    ],
+    [
+      "blk.23.ffn_down_exps.weight",
+      72,
+      170
+    ],
+    [
+      "blk.24.ffn_down_exps.weight",
+      12,
+      168
+    ]
+  ],
+  "top10_up": [
+    [
+      "blk.37.ffn_up_exps.weight",
+      162,
+      188
+    ],
+    [
+      "blk.32.ffn_up_exps.weight",
+      124,
+      183
+    ],
+    [
+      "blk.27.ffn_up_exps.weight",
+      24,
+      182
+    ],
+    [
+      "blk.24.ffn_up_exps.weight",
+      184,
+      181
+    ],
+    [
+      "blk.25.ffn_up_exps.weight",
+      135,
+      181
+    ],
+    [
+      "blk.29.ffn_up_exps.weight",
+      56,
+      180
+    ],
+    [
+      "blk.33.ffn_up_exps.weight",
+      120,
+      177
+    ],
+    [
+      "blk.30.ffn_up_exps.weight",
+      253,
+      173
+    ],
+    [
+      "blk.23.ffn_up_exps.weight",
+      72,
+      170
+    ],
+    [
+      "blk.24.ffn_up_exps.weight",
+      12,
+      168
+    ]
+  ],
+  "top_n_down": 64,
+  "top_n_up": 64
+}
