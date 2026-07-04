@@ -9625,3 +9625,42 @@ Decision:
 - Direct-reader source path is now reproducible at the metadata level and does not need a 3.26 GiB pack file.
 - This is still not a performance result and does not change accepted SOTA.
 - Next source step may consume this manifest in default-off mode to initialize a separate q80 hot residual source/pool and counters. It must first preserve accepted behavior when disabled, then pass metadata smoke validation before any logit-changing compute path is enabled.
+
+### 2026-07-05 Direct Manifest Loader Skeleton Result
+
+Source change:
+
+- Added a default-off direct manifest loader in `ggml/src/ggml-cuda/moe_stream.cu`.
+- New envs:
+  - `GGML_MOE_STREAM_ONE_DIRECT_MANIFEST`
+  - `GGML_MOE_STREAM_ONE_DIRECT_MODEL`
+  - `GGML_MOE_STREAM_ONE_DIRECT_IO=direct|odirect`
+- The loader parses the committed top768 offset manifest, opens the model file, optionally opens the model with `O_DIRECT`, records counters, and reports at exit.
+- It does not connect to current H2D, VRAM cache insertion, or compute. Direct reads remain unused until the later q80 hot pool step.
+- Accepted gate cache behavior remains the rollback point; the new path is inert unless the direct manifest env is set.
+
+Build validation:
+
+- Command: `cmake --build build-ds4-moe-stream --target llama-cli -j 8`
+- Result: success.
+- New warnings from the added code were removed. Remaining warnings are pre-existing `ggml_cuda_moe_stream_link_anchor` missing declaration and unused existing parameters.
+
+Metadata smoke:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/direct-manifest-loader-smoke.json`
+- Run path: `/root/lfz/runs/vendor-ds4-16gb/20260704T162343Z-direct-manifest-metadata-smoke/short-cpu40`
+- Purpose: metadata smoke only, not token-rate measurement and not SOTA.
+- Command shape: strict 16GB systemd cgroup, no swap, `llama-cli -p Hi -n 1`, small `GGML_MOE_STREAM_ONE_CACHE_MIB=64`, direct manifest env enabled.
+- Exit status: `0`
+- Memory peak: `16000000000`
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`
+- Loader log:
+  - `O_DIRECT model reads enabled`
+  - `loaded 768 entries bytes=3422552064`
+  - exit report `hits=0 misses=0 reads=0 bytes=0 failures=0 direct_enabled=1 direct_reads=0 direct_failures=0 direct_fallbacks=0`
+
+Decision:
+
+- Keep the loader skeleton. It proves the source path can resolve top768 offsets from the committed manifest without generating a 3.26 GiB pack.
+- This is not a performance result and current accepted SOTA remains `4.4 tok/s`.
+- Next implementation step must add a separate q80 hot pool/prefill path, still default-off and not sharing the gate LRU. Only after that should exact MXFP4 x Q8_0 compute be wired and verified with op compare/top1.

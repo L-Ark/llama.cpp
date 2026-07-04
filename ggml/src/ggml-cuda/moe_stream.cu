@@ -596,6 +596,205 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
     return true;
 }
 
+struct one_direct_manifest_state {
+    int fd = -1;
+    int fd_direct = -1;
+    bool direct_enabled = false;
+    bool inited = false;
+    bool enabled = false;
+    std::vector<one_expert_pack_entry> entries;
+    std::mutex mu;
+    uint64_t manifest_bytes = 0;
+    std::atomic<uint64_t> hits{0};
+    std::atomic<uint64_t> misses{0};
+    std::atomic<uint64_t> reads{0};
+    std::atomic<uint64_t> bytes{0};
+    std::atomic<uint64_t> failures{0};
+    std::atomic<uint64_t> direct_reads{0};
+    std::atomic<uint64_t> direct_failures{0};
+    std::atomic<uint64_t> direct_fallbacks{0};
+};
+
+static one_direct_manifest_state g_one_direct_manifest;
+
+static void one_direct_manifest_report_atexit() {
+    if (!g_one_direct_manifest.enabled) {
+        return;
+    }
+    std::fprintf(stderr,
+        "[moe_stream] one direct manifest: entries=%zu manifest_bytes=%lu hits=%lu misses=%lu"
+        " reads=%lu bytes=%lu failures=%lu direct_enabled=%d direct_reads=%lu"
+        " direct_failures=%lu direct_fallbacks=%lu\n",
+        g_one_direct_manifest.entries.size(),
+        g_one_direct_manifest.manifest_bytes,
+        g_one_direct_manifest.hits.load(),
+        g_one_direct_manifest.misses.load(),
+        g_one_direct_manifest.reads.load(),
+        g_one_direct_manifest.bytes.load(),
+        g_one_direct_manifest.failures.load(),
+        g_one_direct_manifest.direct_enabled ? 1 : 0,
+        g_one_direct_manifest.direct_reads.load(),
+        g_one_direct_manifest.direct_failures.load(),
+        g_one_direct_manifest.direct_fallbacks.load());
+}
+
+static bool one_direct_manifest_parse_row(char * line, one_expert_pack_entry & entry) {
+    char tensor[128] = {};
+    long long expert = -1;
+    unsigned long long offset = 0;
+    unsigned long long nbytes = 0;
+    const int n = std::sscanf(line, "%127[^,],%lld,%llu,%llu", tensor, &expert, &offset, &nbytes);
+    if (n != 4 || expert < 0 || nbytes == 0) {
+        return false;
+    }
+    entry = one_expert_pack_entry{};
+    std::snprintf(entry.tensor, sizeof(entry.tensor), "%s", tensor);
+    entry.expert_idx = (int32_t) expert;
+    entry.offset = (uint64_t) offset;
+    entry.nbytes = (uint64_t) nbytes;
+    return true;
+}
+
+static void one_direct_manifest_init_once() {
+    std::lock_guard<std::mutex> lk(g_one_direct_manifest.mu);
+    if (g_one_direct_manifest.inited) {
+        return;
+    }
+    g_one_direct_manifest.inited = true;
+
+    const char * manifest_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_MANIFEST");
+    if (!manifest_path || !manifest_path[0]) {
+        return;
+    }
+    const char * model_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_MODEL");
+    if (!model_path || !model_path[0]) {
+        std::fprintf(stderr,
+            "[moe_stream] one direct manifest: GGML_MOE_STREAM_ONE_DIRECT_MODEL is required when manifest is set\n");
+        return;
+    }
+
+    FILE * fp = std::fopen(manifest_path, "r");
+    if (!fp) {
+        std::fprintf(stderr, "[moe_stream] one direct manifest: failed to open manifest %s\n", manifest_path);
+        return;
+    }
+
+    std::vector<one_expert_pack_entry> entries;
+    uint64_t total_bytes = 0;
+    char line[4096];
+    while (std::fgets(line, sizeof(line), fp)) {
+        one_expert_pack_entry entry;
+        if (!one_direct_manifest_parse_row(line, entry)) {
+            continue;
+        }
+        total_bytes += entry.nbytes;
+        entries.push_back(entry);
+    }
+    std::fclose(fp);
+
+    if (entries.empty()) {
+        std::fprintf(stderr, "[moe_stream] one direct manifest: no entries loaded from %s\n", manifest_path);
+        return;
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const one_expert_pack_entry & a, const one_expert_pack_entry & b) {
+        const int name_cmp = std::strcmp(a.tensor, b.tensor);
+        if (name_cmp != 0) {
+            return name_cmp < 0;
+        }
+        if (a.expert_idx != b.expert_idx) {
+            return a.expert_idx < b.expert_idx;
+        }
+        return a.nbytes < b.nbytes;
+    });
+
+    const int fd = ::open(model_path, O_RDONLY);
+    if (fd < 0) {
+        std::fprintf(stderr, "[moe_stream] one direct manifest: model open failed: %s\n", model_path);
+        return;
+    }
+
+    g_one_direct_manifest.fd = fd;
+    const char * io_env = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_IO");
+    if (io_env && (std::strcmp(io_env, "direct") == 0 || std::strcmp(io_env, "odirect") == 0)) {
+#if defined(__linux__) && defined(O_DIRECT)
+        g_one_direct_manifest.fd_direct = ::open(model_path, O_RDONLY | O_DIRECT);
+        if (g_one_direct_manifest.fd_direct >= 0) {
+            g_one_direct_manifest.direct_enabled = true;
+            std::fprintf(stderr, "[moe_stream] one direct manifest: O_DIRECT model reads enabled: %s\n", model_path);
+        } else {
+            std::fprintf(stderr, "[moe_stream] one direct manifest: O_DIRECT open failed; using buffered model reads: %s\n", model_path);
+        }
+#else
+        std::fprintf(stderr, "[moe_stream] one direct manifest: O_DIRECT requested but unavailable; using buffered model reads\n");
+#endif
+    }
+
+    g_one_direct_manifest.entries = std::move(entries);
+    g_one_direct_manifest.manifest_bytes = total_bytes;
+    g_one_direct_manifest.enabled = true;
+    std::atexit(one_direct_manifest_report_atexit);
+    std::fprintf(stderr, "[moe_stream] one direct manifest: loaded %zu entries bytes=%lu from %s\n",
+            g_one_direct_manifest.entries.size(), g_one_direct_manifest.manifest_bytes, manifest_path);
+}
+
+[[maybe_unused]] static const one_expert_pack_entry * one_direct_manifest_lookup(const char * tensor_name, int64_t expert_idx, size_t nbytes) {
+    one_direct_manifest_init_once();
+    if (!g_one_direct_manifest.enabled || !tensor_name || !tensor_name[0]) {
+        return nullptr;
+    }
+    size_t lo = 0;
+    size_t hi = g_one_direct_manifest.entries.size();
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        const one_expert_pack_entry & e = g_one_direct_manifest.entries[mid];
+        int cmp = std::strcmp(e.tensor, tensor_name);
+        if (cmp == 0) {
+            if (e.expert_idx < expert_idx) cmp = -1;
+            else if (e.expert_idx > expert_idx) cmp = 1;
+            else if (e.nbytes < nbytes) cmp = -1;
+            else if (e.nbytes > nbytes) cmp = 1;
+        }
+        if (cmp < 0) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < g_one_direct_manifest.entries.size()) {
+        const one_expert_pack_entry & e = g_one_direct_manifest.entries[lo];
+        if (std::strcmp(e.tensor, tensor_name) == 0 && e.expert_idx == expert_idx && e.nbytes == nbytes) {
+            ++g_one_direct_manifest.hits;
+            return &e;
+        }
+    }
+    ++g_one_direct_manifest.misses;
+    return nullptr;
+}
+
+[[maybe_unused]] static bool one_direct_manifest_read_entry(const one_expert_pack_entry * entry, void * dst, size_t sz) {
+    if (!entry || g_one_direct_manifest.fd < 0 || entry->nbytes != sz) {
+        return false;
+    }
+    if (g_one_direct_manifest.fd_direct >= 0) {
+        if (one_pack_read_exact_fd(g_one_direct_manifest.fd_direct, dst, sz, entry->offset)) {
+            ++g_one_direct_manifest.reads;
+            ++g_one_direct_manifest.direct_reads;
+            g_one_direct_manifest.bytes.fetch_add(sz);
+            return true;
+        }
+        ++g_one_direct_manifest.direct_failures;
+        ++g_one_direct_manifest.direct_fallbacks;
+    }
+    if (!one_pack_read_exact_fd(g_one_direct_manifest.fd, dst, sz, entry->offset)) {
+        ++g_one_direct_manifest.failures;
+        return false;
+    }
+    ++g_one_direct_manifest.reads;
+    g_one_direct_manifest.bytes.fetch_add(sz);
+    return true;
+}
+
 static bool ensure_host_pinned(void *&p, size_t &cur, size_t need);
 
 struct one_prefill_entry {
@@ -1150,6 +1349,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
                      (long)ne01, (long)ne00, nb01, (size_t)ne01 * nb01, (long)cne1);
         std::fflush(stderr);
     }
+    one_direct_manifest_init_once();
 
     const size_t src0_bytes      = (size_t)ne01 * nb01;
     const size_t src1_f32_bytes  = (size_t)cne1 * ne00 * sizeof(float);

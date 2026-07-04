@@ -1,0 +1,41 @@
+{
+  "timestamp_utc": "2026-07-04T16:23:43Z",
+  "status": "passed",
+  "purpose": "metadata smoke only; not a token-rate result and not a SOTA candidate",
+  "source_head_before_commit": "4d0fcd9d9ee252f0c1665a36ee54345c0d63aa8d5",
+  "run_path": "/root/lfz/runs/vendor-ds4-16gb/20260704T162343Z-direct-manifest-metadata-smoke/short-cpu40",
+  "validation": {
+    "exit_status": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "systemd_result": "success",
+    "service_runtime_seconds": 28.495,
+    "cpu_time": "2min 23.583s"
+  },
+  "direct_manifest_loader": {
+    "manifest_path": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+    "model_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "odirect_model_open": true,
+    "entries": 768,
+    "manifest_bytes": 3422552064,
+    "hits": 0,
+    "misses": 0,
+    "reads": 0,
+    "bytes_read": 0,
+    "failures": 0,
+    "direct_reads": 0,
+    "direct_failures": 0,
+    "direct_fallbacks": 0
+  },
+  "command_hashes": {
+    "run_case_sha256": "fd98eede3ea6655eda1634261c5497b2f5db1782388656a0f662b4c5efc28cda",
+    "environment_sha256": "40eaa3c7195cd838327324d5ca0b68fa7ed09bbc237017e6f9c0bce321610f80",
+    "exact_command_sha256": "2bf8446c30e96f4a91fb80c5f84f7842c3f51b4072db3ef4cafe6f5cbbb9c463",
+    "stderr_sha256": "f646f4f402f8f63ec2d2984c8e40e6abb9be44bf4a5624c6b9a1f18fa8a3624d"
+  },
+  "decision": "The default-off direct manifest metadata loader is safe to keep. Next work may add a separate q80 hot pool/prefill path, still default-off, before any exact Q8_0 compute integration."
+}
