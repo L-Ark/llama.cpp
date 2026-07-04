@@ -47169,6 +47169,58 @@ Result B: no-copy-profile n32 completed; rejected; revert implementation.
   - Do not run n96.
   - Revert the split mixed-batch implementation from the code while keeping
     these results in the plan.
+
+## Phase 7GC: current-down overlap ablation
+
+Start time: 2026-07-04T17:46:00+08:00.
+
+Goal:
+
+- Quantify how much `GGML_MOE_CURRENT_DOWN_OVERLAP=1` contributes under the
+  current rebuilt code and 16GB cold-start constraints.
+- Use this to decide whether the next real optimization should target
+  current-down overlap, down prefetch, or abandon down-path work for now.
+
+Theory:
+
+- Previous failed up/gate aggregation reduced io wait but lost overlap.
+- Current-down overlap is explicitly designed to hide down movement behind
+  up/gate work, so it may be one of the few movement optimizations that can
+  improve wall time without delaying independent compute.
+- An ablation gives a lower bound for the value of the feature:
+  - if disabling it is much slower, optimize this path further;
+  - if disabling it is neutral, the path is not worth more code right now.
+
+Experiment: n32 ablation
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gc-no-current-down-overlap"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP=0" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If disabling current-down overlap slows n32 materially, next code work should
+  target making that overlap deeper or more selective.
+- If disabling current-down overlap is neutral or faster, reject further
+  down-overlap work and profile another bottleneck.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
