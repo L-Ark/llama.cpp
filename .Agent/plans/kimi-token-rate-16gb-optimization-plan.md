@@ -52074,3 +52074,141 @@ Decision rule:
   in-flight depth.
 - If profile overhead breaks quality or RAM, reject the profile run and reduce
   profile scope before trying again.
+
+Result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-141246Z-n32-phase7hc-current-detailed-profile`.
+- Gate metrics:
+  - exit `0`;
+  - automated quality `pass`;
+  - `quality_reason=ok`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `75578.11 ms`;
+  - decode `30578.88 ms / 31`, `1.01 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Profile files:
+  - `down-batch-profile.csv` `160018` bytes;
+  - `up-gate-profile.csv` `180914` bytes;
+  - `fallback-profile.csv` `860480` bytes;
+  - `route-profile.csv` `867689` bytes;
+  - `route-trace.csv` `2087851` bytes;
+  - `ttft-trace.csv` `3916866` bytes.
+- Summary counters:
+  - up/gate profile calls `869`, wall `7.463 ms/call`;
+  - up/gate type 18 calls `311`, wall `9.249 ms/call`;
+  - up/gate type 22 calls `558`, wall `6.468 ms/call`,
+    `up_wait=5.981 ms/call`, `gate_wait=6.238 ms/call`;
+  - down batch calls `1644`, wall `2.886 ms/call`;
+  - CPU-side down wrapper calls `2038`, total `39.498 ms/call`,
+    `fallback_t0=37.017 ms/call`;
+  - decode fallback profile total `2477.296 ms`.
+- Aggregated down-batch top cumulative wall:
+  - `blk.4`: wall `448.699 ms`, stage `422.759 ms`, misses `169`;
+  - `blk.60`: wall `399.998 ms`, stage `392.879 ms`, misses `170`;
+  - `blk.16`: wall `204.374 ms`, stage `198.913 ms`, misses `147`;
+  - `blk.23`: wall `188.092 ms`, stage `183.316 ms`, misses `147`;
+  - `blk.25`: wall `188.019 ms`, stage `183.149 ms`, misses `147`.
+- Aggregated up/gate top cumulative wall:
+  - `blk.60`: wall `482.020 ms`, misses `172`;
+  - `blk.5`: wall `302.786 ms`, misses `196`;
+  - `blk.6`: wall `280.782 ms`, misses `153`;
+  - `blk.4`: wall `274.813 ms`, misses `173`;
+  - `blk.3`: wall `270.727 ms`, misses `167`;
+  - type22 layers such as `blk.10`, `blk.1`, `blk.16`, `blk.12` show large
+    up/gate wait, while many type18 layers show compute/IO in the same measured
+    interval.
+- Decode fallback top cumulative wall:
+  - `blk.6.ffn_down_exps.weight`: `475.920 ms`;
+  - `blk.8.ffn_down_exps.weight`: `366.288 ms`;
+  - `blk.9.ffn_down_exps.weight`: `346.032 ms`;
+  - `blk.18.ffn_down_exps.weight`: `332.216 ms`;
+  - `blk.10.ffn_down_exps.weight`: `328.472 ms`;
+  - total decode fallback `2477.296 ms`.
+- Decision:
+  - Static profile preload/protect should not be retried; prior phases rejected
+    it repeatedly.
+  - Planned host prefetch, larger io depth, combined up/gate staging, split
+    staging, and per-stream combined staging were also already rejected.
+  - The next valid step is finer copy-level attribution: split current exposed
+    waits into slot wait, pack/io wait, enqueue, and H2D by op/tensor before
+    designing a new scheduler change.
+
+## Phase 7HD: copy-level wait attribution profile
+
+Start time: 2026-07-04T22:24:39+08:00.
+
+Goal:
+
+- Attribute the remaining movement bottleneck by copy operation:
+  - `runtime_load`;
+  - `current_down_overlap`;
+  - any other staged copy op recorded by the existing copy profiler.
+- Split each copy's wall time into:
+  - slot wait;
+  - host/io wait;
+  - io_uring wait;
+  - enqueue;
+  - H2D.
+- Use this to decide whether the next optimization should target io batching,
+  H2D stream overlap, slot reuse, or specific tensors.
+
+Why this is required:
+
+- Phase 7HC shows cumulative hot layers, but it does not separate pack read wait
+  from H2D and slot wait per tensor.
+- Existing broad scheduler experiments were rejected; a new scheduler change
+  needs stronger evidence about which subcomponent is actually exposed.
+- Code already has `GGML_MOE_COPY_PROFILE_OUT`, so this is an env-only
+  diagnostic run.
+
+Experiment: n32 copy profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7hd-copy-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates for diagnostic:
+
+- run exits `0`;
+- automated quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`, swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `copy-profile.csv` exists and has rows.
+
+Data to aggregate:
+
+- total wall/host/io_wait/H2D by `op`;
+- total wall/host/io_wait/H2D by `(op,tensor)`;
+- top tensors by `io_wait_ms`;
+- top tensors by `h2d_ms`;
+- top tensors by `slot_wait_ms`;
+- whether `current_down_overlap` is actually hiding reads or competing with
+  `runtime_load`.
+
+Decision rule:
+
+- If `io_wait_ms` dominates and is spread across many tensors, plan a new
+  batching/scheduler change only if it differs from rejected combined-stage and
+  depth/refill experiments.
+- If `h2d_ms` dominates, focus on stream/H2D overlap rather than read batching.
+- If `slot_wait_ms` dominates, revisit pinned slot pressure with tensor-specific
+  evidence rather than global `PINNED_SLOTS` sweeps.
+- If one op/tensor group dominates, plan a targeted fix for that group.
