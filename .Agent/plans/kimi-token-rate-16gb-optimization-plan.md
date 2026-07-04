@@ -50228,3 +50228,105 @@ Decision rule:
 - If n96 passes and beats Phase 7FB, run an n96 repeat. Accept only if the repeat
   also passes all gates, then update the reproduction script default, commit, and
   push immediately.
+
+Result: n32 passed, n96 rejected.
+
+- End time: 2026-07-04T20:34:00+08:00.
+- Plan commit:
+  `cdf5f5ed5` (`docs: plan pinned staging slot probe`).
+- No source or runner default was changed.
+- Production default remains `PINNED_SLOTS=12`.
+
+Experiment A: n32 gate
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-122650Z-n32-phase7gs-pinned16`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-122650Z-n32-phase7gs-pinned16
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - manual semantic quality `pass` for the generated n32 prefix;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `74839.87 ms`;
+  - decode `28639.93 ms / 31`, `1.08 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `25458`, misses `192`;
+  - `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=15134218`;
+  - current-down overlap worker `3305688 us`;
+  - down cache slots `806`, hit rate `73.6%`;
+  - upgate cache slots `1679`, hit rate `43.7%`;
+  - pinned staging slots `16`, slot sizes `5.36/6.02/7.44 MiB`.
+- Decision:
+  - n32 passed and was faster than the rebuilt n32 baseline range
+    (`29140-29795 ms / 31`).
+  - Continue to n96.
+
+Experiment B: n96 confirmation
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-122939Z-n96-phase7gs-pinned16`.
+- Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260704-122939Z-n96-phase7gs-pinned16
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Gate metrics:
+  - exit `0`;
+  - manual semantic quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+  - TTFT `76534.88 ms`;
+  - decode `71635.69 ms / 77`, `1.07 tok/s`;
+  - memory peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Movement/cache metrics:
+  - expert pack hits `63479`, misses `633`;
+  - `iouring_reads=37080`;
+  - `iouring_bytes=214923018240`;
+  - `iouring_wait_us=36274894`;
+  - current-down overlap worker `8397231 us`;
+  - down cache slots `806`, hit rate `73.4%`;
+  - upgate cache slots `1679`, hit rate `43.2%`;
+  - pinned staging slots `16`, slot sizes `5.36/6.02/7.44 MiB`.
+- Decision:
+  - Reject `PINNED_SLOTS=16`.
+  - It does not beat Phase 7FB n96 SOTA `70087.31 ms / 77`.
+  - Do not run n96 repeat.
+  - Keep production default `PINNED_SLOTS=12`.
+- Gap analysis:
+  - n32 improved, but n96 did not reproduce the gain at the target length.
+  - The critical path is not solved by simply adding more pinned staging slots:
+    iouring depth remains `8`, batch histograms still have no `9-16` batches,
+    and average inflight stays near `3`.
+  - Extra pinned slots lower neither read count nor VRAM-cache misses; they only
+    provide more staging capacity for the same movement pattern.
+  - Future pinned changes need a coupled design that changes submission depth or
+    batch construction; slot count alone should not be retried.
