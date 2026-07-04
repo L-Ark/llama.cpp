@@ -1978,6 +1978,25 @@ static size_t expert_pack_io_refill_batch() {
     return expert_pack_env_size("GGML_MOE_IO_REFILL_BATCH", 1, 1, 256);
 }
 
+static expert_pack_source * expert_pack_source_for_entry(const expert_pack_entry *entry);
+
+static bool expert_pack_iouring_job_eligible(const expert_pack_entry *entry, size_t expert_bytes) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (!entry || entry->nbytes != expert_bytes) {
+        return false;
+    }
+    if ((entry->offset % expert_pack_direct_alignment()) != 0) {
+        return false;
+    }
+    const expert_pack_source *source = expert_pack_source_for_entry(entry);
+    return source && source->fd_direct >= 0;
+#else
+    (void)entry;
+    (void)expert_bytes;
+    return false;
+#endif
+}
+
 static void expert_pack_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
     uint64_t current = target.load(std::memory_order_relaxed);
     while (current < value &&
@@ -5848,7 +5867,24 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
-        for (const stage_copy_job &job : jobs) {
+        std::vector<stage_copy_job> fallback_jobs = jobs;
+        std::vector<stage_copy_job> iouring_jobs;
+        if (jobs.size() > 1) {
+            iouring_jobs.reserve(jobs.size());
+            fallback_jobs.clear();
+            for (const stage_copy_job &job : jobs) {
+                if (expert_pack_iouring_job_eligible(job.pack_entry, src0_bytes)) {
+                    iouring_jobs.push_back(job);
+                } else {
+                    fallback_jobs.push_back(job);
+                }
+            }
+            if (!iouring_jobs.empty() &&
+                    !expert_pack_iouring_copy_jobs(iouring_jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+                fallback_jobs = jobs;
+            }
+        }
+        for (const stage_copy_job &job : fallback_jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
@@ -7139,7 +7175,24 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
-        for (const down_stage_copy_job &job : jobs) {
+        std::vector<down_stage_copy_job> fallback_jobs = jobs;
+        std::vector<down_stage_copy_job> iouring_jobs;
+        if (jobs.size() > 1) {
+            iouring_jobs.reserve(jobs.size());
+            fallback_jobs.clear();
+            for (const down_stage_copy_job &job : jobs) {
+                if (expert_pack_iouring_job_eligible(job.pack_entry, src0_bytes)) {
+                    iouring_jobs.push_back(job);
+                } else {
+                    fallback_jobs.push_back(job);
+                }
+            }
+            if (!iouring_jobs.empty() &&
+                    !expert_pack_iouring_copy_jobs(iouring_jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+                fallback_jobs = jobs;
+            }
+        }
+        for (const down_stage_copy_job &job : fallback_jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,

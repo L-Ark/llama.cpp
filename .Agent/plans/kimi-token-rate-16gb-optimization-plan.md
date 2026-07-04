@@ -46970,6 +46970,106 @@ Result: n32 completed; diagnostic accepted directionally only.
     - lowering non-iouring `runtime_load` host fallback wall;
     - or improving down/current-overlap staging, where work can be hidden
       behind dependencies more naturally.
+
+## Phase 7GB: split mixed pack/non-pack staging batches
+
+Start time: 2026-07-04T17:34:00+08:00.
+
+Goal:
+
+- Reduce the non-iouring `runtime_load` fallback identified in Phase 7GA.
+- Avoid an all-or-nothing fallback where a small number of non-pack or
+  non-iouring-ineligible jobs forces all pack-hit jobs in the same staging
+  vector to use direct/sequential reads.
+- Keep behavior default-on if it only changes fallback routing for jobs that
+  already have valid expert-pack entries; revert if quality or performance
+  regresses.
+
+Bottleneck evidence:
+
+- Phase 7GA expert pack counters:
+  - `direct_reads=8707`;
+  - `iouring_reads=15024`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Phase 7GA copy-profile:
+  - `runtime_load`, non-iouring pack-hit:
+    - count `8574`;
+    - summed `host_ms=10659.136`;
+    - summed `wall_ms=10784.871`;
+  - `runtime_load`, non-pack fallback:
+    - count `147`;
+    - summed `host_ms=1197.578`;
+    - summed `wall_ms=1201.170`.
+- Inference:
+  - many pack-hit runtime loads are not going through io_uring;
+  - likely cause is that `expert_pack_iouring_copy_jobs()` returns `false` for
+    the entire batch if any job has no pack entry or is not eligible;
+  - callers then fall back to per-job `batch_cache_copy_h2d()`, which turns
+    otherwise pack-eligible jobs into direct reads.
+
+Theory / upper bound:
+
+- If most of the `8574` non-iouring pack-hit runtime loads can be routed back
+  into io_uring batches, the direct host-stage wall should drop materially.
+- Upper bound from Phase 7GA is roughly `10.8 s` summed per-job wall for that
+  bucket; because per-job profile overcounts batch wall, the real decode
+  bound is smaller.
+- Expected measurable signals:
+  - `direct_reads` decreases;
+  - `iouring_reads` increases by a similar amount;
+  - non-iouring pack-hit count in copy-profile drops;
+  - n32 decode improves without changing output.
+
+Implementation plan:
+
+- Add a helper to test whether a job is eligible for expert-pack io_uring:
+  - non-null `pack_entry`;
+  - `pack_entry->nbytes == expert_bytes`;
+  - aligned pack offset;
+  - source has `fd_direct >= 0`.
+- In up/gate `copy_stage_jobs`:
+  - if all jobs are eligible, keep the current fast path;
+  - if some jobs are eligible and some are not, call
+    `expert_pack_iouring_copy_jobs()` only for the eligible subset;
+  - then run the existing fallback loop only for the ineligible subset;
+  - if the eligible subset iouring call fails, fall back to the existing full
+    per-job path so correctness is preserved.
+- Apply the same split to down `copy_down_stage_jobs`.
+- Leave `current_down_overlap` unchanged for the first probe unless n32 shows
+  that runtime load improves; this keeps the first blast radius smaller.
+
+Experiment A: n32 probe with copy profile
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7gb-split-mixed-pack"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- quality `pass`;
+- semantic France output coherent and correct;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 fails any gate or decode regresses versus Phase 7GA with the same copy
+  profile, revert.
+- If n32 reduces direct reads / non-iouring pack-hit count and improves decode,
+  run a no-copy-profile n32 confirmation.
+- Only run n96 if no-profile n32 improves materially under all gates.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
