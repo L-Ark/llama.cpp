@@ -47128,6 +47128,47 @@ Decision rule:
 - If no-profile n32 is not materially faster than the current rebuilt baseline
   range (`29140-29795 ms`), reject for SOTA and do not run n96.
 - If no-profile n32 improves materially and gates pass, run n96.
+
+Result B: no-copy-profile n32 completed; rejected; revert implementation.
+
+- End time: 2026-07-04T17:42:52+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-094043Z-n32-phase7gb-split-mixed-pack-confirm`.
+- Code head:
+  `281ea2688`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76536.29 ms`;
+  - decode `29141.64 ms / 31`, `1.06 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=458752`;
+    - `file=14841335808`;
+    - `kernel=234635264`;
+    - `inactive_file=3598860288`;
+    - `active_file=11241873408`;
+    - `pgmajfault=981451`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `direct_reads=8502`;
+    - `iouring_reads=15229`;
+    - `iouring_bytes=88151605248`;
+    - `iouring_wait_us=15136938`.
+- Comparison:
+  - direct reads improved versus Phase 7GA/7FU shape, but n32 decode did not
+    materially improve versus the current rebuilt baseline lower bound:
+    - Phase 7FU n32 `29140.36 ms`;
+    - Phase 7GB no-profile n32 `29141.64 ms`.
+  - The measured routing improvement is too small to justify a default-on code
+    change or an n96 run.
+- Decision:
+  - Reject Phase 7GB as a performance optimization.
+  - Do not run n96.
+  - Revert the split mixed-batch implementation from the code while keeping
+    these results in the plan.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
