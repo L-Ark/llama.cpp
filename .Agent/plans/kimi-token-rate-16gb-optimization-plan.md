@@ -56189,3 +56189,99 @@ systemd-run --wait --collect --same-dir \
     for this micro-change.
   - Continue with larger scheduling/batching work aimed at reducing or hiding
     `runtime_load` movement.
+
+## Phase 7IC: lightweight up/down stage breakdown refresh
+
+Start time: 2026-07-05T03:07:57+08:00.
+
+Goal:
+
+- Re-locate the current decode bottleneck using lightweight per-call
+  up/gate and down batch profiles.
+- Avoid the failed Phase 7HX full route/TTFT/fallback trace combination.
+- Produce enough evidence to choose the next implementation target:
+  - down compute/stage;
+  - up/gate compute/stage;
+  - read scheduling;
+  - or CPU fallback/page-cache cleanup.
+
+Why this is required:
+
+- Phase 7IA/7IB confirm the macro bottleneck is still movement-heavy, but the
+  next source change needs finer attribution.
+- Existing copy/io profiles show `runtime_load` wait, but not the per-call
+  relationship between:
+  - up/gate stage;
+  - up/gate compute/wait/fuse;
+  - down stage;
+  - down kernel;
+  - D2H/scatter;
+  - wall gaps.
+- The available profile CSVs are much lighter than full route trace and should
+  complete under n32.
+
+Experiment: n32 lightweight stage breakdown
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7ic-stage-breakdown"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start;
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality pass;
+- TTFT <= `106331.72 ms`;
+- memory peak <= `15900000000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `down-batch-profile.csv` and `up-gate-profile.csv` exist and are complete.
+
+Analysis to record:
+
+- Down totals and averages:
+  - calls;
+  - total/avg stage;
+  - total/avg kernel;
+  - total/avg D2H/scatter;
+  - total/avg wall;
+  - cache hits/misses/staged jobs;
+  - top tensors by wall and stage.
+- Up/gate totals and averages:
+  - calls;
+  - total/avg stage;
+  - up/gate wait;
+  - up/gate compute;
+  - fuse;
+  - D2H/scatter;
+  - wall;
+  - stage job hist;
+  - top tensors by wall and stage.
+- Stage granularity stderr summary for main/gate rings:
+  - avg jobs;
+  - avg read jobs;
+  - max jobs/read jobs.
+
+Decision rule:
+
+- If down stage/wall dominates, design a down-specific scheduling change that
+  preserves two-way staging and current-down overlap.
+- If up/gate wait/stage dominates, design an overlap-preserving up/gate change
+  that does not combine stages or delay up compute.
+- If kernel/compute dominates more than expected, revisit operator-level work
+  with a mathematical bound before implementation.
+- If the profile run stalls or produces incomplete CSVs, reject this diagnostic
+  path and return to Phase 7HY copy/io evidence.
