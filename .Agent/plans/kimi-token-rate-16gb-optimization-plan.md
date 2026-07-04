@@ -7357,6 +7357,98 @@ Rollback:
 - If performance improves and gates pass, commit and push immediately before
   running broader sweeps.
 
+Phase 7EJ run 1 result - rejected pending lower-overhead check:
+
+- result time: 2026-07-04T00:48:00Z.
+- source status:
+  - default-off trace cache policy patch tested in dirty worktree;
+  - no commit yet because promotion gate failed.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-004624Z-n32-phase7ej-trace-policy`.
+- trace file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2/route-trace.csv`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cp /tmp/run_phase7eb_repro.sh /tmp/run_phase7ej_repro.sh
+sed -i '/GGML_MOE_VRAM_CACHE_TRACE_POLICY/d' /tmp/run_phase7ej_repro.sh
+perl -0pi -e 's|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nEOF\n|LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1\nGGML_MOE_VRAM_CACHE_TRACE_POLICY=/root/lfz/runs/vendor-kimi-token-rate/20260704-002639Z-n32-phase7ei-copy-profile-r2/route-trace.csv\nGGML_MOE_VRAM_CACHE_TRACE_POLICY_WINDOW=512\nEOF\n|' /tmp/run_phase7ej_repro.sh
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-004624Z-n32-phase7ej-trace-policy"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ej_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - TTFT `73775.25 ms`, under the gate;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence in art, fashion, and cuisine. Its capital, Paris, is famous`
+- decode:
+  - `36545.15 ms / 31`, `0.85 tok/s`;
+  - slower than Phase 7EB n32 SOTA `29599.64 ms / 31`;
+  - fails promotion gate.
+- cache and IO counters:
+  - down slots `806`, hit `75.4%`, misses `3221`;
+  - upgate slots `1679`, hit `54.1%`, misses `13670`;
+  - expert-pack iouring bytes `59418132480`, much lower than Phase 7EI
+    diagnostic `87082139648`;
+  - expert-pack wait `11061318 us`;
+  - main pinned host_stage `19613.329 ms`;
+  - gate pinned host_stage `2545.301 ms`;
+  - up/gate profile wall `9.230 ms/call`;
+  - down profile total `38.811 ms/call`.
+- trace-policy counters:
+  - events loaded `42928`;
+  - calls `42928`;
+  - matched `34326`;
+  - resync `6118`;
+  - unmatched `8602`;
+  - evictions `17462`;
+  - evicted_no_future `13556`;
+  - inserted_no_future `9901`;
+  - cursor reached `42928/42928`.
+
+Gap analysis:
+
+- The policy achieved the intended cache effect:
+  - upgate hit rate improved from Phase 7EI's `43.7%` to `54.1%`;
+  - down hit rate improved from `73.6%` to `75.4%`;
+  - expert-pack bytes dropped by about `27.7 GiB`.
+- It still regressed decode because the implementation introduced too much CPU
+  and staging overhead:
+  - global trace alignment does a bounded scan on mismatch;
+  - the run had `6118` resyncs and `8602` unmatched events;
+  - output changed slightly from the trace-producing run, so later decode route
+    order is not perfectly identical;
+  - main/gate pinned host staging became much worse despite lower transfer
+    volume.
+- The next check should isolate whether the regression is mostly resync scan
+  overhead or inherent trace-policy bookkeeping.
+
+Next lower-overhead check:
+
+- Keep the same source patch and trace file.
+- Change only:
+
+```sh
+GGML_MOE_VRAM_CACHE_TRACE_POLICY_WINDOW=1
+```
+
+- This disables broad resync scanning and measures the minimum overhead version
+  of the policy.
+- Acceptance:
+  - same hard gates as Phase 7EJ;
+  - must beat `29599.64 ms / 31` to continue.
+- If the window=1 run is still slower, revert the source patch and commit the
+  rejection record.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
