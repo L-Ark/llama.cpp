@@ -7658,6 +7658,104 @@ Rollback:
 - If n32 is slower, quality fails, TTFT fails, memory fails, or activation is
   incomplete, reject and keep Phase 7EB SOTA unchanged.
 
+Phase 7EK result - rejected:
+
+- result time: 2026-07-04T01:10:00Z.
+- source status:
+  - env-only experiment;
+  - no source patch;
+  - no source rollback required.
+- profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ek-down-hot512-profile.csv`.
+  - generated from Phase 7EB n96 route profile:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260703-230012Z-n96-phase7eb-slots16-confirm/route-profile.csv`;
+  - rows `512`;
+  - cumulative bytes `3424927744`.
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-010748Z-n32-phase7ek-down-hot512`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-010748Z-n32-phase7ek-down-hot512"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 \
+      /tmp/run_phase7ek_repro.sh
+```
+
+- env delta over Phase 7EB:
+
+```sh
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/profiles/phase7ek-down-hot512-profile.csv
+GGML_MOE_VRAM_PROFILE_UPGATE=0
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS=294
+GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS=24
+```
+
+- hard gates:
+  - exit `0`;
+  - memory peak `15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `78348.54 ms`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - quality pass.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- activation:
+  - stderr reports `profile preload: loaded 512 entries`;
+  - per-tensor preloads occurred for down tensors including `blk.60`,
+    `blk.1`, `blk.2`, `blk.3`, `blk.4`, `blk.5`, `blk.11-30`;
+  - down cache reports `preloads=512`, `pinned=512`;
+  - upgate cache reports `preloads=0`, `pinned=0`.
+- decode:
+  - `31817.43 ms / 31`, `0.97 tok/s`;
+  - slower than Phase 7EB n32 `29599.64 ms / 31`;
+  - fails promotion gate.
+- counters:
+  - down cache: slots `806`, hits `5500`, misses `7620`,
+    hit rate `41.9%`;
+  - upgate cache: slots `1679`, hits `13019`, misses `16757`,
+    hit rate `43.7%`;
+  - expert pack: `iouring_reads=15884`,
+    `iouring_bytes=92502409216`, `iouring_wait_us=18646079`;
+  - main pinned staging: `host_stage=12238.647 ms`,
+    `h2d=3983.548 ms`;
+  - gate pinned staging: `host_stage=515.495 ms`, `h2d=1377.148 ms`;
+  - down profile: `41.583 ms/call`, `cuda_batch=4.660 ms/call`,
+    `fallback_t0=36.865 ms/call`;
+  - up/gate profile: `7.428 ms/call`.
+
+Gap analysis:
+
+- The mechanism worked but the assumption was wrong.
+- Pinning 512 profile-selected down experts reduced effective runtime freedom
+  in the down cache:
+  - Phase 7EI comparable n32 down hit rate was `73.6%`;
+  - Phase 7EK down hit rate dropped to `41.9%`.
+- The preloaded hotset did not match the n32 decode locality well enough, and
+  the remaining unpinned `294` slots were insufficient for runtime churn.
+- Total movement increased:
+  - Phase 7EI diagnostic iouring bytes `87082139648`;
+  - Phase 7EK iouring bytes `92502409216`;
+  - iouring wait rose to `18646079 us`.
+- This confirms that protected profile preload is not a valid direction unless
+  the profile is phase/locality matched and does not reduce runtime residency.
+
+Decision:
+
+- Reject Phase 7EK.
+- Do not run n32 confirmation or n96.
+- Do not use down protected profile preload in SOTA.
+- Keep Phase 7EB as current SOTA:
+  - n32 `29599.64 ms / 31`, `1.05 tok/s`;
+  - n96 `74201.57 ms / 77`, `1.04 tok/s`.
+- Next attempt should not pin a static down hotset. Prefer either:
+  - reducing CPU fallback/page-cache overhead without consuming VRAM slots;
+  - or improving down runtime staging itself without changing cache residency.
+
 ## Phase 0: cold 16GB baseline
 
 Goal: establish the real baseline under the final deployment constraint.
