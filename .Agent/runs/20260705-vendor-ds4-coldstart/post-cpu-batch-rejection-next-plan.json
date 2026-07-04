@@ -1,0 +1,45 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: post CPU-batch rejection fallback-byte reduction audit",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "basis": {
+    "cpu_batch_microprobe_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu-batch-microprobe-validation.json",
+    "best_observed_hot_src0_bandwidth_gib_s": 74.719,
+    "required_hot_src0_bandwidth_zero_overhead_gib_s": 90.643,
+    "required_hot_src0_bandwidth_with_500ms_overhead_gib_s": 130.298,
+    "decision": "Do not implement a large CPU batch runtime rewrite."
+  },
+  "current_bottleneck_after_rejection": {
+    "decode_cpu_updown_fallback_ms": 19029.457,
+    "source_page_exposed_ms_from_touch_split": 15856.166,
+    "hot_compute_ms_after_touch": 3173.291,
+    "ten_tok_s_required_decode_saving_ms": 17386.57,
+    "remaining_issue": "The hot CPU kernel cannot save enough time by itself; the next viable route must reduce or eliminate fallback source bytes/calls, not only make the CPU dot loop faster."
+  },
+  "next_audit_scope_before_code": [
+    {
+      "candidate": "fallback-byte elimination by resident exact up/down subset with a changed VRAM split",
+      "required_bound": "Must include gate-cache penalty, model/context VRAM, source payload, workspace, and TTFT impact. Reject unless the combined bound exceeds 10 tok/s with at least 500 ms implementation slack."
+    },
+    {
+      "candidate": "exact GPU or hybrid execution for selected up/down experts",
+      "required_bound": "Must prove both source delivery and exact/token-stable compute. Any GPU arithmetic must pass fixed-text top1 before performance. Reject if source bytes still require more than available NVMe/page-cache bandwidth or if VRAM residency is below the needed hotset coverage."
+    },
+    {
+      "candidate": "reduce fallback call count or source bytes through model/runtime placement",
+      "required_bound": "Must quantify how many selected experts/calls are removed, the new CPU/GPU layer placement cost, and the TTFT delta. Do not benchmark blind cpu_moe/ngl sweeps already closed by prior audits."
+    }
+  ],
+  "hard_rules": [
+    "Accepted 4.4 tok/s SOTA path remains unchanged by default.",
+    "No performance benchmark until a written bound shows a plausible route above both the current 4.4 tok/s SOTA and the 10 tok/s target class.",
+    "Every logit-changing path must pass fixed-text llama-results top1 equality before any strict cold benchmark.",
+    "Every strict cold benchmark must run under MemoryMax=16000000000 and MemorySwapMax=0, including page cache.",
+    "Any compliant new SOTA must be recorded with reproduction details, committed, pushed to https://github.com/wici-ai/ssd-llama.git branch vendor/deepseek-token-rate-16gb using L-Ark, and reproduced from pushed source."
+  ],
+  "immediate_next_action": "Write and execute a fallback-byte reduction hard-bound artifact using the current fallback profile, accepted VRAM shape, and the rejected CPU-batch microprobe data. Do not write new runtime source before that artifact is complete."
+}

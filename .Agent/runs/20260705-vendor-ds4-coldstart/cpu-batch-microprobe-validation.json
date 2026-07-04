@@ -1,0 +1,185 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: default-off CPU batch microprobe for MXFP4 x Q8_0 fallback",
+  "result": "passed_correctness_rejected_for_10_tok_s_cpu_batch_path",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head_before_commit": "3fedb5c0d42a7b9faa05503efb6b71cdb41b36c3",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "changed_file": "ggml/src/ggml-cpu/ggml-cpu.c",
+    "changed_file_sha256": "d9f07f366627ad1e5fe02b5663f8f5686ca5ec50a606f07bef8010d30889b539"
+  },
+  "implementation": {
+    "default_off": true,
+    "enable_env": "GGML_MOE_CPU_BATCH_MICROPROBE_OUT",
+    "filter_env": "GGML_MOE_CPU_BATCH_MICROPROBE_NAME_FILTER",
+    "limits": [
+      "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_CALLS",
+      "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_ROWS",
+      "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_COLS",
+      "GGML_MOE_CPU_BATCH_MICROPROBE_REPEATS"
+    ],
+    "behavior": "After the normal CPU fallback has written dst, the probe optionally replays a bounded hot-data subset using the same ggml_vec_dot_mxfp4_q8_0 kernel and compares against dst. It does not write model outputs and does not change default runtime behavior.",
+    "nrows_status": "GGML_TYPE_MXFP4 remains nrows=1; ggml_vec_dot_mxfp4_q8_0 still asserts nrc == 1. The probe does not change the accepted fallback arithmetic or trait mapping."
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-results -j 8",
+    "status": "passed",
+    "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10"
+  },
+  "runs": [
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T232828Z-cpu-batch-microprobe/top1-probe",
+      "systemd_unit": "vendor-ds4-cpu-microprobe-232828.service",
+      "cgroup": {
+        "MemoryMax": 16000000000,
+        "MemorySwapMax": 0,
+        "result": "success"
+      },
+      "env": {
+        "GGML_MOE_CPU_BATCH_MICROPROBE_NAME_FILTER": "ffn_up_exps",
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_CALLS": 2,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_ROWS": 1,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_COLS": 2048,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_REPEATS": 4
+      },
+      "correctness": {
+        "same_top1": 145,
+        "n_tokens": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "microprobe_src0_gib_s": [
+        36.407,
+        41.818
+      ],
+      "note": "Low repeat count; used only as first smoke test."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T233016Z-cpu-batch-microprobe/repeats64-updown/ffn_up_exps",
+      "systemd_unit": "vendor-ds4-cpu-microprobe-ffn_up_exps-233016.service",
+      "cgroup": {
+        "MemoryMax": 16000000000,
+        "MemorySwapMax": 0,
+        "result": "success"
+      },
+      "env": {
+        "GGML_MOE_CPU_BATCH_MICROPROBE_NAME_FILTER": "ffn_up_exps",
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_CALLS": 2,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_ROWS": 1,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_COLS": 0,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_REPEATS": 64
+      },
+      "correctness": {
+        "same_top1": 145,
+        "n_tokens": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "microprobe_rows": [
+        {
+          "tensor": "blk.0.ffn_up_exps.weight",
+          "expert": 16,
+          "repeats": 64,
+          "probe_cols": 2048,
+          "probe_rows": 1,
+          "dot_calls": 131072,
+          "src0_gib_s": 73.805,
+          "total_gib_s": 221.416,
+          "us_per_dot": 0.027458,
+          "max_abs": 0,
+          "mean_abs": 0
+        },
+        {
+          "tensor": "blk.1.ffn_up_exps.weight",
+          "expert": 11,
+          "repeats": 64,
+          "probe_cols": 2048,
+          "probe_rows": 1,
+          "dot_calls": 131072,
+          "src0_gib_s": 73.662,
+          "total_gib_s": 220.986,
+          "us_per_dot": 0.027512,
+          "max_abs": 0,
+          "mean_abs": 0
+        }
+      ]
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T233016Z-cpu-batch-microprobe/repeats64-updown/ffn_down_exps",
+      "systemd_unit": "vendor-ds4-cpu-microprobe-ffn_down_exps-233043.service",
+      "cgroup": {
+        "MemoryMax": 16000000000,
+        "MemorySwapMax": 0,
+        "result": "success"
+      },
+      "env": {
+        "GGML_MOE_CPU_BATCH_MICROPROBE_NAME_FILTER": "ffn_down_exps",
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_CALLS": 2,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_ROWS": 1,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_MAX_COLS": 0,
+        "GGML_MOE_CPU_BATCH_MICROPROBE_REPEATS": 64
+      },
+      "correctness": {
+        "same_top1": 145,
+        "n_tokens": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "microprobe_rows": [
+        {
+          "tensor": "blk.0.ffn_down_exps.weight",
+          "expert": 16,
+          "repeats": 64,
+          "probe_cols": 4096,
+          "probe_rows": 1,
+          "dot_calls": 262144,
+          "src0_gib_s": 72.476,
+          "total_gib_s": 217.428,
+          "us_per_dot": 0.013981,
+          "max_abs": 0,
+          "mean_abs": 0
+        },
+        {
+          "tensor": "blk.1.ffn_down_exps.weight",
+          "expert": 11,
+          "repeats": 64,
+          "probe_cols": 4096,
+          "probe_rows": 1,
+          "dot_calls": 262144,
+          "src0_gib_s": 74.719,
+          "total_gib_s": 224.156,
+          "us_per_dot": 0.013561,
+          "max_abs": 0,
+          "mean_abs": 0
+        }
+      ]
+    }
+  ],
+  "hard_bound_comparison": {
+    "required_src0_gib_s_zero_overhead": 90.643,
+    "required_src0_gib_s_with_500ms_overhead": 130.298,
+    "best_observed_src0_gib_s": 74.719,
+    "gap_to_zero_overhead_required_gib_s": 15.924,
+    "gap_to_500ms_overhead_required_gib_s": 55.579,
+    "interpretation": "The source-payload bandwidth metric is the relevant lower-bound comparator. The higher total_gib_s counts repeatedly reread Q8_0 activation rows that are hot in cache and does not remove the expert source/page bottleneck."
+  },
+  "decision": {
+    "correctness_gate": "passed",
+    "cpu_batch_as_10_tok_s_route": "rejected",
+    "reason": "Even a bounded hot-data replay using the same exact CPU kernel and all 20 threads reaches only about 72.5-74.7 GiB/s on the expert source-payload metric, below the 90.643 GiB/s zero-overhead requirement and far below the 130.298 GiB/s requirement with only 500 ms integration overhead.",
+    "next_step": "Stop CPU batch runtime rewrite work. Re-focus on designs that reduce or eliminate fallback source bytes/calls, and write a new hard-bound before any new runtime source edit."
+  }
+}
