@@ -1,0 +1,94 @@
+{
+  "artifact": "remaining-compute-source-candidate-screening",
+  "created_utc": "2026-07-04T14:50:00Z",
+  "source_head_before_audit": "a0200b495f22bcc518bf44cbe0d42efc6dd75aa4",
+  "source_branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "status": "screening_no_runtime_source_change",
+  "purpose": "After closing existing backend reuse, source-only overlap, and layout-only residency, identify what compute+source candidate remains before changing runtime source.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "closed_before_source_edit": [
+    {
+      "name": "existing Q8_1 one-stream up/down reuse",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/gpu-updown-output-drift-audit.json",
+        ".Agent/runs/20260704-vendor-ds4-coldstart/q80-cuda-updown-path-screening.json split_top1_verifier"
+      ],
+      "reason": "Fails token-level top1 and full-output correctness in previously tested up/down classes; also worsens cache/source behavior."
+    },
+    {
+      "name": "naive/scalar MXFP4 x Q8_0 CUDA one-stream",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/q80-up-top1-probe-result.json",
+        ".Agent/runs/20260704-vendor-ds4-coldstart/q80-scalar-duplicate-audit.json"
+      ],
+      "reason": "Historical probe reached only same_top1=136/145 with first mismatch at position 4; compare path timed out around 7 minutes, far beyond the 1.642887 s overhead budget."
+    },
+    {
+      "name": "source-only overlap",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/predictive-source-overlap-hard-bound.json"
+      ],
+      "reason": "Perfect source/page hiding has only an 8.993 tok/s zero-overhead ceiling."
+    },
+    {
+      "name": "layout-only exact compact residency",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/exact-compact-residency-hard-bound.json"
+      ],
+      "reason": "Requires about 18.692 GiB of exact up/down resident payload before gate cache/workspace, which violates current RAM/VRAM constraints."
+    },
+    {
+      "name": "existing backend switch or io_uring-only path",
+      "evidence": [
+        ".Agent/runs/20260704-vendor-ds4-coldstart/exact-updown-backend-feasibility-audit.json"
+      ],
+      "reason": "Current build has only CUDA/CPU active, batch/io_uring is disabled and IO-only, and Blackwell native FP4 is approximate/not wired into accepted one-stream."
+    }
+  ],
+  "still_open_but_requires_new_design": [
+    {
+      "name": "optimized exact MXFP4 x Q8_0 CUDA kernel plus source/cache solution",
+      "why_open": "This is the only exact compute class matching CPU fallback semantics and the only bottleneck class with a 10 tok/s no-overhead ceiling.",
+      "hard_requirements_before_code": [
+        "Define kernel arithmetic equivalent to CPU fallback Q8_0 activation semantics or a deterministic token-level equivalence test.",
+        "Define how source/cache pressure is solved; streaming all up/down on demand requires about 90.6 GiB/s and is not viable.",
+        "Show expected added overhead below 1642.887 ms after removing near-full decode up/down fallback.",
+        "Pass fixed-text top1 verifier before any strict cold France token-rate run."
+      ]
+    },
+    {
+      "name": "verified token-stable Blackwell native FP4 path plus source/cache solution",
+      "why_open": "It may offer fast compute, but it is approximate relative to CPU fallback and not currently wired into one-stream.",
+      "hard_requirements_before_code": [
+        "Create a top1 verifier path before performance testing.",
+        "Prove the source/cache solution separately; compute speed alone cannot overcome the 18.69 GiB resident-payload and 90.6 GiB/s streaming bounds.",
+        "Reject immediately if fixed-text top1 differs or France output is semantically wrong/incomplete."
+      ]
+    },
+    {
+      "name": "new exact compressed resident representation",
+      "why_open": "Only a real footprint reduction, not layout-only packing, could make exact residency fit under 16GB/VRAM constraints.",
+      "hard_requirements_before_code": [
+        "Specify compression ratio and decompression overhead.",
+        "Prove exactness or token-level stability.",
+        "Show resident footprint below the current budget while preserving accepted gate-cache benefit."
+      ]
+    }
+  ],
+  "next_recommended_step": {
+    "name": "write kernel/source design for optimized exact MXFP4 x Q8_0 or reject it on paper",
+    "why": "All cheaper existing-path candidates are now closed. The only remaining path with a 10 tok/s ceiling requires new exact compute plus a source/cache solution.",
+    "minimum_artifact_before_code": "A design artifact with arithmetic mapping, memory/source plan, overhead estimate, verifier command, and rejection thresholds."
+  }
+}

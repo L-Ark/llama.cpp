@@ -114,6 +114,25 @@ Decision:
 - Do not implement layout-only exact residency, another top-N up/down hotset, or a gate-cache sacrifice that still has a sub-10 hard bound.
 - Remaining source-code candidates must be combined compute+source designs: verified exact/token-stable GPU MXFP4 x Q8_0 plus source/cache solution, or a genuinely new exact compression/resident representation with measured footprint below the RAM/VRAM budget.
 
+### 2026-07-04 Remaining Compute+Source Screening
+
+Artifact: `.Agent/runs/20260704-vendor-ds4-coldstart/remaining-compute-source-candidate-screening.json`.
+
+Result: all cheap existing-path candidates are closed before another benchmark. The remaining path to `10 tok/s` is not an env flag or a cache-size sweep; it requires a new compute+source design.
+
+Closed before source edit:
+
+- Existing Q8_1 one-stream up/down reuse: fails token-level top1/full-output correctness and worsens cache/source behavior.
+- Naive/scalar MXFP4 x Q8_0 CUDA one-stream: historical probe had `same_top1=136/145`, first mismatch at position 4, and compare runtime was far beyond the `1642.887 ms` overhead budget.
+- Source-only overlap: zero-overhead ceiling only `8.993 tok/s`.
+- Layout-only exact residency: needs about `18.692 GiB` exact up/down payload before gate/workspace.
+- Backend/io_uring switch: current accepted build has no immediate exact path; io_uring is IO-only and batch is disabled.
+
+Next required artifact before any runtime code:
+
+- Write a concrete design for optimized exact MXFP4 x Q8_0 CUDA plus source/cache solution, or reject it on paper.
+- That design must include arithmetic mapping to CPU fallback semantics, source/cache plan, expected overhead under `1642.887 ms`, fixed-text top1 verifier command, and rejection thresholds.
+
 Current bottleneck conclusion:
 
 - Gate prefill/top3000 raised the accepted cold-start line from `4.2` to `4.4 tok/s`; this is the only currently accepted SOTA.
