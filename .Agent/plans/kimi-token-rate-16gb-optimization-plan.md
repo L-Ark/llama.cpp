@@ -43500,3 +43500,5 @@ LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
 - Diagnostic runner should still be used for bottleneck investigations because
   minimal-profile omits per-call timing details like `host_stage`, `h2d`, and
   down/upgate profile CSVs.
+- Stable repo reproduction runner:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
