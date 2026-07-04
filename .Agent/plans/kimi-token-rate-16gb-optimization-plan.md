@@ -46600,6 +46600,142 @@ Decision rule:
   reject and do not run n96.
 - If n32 improves materially and raises `inflight_max`, run n96 with the same
   settings.
+
+Result: n32 completed; rejected, do not run n96.
+
+- End time: 2026-07-04T17:13:09+08:00.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-091123Z-n32-phase7fy-combined-upgate-slots16`.
+- Code head:
+  `df4417dda`.
+- Metrics:
+  - quality `pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - TTFT `76742.59 ms`;
+  - decode `29464.95 ms / 31`, `1.05 tok/s`;
+  - memory peak `15899996160`;
+  - memory final:
+    - `anon=462848`;
+    - `file=14778707968`;
+    - `kernel=234803200`;
+    - `inactive_file=7528423424`;
+    - `active_file=7249424384`;
+    - `pgmajfault=997185`;
+  - `read_failures=0`, `iouring_fallbacks=0`;
+  - expert pack:
+    - hits `25458`, misses `192`;
+    - `iouring_reads=15024`;
+    - `iouring_bytes=87082139648`;
+    - `iouring_wait_us=13058124`;
+  - global io_uring:
+    - `inflight_avg=4.04`;
+    - `inflight_max=16`;
+    - batch hist `9-16:281`;
+  - main ring granularity:
+    - calls `2743`;
+    - `avg_jobs=4.92`;
+    - `avg_read_jobs=4.92`;
+    - `avg_depth=16.00`;
+    - `max_jobs=16`;
+    - `max_read_jobs=16`;
+  - gate ring granularity:
+    - calls `721`;
+    - `avg_jobs=2.13`;
+    - `avg_read_jobs=2.13`;
+    - `avg_depth=16.00`;
+    - `max_jobs=4`;
+    - `max_read_jobs=4`.
+- Comparison:
+  - versus Phase 7FX n32:
+    - `inflight_max` improved from `12` to `16`;
+    - `iouring_wait_us` worsened from `12148536` to `13058124`;
+    - decode worsened from `28987.50` to `29464.95`.
+- Decision:
+  - Reject `PINNED_SLOTS=16` for combined staging.
+  - Do not run n96.
+  - The slot cap can be removed, but doing so does not improve token rate.
+    The remaining issue is not just read queue depth; it is preserving up/gate
+    copy and compute overlap while keeping aggregated io_uring reads.
+
+## Phase 7FZ: combined read with per-job CUDA streams
+
+Start time: 2026-07-04T17:16:00+08:00.
+
+Goal:
+
+- Keep the useful part of Phase 7FX, larger io_uring read batches.
+- Remove the harmful part, forcing both up and gate H2D copies onto
+  `bc.up_stream`.
+- Implement an env-gated variant that submits combined up+gate pack reads
+  through one ring, but enqueues each completed H2D copy onto that job's
+  original CUDA stream.
+
+Theory:
+
+- Phase 7FX:
+  - reduced n96 `iouring_wait_us` from `37082550` to `30356241`;
+  - but decode regressed because all combined H2D copies were serialized on
+    `bc.up_stream`, and gate compute waited for the combined copy event.
+- If the read side remains aggregated while H2D is distributed back to
+  `bc.up_stream` and `bc.gate_stream`, the implementation may retain the
+  `iouring_wait_us` reduction without losing as much up/gate overlap.
+- Upper bound:
+  - Phase 7FX saved about `6.73 s` of n96 io wait but lost about `7.03 s` to
+    overlap/H2D effects versus what would have beaten Phase 7FT;
+  - recovering even 30% of that lost overlap would move n96 close to or below
+    the current SOTA region.
+
+Implementation plan:
+
+- Add optional `cudaStream_t stream` to staging job structs used by runtime
+  up/gate and down staging; default `nullptr`.
+- In `expert_pack_iouring_copy_jobs`, use `job.stream` when present,
+  otherwise the function's `st` parameter.
+- Record each staging slot's completion event on the actual copy stream.
+- For Phase 7FZ combined up/gate:
+  - set up jobs' `stream=bc.up_stream`;
+  - set gate jobs' `stream=bc.gate_stream`;
+  - call `copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)`;
+  - do not insert a global gate wait on the up stream event;
+  - launch up on `bc.up_stream` after the call returns;
+  - launch gate on `bc.gate_stream` after the call returns.
+- Keep the implementation behind a new flag
+  `GGML_MOE_UP_GATE_COMBINED_STAGE_PER_STREAM=1`.
+- Keep the previous `GGML_MOE_UP_GATE_COMBINED_STAGE=1` behavior available
+  for comparison, but do not use it for production unless it wins later.
+
+Risks:
+
+- The shared staging ring must not reuse a slot before the per-job stream's
+  event has completed.
+- Because the function still waits for all io completions before returning,
+  this does not fully overlap H2D with compute; it only restores copy-stream
+  parallelism.
+- If CUDA stream contention or event ordering is wrong, output quality may
+  fail, so n32 France quality is mandatory.
+
+Experiment A: n32 probe
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-n32-phase7fz-combined-per-stream"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_COMBINED_STAGE_PER_STREAM=1 GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 fails quality/RAM/TTFT/fallback gates, revert the implementation.
+- If n32 decode is not materially better than Phase 7FX n32 `28987.50 ms`,
+  reject and do not run n96.
+- If n32 improves materially and keeps aggregated batch shape
+  (`max_read_jobs > 8`, `inflight_max >= 12`), run n96.
 - If n32/n96 fail gates or are slower, reject the tuning, keep the runner
   override support only if useful for reproducibility, and record the gap.
 
