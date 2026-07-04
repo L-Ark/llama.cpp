@@ -35847,6 +35847,165 @@ Rollback:
 - Env/runner-only failure needs no source rollback.
 - If rejected, record all metrics and do not promote `MIN_PROFILE=1`.
 
+Phase 7EO result - rejected:
+
+- result timestamp: 2026-07-04T02:04Z.
+- plan commit:
+  `372049518` (`docs: plan kimi phase7eo min profile`).
+- source status:
+  - no source patch;
+  - env/runner-only experiment;
+  - no source rollback required.
+- runner:
+  `/tmp/run_phase7eo_repro.sh`.
+- activation:
+  - copied from `/tmp/run_phase7eb_repro.sh`;
+  - added `MIN_PROFILE=1`;
+  - when enabled, `env.txt` omits:
+    - `GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_NAME_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_PROFILE`;
+    - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+    - `GGML_MOE_DOWN_BATCH_PROFILE_OUT`;
+    - `GGML_MOE_UP_GATE_PROFILE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE_OUT`;
+    - `GGML_MOE_ROUTE_TRACE_OUT`;
+    - `GGML_MOE_TTFT_TRACE_OUT`;
+    - `GGML_MOE_BATCH_PROFILE`;
+    - `GGML_MOE_STREAM_DECLINE_DEBUG`;
+    - `GGML_MOE_TTFT_TRACE_MAX_EVENTS`;
+  - kept Phase 7EB runtime envs, including slots16, serial same-type staging,
+    l12 up/gate pack, l1/l2 down overlay pack, current-down overlap,
+    down parallel stage, SQPOLL iouring, 15GB VRAM cache, and mmap drop envs.
+
+First n32 candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-015603Z-n32-phase7eo-min-profile`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-015603Z-n32-phase7eo-min-profile"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7eo_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `73738.98 ms`, below `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- activation:
+  - run directory contains no diagnostic CSV/trace files;
+  - `env.txt` contains none of the omitted diagnostic envs;
+  - stderr has no route/TTFT/down/upgate CSV write lines.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct, truncated only by n32 token budget.
+- decode:
+  - `27967.55 ms / 31`, `1.11 tok/s`;
+  - faster than Phase 7EB historical n32 `29599.64 ms / 31` by
+    `1632.09 ms`;
+  - n32 confirmation required by the promotion rule.
+- memory final:
+  - `memory.current.final=15015936000`;
+  - `file=14779019264`;
+  - `inactive_file=8617455616`;
+  - `active_file=6160904192`;
+  - `anon=450560`;
+  - `kernel=234614784`.
+- expert movement:
+  - expert-pack `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=12557798`;
+  - down cache `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+  - upgate cache `hits=13019`, `misses=16757`, `hit_rate=43.7%`.
+
+Second n32 confirmation:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260704-015849Z-n32-phase7eo-min-profile-confirm`.
+- command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN="/root/lfz/runs/vendor-kimi-token-rate/20260704-015849Z-n32-phase7eo-min-profile-confirm"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=16 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      /tmp/run_phase7eo_repro.sh
+```
+
+- hard gates:
+  - exit `0`;
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+  - TTFT `86450.02 ms`, below `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- activation:
+  - run directory contains no diagnostic CSV/trace files;
+  - `env.txt` contains none of the omitted diagnostic envs.
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality:
+  pass; coherent and semantically correct, truncated only by n32 token budget.
+- decode:
+  - `31579.93 ms / 31`, `0.98 tok/s`;
+  - slower than Phase 7EB historical n32 `29599.64 ms / 31` by
+    `1980.29 ms`;
+  - fails n32 confirmation, so n96 was not run.
+- memory final:
+  - `memory.current.final=15016861696`;
+  - `file=14777610240`;
+  - `inactive_file=4496183296`;
+  - `active_file=10280837120`;
+  - `anon=442368`;
+  - `kernel=234889216`.
+- expert movement:
+  - expert-pack `iouring_reads=15024`;
+  - `iouring_bytes=87082139648`;
+  - `iouring_wait_us=14189670`;
+  - down cache `hits=9659`, `misses=3461`, `hit_rate=73.6%`;
+  - upgate cache `hits=13019`, `misses=16757`, `hit_rate=43.7%`.
+
+Gap analysis:
+
+- The first n32 candidate suggests diagnostic removal can reduce host-side
+  overhead or scheduling noise.
+- The second n32 run did not reproduce and had much worse TTFT and
+  expert-pack wait despite identical route/cache/read counts.
+- Because Phase 7EN already measured `0.626 s` baseline n32 spread and Phase
+  7EO confirmation regressed by nearly `2.0 s` versus the historical n32 gate,
+  this cannot be accepted as a reproducible SOTA change.
+- The route/cache counters remained identical, confirming that this experiment
+  did not reduce compulsory movement. It only changes host-side bookkeeping and
+  therefore remains vulnerable to cold-run variance.
+
+Decision:
+
+- Reject Phase 7EO.
+- Do not run n96.
+- Do not promote `MIN_PROFILE=1` to SOTA.
+- Keep Phase 7EB as accepted SOTA:
+  - n32 gate `29599.64 ms / 31`;
+  - n96 gate `74201.57 ms / 77`;
+  - diagnostic reproduction runner remains useful for bottleneck visibility.
+- Future optimization must reduce actual expert movement or critical-path
+  staging, not only diagnostic/bookkeeping overhead.
+
 Phase 7BZ result - rejected:
 
 - result timestamp: 2026-07-03 UTC.
