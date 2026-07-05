@@ -75166,3 +75166,133 @@ Decision:
 - Any such plan must still preserve the strict gates:
   16GB host RAM, cold start, semantic France output, TTFT within 20%, and
   immediate commit/push only for reproducible compliant gains.
+
+## Phase 7MP - algorithmic/model-format feasibility audit
+
+Timestamp: 2026-07-05 19:40:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Implement the next step from 7MO without repeating closed local CUDA/IO
+  variants.
+- Audit whether the current checkout and server assets can support a
+  reproducible algorithmic or model-format experiment under the strict gates.
+- Prefer a path that can reduce the amount of target-model decode work or
+  movement per accepted token:
+  - true speculative/MTP decoding with parallel accepted tokens;
+  - lookahead decoding if it can run the same Kimi model through the accepted
+    vendor MoE streaming path and produce comparable TTFT/decode metrics;
+  - a smaller/faster expert representation only if a matching, semantically
+    safe model/pack asset already exists or can be generated reproducibly.
+
+Current bottleneck basis:
+
+- 7MO shows no new narrow bucket with a credible untried local patch:
+  - type22 up/gate movement/wait is still large but closed by split/cache,
+    shared IO, and coalescing evidence;
+  - type18 IQ3 compute is large but closed by IQ3/VDR/MMQ/Q8_K attempts;
+  - down staging is large but closed by prefetch/depth/staging-shape/current
+    overlap probes;
+  - Q4 decode fallback is bounded and prior GPU/cache attempts regressed;
+  - prompt fallback/page cache mostly affects TTFT and is already handled by
+    post-prompt drops.
+- Therefore this phase must first answer whether an algorithmic path is
+  executable with current assets before changing source.
+
+Audit commands:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 602cde8b2
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mp-algorithmic-feasibility
+mkdir -p "$RUN"
+
+{
+  git rev-parse HEAD
+  git branch --show-current
+  ls -l build-cuda-batch/bin/llama-completion \
+        build-cuda-batch/bin/llama-speculative \
+        build-cuda-batch/bin/llama-speculative-simple \
+        build-cuda-batch/bin/llama-lookahead
+  build-cuda-batch/bin/llama-speculative --help | sed -n '1,220p'
+  build-cuda-batch/bin/llama-lookahead --help | sed -n '1,220p'
+  find /root/lfz/models -type f \( -name '*.gguf' -o -name '*.safetensors' \) \
+    | sort
+  find /root/lfz/runs/ik_llama/kimi-iq3s-assets -maxdepth 1 -type f \
+    \( -name '*.expert-pack' -o -name '*.json' -o -name '*.txt' \) | sort
+} > "$RUN/audit.txt" 2>&1
+```
+
+Feasibility checks:
+
+- Speculative/MTP:
+  - Requires a draft model or MTP head with tokenizer compatibility with the
+    target Kimi GGUF.
+  - If no local compatible draft/MTP asset exists, do not run speculative
+    decoding; record it as blocked by missing reproducible asset.
+  - If a candidate exists, first run a metadata/tokenizer compatibility check
+    only. A decode benchmark is allowed only after compatibility is proven.
+- Lookahead:
+  - Requires the binary to accept the same model and enough of the existing
+    vendor MoE/expert-pack runtime environment to use the accepted streaming
+    path.
+  - Requires comparable output, TTFT, and decode timing artifacts. If the
+    example cannot emit comparable timings or bypasses the current Kimi expert
+    streaming path, reject it as non-comparable.
+  - If runnable, first do an n32 cold-start diagnostic under the 16GB cgroup.
+- Smaller/faster expert representation:
+  - Requires a deterministic source asset and conversion command.
+  - No generated quantization can be accepted without a France quality pass and
+    a repeat cold-start run. If generation would require large unbounded host
+    RAM, reject for now.
+
+Theoretical upper bounds:
+
+- Speculative/MTP:
+  - If target verification of `k` proposed tokens is truly parallel and draft
+    cost is hidden or much smaller, upper bound is roughly `k * accept_rate`
+    times current decode TPS before overhead.
+  - With current n96 SOTA `1.35 tok/s`, a 4-token branch at `70%` acceptance has
+    a rough ceiling near `3.8 tok/s`; reaching `5 tok/s` would need either
+    higher accepted-token parallelism, higher acceptance, or lower per-token
+    movement from a model-format change.
+  - If verification remains serial, the upper bound is below current SOTA after
+    draft overhead and must be rejected.
+- Lookahead:
+  - Potential gain is bounded by the number of verified tokens accepted per
+    target pass. If acceptance is low, extra sequences increase compute and KV
+    memory, so expected endpoint can be slower.
+- Smaller expert format:
+  - Upper bound is proportional to the reduction in required expert bytes for
+    miss traffic, bounded by the measured exposed expert-pack iouring wait
+    (`22.2 s` on 7MO n32) and H2D/staging time. A 25% byte reduction cannot
+    improve n32 decode by more than roughly `5.5 s` before quality and compute
+    costs.
+
+Acceptance and rollback:
+
+- This phase is audit-first. It may produce no source change.
+- Any runnable diagnostic must use:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - cold-start cache drop from the script or an equivalent recorded method;
+  - exact France prompt;
+  - quality pass;
+  - TTFT `< 127598.064 ms`;
+  - memory peak below the cgroup limit;
+  - reproducible run directory with command/env/system/output/metrics.
+- If a candidate improves token rate, run a second cold-start repeat before
+  promoting it. Only then commit/push source or config changes.
+- If no compatible asset/path exists, record the audit as a completed
+  diagnostic and select the next model-format packaging step explicitly.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Record `audit.txt`, exact commit, binary existence, help output, model list,
+  expert-pack asset list, feasibility decision, and any follow-up command in
+  the plan.
