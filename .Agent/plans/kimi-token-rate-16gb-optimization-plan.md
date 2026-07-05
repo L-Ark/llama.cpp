@@ -81538,3 +81538,90 @@ cat "$RUN/verify_profile_summary.tsv"
 cat "$RUN/source_condition_notes.md"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7NS - verifier lower-bound and serial-decode feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 04:30 CST.
+
+Reason:
+
+- Phase 7NR proved the existing `llama_decode` multi-token verifier path is
+  prompt/multirow work, not the accepted one-token decode streaming path.
+- A tempting fallback design would be to verify speculative tokens by replaying
+  target tokens one at a time through the accepted decode hot path.
+- That design preserves current cache and expert-pack behavior, but it may not
+  reduce expensive Kimi target work per accepted token.
+- Before any speculative source design, compute the hard bound for:
+  - serial one-token target verification;
+  - ideal accepted-token multiplier required for `5 tok/s`;
+  - the minimum speedup a true multi-token verifier must achieve over current
+    serial target decode.
+
+Goal:
+
+- Decide whether a narrow speculative verifier implementation can be justified
+  after 7NR, using only existing measurements.
+- Do not run model inference.
+- Do not edit source.
+- Do not download assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- 7NB target verification run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench`
+- 7MU current n96 baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh`
+- 7NN current n32 I/O profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32`
+- Current source tree for line references only.
+
+Audit method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ns-verifier-bound`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7ns_verifier_bound.py`;
+   - `verifier_bound.tsv`;
+   - `decision.md`.
+3. Parse:
+   - 7NB baseline decode time and token count;
+   - 7NB verify `B=1/2/4/8/16` wall times;
+   - 7MU n96 decode time and token count;
+   - 7NN per-token read volume / iouring wait as current movement reference.
+4. Compute:
+   - current steady one-token target cost from 7NB n32 and 7MU n96;
+   - serial verifier cost for accepted block sizes `a=2/4/8/16`;
+   - output token rate if speculation verifies serially and draft cost is zero;
+   - required target verifier wall time for `5 tok/s`;
+   - required speedup versus serial target decode for each block size;
+   - current measured `B` verifier speedup/regression versus both serial decode
+     and the `5 tok/s` envelope.
+5. Record the exact conclusion:
+   - whether serial one-token verifier can ever reach `5 tok/s`;
+   - whether any narrow implementation can be justified without true
+     multi-token MoE streaming kernels;
+   - whether the next valid work must be a broad multi-token MoE verifier
+     design or no local source work.
+
+Decision rule:
+
+- Reject serial target verification if its zero-draft bound remains near the
+  current `1.35-1.42 tok/s` target decode rate.
+- Reject a narrow verifier patch if the required speedup versus serial target
+  decode is greater than `3x` and the current source path lacks decode-mode
+  multi-token MoE streaming/cache support.
+- Only write a source implementation plan if the bound shows a plausible
+  narrow path to:
+  - `B=4` target verification `<=0.800 s`; or
+  - `B=8` target verification `<=1.600 s`;
+  - while keeping strict 16GB host RAM, TTFT cap, and France quality.
+
+Reproducibility:
+
+- Commit and push this 7NS plan before running the audit.
+- Commit and push the 7NS result before any follow-up source or asset work.
