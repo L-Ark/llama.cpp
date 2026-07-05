@@ -83704,3 +83704,139 @@ Reproducibility:
 - Commit and push this 7OD plan before running the audit.
 - Commit and push the 7OD result before any asset conversion, model run, or
   further source implementation.
+
+### Phase 7OD result
+
+Timestamp: 2026-07-06 06:24 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-221023Z-phase7od-iq2xxs-asset-imatrix`
+
+Plan commit before audit:
+
+- `de4a60b99` (`docs: plan iq2 xxs asset imatrix audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7od_iq2xxs_asset_imatrix.py`
+- `local_assets.tsv`
+- `tool_support.tsv`
+- `command_inventory.tsv`
+- `disk_inventory.tsv`
+- `repo_tool_refs.txt`
+- `decision.md`
+
+Execution:
+
+- Read-only filesystem audit only.
+- No model inference.
+- No source edit.
+- No model asset download.
+- No quantization or conversion.
+- Scan roots:
+  `/root/lfz:/root:/mnt:/data`
+- Bounded scan depth:
+  `MAX_FIND_DEPTH=6`
+
+Tool support:
+
+- `llama-quantize` exists:
+  `/root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-quantize`
+- `llama-quantize --help` advertises `IQ2_XXS`: yes.
+- `llama-quantize --help` advertises imatrix usage: yes.
+- `llama-imatrix` exists:
+  `/root/lfz/llama.cpp-vendor-kimi/build-cuda-batch/bin/llama-imatrix`
+- `llama-imatrix` help probe returned nonzero but binary is present.
+
+Actual asset inventory:
+
+- Current strict benchmark model path:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`
+- Real Kimi `IQ3_S` GGUF shard set:
+
+```text
+00001  0.006 GiB
+00002 45.035 GiB
+00003 45.522 GiB
+00004 45.735 GiB
+00005 45.676 GiB
+00006 46.539 GiB
+00007 44.979 GiB
+00008 46.539 GiB
+00009 44.759 GiB
+00010 12.759 GiB
+total 377.549 GiB
+```
+
+- Real Kimi expert-pack files found:
+  `9`.
+- Largest real Kimi expert packs:
+
+```text
+163.105 GiB  /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+159.901 GiB  /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+ 74.081 GiB  /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack
+  7.161 GiB  /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack
+  4.696 GiB  /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
+```
+
+Important correction to the raw audit summary:
+
+- `local_assets.tsv` reported `51` imatrix candidates, but follow-up
+  classification shows these are source files, tool binaries, docs, issue
+  mirrors, helper scripts, or the audit script itself.
+- Valid local Kimi imatrix data files found:
+  `0`.
+- `local_assets.tsv` reported `46` Kimi GGUF candidates, but many are false
+  positives caused by repository paths containing `kimi`. The real full Kimi
+  model shard set found for current benchmarking is the `IQ3_S` 10-shard set
+  above.
+- Local Kimi `IQ2_XXS` GGUF shard set found:
+  `0`.
+
+Disk inventory:
+
+```text
+mount / /root /root/lfz /mnt
+filesystem /dev/root
+size      992.248 GiB
+used      904.442 GiB
+avail      87.790 GiB
+use        92%
+```
+
+Decision:
+
+- `IQ2_XXS` runtime source work must stop here until a reproducible asset path
+  exists.
+- There is no valid local Kimi imatrix data file and no local Kimi `IQ2_XXS`
+  shard set, so a strict n32/n96 `IQ2_XXS` quality/performance run is not
+  possible yet.
+- Full-model conversion is not currently viable without a precise space plan:
+  only `87.790 GiB` is available while the existing `IQ3_S` shard set is
+  `377.549 GiB`; any `IQ2_XXS` conversion will need either external storage,
+  shard-by-shard output accounting, or cleanup approved outside this phase.
+- The next phase should be an offline conversion feasibility/space-accounting
+  plan, not a source activation or model benchmark.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN_DIR=/root/lfz/runs/vendor-kimi-token-rate/20260705-221023Z-phase7od-iq2xxs-asset-imatrix \
+SCAN_ROOTS=/root/lfz:/root:/mnt:/data \
+MAX_FIND_DEPTH=6 \
+python3 /root/lfz/runs/vendor-kimi-token-rate/20260705-221023Z-phase7od-iq2xxs-asset-imatrix/phase7od_iq2xxs_asset_imatrix.py
+
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-221023Z-phase7od-iq2xxs-asset-imatrix
+cat local_assets.tsv
+cat tool_support.tsv
+cat command_inventory.tsv
+cat disk_inventory.tsv
+cat repo_tool_refs.txt
+cat decision.md
+```
