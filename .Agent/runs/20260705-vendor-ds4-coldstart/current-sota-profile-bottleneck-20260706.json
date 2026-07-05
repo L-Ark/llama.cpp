@@ -1,0 +1,98 @@
+{
+  "created_at_utc": "2026-07-05T23:29:55Z",
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-sota-profile-bottleneck-20260706.json",
+  "decision": "diagnostic_only_sota_unchanged",
+  "purpose": "Strict cold profiling run on the accepted 4.4 tok/s configuration to split the current bottleneck before choosing the next optimization.",
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "memory_max_events": 16879,
+    "pgmajfault": 272731,
+    "workingset_refault_file": 1638880,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "profiling_run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T231251Z-20260706_current_sota_profile_bottleneck_63ca303",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T231251Z-20260706_current_sota_profile_bottleneck_63ca303/france-cpu40-vram0gb",
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 33029.387637,
+    "elapsed_seconds": 64.21,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15097061376,
+    "memory_max_events": 17169,
+    "memory_current_bytes": 15215411200,
+    "pgmajfault": 273090,
+    "pgfault": 2346376,
+    "workingset_refault_file": 1679498,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required; manual review: coherent France paragraph",
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "source_and_build": {
+    "source_head_at_run": "63ca303f5",
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+    "binary_sha256": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+    "binary_build_string": "b14849-d9e56fcdf"
+  },
+  "env_delta_from_accepted_sota": {
+    "GGML_KIMI_CPU_MOE_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_NAME_PROFILE": "1"
+  },
+  "counters": {
+    "gate_prefill": {
+      "loaded_entries": 3313,
+      "limit": 3000,
+      "attempted": 3000,
+      "inserted": 3000,
+      "bytes": 13369344000,
+      "elapsed_ms": 4443.549,
+      "pack_misses": 0,
+      "read_failures": 0
+    },
+    "gate_one_expert_pack": {
+      "hits": 4886,
+      "misses": 0,
+      "reads": 4886,
+      "bytes": 21774204928,
+      "direct_reads": 4886,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "vram_cache": {
+      "hits": 33265,
+      "misses": 1886,
+      "hit_rate": "94.6%"
+    },
+    "kimi_cpu_moe_profile": {
+      "calls": 16920,
+      "total_ms_per_call": 1.974,
+      "total_ms_est": 33412.08,
+      "fallback_t0_ms_per_call": 1.488,
+      "fallback_t0_ms_est": 25176.96,
+      "cuda_single_ms_per_call": 0.474,
+      "cuda_single_ms_est": 8020.08,
+      "batch_accept": 0,
+      "batch_decline": 0,
+      "single_accept": 35151,
+      "single_decline": 38222
+    },
+    "top_name_profile_observation": "Highest up/down fallback tensors remain concentrated in early layers blk.0-9; approximate topK pruning for early layers has already failed correctness/performance in prior artifacts."
+  },
+  "bottleneck_interpretation": {
+    "primary": "Exact up/down CPU fallback remains the measured bottleneck, split between source/page/fallback_t0 and CUDA single-work path.",
+    "page_cache": "Run remains at the 16GB cgroup cap with about 15.10GB file cache and 17169 memory.max events, so page-cache/reclaim pressure is material and must be accounted for in any cold-start claim.",
+    "closed_routes_reconfirmed": [
+      "Gate-cache sacrifice for exact up/down hotset remains below 10 tok/s by hard bound.",
+      "Approximate topK pruning is not correctness-preserving and has prior rejected runs.",
+      "Raw/transposed/rowtile Q80 hot-batch kernels passed correctness but failed required bandwidth by a large margin."
+    ]
+  },
+  "next_action": "Investigate the old 5.1 full-pack mmap diagnostic mismatch by isolating the difference between source commit 88de4bb09 and current code, because current profiling and no-prefill reproduction do not support promotion."
+}

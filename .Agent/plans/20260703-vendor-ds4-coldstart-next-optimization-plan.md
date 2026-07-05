@@ -4,6 +4,44 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: No-Prefill Full-Pack Rejected, Audit 88de4bb09 Regression
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full-pack mmap + `/dev/null` gate prefill 已经严格 cold 测试失败，不能进入 pushed-source SOTA reproduction。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest result artifacts:
+
+- Profiling artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-profile-bottleneck-20260706.json`
+- No-prefill rejection artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-no-prefill-rejected-20260706.json`
+
+Latest measured results:
+
+- Accepted-path profiling run: `/root/lfz/runs/vendor-ds4-16gb/20260705T231251Z-20260706_current_sota_profile_bottleneck_63ca303/france-cpu40-vram0gb`, `eval_tok_s=4.4`, `TTFT=33029.387637 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15097061376`, `memory_max_events=17169`, `ram_ok=true`, `correctness_ok=true`.
+- Profiling split: `kimi_cpu_moe_profile calls=16920`, `total=1.974 ms/call` (`~33412 ms` aggregate), `fallback_t0=1.488 ms/call` (`~25177 ms` aggregate), `cuda_single=0.474 ms/call` (`~8020 ms` aggregate), `batch_accept=0`, `single_accept=35151`, `single_decline=38222`.
+- Full-pack mmap no-prefill run: `/root/lfz/runs/vendor-ds4-16gb/20260705T232609Z-20260706_full_pack_mmap_no_prefill_devnull_8f9ee3a/france-cpu40-vram0gb`, `eval_tok_s=3.9`, `prompt_tok_s=1.6`, `TTFT=29857.542496 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15063568384`, `memory_max_events=18384`, `ram_ok=true`, `correctness_ok=true`.
+- No-prefill correctness passed manual review, but token-rate gate failed. The run did disable prefill (`one prefill: loaded 0 entries from /dev/null`) and still had high file-cache pressure plus slow fallback (`fallback_t0=1.549 ms/call`), so absence of prefill alone does not explain the old `5.1 tok/s` diagnostic.
+
+Updated bottleneck interpretation:
+
+- Current accepted path remains exact up/down CPU fallback dominated, with cgroup file-cache pressure at the 16GB cap.
+- Full native expert-pack mmap is mechanically correct (`hits=35880`, `misses=0`, `fallback_gguf=0`) but does not reliably improve current-source token rate under strict cold 16GB.
+- The old positive full-pack diagnostic used binary build string `b14646-88de4bb09`; current rebuilt runs use `b14879-477e51109`. Since `/dev/null` no-prefill on current source did not reproduce the low file-cache-pressure behavior, the next step is a source regression audit from `88de4bb09` to current, not more runtime sampling.
+
+Updated next executable plan:
+
+1. Commit and push the profiling artifact, no-prefill rejection artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Audit source changes between `88de4bb09` and current for `ggml/src/ggml-cuda/moe_stream.cu` and `ggml/src/ggml-cpu/ggml-cpu.c`. The initial diff scope is large (`~3750` inserted/deleted lines across those files), so prioritize changes affecting prefill, cache keying/admission, DONTNEED, CPU fallback mmap pointer use, fallback profiling path, and page-cache behavior.
+3. Before rebuilding old source or bisecting, write a narrow audit artifact with candidate regression commits and the exact predicted mechanism. Do not check out/build old source until the artifact identifies a bounded reproduction plan that preserves current branch state and disk constraints.
+4. Any old-source reproduction must still use strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct/coherent France output. If it requires a separate build directory, first confirm disk use fits the current `/root` free-space constraint.
+5. Do not delete or move model files during the regression audit. Disk cleanup, alternate GGUF downloads, and GLM deletion remain separate actions requiring explicit user approval.
+6. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output.
+7. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
+
 ### 2026-07-06 Latest Active Plan: Test Full-Pack mmap Without Gate Prefill
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full-pack mmap + 3000-entry gate prefill 已经严格复现失败；新的窄实验只验证一个差异：关闭 gate prefill，保留 full native expert-pack mmap 和 named cache admission。
