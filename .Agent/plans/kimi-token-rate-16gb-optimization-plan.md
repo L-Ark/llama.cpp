@@ -74649,3 +74649,128 @@ Reproducibility:
 - Record source commit, build command, overlay generation command/log, overlay
   size, run directory, metrics, output text, memory files, stderr coalesce
   counters, and disk free before/after cleanup.
+
+### Phase 7MM result
+
+Timestamp: 2026-07-06 21:24:00 CST.
+
+Status: rejected; source rollback required.
+
+Source under test:
+
+- `d42c4af45 cuda: add async adjacent coalescing path`
+
+Build:
+
+- Server build succeeded on `build-cuda-batch`.
+- CUDA compile produced existing warnings only.
+
+Overlay generation:
+
+- temporary overlay:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.expert-pack`
+- generation log:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.log`
+- entries `13556`;
+- size `75681923072` bytes (`71G`);
+- disk before generation `88G` free;
+- disk after generation `18G` free;
+- disk after deletion `88G` free.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-111323Z-phase7mm-async-coalesce-n32`
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-111323Z-phase7mm-async-coalesce-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1 GGML_MOE_IO_COALESCE_ADJACENT_ASYNC=1 GGML_MOE_IO_COALESCE_MAX_BYTES=16777216 GGML_MOE_IO_COALESCE_SLOTS=8" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gates:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- manual semantic quality `pass`;
+- TTFT `75614.04 ms`, below `127598.064 ms`;
+- decode `24810.48 ms / 31`, `1.25 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Activation and counters:
+
+- duplicate replacement:
+  `expert pack: replaced 13556 duplicate keys with later pack sources`;
+- async coalescing activated;
+- expert-pack async coalesce:
+  - groups `5729`;
+  - jobs `12569`;
+  - read bytes `69974016000`;
+  - H2D enqueues `12569`.
+- main ring async coalesce:
+  - groups `4134`;
+  - jobs `9030`;
+  - read bytes `51585974272`;
+  - waits `4110`;
+  - slots `8`, slot size `16.00 MiB`.
+- gate ring async coalesce:
+  - groups `1595`;
+  - jobs `3539`;
+  - read bytes `18388041728`;
+  - waits `1579`;
+  - slots `8`, slot size `16.00 MiB`.
+- expert-pack iouring:
+  - reads `22647`;
+  - bytes `126391910400`;
+  - wait `21222649 us`;
+  - wait calls `12814`;
+  - CQEs `15807`;
+  - inflight avg `2.52`.
+
+Comparison:
+
+- 7MD current default n32:
+  - decode `22659.98 ms / 31`, `1.37 tok/s`;
+  - expert-pack iouring wait about `20.67 s`.
+- 7LY default variance guard:
+  - decode `22256.21 ms / 31`, `1.39 tok/s`.
+- 7MM:
+  - decode `24810.48 ms / 31`, `1.25 tok/s`;
+  - iouring wait `21.22 s`.
+
+Interpretation:
+
+- The async path activated and reduced the number of CQEs/wait calls, so the
+  grouping logic works.
+- Endpoint still regressed and iouring wait increased.
+- Root cause is visible in the counters:
+  - coalesced span slots still wait frequently (`4110 + 1579` waits);
+  - inflight average dropped to `2.52`;
+  - large span reads reduce CQE count but do not preserve enough fine-grained
+    overlap for this SSD/io_uring/CUDA stream pattern.
+- This closes the first-use overlay + adjacent coalescing family for the current
+  design. Improving physical locality is not sufficient unless a future design
+  can maintain higher inflight and avoid span-slot reuse waits.
+
+Decision:
+
+- Reject Phase 7MM.
+- Delete the temporary 71G overlay pack; keep the generation log.
+- Revert source commit `d42c4af45`.
+- Do not promote async coalescing.
+- Do not continue the first-use overlay/coalescing family without a new design
+  that directly proves higher inflight and lower span-slot waits before endpoint
+  testing.
