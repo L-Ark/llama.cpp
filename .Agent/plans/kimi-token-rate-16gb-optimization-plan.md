@@ -79002,7 +79002,7 @@ Decision:
 
 Timestamp: 2026-07-06 01:36:00 CST.
 
-Status: planned.
+Status: complete; diagnostic accepted; runtime testing rejected.
 
 Goal:
 
@@ -79095,3 +79095,81 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Store all raw scripts and summaries in the run directory.
 - Commit and push the result before any runtime experiment.
+
+Result:
+
+- Plan commit before execution:
+  `a8dd83e6e docs: plan tracefirst pack audit`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-170112Z-phase7ng-tracefirst-pack-audit`.
+- No source code was changed.
+- No model run was launched.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `tracefirst_manifest.json`;
+- `audit_tracefirst_pack.py`;
+- `coverage_7my.tsv`;
+- `coverage_7nb.tsv`;
+- `layout_compare_7my.tsv`;
+- `layout_compare_7nb.tsv`;
+- `summary.md`;
+- `decision.md`;
+- `audit_stdout.txt`;
+- `audit_stderr.txt`.
+
+Pack index summary:
+
+- tracefirst entries: `15266`;
+- current effective main+overlay entries: `31599`.
+
+Coverage against current strict traces:
+
+| trace | rows | unique keys | covered rows | covered unique | tracefirst-only missing rows | tracefirst-only missing unique |
+|---|---:|---:|---:|---:|---:|---:|
+| 7MY | `42928` | `13996` | `31493` (`73.362%`) | `10108` (`72.221%`) | `11435` | `3888` |
+| 7NB | `42928` | `13996` | `31493` (`73.362%`) | `10108` (`72.221%`) | `11435` | `3888` |
+
+Layout/gap statistics:
+
+- Current main+overlay pack on 7MY/7NB route order:
+  - pairs: `42437`;
+  - gap `<=2 MiB`: `1726`;
+  - median gap: `84639744` bytes;
+  - p90 gap: `266190848` bytes;
+  - p99 gap: `602456064` bytes.
+- Tracefirst-only covered rows:
+  - pairs: `29847`;
+  - gap `<=2 MiB`: `5520`;
+  - median gap: `9739304960` bytes;
+  - p90 gap: `34776727552` bytes;
+  - p99 gap: `48846651392` bytes.
+- Tracefirst as overlay-extra with fallback to current pack:
+  - pairs: `39554`;
+  - gap `<=2 MiB`: `5987`;
+  - median gap: `4569169920` bytes;
+  - p90 gap: `30852677632` bytes;
+  - p99 gap: `48108404736` bytes.
+
+Interpretation:
+
+- Tracefirst improves the count of very-near adjacent pairs for the subset it
+  covers, but it covers only about `73%` of current route rows.
+- Using it as the main pack would create `11435` route-row pack misses in the
+  current strict trace, which is not acceptable.
+- Using it as overlay-extra would fall back to the current pack for the missing
+  `11435` rows and would still be a layout-only change unless a new safe
+  coalescing pipeline is added.
+- Layout-only first-use/trace-order overlay was already rejected in 7LS.
+- Blocking and async coalescing over trace-order overlays were already rejected
+  in 7LT and 7MM.
+
+Decision:
+
+- Reject tracefirst pack runtime testing for the current SOTA path.
+- Do not run strict n32 with this pack as main pack or overlay-extra.
+- Do not build another trace-order layout-only overlay unless a new non-rejected
+  runtime mechanism is designed first.
+- Current SOTA remains unchanged.
