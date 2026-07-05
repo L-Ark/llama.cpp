@@ -70420,3 +70420,97 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact run directory, metrics, output text, stderr counters, and the
   rollback commit id.
+
+### Phase 7LM result
+
+Timestamp: 2026-07-05 23:18:00 CST.
+
+Status: accepted as clean rollback guard, not a new source optimization.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-071358Z-phase7lm-post-q4-rollback-n32`
+
+Result:
+
+- source commit: `55b3ef9eb`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `71744.24 ms`;
+- decode `20196.41 ms / 31`, `1.53 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `kimi_cpu_fallback_pack_mmap hits=1727 misses=9 bytes=14260764672 fallback_gguf=9`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `16442997 us`;
+- current-down overlap worker `2738290 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- The Q4_0 rollback is clean.
+- The default Q4_0 CPU fallback path is restored.
+- The n32 endpoint is faster than 7KX/7LG, but this is a rollback guard and may
+  include cold-run variance. Do not claim a new source-level optimization from
+  this result alone.
+- Because n32 improved materially and all hard gates passed, run a strict n96
+  guard before the next source change. If n96 also improves, update the current
+  SOTA baseline and use that stricter baseline for all future candidates.
+
+## Phase 7LN - post-Q4 rollback n96 guard
+
+Timestamp: 2026-07-05 23:19:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify whether the clean rollback/default path also improves full n96 output.
+- Establish the current long-output baseline before any new source optimization.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 55b3ef9eb
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ln-post-q4-rollback-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If 7LN passes and beats 7JY/7KZ n96 (`~1.35-1.36 tok/s`), record it as the
+  current reproducible baseline/SOTA candidate and repeat once before any source
+  claim.
+- If 7LN passes but lands near old n96, keep 7LM as a fast n32 variance result
+  and continue bottleneck profiling on n96.
+- If 7LN fails quality, TTFT, IO, or memory gates, do not change the accepted
+  n96 baseline and run a low-overhead profile before source work.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact run directory, output, metrics, stderr counters, and commit id.
