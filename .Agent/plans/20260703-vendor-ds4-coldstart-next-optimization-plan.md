@@ -10973,3 +10973,44 @@ Decision:
 - The only valid next step for real 4Expert/Q4_K verification is a complete GGUF file or another real mmap/readable backing store for the full file contents.
 - Minimum safe disk target remains `>=180G` free.
 - No deletion was performed.
+
+### 2026-07-05 External Draft/MTP Refresh After 4Expert Disk Block
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/external-draft-mtp-refresh-after-4expert-block.json`
+
+Purpose:
+
+- Continue toward the `10 tok/s` target without deleting files or downloading large models.
+- Re-check currently visible DeepSeek-V4-Flash draft/speculative artifacts after the 4Expert GGUF path became disk-blocked.
+- Use metadata/readme/safetensors-header evidence only; no full weights were downloaded and no model benchmark was run.
+
+Findings:
+
+- `RedHatAI/DeepSeek-V4-Flash-speculator.dflash` is a DFlash/speculators safetensors artifact, not GGUF. It is `3607596760 bytes`, has 62 tensors, BF16 draft weights, 5 draft layers, `block_size=8`, `speculative_tokens=7`, and aux hidden-state taps `[3,13,23,32,42]`. Validation metrics report full-sequence acceptance `0.41588552218285346` and position accuracies `[0.7878868554365931, 0.5875753957980987, 0.4541761259979246, 0.35903399619091536, 0.28966203790287387, 0.23638368573594648, 0.19339194045398048]`.
+- `inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k` has the same DFlash safetensors shape class and lower validation metrics: full-sequence acceptance `0.34524488632366185`.
+- `ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1` is a PyTorch EAGLE-3.1 draft head (`1858526016 bytes`) that reports `2.6319782135426646x` speedup on patched vLLM/B200:4 with `mean_accept_len=1.331151832460733`, but its README and benchmark state that serving requires a vLLM DeepSeek-V4 EAGLE overlay.
+- `FoxlightAI/deepseek-v4-flash-mtp` is a Skulk MTP sidecar, not standalone GGUF. Its safetensors header has 797 BF16 tensors under `mtp.0.*`, payload `6777646838 bytes`, which does not match the current vendor loader naming for `blk.%d.nextn.*` tensors.
+- Current vendor/llama.cpp source has NextN/MTP metadata/tensor placeholders and TODO comments, but no DeepSeek4 DFlash, EAGLE, Skulk MTP, or multi-token target-verification runtime path.
+- Current disk still has only about `1.8G` free on `/dev/root`, so even the smaller `3.6G` DFlash safetensors cannot be downloaded persistently without cleanup; the full `164.5G` 4Expert GGUF remains blocked.
+
+Hard-bound interpretation:
+
+- The accepted SOTA is `4.4 tok/s`, so reaching `10 tok/s` needs at least `2.2727x` effective speedup.
+- RedHat DFlash is the only external artifact in this refresh whose optimistic positional-accuracy upper bound could plausibly exceed that class if a fully sublinear verifier existed: `1 + sum(position_acc) ~= 3.908 tokens per target verification` before draft cost, hidden-state capture cost, target batch-verification cost, KV/cache cost, and vendor integration overhead.
+- This is not an accepted runtime bound. Current vendor has no source-ready DFlash verifier, no safetensors draft loader, no hidden-state aux capture for those taps, and no proof that strict 16GB cold-start TTFT/page-cache behavior would remain valid.
+
+Decision:
+
+- Do not write a speculative runtime patch yet.
+- Do not download these weights until either disk is explicitly freed or a source implementation plan passes a stricter bound.
+- The DFlash route is promoted only to `design_candidate`, not to implementation: it needs a dedicated vendor DFlash verifier plan covering safetensors/GGUF conversion, hidden-state taps, draft execution cost, exact greedy target verification, fixed-text top1/France correctness, 16GB cgroup accounting, TTFT, and pushed-source reproduction.
+- EAGLE and Foxlight MTP remain `not_source_ready` for this vendor path because they require non-vendor runtimes/overlays or naming/runtime support not present in current source.
+- Current accepted SOTA remains `4.4 tok/s`.
+
+Next concrete action:
+
+1. Preserve the current 4Expert/Q4_K blocker record and do not delete protected SOTA assets.
+2. If the user approves freeing disk, prioritize full 4Expert GGUF validation because Q4_K/top4 already has default-off loader/cache infrastructure in this branch.
+3. If no disk cleanup is approved, write a DFlash verifier design/bound artifact before touching runtime source. The design must prove that target verification is sublinear enough to beat `10 tok/s` after draft and hidden-state overhead, and it must define an exact correctness gate before any performance run.

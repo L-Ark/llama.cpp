@@ -1,0 +1,161 @@
+{
+  "date": "2026-07-05",
+  "title": "External draft/MTP refresh after 4Expert disk block",
+  "result": "dflash_design_candidate_only_no_runtime_patch",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ram_requirement": "16GB cgroup including page cache, MemorySwapMax=0",
+    "correctness_requirement": "France answer must remain semantic and coherent"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head_before_record": "50097d7929387b22dc4b17abfa42ccf2798026ed",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "git_identity_required": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "method": {
+    "web_search": [
+      "site:huggingface.co DeepSeek-V4-Flash MTP draft speculator dflash EAGLE",
+      "site:huggingface.co DeepSeek-V4-Flash 4Expert GGUF Q4_K",
+      "site:huggingface.co DeepSeek-V4-Flash speculator.dflash"
+    ],
+    "metadata_fetch": "Hugging Face model API and README/config/metrics files",
+    "safetensors_header_probe": "HTTP Range read of the safetensors header only; no full weights downloaded",
+    "full_download_performed": false,
+    "model_run_performed": false,
+    "runtime_source_modified": false
+  },
+  "disk_state": {
+    "root_fs_available": "1.8G",
+    "no_alternate_large_mount": true,
+    "impact": "No persistent download of 3.6GB DFlash, 6.8GB MTP, or 164.5GB 4Expert GGUF can be performed without cleanup."
+  },
+  "artifacts": [
+    {
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "file": "model.safetensors",
+      "size_bytes": 3607596760,
+      "type": "DFlash speculators safetensors draft",
+      "config": {
+        "architectures": ["DFlashDraftModel"],
+        "algorithm": "dflash",
+        "speculative_tokens": 7,
+        "block_size": 8,
+        "aux_hidden_state_layer_ids": [3, 13, 23, 32, 42],
+        "num_hidden_layers": 5,
+        "hidden_size": 4096,
+        "head_dim": 256,
+        "dtype": "bfloat16"
+      },
+      "metrics": {
+        "loss_epoch": 1.0930506713554988,
+        "full_acc_epoch": 0.41588552218285346,
+        "position_acc": [0.7878868554365931, 0.5875753957980987, 0.4541761259979246, 0.35903399619091536, 0.28966203790287387, 0.23638368573594648, 0.19339194045398048],
+        "optimistic_tokens_per_target_verify_upper_bound": 3.9081090376713704
+      },
+      "safetensors_header": {
+        "header_len": 6608,
+        "tensor_count": 62,
+        "dtypes": {"I64": 1, "BF16": 60, "BOOL": 1},
+        "payload_bytes_from_offsets": 3607590144,
+        "top_prefixes": [["layers.0", 11], ["layers.1", 11], ["layers.2", 11], ["layers.3", 11], ["layers.4", 11]],
+        "sample_tensors": [
+          {"name": "embed_tokens.weight", "dtype": "BF16", "shape": [129280, 4096], "bytes": 1059061760},
+          {"name": "fc.weight", "dtype": "BF16", "shape": [4096, 81920], "bytes": 671088640},
+          {"name": "layers.0.self_attn.q_proj.weight", "dtype": "BF16", "shape": [16384, 4096], "bytes": 134217728}
+        ]
+      },
+      "vendor_status": "not_source_ready_design_candidate",
+      "reason": "Current vendor source has no DFlash draft loader, hidden-state tap capture, or exact multi-token target verifier for this speculators artifact."
+    },
+    {
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "file": "model.safetensors",
+      "size_bytes": 3607596760,
+      "type": "DFlash speculators safetensors draft",
+      "metrics": {
+        "loss_epoch": 1.255922379032258,
+        "full_acc_epoch": 0.34524488632366185,
+        "position_acc": [0.7402216216821698, 0.5120305788364243, 0.3688530732868651, 0.27457541005825, 0.21206550450555678, 0.16907155031120671, 0.13732369410884726],
+        "optimistic_tokens_per_target_verify_upper_bound": 3.41414143278932
+      },
+      "safetensors_header": {
+        "header_len": 6608,
+        "tensor_count": 62,
+        "dtypes": {"I64": 1, "BF16": 60, "BOOL": 1},
+        "payload_bytes_from_offsets": 3607590144
+      },
+      "vendor_status": "not_source_ready_lower_metrics_than_redhat"
+    },
+    {
+      "repo": "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+      "url": "https://huggingface.co/ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+      "lastModified": "2026-06-07T22:41:31.000Z",
+      "file": "pytorch_model.bin",
+      "size_bytes": 1858526016,
+      "type": "EAGLE-3.1 PyTorch draft head",
+      "config": {
+        "architectures": ["LlamaForCausalLMEagle3"],
+        "num_hidden_layers": 1,
+        "hidden_size": 4096,
+        "eagle_aux_hidden_state_layer_ids": [1, 21, 40],
+        "target_model_type": "deepseek_v4"
+      },
+      "reported_benchmark": {
+        "gpu": "B200:4",
+        "baseline_tok_per_s": 15.619405951323843,
+        "spec_tok_per_s": 41.10993617236299,
+        "speedup": 2.6319782135426646,
+        "acceptance_rate": 0.11038394415357766,
+        "mean_accept_len": 1.331151832460733,
+        "note": "Requires Maniac deepseek_v4 EAGLE-3 overlay patches in vLLM; not a vendor/llama.cpp result."
+      },
+      "vendor_status": "not_source_ready_requires_vllm_overlay"
+    },
+    {
+      "repo": "FoxlightAI/deepseek-v4-flash-mtp",
+      "url": "https://huggingface.co/FoxlightAI/deepseek-v4-flash-mtp",
+      "lastModified": "2026-06-03T16:45:17.000Z",
+      "file": "mtp.safetensors",
+      "size_bytes": 6777733547,
+      "type": "Skulk MTP sidecar safetensors",
+      "safetensors_header": {
+        "header_len": 86701,
+        "tensor_count": 797,
+        "dtypes": {"BF16": 797},
+        "payload_bytes_from_offsets": 6777646838,
+        "top_prefixes": [["mtp.0", 797]],
+        "sample_tensors": [
+          {"name": "mtp.0.attn.wq_b.weight", "dtype": "BF16", "shape": [32768, 1024], "bytes": 67108864},
+          {"name": "mtp.0.ffn.experts.0.w1.weight", "dtype": "BF16", "shape": [2048, 2048], "bytes": 8388608}
+        ]
+      },
+      "vendor_status": "not_source_ready_name_and_runtime_mismatch",
+      "reason": "Current vendor loader names DeepSeek NextN placeholders as blk.%d.nextn.* and does not execute a Skulk mtp.0.* sidecar runtime."
+    }
+  ],
+  "hard_bound": {
+    "required_speedup_for_10_tok_s_from_accepted_4p4": 2.272727272727273,
+    "redhat_dflash_optimistic_upper_bound_tokens_per_verify": 3.9081090376713704,
+    "interpretation": "RedHat DFlash is plausibly interesting only if target verification is strongly sublinear and draft/hidden-state overhead is small. This cannot be assumed for current vendor; it requires a separate implementation design and correctness proof."
+  },
+  "decision": {
+    "new_sota": false,
+    "runtime_patch_allowed_now": false,
+    "strict_benchmark_allowed_now": false,
+    "dflash_route": "design_candidate_only",
+    "eagle_route": "closed_until_vendor_overlay_or_equivalent_exists",
+    "foxlight_mtp_route": "closed_until_loader_and_runtime_mapping_exists",
+    "next_action": "If disk cleanup is not approved for 4Expert, write a DFlash verifier design/bound before any runtime source edit. It must cover loader/conversion, hidden-state taps, exact greedy verification, target batch cost, draft cost, RAM/VRAM/page-cache/TTFT, fixed-text top1, France correctness, and pushed-source reproduction."
+  },
+  "no_files_deleted": true
+}
