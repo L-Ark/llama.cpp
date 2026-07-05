@@ -71589,3 +71589,105 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact run directory, metrics, output, stderr activation absence, and
   source commit.
+
+### Phase 7LU result
+
+Timestamp: 2026-07-06 01:00:00 CST.
+
+Status: accepted rollback guard.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-081153Z-phase7lu-post-coalesce-rollback-n32`
+
+Result:
+
+- source commit: `40fc9625a`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `75284.60 ms`;
+- decode `23239.54 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr coalesce match count `0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `20164543 us`;
+- current-down overlap worker `3139895 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- Source rollback is clean.
+- The default runtime path is restored and no coalesced staging remains active.
+- Endpoint is within recent diagnostic/default variance, though slower than the
+  fastest clean 7LM n32 run.
+
+Decision:
+
+- Continue from the default runtime path.
+- Do not retry blocking coalesced staging, layout-only repack, cache split,
+  broad combined staging, or Q4_0 GPU routing.
+
+## Phase 7LV - type18 feasibility audit before any next source patch
+
+Timestamp: 2026-07-06 01:02:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Decide whether the remaining type18 `(IQ3_XXS/IQ3_XXS)` compute bucket has a
+  genuinely new implementation angle, or whether it is already closed by prior
+  experiments.
+- Avoid repeating previously rejected IQ3 paths.
+
+Current evidence:
+
+- 7LP current profile:
+  - type `(18,18)` calls `311`;
+  - wall `2606.928 ms`;
+  - wait counters `0`;
+  - up/gate work is compute/kernel dominated;
+  - D2H/fuse/scatter are tiny.
+- 7LP bound:
+  - if all type18 up/gate wall vanished, n32 endpoint upper bound from
+    `22693 ms` would be about `31 / (22.693 - 2.607) = 1.54 tok/s`;
+  - realistic gains are smaller because not all kernel time is removable.
+
+Prior closed directions to audit:
+
+- vendor MMQ / fused MMQ for IQ3;
+- Q8_K decode path;
+- VDR=1 micro-probe;
+- same-type IQ3 parallel up/gate;
+- selective gate-copy/up-compute pipeline;
+- compute-only parallel up/gate.
+
+Audit command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+rg -n "IQ3_XXS|type18|type 18|fused MMQ|vendor MMQ|Q8_K|VDR_IQ3|parallel up/gate|gate-copy|compute-only" \
+  .Agent/plans/kimi-token-rate-16gb-optimization-plan.md \
+  > /root/lfz/runs/vendor-kimi-token-rate/phase7lv-type18-history-audit.txt
+```
+
+Decision rule:
+
+- If every obvious type18 path is already rejected, do not write another IQ3
+  source patch without a new kernel-level idea.
+- If the audit exposes a previously successful but not promoted path, plan a
+  narrow reproduction under the current 16GB/cold-start gates.
+- If no type18 path remains, the next optimization should return to broader
+  whole-decode profiling rather than local CUDA guesses.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Record the audit file path and the specific prior phase conclusions used for
+  the next decision.
