@@ -1,0 +1,164 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-warp-probe-validation.json",
+  "date": "2026-07-05",
+  "title": "Validation: default-off resident-source warp hot-batch compare probe",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "correctness_passed_raw_layout_performance_rejected",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true
+  },
+  "source_change": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off": true,
+    "new_env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_WARP",
+    "behavior": "When HOT_BATCH_PROBE_COMPARE is also enabled, select a half-warp CPU-compatible compare kernel instead of the scalar one-output-thread compare kernel. The probe still runs after normal CPU fallback, uses CPU dst as authoritative, does not clear matrix_row_counts, and does not change logits.",
+    "kernel_mapping": "One warp computes two output dots. Each half-warp maps CPU accum1[0..7] and accum2[0..7] to 16 CUDA lanes, keeps the ib block-pair loop sequential, then uses the same hsum order as the CPU-compatible scalar helper."
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true,
+    "notes": "Only existing warnings were observed."
+  },
+  "debug_history": [
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T022136Z-hot-batch-warp-probe/smoke-hi-compare32",
+      "result": "failed_correctness",
+      "max_abs": 1.86125025,
+      "diff_count": 18432,
+      "root_cause": "__shfl_sync was called only by sublane 0/16 while the mask named the full half-warp.",
+      "fix": "Move shfl collection outside the sublane==0 branch so all lanes named in the half-warp mask execute the same shuffle."
+    }
+  ],
+  "runs": {
+    "smoke_compare32_after_fix": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T022517Z-hot-batch-warp-probe/smoke-hi-compare32",
+      "exit_status": 0,
+      "records": 246,
+      "compare_ran": 4,
+      "compare_ok": 4,
+      "max_abs": 0,
+      "diff_count": 0,
+      "ready_rows": 202,
+      "sample_ready_rows": 6,
+      "sample_src0_bytes": 26738688,
+      "sample_out_bytes": 73728,
+      "timing_us": {
+        "alloc": 117,
+        "h2d": 64,
+        "kernel": 1032,
+        "d2h": 45,
+        "compare": 54,
+        "free": 38,
+        "elapsed": 1397
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 815484928,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      }
+    },
+    "fixed_text_compare512": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T022654Z-hot-batch-warp-probe/probe-cpu41-compare512",
+      "baseline_exit_status": 0,
+      "check_exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "records": 11890,
+      "compare_ran": 262,
+      "compare_ok": 262,
+      "op_level_max_abs": 0,
+      "op_level_diff_count": 0,
+      "ready_rows_all": 32724,
+      "not_in_manifest_rows_all": 38616,
+      "not_ready_rows_all": 0,
+      "bytes_all": {
+        "src0": 145832804352,
+        "q80": 106754560,
+        "out": 402325504
+      },
+      "sample": {
+        "ready_rows": 378,
+        "src0_bytes": 1684537344,
+        "q80_bytes": 1231616,
+        "out_bytes": 4653056,
+        "output_elements": 1163264,
+        "timing_us": {
+          "alloc": 3324,
+          "h2d": 2832,
+          "kernel": 21033,
+          "d2h": 2649,
+          "compare": 3384,
+          "free": 2049,
+          "elapsed": 37497
+        },
+        "kernel_source_bandwidth_gib_s": 74.5898,
+        "projected_kernel_ms_by_ready_rows": 1820.86,
+        "projected_kernel_ms_by_output_count": 1818.61,
+        "projected_h2d_ms": 245.473,
+        "projected_d2h_ms": 229.045,
+        "projected_total_ms_by_ready_rows": 3053.46
+      },
+      "by_kind": {
+        "up": {
+          "ready_rows": 16336,
+          "sample_ready_rows": 188,
+          "sample_src0_bytes": 837812224,
+          "sample_kernel_us": 13497,
+          "sample_source_bandwidth_gib_s": 57.8109
+        },
+        "down": {
+          "ready_rows": 16388,
+          "sample_ready_rows": 190,
+          "sample_src0_bytes": 846725120,
+          "sample_kernel_us": 7536,
+          "sample_source_bandwidth_gib_s": 104.641
+        }
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 1180934144,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      },
+      "hashes": {
+        "top1_baseline_json": "f87331a65bd46bd760b3318f1ee97e91a80e16e5b0c5e800cc8fc5d5b6a3aa36",
+        "top1_check_json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "probe_csv": "33ac3690d984f81ee331729a30189ca20378c448274debda1fcc9419dd910520",
+        "run_sh": "62735167149373a5d96c87839d14ef1d5b0084602e61102758884d600a4d765a"
+      }
+    }
+  },
+  "comparison_to_scalar_compare512": {
+    "scalar_sample_kernel_us": 214715,
+    "warp_sample_kernel_us": 21033,
+    "kernel_speedup": 10.208,
+    "scalar_projected_full_ms": 19855.255,
+    "warp_projected_full_kernel_ms": 1818.61,
+    "interpretation": "The warp mapping fixed correctness and improves the scalar diagnostic by about 10x, but the raw source layout still delivers only about 74.6 GiB/s effective source bandwidth, far below the 400-550 GiB/s practical target."
+  },
+  "decision": {
+    "correctness_gate": "passed",
+    "raw_layout_warp_performance": "rejected",
+    "reason": "Projected raw kernel time is about 1.82 s, which exceeds both the 250 ms pre-staging cutoff and the 446.414 ms total top768 budget. H2D/D2H/pinned staging cannot fix a kernel-only overrun this large.",
+    "strict_cold_performance_allowed": false,
+    "sota_changed": false,
+    "next_step": "Write a hard-bound design for a coalesced/transposed resident source layout. It must include transform/prefill TTFT cost, VRAM workspace, and whether it can plausibly raise effective source bandwidth to 400-550 GiB/s. If not, reject cpu_moe=41 + top768 and return to fresh bottleneck search."
+  }
+}
