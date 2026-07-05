@@ -80339,6 +80339,95 @@ cat "$RUN/compressibility_by_kind.tsv"
 cat "$RUN/decision.md"
 ```
 
+## Phase 7NZ - lower-bit quant runtime support and byte-budget audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 12:38 CST.
+
+Reason:
+
+- Phase 7NX showed local typed-requant candidates are not enough for
+  `5 tok/s`.
+- Phase 7NY showed generic compression of existing expert-pack slices saves
+  less than `1%`.
+- The remaining byte-reduction path is a true lower-bit expert format or a new
+  pre-quantized asset.
+- Before downloading or converting assets, identify which lower-bit formats are
+  actually supported by the current CUDA/MoE path and how much byte reduction
+  each could provide on the current runtime-read byte mix.
+
+Goal:
+
+- Build a source-supported lower-bit candidate matrix for up/gate/down expert
+  tensors.
+- Estimate whether any supported target format can meet the Phase 7NX byte
+  target:
+  - `20.0%` reduction under 7NU raw12; or
+  - `31.2%` reduction under raw8; or
+  - `69.1%` reduction under current runtime throughput.
+- Do not run model inference.
+- Do not edit source.
+- Do not download assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- Current source tree:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - CUDA quant/MMVQ files;
+  - GGML type definitions / type traits.
+- Actual byte mix from Phase 7NX:
+  - up `35.967 GiB/n32`;
+  - gate `38.610 GiB/n32`;
+  - down `43.004 GiB/n32`;
+  - total `117.581 GiB/n32`.
+- Current per-kind/type profile from 7MY/7MA where available.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nz-lowerbit-support`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7nz_lowerbit_support.py`;
+   - `source_type_support.tsv`;
+   - `lowerbit_budget.tsv`;
+   - `decision.md`.
+3. Inspect source support for GGML quant types in the active MoE paths:
+   - up/gate compact MMVQ;
+   - mixed up/gate;
+   - down compact/batch;
+   - CPU fallback if relevant.
+4. Extract GGML type sizes from type traits or compile-time source definitions
+   rather than guessing where possible.
+5. Build candidate budgets:
+   - convert down only to each supported lower-bit type;
+   - convert up/gate only;
+   - convert all expert tensors;
+   - include unsupported but theoretically useful types separately as
+     "requires new kernel" candidates.
+6. Decide:
+   - whether a supported current-source lower-bit target exists;
+   - whether it meets the Phase 7NX `20%` raw12 threshold;
+   - whether quality risk is so high that it must be externally validated before
+     any source work.
+
+Decision rule:
+
+- Reject source work if no supported current-source lower-bit target reaches
+  `>=20%` global byte reduction.
+- If a supported target reaches `>=20%`, write the next plan for an opt-in
+  conversion/pack smoke with strict France quality and n32 gates.
+- If only unsupported targets reach the threshold, next work must be kernel
+  support planning or external asset validation, not pack conversion.
+
+Reproducibility:
+
+- Commit and push this 7NZ plan before running the audit.
+- Commit and push the 7NZ result before any follow-up source or asset work.
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
