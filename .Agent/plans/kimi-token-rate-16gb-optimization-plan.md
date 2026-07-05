@@ -79963,6 +79963,91 @@ cat "$RUN/online_concurrency_hist.tsv"
 cat "$RUN/decision.md"
 ```
 
+## Phase 7NX - byte-reduction target and quantization budget solver
+
+Status: planned.
+
+Timestamp: 2026-07-06 11:44 CST.
+
+Reason:
+
+- Phase 7NU proved pure IO cannot reach `5 tok/s` at the current
+  `3.797 GiB/token` movement volume.
+- Phase 7NW closed the near-term same-layer scheduler family because earlier
+  source experiments reduced IO wait but regressed endpoint decode.
+- The next valid direction is therefore byte reduction / asset format.
+- Before changing model assets or expert-pack formats, compute the exact byte
+  reduction required for:
+  - current runtime throughput;
+  - 7NU raw trace-replay ceiling;
+  - intermediate throughput targets.
+
+Goal:
+
+- Quantify how much up/gate/down movement must be removed to make `5 tok/s`
+  physically possible.
+- Compare that target against current known typed-requant candidates from
+  Phase 7NO/7NP and the actual n32 iouring byte mix.
+- Do not run model inference.
+- Do not edit source.
+- Do not download assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- 7MA copy profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv`
+- 7MY type profiles:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/up-gate-profile.csv`
+  and
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/down-batch-profile.csv`
+- Phase 7NO down requant result.
+- Phase 7NP up/gate byte-reduction result.
+- Phase 7NU raw IO ceiling result.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nx-byte-reduction-budget`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7nx_byte_budget.py`;
+   - `byte_budget_summary.tsv`;
+   - `candidate_budget.tsv`;
+   - `decision.md`.
+3. Parse actual iouring rows from 7MA:
+   - exclude the partial prefix segment;
+   - split by tensor kind (`up`, `gate`, `down`);
+   - compute GiB/token for each kind and total.
+4. Compute required bytes/token for target token rates under throughput
+   assumptions:
+   - current 7NN effective throughput: `5.854 GiB/s`;
+   - 7NU raw 8-worker throughput: `13.048 GiB/s`;
+   - 7NU raw 12-worker throughput: `15.181 GiB/s`;
+   - required throughput for current bytes at `5 tok/s`: `18.985 GiB/s`.
+5. Compare candidates:
+   - Phase 7NO all-down IQ2_S-style byte save: `12.667 GiB` per n32;
+   - Phase 7NP all-up/gate IQ2_S-style byte save: `5.867 GiB` per n32;
+   - combined 7NO+7NP;
+   - ideal down removal;
+   - ideal up/gate removal;
+   - uniform total byte shrink percentages from `10%` to `70%`.
+6. Decide whether a practical asset-format path exists:
+   - if combined known typed-requant candidates cannot reach the required
+     bytes/token even under 7NU raw throughput, reject narrow typed-pack source
+     work;
+   - if they can reach the 7NU raw envelope but not current runtime envelope,
+     require both byte reduction and a new pipeline that avoids 7KW/7LE overlap
+     loss;
+   - if no known candidate reaches either envelope, next asset work must be a
+     new quantized model/pack, not local scheduler code.
+
+Reproducibility:
+
+- Commit and push this 7NX plan before running the audit.
+- Commit and push the 7NX result before any follow-up source or asset work.
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
