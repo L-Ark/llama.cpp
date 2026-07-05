@@ -72183,3 +72183,69 @@ Decision:
 - Continue future optimization from the default path at `09831a4a9`.
 - The next implementation must not simply reduce iouring wait; it must preserve
   or improve endpoint overlap as measured by decode wall time.
+
+## Phase 7LZ - current default n96 reproducibility guard
+
+Timestamp: 2026-07-06 02:04:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-run the current default path at `N=96` after the shared-IO revert.
+- Determine whether the fast 7LY n32 default-path result is just n32 variance
+  or also appears at the longer n96 horizon.
+- Keep this as a baseline/reproducibility guard, not a source optimization.
+
+Why this is needed:
+
+- 7LY n32 after revert produced `22256.21 ms / 31`, `1.39 tok/s`, which is
+  faster than the recent default band.
+- Because no accepted source optimization was introduced, the result must not
+  be promoted without longer-horizon reproduction.
+- The plan requires stable n96 semantic output, strict 16GB host RAM, and cold
+  start for every meaningful performance claim.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 03f4cd9aa
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lz-current-default-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `type22 shared IO early-up staging active`.
+
+Decision rule:
+
+- If n96 is within the recent default band (`~1.33-1.36 tok/s`), treat 7LY as
+  useful baseline variance only and continue searching for a source change.
+- If n96 reproducibly improves over 7KZ/7JY without any source change, update
+  the baseline but do not call it an optimization.
+- If n96 regresses or fails gates, investigate runtime state before any source
+  change.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, source commit, build status, metrics, output, memory,
+  activation absence, and comparison with 7KZ/7JY.
