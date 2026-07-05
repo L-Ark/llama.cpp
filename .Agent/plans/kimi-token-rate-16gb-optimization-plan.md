@@ -74234,3 +74234,145 @@ Decision rule:
   targeted compute probe.
 - If profiling overhead makes endpoint incomparable, use subcomponent totals
   only and run a no-profile confirmation before any source patch.
+
+7MK result:
+
+Timestamp: 2026-07-06 20:28:00 CST.
+
+Status: diagnostic passed.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-103755Z-phase7mk-current-full-profile-n32`
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - answer:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `82668.94 ms`;
+  - decode `23654.05 ms / 31`, `1.31 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Profile summary:
+
+- CPU fallback:
+  - prompt,type=11: `21198.699 ms`;
+  - prompt,type=22: `20882.077 ms`;
+  - prompt,type=18: `15866.054 ms`;
+  - prompt,type=23: `7838.161 ms`;
+  - prompt,type=2: `3258.034 ms`;
+  - decode,type=2: `2216.488 ms`.
+- Decode Q4 fallback top tensors:
+  - blk.10: `379.144 ms`;
+  - blk.18: `354.120 ms`;
+  - blk.9: `339.472 ms`;
+  - blk.6: `334.328 ms`;
+  - blk.8: `298.400 ms`;
+  - blk.7: `293.816 ms`;
+  - blk.15: `217.208 ms`.
+- Down batch by type:
+  - type23 wall `2198.092 ms`, stage `2126.294 ms`;
+  - type11 wall `2149.085 ms`, stage `1917.814 ms`.
+- Up/gate by type:
+  - type22/type22 wall `3532.742 ms`, up_wait `3267.803 ms`,
+    gate_wait `3414.437 ms`;
+  - type18/type18 wall `2680.071 ms`, kernel `2639.421 ms`.
+- Runtime counters:
+  - expert-pack iouring wait `20673296 us`;
+  - current-down worker `3306463 us`;
+  - down cache `766` slots, hit rate `73.4%`;
+  - upgate cache `1735` slots, hit rate `45.2%`.
+
+Cache split simulation:
+
+- Command:
+
+```bash
+python3 scripts/moe-route-cache-sim.py \
+  /root/lfz/runs/vendor-kimi-token-rate/20260705-103755Z-phase7mk-current-full-profile-n32/route-profile.csv \
+  --budget-mib 15000 --sweep --sweep-min 50 --sweep-max 75 --sweep-step 1 \
+  --trace /root/lfz/runs/vendor-kimi-token-rate/20260705-103755Z-phase7mk-current-full-profile-n32/route-trace.csv \
+  --policy lru --preload protected \
+  --profile-stderr /root/lfz/runs/vendor-kimi-token-rate/20260705-103755Z-phase7mk-current-full-profile-n32/stderr.txt
+```
+
+- Output saved:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-103755Z-phase7mk-current-full-profile-n32/cache-sweep-50-75.txt`
+- Profile objective recommends `UPGATE_PCT=63`, close to current `62`.
+- Trace replay calibrated view:
+  - `UPGATE_PCT=50`: down exposed `5175 ms`, upgate wait `3113 ms`;
+  - `UPGATE_PCT=62`: down exposed `6442 ms`, upgate wait `2821 ms`;
+  - `UPGATE_PCT=75`: down exposed `7708 ms`, upgate wait `2484 ms`.
+
+Interpretation:
+
+- Current split is near optimal for static protected profile hit rate.
+- Trace replay suggests a lower upgate split may reduce exposed down IO enough
+  to offset extra upgate wait.
+- This is a runtime-only hypothesis and needs a cold-start endpoint run. It is
+  not the same as blindly repeating older split sweeps because the decision is
+  based on the current route trace and calibrated counters.
+
+Decision:
+
+- Run a one-off `UPGATE_PCT=50` n32 endpoint probe with default profiling
+  disabled (`MIN_PROFILE=1`).
+- If it does not beat the current default band, keep `62`.
+
+## Phase 7ML - Runtime split probe at UPGATE_PCT=50
+
+Timestamp: 2026-07-06 20:34:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test the trace-simulated lower upgate split without source changes.
+- Determine whether reducing down misses improves endpoint token rate under the
+  strict cold-start 16GB host RAM gate.
+
+Theory:
+
+- 7MK simulation predicts:
+  - lower down exposed IO at `UPGATE_PCT=50`;
+  - higher upgate wait;
+  - possible net endpoint gain if down exposed IO dominates.
+- Hard upper bound from simulation:
+  - down exposed improvement about `1267 ms` on n32;
+  - upgate wait regression about `292 ms`;
+  - rough best-case endpoint gain below `1.0 s / n32`.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ml-upgate50-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=50 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality `pass`;
+- France answer semantically correct;
+- TTFT below `127598.064 ms`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode improves versus current default band and repeat confirms before
+  changing any committed default script/env.
+
+Rollback:
+
+- No source rollback is needed because this is runtime-only.
+- If endpoint regresses or only matches noise, keep `UPGATE_PCT=62`.
