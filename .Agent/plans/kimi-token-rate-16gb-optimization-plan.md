@@ -77950,3 +77950,137 @@ Next recommended phase:
   - reject DFlash for the `5 tok/s` track if block-size `8` or `16`
     verification exceeds the envelope above, unless a separate MoE batch
     verification optimization is planned first.
+
+## Phase 7NB - exact target block verification cost probe
+
+Timestamp: 2026-07-05 23:48:00 CST.
+
+Status: planned.
+
+Source baseline:
+
+- Latest pushed baseline:
+  `349453604 docs: record dflash compatibility audit`.
+- 7NA conclusion:
+  DFlash is not a drop-in draft model; its value depends on whether Kimi target
+  verification can batch a proposed block cheaply enough.
+- Existing binary inspection:
+  - `build-cuda-batch/bin/llama-batched` exists, but it is multi-sequence
+    generation, not single-sequence speculative verification;
+  - `build-cuda-batch/bin/llama-batched-bench` exists, but it warms up, uses
+    random tokens, and measures multi-sequence text generation patterns;
+  - therefore neither is a strict proof for DFlash-style single-sequence block
+    verification.
+
+Goal:
+
+- Add the smallest possible diagnostic tool to measure exact target verification
+  cost for a fixed single sequence after France prompt prefill.
+- Do not change production generation behavior.
+- Do not promote SOTA from this phase.
+- Use the result only to decide whether DFlash implementation is worth doing.
+
+Why a new diagnostic tool is needed:
+
+- DFlash verifier semantics are:
+  - target KV already contains the prompt/history;
+  - a proposed block of `B` candidate tokens is evaluated in one target forward
+    pass for the same sequence at consecutive positions;
+  - logits from the block are used to accept a contiguous prefix.
+- Existing `llama-batched`/`llama-batched-bench` do not measure this exact shape:
+  - multi-sequence batches do not include causal dependencies among proposed
+    tokens in the same sequence;
+  - random token routing does not represent the France continuation;
+  - warmup violates the cold-start discipline if treated as a formal result.
+
+Implementation design:
+
+- Add a diagnostic example or tool, tentatively:
+  `tools/kimi-verify-bench`.
+- Inputs:
+  - normal common model/runtime args;
+  - `--verify-block-size B`;
+  - optional fixed continuation string;
+  - optional JSON output path.
+- Fixed prompt:
+  `<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>`
+- Fixed continuation text for verification tokens:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine.`
+- Tool flow:
+  1. Load model with the same Kimi runtime flags as current strict SOTA.
+  2. Tokenize prompt and continuation with the target vocab.
+  3. Prefill the prompt into target KV; record prefill/TTFT-style wall time.
+  4. Build one `llama_batch` for the first `B` continuation tokens at consecutive
+     positions in the same sequence, with logits enabled.
+  5. Run exactly one `llama_decode` target verification pass and
+     `llama_synchronize`.
+  6. Record `verify_wall_ms`, `B`, `verify_tokens_per_s`, prompt token count,
+     continuation token IDs/text, cgroup memory, and existing Kimi profile
+     counters emitted by the runtime.
+  7. Exit without generating a final answer; the quality gate is covered by a
+     separate strict n32 France baseline run in the same phase.
+
+Strict experiment matrix:
+
+- First run a current strict n32 France baseline with:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`
+  under `MemoryMax=15900000000`, `MemorySwapMax=0`, cold start, and the current
+  accepted runtime env. This must pass quality before the diagnostic numbers are
+  considered.
+- Then run one cold-start process per block size:
+  - `B=1`;
+  - `B=2`;
+  - `B=4`;
+  - `B=8`;
+  - `B=16`.
+- Each block-size run must:
+  - use `systemd-run --wait --collect --same-dir`;
+  - set `MemoryMax=15900000000`;
+  - set `MemorySwapMax=0`;
+  - drop page cache before start;
+  - use the same expert pack, VRAM cache, pinned staging, io_uring, and cache
+    drop envs as current strict SOTA;
+  - write raw stdout/stderr, command, env, cgroup files, and parsed metrics.
+
+Acceptance and decision thresholds:
+
+- This phase cannot promote SOTA.
+- Baseline n32 must pass:
+  - semantically correct France answer;
+  - host RAM below 16 GB including page cache;
+  - no OOM;
+  - TTFT within current strict gate.
+- Diagnostic pass/fail for DFlash feasibility:
+  - `B=4` target verify alone should be well below `0.800 s`;
+  - `B=8` target verify alone should be well below `1.600 s`;
+  - `B=16` target verify alone should be well below `3.200 s`;
+  - because DFlash draft overhead is still missing, a realistic pass should
+    leave at least `15-25%` time budget for draft and bookkeeping.
+- If `verify_wall_ms(B)` scales near-linearly with `B`, reject DFlash as the
+  next optimization route and return to MoE batch/IO optimization.
+- If `B=8` or `B=16` is close to one-token cost or strongly sublinear, plan the
+  DFlash loader/runtime implementation phase.
+
+Required artifacts:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nb-target-verify-bench`
+- Files:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `implementation_notes.md`;
+  - `baseline-n32/`;
+  - `verify-B1/`;
+  - `verify-B2/`;
+  - `verify-B4/`;
+  - `verify-B8/`;
+  - `verify-B16/`;
+  - `summary.tsv`;
+  - `decision.md`.
+
+Reproducibility:
+
+- Commit and push this plan before editing source.
+- Commit and push the diagnostic tool only after it builds and is confirmed to
+  be behavior-isolated from production paths.
+- Commit and push all result documentation before any DFlash runtime work.
