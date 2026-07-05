@@ -83153,3 +83153,105 @@ Reproducibility:
 - Commit and push this 7OA plan before running the audit.
 - Commit and push the 7OA result before any follow-up source, model, or asset
   work.
+
+### Phase 7OA result
+
+Timestamp: 2026-07-06 05:33 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-213240Z-phase7oa-iq2xxs-moe-feasibility`
+
+Plan commit before execution:
+
+- `9541795c5` (`docs: plan iq2 xxs moe feasibility audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7oa_iq2xxs_moe_feasibility.py`
+- `source_gate_matrix.tsv`
+- `implementation_scope.tsv`
+- `bounds.tsv`
+- `decision.md`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was edited.
+- No asset was downloaded or converted.
+- The audit used the Phase 7NZ `IQ2_XXS` budget:
+  - target movement `79.741 GiB/n32`;
+  - target movement `2.572 GiB/token`;
+  - byte save `37.840 GiB`;
+  - byte save `32.18%`.
+
+Movement bounds:
+
+| bandwidth case | bandwidth GiB/s | movement ms/token | movement-only tok/s | non-I/O budget for 5 tok/s |
+|---|---:|---:|---:|---:|
+| current effective 7NN | `5.854` | `439.4` | `2.28` | `-239.4 ms` |
+| 7NU raw8 | `13.048` | `197.1` | `5.07` | `2.9 ms` |
+| 7NU raw12 | `15.181` | `169.4` | `5.90` | `30.6 ms` |
+
+Source gate summary:
+
+| gate | status | implication |
+|---|---|---|
+| `ggml_type_definition` | already supported | GGML type and traits exist |
+| `cuda_mmvq_vecdot_and_dispatch` | already supported | generic MMVQ has `IQ2_XXS` vec-dot and dispatch |
+| `cuda_mmq_dispatch_and_template` | already supported | generic MMQ switch and template instance exist |
+| `llama_quantize_cli_acceptance` | already supported | CLI and ftype mapping know `IQ2_XXS` |
+| `moe_stream_type_supported` | small switch/registration | current Kimi stream admission rejects `IQ2_XXS` |
+| `moe_compact_mmvq_switch` | small switch/registration | compact MMVQ local switch rejects `IQ2_XXS` |
+| `moe_mmq_slot_switch` | small switch/registration | optional MMQ slot path rejects `IQ2_XXS` |
+| `down_q8k_special_path` | small switch/registration | can likely leave off and use compact MMVQ, but must verify |
+| `mixed_up_gate_type_policy` | small switch/registration | no change for all-expert `IQ2_XXS`; partial conversion needs policy |
+| `expert_pack_copy_format` | small switch/registration | pack is raw bytes but stride/slot dry-run is required |
+| `prompt_exact_q8k_path` | requires prompt kernel/policy | exact prompt path lacks `IQ2_XXS` branch |
+| `quantizer_imatrix_requirement` | requires asset/imatrix | `IQ2_XXS` requires imatrix; no validated asset in this phase |
+
+Decision:
+
+- Accept 7OA as a reproducible `IQ2_XXS` MoE-stream feasibility audit.
+- Do not implement an `IQ2_XXS` activation patch yet:
+  - decode-side generic CUDA support appears present;
+  - but prompt exact `Q8_K` currently does not admit `IQ2_XXS`;
+  - and no reproducible Kimi `IQ2_XXS` expert asset/imatrix path has been
+    validated.
+- A naive source patch would risk prompt CPU fallback, TTFT regression, and
+  page-cache growth under the 16GB host RAM gate.
+- `IQ2_XXS` can exceed `5 tok/s` only if the runtime also reaches the raw8 or
+  raw12 I/O envelope. At current effective bandwidth, it is still limited to
+  about `2.28 tok/s`.
+- Current SOTA remains unchanged.
+
+Recommended next plan:
+
+- Phase 7OB should close the smallest blocker first:
+  - prompt exact `Q8_K` `IQ2_XXS` kernel/math feasibility; or
+  - asset/imatrix validation if a reproducible Kimi `IQ2_XXS` asset path is
+    available before source work.
+- Do not move to `IQ1_S` until `IQ2_XXS` is either rejected or
+  quality-validated, because `IQ1_S` has higher quality risk.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN_DIR=/root/lfz/runs/vendor-kimi-token-rate/20260705-213240Z-phase7oa-iq2xxs-moe-feasibility \
+PHASE7NZ_RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-211955Z-phase7nz-lowerbit-support \
+IQ2XXS_TOTAL_GIB=79.741 \
+IQ2XXS_SAVED_GIB=37.84 \
+BASE_TOTAL_GIB=117.581 \
+DECODE_TOKENS=31 \
+BW_CURRENT_GIB_S=5.854 \
+BW_RAW8_GIB_S=13.048 \
+BW_RAW12_GIB_S=15.181 \
+python3 "$RUN_DIR/phase7oa_iq2xxs_moe_feasibility.py"
+cat "$RUN_DIR/source_gate_matrix.tsv"
+cat "$RUN_DIR/implementation_scope.tsv"
+cat "$RUN_DIR/bounds.tsv"
+cat "$RUN_DIR/decision.md"
+```
