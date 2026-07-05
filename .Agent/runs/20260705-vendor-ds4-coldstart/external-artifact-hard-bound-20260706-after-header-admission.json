@@ -1,0 +1,631 @@
+{
+  "accepted_bound_inputs": {
+    "decode_fallback_ms": 19115.399,
+    "decode_non_fallback_ms": 11932.04771,
+    "decoded_tokens_estimate": 135.5739515152,
+    "gpu_vram_mib": 32109,
+    "native_extra_gpu_moe_layer_reference_bytes": 3422552064,
+    "native_size_bytes": 156148189760,
+    "target_decode_ms_for_10_tok_s": 13557.39515152
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-hard-bound-20260706-after-header-admission.json",
+  "created_at_utc": "2026-07-05T18:53:00Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "best_full_single_candidate_best_vram_tok_s": 9.435899652555262,
+    "best_full_single_candidate_label": "new_reap_k128_q2_uniform",
+    "full_model_download_performed": false,
+    "new_sota": false,
+    "next_allowed_work": "Empirical progress still requires disk cleanup approval for full downloads and correctness gates; without disk, continue only with new hard-bound proof or newly appearing artifact metadata.",
+    "runtime_source_edit_allowed_next": false,
+    "strict_cold_benchmark_allowed": false,
+    "summary": "New full single-file REAP/compact GGUF candidates remain below 10 tok/s under optimistic size and VRAM placement bounds. Split and sidecar files require full artifact support and correctness testing, and dense sidecars are not current vendor-loadable full models. No runtime source edit or SOTA benchmark is allowed from metadata/header evidence."
+  },
+  "inputs": {
+    "header_admission": ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-header-admission-20260706-after-refresh.json",
+    "metadata_refresh": ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-20260706-after-split-close.json"
+  },
+  "method": "Correct split shard sizes to full split-family totals where possible; reject dense sidecar-only files as non-full models; for full single-file deepseek4 GGUFs compute size-only and optimistic VRAM placement bounds from header tensor offsets. No model weights downloaded beyond 64MiB HTTP ranges already recorded.",
+  "normalized_candidates": [
+    {
+      "architecture": "deepseek4",
+      "best_vram_projection": {
+        "cpu_moe_layers_remaining": 18,
+        "decode_ms": 14367.888225526676,
+        "gpu_moe_layers_fit": 25,
+        "tok_s": 9.435899652555262,
+        "vram_reserve_gib": 0
+      },
+      "best_vram_tok_s": 9.435899652555262,
+      "decision": "below_10_hard_bound_metadata_only",
+      "expert_count": 256,
+      "expert_payload_estimate": {
+        "expert_bytes": 41674604544,
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_tensor_count": 129,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "nonexpert_bytes": 8764757376
+      },
+      "expert_tensor_count_in_header": 129,
+      "expert_used_count": 6,
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "full_model_size_bytes_for_bound": 50439361920,
+      "kind": "full_single_gguf",
+      "label": "new_reap_k128_q2_uniform",
+      "remote_file_size_bytes": 50439361920,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 18106.74963826529,
+      "size_only_tok_s": 7.48748142122037,
+      "size_ratio_vs_native": 0.3230223930070875,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": {
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_payload_per_layer_gib": 0.9026162790697675,
+        "nonexpert_payload_bytes": 8764757376,
+        "nonexpert_payload_gib": 8.162816405296326,
+        "per_layer_ratio_vs_native_reference": 0.28317373461012313,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 18,
+            "decode_ms": 14367.888225526676,
+            "gpu_moe_layers_fit": 25,
+            "tok_s": 9.435899652555262,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 19,
+            "decode_ms": 14503.212698611493,
+            "gpu_moe_layers_fit": 24,
+            "tok_s": 9.34785652893166,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 20,
+            "decode_ms": 14638.537171696307,
+            "gpu_moe_layers_fit": 23,
+            "tok_s": 9.261441216772193,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 14773.861644781122,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 9.17660898517292,
+            "vram_reserve_gib": 3
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 14909.186117865938,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 9.09331672724505,
+            "vram_reserve_gib": 4
+          }
+        ],
+        "required_gpu_moe_layers_for_10tok_approx": 31
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "best_vram_projection": {
+        "cpu_moe_layers_remaining": 18,
+        "decode_ms": 14367.888225526676,
+        "gpu_moe_layers_fit": 25,
+        "tok_s": 9.435899652555262,
+        "vram_reserve_gib": 0
+      },
+      "best_vram_tok_s": 9.435899652555262,
+      "decision": "below_10_hard_bound_metadata_only",
+      "expert_count": 256,
+      "expert_payload_estimate": {
+        "expert_bytes": 41674604544,
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_tensor_count": 129,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "nonexpert_bytes": 8764757728
+      },
+      "expert_tensor_count_in_header": 129,
+      "expert_used_count": 6,
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "full_model_size_bytes_for_bound": 50439362272,
+      "kind": "full_single_gguf",
+      "label": "new_reap50_compact_iq2xxs",
+      "remote_file_size_bytes": 50439362272,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "size_only_decode_ms_if_fallback_scales": 18106.749681356538,
+      "size_only_tok_s": 7.487481403401329,
+      "size_ratio_vs_native": 0.3230223952613564,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": {
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_payload_per_layer_gib": 0.9026162790697675,
+        "nonexpert_payload_bytes": 8764757728,
+        "nonexpert_payload_gib": 8.162816733121872,
+        "per_layer_ratio_vs_native_reference": 0.28317373461012313,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 18,
+            "decode_ms": 14367.888225526676,
+            "gpu_moe_layers_fit": 25,
+            "tok_s": 9.435899652555262,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 19,
+            "decode_ms": 14503.212698611493,
+            "gpu_moe_layers_fit": 24,
+            "tok_s": 9.34785652893166,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 20,
+            "decode_ms": 14638.537171696307,
+            "gpu_moe_layers_fit": 23,
+            "tok_s": 9.261441216772193,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 14773.861644781122,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 9.17660898517292,
+            "vram_reserve_gib": 3
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 14909.186117865938,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 9.09331672724505,
+            "vram_reserve_gib": 4
+          }
+        ],
+        "required_gpu_moe_layers_for_10tok_approx": 31
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "best_vram_projection": {
+        "cpu_moe_layers_remaining": 21,
+        "decode_ms": 15144.53302757866,
+        "gpu_moe_layers_fit": 22,
+        "tok_s": 8.952006065047742,
+        "vram_reserve_gib": 0
+      },
+      "best_vram_tok_s": 8.952006065047742,
+      "decision": "below_10_hard_bound_metadata_only",
+      "expert_count": 256,
+      "expert_payload_estimate": {
+        "expert_bytes": 47110422528,
+        "expert_payload_per_layer_bytes": 1095591221.5813954,
+        "expert_tensor_count": 129,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "nonexpert_bytes": 8764757664
+      },
+      "expert_tensor_count_in_header": 129,
+      "expert_used_count": 6,
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "full_model_size_bytes_for_bound": 55875180192,
+      "kind": "full_single_gguf",
+      "label": "new_reap_k128_q2_q4_mixed",
+      "remote_file_size_bytes": 55875180192,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 18772.19337680928,
+      "size_only_tok_s": 7.2220623767217775,
+      "size_ratio_vs_native": 0.3578343128913645,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 74,
+        "Q2_K": 37,
+        "Q4_K": 18,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": {
+        "expert_payload_per_layer_bytes": 1095591221.5813954,
+        "expert_payload_per_layer_gib": 1.0203488372093024,
+        "nonexpert_payload_bytes": 8764757664,
+        "nonexpert_payload_gib": 8.162816673517227,
+        "per_layer_ratio_vs_native_reference": 0.320109439124487,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 15144.53302757866,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 8.952006065047742,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15297.50851889193,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.862485766735842,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 23,
+            "decode_ms": 15450.4840102052,
+            "gpu_moe_layers_fit": 20,
+            "tok_s": 8.774738152258017,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 24,
+            "decode_ms": 15603.45950151847,
+            "gpu_moe_layers_fit": 19,
+            "tok_s": 8.68871108371874,
+            "vram_reserve_gib": 3
+          },
+          {
+            "cpu_moe_layers_remaining": 25,
+            "decode_ms": 15756.434992831739,
+            "gpu_moe_layers_fit": 18,
+            "tok_s": 8.604354448000342,
+            "vram_reserve_gib": 4
+          }
+        ],
+        "required_gpu_moe_layers_for_10tok_approx": 33
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "best_vram_projection": {
+        "cpu_moe_layers_remaining": 22,
+        "decode_ms": 15410.769219191177,
+        "gpu_moe_layers_fit": 21,
+        "tok_s": 8.797351357800393,
+        "vram_reserve_gib": 0
+      },
+      "best_vram_tok_s": 8.797351357800393,
+      "decision": "below_10_hard_bound_metadata_only",
+      "expert_count": 160,
+      "expert_payload_estimate": {
+        "expert_bytes": 48695869440,
+        "expert_payload_per_layer_bytes": 1132462080.0,
+        "expert_tensor_count": 129,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.expert_count": 160,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "nonexpert_bytes": 8772888160
+      },
+      "expert_tensor_count_in_header": 129,
+      "expert_used_count": 6,
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "full_model_size_bytes_for_bound": 57468757600,
+      "kind": "full_single_gguf",
+      "label": "new_0xsero_spark_q2_reap",
+      "remote_file_size_bytes": 57468757600,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 18967.276445259355,
+      "size_only_tok_s": 7.147781702158145,
+      "size_ratio_vs_native": 0.3680398580882018,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": {
+        "expert_payload_per_layer_bytes": 1132462080.0,
+        "expert_payload_per_layer_gib": 1.0546875,
+        "nonexpert_payload_bytes": 8772888160,
+        "nonexpert_payload_gib": 8.170388787984848,
+        "per_layer_ratio_vs_native_reference": 0.33088235294117646,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15410.769219191177,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.797351357800393,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15410.769219191177,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.797351357800393,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 23,
+            "decode_ms": 15568.892924154414,
+            "gpu_moe_layers_fit": 20,
+            "tok_s": 8.708002050991263,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 24,
+            "decode_ms": 15727.016629117648,
+            "gpu_moe_layers_fit": 19,
+            "tok_s": 8.620449428672492,
+            "vram_reserve_gib": 3
+          },
+          {
+            "cpu_moe_layers_remaining": 25,
+            "decode_ms": 15885.140334080883,
+            "gpu_moe_layers_fit": 18,
+            "tok_s": 8.534639837227749,
+            "vram_reserve_gib": 4
+          }
+        ],
+        "required_gpu_moe_layers_for_10tok_approx": 33
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "best_vram_projection": {
+        "cpu_moe_layers_remaining": 26,
+        "decode_ms": 16980.238923337893,
+        "gpu_moe_layers_fit": 17,
+        "tok_s": 7.984219310887619,
+        "vram_reserve_gib": 0
+      },
+      "best_vram_tok_s": 7.984219310887619,
+      "decision": "below_10_hard_bound_metadata_only",
+      "expert_count": 256,
+      "expert_payload_estimate": {
+        "expert_bytes": 59793997824,
+        "expert_payload_per_layer_bytes": 1390558088.9302325,
+        "expert_tensor_count": 129,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "nonexpert_bytes": 8785739456
+      },
+      "expert_tensor_count_in_header": 129,
+      "expert_used_count": 6,
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "full_model_size_bytes_for_bound": 68579737280,
+      "kind": "full_single_gguf",
+      "label": "new_reap25_lcb50_iq2xxs",
+      "remote_file_size_bytes": 68579737280,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "size_only_decode_ms_if_fallback_scales": 20327.463906865778,
+      "size_only_tok_s": 6.669496605004854,
+      "size_ratio_vs_native": 0.4391964926740884,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": {
+        "expert_payload_per_layer_bytes": 1390558088.9302325,
+        "expert_payload_per_layer_gib": 1.2950581395348837,
+        "nonexpert_payload_bytes": 8785739456,
+        "nonexpert_payload_gib": 8.182357490062714,
+        "per_layer_ratio_vs_native_reference": 0.4062927496580027,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 26,
+            "decode_ms": 16980.238923337893,
+            "gpu_moe_layers_fit": 17,
+            "tok_s": 7.984219310887619,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 26,
+            "decode_ms": 16980.238923337893,
+            "gpu_moe_layers_fit": 17,
+            "tok_s": 7.984219310887619,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 27,
+            "decode_ms": 17174.40012385089,
+            "gpu_moe_layers_fit": 16,
+            "tok_s": 7.893955569774,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 28,
+            "decode_ms": 17368.561324363887,
+            "gpu_moe_layers_fit": 15,
+            "tok_s": 7.805709925152095,
+            "vram_reserve_gib": 3
+          },
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 17562.72252487688,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.719415445023687,
+            "vram_reserve_gib": 4
+          }
+        ],
+        "required_gpu_moe_layers_for_10tok_approx": 35
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "decision": "full_split_download_required_before_correctness; size_bound_uses_total_family_size_when_available",
+      "expert_count": 256,
+      "expert_payload_estimate": null,
+      "expert_tensor_count_in_header": 99,
+      "expert_used_count": 6,
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "full_model_size_bytes_for_bound": 64508046688,
+      "kind": "split_gguf_header_shard",
+      "label": "teamblobfish_iq1m_split_first",
+      "remote_file_size_bytes": 49882725408,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 19829.01438663596,
+      "size_only_tok_s": 6.8371502925819625,
+      "size_ratio_vs_native": 0.4131206822643859,
+      "split_note": {
+        "shards": 2,
+        "split_family": "IQ1_M/"
+      },
+      "type_counts": {
+        "F32": 416,
+        "I32": 3,
+        "IQ1_M": 329,
+        "Q2_K": 5,
+        "Q5_K": 279
+      },
+      "vram_placement_bound": null
+    },
+    {
+      "architecture": "deepseek4",
+      "decision": "full_split_download_required_before_correctness; size_bound_uses_total_family_size_when_available",
+      "expert_count": 256,
+      "expert_payload_estimate": null,
+      "expert_tensor_count_in_header": 104,
+      "expert_used_count": 6,
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "full_model_size_bytes_for_bound": 61540805344,
+      "kind": "split_gguf_header_shard",
+      "label": "teamblobfish_iq1s_xl_split_first",
+      "remote_file_size_bytes": 49952658368,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 19465.769687436856,
+      "size_only_tok_s": 6.964736236589658,
+      "size_ratio_vs_native": 0.3941179557610518,
+      "split_note": {
+        "shards": 2,
+        "split_family": "IQ1_S-XL/"
+      },
+      "type_counts": {
+        "F32": 430,
+        "I32": 3,
+        "IQ1_S": 203,
+        "Q2_K": 5,
+        "Q5_K": 2,
+        "Q8_0": 423
+      },
+      "vram_placement_bound": null
+    },
+    {
+      "architecture": "deepseek4",
+      "decision": "reject_component_not_full_vendor_model",
+      "expert_count": 144,
+      "expert_payload_estimate": null,
+      "expert_tensor_count_in_header": 0,
+      "expert_used_count": 6,
+      "file": "dense/model-dense.gguf",
+      "full_model_size_bytes_for_bound": 8767239936,
+      "kind": "dense_sidecar_component_not_full_model",
+      "label": "new_sidecar_dense_reap_iq2xxs",
+      "remote_file_size_bytes": 8767239936,
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "size_only_decode_ms_if_fallback_scales": 13005.318490551215,
+      "size_only_tok_s": 10.424500685138844,
+      "size_ratio_vs_native": 0.05614692011143556,
+      "split_note": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "Q8_0": 345
+      },
+      "vram_placement_bound": null
+    },
+    {
+      "architecture": "deepseek4",
+      "decision": "reject_component_not_full_vendor_model",
+      "expert_count": 256,
+      "expert_payload_estimate": null,
+      "expert_tensor_count_in_header": 0,
+      "expert_used_count": 6,
+      "file": "dense/model-dense.gguf",
+      "full_model_size_bytes_for_bound": 8978441472,
+      "kind": "dense_sidecar_component_not_full_model",
+      "label": "ssd_dense_sidecar_anchor",
+      "remote_file_size_bytes": 8978441472,
+      "repo": "ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD",
+      "size_only_decode_ms_if_fallback_scales": 13031.173427686626,
+      "size_only_tok_s": 10.403817604572232,
+      "size_ratio_vs_native": 0.05749949125763083,
+      "split_note": null,
+      "type_counts": {
+        "BF16": 147,
+        "F32": 684,
+        "F8_E4M3_B128": 365,
+        "I32": 3
+      },
+      "vram_placement_bound": null
+    },
+    {
+      "architecture": "deepseek4",
+      "decision": "full_split_download_required_before_correctness; size_bound_uses_total_family_size_when_available",
+      "expert_count": 256,
+      "expert_payload_estimate": null,
+      "expert_tensor_count_in_header": 3,
+      "expert_used_count": 6,
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "full_model_size_bytes_for_bound": 100451521792,
+      "kind": "split_gguf_header_shard",
+      "label": "lovedheart_q2k_split_first",
+      "remote_file_size_bytes": 4422407072,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "size_only_decode_ms_if_fallback_scales": 24229.154209682005,
+      "size_only_tok_s": 5.595488407970282,
+      "size_ratio_vs_native": 0.6433089102498988,
+      "split_note": {
+        "shards": 23,
+        "split_family": "Q2_K/"
+      },
+      "type_counts": {
+        "BF16": 4,
+        "F32": 20,
+        "I32": 1,
+        "Q2_K": 3,
+        "Q5_K": 6,
+        "Q6_K": 5
+      },
+      "vram_placement_bound": null
+    }
+  ],
+  "source": {
+    "head": "72f08babed74bc69160799e9396f8ab96e8c3a36",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "?? .Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-header-admission-20260706-after-refresh.json\n?? .Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-20260706-after-split-close.json"
+  }
+}

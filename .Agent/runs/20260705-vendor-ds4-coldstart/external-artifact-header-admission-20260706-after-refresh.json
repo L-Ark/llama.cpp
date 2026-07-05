@@ -1,0 +1,2648 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-header-admission-20260706-after-refresh.json",
+  "candidate_decisions": [
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 129,
+      "expert_used_count": 6,
+      "label": "new_reap_k128_q2_uniform",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 129,
+      "expert_used_count": 6,
+      "label": "new_reap50_compact_iq2xxs",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 129,
+      "expert_used_count": 6,
+      "label": "new_reap_k128_q2_q4_mixed",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 74,
+        "Q2_K": 37,
+        "Q4_K": 18,
+        "Q8_0": 345
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 160,
+      "expert_tensor_count": 129,
+      "expert_used_count": 6,
+      "label": "new_0xsero_spark_q2_reap",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 129,
+      "expert_used_count": 6,
+      "label": "new_reap25_lcb50_iq2xxs",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 99,
+      "expert_used_count": 6,
+      "label": "teamblobfish_iq1m_split_first",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F32": 416,
+        "I32": 3,
+        "IQ1_M": 329,
+        "Q2_K": 5,
+        "Q5_K": 279
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_count": 256,
+      "expert_tensor_count": 104,
+      "expert_used_count": 6,
+      "label": "teamblobfish_iq1s_xl_split_first",
+      "status": "metadata_only_candidate_requires_full_download_and_correctness",
+      "type_counts": {
+        "F32": 430,
+        "I32": 3,
+        "IQ1_S": 203,
+        "Q2_K": 5,
+        "Q5_K": 2,
+        "Q8_0": 423
+      }
+    },
+    {
+      "arch": "deepseek4",
+      "expert_tensor_count": 0,
+      "label": "new_sidecar_dense_reap_iq2xxs",
+      "status": "sidecar_or_dense_only_not_full_vendor_model",
+      "tensor_count": 1199
+    },
+    {
+      "arch": "deepseek4",
+      "expert_tensor_count": 0,
+      "label": "ssd_dense_sidecar_anchor",
+      "status": "sidecar_or_dense_only_not_full_vendor_model",
+      "tensor_count": 1199
+    },
+    {
+      "arch": "deepseek4",
+      "expert_tensor_count": 3,
+      "label": "lovedheart_q2k_split_first",
+      "status": "sidecar_or_dense_only_not_full_vendor_model",
+      "tensor_count": 39
+    }
+  ],
+  "created_at_utc": "2026-07-05T18:48:59Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "full_model_download_performed": false,
+    "new_sota": false,
+    "next_allowed_work": "If disk is approved, full-download and correctness-test the highest-priority candidate class. Without disk, continue only with hard-bound/header work or a proof that supplies deterministic full tensor bytes under RAM/TTFT gates.",
+    "runtime_source_modified": false,
+    "strict_cold_benchmark_allowed": false,
+    "summary": "Header refresh found additional vendor-shaped REAP/compact GGUF candidates, but metadata-only evidence still does not authorize runtime source changes or SOTA benchmarking. Disk remains the blocker for empirical testing; sidecar/dense-only artifacts are not current vendor-loadable full models."
+  },
+  "headers": [
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/50439361920",
+      "data_start": 5334336,
+      "expert_tensor_count": 129,
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "head_sha256": "8b8d13817a48926e513debc30afb68a3c91a51e233389ab8df4924179aab5614",
+      "header_end_offset": 5334316,
+      "label": "new_reap_k128_q2_uniform",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 64,
+        "gguf.n_tensors": 1328,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 50439361920,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "status": 206,
+      "tensor_count": 1328,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 9308160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 562956288,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1267599360,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 1821247488,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2374895616,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3079538688,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight",
+          "offset": 3633186816,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight",
+          "offset": 4186834944,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight",
+          "offset": 4891478016,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "name": "blk.3.ffn_gate_exps.weight",
+          "offset": 5445126144,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            128
+          ],
+          "name": "blk.3.ffn_down_exps.weight",
+          "offset": 5721950208,
+          "type": "Q2_K"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/50439362272",
+      "data_start": 5334688,
+      "expert_tensor_count": 129,
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "head_sha256": "7d0757d973a7098eadf29e51e4ca15c7da25ded69d026cb6cfbb9560b330d9dc",
+      "header_end_offset": 5334661,
+      "label": "new_reap50_compact_iq2xxs",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 68,
+        "gguf.n_tensors": 1328,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 50439362272,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "status": 206,
+      "tensor_count": 1328,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 9308160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 562956288,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1267599360,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 1821247488,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2374895616,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3079538688,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight",
+          "offset": 3633186816,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight",
+          "offset": 4186834944,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight",
+          "offset": 4891478016,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "name": "blk.3.ffn_gate_exps.weight",
+          "offset": 5445126144,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            128
+          ],
+          "name": "blk.3.ffn_down_exps.weight",
+          "offset": 5721950208,
+          "type": "Q2_K"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4/resolve/main/DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/55875180192",
+      "data_start": 5334624,
+      "expert_tensor_count": 129,
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "head_sha256": "63258bf026e2b8ae12d43e1393c2b815ccd0a0bb7b94d992ef1b8be7643f2799",
+      "header_end_offset": 5334618,
+      "label": "new_reap_k128_q2_q4_mixed",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 68,
+        "gguf.n_tensors": 1328,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 55875180192,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "status": 206,
+      "tensor_count": 1328,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 9308160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 562956288,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1267599360,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 1821247488,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2374895616,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3079538688,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight",
+          "offset": 3633186816,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight",
+          "offset": 4186834944,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight",
+          "offset": 4891478016,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "name": "blk.3.ffn_gate_exps.weight",
+          "offset": 5445126144,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            128
+          ],
+          "name": "blk.3.ffn_down_exps.weight",
+          "offset": 5721950208,
+          "type": "Q2_K"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 74,
+        "Q2_K": 37,
+        "Q4_K": 18,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/57468757600",
+      "data_start": 5333536,
+      "expert_tensor_count": 129,
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "head_sha256": "3ed18fb9984b9d08947e0d5e3a68b3fd5e725af39f22f4d3e75f65ef92ef2c13",
+      "header_end_offset": 5333508,
+      "label": "new_0xsero_spark_q2_reap",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 160,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 58,
+        "gguf.n_tensors": 1328,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 57468757600,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "status": 206,
+      "tensor_count": 1328,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 9308160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 355338240,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 795740160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 1141770240,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 1487800320,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 1928202240,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.2.ffn_gate_exps.weight",
+          "offset": 2274232320,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "name": "blk.2.ffn_down_exps.weight",
+          "offset": 2620262400,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.2.ffn_up_exps.weight",
+          "offset": 3060664320,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "name": "blk.3.ffn_gate_exps.weight",
+          "offset": 3406694400,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "name": "blk.3.ffn_down_exps.weight",
+          "offset": 3752724480,
+          "type": "Q2_K"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/68579737280",
+      "data_start": 5334656,
+      "expert_tensor_count": 129,
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "head_sha256": "d581ec7de7a41f37b15fbbdd53d3d8384968626212d3795019490d4ea39600ec",
+      "header_end_offset": 5334644,
+      "label": "new_reap25_lcb50_iq2xxs",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 68,
+        "gguf.n_tensors": 1328,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 68579737280,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "status": 206,
+      "tensor_count": 1328,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 9308160,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 562956288,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1267599360,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 1821247488,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2374895616,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3079538688,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight",
+          "offset": 3633186816,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight",
+          "offset": 4186834944,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight",
+          "offset": 4891478016,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            192
+          ],
+          "name": "blk.3.ffn_gate_exps.weight",
+          "offset": 5445126144,
+          "type": "IQ2_XXS"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            192
+          ],
+          "name": "blk.3.ffn_down_exps.weight",
+          "offset": 5860362240,
+          "type": "Q2_K"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4/resolve/main/DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/49882725408",
+      "data_start": 5314784,
+      "expert_tensor_count": 99,
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "head_sha256": "00ca18da639888399e0011f660b3010d961b7bfc4475b36bcbb60cd70efbf64e",
+      "header_end_offset": 5314781,
+      "label": "teamblobfish_iq1m_split_first",
+      "layer_max": 33,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_group_count": 8,
+        "deepseek4.expert_group_used_count": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.feed_forward_length": 18432,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 31,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 68,
+        "gguf.n_tensors": 1032,
+        "gguf.version": 3,
+        "split.count": 2,
+        "split.no": 0,
+        "split.tensors.count": 1328,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 49882725408,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "status": 206,
+      "tensor_count": 1032,
+      "tensor_samples": [
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "output.weight",
+          "offset": 0,
+          "type": "Q5_K"
+        },
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "token_embd.weight",
+          "offset": 364113984,
+          "type": "Q5_K"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.0.attn_q_a.weight",
+          "offset": 759052352,
+          "type": "IQ1_M"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.0.attn_q_a_norm.weight",
+          "offset": 759969856,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 767314240,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 1474709824,
+          "type": "IQ1_M"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 1950501184,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1953620288,
+          "type": "IQ1_M"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.1.attn_q_a.weight",
+          "offset": 2456644160,
+          "type": "IQ1_M"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.1.attn_q_a_norm.weight",
+          "offset": 2457561664,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2464906048,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 3172301632,
+          "type": "IQ1_M"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3648092992,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3651212096,
+          "type": "IQ1_M"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F32": 416,
+        "I32": 3,
+        "IQ1_M": 329,
+        "Q2_K": 5,
+        "Q5_K": 279
+      },
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/49952658368",
+      "data_start": 5316992,
+      "expert_tensor_count": 104,
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "head_sha256": "f72d605b701018ad61f7ca926f9ff20df00667aa0e8bb27dfc16bb461058404c",
+      "header_end_offset": 5316980,
+      "label": "teamblobfish_iq1s_xl_split_first",
+      "layer_max": 34,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_group_count": 8,
+        "deepseek4.expert_group_used_count": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.feed_forward_length": 18432,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 24,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 68,
+        "gguf.n_tensors": 1066,
+        "gguf.version": 3,
+        "split.count": 2,
+        "split.no": 0,
+        "split.tensors.count": 1328,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 49952658368,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "status": 206,
+      "tensor_count": 1066,
+      "tensor_samples": [
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "output.weight",
+          "offset": 0,
+          "type": "Q5_K"
+        },
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "token_embd.weight",
+          "offset": 364138560,
+          "type": "Q5_K"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.0.attn_q_a.weight",
+          "offset": 801740864,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.0.attn_q_a_norm.weight",
+          "offset": 806197312,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 841853248,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 1549248832,
+          "type": "IQ1_S"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 1974511936,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 1977631040,
+          "type": "IQ1_S"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.1.attn_q_a.weight",
+          "offset": 2473085504,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.1.attn_q_a_norm.weight",
+          "offset": 2477541952,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight",
+          "offset": 2513197888,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight",
+          "offset": 3220593472,
+          "type": "IQ1_S"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3645856576,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight",
+          "offset": 3648975680,
+          "type": "IQ1_S"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F32": 430,
+        "I32": 3,
+        "IQ1_S": 203,
+        "Q2_K": 5,
+        "Q5_K": 2,
+        "Q8_0": 423
+      },
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/8767239936",
+      "data_start": 5323968,
+      "expert_tensor_count": 0,
+      "file": "dense/model-dense.gguf",
+      "head_sha256": "3331b123e4cefe41f1042e8c895ed75f70c63b2023487463d815b9fbbca1659b",
+      "header_end_offset": 5323949,
+      "label": "new_sidecar_dense_reap_iq2xxs",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.compress_ratios": {
+          "array_type": 5,
+          "len": 44,
+          "sample": [
+            0,
+            0,
+            4,
+            128,
+            4,
+            128,
+            4,
+            128
+          ]
+        },
+        "deepseek4.attention.compress_rope_freq_base": 160000.0,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.output_group_count": 8,
+        "deepseek4.attention.output_lora_rank": 1024,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 144,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_gating_func": 4,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.hyper_connection.count": 4,
+        "deepseek4.hyper_connection.epsilon": 9.999999974752427e-07,
+        "deepseek4.hyper_connection.sinkhorn_iterations": 20,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 58,
+        "gguf.n_tensors": 1199,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 8767239936,
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "status": 206,
+      "tensor_count": 1199,
+      "tensor_samples": [
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "offset": 0,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "offset": 3102720,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "offset": 6205440,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "token_embd.weight",
+          "offset": 9308160,
+          "type": "F16"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.0.attn_q_a_norm.weight",
+          "offset": 1068372224,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.0.attn_q_a.weight",
+          "offset": 1141907712,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.1.attn_q_a_norm.weight",
+          "offset": 1211542272,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.1.attn_q_a.weight",
+          "offset": 1285077760,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.2.attn_q_a_norm.weight",
+          "offset": 1392998144,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.2.attn_q_a.weight",
+          "offset": 1466533632,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.3.attn_q_a_norm.weight",
+          "offset": 1544689920,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.3.attn_q_a.weight",
+          "offset": 1618225408,
+          "type": "Q8_0"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.4.attn_q_a_norm.weight",
+          "offset": 1726146368,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.4.attn_q_a.weight",
+          "offset": 1799681856,
+          "type": "Q8_0"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/resolve/main/dense/model-dense.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/8978441472",
+      "data_start": 5315776,
+      "expert_tensor_count": 0,
+      "file": "dense/model-dense.gguf",
+      "head_sha256": "baa8067b4d6e76017123dd63867b78ad5ed13001b749a87e61c14ceaaec37490",
+      "header_end_offset": 5315749,
+      "label": "ssd_dense_sidecar_anchor",
+      "layer_max": 42,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.leading_dense_block_count": 0,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.freq_base_swa": 160000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 41,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 50,
+        "gguf.n_tensors": 1199,
+        "gguf.version": 3,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 8978441472,
+      "repo": "ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD",
+      "status": 206,
+      "tensor_count": 1199,
+      "tensor_samples": [
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "token_embd.weight",
+          "offset": 0,
+          "type": "BF16"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.0.attn_q_a_norm.weight",
+          "offset": 1059064064,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.0.attn_q_a.weight",
+          "offset": 1128814848,
+          "type": "F8_E4M3_B128"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid",
+          "offset": 1166874880,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.1.attn_q_a_norm.weight",
+          "offset": 1202699008,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.1.attn_q_a.weight",
+          "offset": 1272449792,
+          "type": "F8_E4M3_B128"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.1.ffn_gate_tid2eid",
+          "offset": 1310509824,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.2.attn_q_a_norm.weight",
+          "offset": 1376306944,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.2.attn_q_a.weight",
+          "offset": 1446057728,
+          "type": "F8_E4M3_B128"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.2.ffn_gate_tid2eid",
+          "offset": 1484117760,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.3.attn_q_a_norm.weight",
+          "offset": 1528594688,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.3.attn_q_a.weight",
+          "offset": 1598345472,
+          "type": "F8_E4M3_B128"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.4.attn_q_a_norm.weight",
+          "offset": 1699100928,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.4.attn_q_a.weight",
+          "offset": 1768851712,
+          "type": "F8_E4M3_B128"
+        }
+      ],
+      "tid2eid_count": 3,
+      "type_counts": {
+        "BF16": 147,
+        "F32": 684,
+        "F8_E4M3_B128": 365,
+        "I32": 3
+      },
+      "url": "https://huggingface.co/ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD/resolve/main/dense/model-dense.gguf"
+    },
+    {
+      "bytes_read": 67108864,
+      "content_range": "bytes 0-67108863/4422407072",
+      "data_start": 5245024,
+      "expert_tensor_count": 3,
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "head_sha256": "d5aacacfa9281ecc32ae86663842e6523a096c52a2ebf20f8e90696cd5172427",
+      "header_end_offset": 5245011,
+      "label": "lovedheart_q2k_split_first",
+      "layer_max": 1,
+      "layer_min": 0,
+      "metadata": {
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.attention.indexer.head_count": 64,
+        "deepseek4.attention.indexer.key_length": 128,
+        "deepseek4.attention.indexer.top_k": 512,
+        "deepseek4.attention.key_length": 512,
+        "deepseek4.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "deepseek4.attention.q_lora_rank": 1024,
+        "deepseek4.attention.sliding_window": 128,
+        "deepseek4.attention.value_length": 512,
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.embedding_length": 4096,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_shared_count": 1,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.expert_weights_norm": true,
+        "deepseek4.expert_weights_scale": 1.5,
+        "deepseek4.feed_forward_length": 18432,
+        "deepseek4.leading_dense_block_count": 0,
+        "deepseek4.rope.dimension_count": 64,
+        "deepseek4.rope.freq_base": 10000.0,
+        "deepseek4.rope.freq_base_swa": 160000.0,
+        "deepseek4.rope.scaling.factor": 16.0,
+        "deepseek4.rope.scaling.original_context_length": 65536,
+        "deepseek4.rope.scaling.type": "yarn",
+        "deepseek4.rope.scaling.yarn_beta_fast": 32.0,
+        "deepseek4.rope.scaling.yarn_beta_slow": 1.0,
+        "deepseek4.swiglu_clamp_exp": {
+          "array_type": 6,
+          "len": 43,
+          "sample": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 19,
+        "general.license": "mit",
+        "general.name": "DeepSeek V4 Flash",
+        "general.quantization_version": 2,
+        "general.sampling.temp": 1.0,
+        "general.sampling.top_p": 1.0,
+        "general.size_label": "256x8.4B",
+        "general.type": "model",
+        "gguf.n_kv": 54,
+        "gguf.n_tensors": 39,
+        "gguf.version": 3,
+        "split.count": 23,
+        "split.no": 0,
+        "split.tensors.count": 1328,
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "parse_ok": true,
+      "remote_size_bytes": 4422407072,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "status": 206,
+      "tensor_count": 39,
+      "tensor_samples": [
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "output.weight",
+          "offset": 262208,
+          "type": "BF16"
+        },
+        {
+          "dims": [
+            4096,
+            129280
+          ],
+          "name": "token_embd.weight",
+          "offset": 1059340352,
+          "type": "BF16"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.0.attn_q_a.weight",
+          "offset": 2168752192,
+          "type": "Q6_K"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.0.attn_q_a_norm.weight",
+          "offset": 2172192832,
+          "type": "F32"
+        },
+        {
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight",
+          "offset": 2195265856,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight",
+          "offset": 2906790208,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            6,
+            129280
+          ],
+          "name": "blk.0.ffn_gate_tid2eid",
+          "offset": 3622508864,
+          "type": "I32"
+        },
+        {
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight",
+          "offset": 3625627968,
+          "type": "Q2_K"
+        },
+        {
+          "dims": [
+            4096,
+            1024
+          ],
+          "name": "blk.1.attn_q_a.weight",
+          "offset": 4390648384,
+          "type": "Q6_K"
+        },
+        {
+          "dims": [
+            1024
+          ],
+          "name": "blk.1.attn_q_a_norm.weight",
+          "offset": 4394089024,
+          "type": "F32"
+        }
+      ],
+      "tid2eid_count": 1,
+      "type_counts": {
+        "BF16": 4,
+        "F32": 20,
+        "I32": 1,
+        "Q2_K": 3,
+        "Q5_K": 6,
+        "Q6_K": 5
+      },
+      "url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf"
+    }
+  ],
+  "method": "HTTP Range bytes=0-67108863 for selected Hugging Face GGUF candidates from external-artifact-refresh-20260706-after-split-close; parsed GGUF metadata/tensor table only; no full model weights downloaded.",
+  "selected_specs": [
+    {
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "label": "new_reap_k128_q2_uniform",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "source_url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "label": "new_reap50_compact_iq2xxs",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "source_url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4"
+    },
+    {
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "label": "new_reap_k128_q2_q4_mixed",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "source_url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    },
+    {
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "label": "new_0xsero_spark_q2_reap",
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "source_url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B-GGUF"
+    },
+    {
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "label": "new_reap25_lcb50_iq2xxs",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "source_url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+    },
+    {
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "label": "teamblobfish_iq1m_split_first",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "source_url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "label": "teamblobfish_iq1s_xl_split_first",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "source_url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": "dense/model-dense.gguf",
+      "label": "new_sidecar_dense_reap_iq2xxs",
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "source_url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs"
+    },
+    {
+      "file": "dense/model-dense.gguf",
+      "label": "ssd_dense_sidecar_anchor",
+      "repo": "ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD",
+      "source_url": "https://huggingface.co/ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD"
+    },
+    {
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "label": "lovedheart_q2k_split_first",
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "source_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF"
+    }
+  ],
+  "size_only_bounds": [
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18106.74963826529,
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "label": "new_reap_k128_q2_uniform",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size_bytes": 50439361920,
+      "size_ratio_vs_native": 0.3230223930070875,
+      "tok_s_bound": 7.48748142122037
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18106.749681356538,
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "label": "new_reap50_compact_iq2xxs",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "size_bytes": 50439362272,
+      "size_ratio_vs_native": 0.3230223952613564,
+      "tok_s_bound": 7.487481403401329
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18772.19337680928,
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "label": "new_reap_k128_q2_q4_mixed",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "size_bytes": 55875180192,
+      "size_ratio_vs_native": 0.3578343128913645,
+      "tok_s_bound": 7.2220623767217775
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18967.276445259355,
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "label": "new_0xsero_spark_q2_reap",
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "size_bytes": 57468757600,
+      "size_ratio_vs_native": 0.3680398580882018,
+      "tok_s_bound": 7.147781702158145
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 20327.463906865778,
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "label": "new_reap25_lcb50_iq2xxs",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "size_bytes": 68579737280,
+      "size_ratio_vs_native": 0.4391964926740884,
+      "tok_s_bound": 6.669496605004854
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18038.60713183468,
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "label": "teamblobfish_iq1m_split_first",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49882725408,
+      "size_ratio_vs_native": 0.3194575965604841,
+      "tok_s_bound": 7.515766074639876
+    },
+    {
+      "decision": "below_10",
+      "decode_ms_if_only_fallback_scales": 18047.168207282983,
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "label": "teamblobfish_iq1s_xl_split_first",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49952658368,
+      "size_ratio_vs_native": 0.31990545932538383,
+      "tok_s_bound": 7.5122008039183
+    },
+    {
+      "decision": "size_only_above_10_requires_header_correctness",
+      "decode_ms_if_only_fallback_scales": 13005.318490551215,
+      "file": "dense/model-dense.gguf",
+      "label": "new_sidecar_dense_reap_iq2xxs",
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "size_bytes": 8767239936,
+      "size_ratio_vs_native": 0.05614692011143556,
+      "tok_s_bound": 10.424500685138844
+    },
+    {
+      "decision": "size_only_above_10_requires_header_correctness",
+      "decode_ms_if_only_fallback_scales": 13031.173427686626,
+      "file": "dense/model-dense.gguf",
+      "label": "ssd_dense_sidecar_anchor",
+      "repo": "ServantOfAres/DeepSeek-V4-Flash-FP4-FP8-SSD",
+      "size_bytes": 8978441472,
+      "size_ratio_vs_native": 0.05749949125763083,
+      "tok_s_bound": 10.403817604572232
+    },
+    {
+      "decision": "size_only_above_10_requires_header_correctness",
+      "decode_ms_if_only_fallback_scales": 12473.431352369687,
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "label": "lovedheart_q2k_split_first",
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 4422407072,
+      "size_ratio_vs_native": 0.028321859374721193,
+      "tok_s_bound": 10.869018130239185
+    }
+  ],
+  "source": {
+    "head": "72f08babed74bc69160799e9396f8ab96e8c3a36",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "?? .Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-20260706-after-split-close.json"
+  }
+}
