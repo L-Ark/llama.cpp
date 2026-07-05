@@ -1,0 +1,68 @@
+{
+  "date": "2026-07-05",
+  "title": "Result: native DeepSeek4 expert_used_count=4 override probe",
+  "status": "rejected_correctness_and_performance",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T154916Z-20260705_native_top4_override_probe",
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T154916Z-20260705_native_top4_override_probe/france-native-top4-cpu40-vram0gb",
+  "source_commit": "0d6feac57",
+  "config": {
+    "framework": "vendor",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "override": "--override-kv deepseek4.expert_used_count=int:4",
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "cache_mib": 13568,
+    "prefill_limit": 3000,
+    "context": 256,
+    "batch": 16,
+    "ubatch": 16,
+    "threads": 20,
+    "threads_batch": 20,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "drop_caches": true
+  },
+  "metrics": {
+    "eval_tok_s": 3.5,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32955.361169,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ok": true,
+    "elapsed_seconds": 87.28,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15056191488,
+    "memory_max_events": 28125,
+    "ram_ok": true,
+    "oom_seen": false,
+    "pgmajfault": 358938,
+    "workingset_refault_file": 4796255
+  },
+  "moe_stream_counters": {
+    "slots": 3192,
+    "prefill_attempted": 3000,
+    "prefill_inserted": 3000,
+    "prefill_bytes": 13369344000,
+    "prefill_elapsed_ms": 4258.744,
+    "expert_pack_hits": 4533,
+    "expert_pack_misses": 1670,
+    "expert_pack_reads": 4533,
+    "expert_pack_bytes": 20201078784,
+    "direct_failures": 0,
+    "direct_fallbacks": 0,
+    "vram_cache_hits": 28794,
+    "vram_cache_misses": 3203,
+    "vram_cache_hit_rate_pct": 90.0
+  },
+  "answer": "France, located in Western Europe, is a country renowned for its rich history, vibrant culture, and significant global influence. Known as \"La République Française\" (the French Republic), it is famous for its iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is a global leader in art, fashion, cuisine, and wine, with French cuisine and wines being particularly celebrated worldwide. The country is also known for its philosophical and intellectual contributions, with figures like Voltaire, Descartes, and Sartre. Politically, it is a semi-presidential republic, with Paris as its capital. France is also a nuclear power and a permanent member of the United Nations Security Council. The country is renowned for its culture, history, and landmarks, including the Eiff Tower, the Louvre, and the Eiffel Tower. Wait, I already said that. Let me try again: France is a country in",
+  "correctness": {
+    "script_heuristic_correctness_ok": true,
+    "manual_correctness_ok": false,
+    "manual_reason": "The answer begins coherently but then repeats landmarks, contains a typo-like phrase 'Eiff Tower', explicitly says 'Wait, I already said that. Let me try again', and ends mid-sentence. This fails the semantic/coherence requirement."
+  },
+  "decision": {
+    "accepted_sota": false,
+    "reason": "Both performance and manual correctness failed: eval_tok_s=3.5 is below the accepted 4.4 SOTA, and the France output is not coherent enough.",
+    "gap_analysis": "Reducing native expert_used_count without the 4Expert model's tid2eid routing and matching Q4_K expert representation changed routing badly. Gate pack misses appeared (1670), VRAM cache hit rate fell from 94.6% to 90.0%, page faults/refaults increased, and output quality degraded.",
+    "next_step": "Do not continue native top-k metadata overrides as a SOTA route. The 4Expert route still requires the actual 4Expert artifact/routing/weights and correctness validation."
+  }
+}

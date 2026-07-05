@@ -144,6 +144,12 @@ def check_correctness(answer: str, prompt: str) -> tuple[bool, str]:
         failures.append("degenerate_text")
     if re.search(r"\b(the the|of of|in the the)\b", lowered):
         failures.append("repetition")
+    if re.search(r"\b(wait,?\s+i\s+already\s+said|let\s+me\s+try\s+again|start\s+over)\b", lowered):
+        failures.append("self_correction")
+    if re.search(r"\b(eiff tower|eiff\s*$)\b", lowered):
+        failures.append("truncated_or_corrupt_landmark")
+    if re.search(r"\b(a|an|the|in|of|for|with|and|or|to|from|as|is|are)\s*[.。!！?？]?$", lowered):
+        failures.append("unfinished_sentence")
     if failures:
         return False, ",".join(failures)
     return True, "heuristic_pass_manual_review_required"

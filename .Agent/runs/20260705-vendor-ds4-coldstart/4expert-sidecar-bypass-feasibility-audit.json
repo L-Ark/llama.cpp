@@ -1,0 +1,69 @@
+{
+  "date": "2026-07-05",
+  "title": "Audit: can 4Expert/Q4_K bypass the full 164.5GB GGUF download with a sidecar pack?",
+  "status": "no_safe_runtime_probe_without_full_or_split_loader",
+  "purpose": "Evaluate whether the 4Expert/Q4_K route can make progress despite only 1.8GB free disk by using HTTP Range or a small sidecar pack instead of downloading the full GGUF.",
+  "current_disk": {
+    "filesystem": "/dev/root",
+    "available": "1.8G",
+    "full_4expert_expected_size_bytes": 164465760544,
+    "recommended_free_space": ">=180G"
+  },
+  "4expert_header_evidence": {
+    "header_probe": "/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert.header64m.gguf.part",
+    "architecture": "deepseek4",
+    "n_tensors": 1328,
+    "expert_count": 256,
+    "expert_used_count": 4,
+    "q4k_expert_tensors": 129,
+    "q4k_expert_payload_bytes": 155826782208,
+    "q4k_expert_payload_gib": 145.125,
+    "tid2eid_name": "blk.%d.ffn_gate_tid2eid.weight",
+    "tid2eid_shape": [4, 129280]
+  },
+  "source_findings": {
+    "routing": "src/models/deepseek4.cpp uses layer.ffn_gate_tid2eid to restrict per-token candidate experts before top-k. Therefore cloudyu 4Expert is not equivalent to simply setting native expert_used_count=4.",
+    "loader_alias": "src/llama-model.cpp already has a default-off LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS path to load blk.%d.ffn_gate_tid2eid.weight when the actual 4Expert GGUF is present.",
+    "expert_pack_format": "GGMLMOEPACKv1 stores tensor name, expert index, offset, and nbytes for payload slices. It does not carry model metadata, hparams, tensor type substitutions, or tid2eid routing semantics.",
+    "direct_manifest": "The current direct manifest path opens a local model file and does not fetch HTTP ranges. It can read local GGUF offsets, but cannot provide missing metadata/non-expert tensors from the remote 4Expert file."
+  },
+  "native_top4_control_probe": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/native-expert-used-top4-override-result.json",
+    "result": "rejected_correctness_and_performance",
+    "eval_tok_s": 3.5,
+    "manual_correctness_ok": false,
+    "gap": "Native top4 without 4Expert tid2eid routing reduced cache hit rate to 90.0%, introduced expert-pack misses, slowed to 3.5 tok/s, and produced repetitive/self-correcting output."
+  },
+  "sidecar_options": [
+    {
+      "option": "HTTP Range build a small expert pack only",
+      "verdict": "insufficient",
+      "reason": "A pack of expert slices alone cannot change hparams, expert_used_count, or load ffn_gate_tid2eid.weight. With the native GGUF, the graph still uses native metadata and native tensor types."
+    },
+    {
+      "option": "Use native non-expert tensors plus remote 4Expert Q4_K experts",
+      "verdict": "requires_new_split_loader",
+      "reason": "This would need a loader/runtime that sources metadata/tid2eid/Q4_K expert tensors from the 4Expert artifact while sourcing non-experts from the native GGUF. Current llama.cpp loader assumes one GGUF model file for hparams and tensor metadata."
+    },
+    {
+      "option": "Sparse 4Expert GGUF with holes",
+      "verdict": "rejected",
+      "reason": "Header-only or sparse-zero model files cannot prove correctness. Filling enough non-expert data would still require many GiB that are not available, and missing expert/non-expert tensors would silently corrupt outputs."
+    },
+    {
+      "option": "Native expert_used_count top-k override",
+      "verdict": "rejected_by_probe",
+      "reason": "The top4 control probe failed both performance and manual coherence. Top-k metadata override is not a substitute for the actual 4Expert model."
+    }
+  ],
+  "decision": {
+    "runtime_source_patch_allowed_now": false,
+    "download_allowed_now": false,
+    "reason": "Without disk for the complete GGUF or a substantial split-GGUF loader design, sidecar-only validation cannot prove model correctness or token-rate behavior. The current no-download top4 control failed.",
+    "next_reopen_conditions": [
+      "Explicitly free or attach at least 180GB persistent disk and download the full 4Expert GGUF with size/hash recording.",
+      "Or write a separate split-loader hard-bound design that proves exact metadata/tensor sourcing, correctness gates, host RAM/page-cache behavior, VRAM footprint, TTFT, and rollback before source code.",
+      "Any future 4Expert result still needs strict cold France correctness, five-prompt semantic gate if the France result passes, 16GB cgroup including page cache, TTFT gate, immediate commit/push, and pushed-source reproduction."
+    ]
+  }
+}

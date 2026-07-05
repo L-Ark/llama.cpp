@@ -22,6 +22,18 @@ Current accepted strict cold SOTA 仍然是 `4.4 tok/s`。`PREFILL_LIMIT=2800` �
 - Config delta from previous accepted `4.4 tok/s` SOTA: only `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=2800` instead of `3000`; `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, `vram_cache=0`, accepted gate O_DIRECT pack, topk env, and strict 16GB/no-swap cold run remain unchanged.
 - Candidate TTFT increase was about `980.368 ms` / `3.06%`, below the accepted gate `33617.688744 ms` and below the 20% TTFT ceiling. This was not enough because token rate did not reproduce.
 
+Latest follow-up after prefill rejection:
+
+- Native top4 override plan: `.Agent/runs/20260705-vendor-ds4-coldstart/native-expert-used-top4-override-plan.json`
+- Native top4 override result: `.Agent/runs/20260705-vendor-ds4-coldstart/native-expert-used-top4-override-result.json`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T154916Z-20260705_native_top4_override_probe/france-native-top4-cpu40-vram0gb`
+- Config delta: `--override-kv deepseek4.expert_used_count=int:4`
+- Result: rejected. Metrics were `eval_tok_s=3.5`, `TTFT=32955.361169 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `oom_seen=false`. Manual correctness failed because the France answer repeated itself, contained `Wait, I already said that. Let me try again`, and ended mid-sentence.
+- Gap: native top4 is not equivalent to the cloudyu 4Expert artifact. It lacks `ffn_gate_tid2eid.weight` routing, reduced the gate cache hit rate to `90.0%`, introduced `1670` expert-pack misses, and increased page refault pressure.
+- Correctness guard update: `.Agent/run-tools/strict_ds4_runner.py` now rejects obvious self-correction/truncation patterns so future runs do not pass this kind of output by heuristic.
+- 4Expert sidecar audit: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-sidecar-bypass-feasibility-audit.json`
+- Sidecar decision: no safe runtime probe can bypass the full 4Expert GGUF with the current loader. A small expert pack alone cannot change hparams, tensor metadata, `expert_used_count`, or `ffn_gate_tid2eid.weight` routing; a native top-k override failed; sparse/header-only GGUFs cannot prove correctness. Reopen 4Expert only with the full `164.5GB` GGUF after freeing disk, or with a separate split-loader hard-bound design before source code.
+
 Why this improved:
 
 - `PREFILL_LIMIT=3192` was rejected: it filled all 3192 cache slots, increased prefill time to `5052.580 ms`, increased misses to `1980`, and regressed eval to `4.3 tok/s`.
@@ -38,6 +50,7 @@ Next optimization direction after reproduction:
 
 - Continue current-route no-source parameter screening only if it is bounded and cheap. `PREFILL_LIMIT=2600` is not allowed by default after the failed 2800 reproduction unless a new artifact explains why it should behave differently.
 - Larger 10 tok/s work remains the 4Expert/Q4_K route if disk is explicitly freed for the full `164.5GB` GGUF, or a genuinely new external artifact/representation/graph-dataflow proof. DFlash remains closed by the oracle verifier probe below.
+- Do not continue native top-k metadata overrides as a SOTA route; top4 failed both performance and manual coherence.
 - No runtime source edit is allowed without a new hard-bound artifact covering exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and token-rate ceiling.
 
 Promotion gate remains strict:
