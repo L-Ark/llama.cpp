@@ -79364,7 +79364,7 @@ Decision:
 
 Timestamp: 2026-07-06 02:46:00 CST.
 
-Status: planned.
+Status: completed; rejected; no source change and no SOTA promotion.
 
 Goal:
 
@@ -79502,3 +79502,121 @@ Reproducibility:
 - Store raw commands, env, metrics, stderr, stdout, memory files, and scheduler
   cache summaries in the run directory.
 - Commit and push the result before any follow-up benchmark or source change.
+
+Result:
+
+- Plan commit before execution:
+  `f17b13e5b docs: plan scheduler moe cache probe`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-172254Z-phase7ni-sched-moe-cache-n32`.
+- Source state:
+  - server fast-forwarded to `f17b13e5b`;
+  - build succeeded with `cmake --build build-cuda-batch -j"$(nproc)"`;
+  - no source code was changed.
+- Systemd:
+  - result `success`;
+  - service runtime `2min 3.577s`;
+  - CPU time `42min 19.646s`.
+
+Exact run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-172254Z-phase7ni-sched-moe-cache-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=14500 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_SCHED_MOE_CACHE_SLOTS=8\nGGML_SCHED_MOE_CACHE_PREFETCH=setmarkov\nGGML_SCHED_MOE_CACHE_PREFETCH_LIMIT=2\nGGML_SCHED_MOE_LOG=1' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Hard gates:
+
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- manual semantic quality: pass;
+- TTFT `74193.36 ms`, below `127598.064 ms`;
+- decode `23011.53 ms / 31`, `1.35 tok/s`;
+- `memory.max=15899996160`;
+- `memory.swap.max=0`;
+- `memory.peak=15899996160`;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Memory:
+
+- `memory.current.final=15091879936`;
+- `file=14853234688`;
+- `inactive_file=10155016192`;
+- `active_file=4697473024`;
+- `anon=458752`;
+- `kernel=234344448`;
+- `pgmajfault=999282`;
+- `workingset_refault_file=20134`.
+
+Runtime counters:
+
+- Env activation was present in `env.txt`:
+  - `GGML_SCHED_MOE_CACHE_SLOTS=8`;
+  - `GGML_SCHED_MOE_CACHE_PREFETCH=setmarkov`;
+  - `GGML_SCHED_MOE_CACHE_PREFETCH_LIMIT=2`;
+  - `GGML_SCHED_MOE_LOG=1`.
+- Scheduler MoE cache log counts from `stderr.txt`:
+  - `allocated MoE expert cache`: `0`;
+  - `moe_cache tensor=`: `0`;
+  - `moe_cache_bypass`: `0`;
+  - `moe_copy split=`: `0`;
+  - `moe_cache_prime`: `0`.
+- Expert pack:
+  - hits `25669`;
+  - misses `192`;
+  - direct reads `695`;
+  - iouring reads `23247`;
+  - iouring bytes `129696645120` (`120.79 GiB`);
+  - iouring wait `19557286 us`;
+  - iouring submit `52294 us`;
+  - inflight avg `3.38`, max `8`.
+- Pinned staging:
+  - main copies `17289`, waits `17253`, jobs `16692`;
+  - gate copies `6836`, waits `6812`, jobs `6555`.
+- Current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3765`;
+  - cache hits `3427`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - failed batches `0`;
+  - worker `3423652 us`.
+- VRAM cache with `VRAM_MIB=14500`:
+  - down slots `740`, hit rate `72.9%`;
+  - upgate slots `1677`, hit rate `43.7%`.
+
+Comparison and interpretation:
+
+- The endpoint number is within the broader n32 band, but the activation gate
+  failed: the scheduler MoE cache did not run at all on this current Kimi
+  streaming graph.
+- There are no `moe_cache_bypass` rows either, which means this path is not
+  merely rejecting individual Kimi expert nodes; the current optimized graph
+  does not enter the scheduler MoE cache interception path.
+- Expert-pack bytes did not fall versus comparable current n32 runs:
+  - 7MY full-profile n32: `126391910400` bytes;
+  - 7NI scheduler-cache probe: `129696645120` bytes.
+- `VRAM_MIB=14500` reduced stream-cache slots relative to the accepted
+  `VRAM_MIB=15000` default:
+  - down slots `766 -> 740`;
+  - upgate slots `1735 -> 1677`.
+- Therefore the observed endpoint cannot be attributed to scheduler-cache work
+  and cannot be promoted.
+
+Decision:
+
+- Reject scheduler MoE cache as a current optimization path.
+- Do not run n32 repeat or n96 validation.
+- Do not enable `GGML_SCHED_MOE_CACHE_*` in the runner.
+- Current SOTA remains unchanged.
