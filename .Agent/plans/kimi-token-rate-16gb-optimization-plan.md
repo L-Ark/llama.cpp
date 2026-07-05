@@ -66016,3 +66016,72 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Record exact output and whether the next step is pack conversion or rejection.
+
+### 7KP result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `a1bc111ed` (`docs: plan expert byte reduction bound`).
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard a1bc111ed
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+python3 - <<'PY'
+# exact script recorded in Phase 7KP plan
+PY
+```
+
+Output:
+
+```text
+upgate_current
+  upgate cap 1735 hits 13469 misses 16307 miss_gib 77.482 saved_gib 0.0 bound_ms 0.0
+  down cap 766 hits 5982 misses 7170 miss_gib 44.491 saved_gib 0.0 bound_ms 0.0
+ total_bound_ms 0.0
+upgate_to_4.48MiB
+  upgate cap 2073 hits 14165 misses 15611 miss_gib 68.365 saved_gib 9.117 bound_ms 807.649
+  down cap 766 hits 5982 misses 7170 miss_gib 44.491 saved_gib 0.0 bound_ms 0.0
+ total_bound_ms 807.649
+down_to_6.02MiB
+  upgate cap 1735 hits 13469 misses 16307 miss_gib 77.482 saved_gib 0.0 bound_ms 0.0
+  down cap 947 hits 6446 misses 6706 miss_gib 39.395 saved_gib 5.096 bound_ms 320.044
+ total_bound_ms 320.044
+down_to_4.48MiB
+  upgate cap 1735 hits 13469 misses 16307 miss_gib 77.482 saved_gib 0.0 bound_ms 0.0
+  down cap 1270 hits 7141 misses 6011 miss_gib 26.324 saved_gib 18.168 bound_ms 1140.959
+ total_bound_ms 1140.959
+both_upgate4.48_down6.02
+  upgate cap 2073 hits 14165 misses 15611 miss_gib 68.365 saved_gib 9.117 bound_ms 807.649
+  down cap 947 hits 6446 misses 6706 miss_gib 39.395 saved_gib 5.096 bound_ms 320.044
+ total_bound_ms 1127.693
+both_4.48MiB
+  upgate cap 2073 hits 14165 misses 15611 miss_gib 68.365 saved_gib 9.117 bound_ms 807.649
+  down cap 1270 hits 7141 misses 6011 miss_gib 26.324 saved_gib 18.168 bound_ms 1140.959
+ total_bound_ms 1948.608
+```
+
+Interpretation:
+
+- Up/gate-only byte reduction is not enough:
+  - `4.48 MiB` up/gate with more slots saves only `807.649 ms` n32.
+- Down-only byte reduction is also below the implementation threshold:
+  - `6.02 MiB` down saves `320.044 ms`;
+  - `4.48 MiB` down saves `1140.959 ms`.
+- Even the aggressive all-expert `4.48 MiB` scenario reaches only
+  `1948.608 ms`, below the `2 s` threshold, and it would require a real
+  converted model/pack plus quality validation.
+- Therefore expert byte-size work is not the best next source implementation
+  under the current evidence.
+
+Decision:
+
+- Reject expert-pack quant/byte-size conversion for this optimization round.
+- Do not build a new converted expert pack until a later trace shows a larger
+  movement-byte upper bound or a known-good converted model exists.
+- Remaining candidates must target runtime overhead/scheduling that is not
+  captured by pure movement-byte, cache-policy, or CPU fallback upper bounds.
