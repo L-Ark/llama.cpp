@@ -1,0 +1,111 @@
+{
+  "artifact": "current-head-nonduplicate-next-screening-after-mmvq",
+  "created_utc": "2026-07-05T08:41:15Z",
+  "source_head": "745c2f5894ea679863969147124fe00a3cd69b36",
+  "runtime_relevant_source_head": "1c63249c0818a485c36e3aa307311c8579a2cca8",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "git_identity_required": "L-Ark <fliangae@connect.ust.hk>",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "purpose": "Screen current vendor DeepSeek4 source and local artifacts for a non-duplicate mechanism that could plausibly reach 10 tok/s after the MMVQ hot skip rejection, before any runtime patch.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "accepted_sota_reference_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "target_math": {
+    "accepted_decode_window_ms": 31047.447,
+    "target_tok_s": 10.0,
+    "required_decode_saving_ms": 17386.57,
+    "max_added_overhead_ms_est": 1642.887,
+    "ttft_limit_ms": 33617.688744,
+    "constraints": [
+      "strict cold drop_caches",
+      "16GB cgroup including file page cache",
+      "MemorySwapMax=0",
+      "no swap/OOM",
+      "France answer must remain semantically correct and coherent"
+    ]
+  },
+  "inspection_evidence": {
+    "source_grep": [
+      "src/llama-model.cpp contains NextN/MTP metadata loading and comments, but DeepSeek4 runtime support is not implemented for target verification.",
+      "src/llama-arch.cpp says NextN/MTP tensors are currently ignored/reserved for future MTP support.",
+      "src/models/deepseek4.cpp exposes LLAMA_DEEPSEEK4_LIGHTNING_INDEXER, DS4_HOT_DISPATCH, and DS4_SPARSE_RETAINED_GRAPH_PROBE_OUT, but build_expert_mix receives selected IDs and weights, not a retained gate output tensor.",
+      "ggml/src/ggml-backend.cpp has GGML_SCHED_MOE_CACHE_PREFETCH=setmarkov, but the cache copies experts for the current backend slot path and does not provide a proven cross-layer predictive source overlap for the accepted DeepSeek4 cold path.",
+      "common/speculative.cpp and examples/speculative require a compatible draft model for normal speculation; no local compatible DeepSeek draft exists."
+    ],
+    "local_model_inventory": [
+      "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00001-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00002-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00003-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00004-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00005-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00006-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00007-of-00007.gguf"
+    ],
+    "local_model_conclusion": "No local tokenizer-compatible DeepSeek draft/MTP GGUF was found. GLM shards are not a compatible DeepSeek draft model."
+  },
+  "candidate_screens": [
+    {
+      "candidate": "compatible draft/MTP/NextN verified speculation",
+      "current_code_path_found": false,
+      "local_artifact_found": false,
+      "hard_bound_above_10_tok_s": false,
+      "decision": "blocked_before_runtime_patch",
+      "reason": "Current vendor source preserves/loads some NextN/MTP metadata in generic/model-loader paths, but DeepSeek4 target verification is not implemented and the accepted DeepSeek GGUF has no local draft/MTP companion. Without a compatible draft and verifier, correctness cannot be guaranteed."
+    },
+    {
+      "candidate": "no-source verifier/speculation preserving greedy token stream",
+      "current_code_path_found": true,
+      "hard_bound_above_10_tok_s": false,
+      "decision": "closed_for_sota",
+      "reason": "Lookahead/ngram/lookup mechanisms exist, but historical DeepSeek4 runs either diverged, stalled/replayed, accepted too few drafted tokens, or ran below SOTA. llama-results top1 is only a verifier and provides no speedup by itself."
+    },
+    {
+      "candidate": "compact resident representation for exact GPU up/down",
+      "current_code_path_found": false,
+      "hard_bound_above_10_tok_s": false,
+      "decision": "no_existing_mechanism",
+      "reason": "Existing DS4_HOT_DISPATCH is rectangular and gate-recompute based. Sparse retained probe showed no retained graph-level gate output available to build_expert_mix, no active hot manager path in the accepted route, and final combine/copy margin is too tight. Existing Q8_0/MMVQ/raw/transposed/row-tile probes failed correctness or bandwidth bounds."
+    },
+    {
+      "candidate": "predictive async source overlap before the consuming op/layer",
+      "current_code_path_found": false,
+      "hard_bound_above_10_tok_s": false,
+      "decision": "no_existing_mechanism",
+      "reason": "Accepted path source/page exposure is large, but source-only overlap has a zero-overhead ceiling below 10 tok/s. Existing same-op touch, mmap/direct staging, io_uring/source-only prefetch, and backend MoE slot prefetch do not remove enough decode CPU up/down fallback under the strict cold 16GB page-cache budget."
+    }
+  ],
+  "historical_artifacts_consulted": [
+    ".Agent/runs/20260704-vendor-ds4-coldstart/nonduplicate-hard-bound-after-q80-duplicate-audit.json",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/external-draft-mtp-audit.json",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/algorithmic-support-inspection.json",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/exact-verifier-feasibility-inspection.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/full-decode-updown-cuda-streaming-hard-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-result.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/transient-repack-current-head-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-batch-skip-top1-rejected.json"
+  ],
+  "decision": {
+    "new_existing_vendor_mechanism_with_10_tok_s_bound_found": false,
+    "runtime_patch_allowed_now": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "next_required_work": [
+      "Do not repeat closed cache-size, source-only, DS4_HOT rectangular, raw/transposed/row-tile, Q8_0, MMVQ, lightning, CUDA graph, lookahead, or ngram routes.",
+      "A future runtime patch must start from a new hard-bound artifact, not from source editing.",
+      "The next plausible 10 tok/s path requires either a compatible DeepSeek draft/MTP artifact plus target-verifier integration, or a new exact compact representation design that proves source bytes, compute bandwidth, VRAM, host RAM/page-cache, TTFT, and fixed-text top1 correctness before benchmarking."
+    ]
+  }
+}

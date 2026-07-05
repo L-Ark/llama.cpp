@@ -44,6 +44,18 @@ Next execution plan:
 5. Only after the hard-bound shows margin should a default-off source probe be implemented. The first gate is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
 
+Current-head non-duplicate screening result:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-nonduplicate-next-screening-after-mmvq.json`.
+- Source head: `745c2f5894ea679863969147124fe00a3cd69b36`; runtime-relevant code head remains `1c63249c0818a485c36e3aa307311c8579a2cca8` because `745c2f589` only changed the plan.
+- Runtime source modified: no. Model run performed: no. This is a source/artifact screening gate before any runtime patch.
+- Result: no current vendor DeepSeek mechanism with a credible `10 tok/s` hard-bound was found after the MMVQ rejection.
+- Compatible draft/MTP/NextN verified speculation: no local compatible DeepSeek draft/MTP GGUF found; current source preserves/loads some NextN/MTP metadata but does not implement a DeepSeek4 target-verification path.
+- No-source speculation/verifier: lookahead/ngram/lookup code exists, but historical DeepSeek4 runs diverged, replayed/stalled, accepted too few tokens, or performed below SOTA. `llama-results` top1 is only a correctness verifier and gives no token-rate gain by itself.
+- Compact resident exact GPU up/down: no existing mechanism. Current `DS4_HOT_DISPATCH` is rectangular/gate-recompute based; sparse retained probe showed no retained graph-level gate tensor available to `build_expert_mix`, and existing Q8_0/MMVQ/raw/transposed/row-tile probes failed correctness or bandwidth bounds.
+- Predictive source overlap: no existing mechanism. Existing backend MoE cache/prefetch and same-op source staging do not remove enough decode CPU up/down fallback; source-only overlap remains below the `10 tok/s` ceiling under strict cold 16GB including page cache.
+- Decision: runtime patches are frozen until a new hard-bound artifact is written. The next viable 10 tok/s route must be either a compatible DeepSeek draft/MTP artifact plus verifier integration, or a new exact compact representation design with measured source bytes, compute bandwidth, VRAM, host RAM/page-cache, TTFT, and fixed-text top1 proof.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。
