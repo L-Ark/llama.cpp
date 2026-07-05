@@ -6268,39 +6268,18 @@ static bool launch_moe_mmq_slot_batch(
     };
 
     ggml_backend_cuda_context * null_ctx = nullptr;
-    const bool dynamic_mmq_x = expert_pack_env_bool("GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X", false);
-    static std::atomic<int> first_dynamic_mmq_x{0};
-    if (dynamic_mmq_x && first_dynamic_mmq_x.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream] vendor MMQ dynamic-X up/gate path active: type=%d\n", (int)src0_type);
-    }
     switch (src0_type) {
         case GGML_TYPE_IQ3_XXS:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case<GGML_TYPE_IQ3_XXS>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
-            }
+            launch_mul_mat_q<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
             break;
         case GGML_TYPE_IQ2_S:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case<GGML_TYPE_IQ2_S>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q<GGML_TYPE_IQ2_S, 8>(*null_ctx, args, st);
-            }
+            launch_mul_mat_q<GGML_TYPE_IQ2_S, 8>(*null_ctx, args, st);
             break;
         case GGML_TYPE_Q3_K:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case<GGML_TYPE_Q3_K>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q<GGML_TYPE_Q3_K, 8>(*null_ctx, args, st);
-            }
+            launch_mul_mat_q<GGML_TYPE_Q3_K, 8>(*null_ctx, args, st);
             break;
         case GGML_TYPE_IQ4_XS:
-            if (dynamic_mmq_x) {
-                mul_mat_q_case<GGML_TYPE_IQ4_XS>(*null_ctx, args, st);
-            } else {
-                launch_mul_mat_q<GGML_TYPE_IQ4_XS, 8>(*null_ctx, args, st);
-            }
+            launch_mul_mat_q<GGML_TYPE_IQ4_XS, 8>(*null_ctx, args, st);
             break;
         default:
             return false;
