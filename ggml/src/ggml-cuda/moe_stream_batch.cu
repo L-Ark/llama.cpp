@@ -6493,6 +6493,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (serial_stage_batch && first_serial_stage_batch.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] serial same-type batched staging active\n");
     }
+    const bool iq3_up_gate_parallel_compute =
+        expert_pack_env_bool("GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE", false) &&
+        !prompt_mode && !mixed_types && !exact_prompt_q8k && !serial_up_gate &&
+        src0_type == GGML_TYPE_IQ3_XXS &&
+        bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
+    static std::atomic<int> first_iq3_parallel_compute{0};
+    if (iq3_up_gate_parallel_compute && first_iq3_parallel_compute.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream] IQ3_XXS compute-only parallel up/gate active\n");
+    }
 
     auto stage_tensor = [&](
             const char *key_name, const void *host_base, void *d_out,
@@ -7555,6 +7564,40 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return parallel_fail();
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return parallel_fail();
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return parallel_fail();
+    } else if (iq3_up_gate_parallel_compute) {
+        int up_slots[MOE_STREAM_MAX_ACTIVE] = {};
+        if (!stage_tensor_slots_only(
+                up_key_name, src0_up_data, st,
+                bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
+            return false;
+        }
+        if (!stage_tensor_slots_only(
+                gate_key_name, src0_gate_data, st,
+                bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
+            return false;
+        }
+        if (cudaEventRecord(bc.ev_stage_ready, st) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(bc.up_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(bc.gate_stream, bc.ev_stage_ready, 0) != cudaSuccess) return false;
+
+        if (profile && bc.ev_up_start) cudaEventRecord(bc.ev_up_start, bc.up_stream);
+        if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
+        if (!launch_tensor(bc.d_up, bc.up_stream, bc.d_x_ids_up, bc.d_src1_q8_up, bc.h_x_ids_up)) {
+            return false;
+        }
+        if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+        if (profile && bc.ev_gate_work_start) cudaEventRecord(bc.ev_gate_work_start, bc.gate_stream);
+        if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+        if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
+        if (!launch_tensor(bc.d_gate, bc.gate_stream, bc.d_x_ids_gate, bc.d_src1_q8_gate, bc.h_x_ids_gate)) {
+            return false;
+        }
+        if (profile) cudaEventRecord(bc.ev_gate, bc.gate_stream);
+        if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess) return false;
+        if (cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return false;
+        if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return false;
     } else {
         if (serial_stage_batch) {
             std::vector<stage_copy_job> up_jobs;

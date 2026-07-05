@@ -63676,3 +63676,92 @@ Decision:
 - Keep production default unchanged:
   - mixed-type up/gate parallel staging remains enabled;
   - same-type IQ3 up/gate parallel staging is not promoted.
+
+## Phase 7KE - same-type IQ3 compute-only parallelism
+
+Timestamp: 2026-07-05 10:14:07 CST.
+
+Status: planned.
+
+Goal:
+
+- Test a narrower IQ3 same-type optimization after 7KD failed.
+- Keep IQ3 up/gate tensor movement on the existing serial staging path, but run
+  only the up and gate MMVQ kernels on separate CUDA streams after both tensors
+  have been staged.
+- Preserve all hard gates:
+  - host RAM below `15900000000` bytes including page cache;
+  - swap `0`;
+  - cold start only;
+  - semantic pass for `Please introduce France in a short paragraph.`;
+  - TTFT no more than 20% above `106331.72 ms`;
+  - `read_failures=0` and `iouring_fallbacks=0`.
+
+Bottleneck and 7KD lesson:
+
+- 7JZ showed same-type `IQ3_XXS/IQ3_XXS` rows still spend `2752.214 ms` wall
+  on diagnostic n32.
+- 7KD confirmed that forcing IQ3 same-type staged movement onto two parallel
+  rings is counterproductive:
+  - n32 decode regressed to `23098.45 ms / 31`;
+  - iouring wait rose to `23018056 us`.
+- Therefore the next experiment must avoid adding movement concurrency.
+
+Theory and upper bound:
+
+- If serial staging remains unchanged, the only possible gain is overlap between
+  the up and gate MMVQ kernels.
+- The upper bound is much smaller than 7KD because IO/staging remains exposed.
+- The useful upper bound is:
+
+```text
+iq3_compute_overlap_saving <= sum(min(up_compute_ms, gate_compute_ms))
+```
+
+- Existing 7JZ serial IQ3 profiling does not separate stage and compute for the
+  serial path, so this is an exploratory low-blast-radius probe.
+- If n32 does not improve, the result confirms same-type IQ3 is dominated by
+  movement and should not be targeted until IO misses are reduced.
+
+Implementation plan:
+
+1. Add default-off env `GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE=1`.
+2. For same-type `IQ3_XXS/IQ3_XXS` decode rows only:
+   - stage up slots on the main stream using the existing serial
+     `stage_tensor_slots_only` path;
+   - stage gate slots on the main stream using the existing serial path and
+     avoiding up slots;
+   - record a stage-ready event on the main stream;
+   - make `bc.up_stream` and `bc.gate_stream` wait on that event;
+   - launch the existing up and gate MMVQ kernels on their separate streams;
+   - wait for both streams before fuse/D2H/scatter.
+3. Do not change the existing IQ2 same-type path.
+4. Do not change script defaults unless strict n32 and n96 pass.
+
+Strict n32 experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <7KE-commit>
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ke-iq3-compute-parallel-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE=1" \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Promotion rule:
+
+- Reject if n32 is slower than `22667.39 ms / 31`, if output quality fails, if
+  host memory exceeds the cgroup limit, if swap is used, or if TTFT exceeds the
+  gate.
+- Only run n96 if strict n32 improves and passes all gates.
+- Promote only if strict n96 improves over `57169.16 ms / 77` and all gates
+  pass. Otherwise revert the runtime code and record the rejection.
