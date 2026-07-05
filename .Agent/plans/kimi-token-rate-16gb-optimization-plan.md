@@ -85440,3 +85440,123 @@ mkdir -p "$RUN"
 python3 "$RUN/phase7oj_external_iq2xxs_audit.py"
 cat "$RUN/decision.md"
 ```
+
+### Phase 7OJ result
+
+Timestamp: 2026-07-06 09:43 CST.
+
+Status: accepted metadata audit; blocked by current disk.
+
+Plan commit before execution:
+
+- `0bf00cf52` (`docs: plan external iq2 xxs asset audit`)
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-233938Z-phase7oj-external-iq2xxs-asset-audit`
+
+Artifacts:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `hf_model_api.json`;
+- `iq2xxs_siblings.tsv`;
+- `asset_feasibility.json`;
+- `decision.md`;
+- `phase7oj_external_iq2xxs_audit.py`.
+
+Execution notes:
+
+- Metadata-only Hugging Face API audit.
+- No GGUF shard was downloaded.
+- No model inference was run.
+- No source file was changed.
+- No expert-pack asset was generated or deleted.
+
+Remote model metadata:
+
+- Model id:
+  `AesSedai/Kimi-K2.7-Code-GGUF`
+- API:
+  `https://huggingface.co/api/models/AesSedai/Kimi-K2.7-Code-GGUF?blobs=true`
+- Remote sha:
+  `d3b40c3f8a988660c19cae6e94994911d0129531`
+- Last modified:
+  `2026-06-17T18:51:15.000Z`
+- Tags include:
+  - `gguf`;
+  - `base_model:moonshotai/Kimi-K2.7-Code`;
+  - `base_model:quantized:moonshotai/Kimi-K2.7-Code`;
+  - `imatrix`;
+  - `conversational`.
+- License was not returned by the API/card data in this audit.
+
+`IQ2_XXS` shard set:
+
+| shard | size bytes | size GiB | sha256 |
+|---|---:|---:|---|
+| `00001-of-00007` | `6912768` | `0.006` | `d89b9a9945205f70dbe5bce6f79ff1047b6295efc98237b0936637dc34052298` |
+| `00002-of-00007` | `49970132416` | `46.538` | `c05999cdd4f584fec87bb514444ee5b0500074d64ca08ce88260ba2522944ee9` |
+| `00003-of-00007` | `49778214080` | `46.360` | `b91e4957717ceade242b050c3843b156f886baaac93db9702cca49ceb8292872` |
+| `00004-of-00007` | `49611094976` | `46.204` | `cd57532f532306acff75c4b6adcfd7153c4b1db927c9fc5a93c4db5b265e46d8` |
+| `00005-of-00007` | `49707537344` | `46.294` | `eb62769db9894cedc3cddc0712ec1dc1933ff839c899e4dcf64f12df4d9b7850` |
+| `00006-of-00007` | `47956968512` | `44.663` | `4650f9a548c87e923c1f46868380bb03c6e44ef3f57059660b4038f160bf4eb5` |
+| `00007-of-00007` | `35136819712` | `32.724` | `419a30f8910aee5e153417e9f087a17714b5741ed68d787da769ad58b5d8ce03` |
+
+Space accounting:
+
+- Shard set is complete:
+  `7/7`.
+- Total remote size:
+  `282167679808` bytes, `262.789 GiB`.
+- Largest shard:
+  `49970132416` bytes, `46.538 GiB`.
+- Current free disk on `/root/lfz`:
+  `94221332480` bytes, `87.750 GiB`.
+- Download-only requirement:
+  `262.789 GiB`;
+  missing `175.039 GiB`.
+- Conservative download plus expert-pack generation requirement:
+  `572.117 GiB`;
+  missing `484.366 GiB`.
+
+Existing local assets recorded by the audit:
+
+- Local model dirs:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`;
+  - `/root/lfz/models/Kimi-K2.7-Code-first-shard-test`;
+  - `/root/lfz/models/Kimi-K2.7-Code-layer1-test`.
+- Relevant expert-pack assets include:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`:
+    `175133036544` bytes;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`:
+    `4844539904` bytes;
+  - older/diagnostic packs also remain in the asset directory.
+
+Decision:
+
+- Accept 7OJ as a reproducible external asset metadata audit.
+- The remote `IQ2_XXS` GGUF shard set now exists and is metadata-complete.
+- The path is still blocked on this server because current disk cannot hold even
+  a download-only staging copy.
+- Do not download the shard set on the current disk state.
+- Do not start expert-pack generation for `IQ2_XXS` on this server.
+- The next valid `IQ2_XXS` phase requires one of:
+  - free at least `175.039 GiB` for download-only staging and preferably
+    `484.366 GiB` for conservative download plus pack generation;
+  - attach/use external storage;
+  - design a streaming/offline pack-generation path that never needs the full
+    GGUF shard set and a full expert-pack output resident at the same time, with
+    exact disk bounds before execution.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 0bf00cf52
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-233938Z-phase7oj-external-iq2xxs-asset-audit
+RUN="$RUN" "$RUN/phase7oj_external_iq2xxs_audit.py"
+cat "$RUN/iq2xxs_siblings.tsv"
+cat "$RUN/asset_feasibility.json"
+cat "$RUN/decision.md"
+```
