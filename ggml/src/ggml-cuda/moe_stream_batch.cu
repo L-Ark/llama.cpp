@@ -4397,16 +4397,6 @@ static bool expert_pack_iouring_copy_jobs(
     const bool profile_stage = pinned_stage_profile_enabled();
     const bool profile_copy = copy_profile_enabled();
     const bool profile_copy_h2d = copy_profile_h2d_enabled() && profile_copy;
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && CUDART_VERSION >= 12080
-    const bool use_h2d_batch_async =
-        expert_pack_env_bool("GGML_MOE_H2D_BATCH_ASYNC", false) && !profile_copy_h2d && st != nullptr;
-#else
-    const bool use_h2d_batch_async = false;
-#endif
-    static std::atomic<int> first_h2d_batch_async{0};
-    if (use_h2d_batch_async && first_h2d_batch_async.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream_batch] H2D batch memcpy active\n");
-    }
     double io_batch_slot_wait_ms = 0.0;
     double io_batch_submit_ms = 0.0;
     double io_batch_wait_ms = 0.0;
@@ -4504,12 +4494,24 @@ static bool expert_pack_iouring_copy_jobs(
                 io_batch_inflight_max = inflight;
             }
         }
-        auto enqueue_done_copy = [&](const pending_job &done, double batch_enqueue_share_ms = -1.0) -> bool {
+        auto handle_cqe = [&](io_uring_cqe *cqe) -> bool {
+            const uint64_t data = io_uring_cqe_get_data64(cqe);
+            const size_t pending_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
+            if (pending_idx >= pending.size() || cqe->res != (int)pending[pending_idx].bytes) {
+                io_uring_cqe_seen(ring_io, cqe);
+                ++g_expert_pack.iouring_fallbacks;
+                return false;
+            }
+
+            const pending_job done = pending[pending_idx];
             const Job &job = jobs[done.job_idx];
             pinned_stage_slot &slot = ring.slots[done.slot_idx];
+            io_uring_cqe_seen(ring_io, cqe);
+            ++g_expert_pack.iouring_cqes;
+            ++ring.iouring_cqes;
+
             const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch || profile_io_wait;
-            const auto enqueue_start = measure_enqueue && batch_enqueue_share_ms < 0.0 ?
-                std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if ((profile_stage || profile_copy_h2d) && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
                     return false;
@@ -4530,21 +4532,17 @@ static bool expert_pack_iouring_copy_jobs(
                 cudaStreamSynchronize(st);
                 return false;
             }
-            double enqueue_ms = batch_enqueue_share_ms;
-            if (enqueue_ms < 0.0) {
-                if (profile_stage) {
-                    const auto enqueue_end = std::chrono::steady_clock::now();
-                    enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
-                    ring.enqueue_ms += enqueue_ms;
-                } else if (profile_copy) {
-                    const auto enqueue_end = std::chrono::steady_clock::now();
-                    enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
-                } else if (profile_io_batch) {
-                    const auto enqueue_end = std::chrono::steady_clock::now();
-                    enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
-                } else {
-                    enqueue_ms = 0.0;
-                }
+            double enqueue_ms = 0.0;
+            if (profile_stage) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                ring.enqueue_ms += enqueue_ms;
+            } else if (profile_copy) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+            } else if (profile_io_batch) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
             }
             if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
             if (profile_io_wait) io_wait_enqueue_ms += enqueue_ms;
@@ -4587,135 +4585,8 @@ static bool expert_pack_iouring_copy_jobs(
 
             ++completed;
             --inflight;
-            reusable_pending_slots.push_back({done.pending_idx, done.slot_idx});
+            reusable_pending_slots.push_back({pending_idx, done.slot_idx});
             return true;
-        };
-
-        auto enqueue_done_batch = [&](const std::vector<pending_job> &done_jobs) -> bool {
-            if (done_jobs.empty()) {
-                return true;
-            }
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && CUDART_VERSION >= 12080
-            if (use_h2d_batch_async && done_jobs.size() > 1) {
-                const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch || profile_io_wait;
-                const auto enqueue_start = measure_enqueue ?
-                    std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-                std::vector<void *> dsts;
-                std::vector<void *> srcs;
-                std::vector<size_t> sizes;
-                dsts.reserve(done_jobs.size());
-                srcs.reserve(done_jobs.size());
-                sizes.reserve(done_jobs.size());
-                for (const pending_job &done : done_jobs) {
-                    const Job &job = jobs[done.job_idx];
-                    pinned_stage_slot &slot = ring.slots[done.slot_idx];
-                    if ((profile_stage || profile_copy_h2d) && slot.copy_start) {
-                        if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
-                            return false;
-                        }
-                    }
-                    dsts.push_back(job.dst);
-                    srcs.push_back(slot.host);
-                    sizes.push_back(expert_bytes);
-                }
-                cudaMemcpyAttributes attr = {};
-                attr.srcAccessOrder = cudaMemcpySrcAccessOrderStream;
-                size_t attr_idx = 0;
-                size_t fail_idx = SIZE_MAX;
-                if (cudaMemcpyBatchAsync(
-                            dsts.data(), srcs.data(), sizes.data(), sizes.size(),
-                            &attr, &attr_idx, 1, &fail_idx, st) != cudaSuccess) {
-                    return false;
-                }
-                for (const pending_job &done : done_jobs) {
-                    pinned_stage_slot &slot = ring.slots[done.slot_idx];
-                    if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
-                        if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) {
-                            return false;
-                        }
-                        if (profile_stage) {
-                            slot.timing_pending = true;
-                        }
-                    }
-                    if (cudaEventRecord(slot.done, st) != cudaSuccess) {
-                        cudaStreamSynchronize(st);
-                        return false;
-                    }
-                }
-                double enqueue_ms = 0.0;
-                if (measure_enqueue) {
-                    const auto enqueue_end = std::chrono::steady_clock::now();
-                    enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
-                    if (profile_stage) {
-                        ring.enqueue_ms += enqueue_ms;
-                    }
-                }
-                const double per_copy_enqueue_ms = enqueue_ms / (double)done_jobs.size();
-                if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
-                if (profile_io_wait) io_wait_enqueue_ms += enqueue_ms;
-                for (const pending_job &done : done_jobs) {
-                    const Job &job = jobs[done.job_idx];
-                    pinned_stage_slot &slot = ring.slots[done.slot_idx];
-                    slot.pending = true;
-                    ++ring.copies;
-                    ++g_expert_pack.iouring_reads;
-                    g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
-                    ++g_expert_pack.iouring_h2d_enqueues;
-                    if (profile_io_batch) ++io_batch_cqes;
-                    if (done.copy_start != std::chrono::steady_clock::time_point{}) {
-                        const auto copy_end = std::chrono::steady_clock::now();
-                        const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
-                        if (batch_ttft_trace_enabled()) {
-                            batch_ttft_trace_record(
-                                trace_op,
-                                job.tensor,
-                                job.expert_idx,
-                                expert_bytes,
-                                false,
-                                true,
-                                false,
-                                wall_ms);
-                        }
-                        if (profile_copy) {
-                            copy_profile_record(
-                                    trace_op, job.tensor, job.expert_idx, expert_bytes,
-                                    true, false, true,
-                                    0.0, 0.0, wall_ms, per_copy_enqueue_ms, -1.0, wall_ms);
-                        }
-                    }
-                    ++completed;
-                    --inflight;
-                    reusable_pending_slots.push_back({done.pending_idx, done.slot_idx});
-                }
-                return true;
-            }
-#endif
-            for (const pending_job &done : done_jobs) {
-                if (!enqueue_done_copy(done)) {
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        auto handle_cqe = [&](io_uring_cqe *cqe, std::vector<pending_job> *deferred) -> bool {
-            const uint64_t data = io_uring_cqe_get_data64(cqe);
-            const size_t pending_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
-            if (pending_idx >= pending.size() || cqe->res != (int)pending[pending_idx].bytes) {
-                io_uring_cqe_seen(ring_io, cqe);
-                ++g_expert_pack.iouring_fallbacks;
-                return false;
-            }
-
-            const pending_job done = pending[pending_idx];
-            io_uring_cqe_seen(ring_io, cqe);
-            ++g_expert_pack.iouring_cqes;
-            ++ring.iouring_cqes;
-            if (deferred) {
-                deferred->push_back(done);
-                return true;
-            }
-            return enqueue_done_copy(done);
         };
 
         auto refill_pending = [&]() -> bool {
@@ -4769,13 +4640,9 @@ static bool expert_pack_iouring_copy_jobs(
             return false;
         }
         size_t drained_cqes = 0;
-        std::vector<pending_job> deferred_h2d;
-        if (use_h2d_batch_async) {
-            deferred_h2d.reserve(depth);
-        }
-        if (!handle_cqe(cqe, use_h2d_batch_async ? &deferred_h2d : nullptr)) return false;
+        if (!handle_cqe(cqe)) return false;
         ++drained_cqes;
-        if (!use_h2d_batch_async && refill_batch == 1 && !refill_pending()) return false;
+        if (refill_batch == 1 && !refill_pending()) return false;
 
         while (completed < read_jobs.size() && inflight > 0) {
             io_uring_cqe *extra_cqe = nullptr;
@@ -4783,12 +4650,8 @@ static bool expert_pack_iouring_copy_jobs(
             if (peek_rc != 0 || !extra_cqe) {
                 break;
             }
-            if (!handle_cqe(extra_cqe, use_h2d_batch_async ? &deferred_h2d : nullptr)) return false;
+            if (!handle_cqe(extra_cqe)) return false;
             ++drained_cqes;
-            if (!use_h2d_batch_async && refill_batch == 1 && !refill_pending()) return false;
-        }
-        if (use_h2d_batch_async) {
-            if (!enqueue_done_batch(deferred_h2d)) return false;
             if (refill_batch == 1 && !refill_pending()) return false;
         }
         if (profile_io_wait) {
