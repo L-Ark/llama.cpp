@@ -76109,10 +76109,16 @@ mkdir -p "$RUN"
 
 systemd-run --wait --collect --same-dir \
   -p MemoryMax=15900000000 -p MemorySwapMax=0 \
-  python3 scripts/kimi-hf-fp4-asset-audit.py \
-    --out "$RUN/asset-audit.json" \
-    decart-ai/Kimi-K2.7-Code-NVFP4 \
-    amd/Kimi-K2.7-Code-MXFP4
+  env RUN="$RUN" COMMIT=f0b8b102c /tmp/run_phase7mt_metadata.sh
+```
+
+The wrapper runs:
+
+```bash
+/usr/bin/timeout 600s python3 scripts/kimi-hf-fp4-asset-audit.py \
+  --out "$RUN/asset-audit.json" \
+  decart-ai/Kimi-K2.7-Code-NVFP4 \
+  amd/Kimi-K2.7-Code-MXFP4
 ```
 
 Required outputs:
