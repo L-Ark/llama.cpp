@@ -76664,3 +76664,76 @@ Reproducibility:
 - Accepted improvement must be committed and pushed immediately with the exact
   reproduction command.
 - Rejected source must be reverted and pushed immediately.
+
+Result - 2026-07-05 21:34 CST:
+
+- Plan commit before source edit: `83fb549f0`.
+- Source commit tested: `97fc11038`
+  (`cuda: add iouring fixed buffer expert reads`).
+- Revert commit pushed after failed gate: `b5957f689`
+  (`Revert "cuda: add iouring fixed buffer expert reads"`).
+- Server was synced to the source commit, build passed:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 97fc11038
+cmake --build build-cuda-batch -j"$(nproc)"
+```
+
+- Strict n32 run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-133100Z-phase7mv-iouring-fixedbuf-n32`
+- Exact run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-133100Z-phase7mv-iouring-fixedbuf-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_IO_REGISTER_BUFFERS=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Exit `0`; `memory.swap.max=0`; `memory.peak=15899996160`;
+  `memory.events`: `oom=0`, `oom_kill=0`.
+- Quality: `pass`.
+- Answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `71597.89 ms`, within the 20% cap.
+- Decode: `24447.15 ms / 31`, `1.27 tok/s`.
+- Expert-pack counters:
+  - `iouring_reads=22647`;
+  - `iouring_bytes=126391910400`;
+  - `iouring_submit_us=55138`;
+  - `iouring_wait_us=21223073`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - fixed buffers: `attempts=5`, `success=5`, `failures=0`,
+    `fixed_reads=22647`.
+- Inflight and batches:
+  - total iouring `batches=5178`, `wait_calls=16709`,
+    `inflight_avg=3.40`, `inflight_max=8`;
+  - main staging `jobs=16268`, `inflight_avg=3.37`;
+  - gate staging `jobs=6379`, `inflight_avg=3.50`.
+- VRAM cache:
+  - total hit rate `53.9%`;
+  - down hit rate `73.4%`;
+  - up/gate hit rate `45.2%`.
+
+Decision:
+
+- Reject. Registration worked and every read used fixed buffers, but endpoint
+  performance regressed versus the current clean n32 default band:
+  - 7MD default repeat: `22659.98 ms / 31`, `1.37 tok/s`;
+  - 7LY post-revert guard: `22256.21 ms / 31`, `1.39 tok/s`;
+  - 7MV fixed buffers: `24447.15 ms / 31`, `1.27 tok/s`.
+- The measured `iouring_wait_us=21.22 s` did not compress the wait bucket;
+  it is worse than the recent default references near `19.45-19.49 s`.
+- This means fixed registered buffers remove no relevant bottleneck on this
+  kernel/device path and may add registration/accounting or pinned-memory
+  pressure. There is no basis to run n96 because the n32 gate failed.
+- Source rollback was pushed immediately as `b5957f689`, and the server was
+  reset to that reverted HEAD.
