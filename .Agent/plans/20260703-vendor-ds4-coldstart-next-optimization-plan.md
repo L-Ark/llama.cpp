@@ -10684,3 +10684,83 @@ SOTA status for this update:
 - This is a planning update only.
 - Current accepted SOTA remains `4.4 tok/s`.
 - The invalid zero-output Q4_K harness measurements are not accepted performance evidence.
+
+### 2026-07-05 Q4_K Top4 Combo Microprobe Result
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/q4k-top4-combo-microprobe-result.json`
+
+Validity fix:
+
+- The first Q4_K harness results were invalid because the warmup output was exactly zero.
+- Root cause: the standalone harness called CPU quant/dot functions without `ggml_cpu_init()`, so the CPU fp16 lookup table used by `GGML_CPU_FP16_TO_FP32` inside the dot path was not initialized.
+- Fix: call `ggml_cpu_init()` before quantization and add block-field diagnostics plus fail-fast zero-output detection.
+- Valid evidence after the fix:
+  - Q4_K block fields are nonzero: `q4_d=0.0351257324`, `q4_dmin=0.256347656`, `q4_scales_nz=12`, `q4_qs_nz=126`
+  - Q8_K fields are nonzero: `q8_d=-0.124245711`, `q8_qs_nz=255`, `q8_bsums_nz=16`
+  - up/gate-like first row: `ref0=-1146.38565`, `q4dot0=-1509.15625`, `warm_abs_sum=8976186.09`
+  - down-like first row: `ref0=1243.30404`, `q4dot0=1085.05469`, `warm_abs_sum=12776267.4`
+
+Valid microprobe results:
+
+| threads | up/gate-like `src_gib_s` | down-like `src_gib_s` | verdict |
+| --- | ---: | ---: | --- |
+| 1 | `16.356` | `14.914` | below zero-overhead gate |
+| 8 | `33.511` | `49.066` | below zero-overhead gate |
+| 20 | `73.542` | `111.682` | mixed; up shape below 500ms-overhead gate |
+| 24 | `89.257` | `86.978` | both below 500ms-overhead gate |
+| 32 | `116.115` | `115.044` | passes reopen gate |
+
+Decision:
+
+- The hard microprobe reopen rule is satisfied only at `32` threads: both DS4-like shapes exceed the `91.978 GiB/s` 500ms-overhead gate.
+- This does not change SOTA. It is not a model run, does not prove TTFT, does not prove France correctness, and does not prove 16GB end-to-end behavior.
+- Current accepted SOTA remains `4.4 tok/s`.
+- The route is reopened only for a source-design phase: `4Expert/top_k=4 + Q4_K routed experts + source/page elimination + faster CPU fallback`.
+
+### 2026-07-05 Next Source Plan: Default-Off 4Expert/Q4_K Integration Probe
+
+Purpose:
+
+- Test whether the microprobe upper-bound can be converted into a real vendor DeepSeek path without breaking correctness or the 16GB/TTFT gates.
+- This must stay design-first and correctness-first. No long France benchmark is allowed until loading/routing/Q4_K correctness is verified.
+
+Required source design steps before runtime edits:
+
+1. 4Expert GGUF acquisition and reproducibility policy.
+   - Candidate: `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf`.
+   - Do not delete accepted SOTA model, accepted expert pack, accepted run records, or pushed-source repro artifacts.
+   - Because `/root` free space is tight, first write an explicit disk plan that lists what can be removed or where the full GGUF can be placed. No full download until the disk plan preserves SOTA reproducibility.
+   - Record full URL, expected size `164465760544 bytes`, SHA256 if downloaded, and exact local path.
+
+2. Routing tensor compatibility.
+   - The 4Expert candidate uses routing tensor name `blk.*.ffn_gate_tid2eid.weight`.
+   - Current vendor probes and accepted native path use `blk.*.ffn_gate_tid2eid`.
+   - Implement a default-off alias loader/probe only if needed; it must not alter accepted native SOTA behavior when the env/config is unset.
+   - First validation is metadata/load-only, not a token-rate benchmark.
+
+3. Q4_K stream/cache/pack support.
+   - Current one-stream cache type allowlist covers `IQ3_XXS` and the DS4 experimental native types `MXFP4/F8_E4M3_B128`; Q4_K is not yet a supported stream/cache path.
+   - Add Q4_K support behind an explicit env/config gate.
+   - Prove cache slot size, tensor offsets, direct read alignment, pack manifest, and copy size before wiring compute.
+   - The accepted gate-only native SOTA path must remain unchanged by default.
+
+4. Correctness gates before performance.
+   - Any logit-changing path must first create a baseline `result.gguf` and pass `llama-results --check --top1-report --top1-fail-on-mismatch` with `same_top1 == n_tokens`.
+   - Then run the France prompt and record the exact answer. The answer must be semantically correct and coherent.
+   - Then run the five-prompt warm/cold correctness set if the France prompt passes.
+
+5. Strict performance gate only after correctness.
+   - Benchmark only under strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, and page cache charged inside cgroup.
+   - Promotion requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `ram_ok=true`, no OOM/swap, and correct France output.
+   - If TTFT exceeds the gate but token rate improves, commit and push only as a rejected diagnostic, labeled not accepted.
+
+Execution order:
+
+1. Write a disk/repro plan for the 4Expert GGUF and preserve all current SOTA artifacts.
+2. Implement or test metadata-only 4Expert GGUF loading and routing alias behavior.
+3. Implement default-off Q4_K stream/cache/pack support and validate with small read/cache diagnostics.
+4. Run top1 correctness comparison before any long model benchmark.
+5. Run strict cold France benchmark only after top1 and output correctness pass.
+6. For any compliant new SOTA, immediately record full reproduction information, commit and push to `ssd/vendor/deepseek-token-rate-16gb`, then reproduce from pushed source before promotion.

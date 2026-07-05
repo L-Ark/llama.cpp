@@ -9,11 +9,50 @@
 #include <thread>
 #include <vector>
 
+#include "ggml-cpu.h"
 #include "ggml-cpu/quants.h"
 
 static double now_ms() {
     using clock = std::chrono::steady_clock;
     return std::chrono::duration<double, std::milli>(clock::now().time_since_epoch()).count();
+}
+
+static int count_nonzero_u8(const uint8_t * data, size_t n) {
+    int nz = 0;
+    for (size_t i = 0; i < n; ++i) {
+        nz += data[i] != 0;
+    }
+    return nz;
+}
+
+static int count_nonzero_i8(const int8_t * data, size_t n) {
+    int nz = 0;
+    for (size_t i = 0; i < n; ++i) {
+        nz += data[i] != 0;
+    }
+    return nz;
+}
+
+static int count_nonzero_i16(const int16_t * data, size_t n) {
+    int nz = 0;
+    for (size_t i = 0; i < n; ++i) {
+        nz += data[i] != 0;
+    }
+    return nz;
+}
+
+static double float_dot(const float * x, const float * y, int k) {
+    double sum = 0.0;
+    for (int i = 0; i < k; ++i) {
+        sum += (double) x[i] * (double) y[i];
+    }
+    return sum;
+}
+
+static float fp16_to_float(ggml_fp16_t v) {
+    float out = 0.0f;
+    ggml_cpu_fp16_to_fp32(&v, &out, 1);
+    return out;
 }
 
 static void bench_shape(int k, int rows, int iters, int nth) {
@@ -24,7 +63,7 @@ static void bench_shape(int k, int rows, int iters, int nth) {
 
     const int nb = k / QK_K;
     std::mt19937 rng(1);
-    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> dist(-16.0f, 16.0f);
 
     std::vector<float> xf((size_t) rows * k);
     std::vector<float> yf(k);
@@ -46,8 +85,32 @@ static void bench_shape(int k, int rows, int iters, int nth) {
     const double quant_ms = now_ms() - q0;
 
     std::vector<float> out(rows);
+    double warm_abs_sum = 0.0;
     for (int r = 0; r < rows; ++r) {
         ggml_vec_dot_q4_K_q8_K(k, &out[r], 0, &xq[(size_t) r * nb], 0, yq.data(), 0, 1);
+        warm_abs_sum += std::fabs((double) out[r]);
+    }
+    const double ref0 = float_dot(xf.data(), yf.data(), k);
+    std::printf(
+        "debug k=%d rows=%d threads=%d q4_d=%.9g q4_dmin=%.9g q4_scales_nz=%d q4_qs_nz=%d q4_scale0=%u q4_q0=%u q8_d=%.9g q8_qs_nz=%d q8_bsums_nz=%d q8_q0=%d q8_bsum0=%d ref0=%.9g q4dot0=%.9g warm_abs_sum=%.9g\n",
+        k, rows, nth,
+        (double) fp16_to_float(xq[0].d),
+        (double) fp16_to_float(xq[0].dmin),
+        count_nonzero_u8(xq[0].scales, sizeof(xq[0].scales)),
+        count_nonzero_u8(xq[0].qs, sizeof(xq[0].qs)),
+        (unsigned) xq[0].scales[0],
+        (unsigned) xq[0].qs[0],
+        (double) yq[0].d,
+        count_nonzero_i8(yq[0].qs, sizeof(yq[0].qs)),
+        count_nonzero_i16(yq[0].bsums, QK_K / 16),
+        (int) yq[0].qs[0],
+        (int) yq[0].bsums[0],
+        ref0,
+        (double) out[0],
+        warm_abs_sum);
+    if (warm_abs_sum <= 0.0) {
+        std::fprintf(stderr, "invalid zero q4_k dot warmup: k=%d rows=%d\n", k, rows);
+        std::exit(3);
     }
 
     std::vector<double> sinks(nth, 0.0);
@@ -100,15 +163,17 @@ static void bench_shape(int k, int rows, int iters, int nth) {
     const double us_per_dot = dot_ms * 1000.0 / (double) dot_calls;
 
     std::printf(
-        "shape k=%d rows=%d iters=%d threads=%d quant_ms=%.3f dot_ms=%.3f dot_calls=%llu q4_src_bytes=%llu q8_bytes=%llu src_gib_s=%.3f total_gib_s=%.3f us_per_dot=%.6f sink=%.9g\n",
+        "shape k=%d rows=%d iters=%d threads=%d quant_ms=%.3f dot_ms=%.3f dot_calls=%llu q4_src_bytes=%llu q8_bytes=%llu src_gib_s=%.3f total_gib_s=%.3f us_per_dot=%.6f warm_abs_sum=%.9g sink=%.9g\n",
         k, rows, iters, nth, quant_ms, dot_ms,
         (unsigned long long) dot_calls,
         (unsigned long long) q4_src_bytes,
         (unsigned long long) q8_bytes,
-        src_gib_s, total_gib_s, us_per_dot, sink);
+        src_gib_s, total_gib_s, us_per_dot, warm_abs_sum, sink);
 }
 
 int main(int argc, char ** argv) {
+    ggml_cpu_init();
+
     int iters = 400;
     if (argc >= 2) {
         iters = std::max(1, std::atoi(argv[1]));

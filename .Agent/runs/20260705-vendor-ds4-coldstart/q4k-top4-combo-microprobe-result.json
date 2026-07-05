@@ -1,0 +1,107 @@
+{
+  "date": "2026-07-05",
+  "title": "Result: valid Q4_K CPU dot microprobe for 4Expert/top4 combo hard-bound",
+  "result": "microprobe_reopens_design_only_not_sota",
+  "promoted_to_sota": false,
+  "runtime_source_modified": false,
+  "diagnostic_source_modified": true,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "pre_commit_head": "419c323d84901882e0e185b8aff45538ca9723a1",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "artifacts": {
+    "valid_log": ".Agent/runs/20260705-vendor-ds4-coldstart/q4k-dot-harness-20260705T-valid-init.log",
+    "valid_log_sha256": "e6414f40ccdc3654725bdd3a73d842e9f2cfda9e1ce97ac46a356d9675b99546",
+    "init_debug_log": ".Agent/runs/20260705-vendor-ds4-coldstart/q4k-dot-harness-20260705T-init-debug.log",
+    "prior_invalid_zero_output_log": ".Agent/runs/20260705-vendor-ds4-coldstart/q4k-dot-harness-20260705T-valid.log",
+    "harness": ".Agent/run-tools/q4k_dot_harness.cpp",
+    "harness_sha256": "54716a1201ef3affe2c643e2b10d3a566355faf0d901fc61968555582a91e314",
+    "runner": ".Agent/run-tools/run_q4k_dot_harness.sh",
+    "runner_sha256": "1fa874280c1f41beacd27841604c8142df7cc60a8c936b0faf9f189fc3bcbfbf"
+  },
+  "validity_fix": {
+    "prior_issue": "The first Q4_K harness emitted zero-output warmup results; sink matched the epsilon-only accumulation, so the apparent throughput was invalid.",
+    "root_cause": "The standalone harness called quantize/dot functions without ggml_cpu_init(), leaving CPU fp16 lookup tables uninitialized for GGML_CPU_FP16_TO_FP32 users inside the dot path.",
+    "fix": "Call ggml_cpu_init() in main before quantization and add fail-fast plus block-field diagnostics.",
+    "validity_evidence": {
+      "q4_d": 0.0351257324,
+      "q4_dmin": 0.256347656,
+      "q4_scales_nz": 12,
+      "q4_qs_nz": 126,
+      "q8_d": -0.124245711,
+      "q8_qs_nz": 255,
+      "q8_bsums_nz": 16,
+      "up_like_ref0": -1146.38565,
+      "up_like_q4dot0": -1509.15625,
+      "up_like_warm_abs_sum": 8976186.09,
+      "down_like_ref0": 1243.30404,
+      "down_like_q4dot0": 1085.05469,
+      "down_like_warm_abs_sum": 12776267.4
+    }
+  },
+  "hard_bound_thresholds": {
+    "required_q4k_src_gib_s_zero_overhead": 63.98322825865537,
+    "required_q4k_src_gib_s_with_500ms_overhead": 91.97849002237468,
+    "reopen_rule": "Both DS4-like shapes must exceed 91.978 GiB/s with margin before source implementation can be considered.",
+    "sota_rule": "This microprobe is not a model run and cannot promote SOTA."
+  },
+  "results": [
+    {
+      "threads": 1,
+      "up_gate_like": {"k": 4096, "rows": 2048, "src_gib_s": 16.356, "total_gib_s": 16.372, "us_per_dot": 0.131189},
+      "down_like": {"k": 2048, "rows": 4096, "src_gib_s": 14.914, "total_gib_s": 14.921, "us_per_dot": 0.07194},
+      "verdict": "below_zero_overhead_gate"
+    },
+    {
+      "threads": 8,
+      "up_gate_like": {"k": 4096, "rows": 2048, "src_gib_s": 33.511, "total_gib_s": 33.544, "us_per_dot": 0.064032},
+      "down_like": {"k": 2048, "rows": 4096, "src_gib_s": 49.066, "total_gib_s": 49.09, "us_per_dot": 0.021866},
+      "verdict": "below_zero_overhead_gate"
+    },
+    {
+      "threads": 20,
+      "up_gate_like": {"k": 4096, "rows": 2048, "src_gib_s": 73.542, "total_gib_s": 73.615, "us_per_dot": 0.029177},
+      "down_like": {"k": 2048, "rows": 4096, "src_gib_s": 111.682, "total_gib_s": 111.737, "us_per_dot": 0.009607},
+      "verdict": "mixed_up_shape_below_500ms_overhead_gate"
+    },
+    {
+      "threads": 24,
+      "up_gate_like": {"k": 4096, "rows": 2048, "src_gib_s": 89.257, "total_gib_s": 89.345, "us_per_dot": 0.02404},
+      "down_like": {"k": 2048, "rows": 4096, "src_gib_s": 86.978, "total_gib_s": 87.021, "us_per_dot": 0.012335},
+      "verdict": "both_shapes_below_500ms_overhead_gate"
+    },
+    {
+      "threads": 32,
+      "up_gate_like": {"k": 4096, "rows": 2048, "src_gib_s": 116.115, "total_gib_s": 116.23, "us_per_dot": 0.01848},
+      "down_like": {"k": 2048, "rows": 4096, "src_gib_s": 115.044, "total_gib_s": 115.101, "us_per_dot": 0.009326},
+      "verdict": "passes_reopen_gate"
+    }
+  ],
+  "best_case_analysis": {
+    "threads": 32,
+    "up_gate_like_src_gib_s": 116.115,
+    "down_like_src_gib_s": 115.044,
+    "up_margin_over_500ms_gate_gib_s": 24.136509977625318,
+    "down_margin_over_500ms_gate_gib_s": 23.06550997762531,
+    "up_margin_over_500ms_gate_pct": 26.240385463017787,
+    "down_margin_over_500ms_gate_pct": 25.076004051577664,
+    "interpretation": "The standalone resident Q4_K dot kernel is fast enough to reopen a design-only route, but this does not prove end-to-end token rate because routing compatibility, Q4_K stream/cache implementation, full 4Expert GGUF integration, page/source behavior, CPU thread interaction, TTFT, and correctness remain unproven."
+  },
+  "decision": {
+    "new_sota": "no",
+    "accepted_sota_unchanged": true,
+    "q4k_top4_combo_route": "reopen_design_phase_only",
+    "next_required_plan": "Write and execute a default-off source integration plan covering 4Expert GGUF acquisition/repro, routing tensor alias compatibility for ffn_gate_tid2eid.weight, Q4_K stream/cache/pack support, top1 verifier, France/five-prompt correctness, 16GB cgroup/page-cache accounting, TTFT gate, and pushed-source reproduction."
+  }
+}
