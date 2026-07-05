@@ -1,0 +1,1936 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/speculative-artifact-refresh-20260706-after-diskless-close.json",
+  "classification": [
+    {
+      "downloads": 302,
+      "lastModified": "2026-05-03T13:35:09.000Z",
+      "repo": "Arien0/Qwen3.5-9B-DeepSeek-V4-Flash-AWQ-BF16-INT8-UC-MTP",
+      "selected_files": [
+        {
+          "blob": "60e606a9a747feeb284f0a4dda9fcd16984c575c",
+          "name": "config.json",
+          "size": 16177
+        },
+        {
+          "blob": "32fc0bbbd21b06002befb371a7f8c9f93f652e08",
+          "name": "generation_config.json",
+          "size": 142
+        },
+        {
+          "blob": "1b5c92aaa218b4d69b0b2db5232fa7728b6106ce",
+          "name": "model.safetensors",
+          "size": 13849507024
+        },
+        {
+          "blob": "4bbbef2de58924f75c8069bf496faa5e084b959d",
+          "name": "model.safetensors.index.json",
+          "size": 81692
+        },
+        {
+          "blob": "79f8f0f35b8e670ef67c0f43af3bbcbad9ac4c92",
+          "name": "model_mtp.safetensors",
+          "size": 486582848
+        },
+        {
+          "blob": "59ce6974aad08ed1f74c70b32acab46011e56116",
+          "name": "preprocessor_config.json",
+          "size": 333
+        },
+        {
+          "blob": "8af8110fe33fb48d1a0aefafb83005347beda96a",
+          "name": "processor_config.json",
+          "size": 1296
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "539d5dc532357e60863f798a874ae6ee2b15e378",
+          "name": "tokenizer_config.json",
+          "size": 7162
+        },
+        {
+          "blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe",
+          "name": "video_preprocessor_config.json",
+          "size": 385
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "safetensors",
+        "qwen3_5",
+        "AWQ",
+        "MTP",
+        "image-text-to-text",
+        "conversational",
+        "en",
+        "dataset:HuggingFaceH4/ultrachat_200k",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "compressed-tensors",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 0,
+      "lastModified": "2026-06-03T16:45:17.000Z",
+      "repo": "FoxlightAI/deepseek-v4-flash-mtp",
+      "selected_files": [
+        {
+          "blob": "f7408d1b1085190eabf8c676a16cbededfdaff0a",
+          "name": "mtp.safetensors",
+          "size": 6777733547
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "mtp-sidecar",
+        "skulk",
+        "foxlight",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 12852,
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "selected_files": [
+        {
+          "blob": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": 18407318272
+        },
+        {
+          "blob": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872
+        },
+        {
+          "blob": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760
+        },
+        {
+          "blob": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184
+        },
+        {
+          "blob": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400
+        },
+        {
+          "blob": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432
+        },
+        {
+          "blob": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": 5780087552
+        },
+        {
+          "blob": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": 5488550656
+        },
+        {
+          "blob": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": 6642541312
+        },
+        {
+          "blob": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": 6472639232
+        },
+        {
+          "blob": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": 7558898432
+        },
+        {
+          "blob": "664235757835f56506d43ebd96401f8007f29218",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": 9786057472
+        }
+      ],
+      "status": "supplementary_mtp_gguf_or_target_gguf_requires_loader_and_verifier_bound",
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "downloads": 996,
+      "lastModified": "2026-05-11T00:59:31.000Z",
+      "repo": "LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+      "selected_files": [
+        {
+          "blob": "e916e6958f1cd7e2fb00d4e7144045de14666601",
+          "name": "MTP_QUANT_MANIFEST.json",
+          "size": 580
+        },
+        {
+          "blob": "70efc3c1de08a6f591ad22143229c42c080f0a2c",
+          "name": "MTP_QUANT_MANIFEST.md",
+          "size": 492
+        },
+        {
+          "blob": "87e57078993263cd93b469f15d1f774f02e5f556",
+          "name": "config.json",
+          "size": 12929
+        },
+        {
+          "blob": "d7d28cbc23abb1b906ff570115afa448b3a6decd",
+          "name": "docker/apply_mtp_patches.py",
+          "size": 3205
+        },
+        {
+          "blob": "843853281cef5c83d59b24dede8c87e1c2d069cb",
+          "name": "generation_config.json",
+          "size": 174
+        },
+        {
+          "blob": "83cbb06d48499a84d1c55501fe861a0a5c8181f2",
+          "name": "model-00001-of-00004.safetensors",
+          "size": 50000483978
+        },
+        {
+          "blob": "0d7b4bd566e6e66761e5f7a18463d2ef4f53e65c",
+          "name": "model-00002-of-00004.safetensors",
+          "size": 49980495040
+        },
+        {
+          "blob": "fa0bf532b597a523a81890409787b6ff21ea908d",
+          "name": "model-00003-of-00004.safetensors",
+          "size": 50003691840
+        },
+        {
+          "blob": "4d996e6dd00961a4b046efac5b4754128b2edfd6",
+          "name": "model-00004-of-00004.safetensors",
+          "size": 2484315128
+        },
+        {
+          "blob": "04e0fcafc3cf47e470b8acc86f9e5745555c64d4",
+          "name": "model-mtp-w4a16.safetensors",
+          "size": 3552110692
+        },
+        {
+          "blob": "3a08839e548afe6d46f356bbbcd204f3b5a1e70e",
+          "name": "model.safetensors.index.json",
+          "size": 8684565
+        },
+        {
+          "blob": "0ea474ba13beaf95c2faf2629804bbd0f8a22fe4",
+          "name": "tokenizer.json",
+          "size": 10071762
+        },
+        {
+          "blob": "4d26ff123891076cff6fc3169d70ca5e77b2fd32",
+          "name": "tokenizer_config.json",
+          "size": 397
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "moe",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8-block",
+        "mtp",
+        "speculative-decoding",
+        "multi-token-prediction",
+        "acti",
+        "blackwell",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "base_model:quantized:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "doi:10.57967/hf/8744",
+        "license:apache-2.0",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 282,
+      "lastModified": "2026-06-07T22:41:31.000Z",
+      "repo": "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+      "selected_files": [],
+      "status": "not_relevant_or_no_candidate_files",
+      "tags": [
+        "transformers",
+        "pytorch",
+        "llama",
+        "speculative-decoding",
+        "eagle3",
+        "eagle3.1",
+        "draft-model",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "text-generation-inference",
+        "endpoints_compatible",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 11,
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "selected_files": [
+        {
+          "blob": "0ed924fea2c75464186568d0ae3caf7e2406f0c0",
+          "name": "config.json",
+          "size": 1816
+        },
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "status": "dflash_or_speculator_not_vendor_loadable_current_verifier_closed",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1983,
+      "lastModified": "2026-05-29T07:22:22.000Z",
+      "repo": "canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+      "selected_files": [
+        {
+          "blob": "ae5c4308a88d592e1ccee06e2ea094e0b635422d",
+          "name": "config.json",
+          "size": 61992
+        },
+        {
+          "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+          "name": "generation_config.json",
+          "size": 170
+        },
+        {
+          "blob": "768a22b70f765650d146b7f921bfe774ded58d8b",
+          "name": "model-00001-of-00035.safetensors",
+          "size": 5365711244
+        },
+        {
+          "blob": "6fbe33b5c1afc469003c3980c181f517dde82482",
+          "name": "model-00002-of-00035.safetensors",
+          "size": 5368733688
+        },
+        {
+          "blob": "d07aac8e92cfc39acfffc11dccd15ff97f7064e4",
+          "name": "model-00003-of-00035.safetensors",
+          "size": 5365881272
+        },
+        {
+          "blob": "78b2111f13e75de92a2f374e3d4e7985539ea529",
+          "name": "model-00004-of-00035.safetensors",
+          "size": 5365955528
+        },
+        {
+          "blob": "ce4e3a03bf5ddc2fc075c59857e769181a0bd91b",
+          "name": "model-00005-of-00035.safetensors",
+          "size": 5365634688
+        },
+        {
+          "blob": "8e297d5e34bd81f20de450fedf09a48b6e3446b1",
+          "name": "model-00006-of-00035.safetensors",
+          "size": 5365954232
+        },
+        {
+          "blob": "28ff05878092922e8b1a8506cbfb97be1d77dfad",
+          "name": "model-00007-of-00035.safetensors",
+          "size": 5365876656
+        },
+        {
+          "blob": "615eb8c0fb05c90f54f7a4d6b0d9cd0116b96de6",
+          "name": "model-00008-of-00035.safetensors",
+          "size": 5365644040
+        },
+        {
+          "blob": "f3a438f6e155b1e9a2edb27e5438874f17f7b572",
+          "name": "model-00009-of-00035.safetensors",
+          "size": 5365959856
+        },
+        {
+          "blob": "74dbafa99427d47a5b30a64f9712c0caf7b9d814",
+          "name": "model-00010-of-00035.safetensors",
+          "size": 5365883792
+        },
+        {
+          "blob": "0da2b8c2c20afcc0d8d981c64e8b153e6b5a5510",
+          "name": "model-00011-of-00035.safetensors",
+          "size": 5365958632
+        },
+        {
+          "blob": "200a33859476c40edf918a03d067ef8393f82525",
+          "name": "model-00012-of-00035.safetensors",
+          "size": 5365636744
+        },
+        {
+          "blob": "8df47ae92df876a0cc1ac8f4e08ec9d3fdb74288",
+          "name": "model-00013-of-00035.safetensors",
+          "size": 5365885968
+        },
+        {
+          "blob": "c7a20b8ae9aa0a9a41ecec015eb709a7e882e5e6",
+          "name": "model-00014-of-00035.safetensors",
+          "size": 5365959984
+        },
+        {
+          "blob": "d9cf9d4c67f8d15ef4e24f552fc4fe4824addbb9",
+          "name": "model-00015-of-00035.safetensors",
+          "size": 5365639448
+        },
+        {
+          "blob": "d3b81066d08d1aef384dfd37e5697441c3f2dcec",
+          "name": "model-00016-of-00035.safetensors",
+          "size": 5365958688
+        },
+        {
+          "blob": "5613ce54efac9d6c8f1ef7aa7d5f5486921b7728",
+          "name": "model-00017-of-00035.safetensors",
+          "size": 5365881456
+        },
+        {
+          "blob": "1d373b3d5c0b7dd7327873b9d85fd3f797429d3b",
+          "name": "model-00018-of-00035.safetensors",
+          "size": 5365641336
+        },
+        {
+          "blob": "2da741c77a7d8539d0546a8e8d153dcf27cced54",
+          "name": "model-00019-of-00035.safetensors",
+          "size": 5365960264
+        },
+        {
+          "blob": "009f760bcdab15364639a06351284dcaefa3bb03",
+          "name": "model-00020-of-00035.safetensors",
+          "size": 5365884160
+        },
+        {
+          "blob": "8ac99af202497b90e0d1ef30cad0a7bb385f16c6",
+          "name": "model-00021-of-00035.safetensors",
+          "size": 5365958816
+        },
+        {
+          "blob": "f79d522e4d02687287670fb9c706d70a68ca6c29",
+          "name": "model-00022-of-00035.safetensors",
+          "size": 5365637112
+        },
+        {
+          "blob": "31437f254fdef67378aaef512112636aafb49220",
+          "name": "model-00023-of-00035.safetensors",
+          "size": 5348100920
+        },
+        {
+          "blob": "394e3aeb988aa70a42f147792c1be0b163cd814b",
+          "name": "model-00024-of-00035.safetensors",
+          "size": 5369063592
+        },
+        {
+          "blob": "ef4d3e8b6b2e1c522ec5bee66e7252b0198a14dd",
+          "name": "model-00025-of-00035.safetensors",
+          "size": 5366164392
+        },
+        {
+          "blob": "64cc01f34a0725a86fb0bf10be4119c0e26fa6cb",
+          "name": "model-00026-of-00035.safetensors",
+          "size": 5365958848
+        },
+        {
+          "blob": "1fba92123a831f00265d3b8d38c218e98f5408f2",
+          "name": "model-00027-of-00035.safetensors",
+          "size": 5365881776
+        },
+        {
+          "blob": "f8c4f3f60d7f795ccf0902c7b4796dc82133d3a4",
+          "name": "model-00028-of-00035.safetensors",
+          "size": 5364642984
+        },
+        {
+          "blob": "6d21900699aa7c0dc7ef2afc03894efd14002999",
+          "name": "model-00029-of-00035.safetensors",
+          "size": 5366958816
+        },
+        {
+          "blob": "f4a7a90ac90789e1c28428aef1867ce4302878f8",
+          "name": "model-00030-of-00035.safetensors",
+          "size": 5365884456
+        },
+        {
+          "blob": "c030b7f4ca5dbdb106ef3f1e4acfffc43a292c74",
+          "name": "model-00031-of-00035.safetensors",
+          "size": 4524121896
+        },
+        {
+          "blob": "9746cadc8b0c2c2ca92a9ba8f6782c48c158ec54",
+          "name": "model-00032-of-00035.safetensors",
+          "size": 5357466092
+        },
+        {
+          "blob": "592421ff2db18417480c121cc1bac363d8e28013",
+          "name": "model-00033-of-00035.safetensors",
+          "size": 5368744104
+        },
+        {
+          "blob": "aed053f194f3052e260191b359af863dc2c900eb",
+          "name": "model-00034-of-00035.safetensors",
+          "size": 4613846656
+        },
+        {
+          "blob": "79047c810f993add601d13c20f1ae1888782694d",
+          "name": "model-00035-of-00035.safetensors",
+          "size": 3177185520
+        },
+        {
+          "blob": "3920c6ae7b9a0b8045d94fce3966aec64f8d0c28",
+          "name": "model.safetensors.index.json",
+          "size": 11765790
+        },
+        {
+          "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+          "name": "tokenizer.json",
+          "size": 6367146
+        },
+        {
+          "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+          "name": "tokenizer_config.json",
+          "size": 801
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "compressed-tensors",
+        "nvfp4",
+        "fp8",
+        "deepseek",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 10973,
+      "lastModified": "2026-05-30T00:23:25.000Z",
+      "repo": "canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+      "selected_files": [
+        {
+          "blob": "e7afb9df12343c3dfd48505937cbda5f09162d63",
+          "name": "config.json",
+          "size": 44985
+        },
+        {
+          "blob": "3c87ea4dddde89379cffc4afef6e36b61587ab4b",
+          "name": "generation_config.json",
+          "size": 169
+        },
+        {
+          "blob": "dfe54e1c87076df05c48ec246372ddbead2cea93",
+          "name": "model-00001-of-00004.safetensors",
+          "size": 51194922826
+        },
+        {
+          "blob": "ea57ebec2b5747a3a6c5809a17e368bccaaeca23",
+          "name": "model-00002-of-00004.safetensors",
+          "size": 50169748020
+        },
+        {
+          "blob": "43ed6b9f4af62277e9f5b2c3ddd1842233eadd8a",
+          "name": "model-00003-of-00004.safetensors",
+          "size": 50164611144
+        },
+        {
+          "blob": "16ffae85ea65c598038dc35020fee136550a4f2a",
+          "name": "model-00004-of-00004.safetensors",
+          "size": 18814174990
+        },
+        {
+          "blob": "8114fd1ceee19deb87cb3234920f1eeb8aeea9bb",
+          "name": "model.safetensors.index.json",
+          "size": 8551345
+        },
+        {
+          "blob": "0ea474ba13beaf95c2faf2629804bbd0f8a22fe4",
+          "name": "tokenizer.json",
+          "size": 10071762
+        },
+        {
+          "blob": "4d26ff123891076cff6fc3169d70ca5e77b2fd32",
+          "name": "tokenizer_config.json",
+          "size": 397
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "moe",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1193,
+      "lastModified": "2026-05-08T20:52:59.000Z",
+      "repo": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ4-mtp",
+      "selected_files": [
+        {
+          "blob": "0a0deb521ab1a3e8979915ac6b5a15c39689c7d3",
+          "name": "config.json",
+          "size": 21312
+        },
+        {
+          "blob": "2a7dc605e4df9ac1ca84e063483e84baa0809934",
+          "name": "model-00001-of-00002.safetensors",
+          "size": 5007115155
+        },
+        {
+          "blob": "744f9773c1ac2729151accf2143b2c947c83e49f",
+          "name": "model-00002-of-00002.safetensors",
+          "size": 1223741121
+        },
+        {
+          "blob": "23384f12d58f59f313b7a463973e9e26e09e05b1",
+          "name": "model.safetensors.index.json",
+          "size": 121214
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "e2fab0e7743a76ae4a0e22c78462736c11178e9a",
+          "name": "tokenizer_config.json",
+          "size": 11392
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "4-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 784,
+      "lastModified": "2026-05-08T20:53:17.000Z",
+      "repo": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ8-mtp",
+      "selected_files": [
+        {
+          "blob": "4bfa42926cf023f0d3f839a90d4a061026563626",
+          "name": "config.json",
+          "size": 3144
+        },
+        {
+          "blob": "2ac36e1564ecb54336a26347bf5f267d66e8beb1",
+          "name": "model-00001-of-00003.safetensors",
+          "size": 5049176983
+        },
+        {
+          "blob": "0e96b420ba39070cc4fd01fcba949bd21b2b8405",
+          "name": "model-00002-of-00003.safetensors",
+          "size": 5002862824
+        },
+        {
+          "blob": "37309c40b0fc9bba32a600eec7258238dd4283ea",
+          "name": "model-00003-of-00003.safetensors",
+          "size": 664527176
+        },
+        {
+          "blob": "cb22129d2256628e2b91fde808fd981f708d0742",
+          "name": "model.safetensors.index.json",
+          "size": 121215
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "e2fab0e7743a76ae4a0e22c78462736c11178e9a",
+          "name": "tokenizer_config.json",
+          "size": 11392
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 124,
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "selected_files": [
+        {
+          "blob": "f71077fd8c9f7f0a9f8acb2b42513def9d483c60",
+          "name": "config.json",
+          "size": 1817
+        },
+        {
+          "blob": "77101baa60582c98f5ac6ae81d69d4158d7aba58",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "7113a1a91134771f109e680ec8e93983f238580d",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "status": "dflash_or_speculator_not_vendor_loadable_current_verifier_closed",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 19,
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "selected_files": [
+        {
+          "blob": "e53effb20a1b591966c646351b87ac3451abe7af",
+          "name": "config.json",
+          "size": 1855
+        },
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "status": "dflash_or_speculator_not_vendor_loadable_current_verifier_closed",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1219,
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "selected_files": [
+        {
+          "blob": "23c8f2c817b60e9ef1bd47251cee816aae0ae4a9",
+          "name": "config.json",
+          "size": 1590
+        },
+        {
+          "blob": "858e87c712c438395794ff6b3831a83b25404ddc",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "6e81be9d37062f442c1f76e536fd1e65b2324abf",
+          "name": "val_metrics.json",
+          "size": 382
+        }
+      ],
+      "status": "dflash_or_speculator_not_vendor_loadable_current_verifier_closed",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 157,
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "selected_files": [
+        {
+          "blob": "4a677c4ccc881b67d3701d0f63a5f7a18ea10d3b",
+          "name": "config.json",
+          "size": 1812
+        },
+        {
+          "blob": "410584738bfbd0d77114d72a4ad361e330cc4b6d",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "15220b979861b2d0f3df8297c61d67000e228b23",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "status": "dflash_or_speculator_not_vendor_loadable_current_verifier_closed",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 2718,
+      "lastModified": "2026-06-27T05:30:25.000Z",
+      "repo": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "selected_files": [
+        {
+          "blob": "240eb55cf6e7d27193c9b93c38f0b0fba8581326",
+          "name": "config.json",
+          "size": 5075
+        },
+        {
+          "blob": "42a05374034a6706ea5d3c4ed11a1d271db12f48",
+          "name": "model.safetensors",
+          "size": 3598959572
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "quantized",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 3890,
+      "lastModified": "2026-06-01T20:30:53.000Z",
+      "repo": "mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+      "selected_files": [
+        {
+          "blob": "4e06a4dd8d98891e02da755593ce448ef163c8a3",
+          "name": "config.json",
+          "size": 5103
+        },
+        {
+          "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+          "name": "generation_config.json",
+          "size": 170
+        },
+        {
+          "blob": "42a05374034a6706ea5d3c4ed11a1d271db12f48",
+          "name": "model.safetensors",
+          "size": 3598959572
+        },
+        {
+          "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+          "name": "tokenizer.json",
+          "size": 6367146
+        },
+        {
+          "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+          "name": "tokenizer_config.json",
+          "size": 801
+        }
+      ],
+      "status": "safetensors_mtp_draft_not_vendor_gguf",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "mlx-vlm",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mtp",
+        "speculative-decoding",
+        "draft-model",
+        "bf16",
+        "8-bit",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    }
+  ],
+  "created_at_utc": "2026-07-05T20:20:41Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "download_allowed": false,
+    "new_vendor_loadable_high_acceptance_candidate_found": false,
+    "reason": "Metadata refresh found MTP/DFlash/draft/speculator artifacts, but none are a vendor-loadable standalone GGUF draft with a proven high-acceptance, sublinear verifier path. Existing N=2 MTP and DFlash oracle verifier closures remain controlling.",
+    "runtime_source_edit_allowed": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "prior_closure_artifacts": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/external-mtp-sidecar-followup-audit.json"
+  ],
+  "repo_count": 16,
+  "repos": [
+    {
+      "downloads": 302,
+      "file_count": 10,
+      "files": [
+        {
+          "blob": "60e606a9a747feeb284f0a4dda9fcd16984c575c",
+          "name": "config.json",
+          "size": 16177
+        },
+        {
+          "blob": "32fc0bbbd21b06002befb371a7f8c9f93f652e08",
+          "name": "generation_config.json",
+          "size": 142
+        },
+        {
+          "blob": "1b5c92aaa218b4d69b0b2db5232fa7728b6106ce",
+          "name": "model.safetensors",
+          "size": 13849507024
+        },
+        {
+          "blob": "4bbbef2de58924f75c8069bf496faa5e084b959d",
+          "name": "model.safetensors.index.json",
+          "size": 81692
+        },
+        {
+          "blob": "79f8f0f35b8e670ef67c0f43af3bbcbad9ac4c92",
+          "name": "model_mtp.safetensors",
+          "size": 486582848
+        },
+        {
+          "blob": "59ce6974aad08ed1f74c70b32acab46011e56116",
+          "name": "preprocessor_config.json",
+          "size": 333
+        },
+        {
+          "blob": "8af8110fe33fb48d1a0aefafb83005347beda96a",
+          "name": "processor_config.json",
+          "size": 1296
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "539d5dc532357e60863f798a874ae6ee2b15e378",
+          "name": "tokenizer_config.json",
+          "size": 7162
+        },
+        {
+          "blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe",
+          "name": "video_preprocessor_config.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-05-03T13:35:09.000Z",
+      "likes": 0,
+      "repo": "Arien0/Qwen3.5-9B-DeepSeek-V4-Flash-AWQ-BF16-INT8-UC-MTP",
+      "sha": "5cc8c434f3683ce8b687af04abc6c17ee253109f",
+      "tags": [
+        "safetensors",
+        "qwen3_5",
+        "AWQ",
+        "MTP",
+        "image-text-to-text",
+        "conversational",
+        "en",
+        "dataset:HuggingFaceH4/ultrachat_200k",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "compressed-tensors",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 0,
+      "file_count": 1,
+      "files": [
+        {
+          "blob": "f7408d1b1085190eabf8c676a16cbededfdaff0a",
+          "name": "mtp.safetensors",
+          "size": 6777733547
+        }
+      ],
+      "lastModified": "2026-06-03T16:45:17.000Z",
+      "likes": 0,
+      "repo": "FoxlightAI/deepseek-v4-flash-mtp",
+      "sha": "3b199487f401a2c14e9c45c78bdc39626673c0f5",
+      "tags": [
+        "mtp-sidecar",
+        "skulk",
+        "foxlight",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 12852,
+      "file_count": 12,
+      "files": [
+        {
+          "blob": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": 18407318272
+        },
+        {
+          "blob": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872
+        },
+        {
+          "blob": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760
+        },
+        {
+          "blob": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184
+        },
+        {
+          "blob": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400
+        },
+        {
+          "blob": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432
+        },
+        {
+          "blob": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": 5780087552
+        },
+        {
+          "blob": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": 5488550656
+        },
+        {
+          "blob": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": 6642541312
+        },
+        {
+          "blob": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": 6472639232
+        },
+        {
+          "blob": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": 7558898432
+        },
+        {
+          "blob": "664235757835f56506d43ebd96401f8007f29218",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": 9786057472
+        }
+      ],
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "likes": 28,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "sha": "1daa76610d6ad53af9f97594f179ddba8af36600",
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "downloads": 996,
+      "file_count": 13,
+      "files": [
+        {
+          "blob": "e916e6958f1cd7e2fb00d4e7144045de14666601",
+          "name": "MTP_QUANT_MANIFEST.json",
+          "size": 580
+        },
+        {
+          "blob": "70efc3c1de08a6f591ad22143229c42c080f0a2c",
+          "name": "MTP_QUANT_MANIFEST.md",
+          "size": 492
+        },
+        {
+          "blob": "87e57078993263cd93b469f15d1f774f02e5f556",
+          "name": "config.json",
+          "size": 12929
+        },
+        {
+          "blob": "d7d28cbc23abb1b906ff570115afa448b3a6decd",
+          "name": "docker/apply_mtp_patches.py",
+          "size": 3205
+        },
+        {
+          "blob": "843853281cef5c83d59b24dede8c87e1c2d069cb",
+          "name": "generation_config.json",
+          "size": 174
+        },
+        {
+          "blob": "83cbb06d48499a84d1c55501fe861a0a5c8181f2",
+          "name": "model-00001-of-00004.safetensors",
+          "size": 50000483978
+        },
+        {
+          "blob": "0d7b4bd566e6e66761e5f7a18463d2ef4f53e65c",
+          "name": "model-00002-of-00004.safetensors",
+          "size": 49980495040
+        },
+        {
+          "blob": "fa0bf532b597a523a81890409787b6ff21ea908d",
+          "name": "model-00003-of-00004.safetensors",
+          "size": 50003691840
+        },
+        {
+          "blob": "4d996e6dd00961a4b046efac5b4754128b2edfd6",
+          "name": "model-00004-of-00004.safetensors",
+          "size": 2484315128
+        },
+        {
+          "blob": "04e0fcafc3cf47e470b8acc86f9e5745555c64d4",
+          "name": "model-mtp-w4a16.safetensors",
+          "size": 3552110692
+        },
+        {
+          "blob": "3a08839e548afe6d46f356bbbcd204f3b5a1e70e",
+          "name": "model.safetensors.index.json",
+          "size": 8684565
+        },
+        {
+          "blob": "0ea474ba13beaf95c2faf2629804bbd0f8a22fe4",
+          "name": "tokenizer.json",
+          "size": 10071762
+        },
+        {
+          "blob": "4d26ff123891076cff6fc3169d70ca5e77b2fd32",
+          "name": "tokenizer_config.json",
+          "size": 397
+        }
+      ],
+      "lastModified": "2026-05-11T00:59:31.000Z",
+      "likes": 15,
+      "repo": "LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+      "sha": "c9ab0c108adc22d0fabf3f1b151554d0d247c122",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "moe",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8-block",
+        "mtp",
+        "speculative-decoding",
+        "multi-token-prediction",
+        "acti",
+        "blackwell",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "base_model:quantized:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "doi:10.57967/hf/8744",
+        "license:apache-2.0",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 282,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "39925bfda3d6126bd58e61049dbdb1bc0151867a",
+          "name": "benchmark_results.json",
+          "size": 1022
+        },
+        {
+          "blob": "444ab2c83c9758ba438b9c8373feeb6e77b48e31",
+          "name": "config.json",
+          "size": 1094
+        },
+        {
+          "blob": "440704b75d8b94d1789bfe600d0ba6dbb1121bfa",
+          "name": "pytorch_model.bin",
+          "size": 1858526016
+        }
+      ],
+      "lastModified": "2026-06-07T22:41:31.000Z",
+      "likes": 6,
+      "repo": "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+      "sha": "4c68aa4689d59cb1064f20abec7708174ee4613d",
+      "tags": [
+        "transformers",
+        "pytorch",
+        "llama",
+        "speculative-decoding",
+        "eagle3",
+        "eagle3.1",
+        "draft-model",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "text-generation-inference",
+        "endpoints_compatible",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 11,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "0ed924fea2c75464186568d0ae3caf7e2406f0c0",
+          "name": "config.json",
+          "size": 1816
+        },
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "likes": 1,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "sha": "e44fc94ceb1e7ed45550d15e782aeadd08050483",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1983,
+      "file_count": 40,
+      "files": [
+        {
+          "blob": "ae5c4308a88d592e1ccee06e2ea094e0b635422d",
+          "name": "config.json",
+          "size": 61992
+        },
+        {
+          "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+          "name": "generation_config.json",
+          "size": 170
+        },
+        {
+          "blob": "768a22b70f765650d146b7f921bfe774ded58d8b",
+          "name": "model-00001-of-00035.safetensors",
+          "size": 5365711244
+        },
+        {
+          "blob": "6fbe33b5c1afc469003c3980c181f517dde82482",
+          "name": "model-00002-of-00035.safetensors",
+          "size": 5368733688
+        },
+        {
+          "blob": "d07aac8e92cfc39acfffc11dccd15ff97f7064e4",
+          "name": "model-00003-of-00035.safetensors",
+          "size": 5365881272
+        },
+        {
+          "blob": "78b2111f13e75de92a2f374e3d4e7985539ea529",
+          "name": "model-00004-of-00035.safetensors",
+          "size": 5365955528
+        },
+        {
+          "blob": "ce4e3a03bf5ddc2fc075c59857e769181a0bd91b",
+          "name": "model-00005-of-00035.safetensors",
+          "size": 5365634688
+        },
+        {
+          "blob": "8e297d5e34bd81f20de450fedf09a48b6e3446b1",
+          "name": "model-00006-of-00035.safetensors",
+          "size": 5365954232
+        },
+        {
+          "blob": "28ff05878092922e8b1a8506cbfb97be1d77dfad",
+          "name": "model-00007-of-00035.safetensors",
+          "size": 5365876656
+        },
+        {
+          "blob": "615eb8c0fb05c90f54f7a4d6b0d9cd0116b96de6",
+          "name": "model-00008-of-00035.safetensors",
+          "size": 5365644040
+        },
+        {
+          "blob": "f3a438f6e155b1e9a2edb27e5438874f17f7b572",
+          "name": "model-00009-of-00035.safetensors",
+          "size": 5365959856
+        },
+        {
+          "blob": "74dbafa99427d47a5b30a64f9712c0caf7b9d814",
+          "name": "model-00010-of-00035.safetensors",
+          "size": 5365883792
+        },
+        {
+          "blob": "0da2b8c2c20afcc0d8d981c64e8b153e6b5a5510",
+          "name": "model-00011-of-00035.safetensors",
+          "size": 5365958632
+        },
+        {
+          "blob": "200a33859476c40edf918a03d067ef8393f82525",
+          "name": "model-00012-of-00035.safetensors",
+          "size": 5365636744
+        },
+        {
+          "blob": "8df47ae92df876a0cc1ac8f4e08ec9d3fdb74288",
+          "name": "model-00013-of-00035.safetensors",
+          "size": 5365885968
+        },
+        {
+          "blob": "c7a20b8ae9aa0a9a41ecec015eb709a7e882e5e6",
+          "name": "model-00014-of-00035.safetensors",
+          "size": 5365959984
+        },
+        {
+          "blob": "d9cf9d4c67f8d15ef4e24f552fc4fe4824addbb9",
+          "name": "model-00015-of-00035.safetensors",
+          "size": 5365639448
+        },
+        {
+          "blob": "d3b81066d08d1aef384dfd37e5697441c3f2dcec",
+          "name": "model-00016-of-00035.safetensors",
+          "size": 5365958688
+        },
+        {
+          "blob": "5613ce54efac9d6c8f1ef7aa7d5f5486921b7728",
+          "name": "model-00017-of-00035.safetensors",
+          "size": 5365881456
+        },
+        {
+          "blob": "1d373b3d5c0b7dd7327873b9d85fd3f797429d3b",
+          "name": "model-00018-of-00035.safetensors",
+          "size": 5365641336
+        },
+        {
+          "blob": "2da741c77a7d8539d0546a8e8d153dcf27cced54",
+          "name": "model-00019-of-00035.safetensors",
+          "size": 5365960264
+        },
+        {
+          "blob": "009f760bcdab15364639a06351284dcaefa3bb03",
+          "name": "model-00020-of-00035.safetensors",
+          "size": 5365884160
+        },
+        {
+          "blob": "8ac99af202497b90e0d1ef30cad0a7bb385f16c6",
+          "name": "model-00021-of-00035.safetensors",
+          "size": 5365958816
+        },
+        {
+          "blob": "f79d522e4d02687287670fb9c706d70a68ca6c29",
+          "name": "model-00022-of-00035.safetensors",
+          "size": 5365637112
+        },
+        {
+          "blob": "31437f254fdef67378aaef512112636aafb49220",
+          "name": "model-00023-of-00035.safetensors",
+          "size": 5348100920
+        },
+        {
+          "blob": "394e3aeb988aa70a42f147792c1be0b163cd814b",
+          "name": "model-00024-of-00035.safetensors",
+          "size": 5369063592
+        },
+        {
+          "blob": "ef4d3e8b6b2e1c522ec5bee66e7252b0198a14dd",
+          "name": "model-00025-of-00035.safetensors",
+          "size": 5366164392
+        },
+        {
+          "blob": "64cc01f34a0725a86fb0bf10be4119c0e26fa6cb",
+          "name": "model-00026-of-00035.safetensors",
+          "size": 5365958848
+        },
+        {
+          "blob": "1fba92123a831f00265d3b8d38c218e98f5408f2",
+          "name": "model-00027-of-00035.safetensors",
+          "size": 5365881776
+        },
+        {
+          "blob": "f8c4f3f60d7f795ccf0902c7b4796dc82133d3a4",
+          "name": "model-00028-of-00035.safetensors",
+          "size": 5364642984
+        },
+        {
+          "blob": "6d21900699aa7c0dc7ef2afc03894efd14002999",
+          "name": "model-00029-of-00035.safetensors",
+          "size": 5366958816
+        },
+        {
+          "blob": "f4a7a90ac90789e1c28428aef1867ce4302878f8",
+          "name": "model-00030-of-00035.safetensors",
+          "size": 5365884456
+        },
+        {
+          "blob": "c030b7f4ca5dbdb106ef3f1e4acfffc43a292c74",
+          "name": "model-00031-of-00035.safetensors",
+          "size": 4524121896
+        },
+        {
+          "blob": "9746cadc8b0c2c2ca92a9ba8f6782c48c158ec54",
+          "name": "model-00032-of-00035.safetensors",
+          "size": 5357466092
+        },
+        {
+          "blob": "592421ff2db18417480c121cc1bac363d8e28013",
+          "name": "model-00033-of-00035.safetensors",
+          "size": 5368744104
+        },
+        {
+          "blob": "aed053f194f3052e260191b359af863dc2c900eb",
+          "name": "model-00034-of-00035.safetensors",
+          "size": 4613846656
+        },
+        {
+          "blob": "79047c810f993add601d13c20f1ae1888782694d",
+          "name": "model-00035-of-00035.safetensors",
+          "size": 3177185520
+        },
+        {
+          "blob": "3920c6ae7b9a0b8045d94fce3966aec64f8d0c28",
+          "name": "model.safetensors.index.json",
+          "size": 11765790
+        },
+        {
+          "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+          "name": "tokenizer.json",
+          "size": 6367146
+        },
+        {
+          "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+          "name": "tokenizer_config.json",
+          "size": 801
+        }
+      ],
+      "lastModified": "2026-05-29T07:22:22.000Z",
+      "likes": 8,
+      "repo": "canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+      "sha": "1e70632a7d3890ba227af6aa25b1d75152a6d3f9",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "compressed-tensors",
+        "nvfp4",
+        "fp8",
+        "deepseek",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 10973,
+      "file_count": 9,
+      "files": [
+        {
+          "blob": "e7afb9df12343c3dfd48505937cbda5f09162d63",
+          "name": "config.json",
+          "size": 44985
+        },
+        {
+          "blob": "3c87ea4dddde89379cffc4afef6e36b61587ab4b",
+          "name": "generation_config.json",
+          "size": 169
+        },
+        {
+          "blob": "dfe54e1c87076df05c48ec246372ddbead2cea93",
+          "name": "model-00001-of-00004.safetensors",
+          "size": 51194922826
+        },
+        {
+          "blob": "ea57ebec2b5747a3a6c5809a17e368bccaaeca23",
+          "name": "model-00002-of-00004.safetensors",
+          "size": 50169748020
+        },
+        {
+          "blob": "43ed6b9f4af62277e9f5b2c3ddd1842233eadd8a",
+          "name": "model-00003-of-00004.safetensors",
+          "size": 50164611144
+        },
+        {
+          "blob": "16ffae85ea65c598038dc35020fee136550a4f2a",
+          "name": "model-00004-of-00004.safetensors",
+          "size": 18814174990
+        },
+        {
+          "blob": "8114fd1ceee19deb87cb3234920f1eeb8aeea9bb",
+          "name": "model.safetensors.index.json",
+          "size": 8551345
+        },
+        {
+          "blob": "0ea474ba13beaf95c2faf2629804bbd0f8a22fe4",
+          "name": "tokenizer.json",
+          "size": 10071762
+        },
+        {
+          "blob": "4d26ff123891076cff6fc3169d70ca5e77b2fd32",
+          "name": "tokenizer_config.json",
+          "size": 397
+        }
+      ],
+      "lastModified": "2026-05-30T00:23:25.000Z",
+      "likes": 17,
+      "repo": "canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+      "sha": "4a4f86303d4fd8c43bafbf02d5523b06275e577d",
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "moe",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1193,
+      "file_count": 6,
+      "files": [
+        {
+          "blob": "0a0deb521ab1a3e8979915ac6b5a15c39689c7d3",
+          "name": "config.json",
+          "size": 21312
+        },
+        {
+          "blob": "2a7dc605e4df9ac1ca84e063483e84baa0809934",
+          "name": "model-00001-of-00002.safetensors",
+          "size": 5007115155
+        },
+        {
+          "blob": "744f9773c1ac2729151accf2143b2c947c83e49f",
+          "name": "model-00002-of-00002.safetensors",
+          "size": 1223741121
+        },
+        {
+          "blob": "23384f12d58f59f313b7a463973e9e26e09e05b1",
+          "name": "model.safetensors.index.json",
+          "size": 121214
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "e2fab0e7743a76ae4a0e22c78462736c11178e9a",
+          "name": "tokenizer_config.json",
+          "size": 11392
+        }
+      ],
+      "lastModified": "2026-05-08T20:52:59.000Z",
+      "likes": 1,
+      "repo": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ4-mtp",
+      "sha": "0f174d018d70bac5ae26f8ae51dbbd6549695013",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "4-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 784,
+      "file_count": 7,
+      "files": [
+        {
+          "blob": "4bfa42926cf023f0d3f839a90d4a061026563626",
+          "name": "config.json",
+          "size": 3144
+        },
+        {
+          "blob": "2ac36e1564ecb54336a26347bf5f267d66e8beb1",
+          "name": "model-00001-of-00003.safetensors",
+          "size": 5049176983
+        },
+        {
+          "blob": "0e96b420ba39070cc4fd01fcba949bd21b2b8405",
+          "name": "model-00002-of-00003.safetensors",
+          "size": 5002862824
+        },
+        {
+          "blob": "37309c40b0fc9bba32a600eec7258238dd4283ea",
+          "name": "model-00003-of-00003.safetensors",
+          "size": 664527176
+        },
+        {
+          "blob": "cb22129d2256628e2b91fde808fd981f708d0742",
+          "name": "model.safetensors.index.json",
+          "size": 121215
+        },
+        {
+          "blob": "67741b04f23bfdb46501f748ce27865ec82eccfb",
+          "name": "tokenizer.json",
+          "size": 19989343
+        },
+        {
+          "blob": "e2fab0e7743a76ae4a0e22c78462736c11178e9a",
+          "name": "tokenizer_config.json",
+          "size": 11392
+        }
+      ],
+      "lastModified": "2026-05-08T20:53:17.000Z",
+      "likes": 0,
+      "repo": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ8-mtp",
+      "sha": "cdb7794e6e3d30c88c37c8ff3789fe07b44beb66",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 124,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "f71077fd8c9f7f0a9f8acb2b42513def9d483c60",
+          "name": "config.json",
+          "size": 1817
+        },
+        {
+          "blob": "77101baa60582c98f5ac6ae81d69d4158d7aba58",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "7113a1a91134771f109e680ec8e93983f238580d",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "likes": 1,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "sha": "35ac404789eaade28f3852d4f0b45186390ba391",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 19,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "e53effb20a1b591966c646351b87ac3451abe7af",
+          "name": "config.json",
+          "size": 1855
+        },
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "sha": "78797e79d4f07832f4c44a9489385f62426a7fb6",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 1219,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "23c8f2c817b60e9ef1bd47251cee816aae0ae4a9",
+          "name": "config.json",
+          "size": 1590
+        },
+        {
+          "blob": "858e87c712c438395794ff6b3831a83b25404ddc",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "6e81be9d37062f442c1f76e536fd1e65b2324abf",
+          "name": "val_metrics.json",
+          "size": 382
+        }
+      ],
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "sha": "b4863ac427d3230ac0f6f6b08afeadc4ee14046a",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 157,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "4a677c4ccc881b67d3701d0f63a5f7a18ea10d3b",
+          "name": "config.json",
+          "size": 1812
+        },
+        {
+          "blob": "410584738bfbd0d77114d72a4ad361e330cc4b6d",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "15220b979861b2d0f3df8297c61d67000e228b23",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "sha": "a078825dfcdd014f9aa51e27892af0430abe2331",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 2718,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "240eb55cf6e7d27193c9b93c38f0b0fba8581326",
+          "name": "config.json",
+          "size": 5075
+        },
+        {
+          "blob": "42a05374034a6706ea5d3c4ed11a1d271db12f48",
+          "name": "model.safetensors",
+          "size": 3598959572
+        }
+      ],
+      "lastModified": "2026-06-27T05:30:25.000Z",
+      "likes": 1,
+      "repo": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "sha": "52b277799eb7694fdaeb3baab3d5316cd85b2e87",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "quantized",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "8-bit",
+        "region:us"
+      ]
+    },
+    {
+      "downloads": 3890,
+      "file_count": 5,
+      "files": [
+        {
+          "blob": "4e06a4dd8d98891e02da755593ce448ef163c8a3",
+          "name": "config.json",
+          "size": 5103
+        },
+        {
+          "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+          "name": "generation_config.json",
+          "size": 170
+        },
+        {
+          "blob": "42a05374034a6706ea5d3c4ed11a1d271db12f48",
+          "name": "model.safetensors",
+          "size": 3598959572
+        },
+        {
+          "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+          "name": "tokenizer.json",
+          "size": 6367146
+        },
+        {
+          "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+          "name": "tokenizer_config.json",
+          "size": 801
+        }
+      ],
+      "lastModified": "2026-06-01T20:30:53.000Z",
+      "likes": 1,
+      "repo": "mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+      "sha": "0171b72cf11b5bba695aef01b0de237bef0a6640",
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "mlx-vlm",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mtp",
+        "speculative-decoding",
+        "draft-model",
+        "bf16",
+        "8-bit",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ]
+    }
+  ],
+  "terms": [
+    "DeepSeek-V4-Flash MTP",
+    "DeepSeek V4 Flash MTP GGUF",
+    "DeepSeek V4 Flash draft GGUF",
+    "DeepSeek-V4-Flash speculator",
+    "DeepSeek-V4-Flash DFlash",
+    "DeepSeek V4 Flash EAGLE",
+    "deepseek-v4-flash-mtp sidecar",
+    "DeepSeek-V4-Flash speculative decoding"
+  ]
+}
