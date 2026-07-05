@@ -1,0 +1,38 @@
+{
+  "artifact": "current-head-lightning-indexer-recheck-plan",
+  "baseline_guard_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-sota44-no-trace-after-sparse-close.json",
+  "candidate": "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1",
+  "gates": [
+    "fixed-text llama-results top1 same_top1 == n_tokens under strict 16GB/no-swap cgroup",
+    "strict cold France eval_tok_s > 4.4",
+    "TTFT <= 33617.688744 ms",
+    "memory_peak_bytes <= 16000000000 including page cache, MemorySwapMax=0, oom=0, oom_kill=0",
+    "France answer semantic/coherent/complete",
+    "if candidate passes, immediately record and push artifacts then reproduce from pushed source before promotion"
+  ],
+  "known_limit": "Does not remove decode CPU up/down fallback, so it cannot approach 10 tok/s alone.",
+  "next_allowed_action": "Run exactly one strict cold France benchmark with the accepted SOTA env plus LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1. Reject after one failed/tied run; if it beats 4.4 tok/s and passes TTFT/RAM/correctness, commit/push artifacts and reproduce from pushed source before promotion.",
+  "not_primary_10tok_route": true,
+  "previous_rejected_artifacts": [
+    ".Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-repeat-candidate.json",
+    ".Agent/runs/20260704-vendor-ds4-coldstart/lightning-indexer-pushed-repro-rejected.json"
+  ],
+  "reject_after_one_failed_recheck": true,
+  "source_head": "cb120711469807ec677a37416a83d409c73fd5b8",
+  "status": "top1_precheck_passed_pending_strict_cold_once",
+  "top1_precheck": {
+    "check_n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "memory_current_bytes": 15162310656,
+    "memory_events": "low 0\nhigh 0\nmax 18129\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_peak_bytes": 16000000000,
+    "n_tokens": 145,
+    "note": "mode is reported as defaultoff by the helper script; LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1 was set externally by systemd-run env.",
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T072454Z-current-head-lightning-recheck",
+    "same_top1": 145,
+    "status": "pass",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260705T072454Z-current-head-lightning-recheck/top1-lightning/top1-summary.json"
+  },
+  "updated_at_utc": "2026-07-05T07:34:27Z",
+  "why_allowed_once": "Existing default-off env only; previous repeat reached 4.5 tok/s with TTFT inside gate, but pushed-source reproduction tied 4.4 and missed TTFT by 1.217 ms. Current-head accepted-path guard now has TTFT 32087.738 ms, giving more TTFT slack. This permits one correctness-gated current-head recheck, not repeated sampling."
+}

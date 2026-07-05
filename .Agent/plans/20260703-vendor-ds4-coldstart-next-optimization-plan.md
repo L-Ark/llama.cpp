@@ -4,6 +4,42 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
+
+本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。
+
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 `4.2`，也不是任何 trace/diagnostic run：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted SOTA metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Current-head guard after the latest rejected-route work: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`, with `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Promotion gate: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct/coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction
+- Model file: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`)
+- Current pushed source for this plan: `cb120711469807ec677a37416a83d409c73fd5b8` on local branch `feat/ds4-moe-stream-on-vendor`, pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`
+
+Closed routes and constraints from the latest hard bounds:
+
+- Sparse retained top64 route is closed on the current graph. The probe showed no retained graph-level gate output available to `build_expert_mix`, no active hot manager path in the accepted route, and a final hot/cold combine bound that leaves too little margin.
+- Full decode up/down CUDA/streaming route is closed before runtime source edit. Decode up/down unique payload is `21.806 GiB`, call-weighted payload is `148.916 GiB`, exact GPU raw/transposed kernel projections exceed the full fallback-removal margin, and full resident payload violates VRAM/16GB page-cache constraints.
+- Source/page-only, io_uring/source-only prefetch, CPU batch rewrite, extra full GPU MoE layer, current `DS4_HOT_DISPATCH` rectangular shapes, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, standalone MMVQ hot-resident skip/write, and CUDA graph wrapping remain rejected unless a new hard-bound changes the limiting math.
+- The measured bottleneck is still decode CPU up/down fallback plus source/page behavior. Accepted decode window is about `31047.447 ms`; reaching `10 tok/s` needs about `17386.570 ms` saving while keeping total added overhead below roughly `1.6-1.7 s`.
+
+Immediate one-time candidate screen:
+
+- Candidate: `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`.
+- Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-plan.json`.
+- This is not the primary 10 tok/s route and does not remove CPU up/down fallback. It is allowed once because it is an existing default-off env, previous repeat once reached `4.5 tok/s` but failed pushed-source promotion, and current-head guard has more TTFT slack.
+- Correctness precheck already passed under strict 16GB/no-swap cgroup: `/root/lfz/runs/vendor-ds4-16gb/20260705T072454Z-current-head-lightning-recheck/top1-lightning`, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
+- Next allowed action is exactly one strict cold France benchmark with the accepted SOTA env plus `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`. If it does not beat `4.4 tok/s`, or if TTFT/RAM/correctness fails, record it as rejected and stop sampling this candidate. If it beats `4.4 tok/s` and passes all gates, immediately record full reproduction metadata, commit and push, then do a clean pushed-source strict cold reproduction before promotion.
+
+Next optimization direction after the lightning candidate:
+
+1. If lightning fails or only ties, restart from the current-head `4.4 tok/s` guard and run a fresh bottleneck split only when it answers a new question. Do not treat trace-overhead runs as SOTA candidates.
+2. Any new runtime source edit must first have a hard-bound artifact that shows how it can save enough of the `~19.1 s` decode CPU up/down fallback while respecting strict cold 16GB RAM including page cache and `TTFT <= 33617.688744 ms`.
+3. The next plausible 10 tok/s route must reduce both source bytes and exact compute by construction. Valid directions are: a new compact graph route only after proving a retained CUDA gate/hidden tensor and bounded final combine cost with meaningful margin; or a new exact up/down algorithm/layout that materially exceeds the measured `72-75 GiB/s` exact kernels and accounts for H2D/D2H/scatter/sync overhead.
+4. Do not promote steady-state, warm page-cache, diagnostic trace, or top1-only results as cold SOTA. Cold SOTA must start after `drop_caches` inside the strict runner and must keep total cgroup memory including page cache under `16000000000` bytes.
+5. Every compliant new SOTA must be documented in detail and pushed immediately to `ssd/vendor/deepseek-token-rate-16gb`. Required reproduction metadata: source commit, pushed remote branch, full env/CLI, run path, build command, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, pack/cache counters, and comparison to the previous `4.4 tok/s` SOTA.
+
 ### 2026-07-05 Latest Active Plan Override After Sparse-Retained Planner
 
 This section is the latest active plan and supersedes the older active-plan text below when there is any conflict. Historical sections remain as experiment records.
