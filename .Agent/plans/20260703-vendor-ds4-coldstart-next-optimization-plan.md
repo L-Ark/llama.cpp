@@ -4,16 +4,16 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: Current 10 tok/s Source Gates After Exact-Compact Closure
+### 2026-07-05 Latest Plan: External Artifact Watch After Exact Graph Closure
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。本次更新补齐外部 DSpark/MTP/GGUF artifact watch，并把下一步可打开的路线限制到有硬性上界和正确性证据的候选。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
 - Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
 - Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
-- Current source/artifact head before this plan update: `7f1c61fb88d034396e59a304c6381ac317c1fc43` (`vendor-ds4: bound non native representation routes`)
+- Current source/artifact head before this plan update: `95bc8bb88d92017806a9df32b4ddc6458db74d95` (`vendor-ds4: bound exact graph dataflow routes`)
 - Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
 - Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
 - Promotion gate remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct and coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction.
@@ -24,6 +24,8 @@ Current closed-route summary:
 - MTP/source-union amortization is insufficient for current DSpark/MTP work: `W=5` projects only `8.454 tok/s`, `W=6` only `9.069 tok/s` even under an unrealistically favorable bound where non-MoE decode batches perfectly. `W=8` reaches `10.512 tok/s` only in an extreme no-overhead lower bound and has no compatible verifier/runtime proof.
 - Native MXFP4 exact compact representation is closed: top4096 is the first positive raw exact hotset, but it needs about `5.33x` exact reduction to fit; measured/estimated lossless compression and entropy evidence are only about `1.04x-1.09x`.
 - Antirez exact N=2 MTP remains closed for the `10 tok/s` objective: even perfect two-token acceptance requires `C_verify + C_draft <= 1.32x` one current target-token pass, while current decode CPU up/down fallback alone is about `139.9 ms/token`.
+- External DSpark/MTP artifacts are still not source-ready for vendor: official/community DSpark remains safetensors/custom inference or MLX, while the public GGUF MTP sidecar uses unsupported `deepseek4_mtp_support`/`mtp.0.*` tensors and exact N=2 is already hard-bound negative.
+- Public lower-bit GGUF target files are a possible future representation/model-artifact route, not a direct continuation of the current native GGUF SOTA. They can only be tested after a separate hard-bound documents selected file, size, vendor loadability, expected TTFT/page-cache behavior, accuracy risk, and strict correctness gates.
 - Previously closed routes remain closed unless a new hard-bound artifact changes the limiting math: source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, standalone MMVQ skip/write, sparse retained top64 graph, transient MXFP4 repack, no-source lookahead/ngram speculation, and raw top4096 residency.
 
 Latest high-acceptance verifier/draft audit:
@@ -56,19 +58,30 @@ Latest exact graph/dataflow hard-bound:
 - Current exact kernels are too slow for the remaining bounds: top128 needs about `246 GiB/s` before integration overhead, while raw/transposed/row-tile exact probes measured about `74.59`, `72.434`, and `62.907 GiB/s`. The top768 exact route needs `<=446.414 ms` overhead but measured exact kernel projections are about `1.82-2.16 s`.
 - Full selected-MoE exact CUDA replacement is closed for current payload/kernel shape: full exact raw/transposed projections need about `2.0 s` kernel time against only `1.729 s` total fallback-removal margin, and unique decode up/down payload is `21.806 GiB`, too large for VRAM and the strict 16GB host/page-cache budget.
 
+Latest external artifact watch:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-watch-after-exact-graph.json`.
+- Result: `no_external_artifact_runtime_patch_allowed_now`; runtime source remains frozen.
+- Local inventory correction: `/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf` is only a symlink to `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`; it is not a new quantization or alternate target.
+- Official `deepseek-ai/DeepSeek-V4-Flash-DSpark`, `fraserprice/DeepSeek-V4-Flash-DSpark`, and `autotrust/DeepSeek-V4-Flash-DSpark-4E` are safetensors/custom inference artifacts. They are useful reference material for DSpark semantics but are not directly loadable by current vendor GGUF code.
+- MTP search still does not provide a compatible vendor route. Antirez exposes `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` (`3807602400` bytes), but current vendor source cannot load `deepseek4_mtp_support` or run `mtp.0.*`; exact N=2 MTP remains closed by the cost bound.
+- GGUF target search found lower-bit candidate files that could reduce total model bytes, for example antirez IQ2XXS (`86720111200` bytes), tarruda Q2_K split total (`96962159168` bytes), teamblobfish IQ1_M split total (`64508046688` bytes), sleepyeldrazi REAP-K128 uniform (`50439361920` bytes), and 0xSero Spark-Mini Q2 REAP (`52593532000` bytes). These are not the same accepted native model artifact and may change quality; no token-rate or correctness claim is allowed until strict tests pass.
+- Decision: the only newly visible candidate class is an alternate lower-bit GGUF target/representation run. Before any download or benchmark, write `.Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-target-representation-hard-bound.json` with selected repo/file, exact size, expected I/O/page-cache behavior under the 16GB cgroup, TTFT estimate, VRAM plan, vendor loadability check, accuracy risk, France answer gate, five-prompt semantic gate, and rollback criteria.
+
 Next active plan:
 
 1. Keep the accepted `4.4 tok/s` strict-cold SOTA as the comparison baseline. Do not make a runtime/source patch before a new hard-bound artifact proves the route can clear the promotion gate.
 2. Verifier/draft work is closed for current artifacts. Reopen it only with a concrete compatible DSpark/MTP/draft artifact and a hard-bound proving `A>=7`, or `A>=5` with measured sublinear target verification, while preserving the 16GB page-cache budget, accepted gate-cache behavior, TTFT limit, fixed-text top1, and France correctness.
-3. Non-native representation work is closed for current artifacts. Reopen it only through an offline or compare-only artifact proving fixed-text top1 plus `>5.33x` effective payload reduction, or equivalent source+CPU fallback reduction, with VRAM/RAM/TTFT and overhead accounting before source changes.
-4. Exact graph/dataflow work is closed for current artifacts. Reopen it only with a new placement/kernel proof that shows retained CUDA gate/up/down, hidden scheduler-copy counts, fixed-text top1, and enough margin above the current top64/top128/top768/full-MoE hard bounds before source changes.
-5. The remaining route classes are: a new external high-acceptance verifier/draft artifact, a new correctness-verified representation artifact, or a genuinely new exact graph/dataflow proof satisfying item 4. Any of these must start from a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
-6. First gate for any default-off source probe is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
-7. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
+3. External lower-bit GGUF target work is the only newly opened candidate class from this audit, but it is not accepted SOTA and not a runtime optimization yet. First write `alternate-gguf-target-representation-hard-bound.json`; only if the hard-bound shows a plausible strict-cold gain should we download/load one selected target and run fixed-text, France, and five-prompt semantic correctness gates under the 16GB cgroup.
+4. Non-native representation work inside the current native GGUF is closed for current artifacts. Reopen it only through an offline or compare-only artifact proving fixed-text top1 plus `>5.33x` effective payload reduction, or equivalent source+CPU fallback reduction, with VRAM/RAM/TTFT and overhead accounting before source changes.
+5. Exact graph/dataflow work is closed for current artifacts. Reopen it only with a new placement/kernel proof that shows retained CUDA gate/up/down, hidden scheduler-copy counts, fixed-text top1, and enough margin above the current top64/top128/top768/full-MoE hard bounds before source changes.
+6. The remaining route classes are: a new external high-acceptance verifier/draft artifact, a correctness-verified alternate GGUF/representation artifact, or a genuinely new exact graph/dataflow proof satisfying item 5. Any of these must start from a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
+7. First gate for any default-off source probe or alternate target run is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
+8. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
 
 ### 2026-07-05 Historical Plan: Forced-Batch, MTP-Union, and Exact-Compact Closure
 
-本节已被上方 `2026-07-05 Latest Plan: Current 10 tok/s Source Gates After Exact-Compact Closure` 覆盖；内容只作为历史实验记录保留。后续执行必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。后续执行必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 forced-batch 诊断结果，也不是任何 trace/warm/steady-state/top1-only 结果：
 
@@ -133,7 +146,7 @@ Next execution plan:
 
 ### 2026-07-05 Historical Plan: Post-MMVQ Non-Duplicate Gate
 
-本节已被上方 `2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure` 覆盖；内容只作为历史实验记录保留。后续不能从已关闭路线直接继续写 runtime 代码，必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清新的硬性上界、正确性门槛和复现信息。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。后续不能从已关闭路线直接继续写 runtime 代码，必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清新的硬性上界、正确性门槛和复现信息。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
@@ -219,7 +232,7 @@ DeepSeek4 MTP N=2 verifier cost bound:
 
 ### 2026-07-05 Historical Plan: Current Head After Full Up/Down Bound
 
-本节已被上方 `2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure` 覆盖；内容只作为历史实验记录保留。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 `4.2`，也不是任何 trace/diagnostic run：
 
@@ -364,7 +377,7 @@ Mandatory record/push rule:
 
 ### 2026-07-05 Current Active Plan Update
 
-本节已被上方 `2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure` 覆盖；内容只作为历史实验记录保留。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。
 
 当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被后续 direct hot pool、Q8_0、CPU batch、payload compression、CUDA graph、VRAM recovery 或 hot-batch compare 候选替代：
 
@@ -532,7 +545,7 @@ Immediate execution plan:
 
 ### 2026-07-05 Historical Active Plan Override
 
-本节已被上方 `2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure` 覆盖；内容只作为历史实验记录保留。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。
 
 当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被 direct-reader、Q8_0、CUDA graph 或其他候选替代：
 
@@ -624,7 +637,7 @@ Immediate execution plan:
 
 ### 2026-07-04 Historical Active Plan Override
 
-本节已被上方 `2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure` 覆盖；内容只作为历史实验记录保留。
+本节已被上方最新生效计划覆盖；内容只作为历史实验记录保留。
 
 当前 accepted SOTA 仍为 `4.4 tok/s`，不是 lightning `4.5`：
 

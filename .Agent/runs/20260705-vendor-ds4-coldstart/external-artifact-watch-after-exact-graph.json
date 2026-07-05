@@ -1,0 +1,230 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-watch-after-exact-graph.json",
+  "created_at_utc": "2026-07-05T10:52:51Z",
+  "source_head_before_doc_update": "95bc8bb88d92017806a9df32b4ddc6458db74d95",
+  "decision": "no_external_artifact_runtime_patch_allowed_now",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "local_inventory": {
+    "accepted_model_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "accepted_model_size_bytes": 156148189760,
+    "symlink_checked": "/root/lfz/models/DeepSeek-V4-Flash-GGUF/DeepSeek-V4-Flash-00001-of-00001.gguf",
+    "symlink_target": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "local_compatible_dspark_or_mtp_artifact_found": false
+  },
+  "huggingface_queries": [
+    "https://huggingface.co/api/models?search=DeepSeek-V4-Flash-DSpark",
+    "https://huggingface.co/api/models?search=DeepSeek-V4-Flash-MTP",
+    "https://huggingface.co/api/models?search=DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/api/models?search=deepseek4_mtp_support"
+  ],
+  "repo_audit": [
+    {
+      "repo": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "sha": "62af8fffb2f7030cac4de2f0169f5b8d1101b646",
+      "last_modified": "2026-07-04T03:15:12.000Z",
+      "classification": "official_dspark_safetensors_custom_inference",
+      "selected_facts": {
+        "siblings_count": 74,
+        "format": "safetensors",
+        "not_vendor_gguf": true
+      },
+      "decision": "reference_only_not_directly_loadable_by_current_vendor"
+    },
+    {
+      "repo": "fraserprice/DeepSeek-V4-Flash-DSpark",
+      "url": "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-DSpark",
+      "sha": "8bbae7df04e6e3de72fd93614ea076e4948021cb",
+      "last_modified": "2026-07-01T16:10:17.000Z",
+      "classification": "community_dspark_safetensors_with_dspark_mtp_shards",
+      "selected_facts": {
+        "siblings_count": 58,
+        "contains_files": [
+          "dspark-mtp-00001-of-00003.safetensors",
+          "dspark-mtp-00002-of-00003.safetensors",
+          "dspark-mtp-00003-of-00003.safetensors"
+        ],
+        "not_vendor_gguf": true
+      },
+      "decision": "reference_only_not_source_ready"
+    },
+    {
+      "repo": "autotrust/DeepSeek-V4-Flash-DSpark-4E",
+      "url": "https://huggingface.co/autotrust/DeepSeek-V4-Flash-DSpark-4E",
+      "sha": "1ba9c13e55c23df977dc7077488bcefece3e2e47",
+      "last_modified": "2026-06-27T13:13:02.000Z",
+      "classification": "community_dspark_topk4_safetensors",
+      "selected_facts": {
+        "siblings_count": 78,
+        "format": "safetensors",
+        "not_vendor_gguf": true
+      },
+      "decision": "reference_only_not_source_ready"
+    },
+    {
+      "repo": "antirez/deepseek-v4-gguf",
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf",
+      "sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "last_modified": "2026-05-31T11:28:43.000Z",
+      "classification": "gguf_targets_plus_supplementary_mtp_sidecar",
+      "selected_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size_bytes": 3807602400,
+          "decision": "unsupported_deepseek4_mtp_support_sidecar_exact_n2_route_closed"
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+          "size_bytes": 86720111200,
+          "decision": "alternate_target_candidate_only"
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+          "size_bytes": 164633502304,
+          "decision": "larger_than_current_target_not_promising_for_cold_rate"
+        }
+      ],
+      "decision": "no_runtime_patch_now"
+    },
+    {
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "url": "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF",
+      "sha": "f9815d70824d68364c5a3c5136ff9672883394e0",
+      "last_modified": "2026-06-30T03:17:40.000Z",
+      "classification": "mxfp4_split_gguf_target",
+      "selected_files_total_bytes": 156004658464,
+      "decision": "similar_size_to_current_native_target_not_direct_speed_route"
+    },
+    {
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF",
+      "sha": "6d5841869d1b1afd0c2ec903743b92a13121a7d5",
+      "last_modified": "2026-07-02T05:07:00.000Z",
+      "classification": "multi_quant_split_gguf_target",
+      "selected_files": [
+        {
+          "quant": "Q2_K",
+          "split_total_bytes": 96962159168,
+          "decision": "alternate_target_candidate_only"
+        },
+        {
+          "quant": "MXFP4",
+          "split_total_bytes": 156378344860,
+          "decision": "similar_size_to_current_target"
+        }
+      ],
+      "decision": "requires_alternate_target_hard_bound_before_download"
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "sha": "b281094221a72c210a2b986709510b4c4b51b67e",
+      "last_modified": "2026-05-19T19:14:44.000Z",
+      "classification": "lower_bit_split_gguf_targets",
+      "selected_files": [
+        {
+          "quant": "IQ1_M",
+          "split_total_bytes": 64508046688,
+          "decision": "alternate_target_candidate_accuracy_risk"
+        },
+        {
+          "quant": "IQ1_S-XL",
+          "split_total_bytes": 61540705344,
+          "decision": "alternate_target_candidate_accuracy_risk"
+        },
+        {
+          "quant": "IQ2_XXS-XL",
+          "split_total_bytes": 78518823680,
+          "decision": "alternate_target_candidate_accuracy_risk"
+        }
+      ],
+      "decision": "requires_correctness_first"
+    },
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "sha": "62d010639c0114e9eddc245ebce6aba235b0bdc5",
+      "last_modified": "2026-06-19T15:56:40.000Z",
+      "classification": "reap_pruned_lower_bit_gguf_target",
+      "selected_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+          "size_bytes": 50439361920
+        }
+      ],
+      "decision": "alternate_target_candidate_with_model_quality_risk"
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "sha": "57aec7078215e68e7a0dba22a41409f00bedb88e",
+      "last_modified": "2026-05-30T10:14:15.000Z",
+      "classification": "spark_mini_q2_reap_target",
+      "selected_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size_bytes": 52593532000
+        }
+      ],
+      "decision": "alternate_target_candidate_with_model_quality_risk"
+    },
+    {
+      "repo": "nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "url": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "sha": "0b34e0b629c706396002496e795e9f910f7bf69f",
+      "last_modified": "2026-04-26T18:47:41.000Z",
+      "classification": "current_native_fp4_fp8_target",
+      "selected_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+          "size_bytes": 156148189760
+        }
+      ],
+      "decision": "current_sota_target"
+    }
+  ],
+  "route_gates": {
+    "dspark_or_mtp": {
+      "status": "closed_for_current_artifacts",
+      "reason": "available public artifacts are not directly compatible with current vendor GGUF runtime, and exact N=2 MTP is below the 10 tok/s hard bound",
+      "reopen_only_if": [
+        "compatible vendor-loadable draft or verifier artifact exists",
+        "average accepted draft tokens A>=7, or A>=5 with measured sublinear target verification",
+        "full 16GB host RAM including page cache and TTFT accounting passes",
+        "fixed-text top1 and France semantic correctness pass"
+      ]
+    },
+    "alternate_low_bit_gguf_target": {
+      "status": "candidate_class_only",
+      "next_required_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-target-representation-hard-bound.json",
+      "not_accepted_sota": true,
+      "required_before_download_or_benchmark": [
+        "select exactly one repo/file set and record exact byte size",
+        "prove current vendor can load the GGUF or define a no-source metadata-only loader check",
+        "estimate cold TTFT and page-cache behavior under MemoryMax=16000000000 and MemorySwapMax=0",
+        "define VRAM plan and confirm it does not displace accepted gate-cache behavior unless the measured route compensates",
+        "run fixed-text top1, France prompt, and five-prompt semantic correctness before strict cold promotion",
+        "record model/quantization change explicitly in SOTA metadata"
+      ]
+    }
+  },
+  "push_requirement": {
+    "remote": "https://github.com/wici-ai/ssd-llama.git",
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "identity": "L-Ark <fliangae@connect.ust.hk>",
+    "on_new_compliant_sota": "commit and push source plus artifacts immediately, then do clean pushed-source reproduction before accepting"
+  }
+}
