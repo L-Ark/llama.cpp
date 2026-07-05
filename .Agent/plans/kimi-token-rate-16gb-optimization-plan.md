@@ -71310,3 +71310,128 @@ Next direction:
     pressure, or delaying up compute.
 - Before writing such a source patch, the plan must define the staging buffer
   size, slice-copy sequence, overlap model, and correctness gates.
+
+## Phase 7LT - adjacent-span coalesced staging design
+
+Timestamp: 2026-07-06 00:28:00 CST.
+
+Status: planned.
+
+Why this is the next source attempt:
+
+- 7LS proved that layout-only first-use repacking is insufficient because the
+  current runtime still performs one O_DIRECT read per expert job.
+- 7LR showed first-use physical layout creates many adjacent jobs:
+  runtime_load `adjacent/read_jobs=0.4227` in simulation.
+- Therefore the smallest remaining movement experiment is not another pack
+  layout change, but a runtime path that can turn adjacent physical entries into
+  one larger read and then enqueue per-expert H2D slices.
+
+Scope:
+
+- Add a default-off env gate:
+  `GGML_MOE_IO_COALESCE_ADJACENT=1`.
+- Only coalesce entries when all conditions hold:
+  - same pack source;
+  - same `trace_op` batch;
+  - entries are physically adjacent after offset sorting
+    (`next.offset == previous.offset + previous.nbytes`);
+  - total span bytes `<= GGML_MOE_IO_COALESCE_MAX_BYTES`
+    (default `33554432`, 32 MiB);
+  - group size `>= 2`.
+- Non-adjacent jobs stay on the existing per-expert io_uring path.
+- Keep this source path default-off and therefore production-inactive unless
+  explicitly enabled for the experiment.
+
+Implementation model:
+
+- Extend `pinned_stage_ring` with a small independent coalesce slot pool:
+  - slot count from `GGML_MOE_IO_COALESCE_SLOTS`, default `2`;
+  - slot bytes from `GGML_MOE_IO_COALESCE_MAX_BYTES`, default `32 MiB`;
+  - each slot has pinned host memory and a CUDA done event.
+- In `expert_pack_iouring_copy_jobs`:
+  - after `read_jobs` are sorted by source/offset, identify adjacent groups;
+  - read each group span into a coalesce pinned slot using the same direct fd;
+  - for each job in the group, enqueue `cudaMemcpyAsync(job.dst, slot.host +
+    offset_delta, expert_bytes, H2D, st)`;
+  - record the slot done event after all slice H2Ds;
+  - mark the slot pending so it is not reused until the event completes;
+  - submit singleton/non-coalesced jobs through the existing path.
+
+Correctness requirements:
+
+- Copy bytes exactly; no quantization or math changes.
+- The H2D slice for every coalesced job must use the exact expert byte range
+  from the pack entry.
+- The coalesce slot must not be reused until its CUDA done event has completed.
+- `read_failures=0` and `iouring_fallbacks=0` remain mandatory.
+- Output for `Please introduce France in a short paragraph.` must remain
+  semantically correct and coherent.
+
+Theoretical upper bound:
+
+- From 7LR default trace:
+  - runtime_load wait `18026.121 ms`;
+  - current_down_overlap wait `2666.982 ms`;
+  - total profiled IO wait `20693.103 ms`.
+- From first-use simulation:
+  - runtime_load adjacent/read_jobs `0.4227`;
+  - current_down_overlap adjacent/read_jobs `0.4238`.
+- If coalescing eliminated one wait cycle per adjacent pair with no H2D or
+  slot-pressure penalty, an optimistic n32 bound is roughly:
+  - `20.69 s * 0.42 = 8.69 s` wait compression;
+  - endpoint bound from 7LO `31 / (22.63 - 8.69) = 2.22 tok/s`.
+- This is an optimistic ceiling. The practical target is only to beat the
+  current clean n32 band and then reproduce at n96.
+
+Experiment preparation:
+
+- Because disk is limited, regenerate the 7LS trace-only first-use overlay only
+  for the experiment and delete it after acceptance/rejection.
+- Use overlay-extra plus duplicate replacement:
+  - `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7lt-firstuse-trace-overlay.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`
+  - `GGML_MOE_IO_COALESCE_ADJACENT=1`
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lt-coalesced-adjacent-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7lt-firstuse-trace-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1 GGML_MOE_IO_COALESCE_ADJACENT=1 GGML_MOE_IO_COALESCE_MAX_BYTES=33554432 GGML_MOE_IO_COALESCE_SLOTS=2" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- plan committed and pushed before source edit;
+- source committed and pushed before running;
+- generated overlay exists during the run and is deleted if rejected;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must show duplicate replacement and coalesced staging counters.
+
+Decision rule:
+
+- Accept only after a passing n32 candidate repeats and then improves n96.
+- If n32 regresses, quality fails, TTFT fails, memory exceeds the 16GB cgroup, or
+  coalesced counters show low activation, revert source or keep it default-off
+  with a recorded rejection and delete the generated overlay.
+
+Reproducibility:
+
+- Record generation command/log, overlay path/size, exact source commit, run
+  directory, metrics, output text, stderr coalesce counters, and disk free
+  space before/after deletion.
