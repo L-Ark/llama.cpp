@@ -53,13 +53,22 @@ Bottleneck refresh after top-k closure:
 - Hot compute after touch is only `2997.437 ms`; zero-overhead hot-compute-only removal reaches `4.874 tok/s`. Scheduler/tail gap is only `1495.767 ms`; zero-overhead tail-only reaches `4.624 tok/s`. Gate one-stream excluding seq0 is `3486.025 ms`; gate-only remains too small.
 - Decision: the primary bottleneck is still exact decode up/down CPU fallback plus its source/page exposure. No immediate runtime source edit is allowed from this trace alone. The next candidate must include a new hard-bound for exact up/down fallback removal or overlap under about `1.6-2.7s` overhead budget, and it must avoid already closed top-k, top768 resident-source, source-only, scheduler-only, gate-only, CUDA graph, down-batch, and standalone MMVQ routes.
 
+MMVQ fused compact sparse bound refresh:
+
+- Refreshed bound artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound-after-topk-close.json`
+- Next-source plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-compact-sparse-next-plan-after-topk-close.json`
+- Why this reopens a narrow source-probe route: with the refreshed source/page delta, compact fused MMVQ hot-pair routing has a paper bound above 10. The generated bound gives CPU-backend fused existing-gate-output best case `pair_count=48`, `10.727 tok/s`, `919.189 ms` margin. After adding a conservative selected gate-output H2D correction, `pair_count=48` remains `10.692 tok/s` with `877.726 ms` margin. Graph zero-transfer existing-gate-output `pair_count=64` is `10.767 tok/s` with `965.727 ms` margin; gate recompute `pair_count=64` is still `10.590 tok/s` with `754.797 ms` margin.
+- Why this is not a SOTA or benchmark permission: previous sparse graph probe proved the current one-stream helper returns through CPU memory and has no reusable GPU gate tensor. Existing `DS4_HOT` manager is still rejected because the ideal `544 MiB` sparse up/down payload inflates to `2507.5 MiB` up/down-only or `3761.25 MiB` gate/up/down, with estimated gate-cache penalty above `1.0-2.0s`.
+- Allowed next source edit: only a default-off compact sparse fused MMVQ proof/compare probe, starting with `pair_count=48`, proposed env shape `DS4_SPARSE_FUSED_MMVQ_PROBE=1`, `DS4_SPARSE_FUSED_MMVQ_PROFILE=<top48-pair-profile>`, `DS4_SPARSE_FUSED_MMVQ_MODE=compare`.
+- Hard gates for that source edit: default-off fixed-text `llama-results` must remain `same_top1 == n_tokens`; probe mode must not write logits or clear CPU fallback counts; it must record exact selected pair profile, payload MiB, gate-output transfer or gate recompute path, H2D/D2H bytes, kernel ms, scatter/combine copies, and cgroup memory including page cache. Because MMVQ is not bit-exact, any write/skip path requires a separate fixed-text top1 gate before any strict cold France benchmark.
+
 Next executable plan:
 
 1. Close no-source approximate top-k pruning. Do not run `KEEP_TOPK_LAYER_VALUE=2`, wider top2 ranges, or another top-k sweep unless a future artifact proves a correctness-preserving routing model before the performance run.
 2. Return to exact up/down fallback elimination. The latest bottleneck refresh shows why this is the remaining useful bottleneck: source/page-only reaches only about `9.768 tok/s`, hot-compute-only reaches only about `4.874 tok/s`, and full decode CPU fallback removal is the first hard-bound row clearly above 10 at about `12.459 tok/s`.
-3. Before any runtime source edit, write or refresh a hard-bound artifact that identifies one exact kernel/layout/dataflow change, its exact code path, expected saved milliseconds, required GiB/s, VRAM impact, page-cache impact, TTFT impact, fixed-text top1 verifier, strict France correctness gate, rollback criteria, and full env/CLI.
+3. The next source edit is now narrowed to the compact sparse fused MMVQ proof/compare probe above. It is default-off diagnostic work only; no strict cold SOTA benchmark is allowed until placement/dataflow and fixed-text top1 gates pass.
 4. The nearest non-source blocker is full 4Expert/alternate artifact testing. That remains blocked by disk until the user explicitly approves deletion or relocation of large non-SOTA assets while preserving accepted SOTA evidence.
-5. If a new exact source probe is proposed, first run fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Only after top1 stability can a strict cold France generation run be used for SOTA consideration.
+5. If the compact sparse fused probe produces a logit-changing write/skip path, first run fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Only after top1 stability can a strict cold France generation run be used for SOTA consideration.
 
 Promotion gate remains strict:
 

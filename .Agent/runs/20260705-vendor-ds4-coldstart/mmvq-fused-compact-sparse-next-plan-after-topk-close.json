@@ -1,0 +1,101 @@
+{
+  "artifact": "mmvq-fused-compact-sparse-next-plan-after-topk-close",
+  "created_utc": "2026-07-05T16:45:00Z",
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head_before_artifact": "0b9ea442e4c7a345b58e8430bf69cb41b71ad6f6"
+  },
+  "inputs": {
+    "fused_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound-after-topk-close.json",
+    "bottleneck_refresh": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-bottleneck-refresh-after-topk-close.json",
+    "mmvq_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json",
+    "sparse_graph_probe_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-graph-probe-validation.json",
+    "sparse_retained_planner_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json",
+    "deepseek4_graph_path": "src/models/deepseek4.cpp::build_expert_mix"
+  },
+  "why_reopened": {
+    "source_page_delta_ms_after_topk_close": 16932.875999999997,
+    "full_decode_cpu_fallback_removal_bound_tok_s": 12.458609680408724,
+    "best_generated_cpu_backend_bound_without_gate_output_h2d": {
+      "pair_count": 48,
+      "decode_ms": 12638.206605960382,
+      "tok_s": 10.727309320237032,
+      "margin_to_10tok_ms": 919.1885455596203
+    },
+    "best_corrected_cpu_backend_with_gate_output_h2d": {
+      "pair_count": 48,
+      "gate_output_h2d_bytes_est": 72646656,
+      "gate_output_h2d_ms_est": 41.46220105820105,
+      "corrected_decode_ms": 12679.668807018583,
+      "corrected_tok_s": 10.692231286053444,
+      "corrected_margin_to_10tok_ms": 877.7263445014196
+    },
+    "best_graph_zero_transfer_existing_gate_output": {
+      "pair_count": 64,
+      "decode_ms": 12591.668396457528,
+      "tok_s": 10.766956946971513,
+      "margin_to_10tok_ms": 965.7267550624747
+    },
+    "graph_zero_transfer_gate_recompute_pair64": {
+      "decode_ms": 12802.598626101671,
+      "tok_s": 10.58956509335493,
+      "margin_to_10tok_ms": 754.7965254183309
+    }
+  },
+  "corrected_cpu_backend_rows": [
+    {"pair_count": 16, "gate_output_h2d_ms_est": 17.710737213403878, "corrected_decode_ms": 12756.54796931816, "corrected_tok_s": 10.627793023730266, "corrected_margin_to_10tok_ms": 800.8471822018419},
+    {"pair_count": 32, "gate_output_h2d_ms_est": 31.32574955908289, "corrected_decode_ms": 12681.902229393729, "corrected_tok_s": 10.690348266600799, "corrected_margin_to_10tok_ms": 875.4929221262737},
+    {"pair_count": 48, "gate_output_h2d_ms_est": 41.46220105820105, "corrected_decode_ms": 12679.668807018583, "corrected_tok_s": 10.692231286053444, "corrected_margin_to_10tok_ms": 877.7263445014196},
+    {"pair_count": 64, "gate_output_h2d_ms_est": 49.700405643738975, "corrected_decode_ms": 12690.127147528769, "corrected_tok_s": 10.683419475556732, "corrected_margin_to_10tok_ms": 867.2680039912339},
+    {"pair_count": 80, "gate_output_h2d_ms_est": 56.171276895943556, "corrected_decode_ms": 12712.401956932199, "corrected_tok_s": 10.664699871393715, "corrected_margin_to_10tok_ms": 844.9931945878034},
+    {"pair_count": 96, "gate_output_h2d_ms_est": 61.55743562610229, "corrected_decode_ms": 12741.929202270103, "corrected_tok_s": 10.639986250358868, "corrected_margin_to_10tok_ms": 815.4659492498995},
+    {"pair_count": 128, "gate_output_h2d_ms_est": 70.02941446208112, "corrected_decode_ms": 12816.363858806959, "corrected_tok_s": 10.57819152208591, "corrected_margin_to_10tok_ms": 741.0312927130435}
+  ],
+  "implementation_constraints": [
+    "The accepted default path must remain unchanged unless all correctness and strict cold gates pass.",
+    "The current one-stream helper is CPU-backend and does not retain a reusable GPU gate tensor; sparse-graph-probe-validation already rejected using it for graph zero-transfer.",
+    "The existing DS4_HOT manager is not acceptable for this profile because pair_count=64 inflates ideal 544 MiB up/down payload to 2507.5 MiB up/down-only or 3761.25 MiB gate/up/down, with estimated gate-cache penalty above 1.0-2.0 s.",
+    "A compact sparse implementation must avoid per-layer dummy-slot inflation and must account for gate output: either transfer selected gate output vectors to GPU, or recompute gate with compact gate/up/down payload and include the extra kernel/payload cost.",
+    "MMVQ is not bit-exact versus CPU fallback. The earlier compare-only probe was token-stable only because CPU fallback remained authoritative. Any write/skip mode must pass a fixed-text top1 gate before a France performance run."
+  ],
+  "next_allowed_source_probe": {
+    "allowed": true,
+    "scope": "default-off diagnostic/proof only, not a strict cold SOTA benchmark",
+    "candidate": "compact sparse fused MMVQ hot-pair probe for complete (layer, expert) up/down pairs, starting with pair_count=48",
+    "required_env_shape": [
+      "DS4_SPARSE_FUSED_MMVQ_PROBE=1",
+      "DS4_SPARSE_FUSED_MMVQ_PROFILE=<top48-pair-profile>",
+      "DS4_SPARSE_FUSED_MMVQ_MODE=compare"
+    ],
+    "code_paths_to_change": [
+      "src/models/deepseek4.cpp::build_expert_mix for compact sparse hot branch or proof hook",
+      "ggml/src/ggml-cuda/moe_stream.cu MMVQ resident hot-pair kernel/probe helpers",
+      "ggml/src/ggml-cpu/ggml-cpu.c only if a default-off compare/write hook is needed at mul_mat_id boundary"
+    ],
+    "first_probe_requirements": [
+      "Default-off build passes and default-off fixed-text llama-results remains same_top1 == n_tokens.",
+      "Probe mode must not write logits or clear CPU fallback counts.",
+      "Record exact selected pair profile, payload MiB, gate-output transfer/recompute path, H2D/D2H bytes, kernel ms, scatter/combine copies, and cgroup memory including page cache.",
+      "If op-level error is nonzero, add a separate write/skip fixed-text top1 run before any strict cold generation benchmark.",
+      "Do not run strict cold France performance benchmark until fixed-text top1 passes under write/skip mode and projected overhead remains below the corrected margin."
+    ]
+  },
+  "strict_sota_gate_if_later_promoted": {
+    "eval_tok_s_must_exceed": 4.4,
+    "target_objective_tok_s": 10.0,
+    "ttft_ms_max_for_accepted_sota": 33617.688744,
+    "memory_peak_bytes_max": 16000000000,
+    "memory_includes_page_cache": true,
+    "memory_swap_max": 0,
+    "correctness": "France answer must be semantic, coherent, and complete; five-prompt semantic set required before calling prompt-general steady behavior stable.",
+    "push_policy": "If a compliant new SOTA appears, immediately record full reproduction metadata, commit, push to ssd/vendor/deepseek-token-rate-16gb, then clean pushed-source reproduce before promotion."
+  },
+  "decision": {
+    "sota_changed": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "source_edit_allowed_next": true,
+    "source_edit_gate": "Only the default-off compact sparse fused MMVQ proof/compare probe is allowed. No logit-writing performance run and no DS4_HOT dense-manager adaptation are allowed from this artifact alone.",
+    "reason": "After the refreshed bottleneck, the corrected compact CPU-backend fused bound remains above 10 tok/s with about 878 ms margin even after selected gate-output H2D. This is enough to justify a default-off correctness/dataflow probe, but not enough to promote or benchmark without proving token stability and compact sparse placement."
+  }
+}
