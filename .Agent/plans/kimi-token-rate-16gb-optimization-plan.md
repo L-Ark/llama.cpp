@@ -77712,7 +77712,7 @@ Decision:
 
 Timestamp: 2026-07-05 23:10:00 CST.
 
-Status: planned.
+Status: complete.
 
 Source baseline:
 
@@ -77851,3 +77851,102 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Store all raw metadata and commands in the run directory.
 - Commit and push the audit result before any implementation work.
+
+Result:
+
+- Plan commit before execution:
+  `ab032e8f7 docs: plan dflash compatibility audit`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-151800Z-phase7na-dflash-compat-audit`.
+- Server repo state during audit:
+  `ab032e8f72972a2685cea20137ee6037cc597fa1`.
+- Audit method:
+  - source inspection only;
+  - Hugging Face API/README and HTTP HEAD metadata only;
+  - GitHub raw README/source fetch for `z-lab/dflash`;
+  - no source changes;
+  - no build;
+  - no model run;
+  - no large weight download.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `vendor_speculative_sources.txt`;
+- `vendor_speculative_flags.txt`;
+- `dflash_hf_metadata.json`;
+- `dflash_hf_readme.md`;
+- `dflash_hf_file_heads.txt`;
+- `dflash_external_refs.txt`;
+- `dflash_raw_sources.txt`;
+- `compatibility_matrix.md`;
+- `dflash_contract.md`;
+- `performance_bound.md`;
+- `decision.md`.
+
+Key findings:
+
+- `freakyskittle/Kimi-K2.7-Code-Dflash` is not a standard standalone llama.cpp
+  draft model:
+  - model card reports `architecture: dflash-draft`;
+  - intended workflow is Oxidize speculative decoding;
+  - Q4_0 GGUF is `1115179680` bytes by HF HEAD;
+  - F32 GGUF is `7927646880` bytes by HF HEAD.
+- Current vendor llama.cpp has no direct DFlash path:
+  - focused source grep found no `dflash` architecture/loader/tensor mapping;
+  - implemented speculative paths are ordinary standalone draft-model contexts
+    and ngram variants;
+  - `COMMON_SPECULATIVE_TYPE_EAGLE3` exists, but its draft method is
+    `TODO: implement`, and CLI `--spec-type` does not expose `eagle3`.
+- DFlash runtime contract is hidden-state dependent:
+  - upstream `dflash/model.py` runs target with `output_hidden_states`, extracts
+    selected target hidden layers, embeds proposed/noise tokens with target
+    embeddings, calls the DFlash model with `target_hidden`, then projects with
+    target `lm_head`;
+  - upstream `dflash/model_mlx.py` explicitly binds the draft model to target
+    `embed_tokens` and `lm_head`;
+  - this does not match current `--spec-draft-model`, which constructs an
+    independent draft `llama_context` that consumes token IDs and emits logits.
+- DFlash Kimi candidate metadata:
+  - hidden size `7168`;
+  - draft layers `6`;
+  - attention heads `64`;
+  - KV heads `64`;
+  - intermediate size `2048`;
+  - target layer IDs `[1, 12, 24, 35, 47, 58]`.
+
+Performance bound:
+
+- Current strict SOTA about `1.36 tok/s`, or about `0.735 s/token`.
+- To reach `5 tok/s`, time per output token must be `<= 0.200 s`.
+- If accepted length `a = 4`, then draft plus target verification must cost
+  `<= 0.800 s`, only `1.09x` the current one-token step.
+- If accepted length `a = 8`, draft plus verification must cost `<= 1.600 s`,
+  about `2.18x` the current one-token step.
+- If accepted length `a = 16`, draft plus verification must cost `<= 3.200 s`,
+  about `4.35x` the current one-token step.
+- Therefore DFlash is only credible if Kimi target block verification amortizes
+  MoE expert-pack reads heavily across the proposed block.
+
+Decision:
+
+- Do not implement DFlash directly yet.
+- Do not promote any SOTA from this phase.
+- DFlash GGUF remains a valid future design track, but it is not a directly
+  runnable asset in the current vendor tree.
+- Before writing a DFlash runtime, measure target-only block verification cost
+  for candidate block sizes. The specific unknown is whether current Kimi MoE
+  streaming can verify a proposed block with enough expert-read amortization.
+
+Next recommended phase:
+
+- Plan a no-SOTA target batch verification cost probe:
+  - run under strict cold-start memory gates;
+  - evaluate fixed known continuation blocks of sizes `1`, `2`, `4`, `8`, and
+    `16` through the target model path after prompt prefill;
+  - record target decode wall, expert-pack iouring bytes/wait, up/gate and down
+    profile buckets, TTFT, output quality, and memory peak;
+  - reject DFlash for the `5 tok/s` track if block-size `8` or `16`
+    verification exceeds the envelope above, unless a separate MoE batch
+    verification optimization is planned first.
