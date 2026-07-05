@@ -78997,3 +78997,101 @@ Decision:
     dry-run;
   - or a separately planned EAGLE/DFlash runtime implementation with a verifier
     cost model that beats the 7NB rejection.
+
+## Phase 7NG - local tracefirst expert-pack coverage audit
+
+Timestamp: 2026-07-06 01:36:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Audit the existing local `tracefirst-n64` expert pack before any runtime
+  experiment.
+- Decide whether it can become a strict n32 candidate, or whether it is just a
+  stale layout-only asset covered by the 7LS/7MM rejections.
+- Do not edit source and do not run the model in this phase.
+
+Candidate asset:
+
+- `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack`
+- Manifest:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.manifest.json`
+- Manifest facts:
+  - layout: `trace-order-first`;
+  - entries: `15266`;
+  - payload: `74.079 GiB`;
+  - missing from its source profile: `300`;
+  - source trace:
+    `/root/lfz/runs/ik_llama/overlap5tps-a1-profile-n64-20260630-20260630-035810Z/route_trace.csv`.
+
+Why this is not immediately a runtime test:
+
+- 7LS tested a generated first-use overlay-extra and rejected it:
+  layout-only did not help because the runtime still issued one read per expert.
+- 7LT and 7MM tested blocking and async adjacent coalescing with temporary
+  first-use overlays and rejected both due endpoint regressions and span-slot
+  waits.
+- Therefore a `tracefirst-n64` runtime test is only justified if this existing
+  pack shows a materially different property:
+  - much better coverage of the current strict trace than the old generated
+    overlay path;
+  - enough current-route locality to produce a new hard bound;
+  - or a safe way to use it without reintroducing coalescing/span waits.
+
+Audit inputs:
+
+- Candidate tracefirst pack and manifest.
+- Current accepted runtime traces:
+  - 7MY:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/route-trace.csv`;
+  - 7NB baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench/baseline-n32/route-trace.csv`
+    if present.
+- Current main and overlay packs:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`.
+
+Audit method:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ng-tracefirst-pack-audit`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `tracefirst_manifest.json`;
+  - `coverage_7my.tsv`;
+  - `coverage_7nb.tsv` if 7NB trace exists;
+  - `layout_compare_7my.tsv`;
+  - `summary.md`;
+  - `decision.md`;
+  - `audit_tracefirst_pack.py`.
+- Parse pack indexes and route traces to compute:
+  - unique current route keys;
+  - current route rows covered by tracefirst;
+  - missing keys by tensor/type/layer;
+  - how many reads would fall back to the original pack if used as
+    overlay-extra;
+  - how many reads would become GGUF misses if used as the main pack;
+  - physical gap/span statistics for current route order under current main
+    pack vs tracefirst pack.
+
+Decision rule:
+
+- Reject runtime testing if any of these hold:
+  - current-route key coverage is materially below `99%`;
+  - using tracefirst as the main pack would create more than a tiny number of
+    pack misses;
+  - using tracefirst as overlay-extra is only layout-only and has no new runtime
+    mechanism beyond 7LS/7MM;
+  - hard upper bound is only fewer seeks/gaps without byte reduction or a new
+    safe coalescing pipeline.
+- Only if the audit finds a new non-rejected mechanism should the next phase
+  plan a strict n32 run. That plan must include exact env, quality/RAM/TTFT
+  gates, activation evidence, and immediate rejection rules.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store all raw scripts and summaries in the run directory.
+- Commit and push the result before any runtime experiment.
