@@ -1,0 +1,163 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/non-native-representation-next-hard-bound.json",
+  "created_utc": "2026-07-05T10:27:40Z",
+  "source_head_before_artifact": "e9e7263866496a2d1174f390253e03e74c062b24",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "git_identity_required": "L-Ark <fliangae@connect.ust.hk>",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "purpose": "Hard-bound screen for non-native or approximate representations after high-acceptance verifier/draft audit found no source-ready route.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "strict_ram_rule": "16GB cgroup including file page cache, MemorySwapMax=0, no swap/OOM",
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "hard_requirements": {
+    "target_tok_s": 10.0,
+    "accepted_decode_window_ms": 31047.44671,
+    "decoded_tokens_estimate": 136.608765524,
+    "target_decode_window_ms_for_10_tok_s": 13660.8765524,
+    "required_decode_saving_ms_for_10_tok_s": 17386.5701576,
+    "top4096_zero_overhead_slack_ms": 1008.842,
+    "measured_extra_pool_that_fits_with_gate_preserved_gib": 3.188,
+    "top4096_raw_payload_gib": 17.0,
+    "required_effective_payload_reduction_top4096": 5.33,
+    "correctness_gate": "Any non-exact representation must pass fixed-text top1 before a strict cold performance benchmark, then France semantic correctness before SOTA promotion."
+  },
+  "evidence_consulted": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/exact-compact-representation-closure-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/exact-payload-reduction-audit.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-updown-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-batch-skip-top1-rejected.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-graph-probe-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/fallback-byte-reduction-hard-bound-after-cpu-probe.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/top768-batched-fused-exact-compute-design.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-hard-bound-recheck.json"
+  ],
+  "candidate_screen": [
+    {
+      "candidate": "native MXFP4 lossless compression, dedup, zero-block skip, or dictionary representation",
+      "representation_type": "exact",
+      "correctness_status": "exact_by_construction",
+      "payload_evidence": {
+        "required_reduction_top4096": 5.33,
+        "full_top4096_zstd_l1_ratio": 1.040149,
+        "top512_zstd_l10_ratio": 1.04014,
+        "byte_entropy_ideal_ratio": 1.044616,
+        "block_entropy_ideal_ratio": 1.085041,
+        "sample_duplicate_blocks": 0,
+        "sample_zero_blocks": 0
+      },
+      "decision": "closed",
+      "reason": "The representation is exact but cannot get close to the required 5.33x payload reduction. Native MXFP4 hot payload is already information-dense."
+    },
+    {
+      "candidate": "CPU-compatible Q8_0 exact arithmetic with resident source",
+      "representation_type": "exact_arithmetic_path_not_payload_reduction",
+      "correctness_status": "fixed-text top1 passed for all-up/all-down combined skip in validation artifact",
+      "performance_evidence": {
+        "top768_payload_gib": 3.188,
+        "top768_zero_overhead_tok_s": 6.48,
+        "top3072_payload_gib": 12.75,
+        "top3072_zero_overhead_tok_s": 9.946,
+        "top3072_slack_ms": -73.955,
+        "top4096_payload_gib": 17.0,
+        "top4096_zero_overhead_tok_s": 10.797,
+        "top4096_slack_ms": 1008.842
+      },
+      "decision": "not_a_10_tok_s_non_native_route",
+      "reason": "This path preserves top1 but does not reduce source payload enough. The fitting top768 pool has a 6.48 tok/s zero-overhead ceiling; the first positive top4096 pool needs 17 GiB and cannot fit with the accepted gate cache/workspace."
+    },
+    {
+      "candidate": "standalone MMVQ/codebook approximate hot resident skip/write",
+      "representation_type": "non_exact_approximate",
+      "correctness_status": "failed",
+      "correctness_evidence": {
+        "fixed_text_same_top1": "142/145",
+        "first_mismatch_pos": 9,
+        "max_abs": 4.79565,
+        "mean_abs": 0.146238
+      },
+      "performance_evidence": {
+        "compare_only_kernel_projection_top128_ms": 159.823,
+        "projected_h2d_plus_kernel_plus_d2h_top128_ms": 306.367,
+        "top128_allowed_kernel_and_integration_ms": 179.257,
+        "direct_pool_mib": 544,
+        "gate_cache_effect": "direct pool displaced accepted gate cache allocation"
+      },
+      "decision": "closed",
+      "reason": "The first logit-affecting correctness gate failed before performance, and the direct pool broke accepted gate-cache behavior. Compare-only success is not a valid correctness proof."
+    },
+    {
+      "candidate": "graph-level zero-transfer sparse MMVQ/top64 retained hot branch",
+      "representation_type": "non_exact_approximate plus graph dataflow change",
+      "paper_bound": {
+        "pair_count": 64,
+        "tok_s": 10.013888843633731,
+        "margin_ms": 18.947062554683725,
+        "ideal_updown_payload_mib": 544
+      },
+      "dataflow_evidence": {
+        "graph_gate_output_input_available": 0,
+        "hot_active": 0,
+        "hot_ready": 0,
+        "selected_matches_hot_picks": 0,
+        "accepted_path_up_non_cuda_rows": 6120,
+        "accepted_path_down_non_cuda_rows": 6120,
+        "combine_bytes_total": 646742016,
+        "combine_copy_lower_bound_margin_after_24gib_s_copy_ms": 1.750067
+      },
+      "decision": "not_source_ready",
+      "reason": "The paper bound has only about 19 ms margin and requires an existing retained CUDA gate/up/down dataflow. Current accepted graph exposes no retained gate tensor, no active hot manager, and a final combine copy/scheduler overhead would consume the margin even before proving top1 for MMVQ write."
+    },
+    {
+      "candidate": "low-bit recoding, low-rank, sparsification, or learned codebook beyond existing MMVQ",
+      "representation_type": "non_exact_approximate",
+      "correctness_status": "unproven",
+      "payload_requirement": "must show >5.33x effective payload reduction or equivalent source+CPU fallback reduction, while preserving fixed-text top1",
+      "overhead_requirement": "decode overhead must remain below the top4096 1008.842 ms slack after all kernel, transfer, sync, scatter, and scheduler costs",
+      "decision": "not_allowed_without_new_offline_proof",
+      "reason": "No current artifact proves token stability for a more aggressive approximation. The closest MMVQ write already changed top1, so any new representation must start with a separate offline/top1 proof before runtime source changes."
+    },
+    {
+      "candidate": "prompt-specific route/output cache or lookup cache",
+      "representation_type": "non_general_cache",
+      "correctness_status": "not_general_model_correctness",
+      "decision": "not_promotable",
+      "reason": "A prompt-specific cache cannot be claimed as a vendor model token-rate SOTA for arbitrary prompts unless it has a verifier proving greedy-stream equivalence and prompt-set correctness. Historical lookup/ngram/no-source speculation did not provide this."
+    }
+  ],
+  "implementation_gates_if_reopened": [
+    "A new approximate representation must first run in compare-only mode under strict 16GB/no-swap cgroup and prove fixed-text top1 equality.",
+    "The default accepted path must remain byte-for-byte/top1 unchanged when the new env is disabled.",
+    "Any logit-writing mode must pass fixed-text top1 before France generation or performance.",
+    "The path must explicitly account for VRAM pool size, lost gate cache slots, CUDA workspace, H2D/D2H, scatter, synchronization, scheduler copies, host RAM, file page cache, TTFT, and rollback.",
+    "Only after these gates pass may strict cold France be benchmarked; promotion requires eval_tok_s > 4.4, TTFT <= 33617.688744 ms, memory.peak <= 16000000000 bytes including page cache, no swap/OOM, and coherent France output."
+  ],
+  "decision": {
+    "status": "no_non_native_representation_source_patch_allowed_now",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "runtime_patch_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "reason": "Every current non-native route fails one of the hard gates: exact compression is far below the needed 5.33x reduction; Q8_0 exact arithmetic is token-stable but has a sub-10 fitting-payload ceiling; standalone MMVQ failed fixed-text top1 and gate-cache preservation; graph-level zero-transfer MMVQ lacks the retained CUDA dataflow and has only ~19 ms paper margin; more aggressive low-rank/sparsified/codebook representations have no top1 proof.",
+    "next_allowed_work": [
+      "Do not implement a new runtime representation path from the current evidence.",
+      "A future non-native route must begin with an offline or compare-only artifact that proves fixed-text top1 and the >5.33x/equivalent fallback reduction before source changes.",
+      "If no such representation appears, the remaining 10 tok/s route requires a new external high-acceptance verifier/draft artifact or a new exact graph/dataflow breakthrough with a hard bound above 10."
+    ]
+  }
+}
