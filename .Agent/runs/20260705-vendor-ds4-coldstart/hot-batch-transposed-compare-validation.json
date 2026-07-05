@@ -1,0 +1,196 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-transposed-compare-validation.json",
+  "date": "2026-07-05",
+  "title": "Validation: default-off transposed hot-batch warp compare probe",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "correctness_passed_performance_rejected_top768_closed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true
+  },
+  "source_change": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off": true,
+    "new_env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_TRANSPOSE",
+    "behavior": "When HOT_BATCH_PROBE_COMPARE, HOT_BATCH_PROBE_WARP, and HOT_BATCH_PROBE_TRANSPOSE are enabled together, compare resident transposed-pool source against CPU fallback dst after normal CPU fallback. It does not clear matrix_row_counts, skip fallback, or change logits.",
+    "requires": "GGML_MOE_STREAM_ONE_DIRECT_TRANSPOSE=1 for the direct pool layout"
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true,
+    "notes": "Only existing warnings were observed."
+  },
+  "runs": {
+    "smoke_compare32": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T030349Z-transposed-compare/smoke-hi-compare32",
+      "exit_status": 0,
+      "records": 246,
+      "compare_ran": 4,
+      "compare_ok": 4,
+      "max_abs": 0,
+      "diff_count": 0,
+      "ready_rows": 202,
+      "sample_ready_rows": 6,
+      "sample_src0_bytes": 26738688,
+      "sample_out_bytes": 73728,
+      "timing_us": {
+        "alloc": 100,
+        "h2d": 59,
+        "kernel": 378,
+        "d2h": 58,
+        "compare": 52,
+        "free": 37,
+        "elapsed": 732
+      },
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "elapsed_ms": 1942.822,
+        "read_ms": 1739.248,
+        "h2d_ms": 133.496,
+        "transform_ms": 33.916,
+        "transposed": true,
+        "failures": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 9685368832,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      }
+    },
+    "fixed_text_compare512": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T030521Z-transposed-compare/probe-cpu41-compare512",
+      "baseline_exit_status": 0,
+      "check_exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "records": 11890,
+      "compare_ran": 262,
+      "compare_ok": 262,
+      "op_level_max_abs": 0,
+      "op_level_diff_count": 0,
+      "ready_rows_all": 32724,
+      "not_in_manifest_rows_all": 38616,
+      "not_ready_rows_all": 0,
+      "bytes_all": {
+        "src0": 145832804352,
+        "q80": 106754560,
+        "out": 402325504
+      },
+      "sample": {
+        "ready_rows": 378,
+        "src0_bytes": 1684537344,
+        "q80_bytes": 1231616,
+        "out_bytes": 4653056,
+        "output_elements": 1163264,
+        "timing_us": {
+          "alloc": 4015,
+          "h2d": 3799,
+          "kernel": 21659,
+          "d2h": 2879,
+          "compare": 3850,
+          "free": 2521,
+          "elapsed": 41330
+        },
+        "kernel_source_bandwidth_gib_s": 72.434,
+        "projected_kernel_ms_by_ready_rows": 1875.05,
+        "projected_kernel_ms_by_output_count": 1872.74,
+        "projected_h2d_ms": 329.291,
+        "projected_d2h_ms": 248.932,
+        "projected_total_ms_by_ready_rows": 3352.31
+      },
+      "by_kind": {
+        "up": {
+          "ready_rows": 16336,
+          "sample_ready_rows": 188,
+          "sample_kernel_us": 13581,
+          "sample_source_bandwidth_gib_s": 57.4533
+        },
+        "down": {
+          "ready_rows": 16388,
+          "sample_ready_rows": 190,
+          "sample_kernel_us": 8078,
+          "sample_source_bandwidth_gib_s": 97.62
+        }
+      },
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "elapsed_ms": 2066.412,
+        "read_ms": 1857.139,
+        "h2d_ms": 134.977,
+        "transform_ms": 35.765,
+        "transposed": true,
+        "failures": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 16000000000,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      },
+      "hashes": {
+        "top1_baseline_json": "f87331a65bd46bd760b3318f1ee97e91a80e16e5b0c5e800cc8fc5d5b6a3aa36",
+        "top1_check_json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "probe_csv": "2a200db408ea7a79f029591f31b4f7b8ad16e33bee64ec52392be131195fd2b7",
+        "run_sh": "715040300a47201353d2d830389c3f07b18ab35bc5e55306869b94a192a61bdf"
+      }
+    },
+    "default_off_top1_after_source": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T030856Z-transposed-compare/defaultoff-top1-check",
+      "exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 13992579072,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      },
+      "hashes": {
+        "top1_check_json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "check_stdout": "32978891d859d0d369c774270dd2026c2d7d7263c236a4cc0310567996710194",
+        "check_stderr": "d89874e58793069e12b32d408a0b9633349572f8da3c4d2c291a07f8d05425c2"
+      }
+    }
+  },
+  "comparison": {
+    "raw_warp_projected_kernel_ms": 1818.61,
+    "transposed_projected_kernel_ms": 1872.74,
+    "raw_warp_kernel_gib_s": 74.5898,
+    "transposed_kernel_gib_s": 72.434,
+    "interpretation": "The transposed block-major layout did not improve the fixed-text sample. Up remains about 57 GiB/s and down about 98 GiB/s, far below the 400-550 GiB/s target."
+  },
+  "decision": {
+    "correctness_gate": "passed",
+    "performance_gate": "failed",
+    "top768_route": "rejected_closed",
+    "reason": "Projected raw kernel time is about 1.87 s, above the 250 ms cutoff and the 446.414 ms total budget. This also fails to improve over raw warp.",
+    "strict_cold_performance_allowed": false,
+    "sota_changed": false,
+    "next_step": "Return to a fresh bottleneck search from the accepted 4.4 tok/s SOTA path. Do not continue top768 raw/transposed/pinned/CUDA-graph variants."
+  }
+}
