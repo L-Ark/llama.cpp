@@ -1,0 +1,155 @@
+{
+  "accepted_sota_reference": {
+    "accepted_decode_ms_estimate": 31047.446709999997,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "eval_tok_s": 4.4,
+    "required_saving_ms_for_10tok": 17386.5701576,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "target_decode_ms_for_10tok": 13660.876552399997
+  },
+  "artifact": "transient-repack-current-head-bound",
+  "by_kind_cne": {
+    "down:cne1=1": {
+      "chunks": 373760,
+      "compute_saved_ms_threadsum_est": 63286.43973265321,
+      "covered_ms_threadsum_est": 193773.94433606186,
+      "eligible_fraction": 0.9765625,
+      "eligible_rows8": 74752000,
+      "groups8": 9344000,
+      "ms": 198424.51900012736,
+      "net_saved_ms_threadsum_est": 9996.439732653213,
+      "net_saved_wall_ms_est_threads": 499.82198663266064,
+      "repack_ms_threadsum_est": 53290.0,
+      "rows": 76546048,
+      "tail_rows": 1794048
+    },
+    "down:cne1>1": {
+      "chunks": 108288,
+      "compute_saved_ms_threadsum_est": 15754.65802356377,
+      "covered_ms_threadsum_est": 48238.48899998391,
+      "eligible_fraction": 1.0,
+      "eligible_rows8": 1732608,
+      "groups8": 216576,
+      "ms": 48238.48899998391,
+      "net_saved_ms_threadsum_est": 14519.49802356377,
+      "net_saved_wall_ms_est_threads": 725.9749011781885,
+      "repack_ms_threadsum_est": 1235.16,
+      "rows": 1732608,
+      "tail_rows": 0
+    },
+    "up:cne1=1": {
+      "chunks": 373760,
+      "compute_saved_ms_threadsum_est": 60450.70603439125,
+      "covered_ms_threadsum_est": 205069.61999226507,
+      "eligible_fraction": 0.93359375,
+      "eligible_rows8": 35731456,
+      "groups8": 4466432,
+      "ms": 219656.16200008307,
+      "net_saved_ms_threadsum_est": -8482.390965608742,
+      "net_saved_wall_ms_est_threads": -424.1195482804371,
+      "repack_ms_threadsum_est": 68933.097,
+      "rows": 38273024,
+      "tail_rows": 2541568
+    },
+    "up:cne1>1": {
+      "chunks": 54144,
+      "compute_saved_ms_threadsum_est": 9680.965486600913,
+      "covered_ms_threadsum_est": 32841.17000000023,
+      "eligible_fraction": 1.0,
+      "eligible_rows8": 866304,
+      "groups8": 108288,
+      "ms": 32841.17000000023,
+      "net_saved_ms_threadsum_est": 8009.692486600913,
+      "net_saved_wall_ms_est_threads": 400.4846243300457,
+      "repack_ms_threadsum_est": 1671.2730000000001,
+      "rows": 866304,
+      "tail_rows": 0
+    }
+  },
+  "candidate_totals": {
+    "all": {
+      "compute_saved_ms_threadsum": 149172.76927720915,
+      "net_saved_ms_threadsum": 24043.239277209155,
+      "net_saved_wall_ms_est_threads": 1202.1619638604577,
+      "repack_ms_threadsum": 125129.53
+    },
+    "down": {
+      "compute_saved_ms_threadsum": 79041.09775621699,
+      "net_saved_ms_threadsum": 24515.937756216983,
+      "net_saved_wall_ms_est_threads": 1225.796887810849,
+      "repack_ms_threadsum": 54525.16
+    },
+    "up": {
+      "compute_saved_ms_threadsum": 70131.67152099217,
+      "net_saved_ms_threadsum": -472.6984790078286,
+      "net_saved_wall_ms_est_threads": -23.634923950391432,
+      "repack_ms_threadsum": 70604.37
+    }
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T032634Z-20260705_current_head_sota44_component_trace_absbin/france-trace-cpu40-vram0gb",
+  "chunk_row_hist_top": [
+    [
+      103,
+      355072
+    ],
+    [
+      205,
+      355072
+    ],
+    [
+      16,
+      162432
+    ],
+    [
+      91,
+      18688
+    ],
+    [
+      201,
+      18688
+    ]
+  ],
+  "created_or_updated_at_utc": "2026-07-05T07:55:08Z",
+  "decision": {
+    "reason": "Even the updated current-head trace gives only about 1.2s zero-overhead saving, far below the ~17.39s required for 10 tok/s. The already-run strict-cold transient down-repack candidate regressed to 3.4 tok/s, so this path remains closed unless a new design avoids extra cold source scans/page churn.",
+    "sota_changed": false,
+    "strict_cold_benchmark_allowed": false,
+    "verdict": "rejected_current_head_bound_no_runtime_patch"
+  },
+  "harness_basis": {
+    "down": {
+      "k": 2048,
+      "repack_ms": 2.92,
+      "rows": 4096,
+      "speedup": 1.485
+    },
+    "up": {
+      "k": 4096,
+      "repack_ms": 3.951,
+      "rows": 2048,
+      "speedup": 1.418
+    }
+  },
+  "historical_strict_cold_evidence": {
+    "eval_tok_s": 3.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T105753Z-20260703T-transient-down-repack-probe/france-cpu40-vram0gb",
+    "verdict": "strict-cold regression; extra source scans/scratch traffic increased page-cache/refault pressure"
+  },
+  "remote_head": "b4e5702dea7e3178fbc734bf48a32800974ca3c1",
+  "source_head": "b4e5702dea7e3178fbc734bf48a32800974ca3c1",
+  "threads": 20,
+  "zero_overhead_bounds": {
+    "all_up_down_transient_repack": {
+      "decode_ms": 29845.28474613954,
+      "margin_to_10tok_ms": -16184.408193739542,
+      "net_saved_ms": 1202.1619638604577,
+      "tok_s": 4.577231099853058
+    },
+    "down_only_transient_repack": {
+      "decode_ms": 29821.64982218915,
+      "margin_to_10tok_ms": -16160.773269789152,
+      "net_saved_ms": 1225.796887810849,
+      "tok_s": 4.580858749885616
+    }
+  }
+}
