@@ -74909,3 +74909,111 @@ Decision:
 - Keep `571253450` revert.
 - Do not continue first-use overlay/coalescing under the current design.
 - Continue future optimization from the restored default path.
+
+## Phase 7MO - post-coalescing current-path bottleneck refresh
+
+Timestamp: 2026-07-06 21:50:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-establish the current bottleneck after closing these directions:
+  - broad/lower/higher VRAM split probes;
+  - first-use overlay and adjacent coalescing;
+  - Q4 broad/single/split/hit-only production;
+  - type18/IQ3 direct compute and parallelism probes;
+  - shared/combined H2D and up/gate IO scheduler variants.
+- Produce a measured next target before any new source edit.
+
+Why this is needed:
+
+- 7MN only proves rollback cleanliness; it does not split decode wall by
+  substage.
+- 7MK is the latest full current-path profile, but it predates the final
+  coalescing attempt/revert and should be refreshed before choosing another
+  source change.
+- The next optimization must not repeat already rejected families. It must be
+  justified by a currently measured bucket with a credible upper bound above
+  roughly `1 s` on n32.
+
+Experiment:
+
+- Run current default n32 with `MIN_PROFILE=0`.
+- This enables:
+  - CPU MoE eligibility/name/profile;
+  - fallback profile CSV;
+  - down-batch profile CSV;
+  - up-gate profile CSV;
+  - route profile and route trace.
+- No source changes and no extra experimental env.
+- This is diagnostic; endpoint timing may be slower than minimal-profile
+  production and cannot promote SOTA.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard be1e6c12c
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mo-current-full-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- no async coalesce activation.
+
+Analysis to record:
+
+- Metrics:
+  - TTFT;
+  - decode time/token rate;
+  - memory peak/current distribution.
+- CPU fallback:
+  - by phase/type;
+  - top decode Q4 fallback tensors.
+- Up/gate:
+  - aggregate wall/stage/wait/compute/fuse/D2H/scatter;
+  - by `(up_type, gate_type)`;
+  - whether type22 wait or type18 compute still dominates.
+- Down:
+  - down-batch wall/stage/kernel/D2H/scatter by type;
+  - current-down overlap counters.
+- IO/cache:
+  - expert-pack iouring wait/submit/inflight;
+  - down/upgate cache slots and hit rates.
+- Decision table:
+  - list every bucket above `1 s`;
+  - mark whether it is already closed by prior phases;
+  - select exactly one next candidate, or record that no credible source target
+    remains above the threshold.
+
+Decision rule:
+
+- If the largest remaining bucket is one of the already closed families, do not
+  implement another variant unless the profile reveals a new mechanism.
+- If a new bucket above `1 s` appears, write a separate implementation plan
+  before editing source.
+- If no credible bucket remains, stop local CUDA/IO guesses and move to a
+  broader algorithmic/model-format direction only after writing a new plan.
+
+Reproducibility:
+
+- Commit and push this diagnostic plan before running.
+- Record exact run directory, source commit, command, output text, all metrics,
+  generated CSV file list, aggregation commands, summaries, and next decision.
