@@ -1,0 +1,75 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-header-bound-after-admission.json",
+  "created_at_utc": "2026-07-05T18:13:30Z",
+  "source_head_before_artifact": "185339798c8b9b32805f6ebf3842a2d10c7152ea",
+  "decision": "admission_ready_but_empirical_alternate_gguf_test_disk_blocked",
+  "accepted_sota_unchanged": true,
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "source_admission_state": {
+    "q4k_stream_one_env": "GGML_MOE_STREAM_ONE_Q4K=1",
+    "q4k_stream_one_status": "present_default_off_guard_passed_no_sota",
+    "tid2eid_alias_env": "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1",
+    "tid2eid_alias_status": "present_default_off_guard_passed_no_sota",
+    "meaning": "Current source can attempt a full 4Expert load/test after disk is available, but the admission patches are not performance evidence."
+  },
+  "hard_bound_conclusion": {
+    "cloudyu_4expert": {
+      "priority": "first_empirical_target_after_disk_cleanup",
+      "remote_file": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+      "size_bytes": 164465760544,
+      "header_evidence": [
+        "general.architecture=deepseek4",
+        "deepseek4.expert_used_count=4",
+        "ffn_gate_tid2eid.weight dims [4,129280]",
+        "routed expert tensors use Q4_K"
+      ],
+      "bound": "Earlier 4Expert bound granted alias/Q4_K admission plus perfect source/page elimination and still reached only about 9.581 tok/s, roughly 597 ms short before integration overhead.",
+      "decision": "full_model_test_required_before_any_claim"
+    },
+    "0xsero_q2_reap": {
+      "size_bytes": 52593532000,
+      "header_status": "vendor-shaped deepseek4 but changed topology expert_count=144",
+      "bound": "Optimistic VRAM placement stays below 10 tok/s on the current 32GB GPU and requires about 39.5 GiB VRAM at zero reserve to reach 10.",
+      "decision": "download_only_after_cloudyu_or_if_disk_policy_prefers_smaller_changed_topology_test"
+    },
+    "bullerwins_iq2_s": {
+      "size_bytes": 88019539296,
+      "header_status": "native expert_count=256 and expert_used_count=6 with lower-bit expert tensors",
+      "decision": "requires_full_download_and_correctness_test; metadata_only_not_enough"
+    }
+  },
+  "disk_state": {
+    "root_free_gib_observed_recently": 1.86,
+    "full_download_blocked": true,
+    "delete_without_user_approval": false,
+    "required_free_space_gib": {
+      "0xsero_q2_reap_minimum": 60,
+      "lowbit_native_topology_minimum": 90,
+      "cloudyu_4expert_preferred": 180
+    }
+  },
+  "next_plan": [
+    "Push this plan/artifact update to ssd/vendor/deepseek-token-rate-16gb.",
+    "Do not make more runtime source changes from metadata-only evidence.",
+    "Request explicit disk cleanup or relocation approval before full alternate GGUF tests.",
+    "If disk is approved, test cloudyu 4Expert first with full hash/repro metadata, alias/Q4_K envs, strict 16GB no-swap, correctness gates, then strict cold France benchmark.",
+    "Promote only if eval_tok_s > 4.4, TTFT <= 33617.688744 ms, RAM/page cache <= 16GB, no OOM/swap, and France output is semantically correct and coherent.",
+    "On any compliant SOTA, immediately record full reproduction metadata, commit/push to ssd/vendor/deepseek-token-rate-16gb, and perform clean pushed-source reproduction."
+  ],
+  "push_target": {
+    "remote": "https://github.com/wici-ai/ssd-llama.git",
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "identity": "L-Ark <fliangae@connect.ust.hk>"
+  }
+}

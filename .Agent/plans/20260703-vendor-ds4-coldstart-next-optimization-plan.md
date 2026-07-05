@@ -4,6 +4,47 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Admission Ready, But Alternate GGUF Empirical Test Is Disk-Blocked
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT gate expert pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest planning artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-header-bound-after-admission.json`
+- Source head when written: `185339798c8b9b32805f6ebf3842a2d10c7152ea`
+- Purpose: consolidate the post-admission state after header-only GGUF parsing and confirm what is executable next.
+
+Current source/admission state:
+
+- `GGML_MOE_STREAM_ONE_Q4K=1` already exists as a default-off Q4_K stream-one admission gate in `ggml/src/ggml-cpu/ggml-cpu.c` and `ggml/src/ggml-cuda/moe_stream.cu`.
+- `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` already exists as a default-off DeepSeek4 loader alias for `blk.%d.ffn_gate_tid2eid.weight` in `src/llama-model.cpp`.
+- Default-off guards for both patches passed under strict 16GB/no-swap and did not promote a new SOTA. These patches only make a future full 4Expert load/test possible; they are not performance evidence by themselves.
+
+Latest hard-bound conclusion:
+
+- `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf` remains the highest-priority empirical target after disk cleanup. Header-only parsing proves it is `deepseek4`, uses `deepseek4.expert_used_count=4`, has `ffn_gate_tid2eid.weight` with dims `[4,129280]`, and is not equivalent to the failed native `--override-kv deepseek4.expert_used_count=int:4` run.
+- The older 4Expert hard-bound already granted the source-readiness fixes above plus perfect source/page elimination and still reached only about `9.581 tok/s`, roughly `597 ms` short of 10 before integration overhead. Therefore header metadata plus admission code is not enough to justify another runtime optimization patch or a SOTA claim.
+- Low-bit candidates remain unproven. `0xSero` Q2 REAP is header-loadable but changes topology to `expert_count=144`; its optimistic VRAM placement bound stays below 10 on the current 32GB GPU. `bullerwins` IQ2_S preserves native `expert_count=256` / `expert_used_count=6` but needs full download and correctness testing. Size-only low-bit bounds remain below 10.
+- No full model weights were downloaded for this update, and no runtime benchmark was run from metadata-only evidence.
+
+Updated next executable plan:
+
+1. Commit and push this plan/artifact update to `ssd/vendor/deepseek-token-rate-16gb` so the current decision point is reproducible from the remote branch.
+2. Freeze new runtime/source optimization work until one of two prerequisites is satisfied: either a new hard-bound artifact proves a route above `10 tok/s` with integration margin, or disk cleanup is explicitly approved so a full alternate GGUF can be tested.
+3. To make empirical progress, request explicit user approval for disk cleanup/relocation. Minimum useful targets: about `60GB` for the 0xSero Q2 REAP candidate, about `90-100GB` for low-bit native-topology GGUFs, and preferably `>=180GB` for cloudyu 4Expert GGUF plus hash/run artifacts.
+4. Preserve these assets before any cleanup: accepted native GGUF `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, accepted France gate pack `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, accepted SOTA run above, current source branch, profiles, and pushed-source reproduction artifacts. Do not delete files without explicit user approval.
+5. If disk is approved, test `cloudyu` 4Expert first. Required order: download full GGUF, record URL/path/size/SHA256, validate loader metadata with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` and `GGML_MOE_STREAM_ONE_Q4K=1`, confirm 16GB/no-swap accounting, run correctness gates, then run strict cold France only if correctness passes.
+6. Correctness remains mandatory before performance promotion. For same-model/default-off source changes, run fixed-text top1 and require `same_top1 == n_tokens`; for alternate model/quantization artifacts, record France output and the five-prompt semantic set before any SOTA claim. The France prompt must be semantically correct and coherent.
+7. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct France output.
+8. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+
 ### 2026-07-06 Latest Active Plan: Payload/Artifact Refresh Still Blocks Source, Need Disk Approval For Empirical Alternate Test
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
