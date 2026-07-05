@@ -64932,3 +64932,89 @@ Decision rule:
   gates pass.
 - If promoted, update the reproducible runner defaults and push immediately.
 - If rejected, keep both dense mmap drop defaults enabled.
+
+### 7KK result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kk-dense-retain-n32`.
+
+Source:
+
+- commit `91cbb734c2e7f95994582680c37f81b8e9d5624f`.
+- No runtime source changes.
+- Env override verified in `env.txt`:
+  - script default writes `LLAMA_DROP_DENSE_MMAP_CACHE=1`;
+  - script default writes `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`;
+  - later override writes `LLAMA_DROP_DENSE_MMAP_CACHE=0`;
+  - later override writes `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=0`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79332.86 ms`;
+- decode `23140.32 ms / 31`, `1.34 tok/s`;
+- memory peak `15899996160`;
+- memory final `15103987712`;
+- swap max `0`;
+- anon `454656`;
+- file `14865989632`;
+- kernel `234704896`;
+- inactive_file `5607354368`;
+- active_file `9257971712`;
+- `pgmajfault=956942`;
+- `pgfault=2886198`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- dense initial drop was disabled:
+  `load_tensors: dense parameters loaded...` appears, but no
+  `drop_mmap_dense_pages` dense dontneed line appears.
+- prompt-end expert drop remained enabled:
+  `drop_expert_mmap_pages_after_prompt: expert mmap dontneed after prompt bytes=374261.30 MiB ranges=180 failures=0`.
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring submit `49354 us`;
+- iouring wait `20466973 us`;
+- iouring batches `5178`, wait calls `18338`;
+- current-down overlap planned jobs `3673`, worker `3286671 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Comparison:
+
+- Current accepted script-default n32:
+  `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KK dense-retain n32:
+  `23140.32 ms / 31`, `1.34 tok/s`.
+- Dense retention is `472.93 ms` slower on n32.
+
+Interpretation:
+
+- Keeping dense mmap pages does not reduce enough decode refault pressure to
+  beat the current SOTA.
+- The run remains at the cgroup cap and still has high major faults
+  (`956942`), so dense retention is not solving the cold-start page-cache
+  pressure.
+- iouring wait remains high (`20.47 s`), and expert movement counters are
+  unchanged, so dense page retention does not attack the current movement
+  bottleneck.
+
+Decision:
+
+- Reject dense mmap retention.
+- Do not run n96.
+- Keep both dense mmap drop defaults enabled:
+  - `LLAMA_DROP_DENSE_MMAP_CACHE=1`;
+  - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`.
+- Do not revisit dense retention without a decode-only page-fault trace proving
+  dense pages are on the critical path.
