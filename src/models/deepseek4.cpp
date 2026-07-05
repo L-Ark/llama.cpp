@@ -4,6 +4,7 @@
 #include "llama-memory-deepseek4.h"
 #include "../llama-deepseek4-hot.h"
 #include "ggml-backend.h"
+#include "../../vendor/nlohmann/json.hpp"
 
 #include <algorithm>
 #include <cinttypes>
@@ -11,9 +12,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <mutex>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -276,6 +280,256 @@ static void deepseek4_sparse_retained_graph_probe_write(
         (unsigned long long) rectangular_updown_bytes,
         (unsigned long long) combine_bytes_call,
         compact_candidate ? 1 : 0);
+    std::fflush(fp);
+}
+
+struct deepseek4_sparse_fused_mmvq_layer_profile {
+    int pairs = 0;
+    double hot_ms = 0.0;
+    int64_t fused_calls = 0;
+};
+
+struct deepseek4_sparse_fused_mmvq_probe_state {
+    std::mutex mutex;
+    FILE * fp = nullptr;
+    bool fp_attempted = false;
+    bool load_attempted = false;
+    bool profile_loaded = false;
+    uint64_t seq = 0;
+    std::string profile_path;
+    int top_n = 0;
+    uint64_t profile_payload_bytes = 0;
+    int profile_active_layers = 0;
+    int profile_max_pairs_per_layer = 0;
+    std::vector<deepseek4_sparse_fused_mmvq_layer_profile> layers;
+};
+
+static deepseek4_sparse_fused_mmvq_probe_state & deepseek4_sparse_fused_mmvq_probe() {
+    static deepseek4_sparse_fused_mmvq_probe_state state;
+    return state;
+}
+
+static bool deepseek4_sparse_fused_mmvq_probe_enabled() {
+    static const bool enabled = []() {
+        const char * value = std::getenv("DS4_SPARSE_FUSED_MMVQ_PROBE");
+        return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+static const char * deepseek4_sparse_fused_mmvq_probe_mode() {
+    const char * mode = std::getenv("DS4_SPARSE_FUSED_MMVQ_MODE");
+    return (mode && mode[0]) ? mode : "placement";
+}
+
+static const char * deepseek4_sparse_fused_mmvq_probe_out_path() {
+    const char * path = std::getenv("DS4_SPARSE_FUSED_MMVQ_PROBE_OUT");
+    if (path == nullptr || path[0] == '\0' || std::strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+    return path;
+}
+
+static void deepseek4_sparse_fused_mmvq_load_profile_locked() {
+    auto & state = deepseek4_sparse_fused_mmvq_probe();
+    if (state.load_attempted) {
+        return;
+    }
+    state.load_attempted = true;
+
+    const char * path = std::getenv("DS4_SPARSE_FUSED_MMVQ_PROFILE");
+    if (path == nullptr || path[0] == '\0') {
+        std::fprintf(stderr, "deepseek4_sparse_fused_mmvq_probe: DS4_SPARSE_FUSED_MMVQ_PROFILE is unset\n");
+        return;
+    }
+    state.profile_path = path;
+
+    try {
+        std::ifstream f(path);
+        if (!f.good()) {
+            std::fprintf(stderr, "deepseek4_sparse_fused_mmvq_probe: failed to open profile %s\n", path);
+            return;
+        }
+        nlohmann::json j;
+        f >> j;
+
+        state.top_n = j.value("top_n", 0);
+        state.profile_payload_bytes = j.value("payload_bytes", (uint64_t) 0);
+        state.profile_active_layers = j.value("active_layers", 0);
+        state.profile_max_pairs_per_layer = j.value("max_pairs_per_layer", 0);
+
+        const auto & pairs = j.at("pairs");
+        for (const auto & p : pairs) {
+            const int layer = p.value("layer", -1);
+            if (layer < 0) {
+                continue;
+            }
+            if ((size_t) layer >= state.layers.size()) {
+                state.layers.resize((size_t) layer + 1);
+            }
+            auto & lp = state.layers[(size_t) layer];
+            lp.pairs += 1;
+            lp.hot_ms += p.value("hot_ms", 0.0);
+            lp.fused_calls += p.value("fused_calls", (int64_t) 0);
+        }
+        state.profile_loaded = true;
+        std::fprintf(stderr,
+            "deepseek4_sparse_fused_mmvq_probe: loaded profile %s top_n=%d payload_bytes=%llu active_layers=%d\n",
+            path, state.top_n, (unsigned long long) state.profile_payload_bytes, state.profile_active_layers);
+    } catch (const std::exception & e) {
+        std::fprintf(stderr, "deepseek4_sparse_fused_mmvq_probe: failed to parse profile %s: %s\n", path, e.what());
+    }
+}
+
+static FILE * deepseek4_sparse_fused_mmvq_probe_fp_locked() {
+    auto & state = deepseek4_sparse_fused_mmvq_probe();
+    if (state.fp != nullptr) {
+        return state.fp;
+    }
+    if (state.fp_attempted) {
+        return nullptr;
+    }
+    state.fp_attempted = true;
+
+    const char * path = deepseek4_sparse_fused_mmvq_probe_out_path();
+    if (path == nullptr) {
+        return nullptr;
+    }
+
+    state.fp = std::fopen(path, "w");
+    if (state.fp == nullptr) {
+        std::fprintf(stderr, "deepseek4_sparse_fused_mmvq_probe: failed to open %s\n", path);
+        return nullptr;
+    }
+
+    std::fprintf(state.fp,
+        "seq,mode,profile_path,profile_loaded,profile_top_n,profile_payload_bytes,profile_active_layers,profile_max_pairs_per_layer,"
+        "il,mix_tokens,n_embd,selected_ne0,selected_ne1,cur_buft,cur_experts_buft,selected_buft,weights_buft,"
+        "full_gate_up_buft,full_gate_buft,full_up_buft,full_down_buft,full_gate_up_type,full_gate_type,full_up_type,full_down_type,"
+        "full_gate_up_expert_bytes,full_gate_expert_bytes,full_up_expert_bytes,full_down_expert_bytes,"
+        "layer_profile_pairs,layer_profile_hot_ms,layer_profile_fused_calls,compact_updown_bytes_layer,compact_gate_updown_bytes_layer,"
+        "hot_active,hot_ready,hot_k,hot_n_picks,hot_dispatch_enabled,dispatch_dual,"
+        "existing_hot_rectangular_entries,existing_hot_rectangular_updown_bytes_layer,existing_hot_rectangular_gate_updown_bytes_layer,"
+        "selected_values_available_at_graph_build,graph_gate_output_input_available,probe_writes_logits,probe_clears_cpu_fallback_counts,"
+        "requires_runtime_membership_probe,next_compare_allowed,placement_compact_candidate\n");
+    std::fflush(state.fp);
+    return state.fp;
+}
+
+static void deepseek4_sparse_fused_mmvq_probe_write(
+        int il,
+        int64_t mix_tokens,
+        int64_t n_embd,
+        const ggml_tensor * cur_ffn,
+        const ggml_tensor * cur_experts_in,
+        const ggml_tensor * selected_experts,
+        const ggml_tensor * weights,
+        const ggml_tensor * full_gate_up,
+        const ggml_tensor * full_gate,
+        const ggml_tensor * full_up,
+        const ggml_tensor * full_down,
+        const ds4_hot::layer_hot_state * hot,
+        bool hot_dispatch_enabled,
+        bool dispatch_dual) {
+    if (!deepseek4_sparse_fused_mmvq_probe_enabled()) {
+        return;
+    }
+
+    auto & state = deepseek4_sparse_fused_mmvq_probe();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    deepseek4_sparse_fused_mmvq_load_profile_locked();
+    FILE * fp = deepseek4_sparse_fused_mmvq_probe_fp_locked();
+    if (fp == nullptr) {
+        return;
+    }
+
+    const auto empty_layer = deepseek4_sparse_fused_mmvq_layer_profile{};
+    const auto & lp = (il >= 0 && (size_t) il < state.layers.size()) ? state.layers[(size_t) il] : empty_layer;
+    const int64_t selected_ne0 = selected_experts ? selected_experts->ne[0] : -1;
+    const int64_t selected_ne1 = selected_experts ? selected_experts->ne[1] : -1;
+    const bool hot_active = hot != nullptr;
+    const bool hot_ready = hot && hot->ready_for_dispatch();
+    const int64_t hot_k = hot ? hot->k : 0;
+    const int64_t hot_n_picks = hot ? hot->n_picks : 0;
+
+    const uint64_t gate_up_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_gate_up);
+    const uint64_t gate_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_gate);
+    const uint64_t up_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_up);
+    const uint64_t down_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_down);
+    const uint64_t gate_updown_expert_bytes =
+        (gate_up_expert_bytes > 0 ? gate_up_expert_bytes : gate_expert_bytes + up_expert_bytes) + down_expert_bytes;
+    const uint64_t compact_updown_bytes = (uint64_t) lp.pairs * (up_expert_bytes + down_expert_bytes);
+    const uint64_t compact_gate_updown_bytes = (uint64_t) lp.pairs * gate_updown_expert_bytes;
+    const uint64_t rectangular_entries = hot_ready ? (uint64_t) (hot_k + hot_n_picks + 1) : 0;
+    const uint64_t rectangular_updown_bytes = rectangular_entries * (up_expert_bytes + down_expert_bytes);
+    const uint64_t rectangular_gate_updown_bytes = rectangular_entries * gate_updown_expert_bytes;
+
+    const bool selected_values_available_at_graph_build = false;
+    const bool graph_gate_output_input_available = false;
+    const bool probe_writes_logits = false;
+    const bool probe_clears_cpu_fallback_counts = false;
+    const bool requires_runtime_membership_probe = lp.pairs > 0;
+    const bool next_compare_allowed =
+        state.profile_loaded && lp.pairs > 0 && compact_updown_bytes > 0 && !dispatch_dual;
+    const bool placement_compact_candidate =
+        state.profile_loaded && lp.pairs > 0 && selected_ne0 > 0 && selected_ne1 > 0 && down_expert_bytes > 0;
+
+    std::fprintf(fp,
+        "%llu,%s,%s,%d,%d,%llu,%d,%d,"
+        "%d,%lld,%lld,%lld,%lld,%s,%s,%s,%s,"
+        "%s,%s,%s,%s,%s,%s,%s,%s,"
+        "%llu,%llu,%llu,%llu,%d,%.6f,%lld,%llu,%llu,"
+        "%d,%d,%lld,%lld,%d,%d,%llu,%llu,%llu,%d,%d,%d,%d,%d,%d,%d\n",
+        (unsigned long long) state.seq++,
+        deepseek4_sparse_fused_mmvq_probe_mode(),
+        state.profile_path.c_str(),
+        state.profile_loaded ? 1 : 0,
+        state.top_n,
+        (unsigned long long) state.profile_payload_bytes,
+        state.profile_active_layers,
+        state.profile_max_pairs_per_layer,
+        il,
+        (long long) mix_tokens,
+        (long long) n_embd,
+        (long long) selected_ne0,
+        (long long) selected_ne1,
+        deepseek4_tensor_buft_name(cur_ffn),
+        deepseek4_tensor_buft_name(cur_experts_in),
+        deepseek4_tensor_buft_name(selected_experts),
+        deepseek4_tensor_buft_name(weights),
+        deepseek4_tensor_buft_name(full_gate_up),
+        deepseek4_tensor_buft_name(full_gate),
+        deepseek4_tensor_buft_name(full_up),
+        deepseek4_tensor_buft_name(full_down),
+        deepseek4_tensor_type_name(full_gate_up),
+        deepseek4_tensor_type_name(full_gate),
+        deepseek4_tensor_type_name(full_up),
+        deepseek4_tensor_type_name(full_down),
+        (unsigned long long) gate_up_expert_bytes,
+        (unsigned long long) gate_expert_bytes,
+        (unsigned long long) up_expert_bytes,
+        (unsigned long long) down_expert_bytes,
+        lp.pairs,
+        lp.hot_ms,
+        (long long) lp.fused_calls,
+        (unsigned long long) compact_updown_bytes,
+        (unsigned long long) compact_gate_updown_bytes,
+        hot_active ? 1 : 0,
+        hot_ready ? 1 : 0,
+        (long long) hot_k,
+        (long long) hot_n_picks,
+        hot_dispatch_enabled ? 1 : 0,
+        dispatch_dual ? 1 : 0,
+        (unsigned long long) rectangular_entries,
+        (unsigned long long) rectangular_updown_bytes,
+        (unsigned long long) rectangular_gate_updown_bytes,
+        selected_values_available_at_graph_build ? 1 : 0,
+        graph_gate_output_input_available ? 1 : 0,
+        probe_writes_logits ? 1 : 0,
+        probe_clears_cpu_fallback_counts ? 1 : 0,
+        requires_runtime_membership_probe ? 1 : 0,
+        next_compare_allowed ? 1 : 0,
+        placement_compact_candidate ? 1 : 0);
     std::fflush(fp);
 }
 
@@ -744,6 +998,10 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
                                    && hot_dispatch_env
                                    && selected_experts->ne[0] == hot->n_picks;
         deepseek4_sparse_retained_graph_probe_write(
+            il, mix_tokens, n_embd, cur_ffn, cur_experts_in, selected_experts, weights,
+            layer.ffn_gate_up_exps, layer.ffn_gate_exps, layer.ffn_up_exps, layer.ffn_down_exps,
+            hot, hot_dispatch_env, dispatch_dual);
+        deepseek4_sparse_fused_mmvq_probe_write(
             il, mix_tokens, n_embd, cur_ffn, cur_experts_in, selected_experts, weights,
             layer.ffn_gate_up_exps, layer.ffn_gate_exps, layer.ffn_up_exps, layer.ffn_down_exps,
             hot, hot_dispatch_env, dispatch_dual);

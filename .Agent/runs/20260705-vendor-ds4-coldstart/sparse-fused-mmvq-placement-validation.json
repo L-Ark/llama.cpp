@@ -1,0 +1,181 @@
+{
+  "artifact": "sparse-fused-mmvq-placement-validation-summary",
+  "build": {
+    "binary_hashes_sha256": {
+      "llama_cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+      "llama_results": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10"
+    },
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8"
+  },
+  "csv": "/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation/probe/sparse-fused-placement.csv",
+  "csv_rows": 6579,
+  "csv_sha256": "b179a2132d17ae8648fa4c4ce8110c11c3438d2baccec128b61d1b453f964ec5",
+  "decision": {
+    "defaultoff_top1_passed": true,
+    "next_step": "Implement compare-only runtime membership/MMVQ probe only after this placement artifact is committed; no logit-writing path yet.",
+    "placement_probe_clears_cpu_fallback_counts": false,
+    "placement_probe_writes_logits": false,
+    "probe_top1_passed": true,
+    "strict_cold_benchmark_allowed": false
+  },
+  "defaultoff_top1": {
+    "baseline_top1_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation/defaultoff",
+    "check_n_tokens": 145,
+    "check_top1_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "exit_status": 0,
+    "first_mismatch_pos": -1,
+    "memory_events": "low 0\nhigh 0\nmax 16842\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_file_bytes": 15048638464,
+    "memory_peak_bytes": 16000000000,
+    "mode": "defaultoff",
+    "n_tokens": 145,
+    "placement_csv_exists": false,
+    "placement_csv_lines": 0,
+    "same_top1": 145,
+    "status": "pass"
+  },
+  "graph_gate_output_input_available_values": {
+    "0": 6579
+  },
+  "layers_preview": {
+    "11": {
+      "compact_gate_updown_bytes_layer": 13369344,
+      "compact_updown_bytes_layer": 8912896,
+      "fused_calls": 93,
+      "hot_ms": 15.297,
+      "pairs": 1,
+      "rows": 153
+    },
+    "12": {
+      "compact_gate_updown_bytes_layer": 26738688,
+      "compact_updown_bytes_layer": 17825792,
+      "fused_calls": 150,
+      "hot_ms": 25.453,
+      "pairs": 2,
+      "rows": 153
+    },
+    "13": {
+      "compact_gate_updown_bytes_layer": 26738688,
+      "compact_updown_bytes_layer": 17825792,
+      "fused_calls": 187,
+      "hot_ms": 30.896,
+      "pairs": 2,
+      "rows": 153
+    },
+    "14": {
+      "compact_gate_updown_bytes_layer": 13369344,
+      "compact_updown_bytes_layer": 8912896,
+      "fused_calls": 88,
+      "hot_ms": 14.337,
+      "pairs": 1,
+      "rows": 153
+    },
+    "3": {
+      "compact_gate_updown_bytes_layer": 13369344,
+      "compact_updown_bytes_layer": 8912896,
+      "fused_calls": 101,
+      "hot_ms": 17.355,
+      "pairs": 1,
+      "rows": 153
+    },
+    "4": {
+      "compact_gate_updown_bytes_layer": 13369344,
+      "compact_updown_bytes_layer": 8912896,
+      "fused_calls": 59,
+      "hot_ms": 10.628,
+      "pairs": 1,
+      "rows": 153
+    },
+    "5": {
+      "compact_gate_updown_bytes_layer": 13369344,
+      "compact_updown_bytes_layer": 8912896,
+      "fused_calls": 80,
+      "hot_ms": 14.27,
+      "pairs": 1,
+      "rows": 153
+    },
+    "6": {
+      "compact_gate_updown_bytes_layer": 26738688,
+      "compact_updown_bytes_layer": 17825792,
+      "fused_calls": 140,
+      "hot_ms": 23.379,
+      "pairs": 2,
+      "rows": 153
+    },
+    "7": {
+      "compact_gate_updown_bytes_layer": 26738688,
+      "compact_updown_bytes_layer": 17825792,
+      "fused_calls": 151,
+      "hot_ms": 25.695,
+      "pairs": 2,
+      "rows": 153
+    },
+    "8": {
+      "compact_gate_updown_bytes_layer": 26738688,
+      "compact_updown_bytes_layer": 17825792,
+      "fused_calls": 163,
+      "hot_ms": 27.658,
+      "pairs": 2,
+      "rows": 153
+    }
+  },
+  "max_compact_gate_updown_bytes_layer": 40108032,
+  "max_compact_updown_bytes_layer": 26738688,
+  "max_layer_pairs": 3,
+  "next_compare_allowed_values": {
+    "0": 1683,
+    "1": 4896
+  },
+  "placement_compact_candidate_values": {
+    "0": 1683,
+    "1": 4896
+  },
+  "probe_clears_cpu_fallback_counts_values": {
+    "0": 6579
+  },
+  "probe_top1": {
+    "baseline_top1_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation/probe",
+    "check_n_tokens": 145,
+    "check_top1_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "exit_status": 0,
+    "first_mismatch_pos": -1,
+    "memory_events": "low 0\nhigh 0\nmax 17884\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_file_bytes": 15037902848,
+    "memory_peak_bytes": 16000000000,
+    "mode": "probe",
+    "n_tokens": 145,
+    "placement_csv_exists": true,
+    "placement_csv_lines": 6580,
+    "same_top1": 145,
+    "status": "pass"
+  },
+  "probe_writes_logits_values": {
+    "0": 6579
+  },
+  "profile_layers_seen": 32,
+  "profile_loaded_values": {
+    "1": 6579
+  },
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation",
+  "selected_values_available_at_graph_build_values": {
+    "0": 6579
+  },
+  "source": {
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head_before_commit": "ca853386e8a9eeea091222432b11710e6419e47e",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "M src/models/deepseek4.cpp\n?? .Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-placement-validation.json"
+  },
+  "source_head": "ca853386e plus local default-off placement skeleton",
+  "total_profile_pairs_from_unique_layers": 48,
+  "validation_gates": {
+    "defaultoff_fixed_text_top1": "pass same_top1=145/145 first_mismatch=-1",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "probe_clears_cpu_fallback_counts": false,
+    "probe_fixed_text_top1": "pass same_top1=145/145 first_mismatch=-1",
+    "probe_writes_logits": false
+  }
+}

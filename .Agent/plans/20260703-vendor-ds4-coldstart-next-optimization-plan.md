@@ -4,6 +4,47 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Sparse Fused MMVQ Placement Validated, Next Compare-Only Probe
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Accepted SOTA metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted SOTA config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, accepted O_DIRECT gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all source/artifact updates remains `ssd` remote, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Current source/proof state:
+
+- Implemented a default-off compact sparse fused MMVQ placement/proof skeleton in `src/models/deepseek4.cpp`, gated by `DS4_SPARSE_FUSED_MMVQ_PROBE=1`.
+- The probe loads `DS4_SPARSE_FUSED_MMVQ_PROFILE`, defaults to `DS4_SPARSE_FUSED_MMVQ_MODE=placement`, and writes placement rows to `DS4_SPARSE_FUSED_MMVQ_PROBE_OUT`.
+- The placement probe records selected tensor availability, tensor backend/type, per-expert bytes, compact up/down and gate/up/down bytes, current hot-dispatch shape, rectangular payload comparison, and whether the next compare step is allowed.
+- It intentionally does not write logits, does not clear CPU fallback counts, does not skip CPU fallback, and does not change model outputs. It is proof/diagnostic code only, not a token-rate optimization path.
+- Build command passed: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8`.
+- Binary hashes from the validation artifact: `llama-cli=c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62`, `llama-results=1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10`.
+
+Placement validation result:
+
+- Validation artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-placement-validation.json`
+- Validation run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation`
+- Default-off fixed-text top1 gate: pass, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15048638464`, no OOM/swap, no placement CSV emitted.
+- Probe-enabled fixed-text top1 gate: pass, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15037902848`, no OOM/swap.
+- Probe CSV: `/root/lfz/runs/vendor-ds4-16gb/20260705T170219Z-sparse-fused-mmvq-placement-validation/probe/sparse-fused-placement.csv`, `6579` data rows, SHA256 `b179a2132d17ae8648fa4c4ce8110c11c3438d2baccec128b61d1b453f964ec5`.
+- Profile coverage observed in placement rows: `32` profile layers, `48` total up/down pairs, max `3` pairs/layer, max compact up/down payload per layer `26738688` bytes, max compact gate/up/down payload per layer `40108032` bytes.
+- Safety fields: `probe_writes_logits=0` for all rows, `probe_clears_cpu_fallback_counts=0` for all rows, `graph_gate_output_input_available=0` for all rows, `selected_values_available_at_graph_build=0` for all rows.
+- Next compare eligibility: `next_compare_allowed=1` for `4896` rows and `0` for `1683` rows. This means runtime membership/dataflow still needs to be implemented and measured before any logit-changing path can be considered.
+- Decision: strict cold benchmark is not allowed from this patch because it cannot improve token rate by design. The result only proves the default-off placement/dataflow skeleton is safe enough to commit and use for the next compare-only probe.
+
+Updated next executable plan:
+
+1. Commit and push the current default-off placement skeleton, validation artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb` before further source changes. This preserves the exact code/proof state for future rollback and reproduction.
+2. Implement only a compare-only runtime membership/MMVQ probe next. It may compute compact sparse fused MMVQ side results and measure H2D/D2H/kernel/scatter/sync cost, but it must not write logits, must not clear CPU fallback counts, and must not skip the exact CPU fallback path.
+3. Run the compare-only probe first with fixed-text `llama-results` under strict 16GB/no-swap cgroup. Required gate: top1 remains identical to baseline, cgroup `memory.peak <= 16000000000`, file page cache recorded, no OOM/swap, and complete compare telemetry recorded.
+4. Use the refreshed hard-bound budget as the go/no-go rule. The current corrected paper bound for top48 is about `10.692 tok/s` with only `877.726 ms` margin after selected gate-output H2D correction. If measured compare overhead, missing coverage, sync/scatter cost, or page-cache pressure consumes that margin, reject and roll back the runtime route.
+5. Only if compare-only passes the budget and correctness gates, design a separate logit-changing/write-or-skip path. That later path must pass fixed-text top1 before any strict cold France generation benchmark.
+6. Only after fixed-text top1 passes may a strict cold France run be considered for SOTA. Promotion still requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a semantically correct/coherent France answer.
+7. When a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`; then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hashes, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+8. The full 4Expert/alternate-artifact route remains blocked by disk until the user explicitly approves deletion or relocation of large non-SOTA assets. Do not delete files without explicit approval.
+
 ### 2026-07-06 Latest Plan: Close Unsafe KEEP_TOPK Value2, Return To Exact Up/Down
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe、不可复现单次结果、或非 vendor 结果提升为 SOTA。
