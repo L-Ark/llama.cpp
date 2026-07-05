@@ -76540,3 +76540,127 @@ Decision:
 - The next candidate must target the remaining expert-pack movement/wait
   without repeating already rejected broad cache split, pack layout, adjacent
   coalescing, or FP4 conversion directions.
+
+## Phase 7MV - io_uring fixed-buffer expert-pack reads
+
+Timestamp: 2026-07-05 21:20:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test one remaining low-level expert-pack movement mechanism that is distinct
+  from the rejected cache split, prefetch, pack-layout, span/coalescing, and FP4
+  directions.
+- Keep the same per-expert O_DIRECT read granularity and CUDA H2D streaming
+  shape, but register the pinned staging slots with `io_uring` and submit
+  `read_fixed` requests.
+
+Why this is not a repeat of closed work:
+
+- 7MM rejected adjacent/span coalescing because larger reads lowered inflight
+  and introduced span-slot waits.
+- 7CI/7IT/7IU rejected host/trace prefetch because useful hit rate or endpoint
+  behavior did not pass.
+- 7KY/7LE/7LX rejected broad IO depth/refill/shared scheduling variants.
+- Fixed buffers do not change:
+  - expert selection;
+  - cache admission/split;
+  - read order or read size;
+  - H2D enqueue granularity;
+  - math or output.
+- The only intended change is lower per-read kernel setup overhead for O_DIRECT
+  into already pinned CUDA host slots.
+
+Theory and upper bound:
+
+- 7MU n96 baseline:
+  - decode `56696.97 ms / 77`, `1.36 tok/s`;
+  - expert-pack iouring wait `50085670 us`;
+  - iouring submit `130362 us`;
+  - reads `56535`, bytes `315379728384`;
+  - inflight avg `3.39`.
+- Because `submit_us` is only about `0.13 s`, fixed buffers cannot help by
+  submit-time reduction alone.
+- A valid gain would have to come from lower per-read O_DIRECT buffer
+  validation/pinning or lower kernel wait inside the `iouring_wait_us` bucket.
+- Hard optimistic n96 upper bound if fixed buffers remove 5% of iouring wait:
+  `77 / (56.697 - 2.504) = 1.42 tok/s`.
+- Realistic expected upside is smaller, roughly `0.1-0.6 s` on n32 or
+  `0.3-1.5 s` on n96. Anything larger must be confirmed by repeat runs and
+  supporting counters.
+
+Implementation:
+
+- Add a default-off env flag:
+  `GGML_MOE_IO_REGISTER_BUFFERS=1`.
+- In `expert_pack_iouring_copy_jobs()`:
+  - after pinned staging slots exist and the ring exists, register each
+    `pinned_stage_slot.host` buffer as an `iovec` with the slot size;
+  - use `io_uring_prep_read_fixed()` for jobs whose slot index is registered;
+  - fall back to existing `io_uring_prep_read()` if registration fails;
+  - unregister buffers when the ring is rebuilt or released.
+- Add stderr counters:
+  - activation line;
+  - register attempts/success/failures;
+  - fixed-read submissions.
+- Keep default behavior unchanged when the env is absent or `0`.
+
+Experiment A: strict n32 activation and performance gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <source-commit>
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mv-iouring-fixedbuf-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_IO_REGISTER_BUFFERS=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- plan committed and pushed before source edit;
+- source committed and pushed before running;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160` including page cache and pinned buffers;
+- swap max `0`;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- quality `pass`;
+- manual semantic pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr proves activation or records fixed-buffer registration rejection.
+
+Decision rule:
+
+- If registration does not activate, record the kernel/liburing failure and
+  keep the default path.
+- If n32 is slower than the current clean default band or quality/memory/TTFT
+  gates fail, revert the source commit and record rejection.
+- If n32 improves with supporting counters:
+  - lower `iouring_wait_us` or higher effective throughput without lower
+    inflight;
+  - nonzero fixed-read submissions;
+  - no increased H2D waits or cgroup memory pressure;
+  then run one repeat n32.
+- Only after repeat n32 passes, run n96 before any SOTA promotion.
+- If n96 does not beat 7MU/7LZ (`~1.36 tok/s`) with compliant output, do not
+  promote.
+
+Reproducibility:
+
+- Record source commit, build command, exact env, run directory, answer,
+  metrics, memory files, fixed-buffer counters, and decision.
+- Accepted improvement must be committed and pushed immediately with the exact
+  reproduction command.
+- Rejected source must be reverted and pushed immediately.
