@@ -3568,3 +3568,62 @@
 - `counters`: both runs reported one expert pack `hits=4623 misses=0 reads=4623 bytes=20602159104 failures=0 entries=4599 direct_enabled=1 direct_reads=4623 direct_failures=0 direct_fallbacks=0`; VRAM cache `hits=30528 misses=4623 hit_rate=86.8%` and `3192` slots (`13.2GiB`).
 - `answer`: both runs produced the same semantic and coherent France paragraph: France/French Republic in Western Europe, history/culture/global influence, landmarks including Eiffel Tower/Louvre/Versailles, cuisine/wine/fashion/art/science, EU membership, economy, and modern vitality.
 - `decision`: These two fresh strict cold reproductions pass RAM, page-cache accounting, TTFT, O_DIRECT pack, VRAM cache, and correctness requirements, but they reproduce `4.1 tok/s`, not the historical single-run `4.2 tok/s`. Treat `4.2 tok/s` as historical highest observed/current accepted record only when citing its original run; for immediately repeatable evidence from this check, use `4.1 tok/s` as the reproduced strict-cold line.
+
+### 当前计划更新：20260705-sota44-4expert-q4k-coldstart
+
+- `status`: active_plan_disk_blocked_for_full_4expert_validation
+- `time`: `2026-07-05T14:05Z`
+- `repo`: `/root/lfz/vendor/llama.cpp-deepseek-v4`
+- `working_branch`: `feat/ds4-moe-stream-on-vendor`
+- `push_target`: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- `required_git_identity`: `L-Ark <fliangae@connect.ust.hk>`
+- `source_head_before_this_plan_update`: `e3779ed5a` (`vendor-ds4: reject sparse 4expert validation`), already pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+#### 当前有效 SOTA 和硬性门槛
+
+- `accepted_sota`: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, strict cold, vendor framework, 16GB cgroup including page cache, France correctness pass.
+- `accepted_sota_guard_run`: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`.
+- `accepted_sota_guard_metrics`: `TTFT=32087.738292ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- `pushed_source_repro_run`: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`.
+- `accepted_model`: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, `156148189760 bytes` (`145.42 GiB`).
+- `accepted_gate_pack`: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, sha-sensitive SOTA asset, `20495904768 bytes`.
+- `accepted_config`: `cpu_moe=40`, `--vram-cache-gb 0`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_CUDA_DISABLE_GRAPHS=1`, strict `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`.
+- `ttft_promotion_gate`: `<=33617.688744ms`. Runs above this can be committed only as `not_accepted` diagnostics and must not replace the accepted SOTA until TTFT is brought back under the gate.
+- `new_sota_rule`: A new accepted SOTA must beat `4.4 tok/s`, pass France semantic/coherent correctness, pass strict 16GB host RAM including page cache, have no OOM/swap, keep TTFT within the gate, record all metrics and exact reproduction inputs, then immediately commit and push source plus records to `ssd/vendor/deepseek-token-rate-16gb`.
+- `repro_rule`: After any SOTA promotion, rerun from the pushed commit and record the pushed-source reproduction path, binary/model/pack/profile hashes, cgroup memory evidence, exact env/CLI, answer text, and counters. Future rollback must be able to reproduce the metric from the committed record.
+
+#### 2026-07-05 已完成但未提升 SOTA 的工作
+
+- `q4k_microprobe`: Fixed the standalone Q4_K dot harness by calling `ggml_cpu_init()`. Valid microprobe reaches `116.115 GiB/s` up/gate-like and `115.044 GiB/s` down-like at 32 threads, above the `91.978 GiB/s` hard reopen gate. This is only a microprobe, not a model SOTA. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q4k-top4-combo-microprobe-result.json`.
+- `q4k_stream_one_admission`: Added default-off env `GGML_MOE_STREAM_ONE_Q4K=1` so Q4_K is eligible only for stream-one admission and only when the env/name filter allow it. Generic stream support, down-batch, and up-gate batch behavior were not broadened. Default-off guard passed on repeat and did not change SOTA. Commit: `666713548`; artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-q4k-defaultoff-admission-validation.json`.
+- `deepseek4_tid2eid_alias`: Added default-off env `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` to try `blk.%d.ffn_gate_tid2eid.weight` only if the original DeepSeek4 `tid2eid` name is absent. Default-off guard passed and did not change SOTA. Commit: `be6cc73ea`; artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-tid2eid-alias-defaultoff-validation.json`.
+- `4expert_header_probe`: Downloaded only the first `64MiB` of cloudyu 4Expert GGUF for metadata. Header shows `architecture=deepseek4`, `block_count=43`, `expert_count=256`, `expert_used_count=4`, type counts include `Q4_K=129`, and `tid2eid` tensors use `.weight` names. Full model was not downloaded. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-header-alias-probe-and-plan.json`.
+- `4expert_manifest_tool`: Added `.Agent/run-tools/create_gguf_header_expert_manifest.py` and produced a header-derived direct manifest with `33024` expert rows, `129` Q4_K expert tensors, per expert slice size `4718592 bytes`, and payload `155826782208 bytes`. Commit: `ccd385c95`; artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-q4k-header-manifest-summary.json`.
+- `sparse_validation_rejection`: Rejected sparse/header-only 4Expert validation. A sparse logical `164.5GB` file made from the header would map missing tensors as zeros, so correctness, TTFT, token rate, and page-cache behavior would all be invalid. Commit: `e3779ed5a`; artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-sparse-alias-validation-rejection.json`.
+
+#### 当前瓶颈判断
+
+- Current native SOTA still spends most of cold-start time on model page faults, gate expert movement/cache, and CPU fallback for non-cached expert work. Prior down-pack and down-batch attempts either regressed token rate or destabilized page-cache behavior under the 16GB cgroup.
+- CUDA graph is disabled in the accepted path (`GGML_CUDA_DISABLE_GRAPHS=1`). A graph experiment has not been promoted; it must be tested only behind the same correctness/RAM/TTFT gates and must not overwrite the SOTA unless it beats `4.4 tok/s`.
+- The 4Expert/Q4_K route is the current highest-priority route because the header and Q4_K microprobe show a plausible way to reduce CPU/expert movement cost, but no correctness or token-rate claim is valid until the complete real GGUF is available.
+
+#### 当前阻塞：完整 4Expert GGUF 需要磁盘空间
+
+- `root_fs`: `/dev/root`, ext4, `993G` total, `991G` used, `1.8G` available, `100%`.
+- `candidate_4expert_url`: `https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf`.
+- `candidate_4expert_expected_size_bytes`: `164465760544`.
+- `minimum_practical_free_space`: `>=180G` before attempting full download or real mmap/load validation.
+- `protected_assets_do_not_delete`: accepted native GGUF, accepted SOTA gate pack, accepted SOTA run directories, pushed-source reproduction run directories.
+- `space_candidates_requiring_explicit_approval`: `/root/lfz/models/GLM-5.2-UD-IQ3_XXS` (`263G`, unrelated to current vendor DS4 SOTA), `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` (`147174760448 bytes`, not used by accepted env but adjacent to DeepSeek assets and high risk), `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack` (`38420348928 bytes`, prompt-set diagnostic pack), `/root/yibins/ssd16-cache` (`128G`, owner/use unknown), `/opt/models` (`60G`, owner/use unknown), `/tmp` (`15G`, mostly build/test leftovers).
+- `deletion_rule`: No deletion or destructive cleanup has been performed for this plan. Free-space actions require explicit user approval for exact paths, followed by a fresh accepted-SOTA guard if any adjacent DeepSeek asset is touched.
+
+#### 下一步执行计划
+
+- `P0_record_and_push_plan`: Commit this plan update and any disk-blocker artifact, then push to `ssd/vendor/deepseek-token-rate-16gb` with identity `L-Ark`.
+- `P1_release_or_attach_storage`: Obtain at least `180G` real free space. Preferred low-risk route is explicit approval to remove unrelated large artifacts or attach/use another filesystem. Do not use sparse files as a substitute for the real GGUF.
+- `P2_full_4expert_acquisition`: Download the complete 4Expert GGUF, record path, size, sha256, source URL, and free-space state before/after. Abort if file size/hash is incomplete.
+- `P3_load_validation_before_benchmark`: Run metadata/load validation with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` and `GGML_MOE_STREAM_ONE_Q4K=1`. Confirm the alias actually resolves `ffn_gate_tid2eid.weight`, Q4_K expert tensors load, no zero/sparse tensors are used, and RAM accounting remains meaningful.
+- `P4_correctness_smoke`: Before claiming performance, run short strict-cgroup correctness checks including the France prompt. The France answer must be semantic and coherent. If output is wrong, stop and debug routing/quantization before timing work.
+- `P5_strict_cold_benchmark`: Run the exact cold-start benchmark under `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches`, page-cache accounting, no OOM/swap, and the same TTFT gate. Record token rate, prompt rate, TTFT, elapsed time, memory.peak, memory.stat file, faults/refaults, counters, answer, env, CLI, commit, binary hash, model hash, and pack/profile hashes.
+- `P6_promote_or_reject`: If `eval_tok_s > 4.4` and all gates pass, immediately commit and push source/records, then rerun from the pushed commit and record pushed-source reproduction. If token rate regresses, correctness fails, RAM exceeds 16GB, TTFT exceeds the accepted gate, or evidence is incomplete, mark the run rejected and keep `4.4 tok/s` as accepted SOTA.
+- `P7_fallback_if_4expert_underperforms_or_stays_blocked`: Return to native SOTA bottleneck work only after recording the 4Expert blocker. The next native work should focus on measured CPU fallback/page-refault cost and must avoid previously rejected large buffered down-pack or accidental batch enablement paths unless a new hard-bound analysis shows a clear ceiling above `4.4 tok/s`.

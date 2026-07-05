@@ -1,0 +1,93 @@
+{
+  "date": "2026-07-05",
+  "title": "Disk blocker and cleanup candidates after sparse 4Expert validation rejection",
+  "result": "plan_record_only_no_deletion_performed",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+  "current_head_before_record": "e3779ed5a",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "disk_state": {
+    "filesystem": "/dev/root",
+    "type": "ext4",
+    "size": "993G",
+    "used": "991G",
+    "available": "1.8G",
+    "use_percent": "100%"
+  },
+  "blocked_validation": {
+    "candidate_4expert_url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf",
+    "candidate_4expert_expected_size_bytes": 164465760544,
+    "minimum_practical_free_space": ">=180G",
+    "why_sparse_is_rejected": "Header-only or sparse-zero files cannot provide valid correctness, TTFT, token-rate, or page-cache evidence."
+  },
+  "protected_assets": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "size_bytes": 156148189760,
+      "reason": "accepted native GGUF model"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "size_bytes": 20495904768,
+      "reason": "accepted SOTA gate expert pack"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+      "reason": "accepted SOTA guard run"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+      "reason": "accepted pushed-source reproduction run"
+    }
+  ],
+  "cleanup_candidates_requiring_explicit_user_approval": [
+    {
+      "path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+      "size": "263G",
+      "risk": "unrelated to current vendor DS4 SOTA, but deletion still requires explicit approval"
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "size_bytes": 147174760448,
+      "risk": "not used by accepted SOTA env but adjacent to accepted DeepSeek assets; high risk"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+      "size_bytes": 38420348928,
+      "risk": "not the accepted France pack; may still be useful for prompt-set diagnostics"
+    },
+    {
+      "path": "/root/yibins/ssd16-cache",
+      "size": "128G",
+      "risk": "owner/use unknown"
+    },
+    {
+      "path": "/opt/models",
+      "size": "60G",
+      "risk": "shared model directory; owner/use unknown"
+    },
+    {
+      "path": "/tmp",
+      "size": "15G",
+      "risk": "mostly temporary build/test leftovers, but exact subpaths should be approved before deletion"
+    }
+  ],
+  "next_plan": [
+    "Commit and push this plan update.",
+    "Get explicit approval for exact cleanup paths or attach another filesystem with at least 180G free.",
+    "Download the complete real 4Expert GGUF and record size/hash.",
+    "Run alias-on and Q4_K load validation before any token-rate benchmark.",
+    "Promote only if a strict cold benchmark beats 4.4 tok/s and passes RAM, page-cache, TTFT, and correctness gates."
+  ],
+  "no_deletion_performed": true
+}
