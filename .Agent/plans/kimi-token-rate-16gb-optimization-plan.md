@@ -70514,3 +70514,115 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Record exact run directory, output, metrics, stderr counters, and commit id.
+
+### Phase 7LN result
+
+Timestamp: 2026-07-05 23:24:00 CST.
+
+Status: passed hard gates, rejected as SOTA baseline update.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-071731Z-phase7ln-post-q4-rollback-n96`
+
+Result:
+
+- source commit: `3bccb7251`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- quality `pass`;
+- TTFT `78047.69 ms`;
+- decode `58025.69 ms / 77`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `kimi_cpu_fallback_pack_mmap hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`;
+- expert-pack iouring bytes `315379728384`;
+- expert-pack iouring wait `51703990 us`;
+- current-down overlap worker `8296127 us`;
+- down hit rate `73.0%`;
+- upgate hit rate `44.1%`.
+
+Interpretation:
+
+- The rollback is functionally correct at n96.
+- The run does not beat accepted n96 references:
+  - 7JY: `57169.16 ms / 77`, `1.35 tok/s`;
+  - 7KZ: `56777.55 ms / 77`, `1.36 tok/s`.
+- Therefore do not update SOTA from 7LN.
+- The dominant visible runtime counter remains expert-pack movement:
+  `51.70 s` iouring wait for `315.38 GB` of reads. However this counter includes
+  overlapped wait, so it cannot alone identify the critical path.
+- The next step must locate exposed decode bottleneck on the current rollback
+  path before any behavior-changing source edit.
+
+## Phase 7LO - current rollback path low-overhead bottleneck audit
+
+Timestamp: 2026-07-05 23:25:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Produce current n32 bottleneck evidence with enough detail to choose the next
+  implementation target.
+- Avoid heavy CSV/profiling that materially changes decode rate.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 3bccb7251
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lo-bottleneck-audit-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      GGML_KIMI_CPU_MOE_PROFILE=1 \
+      GGML_KIMI_CPU_MOE_NAME_PROFILE=1 \
+      GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1 \
+      GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT="$RUN/fallback-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Analysis to record:
+
+- Decode fallback profile by phase/type/tensor/layer.
+- CPU MoE name/eligibility summaries for batch declines.
+- Expert-pack iouring wait, batch histogram, H2D enqueue count, current-down
+  overlap worker time, and cache hit rates.
+- Whether the largest exposed bucket is:
+  - Q4_0 CPU fallback compute/read;
+  - up/gate movement wait;
+  - down movement wait/current-down overlap;
+  - CPU wrapper/scheduler overhead.
+
+Decision rule:
+
+- If Q4_0 fallback remains the only large fallback bucket but broad GPU Q4_0
+  remains invalid, the next source plan must be correctness-parity first, not a
+  performance patch.
+- If movement wait dominates and fallback is small, the next source plan should
+  target a scheduling/hiding change that reduces exposed waits without adding
+  read volume.
+- If CPU wrapper/eligibility overhead dominates, inspect the CPU MoE wrapper
+  path before editing CUDA movement code.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Save the CSV and summaries in the run directory.
