@@ -84254,3 +84254,220 @@ Reproducibility:
   experiment.
 - Store exact commands, env, metrics, stdout/stderr, memory files, and IO trace
   artifacts in the run directories.
+
+### Phase 7OF result
+
+Timestamp: 2026-07-06 07:12 CST.
+
+Plan commit before execution:
+
+- `ecad7e275` (`docs: plan current head iq3 baseline refresh`)
+
+Build:
+
+- Server reset to:
+  `ecad7e275`.
+- Build command:
+  `cmake --build build-cuda-batch -j"$(nproc)"`.
+- Build result:
+  pass.
+
+Source / asset changes:
+
+- No source code was changed.
+- No GGUF or expert-pack asset was changed.
+- No model asset was downloaded, converted, or deleted.
+
+n32 IO refresh run:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-223407Z-phase7of-current-head-n32-io-refresh`
+- Exact runtime shape:
+  `N=32`, `VRAM_MIB=15000`, `THREADS=32`, `PINNED_SLOTS=12`,
+  `UPGATE_PCT=62`, `IQ2_UPGATE_PARALLEL=1`, `MIN_PROFILE=1`,
+  `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+  `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Extra diagnostic envs:
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv`.
+- Trace artifacts:
+  - `io-batch-profile.csv`: `5179` lines;
+  - `io-wait-trace.csv`: `18139` lines;
+  - `io-locality-profile.csv`: `5179` lines;
+  - `current-down-overlap-profile.csv`: `33` lines.
+- Exit:
+  `0`.
+- Quality smoke:
+  pass, France-specific but truncated by `N=32`.
+- TTFT:
+  `73891.76 ms`.
+- Decode:
+  `21832.95 ms / 31`, `1.42 tok/s`.
+- Host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15095992320`;
+  - `file=14857437184`;
+  - `inactive_file=5276315648`;
+  - `active_file=9580466176`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_reads=22647`;
+  - `iouring_bytes=126391910400` (`117.712 GiB`);
+  - `iouring_wait_us=18234702`;
+  - `iouring_submit_us=55311`;
+  - `iouring_fallbacks=0`;
+  - `read_failures=0`;
+  - inflight avg `3.31`, max `8`;
+  - batch hist `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+- Current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `2970024 us`.
+- VRAM cache:
+  - down slots `766`, hit rate `73.4%`;
+  - upgate slots `1735`, hit rate `45.2%`.
+
+n96 production validation A:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-223641Z-phase7of-current-head-n96-production`
+- Exit:
+  `0`.
+- Quality:
+  pass.
+- Exact output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `79368.14 ms`.
+- Decode:
+  `54779.05 ms / 77`, `1.41 tok/s`.
+- Host RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15091163136`;
+  - `file=14837895168`;
+  - `inactive_file=3081674752`;
+  - `active_file=11755524096`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=47042905`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- VRAM cache:
+  - down hit rate `73.0%`;
+  - upgate hit rate `44.1%`.
+
+n96 production validation B / repeat:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-223954Z-phase7of-current-head-n96-production-repeat`
+- Exit:
+  `0`.
+- Quality:
+  pass.
+- Exact output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `77349.85 ms`.
+- Decode:
+  `58391.17 ms / 77`, `1.32 tok/s`.
+- Host RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15091544064`;
+  - `file=14838751232`;
+  - `inactive_file=2274369536`;
+  - `active_file=12563812352`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=52875301`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- VRAM cache:
+  - down hit rate `73.0%`;
+  - upgate hit rate `44.1%`.
+
+Comparison:
+
+- 7MU n96 reference:
+  `56696.97 ms / 77`, `1.36 tok/s`, `iouring_wait_us=50085670`.
+- 7OF n96 A:
+  faster than 7MU by `1917.92 ms`, but the gain was not repeatable.
+- 7OF n96 B:
+  slower than 7MU by `1694.20 ms`.
+- 7OF A/B average:
+  `56585.11 ms / 77`, effectively the same performance band as 7MU.
+- The stable counters did not change:
+  - n96 iouring bytes remained `315379728384`;
+  - VRAM hit rates remained down `73.0%`, upgate `44.1%`;
+  - batch histograms remained unchanged.
+- The run-to-run variation is primarily exposed IO wait:
+  - 7OF A `47.043 s`;
+  - 7MU `50.086 s`;
+  - 7OF B `52.875 s`.
+
+Decision:
+
+- Accept 7OF as a reproducible current-head baseline/bottleneck refresh.
+- Do not promote a new SOTA. The faster n96 run did not reproduce.
+- Current accepted SOTA/performance reference remains the prior production band
+  represented by 7MU/7OF average, not the single faster 7OF A run.
+- The production path is stable after the default-off `IQ2_XXS` selftest work:
+  quality, TTFT, RAM, read-failure, and iouring-fallback gates all pass.
+- The bottleneck remains unchanged:
+  large expert-pack movement with run-to-run IO wait variability, not a changed
+  cache hit rate or tensor mix.
+- Do not retry already rejected families without new evidence:
+  queue-depth/refill/coalescing, same-layer fill without solving overlap loss,
+  local typed requant, generic compression, cache-policy/predictor, or existing
+  multi-token verifier shape.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard ecad7e275
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-223407Z-phase7of-current-head-n32-io-refresh
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-223641Z-phase7of-current-head-n96-production
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-223954Z-phase7of-current-head-n96-production-repeat
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
