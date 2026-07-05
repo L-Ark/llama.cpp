@@ -69142,6 +69142,106 @@ Decision:
   micro-optimizations against the current mmap/page-cache path.
 - Current accepted defaults remain unchanged.
 
+## Phase 7LI - direct-IO model-loading feasibility probe
+
+Timestamp: 2026-07-05 22:22:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test the smallest existing model-loading alternative that can bypass the mmap
+  page-cache/filemap-fault path identified in 7LH.
+- Use existing `LLAMA_ARG_DIO=1` / `--direct-io` support. Do not change source.
+- Determine whether direct I/O can run under the strict 16GB host-RAM gate, and
+  whether it changes the bottleneck family enough to justify a future
+  source-level loading/tensor-placement design.
+
+Why this is worth testing:
+
+- 7LH shows the dominant sampled hotspot is kernel page-cache/mmap fault/memcg
+  lock contention:
+  - `__pv_queued_spin_lock_slowpath` `60.10%`;
+  - stack under `do_sync_mmap_readahead -> filemap_fault`;
+  - CPU vec-dot fallback functions below the mmap fault stack.
+- Source inspection shows:
+  - `--direct-io` opens model files with `O_DIRECT` when supported;
+  - when direct I/O is available, model loading disables `use_mmap`;
+  - this should remove filemap fault/readahead from model tensor access.
+- Risk:
+  - disabling mmap may allocate real backend buffers for tensors that were
+    previously file-backed;
+  - under the hard 16GB cgroup this may OOM or fail allocation;
+  - even if it runs, direct I/O may increase load time or buffered staging.
+
+Theory and upper bound:
+
+- Hard upper bound is the 7LH kernel mmap-fault hot path. It is large in sampled
+  CPU cycles, but not all of it is decode-critical wall time.
+- A successful direct-IO run must show:
+  - host RAM peak still `<= 15899996160`;
+  - semantic quality pass;
+  - no read/iouring failures;
+  - TTFT under gate;
+  - no mmap/filemap-heavy runtime signature if profiled later.
+- This phase is a feasibility probe, not a SOTA candidate. If it fails memory or
+  load-time gates, direct I/O is rejected under the current 16GB objective.
+
+Experiment A: strict n32 direct-IO gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 9e362db1b
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7li-direct-io-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=LLAMA_ARG_DIO=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Activation checks:
+
+- `env.txt` contains `LLAMA_ARG_DIO=1`.
+- stderr should contain either:
+  - `direct I/O is enabled, disabling mmap`, meaning direct I/O is active; or
+  - `direct I/O is not available, using mmap`, meaning the experiment did not
+    actually test the intended path and must be rejected as non-activated.
+- model load log should show `mmap = false, direct_io = true` for activation.
+
+Decision rule:
+
+- If direct I/O does not activate, reject this phase as unsupported on the
+  current filesystem.
+- If it OOMs, fails allocation, exceeds 16GB, fails quality, exceeds TTFT gate,
+  or has read/iouring failures, reject direct I/O under the current constraints.
+- If it runs and decode improves versus the current n32 range, run one repeat
+  n32 and then an n96 confirmation before promotion.
+- If it runs but is slower, use its memory and profile evidence only to decide
+  whether a more selective direct-I/O tensor-placement source design is worth
+  planning.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, command, env, activation log lines, output, gates,
+  memory distribution, decode/TTFT, and decision.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
