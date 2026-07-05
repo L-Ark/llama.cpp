@@ -71995,3 +71995,129 @@ Reproducibility:
 - Commit the source patch separately.
 - Record source commit, build command, run directory, metrics, stderr activation
   line, and exact env for every run.
+
+### Phase 7LX result
+
+Timestamp: 2026-07-06 01:45:00 CST.
+
+Status: rejected and reverted.
+
+Source:
+
+- source patch: `2553448a9` (`cuda: add type22 shared io early-up staging`);
+- revert commit: `293934e00` (`Revert "cuda: add type22 shared io early-up staging"`).
+
+Build:
+
+- server build succeeded with existing warnings only.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-083352Z-phase7lx-shared-io-early-up-n32`
+
+Activation:
+
+- stderr contains:
+  `[moe_stream] type22 shared IO early-up staging active`
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `73440.18 ms`;
+- decode `23527.16 ms / 31`, `1.32 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Counters:
+
+- expert-pack iouring bytes `126391910400`;
+- iouring wait `18691541 us`;
+- iouring batches `4640`;
+- iouring submit calls `5573`;
+- iouring wait calls `17811`;
+- iouring inflight avg `3.79`;
+- current-down worker `3286603 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- The source path did what it was intended to do at the IO-counter level:
+  - it reduced total iouring wait versus 7LW (`19769217 us -> 18691541 us`);
+  - it increased average inflight (`3.34 -> 3.79`);
+  - it created `9-16` job combined batches.
+- Endpoint decode still regressed:
+  - 7LW diagnostic/current path: `22962.85 ms / 31`, `1.35 tok/s`;
+  - 7LX shared early-up: `23527.16 ms / 31`, `1.32 tok/s`.
+- The gap indicates the saved IO wait is outweighed by added synchronization,
+  background thread, shared-ring slot/event, or stream-ordering overhead.
+- This confirms the same pattern seen in prior combined-staging attempts:
+  reducing raw iouring wait is insufficient if the change disturbs the current
+  overlap shape.
+
+Decision:
+
+- Reject Phase 7LX.
+- Keep the revert.
+- Do not retry shared up/gate IO unless a later profile proves the added
+  synchronization cost and removes it directly.
+- Next step is a post-revert guard to confirm the default path is restored.
+
+## Phase 7LY - post-shared-IO revert n32 guard
+
+Timestamp: 2026-07-06 01:48:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify that reverting `2553448a9` restores the default runtime path and no
+  shared-IO activation remains.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 293934e00
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ly-post-shared-io-revert-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `type22 shared IO early-up staging active`.
+
+Decision rule:
+
+- If the default path returns to the recent `~1.33-1.37 tok/s` n32 band, keep
+  the revert and continue from default.
+- If shared activation remains or decode regresses outside the recent band,
+  inspect binary/source state before planning another source change.
+
+Reproducibility:
+
+- Commit and push this result/guard plan before running.
+- Record run directory, source commit, metrics, output, activation absence, and
+  memory files.
