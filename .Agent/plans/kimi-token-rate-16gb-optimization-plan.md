@@ -79178,7 +79178,7 @@ Decision:
 
 Timestamp: 2026-07-06 01:55:00 CST.
 
-Status: planned.
+Status: completed; diagnostic accepted; no source change; no SOTA promotion.
 
 Goal:
 
@@ -79272,3 +79272,90 @@ Reproducibility:
 - Store all raw metadata, grep outputs, and bound calculations in the run
   directory.
 - Commit and push the audit result before any EAGLE3 download or source work.
+
+Result:
+
+- Plan commit before execution:
+  `5229a130b docs: plan eagle3 compat audit`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-170850Z-phase7nh-eagle3-compat-audit`.
+- No source code was changed.
+- No weights were downloaded.
+- No model run was launched.
+- Current SOTA remains unchanged.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `vendor_speculative_sources.txt`;
+- `vendor_speculative_flags.txt`;
+- `hf_eagle_metadata.jsonl`;
+- `hf_eagle_readmes.md`;
+- `hf_eagle_search.jsonl`;
+- `compatibility_matrix.tsv`;
+- `performance_bound.md`;
+- `decision.md`;
+- `hf_eagle_audit.py`;
+- `hf_eagle_audit.stdout`;
+- `hf_eagle_audit.stderr`.
+
+Source support finding:
+
+- `common/common.h` exposes `COMMON_SPECULATIVE_TYPE_EAGLE3`.
+- `common/speculative.cpp` maps the `eagle3` type name and can construct
+  `common_speculative_state_eagle3`.
+- The actual `common_speculative_state_eagle3::draft()` implementation still
+  contains `TODO: implement` and only suppresses unused arguments.
+- The config path has `has_draft_eagle3 = false` with a TODO marker, so the
+  current vendor source does not expose a usable Kimi EAGLE3 runtime path.
+
+Candidate metadata:
+
+| candidate | kind | size | GGUF | runtime hints | accept metric |
+|---|---|---:|---|---|---|
+| `AQ-MedAI/Kimi-K2.7-Code-eagle3` | EAGLE3 | `3.074 GiB` | no | `eagle`, `sglang` | not reported |
+| `cm00cm/Kimi-K2.7-Code-DFlash` | DFlash | `6.481 GiB` | no | `dflash`, `eagle`, `sglang`, `transformers` | not reported |
+| `cm00cm/Kimi-K2.7-Code-EAGLE3` | EAGLE3 | `2.697 GiB` | no | `dflash`, `eagle`, `sglang`, `transformers` | not reported |
+| `freakyskittle/Kimi-K2.7-Code-Dflash` | DFlash | `8.422 GiB` | yes | `dflash`, `oxidize` | not reported |
+| `novita/kimi-k2.7-code-eagle3-mla` | EAGLE3 | `3.430 GiB` | no | `eagle`, `sglang`, `vllm` | not reported |
+
+Performance bound:
+
+- Current strict SOTA is about `1.36 tok/s`, or `0.735 s/token`.
+- Reaching `5 tok/s` requires at most `0.200 s/token`, so the speculative path
+  needs about `3.68x` effective accepted-token multiplier before draft overhead.
+- 7NB target same-sequence block-verification costs:
+  - `B=1`: `1670.540 ms`;
+  - `B=2`: `11238.700 ms`;
+  - `B=4`: `18555.800 ms`;
+  - `B=8`: `33609.700 ms`;
+  - `B=16`: `51832.100 ms`.
+- Required accepted-token envelopes from 7NA:
+  - accept length `4`: target + draft + bookkeeping `<=0.800 s`;
+  - accept length `8`: target + draft + bookkeeping `<=1.600 s`;
+  - accept length `16`: target + draft + bookkeeping `<=3.200 s`.
+
+Interpretation:
+
+- The public model cards do not report an acceptance length or token multiplier
+  strong enough to justify implementation under the current constraints.
+- The available public EAGLE3/MLA assets are small enough as draft assets, but
+  they are not directly usable in the current vendor runtime because the EAGLE3
+  implementation is still stubbed.
+- Any EAGLE3 path that reuses the measured 7NB target block-verification shape
+  is outside the `5 tok/s` budget by more than an order of magnitude for
+  `B>=4`.
+- A credible future EAGLE3 route would first need a new target-verification
+  design that proves amortized verification below the 7NA envelopes, plus Kimi
+  hidden-state extraction, draft execution, KV accept/reject logic, activation
+  counters, and strict n32 quality/RAM/TTFT gates.
+
+Decision:
+
+- Reject EAGLE3/MLA as the next source implementation task.
+- Do not download EAGLE3 weights.
+- Do not edit source for EAGLE3 until a stronger acceptance proof and a faster
+  verifier design exist.
+- Continue optimization from runtime bottlenecks that can be measured under the
+  strict n32 cold-start gate.
