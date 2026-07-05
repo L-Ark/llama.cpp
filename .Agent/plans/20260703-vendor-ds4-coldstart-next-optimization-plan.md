@@ -40,10 +40,23 @@ Disk and preservation state before the next step:
 - Do not delete files without explicit user approval. Preserve the accepted native GGUF, accepted gate-miss expert pack, accepted SOTA run, current-head guard/repro dirs, profiles, run artifacts, and this plan history.
 - Full 4Expert GGUF testing requires at least about `180GB` safe free space and is blocked until the user explicitly approves deletion or relocation of large non-SOTA assets.
 
+Bottleneck refresh after top-k closure:
+
+- Analysis artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-bottleneck-refresh-after-topk-close.json`
+- CPU chunk artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-sota44-cpu-chunk-analysis-after-topk-close.json`
+- Full component trace run: `/root/lfz/runs/vendor-ds4-16gb/20260705T162641Z-20260706_current_head_sota44_component_trace_after_topk_close/france-trace-after-topk-close-cpu40-vram0gb`. It is valid diagnostic evidence only: `eval_tok_s=4.1`, `prompt_tok_s=1.8`, `TTFT=33894.197124 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15101734912`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`. TTFT is above the promotable gate because tracing perturbs runtime; this run is not a SOTA candidate.
+- Touch split run: `/root/lfz/runs/vendor-ds4-16gb/20260705T162853Z-20260706_current_head_sota44_touch_split_after_topk_close/france-touch-after-topk-close-cpu40-vram0gb`. It is also diagnostic only: `eval_tok_s=2.6`, `prompt_tok_s=1.2`, `TTFT=37423.519396 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15096217600`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- Manual output check: both diagnostics produced the same complete, coherent France paragraph as the accepted path, including correct references to France, Western Europe, landmarks, culture/cuisine, EU membership, and economic/cultural role.
+- New key numbers: accepted decode window `30812.261708 ms`, estimated decoded tokens `135.5739515152`, 10 tok/s target decode time `13557.39515152 ms`, required decode saving `17254.86655648 ms`.
+- Full trace decode CPU fallback is `19930.313 ms`; zero-overhead removal would reach `12.459 tok/s` with `2675.446 ms` margin to 10.
+- Estimated source/page delta is `16932.876 ms`; zero-overhead source/page removal reaches only `9.768 tok/s`, still `321.991 ms` short of 10 before overhead. Therefore source-only prefetch, io_uring, mmap/packdirect, or page-touch routes remain closed.
+- Hot compute after touch is only `2997.437 ms`; zero-overhead hot-compute-only removal reaches `4.874 tok/s`. Scheduler/tail gap is only `1495.767 ms`; zero-overhead tail-only reaches `4.624 tok/s`. Gate one-stream excluding seq0 is `3486.025 ms`; gate-only remains too small.
+- Decision: the primary bottleneck is still exact decode up/down CPU fallback plus its source/page exposure. No immediate runtime source edit is allowed from this trace alone. The next candidate must include a new hard-bound for exact up/down fallback removal or overlap under about `1.6-2.7s` overhead budget, and it must avoid already closed top-k, top768 resident-source, source-only, scheduler-only, gate-only, CUDA graph, down-batch, and standalone MMVQ routes.
+
 Next executable plan:
 
 1. Close no-source approximate top-k pruning. Do not run `KEEP_TOPK_LAYER_VALUE=2`, wider top2 ranges, or another top-k sweep unless a future artifact proves a correctness-preserving routing model before the performance run.
-2. Return to exact up/down fallback elimination. The current candidate screen already shows why this is the remaining useful bottleneck: source/page-only reaches only about `9.22 tok/s`, source/page plus the best existing CPU microprobe reaches only about `9.81 tok/s`, and `source_page_plus_full_fallback_removed` is the first hard-bound row above 10 at about `11.45 tok/s`.
+2. Return to exact up/down fallback elimination. The latest bottleneck refresh shows why this is the remaining useful bottleneck: source/page-only reaches only about `9.768 tok/s`, hot-compute-only reaches only about `4.874 tok/s`, and full decode CPU fallback removal is the first hard-bound row clearly above 10 at about `12.459 tok/s`.
 3. Before any runtime source edit, write or refresh a hard-bound artifact that identifies one exact kernel/layout/dataflow change, its exact code path, expected saved milliseconds, required GiB/s, VRAM impact, page-cache impact, TTFT impact, fixed-text top1 verifier, strict France correctness gate, rollback criteria, and full env/CLI.
 4. The nearest non-source blocker is full 4Expert/alternate artifact testing. That remains blocked by disk until the user explicitly approves deletion or relocation of large non-SOTA assets while preserving accepted SOTA evidence.
 5. If a new exact source probe is proposed, first run fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Only after top1 stability can a strict cold France generation run be used for SOTA consideration.
