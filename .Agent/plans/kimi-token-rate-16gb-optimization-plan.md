@@ -83030,3 +83030,126 @@ python3 "$RUN/phase7nt_route_reuse_bound.py"
 cat "$RUN/route_reuse_bound.tsv"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7OA - IQ2_XXS MoE-stream activation feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 05:26 CST.
+
+Reason:
+
+- Phase 7NX showed that `5 tok/s` requires byte reduction unless the runtime
+  can exceed the current expert-pack movement envelope by a large margin.
+- Phase 7NY rejected generic compression of the existing expert-pack slices.
+- Phase 7NZ showed that the best already-supported Kimi MoE-stream lower-bit
+  target (`all expert -> IQ2_S`) saves only `15.74%`, missing the raw12 `20%`
+  threshold.
+- Phase 7NZ also showed that `all expert -> IQ2_XXS` saves `37.840 GiB`
+  (`32.18%`) and reaches `2.572 GiB/token`, enough for:
+  - `5.07 tok/s` at the 7NU raw8 replay bandwidth (`13.048 GiB/s`);
+  - `5.90 tok/s` at the 7NU raw12 replay bandwidth (`15.181 GiB/s`);
+  - but only `2.28 tok/s` at the current 7NN effective bandwidth
+    (`5.854 GiB/s`).
+- Therefore `IQ2_XXS` is the lowest-risk byte-reduction candidate worth
+  auditing before any source implementation. It still requires both:
+  - MoE-stream runtime support so decode/prompt do not fall back to CPU; and
+  - strict quality validation because it is a high-risk quantization.
+
+Goal:
+
+- Determine whether `IQ2_XXS` can be supported by a narrow, default-off
+  MoE-stream activation patch using existing generic CUDA MMVQ/MMQ kernels, or
+  whether it requires new mathematical kernels.
+- Identify all source gates that would block `IQ2_XXS` from the current fast
+  paths:
+  - tensor registration / expert-pack admission;
+  - up/gate compact MMVQ path;
+  - optional up/gate MMQ path;
+  - prompt exact `Q8_K` path;
+  - down compact/batch path;
+  - down `Q8_K` special path;
+  - mixed up/gate type checks;
+  - quantizer / converter / imatrix requirements.
+- Do not edit source.
+- Do not run model inference.
+- Do not download or convert assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- Phase 7NZ artifacts:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-211955Z-phase7nz-lowerbit-support`
+- Current source tree:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - `ggml/src/ggml-cuda/mmvq.cu`;
+  - `ggml/src/ggml-cuda/mmq.cu`;
+  - `ggml/src/ggml-cuda/vecdotq.cuh`;
+  - `ggml/src/ggml.c`;
+  - `src/llama-quant.cpp`;
+  - `tools/quantize/quantize.cpp`.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oa-iq2xxs-moe-feasibility`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7oa_iq2xxs_moe_feasibility.py`;
+   - `source_gate_matrix.tsv`;
+   - `implementation_scope.tsv`;
+   - `bounds.tsv`;
+   - `decision.md`.
+3. Inspect source and classify each required gate as:
+   - `already_supported`;
+   - `small_switch_or_registration`;
+   - `requires_prompt_kernel`;
+   - `requires_decode_kernel`;
+   - `requires_asset_or_imatrix`;
+   - `unknown_needs_probe`.
+4. Compute the theoretical movement-only bounds using the 7NZ `IQ2_XXS` byte
+   budget:
+   - current effective bandwidth (`5.854 GiB/s`);
+   - 7NU raw8 bandwidth (`13.048 GiB/s`);
+   - 7NU raw12 bandwidth (`15.181 GiB/s`);
+   - required non-I/O overhead budget to sustain `5 tok/s`.
+5. Check whether generic CUDA `IQ2_XXS` kernels are compiled and callable:
+   - `mmvq.cu` vec-dot and switch cases;
+   - `mmq.cu` switch cases;
+   - template instance availability;
+   - conversion helpers.
+6. Check quantization/asset feasibility without creating an asset:
+   - whether `IQ2_XXS` requires imatrix;
+   - whether `from_float_ref` is NULL and whether the batch quantize switch
+     still supports it;
+   - whether `llama-quantize` accepts `IQ2_XXS`;
+   - whether current Kimi expert-only conversion would need a new asset plan.
+7. Decide whether the next phase may be a default-off source implementation
+   plan for `IQ2_XXS`, or whether the next phase must be asset/imatrix or
+   kernel-math planning.
+
+Decision rule:
+
+- Write a default-off source implementation plan only if all of these are true:
+  - decode up/gate and down can be routed through existing generic CUDA kernels
+    with only registration/switch changes;
+  - prompt does not force CPU fallback, or the required prompt kernel work is
+    small and mathematically identical to an existing generic kernel path;
+  - quantization/asset production has a concrete reproducible path that can be
+    gated by strict France quality before any SOTA claim;
+  - the movement-only bound still leaves enough overhead budget for `>5 tok/s`
+    at raw8/raw12 throughput.
+- If `IQ2_XXS` needs a new prompt/decode mathematical kernel, write a separate
+  kernel design plan before implementation.
+- If `IQ2_XXS` is source-feasible but no reproducible asset/imatrix path exists,
+  stop source work and write an asset/imatrix validation plan instead.
+- If `IQ2_XXS` fails the feasibility audit, do not move to `IQ1_S` blindly;
+  first write a new plan explaining why its much higher quality risk is
+  acceptable.
+
+Reproducibility:
+
+- Commit and push this 7OA plan before running the audit.
+- Commit and push the 7OA result before any follow-up source, model, or asset
+  work.
