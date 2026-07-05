@@ -76146,3 +76146,142 @@ Reproducibility:
 - Commit and push this plan before adding/running the script.
 - Commit and push the script before the remote run.
 - Record all metrics and raw JSON summary in this plan after the run.
+
+### Phase 7MT result
+
+Timestamp: 2026-07-05 20:57:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Script:
+
+- Commit: `f0b8b102c`.
+- Plan command commit: `071f7ad94`.
+- Script path: `scripts/kimi-hf-fp4-asset-audit.py`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-125232Z-phase7mt-fp4-asset-metadata`
+
+Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-125232Z-phase7mt-fp4-asset-metadata \
+      COMMIT=f0b8b102c \
+      /tmp/run_phase7mt_metadata.sh
+
+/usr/bin/timeout 600s python3 scripts/kimi-hf-fp4-asset-audit.py \
+  --out /root/lfz/runs/vendor-kimi-token-rate/20260705-125232Z-phase7mt-fp4-asset-metadata/asset-audit.json \
+  decart-ai/Kimi-K2.7-Code-NVFP4 \
+  amd/Kimi-K2.7-Code-MXFP4
+```
+
+Gates:
+
+- exit `0`;
+- systemd runtime `7.641s`;
+- CPU time `6.258s`;
+- `memory.max = 15900000000`;
+- `memory.swap.max = 0`;
+- `memory.peak = 159371264` bytes, about `152.0 MiB`;
+- `memory.events`: `oom = 0`, `oom_kill = 0`;
+- HF cache before/after: `282 MiB` -> `282 MiB`;
+- `hf-cache-large-files.before.txt` and `hf-cache-large-files.after.txt`
+  are empty;
+- no full `.safetensors` or `.gguf` payload was downloaded.
+
+Output files:
+
+- `asset-audit.json` (`61377` bytes);
+- `summary.json` (`23469` bytes);
+- `stdout.txt`, `stderr.txt`, cgroup memory files, cache large-file lists.
+
+Decart NVFP4 metadata:
+
+- Repo: `decart-ai/Kimi-K2.7-Code-NVFP4`;
+- resolved sha: `b16b4af9d9255c114bf3d5f124dc1ba12cbf812c`;
+- `quant_method = "modelopt"`;
+- `likely_modelopt_nvfp4 = true`;
+- safetensors shards: `60`;
+- known total safetensors size: `595185406664` bytes,
+  `554.3096053078771 GiB`;
+- index metadata:
+  - `total_parameters = 519536364528`;
+  - `total_size = 595148146656`;
+  - tensor count `277670`;
+  - unique shard count `60`;
+- largest shard:
+  - `model-00024-of-00060.safetensors`;
+  - `10000281592` bytes, `9.313487999141216 GiB`;
+- tensor-name evidence:
+  - `mlp_experts = 276480`;
+  - `up_proj = 92221`;
+  - `gate_proj = 92221`;
+  - `down_proj = 92221`;
+  - `weight_scale = 207360`;
+  - representative names include
+    `language_model.model.layers.1.mlp.experts.0.down_proj.weight`,
+    `...down_proj.weight_scale`, `...down_proj.weight_scale_2`,
+    `...gate_proj.input_scale`, and matching `up_proj` tensors.
+
+AMD MXFP4 metadata:
+
+- Repo: `amd/Kimi-K2.7-Code-MXFP4`;
+- resolved sha: `7c86fb37b24dffd50ad2cb52d9af75689703219d`;
+- `quant_method = "quark"`;
+- safetensors shards: `64`;
+- known total safetensors size: `552836032096` bytes,
+  `514.868676751852 GiB`;
+- index metadata:
+  - `total_size = 552836032096`;
+  - tensor count `139918`;
+  - unique shard count `64`;
+- largest shard:
+  - `model-00011-of-000064.safetensors`;
+  - `9114736920` bytes, `8.488760255277157 GiB`;
+- no `hf_quant_config.json`;
+- config/Quark evidence:
+  - global quant config uses `dtype = "fp4"`, `group_size = 32`,
+    `scale_format = "e8m0"`, `qscheme = "per_group"`;
+  - `*self_attn*` layer quant config uses `dtype = "fp8_e4m3"` and
+    per-channel scales;
+- tensor-name evidence:
+  - `mlp_experts = 138240`;
+  - `up_proj = 46202`;
+  - `gate_proj = 46202`;
+  - `down_proj = 46202`;
+  - `weight_scale = 69608`;
+  - representative names include
+    `language_model.model.layers.1.mlp.experts.0.down_proj.weight`,
+    `...down_proj.weight_scale`, `...gate_proj.weight`, and
+    `...up_proj.weight`.
+
+Important script caveat:
+
+- `asset-audit.json` reports `likely_deepseek_v4_mxfp4_names = false` for AMD
+  because the initial heuristic looked for `w1/w2/w3`.
+- The actual tensor names are Kimi-style
+  `language_model.model.layers.*.mlp.experts.*.{up,gate,down}_proj`.
+- This name mapping is fixable, but it does not change the phase decision
+  because the asset is far too large for the current server.
+
+Decision:
+
+- Reject full decart NVFP4 conversion on this server:
+  - remote source asset alone is about `554.31 GiB`;
+  - current free disk is about `88 GiB`;
+  - converter dry-run also failed to emit a bounded split plan in 7MS.
+- Reject full AMD MXFP4/quark conversion on this server:
+  - remote source asset alone is about `514.87 GiB`;
+  - current free disk is about `88 GiB`;
+  - even a successful `quark` converter patch would not be runnable here
+    without an external conversion/cache location.
+- Do not implement `quant_method = "quark"` converter support in the current
+  server workflow now. It may be useful on a machine with enough disk, but it
+  cannot produce a benchmarkable Kimi artifact under the current constraints.
+- No token-rate, TTFT, or France-prompt benchmark was run in this phase because
+  no runtime artifact was produced.
+- Next work should return to the existing IQ3/expert-pack runtime path, or use
+  an external conversion machine with enough disk before revisiting FP4.
