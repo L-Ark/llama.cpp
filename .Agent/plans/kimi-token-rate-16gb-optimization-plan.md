@@ -73609,3 +73609,101 @@ Next candidate direction:
   production path that refuses Q4 misses.
 - The key requirement is preserving the current Q3/IQ4 down cache geometry
   (`7.44 MiB`, 766 slots) while testing Q4 GPU compute.
+
+## Phase 7MH - Isolated Q4 down cache pool design
+
+Timestamp: 2026-07-06 18:38:00 CST.
+
+Status: planned.
+
+Current bottleneck:
+
+- 7MG showed that Q4_0 compute for `blk.6` can be semantically correct, but the
+  cache geometry regression dominates:
+  - default down cache: `7.44 MiB`, `766 slots`, hit rate `73.4%`;
+  - Q4 single-layer production: `7.88 MiB`, `723 slots`, hit rate `70.7%`;
+  - planned down jobs increased `3673 -> 4052`;
+  - iouring wait increased on repeat `20476147 us -> 21566985 us`;
+  - decode repeat regressed `22659.98 ms -> 24004.21 ms`.
+- Source reading confirms the root cause:
+  - `g_bcaches[2]` has only `cid=0 down` and `cid=1 upgate`;
+  - `batch_cache_id_for_size()` maps all down tensors larger than the upgate
+    split threshold to `cid=0`;
+  - `batch_cache_get()` frees and rebuilds a cache when the same cid later sees
+    a larger `expert_sz`;
+  - therefore one 7.88 MiB Q4 layer rebuilds the 7.44 MiB down cache and reduces
+    Q3/IQ4 down capacity.
+
+Selected optimization:
+
+- Add an optional third VRAM cache pool for large Q4 down experts:
+  - `cid=0`: existing Q3/IQ4 down pool, unchanged geometry;
+  - `cid=1`: existing upgate pool;
+  - `cid=2`: new Q4 down pool.
+- Default off behind:
+  - `GGML_MOE_Q4_DOWN_CACHE_SPLIT=1`
+  - `GGML_MOE_Q4_DOWN_CACHE_MIN_MIB=7`
+  - `GGML_MOE_Q4_DOWN_CACHE_EXTRA_MIB=512`
+- Keep 7MG production enable narrow:
+  - `GGML_MOE_Q4_DOWN_ENABLE_TENSOR=blk.6.ffn_down_exps.weight`.
+- The third pool may allocate extra VRAM above the current 15GB cache budget
+  only when explicitly enabled. First probe uses `512 MiB`, about 65 slots at
+  `7.88 MiB`.
+
+Theory and upper bound:
+
+- The previous single-layer Q4 probe reduced CPU fallback mmap bytes by about
+  `2.05 GiB`, proving work moved off CPU.
+- It failed because the shared down pool lost `43` slots and created more down
+  misses.
+- If an isolated Q4 pool preserves the original 766-slot down cache, the maximum
+  recoverable benefit is the selected layer's share of Q4 CPU fallback:
+  about `2.6s / 7 ~= 0.37s` on n32.
+- Extra Q4 pool misses still require iouring/H2D, so expected real gain is below
+  `0.37s`; acceptance requires repeat evidence, not theory.
+
+Implementation constraints:
+
+- Default behavior must remain identical when split env is absent.
+- Existing `cid=0` and `cid=1` reporting must keep the same labels.
+- New reporting label: `q4_down`.
+- Do not change `GGML_MOE_VRAM_CACHE_UPGATE_PCT`.
+- Do not enable broad Q4; only the selected tensor may return `true`.
+- If CUDA allocation fails for the extra Q4 pool, disable only `cid=2` and do
+  not disturb the existing pools.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mh-q4-split-blk6-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_ENABLE_TENSOR=blk.6.ffn_down_exps.weight GGML_MOE_Q4_DOWN_CACHE_SPLIT=1 GGML_MOE_Q4_DOWN_CACHE_EXTRA_MIB=512" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality `pass`;
+- France answer semantically correct;
+- TTFT below `127598.064 ms`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- down pool remains close to default geometry:
+  - slot size `7.44 MiB`;
+  - slots near `766`;
+- q4_down pool appears separately with slot size about `7.88 MiB`;
+- n32 repeat must not regress decode versus the current default band before any
+  n96 test.
+
+Rollback:
+
+- If the split pool changes default behavior, fails build, fails quality, exceeds
+  memory, or still regresses repeat decode, revert the split-pool source.
