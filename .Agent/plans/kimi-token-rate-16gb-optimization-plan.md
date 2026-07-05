@@ -67011,3 +67011,210 @@ Reproducibility:
 - A future optimization is accepted only if the same repro script shape passes
   all gates and improves decode time; otherwise revert source changes and record
   the rejection.
+
+### 7KV result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `5b221424a` (`docs: plan current foreground audit`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-042916Z-phase7kv-current-head-foreground-audit-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-042916Z-phase7kv-current-head-foreground-audit-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `79668.98 ms`;
+- decode `23776.55 ms / 31`, `1.30 tok/s`;
+- memory peak `15899996160`;
+- memory final `15075885056`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `copy-profile.csv` and `io-batch-profile.csv` exist.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`;
+- iouring bytes `126391910400`;
+- iouring wait `20549141 us`;
+- iouring submit `53229 us`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3345298 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.4%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `45.2%`.
+
+Parsed foreground attribution:
+
+`io-batch-profile.csv`:
+
+| op/kind | batches | jobs | read jobs | wait ms | wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| runtime_load/all | 4318 | 19143 | 19143 | 17977.192 | 18911.670 |
+| runtime_load/up | 1792 | 7854 | 7854 | 7578.172 | 8072.616 |
+| runtime_load/gate | 1792 | 7855 | 7855 | 7640.071 | 7954.161 |
+| runtime_load/down | 734 | 3434 | 3434 | 2758.950 | 2884.892 |
+| current_down_overlap | 860 | 3504 | 3504 | 2580.958 | 2721.158 |
+
+`copy-profile.csv` row-summed attribution:
+
+| op/kind | rows | bytes GiB | wall ms | io wait ms |
+| --- | ---: | ---: | ---: | ---: |
+| runtime_load/all | 19828 | 100.537 | 77535.671 | 75478.623 |
+| runtime_load/up | 8153 | 37.354 | 32093.070 | 31248.754 |
+| runtime_load/gate | 8154 | 40.128 | 33027.077 | 32125.474 |
+| runtime_load/down | 3521 | 23.055 | 12415.524 | 12104.394 |
+
+Adjacent up/gate pair analysis:
+
+- adjacent same-layer up/gate pairs: `1792`;
+- pair wait sum: `15218.242 ms`;
+- optimistic perfect-overlap upper bound: save `7498.911 ms`;
+- submit overhead in those pairs: only `37.177 ms`.
+
+Interpretation:
+
+- The current-head bottleneck remains foreground `runtime_load`, especially
+  up+gate.
+- The wait is broad across many layers and tensors; no small tensor/layer hotset
+  is worth pinning or special-casing.
+- Submission overhead is not the issue; the visible target is batch-boundary
+  and queue behavior for many small up/gate reads.
+- Existing mixed up/gate parallel staging is active, so the next implementation
+  must improve the lower-level read batch shape rather than simply adding
+  another thread.
+
+Decision:
+
+- Do not change cache policy, VRAM split, IO depth, refill batch, or Q4_0
+  support based on this run.
+- Plan a narrow source experiment for mixed-size combined up/gate io_uring
+  batches, behind an environment flag and rejected unless strict n32 improves.
+
+## Phase 7KW - mixed-size combined up/gate io_uring batch experiment
+
+Timestamp: 2026-07-05 16:58:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Reduce foreground up+gate `runtime_load` wait by changing only the read batch
+  shape for the existing mixed-type up/gate parallel stage.
+- Keep the change default-off until a strict cold-start run proves it improves
+  token rate without harming output correctness, TTFT, or memory.
+
+Theory:
+
+- In 7KV, each decode layer typically issues adjacent up and gate foreground
+  batches with the same active experts.
+- The current implementation copies up and gate in two worker threads using two
+  staging rings. This gives logical parallelism, but it also creates two
+  separate io_uring batches and two SQPOLL queues for mostly adjacent small
+  reads.
+- 7KV measured:
+  - up wait `7578.172 ms`;
+  - gate wait `7640.071 ms`;
+  - adjacent up/gate pair wait sum `15218.242 ms`;
+  - perfect overlap upper bound `7498.911 ms` on n32.
+- A combined mixed-size io_uring batch can:
+  - submit up and gate jobs through one ring;
+  - keep queue depth filled across the combined job list;
+  - reduce dual-ring contention and per-pair batch boundaries;
+  - still launch up and gate compute in parallel after staging completes.
+- The hard upper bound is the `7498.911 ms` n32 pair-overlap budget. Because
+  combined staging may lose some early up-compute overlap, expected practical
+  gain is much smaller; accept only measured decode improvement.
+
+Implementation:
+
+- Add a default-off env flag:
+  `GGML_MOE_MIXED_UP_GATE_COMBINED_IO=1`.
+- Add a mixed-size variant of `expert_pack_iouring_copy_jobs` that:
+  - accepts per-job `nbytes`;
+  - uses a staging ring sized to the largest aligned job;
+  - reads each job with its own aligned read size;
+  - enqueues H2D using each job's exact byte size;
+  - records normal copy/io profile rows under `runtime_load`;
+  - returns false on any unsupported pack entry, preserving existing fallback.
+- In the mixed-type up/gate path, when the flag is enabled:
+  - plan up jobs and gate jobs exactly as today;
+  - concatenate the two job vectors;
+  - copy them with the mixed-size io_uring function on one ring;
+  - launch up compute on `bc.up_stream` and gate compute on `bc.gate_stream`
+    after the combined copy.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <7KW-source-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kw-combined-upgate-io-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_COMBINED_IO=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If strict n32 decode improves versus the current accepted n32 reference
+  (`22667.39 ms / 31`, `1.37 tok/s`) while passing all gates, run n96
+  confirmation, then enable the flag in the repro script, commit, and push.
+- If n32 is slower, quality fails, TTFT rises past the gate, memory exceeds the
+  hard limit, or iouring fallbacks appear, revert the source change and record
+  the rejection.
+
+Reproducibility:
+
+- Commit and push this plan before source edits.
+- Commit and push the default-off implementation before running.
+- Record run directory, exact command, source commit, output, TTFT, decode,
+  token rate, memory, swap, IO counters, and decision.
