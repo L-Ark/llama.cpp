@@ -65510,3 +65510,170 @@ Decision:
   - changing model/expert quant/layout so fewer bytes are moved;
   - or a scheduler change with a measured wall-time upper bound above `2 s`
     that is not one of the already rejected up/gate/down scheduling shapes.
+
+## Phase 7KN - fixed-VRAM cache optimality upper-bound refresh
+
+Timestamp: 2026-07-05 13:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Decide whether the next implementation should revisit VRAM cache admission or
+  eviction under the current accepted post-7JY SOTA.
+- Keep host RAM unchanged and strictly below 16GB; this phase is offline over
+  existing cold-start traces, so it cannot increase RAM, TTFT, or risk output
+  quality.
+- Compare current fixed-capacity LRU behavior with an offline Belady upper
+  bound using the same route sequence and the current accepted cache split.
+- Only implement a cache-policy source change if the hard upper bound is large
+  enough to explain a `> 2 s` n32 wall-time gain and the design does not depend
+  on prompt-specific future knowledge.
+
+Why this is needed:
+
+- 7KL shows decode is still dominated by file-backed expert movement and memory
+  pressure rather than arithmetic.
+- 7KM rejects CPU/file-backed fallback reduction because the whole Q4 fallback
+  bucket is only `2396.936 ms` on n32 and feasible hotsets are too large under
+  the 16GB host-RAM cap.
+- Historical cache-policy probes are mixed or rejected:
+  - Phase 7EJ prompt-trace eviction was not robust;
+  - Phase 7GQ `lfu_lru` damaged hit rate and output quality;
+  - profile-guided hybrid eviction damaged prefetch behavior;
+  - hot exact-key protection was too diffuse.
+- Before another cache implementation, the current trace must prove that LRU
+  misses leave enough reducible movement under the existing VRAM slot budget.
+
+Offline experiment:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+python3 - <<'PY'
+import csv, os, collections
+
+run = os.environ["RUN"]
+trace_path = os.path.join(run, "route-trace.csv")
+io_path = os.path.join(run, "io-batch-profile.csv")
+
+def cls(row):
+    t = row["tensor"]
+    if ".ffn_down_exps." in t:
+        return "down"
+    if ".ffn_up_exps." in t or ".ffn_gate_exps." in t:
+        return "upgate"
+    return "other"
+
+events = {"down": [], "upgate": []}
+bytes_by_key = {}
+for r in csv.DictReader(open(trace_path)):
+    c = cls(r)
+    if c not in events:
+        continue
+    key = (r["tensor"], int(r["expert_idx"]), int(r["expert_bytes"]))
+    events[c].append(key)
+    bytes_by_key[key] = int(r["expert_bytes"])
+
+def lru(seq, cap):
+    cache, used = set(), {}
+    hits = misses = bytes_miss = 0
+    for i, key in enumerate(seq):
+        if key in cache:
+            hits += 1
+            used[key] = i
+            continue
+        misses += 1
+        bytes_miss += bytes_by_key[key]
+        if len(cache) >= cap:
+            victim = min(cache, key=lambda k: used[k])
+            cache.remove(victim)
+            used.pop(victim, None)
+        cache.add(key)
+        used[key] = i
+    return hits, misses, bytes_miss
+
+def belady(seq, cap):
+    pos = collections.defaultdict(collections.deque)
+    for i, key in enumerate(seq):
+        pos[key].append(i)
+    cache = set()
+    hits = misses = bytes_miss = 0
+    inf = 10**18
+    for i, key in enumerate(seq):
+        pos[key].popleft()
+        if key in cache:
+            hits += 1
+            continue
+        misses += 1
+        bytes_miss += bytes_by_key[key]
+        if len(cache) >= cap:
+            victim = max(cache, key=lambda k: pos[k][0] if pos[k] else inf)
+            cache.remove(victim)
+        cache.add(key)
+    return hits, misses, bytes_miss
+
+def hit_rate(h, m):
+    return 100.0 * h / (h + m) if h + m else 0.0
+
+# Accepted post-7JY effective slot counts from runtime logs.
+caps = {"down": 766, "upgate": 1735}
+
+wait_by_kind = collections.Counter()
+bytes_by_kind = collections.Counter()
+for r in csv.DictReader(open(io_path)):
+    op = r.get("op", "")
+    first = r.get("first_tensor", "")
+    if op != "runtime_load":
+        continue
+    if ".ffn_down_exps." in first:
+        kind = "down"
+    elif ".ffn_up_exps." in first or ".ffn_gate_exps." in first:
+        kind = "upgate"
+    else:
+        continue
+    wait_by_kind[kind] += float(r.get("wait_ms", 0) or 0)
+    bytes_by_kind[kind] += int(r.get("read_jobs", 0) or 0) * int(next((k[2] for k in bytes_by_key if k[0] == first), 0))
+
+total_bound_ms = 0.0
+for kind in ["upgate", "down"]:
+    seq = events[kind]
+    cap = caps[kind]
+    lh, lm, lb = lru(seq, cap)
+    oh, om, ob = belady(seq, cap)
+    saved_bytes = lb - ob
+    wait = wait_by_kind[kind]
+    cur_bytes = lb
+    bound_ms = wait * saved_bytes / cur_bytes if cur_bytes else 0.0
+    total_bound_ms += bound_ms
+    print(kind)
+    print("  events", len(seq), "unique", len(set(seq)), "cap", cap)
+    print("  lru_hits", lh, "lru_misses", lm, "hit_pct", round(hit_rate(lh, lm), 2), "miss_gib", round(lb / 2**30, 3))
+    print("  belady_hits", oh, "belady_misses", om, "hit_pct", round(hit_rate(oh, om), 2), "miss_gib", round(ob / 2**30, 3))
+    print("  extra_hits", oh - lh, "saved_gib", round(saved_bytes / 2**30, 3), "wait_ms", round(wait, 3), "bound_ms", round(bound_ms, 3))
+print("total_cache_policy_upper_bound_ms", round(total_bound_ms, 3))
+PY
+```
+
+Decision rule:
+
+- If total offline Belady upper bound is below `2 s` n32, reject cache-policy
+  implementation and return to movement-byte/layout work.
+- If the bound is above `2 s` but depends on future route knowledge, do not
+  implement a prompt-specific oracle. Design only an online policy with a
+  reproducible, prompt-independent signal.
+- If an online approximation is proposed, it must:
+  - keep `GGML_MOE_VRAM_CACHE_POLICY` default behavior unchanged until proven;
+  - preserve `read_failures=0` and `iouring_fallbacks=0`;
+  - keep RAM peak under `15900000000`;
+  - preserve France prompt semantic quality;
+  - keep TTFT within `20%` of `106331.72 ms`.
+- A successful source change must beat the accepted n32 reference
+  `22667.39 ms / 31` and then pass n96 against SOTA `57169.16 ms / 77`.
+- Any accepted result must be committed and pushed immediately with exact
+  reproduction commands. Any regression must be reverted and recorded here.
+
+Reproducibility:
+
+- Use existing 7JS cold-start route trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile`.
+- Record exact offline output and decision here before source changes.
