@@ -64570,3 +64570,187 @@ Decision rule:
   storage/CUDA wait diagnostic.
 - Record all counters, gates, output, and reproduction method, then commit and
   push.
+
+### 7KI result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ki-perf-stat-n32`.
+
+Source:
+
+- commit `2d75e430980611f25a3248fbd3e1c143c054e59a`.
+- No runtime source changes.
+- Diagnostic wrapper:
+  `perf stat -d -d -o "$RUN/perf-stat.txt" -- scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `92094.95 ms`;
+- decode `28245.23 ms / 31`, `1.10 tok/s`;
+- memory peak `15899996160`;
+- memory final `15104413696`;
+- swap max `0`;
+- anon `2752512`;
+- file `14863794176`;
+- kernel `234889216`;
+- inactive_file `6303318016`;
+- active_file `8559714304`;
+- `pgmajfault=927759`;
+- `pgfault=2824345`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring wait `22286826 us`;
+- iouring batches `5178`, wait calls `15884`;
+- current-down overlap planned jobs `3673`, worker `3717239 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+`perf stat` counters:
+
+- elapsed `154.486970396 s`;
+- task-clock `3184291.76 ms`;
+- CPUs utilized `20.612`;
+- context switches `1036803` (`325.599 / sec`);
+- CPU migrations `96`;
+- page faults `2720640`;
+- cycles `5345577985016`;
+- instructions `1202855592243`;
+- IPC `0.23`;
+- user time `748.405333 s`;
+- sys time `2360.695190 s`.
+
+Interpretation:
+
+- This is not a low-CPU idle wait profile. The process consumed about
+  `3184 s` of CPU time over `154.49 s` wall, with most time in kernel mode.
+- The high sys time is consistent with the accepted `GGML_MOE_IO_SQPOLL=1`
+  runtime keeping io_uring polling active while many expert-pack reads are in
+  flight.
+- Earlier SQPOLL was accepted before the current post-7JY mixed up/gate
+  topology. 7JY increased concurrent up/gate IO and total iouring bytes, so the
+  SQPOLL tradeoff must be retested under the current SOTA.
+- Major faults remain high because the strict cold-start run intentionally
+  faults file-backed model/expert pages under a 16GB cgroup. That does not by
+  itself justify page-cache changes unless decode-specific faults are shown to
+  dominate wall time.
+
+Decision:
+
+- Do not implement CPU wrapper source changes from 7KI alone.
+- Next phase should be an env-only post-7JY SQPOLL-off probe:
+  - it directly tests whether the high sys/SQPOLL cost is still buying decode
+    wall-time improvement;
+  - it does not change model math, cache admission, host RAM, or expert reads;
+  - it has a clear promotion path if n32 and n96 both improve under all gates.
+
+## Phase 7KJ - post-mixed SQPOLL-off probe
+
+Timestamp: 2026-07-05 11:39:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-test `GGML_MOE_IO_SQPOLL=0` under the current accepted post-7JY SOTA.
+- Determine whether SQPOLL's high kernel CPU cost still improves wall time after
+  mixed up/gate parallel staging changed IO concurrency.
+
+Why this is worth testing:
+
+- 7KI measured very high kernel CPU time:
+  - `2360.695 s sys`;
+  - `20.612 CPUs utilized`;
+  - `1036803` context switches.
+- The current reproduction script still forces `GGML_MOE_IO_SQPOLL=1`.
+- SQPOLL was accepted much earlier, before:
+  - mixed up/gate parallel staging;
+  - post-prompt dense/expert mmap drops;
+  - current down single-ring overlap;
+  - the current cache split balance.
+- With more concurrent reads, SQPOLL may now increase CPU contention or IO wait
+  more than it reduces submit overhead.
+
+Theory and upper bound:
+
+- Disabling SQPOLL cannot reduce expert bytes or cache misses. It can only
+  reduce kernel polling CPU and scheduling contention.
+- The optimistic upper bound is bounded by the wall-time portion of SQPOLL
+  contention, not the full `2360 s` sys CPU, because most polling CPU can run in
+  parallel.
+- A realistic n32 improvement threshold is to beat the accepted script-default
+  n32:
+  - `22667.39 ms / 31`, `1.37 tok/s`.
+- If n32 improves, n96 must beat current SOTA:
+  - `57169.16 ms / 77`, `1.35 tok/s`.
+
+Strict n32 experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 2d75e4309
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kj-sqpoll-off-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_SQPOLL=0" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Strict n96 promotion experiment, only if n32 improves:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kj-sqpoll-off-n96
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_SQPOLL=0" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through the runner's cache-drop path;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for:
+  `Please introduce France in a short paragraph.`;
+- `env.txt` must record the overriding `GGML_MOE_IO_SQPOLL=0`.
+
+Decision rule:
+
+- If n32 is slower than `22667.39 ms / 31`, reject SQPOLL-off and do not run
+  n96.
+- If n32 improves and all gates pass, run n96.
+- Promote only if n96 improves over `57169.16 ms / 77` and all gates pass.
+- If promoted, change the reproducible script default away from forced SQPOLL,
+  commit the script/plan update immediately, and push.
+- If rejected, keep the current script default `GGML_MOE_IO_SQPOLL=1`.
