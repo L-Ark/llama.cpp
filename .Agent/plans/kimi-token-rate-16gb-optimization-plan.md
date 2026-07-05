@@ -62267,3 +62267,150 @@ Decision:
     `MOE_FUSED_UP_GATE`;
   - or a decode-only bypass that avoids redundant CPU graph execution when the
     existing custom CUDA MoE path has already produced the needed output.
+
+## Phase 7JV - down single-ring inline copy dispatch
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Source baseline:
+
+- Latest pushed baseline: `bf4bd3ce4` (`docs: record current split refresh`).
+- Accepted SOTA behavior remains:
+  - `UPGATE_PCT=62`;
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - strict n96 SOTA decode `71024.41 ms / 77`, `1.08 tok/s`;
+  - strict n32 refresh decode `28921.86 ms / 31`, `1.07 tok/s`.
+
+Bottleneck from 7JU:
+
+- Decode split wall is still dominated by MoE CPU-wrapper splits:
+  - decode wall `28864.760 ms`;
+  - CPU-assigned split wall `28700.660 ms` (`99.43%`).
+- Source inspection shows the CPU assignment includes the custom CUDA MoE path:
+  - `MOE_FUSED_UP_GATE` CPU wrapper calls `ggml_cuda_moe_stream_up_gate_batch()`;
+  - down `MUL_MAT_ID` CPU wrapper calls `ggml_cuda_moe_stream_batch()`;
+  - therefore the next optimization must reduce wrapper/scheduler/IO dispatch overhead or a measured custom CUDA sub-bucket, not just relabel backend support.
+
+Candidate:
+
+- In the down batch path, SOTA enables `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`.
+- With single-ring enabled, all down stage jobs are placed in `down_jobs_a`; `down_jobs_b` remains empty.
+- Current code still launches two `std::thread`s for every down stage copy batch:
+  - one useful thread for `down_jobs_a`;
+  - one empty/no-op thread for `down_jobs_b`;
+  - then immediately joins both before continuing.
+- Replace this with inline copy dispatch when only one job list is non-empty. Keep the existing two-thread path when both lists are non-empty.
+
+Why this can improve token rate:
+
+- For SOTA single-ring, there is no useful overlap from launching a worker thread and immediately joining it: the main thread cannot proceed until copy completion.
+- Removing thread creation/join from the one-list case reduces per-batch CPU wrapper overhead while preserving the exact same IO/copy function, stream, ring, cache slots, and math.
+- Theoretical upper bound:
+  - 7JU n32 had `iouring batches=3280`, but only down runtime-load batches hit this branch;
+  - even at `0.05-0.20 ms` avoidable thread overhead per affected down copy batch, n32 upper bound is roughly tens to low hundreds of ms;
+  - n96 upper bound scales with decode length, likely sub-second but potentially measurable.
+- Expected result:
+  - no TTFT increase beyond noise;
+  - no RAM increase;
+  - no read failure or iouring fallback change;
+  - small decode improvement only if thread dispatch overhead is visible.
+
+Implementation plan:
+
+1. Patch only `ggml/src/ggml-cuda/moe_stream_batch.cu` in the `down_parallel_stage` branch.
+2. If exactly one of `down_jobs_a` / `down_jobs_b` is non-empty, call `copy_down_stage_jobs()` inline on the matching stream/ring.
+3. If both are non-empty, keep the existing two-thread path unchanged.
+4. Keep failure handling and cache-slot clearing unchanged.
+5. Build on the server and run strict cold-start n32 first.
+6. Accept only if all gates pass and decode improves versus 7JU n32 (`28921.86 ms / 31`) without TTFT regression beyond 20%.
+7. If accepted, run strict n96 and commit/push immediately with reproduction commands and all metrics.
+8. If n32 regresses or quality fails, revert the code path and record rejection.
+
+Reproduction gates for all runs:
+
+- `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Cold start through `scripts/kimi-phase7fb-min-profile-repro.sh`, which drops caches.
+- Host RAM peak including page cache `< 16 GB`.
+- Swap max `0`.
+- `read_failures=0`.
+- `iouring_fallbacks=0`.
+- Quality pass and manual semantic pass for:
+  `Please introduce France in a short paragraph.`
+- TTFT `<= 106331.72 ms`.
+
+### 7JV result
+
+Timestamp: 2026-07-05.
+
+Source state:
+
+- Base commit on server: `bf4bd3ce4` (`docs: record current split refresh`).
+- Candidate was applied as an uncommitted diff for measurement:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu` inline-dispatched the down stage copy when only one down job list was non-empty;
+  - `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md` contained this phase plan.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jv-down-single-ring-inline-n32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard bf4bd3ce4
+# apply the 7JV candidate diff from this plan section / local candidate patch
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jv-down-single-ring-inline-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `74908.78 ms`;
+- decode `29276.53 ms / 31`, `1.06 tok/s`;
+- memory peak `15899996160`;
+- memory final `15115685888`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14819`, bytes `85991915520`, wait `12632206 us`;
+- iouring batches `3280`, wait calls `11533`;
+- current-down overlap worker time `3467882 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Comparison:
+
+- 7JU n32 baseline: decode `28921.86 ms / 31`, `1.07 tok/s`, TTFT `77471.02 ms`.
+- 7JV candidate: decode `29276.53 ms / 31`, `1.06 tok/s`, TTFT `74908.78 ms`.
+- Decode regressed by `354.67 ms` (`+1.23%`) despite lower TTFT.
+
+Decision:
+
+- Reject 7JV as a SOTA/performance change.
+- Reverted the runtime code path to the original two-thread down stage dispatch.
+- Do not run n96 for this candidate because n32 failed the decode improvement gate.
+- Interpretation:
+  - empty-thread creation is not a material bottleneck;
+  - inline single-list dispatch may reduce scheduling flexibility or CUDA stream progress enough to lose more time than it saves;
+  - next work should return to measured custom MoE sub-buckets rather than thread-dispatch micro-optimization.
