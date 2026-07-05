@@ -68577,3 +68577,148 @@ Reproducibility:
 
 - Commit and push this plan/result section before any source changes.
 - Append the candidate-specific implementation plan before editing code.
+
+## Phase 7LE - IQ2 up/gate shared-IO dual-fence scheduler
+
+Timestamp: 2026-07-05 19:43:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Reduce type `(22,22)` foreground up/gate staging wait without repeating
+  rejected split staging or whole combined staging.
+- Keep the accepted overlap property: up compute must start as soon as the up
+  subset is staged, even while gate staging continues.
+
+Why this differs from rejected attempts:
+
+- 7KY immediate refill changed when the current ring refills after CQE, but most
+  batches contain only `2-4` or `5-8` jobs. It could not create more work inside
+  small batches, so effective inflight stayed about `3.3`.
+- 7KW / combined staging merged up+gate work but made up compute wait for the
+  combined copy group, reducing the overlap that makes the accepted path fast.
+- 7AY split staging added auxiliary rings/threads and fragmented IO, increasing
+  iouring wait.
+- This phase uses one shared io_uring worker for the same-type IQ2 up/gate pair:
+  - submit all up jobs first;
+  - fill remaining queue depth with gate jobs;
+  - notify the main thread as soon as all up jobs have completed and their H2D
+    copies have been enqueued on `bc.up_stream`;
+  - continue draining/submitting gate jobs in the same worker;
+  - notify the main thread when gate jobs are staged on `bc.gate_stream`.
+- This keeps up compute independent from gate completion while allowing small
+  up batches to use gate reads to fill the SSD queue.
+
+Scope:
+
+- Default off behind:
+
+```text
+GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1
+```
+
+- Only active when all are true:
+  - same-type non-mixed path;
+  - `src0_type == GGML_TYPE_IQ2_S`;
+  - `parallel_stage` is already active;
+  - not prompt mode;
+  - not exact prompt Q8_K;
+  - up and gate expert byte sizes are the same.
+- Do not apply to IQ3_XXS, mixed-type up/gate, prompt, down, current-down
+  overlap, Q4_0 fallback, RAM tier, or VRAM cache policy.
+
+Implementation sketch:
+
+- Add `cudaStream_t stream` to the local `stage_copy_job`.
+- Add a local helper in the same-type parallel-stage branch:
+  `copy_up_gate_jobs_dual_fence(up_jobs, gate_jobs, ...)`.
+- The helper reuses the existing 12-slot `bc.stage_ring`; it must not allocate
+  more pinned slots or increase host RAM.
+- For each completed read:
+  - enqueue H2D on the job's target stream (`bc.up_stream` or `bc.gate_stream`);
+  - mark the up or gate subset completion counters;
+  - signal a `std::condition_variable` when all up jobs are enqueued;
+  - signal again when all gate jobs are enqueued.
+- Main thread flow:
+  1. start the dual-fence worker;
+  2. wait only for `up_ready`;
+  3. launch up compute on `bc.up_stream`;
+  4. wait for `gate_ready`;
+  5. join worker;
+  6. launch gate compute on `bc.gate_stream`.
+- On any worker error:
+  - synchronize involved streams;
+  - clear staged slots for both up and gate jobs;
+  - decline the optimized path and return failure for the experiment. Do not
+    silently fall back inside the same run because that would make mechanism
+    validation ambiguous.
+
+Theoretical upper bound:
+
+- 7LC type `(22,22)` printed wall is `3426.958 ms` on n32.
+- The first implementation cannot beat the entire type `(22,22)` wall because
+  compute and H2D remain. Targeting only small-batch queue underfill gives a
+  realistic n32 upper bound of `~0.5-1.2 s`.
+- n96 scaled upper bound is `~1.2-3.0 s`.
+- If this mechanism mainly converts `2-4` batches into fuller shared batches,
+  expected signs are:
+  - iouring `batch_hist` gains `9-16` or higher effective shared batches;
+  - type `(22,22)` wall drops;
+  - total iouring wait does not rise like 7AY;
+  - endpoint decode improves versus 7KX/7JY n32.
+
+Experiment A: build and strict n32
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase-7le-commit>
+cmake --build build-cuda-batch -j
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7le-iq2-shared-io-dual-fence-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required activation:
+
+- `env.txt` contains `GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1`.
+- stderr contains a one-time activation line:
+  `up/gate shared IO dual-fence active`.
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Promotion and rollback:
+
+- Compare n32 against 7KX no-profile baseline:
+  `22601.57 ms / 31`, `1.37 tok/s`.
+- If n32 is slower, quality fails, TTFT fails, memory fails, activation is
+  missing, or iouring fallback appears, revert source before continuing and
+  record the run as rejected.
+- If n32 improves and all gates pass, run a second n32 cold-start repeat. Only
+  then run n96 confirmation.
+- Promote only if n96 beats the current strict n96 guard/reference while all
+  gates pass. Commit and push immediately with exact reproduction commands.
+
+Reproducibility:
+
+- Commit and push this plan before editing source.
+- After implementation, commit source only after build succeeds.
+- Every run directory must contain enough artifacts to rerun from the recorded
+  commit, command, env, cgroup, cold-start method, model path, expert packs,
+  prompt, seed, and output.
