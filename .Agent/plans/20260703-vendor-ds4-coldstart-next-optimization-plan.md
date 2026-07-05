@@ -4,6 +4,53 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Plan: Preserve 4.4 SOTA, Then Run Bounded KEEP_TOPK Probe
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe、不可复现单次结果、或非 vendor 结果提升为 SOTA。
+
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是之前不可复现的 `4.5 tok/s` prefill 2800 单次结果，也不是历史上下文里曾提到但当前源码/记录无法作为最高有效结果的 `4.2 tok/s`：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Accepted SOTA metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted SOTA config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, accepted O_DIRECT gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes.
+- Expert pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, size `20495904768` bytes.
+- Current pushed source/artifact head before this plan update: `cc6edf04c` (`vendor-ds4: refresh artifacts after top4 reject`).
+- Push target for all future source/artifact updates: `ssd` remote, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`.
+- Git identity for commits/pushes: `L-Ark <fliangae@connect.ust.hk>`.
+
+Closed or rejected routes that must not be accidentally promoted:
+
+- `PREFILL_LIMIT=2800` remains rejected because its first run reached `4.5 tok/s` but clean pushed-source reproduction only reached `4.3 tok/s`. It can only be reopened by a new hard-bound or a new clean reproduction that beats `4.4 tok/s` under the same strict gates.
+- Native `--override-kv deepseek4.expert_used_count=int:4` remains rejected: `eval_tok_s=3.5`, manual France correctness failed, gate-cache hit rate regressed, and it is not equivalent to the cloudyu 4Expert artifact because it lacks the required tid2eid routing behavior.
+- DFlash/current target-verifier path remains closed by the oracle verifier window probe. W=2/4/8 fixed-text oracle evaluation produced only about `1.010x` to `1.013x` speedup, far below the sublinear verifier requirement for a useful speculative route.
+- 4Expert sidecar bypass remains closed with current loader. A small expert pack cannot change hparams, tensor metadata, `expert_used_count`, or `ffn_gate_tid2eid.weight` routing. Reopen only with the full `164.5GB` 4Expert GGUF after disk is explicitly freed, or with a separate split-loader hard-bound before source code.
+- External artifact refresh after top4 rejection found no new vendor-loadable route that is both disk-feasible now and hard-bound above `10 tok/s`.
+
+Disk and preservation state before the next step:
+
+- `/root` is effectively full: about `991G/993G` used and only about `1.8G-1.9G` free.
+- Do not delete files without explicit user approval. Preserve the accepted native GGUF, accepted gate-miss expert pack, accepted SOTA run, current-head guard/repro dirs, profiles, run artifacts, and this plan history.
+- Full 4Expert GGUF testing requires at least about `180GB` safe free space and is blocked until the user explicitly approves deletion or relocation of large non-SOTA assets.
+
+Next executable plan:
+
+1. First audit the current `GGML_MOE_KEEP_TOPK_*` implementation and existing artifacts, without source edits, to confirm exactly what is pruned today and whether the risk is bounded enough for one strict probe.
+2. If the audit supports a cheap bounded probe, write a run-plan artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` before execution. The first candidate is `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` with the accepted SOTA config otherwise unchanged: `cpu_moe=40`, `vram_cache=0`, accepted O_DIRECT gate pack, `PREFILL_LIMIT=3000`, strict cold `drop_caches`, 16GB cgroup including page cache, and no trace.
+3. The theory to record before the run: lowering layer keep-topk from `3` to `2` can reduce CPU fallback up/down work and source/page pressure in layers `10-39`, but it is correctness-risky because it prunes routed expert contribution. The expected upside is bounded by the fraction of decode time currently attributable to CPU up/down fallback and source/page exposure; it cannot be accepted without semantic France correctness and the strict TTFT/RAM gates.
+4. Run the strict France prompt first. The France answer must be semantically correct and coherent; outputs with repetition, self-correction such as `Wait, I already said that`, truncation, contradictory country facts, or landmark/cuisine hallucinations are rejected even if the script heuristic passes.
+5. If the probe improves token rate but fails correctness, RAM, OOM/swap, or TTFT, immediately record it as rejected and restore the accepted SOTA environment. Do not promote it.
+6. If the probe reaches `eval_tok_s > 4.4` and passes correctness, `TTFT <= 33617.688744 ms`, strict 16GB RAM/page-cache, no swap/OOM, and all run counters, immediately commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then run a clean pushed-source reproduction before treating it as accepted.
+7. If the pushed-source reproduction does not also beat `4.4 tok/s` under the same gates, record the candidate as rejected variance, like `PREFILL_LIMIT=2800`, and keep `4.4 tok/s` as accepted SOTA.
+8. If `KEEP_TOPK_LAYER_VALUE=2` fails or is not justified by the audit, do not continue a blind top-k sweep. Close the no-source top-k route unless a new hard-bound explains a specific next point and its correctness risk.
+
+Promotion gate remains strict:
+
+- Any future accepted SOTA requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a France answer that is semantically correct and coherent.
+- Any result with improved token rate but TTFT above the gate may be committed and pushed only as a rejected diagnostic, never as accepted SOTA.
+- When a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`; then perform a clean pushed-source reproduction before treating it as accepted.
+- Required SOTA metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+
 ### 2026-07-05 Latest Plan: Prefill 2800 Candidate Rejected After Pushed-Source Repro
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe 或非 vendor 结果提升为 SOTA。
