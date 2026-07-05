@@ -58813,6 +58813,84 @@ Decision rule:
 - If n96 is flat/worse, reject `GGML_MOE_DOWN_STAGE_SINGLE_RING=1` as a SOTA
   runtime change and keep it only as default-off infrastructure.
 
+### 7JD n96 result and acceptance
+
+Timestamp: 2026-07-05.
+
+First n96 validation run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jd-down-single-ring-n96`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+- TTFT `78794.86 ms`, below `106331.72 ms`;
+- decode `71427.65 ms / 77`, `1.08 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15103438848` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring reads `36832`, bytes `213693792256`, wait `30045280 us`;
+- iouring batches `8036`;
+- down hit `73.0%`;
+- upgate hit `44.1%`.
+
+Second n96 repeat:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jd-down-single-ring-n96-repeat`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+- TTFT `77412.40 ms`, below `106331.72 ms`;
+- decode `71024.41 ms / 77`, `1.08 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15101616128` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring reads `36832`, bytes `213693792256`, wait `30098701 us`;
+- iouring batches `8036`;
+- down hit `73.0%`;
+- upgate hit `44.1%`.
+
+Comparison with accepted pct62 n96 baseline:
+
+- previous accepted 7IN:
+  - decode `72282.91 ms / 77`, `1.07 tok/s`;
+  - iouring reads `36992`, bytes `214835740672`, wait `36653460 us`;
+  - iouring batches `9849` (`6737` main + `3112` gate);
+- 7JD first n96:
+  - decode improvement `855.26 ms`;
+  - iouring wait reduction `6608.180 ms`;
+  - iouring batches reduced to `8036`;
+- 7JD repeat n96:
+  - decode improvement `1258.50 ms`;
+  - iouring wait reduction `6554.759 ms`;
+  - iouring batches reduced to `8036`.
+
+Decision:
+
+- Accept `GGML_MOE_DOWN_STAGE_SINGLE_RING=1` as the new SOTA runtime delta.
+- Reason:
+  - two n96 runs pass all correctness, TTFT, RAM, swap, and expert-pack gates;
+  - both n96 runs beat the accepted pct62 n96 baseline;
+  - the measured mechanism matches the joined-trace theory:
+    reducing split down staging batch boundaries cuts iouring batch count and
+    total wait without adding reads or changing cache hit rates.
+- Update `scripts/kimi-phase7fb-min-profile-repro.sh` to include:
+  `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`.
+- Current accepted SOTA after this phase:
+  - source/runtime includes default-off code support for single-ring staging;
+  - production runner enables `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - strict 16GB cold-start n96 best confirmed decode:
+    `71024.41 ms / 77`, `1.08 tok/s`.
+
 ### Result
 
 Timestamp: 2026-07-05.
