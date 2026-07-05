@@ -68179,3 +68179,208 @@ Reproducibility:
 - Keep the run directory self-contained with `script.sh`, `command.txt`,
   `env.txt`, `stdout.txt`, `stderr.txt`, `metrics.txt`, memory files, and the
   four targeted profile CSVs.
+
+### 7LB result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `4282ee167` (`docs: plan residual kimi bottleneck audit`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-052446Z-phase7lb-residual-audit-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `74746.94 ms`;
+- decode `23938.69 ms / 31`, `1.29 tok/s`;
+- memory peak `15899996160`;
+- memory final `15100104704`;
+- final memory.stat:
+  - `anon=466944`;
+  - `file=14862471168`;
+  - `inactive_file=2846248960`;
+  - `active_file=12015464448`;
+  - `kernel=234889216`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Profile files:
+
+- `io-batch-profile.csv`: `5178` rows;
+- `io-wait-trace.csv`: `17735` rows;
+- `copy-profile.csv`: `23501` rows;
+- `current-down-overlap-profile.csv`: `32` rows.
+
+Aggregated IO profile:
+
+- `runtime_load`:
+  - rows `4318`;
+  - jobs/read jobs `19143/19143`;
+  - wait `18057.987 ms`;
+  - wall `19188.513 ms`;
+  - submit `48.569 ms`;
+  - enqueue `361.442 ms`;
+  - avg row inflight `3.08`, max `8`.
+- `current_down_overlap`:
+  - rows `860`;
+  - jobs/read jobs `3504/3504`;
+  - wait `2599.298 ms`;
+  - wall `2774.779 ms`;
+  - submit `11.015 ms`;
+  - enqueue `40.031 ms`;
+  - avg row inflight `2.97`, max `8`.
+
+Foreground `runtime_load` by tensor kind:
+
+- up:
+  - rows `1792`;
+  - jobs `7854`;
+  - wait `7615.883 ms`;
+  - wall `8196.123 ms`.
+- gate:
+  - rows `1792`;
+  - jobs `7855`;
+  - wait `7683.275 ms`;
+  - wall `8074.727 ms`.
+- down:
+  - rows `734`;
+  - jobs `3434`;
+  - wait `2758.829 ms`;
+  - wall `2917.663 ms`.
+
+Current-down profile:
+
+- overall current-down overlap summary:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3397144 us`.
+- `blk.7.ffn_down_exps.weight`, `blk.8.ffn_down_exps.weight`, and
+  `blk.9.ffn_down_exps.weight` each show `31` `missing_tensor` calls, but the
+  foreground runtime-load profile shows zero down reads for these tensors in
+  this n32 run. Therefore those missing tensors are not the current main
+  endpoint bottleneck.
+
+Interpretation:
+
+- The residual foreground bottleneck is still up/gate expert staging:
+  `~15.30 s` foreground wait across up+gate versus `~2.76 s` for down.
+- Queue depth and refill timing are not the root issue by themselves: effective
+  inflight stays around `3.0` even with max `8`, matching the rejected 7KY
+  immediate-refill result.
+- Broad current-down work is not the next best target; it is smaller and already
+  has overlap.
+- The 7LB plan intended to include up/gate layer summary, but only set
+  `GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=32`. The code also requires
+  `GGML_MOE_UP_GATE_LAYER_PROFILE=1`, so no layer summary was produced. This is
+  a plan/env error, not a runtime failure. Treat 7LB as valid IO/copy/current
+  down evidence only.
+
+Decision:
+
+- Do not promote 7LB; profiling overhead slowed decode versus the no-profile
+  baseline.
+- Use 7LB to narrow the next diagnostic to up/gate layer-level foreground wait.
+- Run a corrected, lower-output 7LC diagnostic with only up/gate layer profile
+  enabled.
+
+## Phase 7LC - corrected up/gate layer bottleneck audit
+
+Timestamp: 2026-07-05 19:03:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Identify whether foreground up/gate wait is broad across layers or dominated
+  by a small set of layer/type pairs.
+- Use this to decide whether the next implementation can be layer-specific, or
+  whether any remaining improvement must change the broader up/gate staging
+  call shape.
+
+Current bottleneck from 7LB:
+
+- up foreground wait `7615.883 ms`;
+- gate foreground wait `7683.275 ms`;
+- combined up+gate foreground wait `15299.158 ms`;
+- down foreground wait `2758.829 ms`;
+- current-down overlap wait `2599.298 ms`.
+
+Diagnostic method:
+
+- Run unchanged current head with `N=32`, strict cold start, strict 16GB cgroup,
+  and accepted runtime defaults.
+- Keep `MIN_PROFILE=1`; do not enable copy or IO CSV profiles in this pass.
+- Add only:
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE=1`
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=64`
+- Parse the stderr summary rows:
+  - top `wall_total`;
+  - top `up_wait_total + gate_wait_total`;
+  - top `wall_gap_total`;
+  - top compute totals.
+
+Theory and upper bound:
+
+- If top layer/type pairs account for at least `> 2500 ms` of up/gate wall,
+  a layer-specific implementation may have enough headroom to justify source
+  work. The hard upper bound is the summed wait or wall gap of those pairs,
+  capped by 7LB's combined up+gate foreground wait of `15299.158 ms`.
+- If the top rows are flat and each layer contributes only `~150-350 ms`, the
+  next implementation must address the repeated per-layer staging structure
+  itself. In that case, single-layer special casing is rejected before coding.
+- The diagnostic is expected to perturb timing less than 7LB because it writes
+  only stderr summary counters rather than per-copy/per-IO CSV rows.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 4282ee167
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lc-upgate-layer-audit-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_UP_GATE_LAYER_PROFILE=1\nGGML_MOE_UP_GATE_LAYER_PROFILE_TOP=64' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If gates fail, reject the diagnostic and do not use it.
+- If layer contribution is concentrated, append a candidate-specific plan for
+  that layer/type pair before source changes.
+- If layer contribution is broad, append a broader up/gate staging-shape plan
+  with a hard upper bound from 7LB/7LC and reject single-layer work.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record the run directory, command, output, gates, and full up/gate layer
+  summary in the result section.
