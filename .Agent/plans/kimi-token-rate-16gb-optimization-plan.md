@@ -79173,3 +79173,102 @@ Decision:
 - Do not build another trace-order layout-only overlay unless a new non-rejected
   runtime mechanism is designed first.
 - Current SOTA remains unchanged.
+
+## Phase 7NH - EAGLE3/MLA speculative compatibility audit
+
+Timestamp: 2026-07-06 01:55:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Audit whether the small public Kimi EAGLE3 / EAGLE3-MLA draft assets can
+  plausibly become the next optimization route under the strict 16 GB host RAM
+  cold-start rules.
+- Do not download weights, do not edit source, and do not run the model in this
+  phase.
+- Decide whether a future EAGLE3 runtime implementation has a hard upper bound
+  high enough to justify source work, or whether it is blocked by current
+  verifier cost/runtime support.
+
+Why this is the next valid step:
+
+- 7NF found no direct target-model GGUF/FP4 replacement that fits current disk.
+- The only public assets small enough for this server are draft/speculative
+  assets:
+  - `cm00cm/Kimi-K2.7-Code-EAGLE3`;
+  - `novita/kimi-k2.7-code-eagle3-mla`;
+  - related EAGLE3/DFlash assets.
+- 7NA/7NB rejected the DFlash path under the current target block-verification
+  shape, but EAGLE3 has not been separately audited against current vendor
+  source support and public acceptance metrics.
+- The user target remains token rate near `5 tok/s`, which needs an effective
+  accepted-token multiplier of about `5 / 1.36 = 3.68x` before draft overhead.
+
+Audit inputs:
+
+- Current vendor source:
+  `/root/lfz/llama.cpp-vendor-kimi`
+- Current 7NB verifier result:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench`
+- Public metadata/model cards for:
+  - `cm00cm/Kimi-K2.7-Code-EAGLE3`;
+  - `novita/kimi-k2.7-code-eagle3-mla`;
+  - `AQ-MedAI/Kimi-K2.7-Code-eagle3` if still present;
+  - any other `Kimi-K2.7-Code EAGLE3` search hit.
+
+Audit method:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nh-eagle3-compat-audit`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `vendor_speculative_sources.txt`;
+  - `vendor_speculative_flags.txt`;
+  - `hf_eagle_metadata.jsonl`;
+  - `hf_eagle_readmes.md`;
+  - `compatibility_matrix.tsv`;
+  - `performance_bound.md`;
+  - `decision.md`.
+- Inspect source for:
+  - EAGLE/EAGLE3 enum and CLI exposure;
+  - draft hidden-state interface;
+  - target verifier path;
+  - whether EAGLE3 is implemented or marked TODO;
+  - whether Kimi MLA/KDA hidden-state extraction is exposed in llama.cpp.
+- Query public metadata/model cards only:
+  - file sizes;
+  - architecture/config hints;
+  - reported acceptance length, if present;
+  - required runtime framework.
+
+Hard-bound criteria:
+
+- A future implementation is only credible if:
+  - the expected accepted-token multiplier can exceed `3.68x` before overhead;
+  - the target verification path does not reuse the slow 7NB block-verification
+    behavior (`B=4` `18.556 s`, `B=8` `33.610 s`, `B=16` `51.832 s`);
+  - the draft asset contract is clear enough to map target hidden states,
+    tokenizer, lm head, and KV acceptance into vendor llama.cpp;
+  - strict n32 can be planned under `MemoryMax=15900000000`.
+- If the public reported accept length is `<=3.2` or the implementation requires
+  the same expensive target block verifier measured in 7NB, reject EAGLE3 as the
+  next source task.
+
+Decision rule:
+
+- If current source already has an implemented EAGLE3 path and a small Kimi
+  EAGLE3 GGUF is directly compatible, write a strict n32 smoke plan.
+- If current source lacks EAGLE3 runtime support but the hard bound is strong,
+  write a separate implementation plan with activation counters, exact verifier
+  semantics, and rollback gates.
+- If source support is absent and reported acceptance/verifier bounds cannot
+  reach the target, reject without source implementation.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store all raw metadata, grep outputs, and bound calculations in the run
+  directory.
+- Commit and push the audit result before any EAGLE3 download or source work.
