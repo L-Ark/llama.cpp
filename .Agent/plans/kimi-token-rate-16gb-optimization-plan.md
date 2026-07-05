@@ -62132,3 +62132,138 @@ Decision rule:
 - If decode CPU split is much lower, target the new dominant bucket instead.
 - This diagnostic is not a SOTA candidate unless it unexpectedly improves
   token rate while passing all gates.
+
+### 7JU result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `4f214ab41` (`docs: plan current split refresh`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ju-current-split-refresh`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 4f214ab41
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ju-current-split-refresh
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32
+GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Default verification:
+
+- command omits `UPGATE_PCT`;
+- `command.txt` records `UPGATE_PCT=62`;
+- `env.txt` includes `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `77471.02 ms`;
+- decode `28921.86 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160`;
+- memory final `15109681152`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14819`, bytes `85991915520`, wait `12393461 us`;
+- iouring batches `3280`, wait calls `11646`;
+- current-down overlap worker time `3373854 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Graph profile:
+
+- submit calls `32`, total `105217.779 ms`, avg `3288.056 ms/call`;
+- sync calls `192`, total `24.748 ms`;
+- decode sync calls `31`, total `24.537 ms`, avg `0.792 ms/call`;
+- explicit CUDA sync is not the bottleneck.
+
+Split profile:
+
+- all:
+  - signatures `244`;
+  - calls `3904`;
+  - wall `105193.284 ms`;
+  - CPU wall `104619.034 ms`;
+  - CUDA0 wall `574.250 ms`.
+- prompt:
+  - wall `76328.524 ms`;
+  - CPU wall `75918.374 ms`;
+  - CUDA0 wall `410.150 ms`.
+- decode:
+  - wall `28864.760 ms`;
+  - CPU wall `28700.660 ms`;
+  - CUDA0 wall `164.100 ms`.
+- Decode CPU share:
+  - `28700.660 / 28864.760 = 99.43%`.
+- Decode top rows:
+  - top1 CPU `ffn_moe_swiglu-9` to `ffn_moe_down-9`:
+    `917.523 ms`, `31` calls, `29.598 ms/call`;
+  - top2 CPU `ffn_moe_swiglu-7` to `ffn_moe_down-7`:
+    `879.380 ms`;
+  - top3 CPU `ffn_moe_swiglu-6` to `ffn_moe_down-6`:
+    `875.838 ms`;
+  - top4 CPU `ffn_moe_swiglu-8` to `ffn_moe_down-8`:
+    `811.219 ms`;
+  - top5 CPU `ffn_moe_swiglu-10` to `ffn_moe_down-10`:
+    `691.387 ms`;
+  - top32 is still CPU `ffn_moe_swiglu-*` to `ffn_moe_down-*`,
+    `421.790 ms`, `13.606 ms/call`.
+
+Assignment diagnostics:
+
+- Decode MoE split rows are assigned to CPU.
+- For `ffn_moe_swiglu-*`:
+  - op `MOE_FUSED_UP_GATE`;
+  - output buffer `CUDA_Host`;
+  - supports `[CUDA0:0,CPU:1]`.
+- For the paired `ffn_moe_down-*`:
+  - op `MUL_MAT_ID`;
+  - output buffer `CUDA_Host`;
+  - supports `[CUDA0:1,CPU:1]`;
+  - source 1 is the CPU-assigned `ffn_moe_swiglu-*`.
+- Interpretation:
+  - `MOE_FUSED_UP_GATE` being unsupported by CUDA forces the split to CPU;
+  - down itself can be supported by CUDA, but the scheduler keeps the paired
+    split on CPU because its input is the CPU-host swiglu output.
+
+Decision:
+
+- Current SOTA still has the same dominant scheduler/backend shape as 7IF.
+- The largest remaining measured bucket is CPU backend MoE swiglu/down split
+  wall, not explicit graph sync or CUDA backend execution.
+- Next phase should not retry cache split, Q4_0 GPU/cache, hot-key pinning, or
+  read coalescing.
+- Next phase should design a guarded feasibility test for reducing the CPU MoE
+  split wrapper:
+  - either a true CUDA backend implementation/support path for
+    `MOE_FUSED_UP_GATE`;
+  - or a decode-only bypass that avoids redundant CPU graph execution when the
+    existing custom CUDA MoE path has already produced the needed output.
