@@ -81092,3 +81092,118 @@ python3 "$RUN/phase7np_upgate_bound.py"
 cat "$RUN/upgate-byte-summary.md"
 cat "$RUN/upgate-target-bounds.tsv"
 ```
+
+## Phase 7NQ - current external asset and format delta audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 03:42 CST.
+
+Reason:
+
+- Phase 7NN rejected the remaining simple I/O queue/coalescing/scheduler work.
+- Phase 7NO rejected immediate down requantization and typed-pack source work:
+  down-only byte savings are too small, and current `GGMLMOEPACKv1` does not
+  carry an independent quant type.
+- Phase 7NP rejected up/gate typed-pack/requantization source work:
+  the best supported n32 up+gate byte-reduction bound is only `5.867 GiB`
+  before overlap discount and requires risky `IQ2_S` down-quantization of
+  already low-bit tensors.
+- Phase 7NJ found no remaining current-source runtime switch that qualifies as
+  a production candidate.
+- Phase 7NK/7NL rejected implementable cache-policy and previous-token route
+  predictor source work.
+- Phase 7NA/7NB rejected the current DFlash/block-verifier path because target
+  block verification is far too expensive in the existing Kimi MoE runtime.
+- The remaining viable path is no longer another local runtime micro-patch. It
+  is a changed model/expert-pack asset or format that materially reduces
+  expensive target work or transferred expert bytes.
+
+Goal:
+
+- Re-query current public and local Kimi-compatible assets after the 7NN-7NP
+  closure.
+- Identify whether any newly available or previously missed asset can be the
+  next strict optimization candidate under the current server constraints:
+  - `88G` free disk on `/root/lfz`;
+  - strict cold start;
+  - host RAM under `16GB`, including page cache;
+  - no swap;
+  - France prompt semantic quality gate;
+  - TTFT increase below `20%`.
+- Do not edit source code.
+- Do not run model inference.
+- Do not download large weights or delete existing assets.
+
+Audit method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nq-asset-format-delta`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `disk_and_local_assets.txt`;
+   - `hf_queries.jsonl`;
+   - `hf_model_metadata.jsonl`;
+   - `candidate_matrix.tsv`;
+   - `decision.md`;
+   - `phase7nq_asset_audit.py`.
+3. Use metadata-only network/API queries for current Hugging Face candidates.
+   Search terms must include at least:
+   - `Kimi K2.7 Code GGUF`;
+   - `Kimi-K2.7-Code NVFP4`;
+   - `Kimi-K2.7-Code MXFP4`;
+   - `Kimi-K2.7-Code IQ2 GGUF`;
+   - `Kimi-K2.7-Code DFlash`;
+   - `Kimi-K2.7-Code EAGLE3`;
+   - `Kimi K2.7 Code draft`.
+4. Cross-check local assets under:
+   - `/root/lfz/models`;
+   - `/root/lfz/runs/ik_llama/kimi-iq3s-assets`.
+5. For each candidate, record:
+   - repository id and URL;
+   - format;
+   - total file size;
+   - largest file size;
+   - whether it is local;
+   - whether it fits current `88G` free disk without deleting assets;
+   - whether it is a drop-in GGUF, expert-only safetensors asset, draft model,
+     DFlash/EAGLE artifact, or converter/runtime project;
+   - required source/runtime work;
+   - expected read-volume or accepted-token multiplier bound;
+   - decision and blocker.
+
+Hard decision rules:
+
+- A direct target/model asset is not a next execution candidate unless it is:
+  - already local or downloadable within the current free disk with safety
+    margin;
+  - compatible with current llama.cpp GGUF loading or has a clear converter
+    path that does not require full-size intermediate files on this server;
+  - plausibly lowers expert read volume enough to exceed the 7NP/7NO byte
+    bounds.
+- A speculative/draft asset is not a next implementation candidate unless:
+  - it is locally runnable or small enough to download within disk limits;
+  - the verifier path does not repeat the 7NB one-target-forward-per-token
+    failure;
+  - metadata or published metrics plausibly support effective accepted-token
+    multiplier `>= 3.68x` before draft overhead, preferably `>= 4.0x`.
+- If all candidates are blocked by disk size, runtime support, converter
+  support, or insufficient acceptance/byte-reduction bounds, record an explicit
+  no-go and keep the current SOTA unchanged.
+- If exactly one candidate qualifies, write a separate follow-up phase before
+  any download, conversion, source edit, or model run.
+
+Strict constraints:
+
+- No model inference in this phase.
+- No source changes.
+- No large downloads.
+- No asset deletion.
+- No SOTA promotion.
+- All results must be reproducible from the recorded script and raw metadata.
+
+Reproducibility:
+
+- Commit and push this 7NQ plan before running the audit.
+- Commit and push the 7NQ result before any follow-up source or asset work.
