@@ -76875,3 +76875,82 @@ Reproducibility:
 - Accepted improvement must remain committed and pushed immediately with the
   exact reproduction command.
 - Rejected source must be reverted and pushed immediately.
+
+Result - 2026-07-05 21:58 CST:
+
+- Plan commit before source edit: `412901186`
+  (`docs: plan dynamicx mmq upgate probe`).
+- Source commit tested: `62a8226d6`
+  (`cuda: add dynamicx vendor mmq upgate probe`).
+- Revert commit pushed after failed gate: `9bbd30d16`
+  (`Revert "cuda: add dynamicx vendor mmq upgate probe"`).
+- Server was synced to the source commit and build passed:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 62a8226d6
+cmake --build build-cuda-batch -j"$(nproc)"
+```
+
+- Strict n32 run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-135439Z-phase7mw-dynamicx-mmq-n32`
+- Exact run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-135439Z-phase7mw-dynamicx-mmq-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1 GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Exit `0`; `memory.swap.max=0`; `memory.peak=15899996160`;
+  `memory.events`: `oom=0`, `oom_kill=0`.
+- Quality: `pass`.
+- Answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `67020.81 ms`, within the 20% cap.
+- Decode: `40819.28 ms / 31`, `0.76 tok/s`.
+- Activation:
+  - `[moe_stream] vendor MMQ up/gate path active: type=18`;
+  - `[moe_stream] vendor MMQ dynamic-X up/gate path active: type=18`.
+- Expert-pack counters:
+  - `iouring_reads=14622`;
+  - `direct_reads=8604`;
+  - `iouring_bytes=85740863488`;
+  - `iouring_submit_us=41251`;
+  - `iouring_wait_us=12986476`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.20`, max `8`.
+- Pinned staging:
+  - main copies `19351`;
+  - gate copies `4088`.
+- Current-down overlap:
+  - completed jobs `3665`;
+  - worker `3076052 us`.
+- VRAM cache:
+  - total hit rate `54.0%`;
+  - down hit rate `73.6%`;
+  - up/gate hit rate `45.3%`.
+
+Decision:
+
+- Reject. Dynamic-X MMQ activated and preserved semantic output, memory, TTFT,
+  and IO correctness, but endpoint decode regressed badly:
+  - current clean default n32 band: `~1.33-1.39 tok/s`;
+  - 7MV fixed-buffer rejected run: `1.27 tok/s`;
+  - 7MW dynamic-X MMQ: `0.76 tok/s`.
+- The reduced iouring read byte count is not a real improvement because the MMQ
+  compute path moves much more wall time onto the decode critical path.
+- This closes the imported ik_llama dynamic-X MMQ delta for the current vendor
+  runtime. Do not continue vendor fused-MMQ variants unless there is a new
+  kernel-level design and a plan that first explains the `0.76 tok/s`
+  regression.
+- Source rollback was pushed immediately as `9bbd30d16`, and the server was
+  reset to that reverted HEAD and rebuilt.
