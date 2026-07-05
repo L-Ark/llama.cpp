@@ -73504,3 +73504,108 @@ Rollback:
 - If output quality fails, TTFT regresses beyond the gate, memory exceeds the
   limit, or decode regresses materially, revert the production-enable source and
   keep only the parity diagnostic.
+
+7MG result:
+
+Timestamp: 2026-07-06 18:28:00 CST.
+
+Status: rejected and source reverted.
+
+Implementation tested:
+
+- Added default-off `GGML_MOE_Q4_DOWN_ENABLE_TENSOR`.
+- Allowed only `blk.6.ffn_down_exps.weight` to use Q4_0 CUDA down batch and
+  return `true`.
+- Other Q4_0 tensors stayed on CPU fallback.
+- Added one activation log:
+  `q4_down_enable active tensor=blk.6.ffn_down_exps.weight`.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+Run A:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-095526Z-phase7mg-q4-blk6-prod-n32`
+- Result:
+  - activation present;
+  - quality `pass`;
+  - TTFT `61544.75 ms`;
+  - decode `22518.02 ms / 31`, `1.38 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - CPU fallback mmap bytes dropped from default `14260764672` to
+    `12212895744`, proving the selected Q4 layer moved off CPU fallback.
+
+Run B repeat:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-095758Z-phase7mg-q4-blk6-prod-repeat-n32`
+- Result:
+  - activation present;
+  - quality `pass`;
+  - TTFT `74634.44 ms`;
+  - decode `24004.21 ms / 31`, `1.29 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - CPU fallback mmap bytes again `12212895744`.
+
+Comparison to current default repeat:
+
+- Default reference:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-092042Z-phase7md-current-default-repeat-n32`
+- Default metrics:
+  - TTFT `66044.43 ms`;
+  - decode `22659.98 ms / 31`, `1.37 tok/s`;
+  - down slot `7.44 MiB`;
+  - down slots `766`;
+  - down hit rate `73.4%`;
+  - current-down planned jobs `3673`;
+  - iouring wait `20476147 us`.
+
+7MG repeat metrics:
+
+- down slot increased to `7.88 MiB`;
+- down slots dropped to `723`;
+- down hit rate dropped to `70.7%`;
+- current-down planned jobs increased to `4052`;
+- iouring wait increased to `21566985 us`;
+- decode regressed to `24004.21 ms`.
+
+Interpretation:
+
+- Single-layer Q4_0 production is semantically safe for `blk.6`, but not a
+  reproducible speedup.
+- The attempted CPU fallback saving is offset by larger Q4 staging/cache slot
+  pressure:
+  - larger down slot size reduces cache capacity;
+  - more planned down jobs and more iouring/H2D work appear on the critical
+    path;
+  - run-to-run variance can make one run look neutral, but repeat rejects it.
+- This supports the hypothesis that broad Q4_0 down is slow mainly because of
+  cache/staging pressure, not first-call Q4 dot math.
+
+Decision:
+
+- Revert the `GGML_MOE_Q4_DOWN_ENABLE_TENSOR` production source.
+- Keep only the default-off parity diagnostic from commit `e50638fb4`.
+- Do not try additional Q4 production layers until there is a design that avoids
+  Q4 down slot-size/cache-capacity loss or stages Q4 without shrinking the
+  existing Q3/IQ4 down cache.
+
+Next candidate direction:
+
+- Investigate split down-cache pools by quant type or a cache-hit-only Q4
+  production path that refuses Q4 misses.
+- The key requirement is preserving the current Q3/IQ4 down cache geometry
+  (`7.44 MiB`, 766 slots) while testing Q4 GPU compute.
