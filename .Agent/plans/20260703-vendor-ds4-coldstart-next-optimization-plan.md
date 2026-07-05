@@ -4,6 +4,48 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Reopen Full Native Expert-Pack mmap, Reproduce Before Promotion
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。刚发现的 full native expert-pack mmap `5.1 tok/s` 结果只能视为 positive diagnostic candidate，不能直接标记为 SOTA；必须先用当前源码重建、严格 cold 复现、记录完整复现信息、push 到 `ssd/vendor/deepseek-token-rate-16gb`，再从 pushed source 做 clean reproduction 后才允许升级。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`156.15 GB`, `145.42 GiB`)
+- Accepted gate pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- Accepted config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT France gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New diagnostic signal to resolve immediately:
+
+- Diagnostic plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/native-full-pack-mmap-diagnostic-plan-20260706.json`
+- Diagnostic run: `/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb`
+- Diagnostic metrics: `eval_tok_s=5.1`, `prompt_tok_s=1.9`, `TTFT=26197.922333 ms`, `elapsed_seconds=52.03`, `memory_peak_bytes=16000000000`, `memory_file_bytes=12725145600`, `memory_max_events=26`, `pgmajfault=287105`, `workingset_refault_file=1914608`, `ram_ok=true`, `ram_limit_killed=false`, `correctness_ok=true`
+- Diagnostic output was semantically correct and coherent for the required France prompt.
+- Full native expert pack: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`, size `147174760448` bytes, format `GGMLMOEPACKv1`, entries `33024`, covering `43` layers, `256` experts, and all `gate/up/down` roles.
+- Diagnostic counters: full pack mmap loaded `33024` entries; CPU fallback pack mmap `hits=35880`, `misses=0`, `fallback_gguf=0`, `bytes=159897354240`; gate one-pack `hits=4623`, `misses=0`, O_DIRECT `reads=4623`, `bytes=20602159104`; VRAM cache hit rate `86.8%`.
+- Important limitation: this was run with `build-ds4-moe-stream-batch-probe` and `GGML_CUDA_MOE_STREAM_BATCH=ON`, not yet the previously accepted batch-OFF binary path. Therefore it is a candidate only, despite passing RAM/TTFT/correctness gates.
+
+Current bottleneck hypothesis after the diagnostic:
+
+- The accepted `4.4 tok/s` path is still dominated by cold expert source/page movement plus exact up/down CPU fallback on cache misses.
+- The positive full-pack mmap signal suggests the existing full native pack may improve the CPU fallback source layout enough to reduce source/page movement and avoid GGUF fallback reads, even though it does not remove CPU fallback math or synchronization.
+- This directly supersedes the older top-level statement that the full native expert-pack route is closed. That older closure remains as historical context, but the route is now reopened only for strict reproduction and source-state validation.
+
+Updated next executable plan:
+
+1. Confirm `build-ds4-moe-stream-batch-probe/bin/llama-cli` has been rebuilt from current source commit `477e51109ae6fdd7c9b3a8b95da18b2362a4cb3c`; record build command, CMake flags, binary path, binary SHA256, branch, and remote target.
+2. Run one clean strict cold reproduction using the rebuilt binary with the exact accepted SOTA env plus `GGML_MOE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` and `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`.
+3. Accept the rebuilt reproduction only if `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct/coherent France output all pass.
+4. If the rebuilt reproduction fails, record a rejected artifact and keep accepted SOTA at `4.4 tok/s`; do not change source behavior and do not continue sampling the candidate without a new hard-bound.
+5. If the rebuilt reproduction passes, write a SOTA-candidate artifact with full metadata: source commit, pushed remote branch, build command, binary SHA256, CMake flags, model path/size, full expert-pack path/size/index metadata, gate-pack path/size, full env/CLI, run path, token rates, TTFT, elapsed time, full France answer, correctness decision, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison against `4.4 tok/s`.
+6. Immediately commit and push the plan update plus reproduction artifact to `ssd/vendor/deepseek-token-rate-16gb`. All future rollback must be able to reconstruct the exact accepted metric from that remote branch.
+7. After push, rebuild/rerun from the pushed source state and perform a second clean strict cold pushed-source reproduction. Only this second passing reproduction may promote the result from candidate to accepted SOTA.
+8. If the pushed-source reproduction passes but differs from the first reproduction, promote only the best clearly reproduced result that passes all gates and is above `4.4 tok/s`; otherwise keep `4.4 tok/s` accepted and record the discrepancy.
+9. Do not delete or move any model files during this reproduction sequence. Disk cleanup, alternate GGUF downloads, and GLM deletion remain separate actions requiring explicit user approval.
+10. After promotion or rejection, update this plan again with the final accepted SOTA status and the next bottleneck decomposition before any new optimization method is implemented.
+
 ### 2026-07-06 Latest Active Plan: Preserve 4.4 SOTA, Resolve Empirical Artifact Blocker Before New Source Work
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。下一阶段优先级是先解除候选 GGUF 的 empirical validation 阻塞，而不是继续做无硬上界支持的 runtime/source sweep。

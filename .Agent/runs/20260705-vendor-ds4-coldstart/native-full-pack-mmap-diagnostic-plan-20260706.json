@@ -1,0 +1,28 @@
+{
+  "acceptance_rule": "If token rate <=4.4 or any gate fails, record as rejected and do not modify source. If >4.4, record as diagnostic only and require source integration plus clean pushed-source reproduction before SOTA promotion.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744
+  },
+  "base_env": "current SOTA gate one-stream pack/profile/prefill/topk env unchanged",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli",
+  "binary_sha256": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+  "created_at_utc": "2026-07-05T22:47:27Z",
+  "diagnostic_only": true,
+  "env_delta": {
+    "GGML_KIMI_CPU_MOE_NAME_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_PROFILE": "1",
+    "GGML_MOE_CPU_FALLBACK_PACK_MMAP": "1",
+    "GGML_MOE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack"
+  },
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "full_pack": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+  "full_pack_entries": 33024,
+  "full_pack_size_bytes": 147174760448,
+  "hard_bound": "This can only improve CPU fallback source layout; it cannot reduce CPU fallback math/synchronization. Prior same-mechanism top128/top256 pack-mmap controls reached only 4.1/4.0 tok/s. Accept no result without eval_tok_s > 4.4, TTFT <= 33617.688744 ms, RAM <=16GB including page cache, no OOM/swap, and coherent France output.",
+  "not_promotable_reason": "Uses historical build-ds4-moe-stream-batch-probe binary with GGML_CUDA_MOE_STREAM_BATCH=ON; current accepted binary has batch OFF. If and only if this unexpectedly improves, source integration and pushed-source reproduction would be required before promotion.",
+  "purpose": "One strict-cold diagnostic run to test whether already-present full native expert-pack mmap has any performance signal before considering source integration.",
+  "source_head": "477e51109ae6fdd7c9b3a8b95da18b2362a4cb3c"
+}
