@@ -4,6 +4,43 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-05 Latest Active Plan Override After Sparse-Retained Planner
+
+This section is the latest active plan and supersedes the older active-plan text below when there is any conflict. Historical sections remain as experiment records.
+
+Current accepted strict cold SOTA is still `4.4 tok/s`:
+
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Required promotion gate: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict 16GB cgroup including file page cache, `MemorySwapMax=0`, no OOM/no swap, semantically correct and coherent France answer, source plus artifacts committed and pushed, then clean pushed-source reproduction.
+- Model file for reproduction: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`).
+- Latest pushed source before this plan update: `ad7207f77fec975d4c99b86adf62af68eb487762` on local branch `feat/ds4-moe-stream-on-vendor` and remote `ssd/vendor/deepseek-token-rate-16gb`.
+
+Latest closed findings:
+
+- The sparse top64 pair profile is generated and reproducible: `64` `(layer, expert)` up/down pairs, `128` tensor entries, `544.0 MiB` up/down payload, `33` active layers, max `4` pairs in one layer.
+- The one-stream sparse graph/dataflow probe is rejected as an implementation route. It showed `34800` gate rows, `570163200` bytes F32 `src1` H2D, `285081600` bytes `dst` D2H, `34800` CPU scatter rows, and `0` retained GPU output / returned GPU handle / zero-transfer-ready rows. Current one-stream gate cache cannot provide a graph-level GPU tensor for sparse up/down.
+- The retained-GPU planner rejects current `DS4_HOT_DISPATCH` graph shapes for this sparse profile. Ideal up/down sparse payload is `544.0 MiB`, but the current rectangular per-layer shape would need `295` retained entries for `64` real pairs, inflating up/down payload to `2507.5 MiB` and gate/up/down payload to `3761.25 MiB`.
+- Gate recompute remains rejected: the hard bound is `9.861 tok/s`, below the 10 tok/s target. The only still-viable graph route must reuse an existing gate result or equivalent retained hidden tensor, not recompute gate.
+- Hot/cold final combine is a tight lower-bound risk. One backend crossing of `[n_embd, P, T]` for `n_embd=4096`, `P=6`, `33` active sparse layers, and `136.609` decoded-token estimate is about `0.413 GiB`; at `24 GiB/s` this costs `17.197 ms`, leaving only `1.750 ms` of the `18.947 ms` graph margin.
+
+Immediate next work:
+
+1. Do not run a strict cold performance/SOTA benchmark from the sparse profile alone.
+2. Implement only a default-off DS4 graph placement/payload/copy-count probe in `src/models/deepseek4.cpp::build_expert_mix`. Proposed envs: `DS4_SPARSE_RETAINED_GRAPH_PROBE_OUT=<csv>` and, if needed, `DS4_SPARSE_PAIR_PROFILE_JSON=.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json`.
+3. The probe must not change logits, fallback counts, default accepted behavior, or output tensors. It should record actual tensor/backend placement, selected-expert dimensions, hot manager state, rectangular payload estimate, compact sparse candidate status, and final hot/cold combine copy estimate.
+4. Verification for this probe: build `llama-cli` and `llama-results`; run fixed-text default-off top1 and probe-enabled top1 under strict 16GB/no-swap cgroup; require `same_top1 == n_tokens`, no OOM/no swap, and no default-path behavior change.
+5. Reject the route immediately if the probe shows any of: gate recompute, CPU-backend gate/up/down H2D-D2H-scatter round trip, current rectangular dummy payload, unbounded scheduler copy, or combine-copy cost that consumes the `18.947 ms` graph margin.
+6. If the probe proves compact placement is feasible, write a separate hard-bound artifact before any logit-changing implementation. That bound must include expected fallback saving, kernel time, launch/sync, final combine copies, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness gate, rollback criteria, and exact reproduction commands.
+7. If compact placement is not feasible, close this sparse retained route and start a fresh bottleneck search from the accepted `4.4 tok/s` SOTA. Do not return to source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or current `DS4_HOT_DISPATCH` rectangular shapes without a new hard-bound that exceeds the current one.
+
+Mandatory record/push rule:
+
+- Every practice step must first update this plan or an artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
+- If a result is a compliant new SOTA, immediately record all reproduction metadata and commit/push source plus artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+- New SOTA reproduction metadata must include: source commit, remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA.
+- After push, do a clean rebuild from the pushed source and rerun strict cold. Promote only if the pushed-source run still beats `4.4 tok/s` and passes every gate. TTFT-regressed or otherwise invalid candidates may be pushed as rejected records, but must be clearly marked not accepted.
+
 ### 2026-07-05 Current Active Plan Update
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan Override` 段落；历史段落保留为实验记录。后续执行必须以本节为入口，先更新计划/实验 artifact，再做 runtime 改动或长跑。
