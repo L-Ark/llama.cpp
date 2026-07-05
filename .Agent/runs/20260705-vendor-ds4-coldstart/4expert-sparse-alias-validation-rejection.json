@@ -1,0 +1,44 @@
+{
+  "date": "2026-07-05",
+  "title": "Rejected: sparse/header-only alias-on validation as a substitute for full 4Expert model verification",
+  "result": "rejected_not_valid_for_correctness_or_ttft",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": true,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "ccd385c951dbe8f2154e087709d2399857cc8a8e",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "context": {
+    "goal": "Continue toward 10 tok/s vendor DeepSeek under 16GB RAM/page-cache limit with correctness always enforced.",
+    "current_accepted_sota_eval_tok_s": 4.4,
+    "full_4expert_gguf_required_bytes": 164465760544,
+    "current_root_free_space": "1.8G"
+  },
+  "evaluated_options": [
+    {
+      "option": "Use llama-gguf on the 64MiB header range",
+      "command_checked": "build-ds4-moe-stream/bin/llama-gguf --help",
+      "finding": "llama-gguf can read GGUF data/header but does not instantiate llama_model::load_tensors(), so it cannot exercise the DeepSeek4 tid2eid alias code path."
+    },
+    {
+      "option": "Create a sparse 164.5GB logical file from the 64MiB header and run llama-cli with alias envs",
+      "finding": "This would map zero-filled holes for missing tensor data. It might exercise some load path, but all missing weights would be zero, so output correctness and TTFT/token-rate results would be invalid. It could also generate misleading page-cache behavior unrelated to the real GGUF."
+    },
+    {
+      "option": "Use sparse/header-only data for a strict cold benchmark",
+      "finding": "Rejected because correctness would not be meaningful and the benchmark would not represent the real 4Expert Q4_K model."
+    }
+  ],
+  "decision": {
+    "sparse_alias_validation": "rejected",
+    "reason": "The user's constraints require correctness and valid cold-start TTFT/token-rate evidence. Header-only or sparse-zero files cannot satisfy those requirements.",
+    "valid_next_step": "Obtain the complete 4Expert GGUF on disk or another real mmap/readable backing store, then run alias-on metadata/load, Q4_K stream/cache diagnostics, top1 correctness, France correctness, and strict cold benchmark."
+  },
+  "required_disk_action": {
+    "minimum_safe_free_space": ">=180G",
+    "no_deletion_performed": true,
+    "candidate_requiring_approval": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS (~263G, unrelated to current vendor DS4 SOTA)"
+  }
+}

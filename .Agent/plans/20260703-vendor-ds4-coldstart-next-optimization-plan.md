@@ -10951,3 +10951,25 @@ Decision:
 - Keep this script and summary. They make future Q4_K direct manifest generation reproducible once the full 4Expert GGUF is available.
 - This is not a SOTA result and does not validate correctness or TTFT.
 - Next blocked item for real 4Expert validation remains disk space for the full GGUF.
+
+### 2026-07-05 Sparse/Header-Only Alias Validation Rejection
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-sparse-alias-validation-rejection.json`
+
+Evaluation:
+
+- `llama-gguf` can read GGUF header/data but does not instantiate `llama_model::load_tensors()`, so it cannot exercise the DeepSeek4 `tid2eid` alias code path.
+- A sparse logical 4Expert file made from the 64MiB header range would map missing tensor data as zero-filled holes.
+- Running `llama-cli` on that sparse file might exercise some loading code, but it would not be the real model:
+  - missing dense and expert weights would be zero;
+  - output correctness would be invalid;
+  - TTFT/token-rate and page-cache behavior would not represent the real 4Expert GGUF.
+
+Decision:
+
+- Reject sparse/header-only files as a substitute for alias-on correctness, TTFT, or token-rate validation.
+- The only valid next step for real 4Expert/Q4_K verification is a complete GGUF file or another real mmap/readable backing store for the full file contents.
+- Minimum safe disk target remains `>=180G` free.
+- No deletion was performed.
