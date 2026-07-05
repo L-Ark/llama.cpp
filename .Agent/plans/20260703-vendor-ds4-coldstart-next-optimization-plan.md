@@ -4,16 +4,16 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: DFlash Oracle Verifier Window Probe
+### 2026-07-05 Latest Plan: DFlash Closed After Oracle Verifier Probe
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe 或非 vendor 结果提升为 SOTA。本次更新完成 DFlash oracle verifier window probe，并关闭当前 vendor target-verifier 路径下的 DFlash 10 tok/s 路线。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
 - Accepted SOTA pushed-source repro: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
 - Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
-- Current source/artifact head before this plan update: `02b173c82` (`vendor-ds4: plan dflash oracle verifier gate`)
+- Current source/artifact head before this result update: `adc3e9c4d` (`vendor-ds4: add oracle verifier probe runner`)
 - Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
 - Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
 
@@ -30,18 +30,27 @@ Current bottleneck framing:
 - This is only a design candidate. Current vendor has no DFlash safetensors loader, no DFlash graph, no hidden-state taps for `[3,13,23,32,42]`, and no DeepSeek4 multi-token verifier runtime.
 - Accepted decode cost is `227.272727 ms/token`. The optimistic DFlash upper bound permits target verification cost at most `1.719568x` one current token decode with zero draft overhead. A more realistic independence-style prefix estimate permits only `1.128429x`.
 - Existing forced-batch fixed-text diagnostic was too coarse and showed no useful speedup: sequential `107.623408161 s`, batch16 `107.597260262 s`, speedup `1.000243x`.
-- Therefore the next step is not a full DFlash implementation. The next step is an oracle target-verifier cost probe that answers whether current vendor target evaluation can verify multiple known-correct future tokens sublinearly.
+- The new oracle window probe confirms the same underlying bottleneck more directly: current vendor target evaluation does not become sublinear when known-correct future tokens are fed in W=2/4/8 batches. This means verifier batching does not remove the per-token DeepSeek MoE CPU fallback/source path enough to support DFlash.
 
-Next executable plan:
+Latest diagnostic result:
 
-1. Prefer no runtime source change. First reuse `llama-results` as an oracle verifier proxy on the fixed France text: W=1 with `--sequential-logits`, and W=2/4/8 with `-b W -ub W` without `--sequential-logits`.
-2. Use the accepted SOTA env/config for every case: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, accepted France gate-miss O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, prefill top3000 profile, `GGML_CUDA_DISABLE_GRAPHS=1`, and the existing topk env (`GGML_MOE_KEEP_TOPK_UPDOWN=4`, layer range `10-39`, layer value `3`).
-3. Run every window under strict `systemd-run --collect --wait -p MemoryMax=16000000000 -p MemorySwapMax=0` with cold `drop_caches` before each case. Record stdout/stderr, `/usr/bin/time -v`, top1 report, `memory.current`, `memory.peak`, `memory.stat`, and `memory.events`.
-4. Result artifact path: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json`; run root should be under `/root/lfz/runs/vendor-ds4-16gb/` with the timestamp and `dflash-oracle-verifier-window-probe` in the name.
-5. If `llama-results` cannot isolate the verifier cost precisely enough, add only a default-off diagnostic tool or script. It must not change default logits or accepted SOTA behavior.
-6. Reopen full DFlash loader/verifier work only if W=4 or W=8 proves sublinear target verification below the DFlash threshold, preserves exact fixed-text top1, passes strict 16GB/no-swap accounting, and leaves at least `500 ms` aggregate overhead slack.
-7. If the probe fails that gate, close DFlash as a `10 tok/s` route for the current vendor target path and return to hard-bound screening. Do not download the 3.6GB DFlash artifact or write loader/runtime code without this verifier proof.
-8. The probe itself is diagnostic only. It cannot be promoted as SOTA because it uses known-correct fixed text, not a generated France answer. A new SOTA still requires a strict cold `llama-cli` generation run and full correctness/RAM/TTFT validation.
+- Result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json`
+- Run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe`
+- Tooling commit used for the run: `adc3e9c4d` (`vendor-ds4: add oracle verifier probe runner`)
+- Method: fixed France text, `llama-results`, W=1 with `--sequential-logits`, W=2/4/8 with `-b W -ub W`, accepted SOTA env/config, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches` before each case.
+- W=1: `elapsed_seconds=64.75`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15061319680`, `ram_ok=true`, `same_top1_as_w1=true`, `top1_matches_next_token=119/144`.
+- W=2: `elapsed_seconds=64.10`, `speedup_vs_w1=1.010140x`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15050993664`, `ram_ok=true`, `same_top1_as_w1=true`.
+- W=4: `elapsed_seconds=63.92`, `speedup_vs_w1=1.012985x`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15043891200`, `ram_ok=true`, `same_top1_as_w1=true`.
+- W=8: `elapsed_seconds=64.62`, `speedup_vs_w1=1.002012x`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14789218304`, `ram_ok=true`, `same_top1_as_w1=true`.
+- Decision: `close_dflash_current_target_verifier_no_sublinear_gain`. The best measured speedup is only `1.012985x`, below the independence-style minimum `1.128429x`, and far below the practical threshold after draft, hidden-state tap, KV/cache, and integration overhead.
+- This is not a SOTA benchmark and cannot be promoted: it uses fixed known-correct text, not a generated France answer.
+
+Next executable plan after DFlash closure:
+
+1. Do not download the 3.6GB DFlash safetensors, implement a DFlash loader, add hidden-state taps, or write a runtime verifier under the current vendor target path. Reopen DFlash only if a new verifier design proves sublinear target verification beyond this probe and fully accounts for 16GB page-cache, VRAM, TTFT, and correctness.
+2. Return to hard-bound screening for a different route. The only route classes still allowed are: a stronger compatible external artifact, a correctness-verified alternate GGUF/representation that beats the previous placement bounds, or a genuinely new exact graph/dataflow proof that reduces both source bytes and CPU fallback compute by construction.
+3. Before any new runtime source edit, write a new hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` with exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and token-rate ceiling.
+4. The first correctness gate for any source probe remains fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. A new SOTA still requires a strict cold `llama-cli` generation run with semantic France correctness, RAM/page-cache pass, TTFT pass, full metadata, immediate commit/push, and clean pushed-source reproduction.
 
 Disk and preservation policy:
 

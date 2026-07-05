@@ -1,0 +1,254 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json",
+  "conclusion": [
+    "W=2/4/8 preserved exact top1 relative to W=1 on the fixed France text.",
+    "All cases stayed within the strict 16GB cgroup including file page cache and saw no OOM.",
+    "Elapsed-time speedups were only about 1.010x for W=2, 1.013x for W=4, and 1.002x for W=8 versus W=1.",
+    "This is far below the independence-style 1.128429x minimum and far below the practical DFlash target-verifier requirement after draft/tap/KV overhead.",
+    "Therefore full DFlash safetensors download, loader work, hidden-state taps, and runtime verifier implementation remain disallowed for the current vendor target path."
+  ],
+  "constraints": {
+    "cold_drop_caches_before_each_case": true,
+    "fixed_text_oracle_only_not_generation_sota": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "vendor_only": true
+  },
+  "date": "2026-07-05",
+  "hard_gate": {
+    "accepted_decode_ms_per_token": 227.272727,
+    "independence_style_tokens_per_verify": 2.564612,
+    "max_target_verify_cost_x_one_token_independence_style": 1.128429,
+    "max_target_verify_cost_x_one_token_optimistic": 1.719568,
+    "minimum_required_speedup_to_reopen": 1.128429,
+    "redhat_dflash_optimistic_tokens_per_verify": 3.90811
+  },
+  "next_step": "Return to hard-bound screening for a different exact representation, compatible external artifact, or graph/dataflow route; accepted SOTA remains 4.4 tok/s.",
+  "purpose": "Diagnostic-only oracle verifier window probe for DFlash feasibility; not a SOTA generation benchmark.",
+  "result": {
+    "comparisons": {
+      "w1": {
+        "cost_x_w1_elapsed": 1.0,
+        "elapsed_seconds": 64.75,
+        "speedup_vs_w1_elapsed": 1.0
+      },
+      "w2": {
+        "cost_x_w1_elapsed": 0.9899613899613898,
+        "elapsed_seconds": 64.1,
+        "speedup_vs_w1_elapsed": 1.0101404056162246
+      },
+      "w4": {
+        "cost_x_w1_elapsed": 0.9871814671814672,
+        "elapsed_seconds": 63.92,
+        "speedup_vs_w1_elapsed": 1.0129849812265332
+      },
+      "w8": {
+        "cost_x_w1_elapsed": 0.9979922779922781,
+        "elapsed_seconds": 64.62,
+        "speedup_vs_w1_elapsed": 1.0020117610646857
+      }
+    },
+    "decision_hint": "close_dflash_current_target_verifier_no_sublinear_gain",
+    "summaries": [
+      {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe/w1-seq",
+        "elapsed_seconds": 64.75,
+        "exit_status": 0,
+        "max_rss_kb": 15599936,
+        "memory_current_bytes": 15183245312,
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 17347,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_file_bytes": 15061319680,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 8434835456,
+          "anon": 1130496,
+          "file": 15061319680,
+          "file_mapped": 278528,
+          "inactive_file": 6626287616,
+          "kernel": 117211136,
+          "pgfault": 1774128,
+          "pgmajfault": 174632,
+          "slab": 116628160,
+          "workingset_activate_file": 743733,
+          "workingset_refault_file": 1927431,
+          "workingset_restore_file": 743657
+        },
+        "oom_seen": false,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "same_top1_as_w1": true,
+        "same_top1_count_vs_w1": 145,
+        "same_top1_total_vs_w1": 145,
+        "sequential_logits": true,
+        "systemd_status": 0,
+        "top1_ids_count": 145,
+        "top1_report": {
+          "mode": "single",
+          "n_tokens": 145,
+          "n_vocab": 129280,
+          "next_token_positions": 144,
+          "top1_matches_next_token": 119
+        },
+        "unit": "vendor-ds4-oracle-w1-20260705T150125Z.service",
+        "window": 1
+      },
+      {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe/w2",
+        "elapsed_seconds": 64.1,
+        "exit_status": 0,
+        "max_rss_kb": 15597988,
+        "memory_current_bytes": 15174508544,
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 18000,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_file_bytes": 15050993664,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 6409064448,
+          "anon": 1130496,
+          "file": 15050993664,
+          "file_mapped": 278528,
+          "inactive_file": 8641576960,
+          "kernel": 117178368,
+          "pgfault": 1780540,
+          "pgmajfault": 178968,
+          "slab": 116468136,
+          "workingset_activate_file": 678359,
+          "workingset_refault_file": 1890643,
+          "workingset_restore_file": 678317
+        },
+        "oom_seen": false,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "same_top1_as_w1": true,
+        "same_top1_count_vs_w1": 145,
+        "same_top1_total_vs_w1": 145,
+        "sequential_logits": false,
+        "systemd_status": 0,
+        "top1_ids_count": 145,
+        "top1_report": {
+          "mode": "single",
+          "n_tokens": 145,
+          "n_vocab": 129280,
+          "next_token_positions": 144,
+          "top1_matches_next_token": 119
+        },
+        "unit": "vendor-ds4-oracle-w2-20260705T150239Z.service",
+        "window": 2
+      },
+      {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe/w4",
+        "elapsed_seconds": 63.92,
+        "exit_status": 0,
+        "max_rss_kb": 15599768,
+        "memory_current_bytes": 15167578112,
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 17540,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_file_bytes": 15043891200,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 6719561728,
+          "anon": 1122304,
+          "file": 15043891200,
+          "file_mapped": 278528,
+          "inactive_file": 8323825664,
+          "kernel": 117223424,
+          "pgfault": 1789318,
+          "pgmajfault": 178228,
+          "slab": 116535568,
+          "workingset_activate_file": 954545,
+          "workingset_refault_file": 2083058,
+          "workingset_restore_file": 954505
+        },
+        "oom_seen": false,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "same_top1_as_w1": true,
+        "same_top1_count_vs_w1": 145,
+        "same_top1_total_vs_w1": 145,
+        "sequential_logits": false,
+        "systemd_status": 0,
+        "top1_ids_count": 145,
+        "top1_report": {
+          "mode": "single",
+          "n_tokens": 145,
+          "n_vocab": 129280,
+          "next_token_positions": 144,
+          "top1_matches_next_token": 119
+        },
+        "unit": "vendor-ds4-oracle-w4-20260705T150349Z.service",
+        "window": 4
+      },
+      {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe/w8",
+        "elapsed_seconds": 64.62,
+        "exit_status": 0,
+        "max_rss_kb": 15598900,
+        "memory_current_bytes": 14910914560,
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 16058,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_file_bytes": 14789218304,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 8979619840,
+          "anon": 1122304,
+          "file": 14789218304,
+          "file_mapped": 266240,
+          "inactive_file": 5809324032,
+          "kernel": 117276672,
+          "pgfault": 1800890,
+          "pgmajfault": 182204,
+          "slab": 116606536,
+          "workingset_activate_file": 1023100,
+          "workingset_refault_file": 2235885,
+          "workingset_restore_file": 1023046
+        },
+        "oom_seen": false,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "same_top1_as_w1": true,
+        "same_top1_count_vs_w1": 145,
+        "same_top1_total_vs_w1": 145,
+        "sequential_logits": false,
+        "systemd_status": 0,
+        "top1_ids_count": 145,
+        "top1_report": {
+          "mode": "single",
+          "n_tokens": 145,
+          "n_vocab": 129280,
+          "next_token_positions": 144,
+          "top1_matches_next_token": 119
+        },
+        "unit": "vendor-ds4-oracle-w8-20260705T150458Z.service",
+        "window": 8
+      }
+    ]
+  },
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T150125Z-dflash-oracle-verifier-window-probe",
+  "source_commit": "adc3e9c4d1ab217f9e96462b70e8aa9ea7381621",
+  "status": "closed_current_vendor_target_verifier_no_sublinear_gain"
+}
