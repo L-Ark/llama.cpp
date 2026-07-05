@@ -69146,7 +69146,7 @@ Decision:
 
 Timestamp: 2026-07-05 22:22:00 CST.
 
-Status: planned.
+Status: rejected after execution.
 
 Goal:
 
@@ -69241,6 +69241,190 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, command, env, activation log lines, output, gates,
   memory distribution, decode/TTFT, and decision.
+
+### 7LI result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `2dd124113` (`docs: plan direct io loading feasibility probe`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-061511Z-phase7li-direct-io-n32`.
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 2dd124113
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-061511Z-phase7li-direct-io-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=LLAMA_ARG_DIO=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Observed gates and failure:
+
+- exit `1`;
+- no generated output, so semantic quality gate failed by missing answer;
+- no cgroup OOM:
+  - `memory.peak=405704704`;
+  - `memory.current.final=220377088`;
+  - `oom=0`;
+  - `oom_kill=0`;
+- swap max `0`;
+- process wall time `2.37 s`.
+
+Activation evidence:
+
+- stderr contains `llama_model_loader: direct I/O is enabled, disabling mmap`;
+- tensor loading reports `mmap = false, direct_io = true`;
+- therefore this is a real direct-I/O activation failure, not an unsupported
+  filesystem fallback.
+
+Failure evidence:
+
+```text
+load_tensors: defer expert mmap probe: defer_experts=1 use_mmap=0 expert_ranges=10 dense=12.05 GiB deferred=365.49 GiB active=0
+ggml_backend_cuda_buffer_type_alloc_buffer: allocating 385415.44 MiB on device 0: cudaMalloc failed: out of memory
+alloc_tensor_range: failed to allocate CUDA0 buffer of size 404137378304
+llama_model_load: error loading model: unable to allocate CUDA0 buffer
+```
+
+Interpretation:
+
+- Existing whole-model direct I/O is incompatible with `--defer-experts` for
+  this Kimi run shape.
+- The direct-I/O switch disables mmap globally. Once `use_mmap=0`, deferred
+  expert tensors are no longer backed by the mmap/deferred path the vendor Kimi
+  runtime depends on.
+- The loader then tries to allocate the deferred expert range as a CUDA buffer
+  of about `385415.44 MiB`, which is impossible on the RTX 5090 and not a host
+  RAM tuning issue.
+- This does not disprove selective direct I/O for a narrow CPU fallback tensor
+  path, but it rejects the existing whole-model `LLAMA_ARG_DIO=1` path for the
+  16GB objective.
+
+Decision:
+
+- Reject Phase 7LI.
+- Do not retry `LLAMA_ARG_DIO=1` whole-model direct I/O unless loader semantics
+  are changed so deferred experts stay non-allocated and only a bounded tensor
+  subset bypasses mmap.
+- Keep current accepted defaults unchanged.
+- The next phase must inspect whether a selective, bounded non-mmap backing can
+  target the measured CPU fallback/page-fault hot path without breaking deferred
+  expert placement, host RAM, TTFT, or quality.
+
+## Phase 7LJ - selective fallback backing feasibility and minimal source target
+
+Timestamp: 2026-07-05 22:42:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Turn the 7LH/7LI evidence into a concrete implementation target instead of
+  guessing another cache-advice micro patch.
+- Identify whether CPU fallback tensor reads can bypass the GGUF mmap/filemap
+  fault path while preserving:
+  - mmap/deferred placement for the full model;
+  - expert-pack io_uring path for normal decode streaming;
+  - 16GB total host RAM including page cache;
+  - current VRAM cache defaults;
+  - semantic quality and TTFT gates.
+
+Bottleneck being targeted:
+
+- 7LH perf shows the dominant sampled cost is kernel page-cache/mmap-fault
+  contention:
+  - `__pv_queued_spin_lock_slowpath` `60.10%`;
+  - stack under `do_sync_mmap_readahead -> filemap_fault`;
+  - CPU vec-dot symbols below that stack.
+- 7LI shows whole-model direct I/O cannot be used because it disables mmap and
+  breaks deferred expert allocation.
+- Therefore the remaining viable family is selective fallback backing:
+  keep mmap for model placement, but avoid repeated mmap faults for the small
+  subset of fallback rows actually consumed during decode/prompt.
+
+Candidate designs to inspect before editing source:
+
+1. Selective expert-pack CPU fallback read path.
+   - For CPU fallback rows that already exist in the expert pack, read the row
+     into a bounded regular CPU workspace instead of dereferencing GGUF
+     `src0->data`.
+   - Do not use pinned buffers for CPU fallback compute unless profiling proves
+     they are needed; pinned space competes with host RAM and staging.
+   - Upper bound: can only help the fallback bytes that currently fault from
+     GGUF. It cannot improve GPU-cache hits or dense compute.
+2. Bounded per-layer fallback row cache.
+   - Cache only the active fallback rows for the current layer/token in normal
+     anonymous memory, then immediately release/reuse the workspace.
+   - Upper bound is limited by the observed decode fallback volume, e.g. prior
+     `decode,type=2` accounting around `8 GiB` total traffic over a run, not by
+     the full `365 GiB` expert model.
+3. Selective `pread`/direct-read fallback into workspace while keeping mmap
+   globally enabled.
+   - This avoids `use_mmap=0` and avoids the 7LI CUDA allocation failure.
+   - It requires exact tensor offset/size mapping and type-aware row decode.
+   - It is rejected unless the workspace is bounded and reproducible under the
+     16GB cgroup.
+
+Implementation triage before any patch:
+
+- Inspect the CPU fallback call sites and identify whether fallback matmul sees
+  enough metadata to map from tensor/layer/expert/type to expert-pack offset.
+- Inspect existing expert-pack index structures and whether down/up/gate rows
+  can be addressed without depending on GPU staging wrappers.
+- If the mapping is not available at the CPU fallback call site, do not make a
+  broad refactor in this phase. Record the missing metadata as the blocker.
+- If the mapping is available, implement the smallest default-off experiment
+  flag, for example:
+  `GGML_MOE_CPU_FALLBACK_PACK_READ=1`.
+
+Theoretical upper bound:
+
+- Current n32 decode reference is `22601.57 ms / 31` from 7KX.
+- 7LH indicates mmap/page-fault lock contention dominates sampled CPU time, but
+  not all sampled CPU time is endpoint wall time.
+- A successful selective fallback path can only remove the fault/readahead
+  portion of CPU fallback traffic. It cannot remove:
+  - GPU expert compute;
+  - H2D staging for GPU-path experts;
+  - normal expert-pack io_uring reads;
+  - unavoidable CPU vec-dot arithmetic for fallback rows.
+- Therefore expected endpoint gain must be conservative: target `3-8%` n32
+  decode improvement first (`~0.7-1.8 s` over 7KX). Anything larger must be
+  confirmed with repeat n32 and n96.
+
+Acceptance gates:
+
+- Plan must be committed and pushed before source edits or experiment.
+- Source experiment must be default-off.
+- Strict cold-start n32 command must use the existing reproducible runner and
+  16GB cgroup.
+- Host RAM peak `<= 15899996160`, swap max `0`, no OOM.
+- Output quality pass and manual semantic pass for the France prompt.
+- TTFT `< 127598.064 ms`.
+- `read_failures=0`, `iouring_fallbacks=0`.
+- If n32 improves versus 7KX by more than noise, run a repeat n32. If repeated,
+  run n96 before promotion.
+- If slower, quality fails, TTFT fails, memory exceeds 16GB, or the
+  implementation has unbounded workspace/page-cache behavior, revert source and
+  record rejection.
+
+Reproducibility:
+
+- Every run must record commit, branch, env, command, script, output, answer,
+  memory, mmap/pack activation evidence, and decision in its run directory.
+- Any accepted source change must include the exact flag/env needed to reproduce
+  it and must be pushed immediately after acceptance.
 
 ### 7LG result
 
