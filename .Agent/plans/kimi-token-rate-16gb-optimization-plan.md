@@ -83442,3 +83442,90 @@ cat "$RUN_DIR/formula_check.tsv"
 cat "$RUN_DIR/selftest_design.md"
 cat "$RUN_DIR/decision.md"
 ```
+
+## Phase 7OC - default-off IQ2_XXS prompt Q8_K branch and selftest
+
+Status: planned.
+
+Timestamp: 2026-07-06 05:48 CST.
+
+Reason:
+
+- Phase 7OB proved the `IQ2_XXS x Q8_K` prompt formula is local and equivalent
+  to CPU dequant-dot:
+  - deterministic parity cases `32`;
+  - max abs error `0.000000000000`.
+- Phase 7OA showed decode-side generic CUDA support exists, but prompt exact
+  `Q8_K` is still missing an `IQ2_XXS` branch.
+- Before any model/asset work, add only the default-off prompt branch and a
+  standalone exported selftest. This closes the prompt math/code blocker while
+  preserving current runtime behavior.
+
+Goal:
+
+- Add `IQ2_XXS` prompt `Q8_K` kernel support without changing default model
+  behavior.
+- Add an exported, model-free selftest callable from `libggml-cuda.so` via
+  Python `ctypes`.
+- Build successfully in `build-cuda-batch`.
+- Run the exported selftest and record the output.
+- Do not run model inference.
+- Do not download or convert assets.
+- Do not promote SOTA.
+
+Implementation plan:
+
+1. In `ggml/src/ggml-cuda/moe_stream_batch.cu`, add:
+   - `moe_iq2_xxs_q8k_block_sum(const block_iq2_xxs *, const block_q8_K *)`;
+   - an `IQ2_XXS` branch in `moe_iq3_xxs_q8k_mat_kernel`;
+   - a default-off env selector:
+     `GGML_MOE_STREAM_PROMPT_UP_GATE=exact-q8-k-iq2-xxs-probe`;
+   - `exact_prompt_q8k_iq2_xxs_probe_enabled()`;
+   - `extern "C" bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void)`.
+2. The selftest must:
+   - allocate deterministic host `block_iq2_xxs` rows;
+   - allocate deterministic host `block_q8_K` input;
+   - compute CPU reference with the Phase 7OB formula;
+   - call the same GPU prompt kernel through `launch_moe_iq3_xxs_q8k_batch`;
+   - compare all output columns with `abs_error <= 1e-4`;
+   - print a concise pass/fail line and first failure details.
+3. Keep current behavior unchanged:
+   - do not add `IQ2_XXS` to `moe_stream_type_supported()` in this phase;
+   - do not admit `IQ2_XXS` model tensors into regular stream execution;
+   - do not modify default `exact-q8-k` behavior for existing `IQ3_XXS/IQ2_S`.
+4. Build:
+   `cmake --build build-cuda-batch -j $(nproc) --target ggml-cuda`
+   or the smallest target that refreshes `libggml-cuda.so`.
+5. Verify the exported selftest without model inference:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+LD_LIBRARY_PATH=$PWD/build-cuda-batch/bin \
+python3 - <<'PY'
+import ctypes
+lib = ctypes.CDLL("./build-cuda-batch/bin/libggml-cuda.so.0.10.0")
+lib.ggml_cuda_moe_iq2_xxs_q8k_selftest.restype = ctypes.c_bool
+ok = lib.ggml_cuda_moe_iq2_xxs_q8k_selftest()
+print(f"iq2_xxs_q8k_selftest={int(ok)}")
+raise SystemExit(0 if ok else 1)
+PY
+```
+
+Acceptance:
+
+- Accept and commit/push the source patch only if:
+  - build succeeds;
+  - exported selftest returns true;
+  - `git diff` confirms default behavior is unchanged except the new explicit
+    probe/selftest path.
+- Reject/revert if:
+  - build fails;
+  - selftest fails;
+  - the patch admits `IQ2_XXS` into normal model execution in this phase;
+  - the patch requires model inference or asset changes.
+
+Reproducibility:
+
+- Commit and push this 7OC plan before editing source.
+- Commit and push the 7OC source/result if accepted.
+- If rejected, revert source changes and commit/push only the result record.
