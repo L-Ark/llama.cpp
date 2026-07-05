@@ -69659,6 +69659,85 @@ Reproducibility:
 - Record run directory, exact command, output, gates, fallback profile path,
   aggregation script/command, and decision.
 
+### 7LK-A result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `0a389d2a1` (`docs: plan current fallback structure probe`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-063706Z-phase7lk-fallback-profile-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `74665.35 ms`;
+- decode `23675.41 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- memory final `15101587456`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `kimi_cpu_fallback_pack_mmap`:
+  - hits `1727`;
+  - misses `9`;
+  - bytes `14260764672`.
+
+Profile failure:
+
+- `env.txt` contains:
+  `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260705-063706Z-phase7lk-fallback-profile-n32/fallback-profile.csv`.
+- `fallback-profile.csv` was not created.
+- Source inspection shows fallback-profile recording is nested inside
+  `ggml_kimi_cpu_moe_profile_enabled()`, which requires
+  `GGML_KIMI_CPU_MOE_PROFILE=1`.
+- The script normally sets `GGML_KIMI_CPU_MOE_PROFILE=1`, but the 7LK-A
+  `EXTRA_RUNTIME_ENV=...` override replaced the default extra env block, so the
+  total CPU MoE profile gate was not enabled for this run.
+
+Decision:
+
+- Treat 7LK-A as a valid gate-passing default run but an incomplete fallback
+  structure probe.
+- Do not use it for fallback distribution decisions.
+- Run 7LK-B with both:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv`.
+
+### Phase 7LK-B - corrected fallback profile probe
+
+Timestamp: 2026-07-05 23:35:00 CST.
+
+Status: planned.
+
+Corrected command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 0a389d2a1
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lkb-fallback-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_KIMI_CPU_MOE_PROFILE=1 GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance:
+
+- Same gates as 7LK-A.
+- `fallback-profile.csv` must exist and contain a header plus entries, or stderr
+  must contain `[kimi_cpu_moe_fallback_profile] written` with `entries=0`.
+- This remains diagnostic only, not a SOTA candidate.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
