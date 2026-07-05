@@ -75296,3 +75296,199 @@ Reproducibility:
 - Record `audit.txt`, exact commit, binary existence, help output, model list,
   expert-pack asset list, feasibility decision, and any follow-up command in
   the plan.
+
+### Phase 7MP result
+
+Timestamp: 2026-07-05 19:56:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Plan commit:
+
+- `61f7728fc docs: plan algorithmic feasibility audit`.
+
+Audit run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-114126Z-phase7mp-algorithmic-feasibility`
+- Source:
+  `61f7728fc6821fe31ebcdd52d3ec1aa0bd5c0986`.
+- Output:
+  `audit.txt`, 658 lines.
+
+Audit findings:
+
+- Required binaries exist:
+  - `build-cuda-batch/bin/llama-completion`;
+  - `build-cuda-batch/bin/llama-speculative`;
+  - `build-cuda-batch/bin/llama-speculative-simple`;
+  - `build-cuda-batch/bin/llama-lookahead`.
+- `llama-speculative` requires a draft model:
+  - source code exits when `params.speculative.draft.mparams.path` is empty;
+  - it checks target/draft vocab type, BOS/EOS policy, special tokens, vocab
+    size, and token text compatibility before running.
+- Local model assets contain only the 10 Kimi IQ3_S GGUF shards:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`
+    through `00010-of-00010.gguf`.
+  - No local compatible draft GGUF, MTP head, or safetensors source was found.
+- Existing Kimi assets are expert packs, hotset JSON files, manifests, and
+  prior diagnostic text outputs. They are not draft/MTP models.
+
+Speculative/MTP decision:
+
+- Rejected for current implementation cycle: no reproducible local compatible
+  draft or MTP asset exists.
+- Do not run `llama-speculative` with the target Kimi model as its own draft:
+  that would double target-model work and cannot improve token rate under the
+  16GB host RAM gate.
+- A future speculative path requires a real compatible draft/MTP asset and a
+  plan proving target verification is parallel rather than serial.
+
+Lookahead diagnostic attempts:
+
+1. `/root/lfz/runs/vendor-kimi-token-rate/20260705-114523Z-phase7mp-lookahead-n32`
+   - `llama-lookahead` rejected `--special`;
+   - no model run occurred.
+2. `/root/lfz/runs/vendor-kimi-token-rate/20260705-114614Z-phase7mp-lookahead-n32`
+   - `llama-lookahead` rejected `-no-cnv`;
+   - no model run occurred.
+3. `/root/lfz/runs/vendor-kimi-token-rate/20260705-114649Z-phase7mp-lookahead-n32`
+   - command:
+     `build-cuda-batch/bin/llama-lookahead --defer-experts --fit off -ngl 99 -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 -t 32 -tb 32 -p '<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>'`
+   - cgroup:
+     `MemoryMax=15900000000`, `MemorySwapMax=0`;
+   - cold start:
+     `sync; echo 3 > /proc/sys/vm/drop_caches`;
+   - vendor MoE path did activate:
+     - expert-pack iouring path loaded both accepted packs;
+     - VRAM split caches were created;
+     - current-down overlap activated;
+     - post-prompt dense/expert mmap drops ran.
+   - lookahead graph shape:
+     - `n_seq_max = 31`;
+     - `kv_unified = true`;
+     - graph nodes `4731`;
+     - graph splits `182` with `bs=512`, `122` with `bs=1`;
+     - CUDA compute buffer `4128.25 MiB`.
+   - endpoint:
+     - after about 5 minutes wall time, stdout contained only the prompt plus
+       `France is`;
+     - observed RSS while running was about `14.3 GiB`;
+     - the run was manually terminated with SIGTERM to avoid unbounded
+       resource use;
+     - no decode speed or TTFT metric was produced, and quality did not reach a
+       complete paragraph.
+
+Lookahead decision:
+
+- Rejected for current SOTA work.
+- It can enter the vendor Kimi MoE streaming path, but the example's fixed
+  `W=15`, `N=5`, `G=15` and `n_parallel=31` make endpoint latency far worse
+  than the accepted `llama-completion` path.
+- Since it failed to produce a complete n32 answer within about 5 minutes, it
+  cannot satisfy the TTFT/quality/reproducible-speedup gates.
+- Do not spend another cycle tuning this example unless a source plan first
+  makes `W/N/G` configurable and computes a hard upper bound that beats the
+  current `1.35 tok/s` n96 SOTA under 16GB host RAM.
+
+Overall 7MP decision:
+
+- No source changes are accepted.
+- No SOTA promotion.
+- The current locally executable algorithmic paths are closed:
+  - speculative/MTP is blocked by missing compatible draft/MTP asset;
+  - lookahead is runnable but endpoint-slower and incomplete under the strict
+    gate.
+- Next viable direction is model-format/quantization economics, not another
+  scheduler or local CUDA/IO patch.
+
+## Phase 7MQ - quantized expert-format asset feasibility
+
+Timestamp: 2026-07-05 20:00:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether a smaller/faster expert representation can be produced or
+  obtained reproducibly for Kimi under the strict 16GB host RAM gate.
+- Focus on formats that could reduce expert-pack miss bytes and H2D/staging
+  work without adding serial CPU fallback:
+  - `LLAMA_FTYPE_MOSTLY_MXFP4_MOE`;
+  - `LLAMA_FTYPE_MOSTLY_NVFP4`;
+  - `LLAMA_FTYPE_MOSTLY_F8_E4M3_MXFP4`.
+
+Current code evidence:
+
+- `include/llama.h` declares:
+  - `LLAMA_FTYPE_MOSTLY_MXFP4_MOE = 38`;
+  - `LLAMA_FTYPE_MOSTLY_NVFP4 = 39`;
+  - `LLAMA_FTYPE_MOSTLY_F8_E4M3_MXFP4 = 41`.
+- `src/llama-model.cpp` has generic loading for per-tensor/per-expert scale
+  tensors such as NVFP4 scale tensors.
+- `src/llama-quant.cpp` has quantization selection logic for MXFP4 MoE.
+- This only proves some code support exists. It does not prove that current
+  Kimi IQ3_S can be safely requantized, that the CUDA MoE streaming kernels can
+  consume the new type fast enough, or that France quality will pass.
+
+Bottleneck link:
+
+- 7MO measured expert-pack iouring wait `22.2 s` on n32 plus several seconds of
+  host staging and H2D.
+- A smaller expert format can help only if it reduces bytes on the miss path and
+  has a GPU compute path. A format that falls back to CPU or requires dequantize
+  staging can be slower despite smaller files.
+
+Theoretical upper bound:
+
+- Current n32 decode diagnostic was `25.416 s / 31` in 7MO.
+- If exposed expert movement were reduced by 25%, the upper bound before compute
+  overhead is roughly `22.2 s * 25% = 5.55 s`, or at best around `31 /
+  (25.416 - 5.55) = 1.56 tok/s`.
+- A 50% byte reduction has a rough ceiling near `2.17 tok/s` if all saved IO
+  wait is exposed and compute does not regress.
+- Therefore model-format work is only worth implementing if it can:
+  - reduce miss bytes materially;
+  - stay on GPU for up/gate/down;
+  - preserve France quality;
+  - avoid increasing TTFT by more than 20%;
+  - run under 16GB host RAM from cold start.
+
+First audit command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 61f7728fc
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mq-quant-format-audit
+mkdir -p "$RUN"
+
+{
+  git rev-parse HEAD
+  ls -l build-cuda-batch/bin/llama-quantize 2>&1 || true
+  build-cuda-batch/bin/llama-quantize --help | sed -n '1,260p'
+  rg -n "MXFP4|NVFP4|F8_E4M3_MXFP4|LLAMA_FTYPE_MOSTLY_MXFP4_MOE|LLAMA_FTYPE_MOSTLY_NVFP4" \
+    include src ggml tools 2>&1 | sed -n '1,260p'
+} > "$RUN/audit.txt" 2>&1
+```
+
+Execution rule:
+
+- This phase starts with audit only.
+- Do not quantize the full Kimi model unless the audit identifies:
+  - a source model/asset that is not already lossy IQ3_S;
+  - a conversion command that can run under 16GB host RAM including page cache;
+  - CUDA MoE kernels or a measured path for the target tensor types;
+  - enough disk space for the output and logs.
+- If only lossy IQ3_S shards are available, do not accept IQ3->FP4 requantized
+  results as quality evidence. At most use them for kernel/type smoke tests.
+- Any actual model-format run must get its own plan before conversion or source
+  edits, and must include repeat cold-start quality validation before
+  promotion.
+
+Reproducibility:
+
+- Commit and push the 7MP result plus this 7MQ plan before running the 7MQ
+  audit.
+- Record exact binary support, available format names, source asset availability,
+  disk space, and whether a safe conversion path exists.
