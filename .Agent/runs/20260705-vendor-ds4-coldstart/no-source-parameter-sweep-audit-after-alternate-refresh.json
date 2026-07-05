@@ -1,0 +1,46 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ms": 32087.738292
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/no-source-parameter-sweep-audit-after-alternate-refresh.json",
+  "audited_routes": [
+    {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/keep-topk-layer-value2-audit-closure.json",
+      "decision": "closed_no_strict_probe",
+      "reason": "The implementation zero-fills pruned routed expert rows and changes model math. Historical top2/top3 variants failed France correctness or regressed performance, so repeating a more aggressive 10-39=>2 sweep is not correctness-preserving.",
+      "route": "GGML_MOE_KEEP_TOPK_LAYER_VALUE=2 or broader top-k pruning"
+    },
+    {
+      "candidate_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-sota-result.json",
+      "candidate_eval_tok_s": 4.5,
+      "decision": "rejected_reproduction_did_not_beat_4p4",
+      "reason": "The single candidate run passed gates, but clean pushed-source reproduction passed gates at only 4.3 tok/s. It is treated as variance and cannot be promoted or repeatedly sampled.",
+      "reproduction_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-pushed-repro-result.json",
+      "reproduction_eval_tok_s": 4.3,
+      "route": "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=2800"
+    },
+    {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-result.json",
+      "decision": "rejected_tie_not_new_sota",
+      "reason": "Correctness/RAM/TTFT passed, but token rate tied accepted SOTA and did not satisfy strict >4.4 promotion gate.",
+      "reproduction_eval_tok_s": 4.4,
+      "route": "LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1 no-source recheck"
+    }
+  ],
+  "created_at_utc": "2026-07-05T20:07:03Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "new_sota": false,
+    "next_allowed_work": "Proceed only with a new hard-bound route, or obtain explicit disk cleanup/relocation approval for full alternate GGUF tests. No files should be deleted without user approval.",
+    "reason": "The remaining no-disk parameter knobs either change model math and have correctness failures, or have already failed clean reproduction/promotion. Further repetition would be sampling variance, not a principled 10 tok/s path.",
+    "run_more_no_source_parameter_sweeps_now": false
+  },
+  "purpose": "Audit whether any no-disk/no-source parameter sweep should be reopened after alternate GGUF metadata refresh.",
+  "source_head": "18df847b36fdeca56cb1f12839dacfd105dd84af"
+}
