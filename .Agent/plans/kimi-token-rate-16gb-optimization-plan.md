@@ -73896,3 +73896,187 @@ Decision rule:
   cache-hit-only or preload-only Q4 production probe.
 - If capacity-65 hit rate is low or first-use misses dominate, keep Q4
   production closed and return to non-Q4 bottlenecks.
+
+7MI result:
+
+Timestamp: 2026-07-06 19:35:00 CST.
+
+Status: diagnostic passed; source is default-off and useful.
+
+Implementation:
+
+- Added `GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT`.
+- Added optional `GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR`.
+- Q4 route profile records active experts and immediately returns `false`, so
+  final output still comes from CPU fallback.
+- No Q4 staging, cache lookup, or kernel launch happens in this diagnostic.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-102026Z-phase7mi-q4-route-profile-n32`
+- Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-102026Z-phase7mi-q4-route-profile-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT=$RUN/q4-route-profile.csv GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR=blk.6.ffn_down_exps.weight" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate result:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT `67351.38 ms`;
+- decode `23543.60 ms / 31`, `1.32 tok/s`;
+- memory.peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- route CSV rows: `248` routed rows plus header.
+
+Route analysis:
+
+```text
+rows 248
+calls 31
+unique 83
+first_use 83
+repeat_routes 165
+repeat_pct 66.53
+lru_16 hit_pct 41.13 hits 102 misses 146
+lru_32 hit_pct 56.05 hits 139 misses 109
+lru_65 hit_pct 65.73 hits 163 misses 85
+lru_128 hit_pct 66.53 hits 165 misses 83
+static_top_16 hit_pct 56.45 hits 140 misses 108
+static_top_32 hit_pct 75.00 hits 186 misses 62
+static_top_65 hit_pct 92.74 hits 230 misses 18
+static_top_128 hit_pct 100.00 hits 248 misses 0
+```
+
+Top routed experts:
+
+```text
+34:18, 84:15, 29:12, 286:11, 107:11, 39:10, 259:10, 223:9,
+247:7, 23:6, 356:6, 282:5, 207:5, 329:5, 311:5, 111:5
+```
+
+Interpretation:
+
+- Online LRU capacity-65 only matches the 7MH observed q4_down hit rate:
+  `65.7%`.
+- Static top-65 would cover `230/248` routed rows, or `92.74%`.
+- Therefore the next Q4 experiment should not be LRU-only.
+- A valid next test is top-k preload plus hit-only execution:
+  - preload the static top experts into an isolated q4_down pool;
+  - run Q4 GPU only when all active experts for the selected call are already
+    resident;
+  - return `false` for any miss so CPU fallback handles that call without
+    critical-path Q4 staging.
+
+Decision:
+
+- Commit the route-profile diagnostic source.
+- Plan a top-65 preload + hit-only Q4 probe.
+
+## Phase 7MJ - Q4 top-k preload plus hit-only production probe
+
+Timestamp: 2026-07-06 19:42:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether `blk.6.ffn_down_exps.weight` can use Q4 GPU only on preloaded
+  hot experts, avoiding decode critical-path Q4 staging misses.
+- Preserve default Q3/IQ4 down cache geometry and France output quality.
+
+Selected method:
+
+- Reuse the isolated q4_down pool idea from 7MH, but change admission:
+  - preload static top experts for `blk.6` into q4_down pool before decode;
+  - during decode, if any active expert for `blk.6` is not already resident,
+    return `false` immediately and let CPU fallback handle the call;
+  - never stage a Q4 miss on the decode critical path.
+- Initial preload list uses 7MI top experts and capacity 65:
+  `34,84,29,286,107,39,259,223,247,23,356,282,207,329,311,111,...`
+- Source must be default-off:
+  - `GGML_MOE_Q4_DOWN_HIT_ONLY_TENSOR=blk.6.ffn_down_exps.weight`
+  - `GGML_MOE_Q4_DOWN_PRELOAD_EXPERTS=comma-separated-list`
+  - `GGML_MOE_Q4_DOWN_CACHE_EXTRA_MIB=512`
+
+Theory and upper bound:
+
+- 7MI static top-65 coverage is `92.74%` of `blk.6` routed rows.
+- Because calls require all active experts resident to run the existing compact
+  batch, row coverage overestimates call coverage; the experiment must report:
+  - hit-only accepted calls;
+  - declined calls due to miss;
+  - accepted rows.
+- If accepted calls are high, max gain is still bounded by the one-layer Q4 CPU
+  fallback share, about `0.37s / n32`.
+- If accepted calls are low, compact-batch all-or-nothing is the limiting factor
+  and this direction should close unless partial-row Q4/CPU split is designed.
+
+Implementation constraints:
+
+- Default behavior unchanged.
+- Do not broad-enable Q4.
+- If q4 preload allocation or staging fails, disable only the q4 hit-only path.
+- Do not rebuild or resize the existing down pool.
+- Do not issue Q4 miss IO during decode.
+- Add counters:
+  - q4 hit-only calls;
+  - accepted calls;
+  - declined calls;
+  - accepted rows;
+  - missed rows.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mj-q4-hitonly-blk6-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_HIT_ONLY_TENSOR=blk.6.ffn_down_exps.weight GGML_MOE_Q4_DOWN_CACHE_EXTRA_MIB=512 GGML_MOE_Q4_DOWN_PRELOAD_EXPERTS=34,84,29,286,107,39,259,223,247,23,356,282,207,329,311,111" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality `pass`;
+- France answer semantically correct;
+- TTFT below `127598.064 ms`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- existing down cache remains `7.44 MiB` / near `766 slots`;
+- q4 hit-only counters prove no miss staging;
+- n32 repeat must improve or at least not regress decode before any n96 test.
+
+Rollback:
+
+- If build fails, quality fails, memory exceeds the limit, TTFT fails, or repeat
+  decode regresses, revert the hit-only source and keep only the diagnostics.

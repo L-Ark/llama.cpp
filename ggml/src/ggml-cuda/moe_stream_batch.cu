@@ -5742,6 +5742,51 @@ static bool q4_down_parity_candidate(const char *name, ggml_type type) {
     return !target || !target[0] || std::strcmp(target, name) == 0;
 }
 
+static bool q4_down_route_profile_candidate(const char *name, ggml_type type) {
+    const char *path = std::getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT");
+    if (!path || !path[0]) return false;
+    if (type != GGML_TYPE_Q4_0 || !name || !std::strstr(name, "ffn_down_exps")) return false;
+    const char *target = std::getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static void q4_down_route_profile_record(
+        const char *name,
+        int call_id,
+        const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *token_ids,
+        int n_active,
+        int64_t ne01,
+        int64_t ne00) {
+    const char *path = std::getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT");
+    if (!path || !path[0] || !active_experts || !dst_ids || !token_ids || n_active <= 0) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f, "call,tensor,active_index,expert,dst_id,token_id,n_active,ne01,ne00\n");
+        header_written = true;
+    }
+    for (int j = 0; j < n_active; ++j) {
+        std::fprintf(f, "%d,%s,%d,%d,%d,%d,%d,%ld,%ld\n",
+                call_id,
+                name ? name : "",
+                j,
+                active_experts[j],
+                (int)dst_ids[j],
+                (int)token_ids[j],
+                n_active,
+                (long)ne01,
+                (long)ne00);
+    }
+    std::fclose(f);
+}
+
 static bool q4_down_parity_once_per_tensor() {
     const char *env = std::getenv("GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR");
     return env && env[0] && env[0] != '0';
@@ -8072,7 +8117,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (!init_batch_once()) return decline("init_batch_once");
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate) return decline("unsupported_type");
+    const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
@@ -8090,6 +8136,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         ++n_active;
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
+    static std::atomic<int> q4_route_profile_calls{0};
+    if (q4_route_profile_candidate) {
+        const int q4_route_call = q4_route_profile_calls.fetch_add(1, std::memory_order_relaxed);
+        q4_down_route_profile_record(
+                src0_name, q4_route_call, active_experts, dst_ids, token_ids,
+                n_active, ne01, ne00);
+        if (q4_route_call == 0) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] q4_down_route_profile active tensor=%s active=%d ne01=%ld ne00=%ld\n",
+                    src0_name ? src0_name : "", n_active, (long)ne01, (long)ne00);
+        }
+        return false;
+    }
     bool q4_parity_run = false;
     int q4_parity_call = -1;
     if (q4_parity_candidate) {
