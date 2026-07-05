@@ -66712,3 +66712,75 @@ Decision:
 - Do not pursue CUDA backend relabeling for `MOE_FUSED_UP_GATE`.
 - Continue to require a measured `> 2 s` source-level bucket before making
   runtime changes.
+
+## Phase 7KU - current-head strict n96 SOTA reproducibility check
+
+Timestamp: 2026-07-05 15:12:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-run the accepted script-default SOTA path at the current head after the
+  recent diagnostic/documentation commits.
+- Verify that the current branch still reproduces stable n96 output and the
+  strict 16GB/cold-start gates.
+- Use this as the next authoritative baseline before any further source work.
+
+Why this is needed:
+
+- Recent phases rejected several source directions:
+  - cache policy;
+  - expert byte-size conversion;
+  - CPU/file-backed fallback reduction;
+  - current-down completeness / Q4_0 down registration;
+  - CUDA graph / small kernel-launch work;
+  - scheduler relabel/bypass for `MOE_FUSED_UP_GATE`.
+- The latest accepted SOTA remains Phase 7JY n96:
+  - decode `57169.16 ms / 77`;
+  - `1.35 tok/s`;
+  - TTFT `73810.16 ms`;
+  - strict memory peak `15899996160`;
+  - quality pass.
+- Before continuing to lower-level or riskier work, the current head must prove
+  the same script-default path is still reproducible.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e177065a5
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ku-current-head-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below the existing gate `106331.72 ms * 1.2`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 is at or faster than current SOTA while passing all gates, record it as
+  the current reproducible SOTA baseline. No source commit is needed.
+- If n96 regresses materially but gates pass, keep 7JY as SOTA and record the
+  variance.
+- If any hard gate fails, investigate before further optimization.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, command shape, metrics, memory, output, IO counters, and
+  comparison with 7JY.
