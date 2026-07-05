@@ -10924,3 +10924,30 @@ Decision:
 - Commit and push this default-off alias infrastructure.
 - Current accepted SOTA remains `4.4 tok/s`; this guard only ties SOTA and is not a new result.
 - Alias-on full load and any Q4_K/4Expert correctness benchmark remain blocked until the complete 4Expert GGUF is available.
+
+### 2026-07-05 Header-Only 4Expert Q4_K Direct Manifest
+
+Artifacts:
+
+- Script: `.Agent/run-tools/create_gguf_header_expert_manifest.py`
+- Summary: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-q4k-header-manifest-summary.json`
+- Generated direct manifest, not committed: `/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert-q4k-all-experts.direct-manifest.csv`
+
+Result:
+
+- The manifest was generated from the 64MiB header range only; no full 4Expert model was downloaded.
+- Header SHA256: `dfa48de9479bd36c7e9b02e58635726a3a5b2215aa17c975a44975cf89704222`
+- Manifest SHA256: `42f127cd1d7e147d49797d9e8a860386e0e9f10fbfac5be37e86c14bddeebaa6`
+- Manifest rows: `33024`
+- Manifest tensors: `129`
+- Per expert slice size: `4718592 bytes`
+- Total Q4_K routed expert payload represented by manifest: `155826782208 bytes` (`145.125 GiB`)
+- Data start: `5845216`
+- Tensor info end: `5845209`
+- First row: `blk.0.ffn_gate_exps.weight,0,8638978336,4718592`
+
+Decision:
+
+- Keep this script and summary. They make future Q4_K direct manifest generation reproducible once the full 4Expert GGUF is available.
+- This is not a SOTA result and does not validate correctness or TTFT.
+- Next blocked item for real 4Expert validation remains disk space for the full GGUF.
