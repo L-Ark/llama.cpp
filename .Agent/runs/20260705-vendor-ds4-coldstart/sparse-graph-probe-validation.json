@@ -1,0 +1,114 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-graph-probe-validation.json",
+  "timestamp_utc": "2026-07-05T05:52:00Z",
+  "status": "probe_passed_correctness_but_rejected_current_dataflow",
+  "purpose": "Validate whether the current CPU-backend one-stream helper can satisfy the sparse top64 graph zero-transfer assumptions before any logit-changing sparse pair implementation.",
+  "source_head_before_change": "38da4f703979a1716bf9ee9d7fbef989425b5528",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "promotion_status": "unchanged"
+  },
+  "implementation": {
+    "default_behavior_changed": false,
+    "files": [
+      "ggml/src/ggml-cuda/moe_stream.cu",
+      ".Agent/run-tools/analyze_sparse_graph_probe.py",
+      ".Agent/run-tools/run_sparse_graph_probe_validation.sh"
+    ],
+    "summary": [
+      "Added default-off DS4_SPARSE_PAIR_GRAPH_PROBE CSV logging inside ggml_cuda_moe_stream_one.",
+      "The probe records src1 H2D bytes, dst D2H bytes, CPU scatter, cache hit/insert state, retained GPU-output flag, returned GPU-handle flag, and zero-transfer readiness.",
+      "Added a run tool for fixed-text top1 validation under MemoryMax=16000000000 and MemorySwapMax=0.",
+      "Added an analyzer that combines the probe CSV with the top64 sparse pair profile and emits an explicit pass/reject decision."
+    ],
+    "env": [
+      "DS4_SPARSE_PAIR_GRAPH_PROBE",
+      "DS4_SPARSE_PAIR_GRAPH_PROBE_OUT",
+      "DS4_SPARSE_PAIR_PROFILE_JSON"
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 16",
+    "status": "passed",
+    "hashes": {
+      "build-ds4-moe-stream/bin/llama-results": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+      "build-ds4-moe-stream/bin/llama-cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62"
+    }
+  },
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation",
+  "default_off_top1": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation/defaultoff-top1",
+    "systemd_unit": "vendor-ds4-sparse-defaultoff-054737.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 25.254,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "memory_peak_bytes": 4287217664,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "summary_sha256": "1c5f9163c17e6da2434bc5a315ef21acd15ce0fb59dbdae7b31e0fadc62f0289"
+  },
+  "probe_top1": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation/probe-top1",
+    "systemd_unit": "vendor-ds4-sparse-probe-054840.service",
+    "systemd_result": "success",
+    "service_runtime_seconds": 23.038,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "memory_peak_bytes": 919150592,
+    "memory_events": {
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "summary_sha256": "988cd5a7f530970c0024093650fc01c66ac120006891cb16de0cb721dd4f5ffe"
+  },
+  "sparse_graph_probe": {
+    "csv": "/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation/probe-top1/sparse-graph-probe.csv",
+    "summary": "/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation/probe-top1/sparse-graph-probe-summary.json",
+    "csv_sha256": "ddacd339564888e7a0b1676db1099854800ca771ca94303939b0b83885391baa",
+    "summary_sha256": "c727d3fa31ae3af44b9e05b6e7705a629be8c886170a73552cfe79c568c779e8",
+    "status": "rejected_current_dataflow",
+    "probe_rows": 34800,
+    "roles": {
+      "gate": 34800
+    },
+    "src1_h2d_bytes": 570163200,
+    "dst_d2h_bytes": 285081600,
+    "scatter_rows": 34800,
+    "retained_gpu_output_rows": 0,
+    "returned_gpu_handle_rows": 0,
+    "zero_transfer_ready_rows": 0,
+    "src0_cache_hit_rows": 32603,
+    "src0_cache_insert_rows": 272,
+    "profile": {
+      "pairs": 64,
+      "payload_bytes": 570425344,
+      "payload_mib": 544,
+      "active_layers": 33,
+      "max_pairs_per_layer": 4
+    },
+    "reasons": [
+      "one-stream still copies F32 src1 activations from host to GPU",
+      "one-stream still copies dst output from GPU to host",
+      "one-stream still scatters GPU output into CPU dst",
+      "probe observed no retained reusable GPU output",
+      "probe observed no returned GPU output handle",
+      "accepted path does not stream sparse up/down pair rows through this helper"
+    ]
+  },
+  "decision": {
+    "promote_as_sota": false,
+    "keep_source": true,
+    "reason": "The probe is token-stable and useful instrumentation, but it proves the current CPU-backend one-stream helper violates the graph zero-transfer assumptions. It cannot implement the top64 sparse pair route.",
+    "next_step": "Design a true graph-level retained GPU tensor path, or an equivalent retained GPU buffer/lifetime mechanism, before any logit-changing sparse pair implementation. Do not use gate recompute, the existing per-layer dummy hot manager, or CPU-backend D2H/scatter as the continuation path."
+  }
+}

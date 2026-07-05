@@ -1661,6 +1661,128 @@ static void one_trace_write(
         std::chrono::duration<double, std::milli>(t_dontneed - t0).count());
 }
 
+struct sparse_graph_probe_state {
+    std::mutex mu;
+    FILE * fp = nullptr;
+    bool initialized = false;
+    std::atomic<uint64_t> seq{0};
+};
+
+static sparse_graph_probe_state g_sparse_graph_probe;
+
+static bool sparse_graph_probe_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("DS4_SPARSE_PAIR_GRAPH_PROBE");
+        return (env && env[0] && env[0] != '0') ? 1 : 0;
+    }();
+    return enabled != 0;
+}
+
+static const char * sparse_graph_probe_role(const char * name) {
+    if (!name) {
+        return "other";
+    }
+    if (std::strstr(name, "ffn_gate_exps") != nullptr) {
+        return "gate";
+    }
+    if (std::strstr(name, "ffn_up_exps") != nullptr) {
+        return "up";
+    }
+    if (std::strstr(name, "ffn_down_exps") != nullptr) {
+        return "down";
+    }
+    return "other";
+}
+
+static FILE * sparse_graph_probe_fp_locked() {
+    if (!g_sparse_graph_probe.initialized) {
+        g_sparse_graph_probe.initialized = true;
+        if (sparse_graph_probe_enabled()) {
+            const char * path = std::getenv("DS4_SPARSE_PAIR_GRAPH_PROBE_OUT");
+            const char * profile = std::getenv("DS4_SPARSE_PAIR_PROFILE_JSON");
+            if (path && path[0]) {
+                g_sparse_graph_probe.fp = std::fopen(path, "w");
+                if (g_sparse_graph_probe.fp) {
+                    std::setvbuf(g_sparse_graph_probe.fp, nullptr, _IOLBF, 0);
+                    std::fprintf(g_sparse_graph_probe.fp,
+                        "seq,tensor_role,tensor,expert,cne1,src0_bytes,src1_f32_bytes,dst_bytes,"
+                        "src0_from_cache,src0_cache_inserted,slot,deferred_sync,src1_h2d_bytes,dst_d2h_bytes,"
+                        "scatter_to_cpu,retains_gpu_output,returns_gpu_handle,zero_transfer_ready,"
+                        "kernel_src0_ptr,d_src1_f32_ptr,d_dst_ptr,h_scratch_ptr,dst_host_ptr\n");
+                    std::fprintf(stderr,
+                        "[moe_stream] sparse graph probe enabled out=%s profile=%s\n",
+                        path, (profile && profile[0]) ? profile : "");
+                } else {
+                    std::fprintf(stderr, "[moe_stream] failed to open sparse graph probe: %s\n", path);
+                }
+            }
+        }
+    }
+    return g_sparse_graph_probe.fp;
+}
+
+static void sparse_graph_probe_write(
+    const char * src0_name,
+    int64_t expert_index,
+    int64_t cne1,
+    size_t src0_bytes,
+    size_t src1_f32_bytes,
+    size_t dst_bytes,
+    bool cache_hit,
+    bool cache_inserted,
+    int slot,
+    bool deferred_sync,
+    const void * kernel_src0,
+    const void * d_src1_f32,
+    const void * d_dst,
+    const void * h_scratch,
+    const void * dst_host) {
+    if (!sparse_graph_probe_enabled()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(g_sparse_graph_probe.mu);
+    FILE * fp = sparse_graph_probe_fp_locked();
+    if (!fp) {
+        return;
+    }
+
+    const bool src1_h2d = src1_f32_bytes > 0;
+    const bool dst_d2h = dst_bytes > 0;
+    const bool scatter_to_cpu = true;
+    const bool retains_gpu_output = false;
+    const bool returns_gpu_handle = false;
+    const bool zero_transfer_ready =
+        !src1_h2d && !dst_d2h && !scatter_to_cpu && retains_gpu_output && returns_gpu_handle;
+    const uint64_t seq = g_sparse_graph_probe.seq.fetch_add(1, std::memory_order_relaxed);
+
+    std::fprintf(fp,
+        "%" PRIu64 ",%s,%s,%" PRId64 ",%" PRId64 ",%zu,%zu,%zu,%d,%d,%d,%d,%zu,%zu,%d,%d,%d,%d,%p,%p,%p,%p,%p\n",
+        seq,
+        sparse_graph_probe_role(src0_name),
+        src0_name ? src0_name : "",
+        expert_index,
+        cne1,
+        src0_bytes,
+        src1_f32_bytes,
+        dst_bytes,
+        cache_hit ? 1 : 0,
+        cache_inserted ? 1 : 0,
+        slot,
+        deferred_sync ? 1 : 0,
+        src1_h2d ? src1_f32_bytes : (size_t) 0,
+        dst_d2h ? dst_bytes : (size_t) 0,
+        scatter_to_cpu ? 1 : 0,
+        retains_gpu_output ? 1 : 0,
+        returns_gpu_handle ? 1 : 0,
+        zero_transfer_ready ? 1 : 0,
+        kernel_src0,
+        d_src1_f32,
+        d_dst,
+        h_scratch,
+        dst_host);
+}
+
 static bool moe_stream_one_experimental_ds4_enabled() {
     static int enabled = [] {
         const char * env = std::getenv("GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4");
@@ -3573,6 +3695,9 @@ extern "C" bool ggml_cuda_moe_stream_one(
 
     if (cudaMemcpyAsync(ctx.h_scratch, ctx.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) { release_slot(s); return false; }
     const auto t_d2h = std::chrono::steady_clock::now();
+    sparse_graph_probe_write(src0_name, expert_index, cne1, src0_bytes, src1_f32_bytes, dst_bytes,
+            cache_hit, cache_inserted, s, g_defer_sync, kernel_src0,
+            ctx.d_src1_f32, ctx.d_dst, ctx.h_scratch, dst);
 
     if (!g_defer_sync) {
         if (cudaStreamSynchronize(st) != cudaSuccess) { release_slot(s); return false; }

@@ -112,6 +112,16 @@ Sparse pair top64 profile and next graph-probe plan:
 - Correctness gate before any logit-writing path: fixed-text top1 `same_top1 == n_tokens`, coherent France answer, op-level compare/tolerance documented if MMVQ writes replace CPU fallback, strict 16GB cgroup including page cache, `MemorySwapMax=0`, no OOM/no swap, and TTFT within the accepted gate for any promotable SOTA.
 - If and only if the graph/dataflow probe proves zero-transfer feasibility, write a separate hard-bound artifact before implementation of a logit-changing path. The bound must include expected decode saving, kernel time, launch/sync, remaining transfers, VRAM/RAM footprint including page cache, TTFT impact, and rollback criteria. A strict cold SOTA benchmark is not allowed from the profile alone.
 
+Sparse graph/dataflow probe result:
+
+- Source change is default-off and diagnostic only: `DS4_SPARSE_PAIR_GRAPH_PROBE=1` plus `DS4_SPARSE_PAIR_GRAPH_PROBE_OUT=<csv>` records one-stream dataflow facts; default behavior is unchanged.
+- Validation artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-graph-probe-validation.json`; run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T054737Z-sparse-graph-probe-validation`.
+- Build passed for `llama-cli` and `llama-results`. Default-off fixed-text top1 passed with `same_top1=145/145`, `first_mismatch_pos=-1`, no OOM/no swap under `MemoryMax=16000000000` and `MemorySwapMax=0`.
+- Probe-enabled fixed-text top1 also passed with `same_top1=145/145`, `first_mismatch_pos=-1`, confirming the probe does not change logits.
+- Dataflow verdict: `rejected_current_dataflow`. The CSV had `34800` one-stream rows and all were `gate` rows. It observed `570163200` bytes of F32 `src1` H2D, `285081600` bytes of `dst` D2H, `34800` CPU scatter rows, `0` retained GPU-output rows, `0` returned GPU-handle rows, and `0` zero-transfer-ready rows.
+- Therefore the current CPU-backend one-stream helper cannot implement the top64 sparse graph zero-transfer route. It can cache/compute gate experts, but it returns through CPU memory and has no reusable graph-level GPU gate tensor. It also does not stream the sparse up/down pair rows in the accepted path.
+- Next source work must not layer a logit-changing sparse pair path on this helper. The only viable continuation is a true graph-level retained-tensor design: either change graph/backend scheduling so gate, GLU/up, and selected down hot branch stay on CUDA tensors, or create an equivalent retained GPU buffer with explicit lifetime and no H2D/D2H round trip. Gate recompute, existing per-layer dummy hot manager, and CPU-backend scatter routes remain rejected.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.
