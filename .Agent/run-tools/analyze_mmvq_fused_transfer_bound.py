@@ -198,6 +198,14 @@ def main() -> int:
         selected_gate_gib = sum(r["call_weighted_gib_gate_recompute"] for r in selected)
         payload_mib = sum(r["payload_mib_updown"] for r in selected)
         payload_gate_mib = sum(r["payload_mib_gate_updown"] for r in selected)
+        per_layer_counts: dict[int, int] = {}
+        for r in selected:
+            per_layer_counts[r["layer"]] = per_layer_counts.get(r["layer"], 0) + 1
+        # Existing DS4 hot manager allocates k_local + P + 1 slots for every active layer/tensor.
+        # This is much larger than the ideal sparse global direct-pair payload when hot pairs are
+        # spread over many layers.
+        manager_updown_payload_mib = sum((k + 7) * 2 * SLOT_MIB for k in per_layer_counts.values())
+        manager_gate_updown_payload_mib = sum((k + 7) * 3 * SLOT_MIB for k in per_layer_counts.values())
         remaining_gib = total_call_gib - selected_gib
         remaining_cpu_ms = remaining_gib / BEST_CPU_MICROPROBE_GIB_S * 1000.0
         penalty = gate_penalty_ms(scores, payload_mib)
@@ -226,6 +234,15 @@ def main() -> int:
             "hot_save_ms_zero_kernel": hot_save,
             "payload_mib_updown": payload_mib,
             "payload_mib_gate_updown": payload_gate_mib,
+            "existing_ds4_hot_manager_payload_mib": {
+                "active_layers": len(per_layer_counts),
+                "max_pairs_per_layer": max(per_layer_counts.values()) if per_layer_counts else 0,
+                "per_layer_pair_counts": dict(sorted(per_layer_counts.items())),
+                "updown_only_if_supported": manager_updown_payload_mib,
+                "gate_updown_current_manager": manager_gate_updown_payload_mib,
+                "gate_penalty_updown_only_if_supported": gate_penalty_ms(scores, manager_updown_payload_mib),
+                "gate_penalty_gate_updown_current_manager": gate_penalty_ms(scores, manager_gate_updown_payload_mib),
+            },
             "call_weighted_gib_updown": selected_gib,
             "call_weighted_gib_gate_recompute_extra": selected_gate_gib,
             "remaining_cpu_microprobe_ms": remaining_cpu_ms,

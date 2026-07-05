@@ -97,6 +97,7 @@ MMVQ fused/no-transfer hard-bound:
 - Graph-level zero-transfer is only barely viable on paper if it reuses existing gate GPU output: best bound is `10.014 tok/s` at `pair_count=64`, with only `18.947 ms` margin. This assumes up/down hot pair kernels at the measured MMVQ speed, no intermediate H2D/D2H, no extra gate recompute, and gate cache impact already counted through the 544 MiB up/down payload.
 - Gate recompute is rejected: `pair_count=64` with gate recompute projects `9.861 tok/s`, and adding gate payload worsens gate-cache pressure. Any future graph probe must reuse the existing gate result or otherwise prove an equivalent zero-transfer gate source.
 - Existing full DS4 hot dispatch remains a different, already rejected design because it allocates per-layer K hot experts. A new source edit, if attempted, must be a sparse global-pair graph/probe or equivalent proof that only the selected hot up/down pairs are resident and that the hot branch stays on GPU end-to-end.
+- Existing DS4 hot manager cannot directly implement the top64 pair bound: the ideal sparse up/down payload is `544 MiB`, but current manager dummy slots across the 33 active layers inflate it to `2507.5 MiB` for up/down-only if that mode existed, or `3761.25 MiB` for current gate/up/down manager behavior. The estimated gate-cache penalty is about `1093.688-1997.926 ms`, far above the `18.947 ms` graph zero-transfer margin.
 
 Latest closed decisions:
 
