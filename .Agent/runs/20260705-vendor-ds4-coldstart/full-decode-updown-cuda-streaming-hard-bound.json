@@ -1,0 +1,277 @@
+{
+  "decision": {
+    "extra_gpu_layers": "rejected: moving one full MoE layer to GPU costs about 3264 MiB and steals roughly 712 gate-cache slots, with an estimated gate penalty larger than the optimistic per-layer fallback saving; historical cpu_moe=39/38 runs already regressed.",
+    "full_exact_gpu_kernel": "rejected: exact raw/transposed probes require about 2.0s kernel time for the full 148.916 GiB call-weighted decode payload, exceeding the 1.729s total margin before source or integration overhead.",
+    "full_mmvq_gpu_kernel": "rejected before source edit: the measured non-exact MMVQ kernel leaves about 1.19s for source and integration, requiring at least about 18 GiB/s even with perfect per-run unique expert reuse or about 125 GiB/s without reuse; measured O_DIRECT is about 1.85 GiB/s and current page-source effective rate is about 9.17 GiB/s.",
+    "full_resident_payload": "rejected: the decode unique up/down payload is about 21.81 GiB, larger than available VRAM and larger than the 16GB host/page-cache budget; preloading it at measured O_DIRECT speed would add about 11.8s TTFT.",
+    "sota_changed": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "inputs": {
+    "bottleneck": ".Agent/runs/20260705-vendor-ds4-coldstart/fresh-sota44-current-head-bottleneck-analysis.json",
+    "candidate_screen": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    "full_trace_profile": "/root/lfz/runs/vendor-ds4-16gb/20260705T032634Z-20260705_current_head_sota44_component_trace_absbin/france-trace-cpu40-vram0gb/fallback_profile.csv",
+    "mmvq_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    "touch_split_profile": "/root/lfz/runs/vendor-ds4-16gb/20260705T033155Z-20260705_current_head_sota44_touch_split/france-touch-cpu40-vram0gb/fallback_profile.csv"
+  },
+  "kernel_bound_rows": [
+    {
+      "bandwidth_gib_s": 74.59,
+      "decode_ms_if_zero_source_plus_kernel": 13928.50857104035,
+      "kernel_ms_for_call_weighted_decode": 1996.4608610403538,
+      "name": "exact_raw_warp_probe",
+      "remaining_margin_after_kernel_ms": -267.6320186403518,
+      "required_call_weighted_source_gib_s_after_kernel": null,
+      "required_unique_source_gib_s_after_kernel": null,
+      "tok_s_if_zero_source_plus_kernel": 9.80785306820516
+    },
+    {
+      "bandwidth_gib_s": 72.434,
+      "decode_ms_if_zero_source_plus_kernel": 13987.933283418555,
+      "kernel_ms_for_call_weighted_decode": 2055.8855734185604,
+      "name": "exact_transposed_warp_probe",
+      "remaining_margin_after_kernel_ms": -327.05673101855837,
+      "required_call_weighted_source_gib_s_after_kernel": null,
+      "required_unique_source_gib_s_after_kernel": null,
+      "tok_s_if_zero_source_plus_kernel": 9.766186523490033
+    },
+    {
+      "bandwidth_gib_s": 74.719,
+      "decode_ms_if_zero_source_plus_kernel": 13925.061744248313,
+      "kernel_ms_for_call_weighted_decode": 1993.014034248317,
+      "name": "best_cpu_microprobe_equivalent",
+      "remaining_margin_after_kernel_ms": -264.18519184831507,
+      "required_call_weighted_source_gib_s_after_kernel": null,
+      "required_unique_source_gib_s_after_kernel": null,
+      "tok_s_if_zero_source_plus_kernel": 9.810280775266627
+    },
+    {
+      "bandwidth_gib_s": 276.25420958795564,
+      "decode_ms_if_zero_source_plus_kernel": 12471.101995714282,
+      "kernel_ms_for_call_weighted_decode": 539.0542857142857,
+      "name": "non_exact_mmvq_probe",
+      "remaining_margin_after_kernel_ms": 1189.7745566857163,
+      "required_call_weighted_source_gib_s_after_kernel": 125.16322087087357,
+      "required_unique_source_gib_s_after_kernel": 18.32796996810395,
+      "tok_s_if_zero_source_plus_kernel": 10.9540251992924
+    }
+  ],
+  "next_step": "Do not implement a full decode up/down streaming source path from this bound. The remaining path must be a new algorithmic route that reduces both source bytes and exact compute substantially, or a fresh bottleneck search for smaller accepted-SOTA improvements with the same correctness/RAM/TTFT gates.",
+  "profile_totals": {
+    "touch_split_decode_down": {
+      "call_bytes": 79948677120,
+      "call_gib": 74.4580078125,
+      "calls": 17940,
+      "fallback_ms": 1419.141,
+      "fallback_us": 1419141,
+      "payload_bytes": 11707088896,
+      "payload_gib": 10.903076171875,
+      "rows": 2627,
+      "touch_ms": 20914.912,
+      "touch_us": 20914912,
+      "unique_count": 2627
+    },
+    "touch_split_decode_up": {
+      "call_bytes": 79948677120,
+      "call_gib": 74.4580078125,
+      "calls": 17940,
+      "fallback_ms": 1463.121,
+      "fallback_us": 1463121,
+      "payload_bytes": 11707088896,
+      "payload_gib": 10.903076171875,
+      "rows": 2627,
+      "touch_ms": 20786.583,
+      "touch_us": 20786583,
+      "unique_count": 2627
+    }
+  },
+  "remote_head": "b37f0b7133f3a771a16cdee9d6b3b63a27408fd7",
+  "requirements": {
+    "accepted_decode_ms": 31047.446709999997,
+    "current_source_effective_call_weighted_gib_s": 9.17358213788253,
+    "decode_unique_updown_payload_gib": 21.80615234375,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "full_fallback_removal_margin_ms": 1728.828842400002,
+    "hot_compute_ms_after_touch": 2882.262,
+    "measured_direct_prefill_odirect_gib_s": 1.85,
+    "prompt_unique_updown_payload_gib": 7.37109375,
+    "source_page_delta_ms_estimate": 16233.137,
+    "target_decode_ms_for_10tok": 13660.876552399997,
+    "total_decode_call_weighted_gib": 148.916015625
+  },
+  "resident_layer_tradeoff": {
+    "cuda_free_mib_reference": 238.0,
+    "extra_mib_needed_for_one_layer": 3026.0,
+    "gate_penalty_ms_est": 1458.2503375291951,
+    "gate_slots_stolen_est": 712,
+    "historical_evidence": [
+      "cpu_moe=39/38 strict runs are already recorded as rejected in the plan.",
+      "cpu39/cache10496 only tied about 1.6 tok/s and late10 cpu39/cache13000 hit a complete stream-cache cliff."
+    ],
+    "lost_gate_score_est": 1424,
+    "per_full_gate_up_down_layer_mib": 3264.0,
+    "per_tensor_layer_mib": 1088.0,
+    "top_layers": [
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 1172.844,
+        "layer": 0,
+        "optimistic_full_layer_saved_ms": 1172.844,
+        "optimistic_net_ms_after_gate_penalty": -285.40633752919507,
+        "touch_split_compute_ms": 86.392,
+        "touch_split_touch_ms": 3099.059,
+        "unique_payload_gib": 1.55224609375
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 1135.604,
+        "layer": 1,
+        "optimistic_full_layer_saved_ms": 1135.604,
+        "optimistic_net_ms_after_gate_penalty": -322.6463375291951,
+        "touch_split_compute_ms": 88.116,
+        "touch_split_touch_ms": 3269.928,
+        "unique_payload_gib": 1.494140625
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 1074.364,
+        "layer": 2,
+        "optimistic_full_layer_saved_ms": 1074.364,
+        "optimistic_net_ms_after_gate_penalty": -383.8863375291951,
+        "touch_split_compute_ms": 86.872,
+        "touch_split_touch_ms": 3033.335,
+        "unique_payload_gib": 1.48583984375
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 725.712,
+        "layer": 4,
+        "optimistic_full_layer_saved_ms": 725.712,
+        "optimistic_net_ms_after_gate_penalty": -732.5383375291951,
+        "touch_split_compute_ms": 91.592,
+        "touch_split_touch_ms": 1506.76,
+        "unique_payload_gib": 0.7802734375
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 675.844,
+        "layer": 9,
+        "optimistic_full_layer_saved_ms": 675.844,
+        "optimistic_net_ms_after_gate_penalty": -782.4063375291951,
+        "touch_split_compute_ms": 90.304,
+        "touch_split_touch_ms": 1401.85,
+        "unique_payload_gib": 0.70556640625
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 617.016,
+        "layer": 6,
+        "optimistic_full_layer_saved_ms": 617.016,
+        "optimistic_net_ms_after_gate_penalty": -841.2343375291952,
+        "touch_split_compute_ms": 90.564,
+        "touch_split_touch_ms": 1308.574,
+        "unique_payload_gib": 0.6806640625
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 614.048,
+        "layer": 3,
+        "optimistic_full_layer_saved_ms": 614.048,
+        "optimistic_net_ms_after_gate_penalty": -844.2023375291951,
+        "touch_split_compute_ms": 90.944,
+        "touch_split_touch_ms": 1387.573,
+        "unique_payload_gib": 0.80517578125
+      },
+      {
+        "call_gib": 3.4365234375,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 593.373,
+        "layer": 21,
+        "optimistic_full_layer_saved_ms": 593.373,
+        "optimistic_net_ms_after_gate_penalty": -864.8773375291951,
+        "touch_split_compute_ms": 65.616,
+        "touch_split_touch_ms": 1250.888,
+        "unique_payload_gib": 0.65576171875
+      },
+      {
+        "call_gib": 3.4365234375,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 570.999,
+        "layer": 19,
+        "optimistic_full_layer_saved_ms": 570.999,
+        "optimistic_net_ms_after_gate_penalty": -887.2513375291951,
+        "touch_split_compute_ms": 64.59,
+        "touch_split_touch_ms": 1354.666,
+        "unique_payload_gib": 0.68896484375
+      },
+      {
+        "call_gib": 4.58203125,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 552.076,
+        "layer": 5,
+        "optimistic_full_layer_saved_ms": 552.076,
+        "optimistic_net_ms_after_gate_penalty": -906.1743375291951,
+        "touch_split_compute_ms": 90.012,
+        "touch_split_touch_ms": 1163.41,
+        "unique_payload_gib": 0.58935546875
+      },
+      {
+        "call_gib": 3.4365234375,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 525.912,
+        "layer": 20,
+        "optimistic_full_layer_saved_ms": 525.912,
+        "optimistic_net_ms_after_gate_penalty": -932.3383375291951,
+        "touch_split_compute_ms": 64.866,
+        "touch_split_touch_ms": 1032.277,
+        "unique_payload_gib": 0.498046875
+      },
+      {
+        "call_gib": 3.4365234375,
+        "estimated_gate_penalty_ms_for_one_extra_gpu_layer": 1458.2503375291951,
+        "full_trace_fallback_ms": 516.282,
+        "layer": 10,
+        "optimistic_full_layer_saved_ms": 516.282,
+        "optimistic_net_ms_after_gate_penalty": -941.9683375291951,
+        "touch_split_compute_ms": 66.9,
+        "touch_split_touch_ms": 1397.322,
+        "unique_payload_gib": 0.630859375
+      }
+    ]
+  },
+  "source_bound_rows": [
+    {
+      "bandwidth_gib_s": 1.85,
+      "call_weighted_ms": 80495.14358108108,
+      "name": "measured_direct_prefill_odirect",
+      "unique_payload_ms": 11787.109375
+    },
+    {
+      "bandwidth_gib_s": 9.17358213788253,
+      "call_weighted_ms": 16233.136999999999,
+      "name": "current_page_source_effective_call_weighted",
+      "unique_payload_ms": 2377.0596933667784
+    },
+    {
+      "bandwidth_gib_s": 24.0,
+      "call_weighted_ms": 6204.833984375,
+      "name": "pcie_24gib_s_ideal",
+      "unique_payload_ms": 908.5896809895834
+    },
+    {
+      "bandwidth_gib_s": 50.0,
+      "call_weighted_ms": 2978.3203125,
+      "name": "pcie_50gib_s_ideal",
+      "unique_payload_ms": 436.123046875
+    }
+  ],
+  "source_head": "b37f0b7133f3a771a16cdee9d6b3b63a27408fd7",
+  "status": "full_decode_updown_cuda_streaming_rejected_before_runtime_source_edit"
+}

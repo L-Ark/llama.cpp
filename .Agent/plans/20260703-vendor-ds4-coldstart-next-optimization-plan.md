@@ -83,6 +83,18 @@ Current-head accepted-path baseline guard:
 - Result: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
 - France answer was semantically correct and coherent. This ties the accepted SOTA class and is a guardrail/baseline record, not a new SOTA promotion.
 
+Full decode up/down CUDA/streaming hard-bound result:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-decode-updown-cuda-streaming-hard-bound.json`; helper: `.Agent/run-tools/analyze_full_decode_updown_streaming_bound.py`.
+- Status: `full_decode_updown_cuda_streaming_rejected_before_runtime_source_edit`.
+- Decode up/down call-weighted payload is `148.916 GiB`; decode unique up/down payload is `21.806 GiB` (`2627` unique up rows and `2627` unique down rows).
+- Total margin after perfect full fallback removal is only `1728.829 ms`.
+- Exact GPU paths are rejected by kernel time alone: raw exact probe at `74.590 GiB/s` projects `1996.461 ms`, transposed exact probe at `72.434 GiB/s` projects `2055.886 ms`, and the best CPU microprobe-equivalent bandwidth projects `1993.014 ms`. All exceed the full-route margin before source transfer or integration overhead.
+- Non-exact MMVQ speed is not enough to justify source work: at `276.254 GiB/s`, kernel time would be `539.054 ms`, leaving `1189.775 ms` for source and integration. That still requires `18.328 GiB/s` if every unique expert is read only once, or `125.163 GiB/s` if call-weighted source is streamed. Measured direct O_DIRECT prefill is only about `1.850 GiB/s`; current page-source effective rate is about `9.174 GiB/s`.
+- Full resident payload is rejected: `21.806 GiB` decode up/down unique payload exceeds available VRAM and the 16GB host/page-cache budget. Preloading just that payload at measured O_DIRECT speed would add about `11.787 s` TTFT.
+- Extra GPU MoE layer tradeoff is rejected: one full gate/up/down layer costs about `3264 MiB`, needs about `3026 MiB` beyond the current free VRAM reference, and would steal roughly `712` gate-cache slots. Estimated gate penalty is `1458.250 ms`, larger than the most optimistic one-layer full-trace fallback saving (`1172.844 ms`). This matches prior `cpu_moe=39/38` rejected runs.
+- Decision: do not implement a full decode up/down streaming source path or a full-resident payload path from this bound. The next route must reduce both source bytes and exact compute substantially by construction, or pursue smaller accepted-SOTA improvements with the same RAM/TTFT/correctness gates.
+
 Mandatory record/push rule:
 
 - Every practice step must first update this plan or an artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
