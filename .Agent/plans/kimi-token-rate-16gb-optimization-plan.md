@@ -79755,6 +79755,100 @@ python3 audit_runtime_switches.py
 cat decision.md
 ```
 
+## Phase 7NV - online same-layer I/O concurrency audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 10:40 CST.
+
+Reason:
+
+- Phase 7NU showed raw runtime-shaped direct reads can reach `15.181 GiB/s`
+  with enough independent work, while current runtime effective throughput is
+  `5.854 GiB/s`.
+- That raw ceiling is not directly implementable if it depends on future-token
+  route traces.
+- The only online read work known without oracle prefetch is work discoverable
+  after the current token/layer route is computed:
+  - up experts;
+  - gate experts;
+  - down experts for the same active expert set.
+- Current SOTA already has current-down overlap, so a follow-up source patch is
+  justified only if profiles show same-layer miss work is still serialized or
+  under-filled in a way that can be changed without delaying critical up/gate
+  reads.
+
+Goal:
+
+- Decide whether a source implementation should try a same-layer priority I/O
+  scheduler that submits more known jobs per route event.
+- Do not run model inference.
+- Do not edit source.
+- Do not download assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- 7MA endpoint-overlap n32 profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32`
+- 7NN low-level iouring/locality profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32`
+- Current source scheduling points in:
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nv-online-concurrency`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7nv_online_concurrency.py`;
+   - source snippets / line references for current up/gate/down scheduling;
+   - `online_concurrency_summary.tsv`;
+   - `decision.md`.
+3. Reconstruct decode token/layer groups from 7MA `copy-profile.csv`:
+   - split token boundaries by layer reset;
+   - group rows by `(token, layer, op, tensor_kind)`;
+   - count iouring jobs and bytes for up, gate, down, and current-down-overlap.
+4. Estimate same-layer online work available after each route:
+   - `up_iouring_jobs + gate_iouring_jobs + down_iouring_jobs`;
+   - compare against current per-batch `read_jobs`, `inflight_avg`, and
+     `inflight_max`;
+   - report how often current route events have enough known jobs to fill
+     depth `8` and depth `12`.
+5. Estimate critical-path risk:
+   - if combined same-layer scheduling would put down jobs ahead of missing
+     up/gate jobs, mark as unsafe unless priority/fence can be proven;
+   - if current-down-overlap already covers most down misses before down
+     compute, mark additional same-layer scheduling as low-upside.
+6. Inspect source line references around:
+   - `expert_pack_iouring_copy_jobs`;
+   - current-down overlap scheduling;
+   - up/gate runtime load calls;
+   - any existing priority or separate-ring behavior.
+
+Decision rule:
+
+- Proceed to source design only if all are true:
+  - at least `50%` of route events have `>=12` same-layer known iouring jobs;
+  - current runtime submits them as smaller serialized batches rather than a
+    priority-filled queue;
+  - source inspection shows a default-off priority scheduler can preserve
+    up/gate-first completion while using down jobs as background fill;
+  - theoretical movement-only bound from 7NU would improve n96 by at least
+    `15%` without increasing TTFT.
+- Reject source work if:
+  - available online jobs are not enough to fill higher queue depth;
+  - current-down overlap already consumes most safe same-layer down work;
+  - the only way to reach 7NU raw throughput requires future-token oracle
+    prefetch or route-trace replay.
+
+Reproducibility:
+
+- Commit and push this 7NV plan before running the audit.
+- Commit and push the 7NV result before any follow-up source work.
+
 Artifacts:
 
 - `commands.log`
