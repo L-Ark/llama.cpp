@@ -65454,3 +65454,59 @@ Reproducibility:
 - Use 7KG, a strict cold-start run that already passed all hard gates.
 - Record the exact script output and decision here.
 - Commit and push result before any source changes.
+
+### 7KM result
+
+Timestamp: 2026-07-05.
+
+Source data:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kg-post-mixed-fallback-profile-n32/fallback-profile.csv`.
+- 7KG was a strict cold-start run that passed all hard gates.
+
+Offline output:
+
+```text
+decode_total_ms 2396.936
+decode_total_gib 13.351
+by_type_ms {'2': 2396.936}
+top_layers_ms [(9, 409.672), (10, 388.232), (18, 383.072), (6, 377.992), (8, 315.6), (7, 266.904), (15, 255.464)]
+top_keys 8 ms 224.16 share 9.35 mib 63.0
+top_keys 16 ms 394.28 share 16.45 mib 126.0
+top_keys 32 ms 647.539 share 27.02 mib 252.0
+top_keys 64 ms 987.779 share 41.21 mib 504.0
+top_keys 128 ms 1439.927 share 60.07 mib 1008.0
+top_keys 256 ms 1961.062 share 81.82 mib 2016.0
+top_keys 512 ms 2369.307 share 98.85 mib 4032.0
+```
+
+Interpretation:
+
+- The whole decode fallback upper bound is only `2396.936 ms` on diagnostic
+  n32, and it is entirely `Q4_0` / type `2`.
+- A small non-file-backed hotset is not attractive:
+  - `504 MiB` covers only `987.779 ms`;
+  - `1008 MiB` covers only `1439.927 ms`;
+  - `2016 MiB` is needed to approach `1961.062 ms`.
+- Under the strict 16GB host-RAM cap, spending `1-2 GiB` anonymous RAM for a
+  sub-`2 s` n32 theoretical upper bound is not justified, especially because
+  the system already runs at the cgroup memory cap.
+- This matches the historical rejected evidence:
+  - 7N per-call direct/aligned buffer reduced local fallback accounting but
+    regressed token rate;
+  - 7Z anonymous hot cache mechanically worked but regressed;
+  - 7BK/7BP mmap advice moved or worsened page-cache cost;
+  - 7EZ page release caused refault/regression.
+
+Decision:
+
+- Reject a new CPU/file-backed fallback reduction source implementation.
+- Do not implement another anonymous fallback cache, per-call buffer, mmap
+  advice, or page-release policy.
+- Keep Q4_0 CPU fallback as a documented residual cost for now.
+- Next optimization must target a larger bucket than decode CPU fallback:
+  - reducing expert movement bytes;
+  - improving cache hit rate without host-RAM cost;
+  - changing model/expert quant/layout so fewer bytes are moved;
+  - or a scheduler change with a measured wall-time upper bound above `2 s`
+    that is not one of the already rejected up/gate/down scheduling shapes.
