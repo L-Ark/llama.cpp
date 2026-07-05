@@ -77181,3 +77181,126 @@ Decision:
   - a real draft/speculative/EAGLE/MTP asset and acceptance-rate model;
   - a deeper kernel rewrite based on new first-principles analysis, not another
     stale env-port.
+
+## Phase 7MY - strict current bottleneck refresh
+
+Timestamp: 2026-07-05 22:26:12 CST.
+
+Status: planned.
+
+Goal:
+
+- Continue optimization after 7MX by re-measuring the current vendor runtime
+  bottleneck from a strict cold start before designing another source patch.
+- Produce a reproducible n32 full-profile run that decomposes decode into:
+  - endpoint token rate and TTFT;
+  - expert-pack iouring reads, bytes, wait, submit, inflight;
+  - pinned staging and H2D counts;
+  - up/gate batch profile by type;
+  - down batch profile by type;
+  - CPU fallback profile;
+  - route trace and VRAM cache hit rates;
+  - final cgroup memory distribution including page cache.
+- Keep the current accepted SOTA unchanged unless a later phase implements and
+  validates an actual improvement.
+
+Why this is the next valid step:
+
+- 7MX found no old ik_llama env-port that is both unported and supported by
+  compliant quality/memory evidence.
+- The current source-level local micro-optimization families are mostly closed:
+  fixed buffers, IO depth/refill/SQPOLL/shared scheduling, pinned growth,
+  broader RAM tier, broader VRAM split, coalescing/layout, Q4 down GPU, Q8_K,
+  MMQ/dynamic-X MMQ, CUDA graph, and page-cache advice variants.
+- A new source patch now needs a fresh bottleneck measurement, not another
+  guessed env toggle.
+
+Experiment A: strict n32 full-profile bottleneck run
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <plan-result-commit>
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7my-current-bottleneck-n32-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- plan committed and pushed before running;
+- no source changes in this phase;
+- exit `0`;
+- cold-start script path with cache drop;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- host RAM peak `<= 15899996160` including page cache and pinned buffers;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- quality `pass`;
+- manual semantic pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Profile files expected:
+
+- `metrics.txt`;
+- `stderr.txt`;
+- `fallback-profile.csv`;
+- `down-batch-profile.csv`;
+- `up-gate-profile.csv`;
+- `route-profile.csv`;
+- `route-trace.csv`;
+- `ttft-trace.csv`;
+- `memory.stat.final.txt`;
+- `memory.peak.txt`;
+- `memory.events.txt`.
+
+Analysis method:
+
+- Use `metrics.txt` and stderr summaries for endpoint correctness gates.
+- Summarize CSVs with a reproducible script or inline Python stored in the run
+  directory:
+  - total and per-type up/gate wall, stage, kernel, D2H/scatter;
+  - total and per-type down wall, stage, kernel, D2H/scatter;
+  - CPU fallback bytes/time by phase and type;
+  - route-cache hit/miss distribution from route profile;
+  - top route-trace layers/tensors by misses and bytes.
+- Estimate hard upper bounds for possible next directions:
+  - if exposed expert-pack wait remains dominant, compute the upper bound from
+    measured bytes and observed effective throughput, then prefer model-format
+    read-volume reduction or a true overlap/scheduling redesign;
+  - if up/gate kernel wall dominates, compute the bound from measured per-type
+    wall and only then plan a kernel rewrite;
+  - if down stage/D2H dominates, compute the bound from down CSV and test only
+    a target that can move that measured bucket;
+  - if profile overhead breaks TTFT or token rate badly, rerun min-profile n32
+    to separate profiling overhead from runtime bottleneck.
+
+Decision rule:
+
+- Do not edit source in 7MY.
+- If the run fails any strict gate, record the failure and rerun only if the
+  cause is a transient run/setup issue.
+- If the profile is valid, append the result and choose exactly one next
+  candidate phase:
+  - model-format/asset plan;
+  - speculative/draft plan;
+  - specific kernel rewrite plan;
+  - or explicit no-candidate decision if no measured bucket has a credible
+    upper bound.
+- Any implementation phase after 7MY must include theory, hard upper bound,
+  activation signal, exact cold-start command, and commit/push/revert rules.
+
+Reproducibility:
+
+- Record the exact command and git commit in this plan.
+- Keep all run artifacts in the run directory.
+- Commit and push the final 7MY result even if the decision is to reject all
+  immediate implementation candidates.
