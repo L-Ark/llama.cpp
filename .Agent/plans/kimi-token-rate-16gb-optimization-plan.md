@@ -84471,3 +84471,125 @@ systemd-run --wait --collect --same-dir \
       MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+## Phase 7OG - launch-level IO priority jitter probe
+
+Status: planned.
+
+Timestamp: 2026-07-06 07:22 CST.
+
+Reason:
+
+- Phase 7OF showed the production path is stable but n96 decode varies mainly
+  with exposed iouring wait:
+  - 7OF A: decode `54779.05 ms`, `iouring_wait_us=47042905`;
+  - 7MU: decode `56696.97 ms`, `iouring_wait_us=50085670`;
+  - 7OF B: decode `58391.17 ms`, `iouring_wait_us=52875301`.
+- Stable counters did not change across those runs:
+  - n96 iouring bytes `315379728384`;
+  - down hit rate `73.0%`;
+  - upgate hit rate `44.1%`;
+  - batch histograms unchanged.
+- A read-only system audit after 7OF found:
+  - root filesystem on `/dev/vda1`, ext4, mount option `discard`;
+  - `vda` block scheduler `none`, `nr_requests=256`;
+  - cgroup IO PSI nonzero (`avg300` about `2.14`);
+  - memory PSI nonzero and `kswapd0` active at low CPU;
+  - no large obvious foreground IO contender in `ps`.
+- This suggests a narrow system-level probe is justified: test whether
+  launch-level IO/CPU priority can reduce cold-start runtime wait jitter without
+  touching source, queue depth, coalescing, cache policy, or assets.
+
+Goal:
+
+- Determine whether running the exact accepted production command under higher
+  systemd service priority improves n96 token rate reproducibly.
+- Do not edit source.
+- Do not change runtime MoE env knobs.
+- Do not change model, expert packs, cache split, queue depth, pinned slots, or
+  prompt.
+- Do not promote a single faster run.
+
+Candidate launch properties:
+
+```text
+IOAccounting=yes
+IOWeight=10000
+CPUWeight=10000
+Nice=-10
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+```
+
+Theory and bound:
+
+- This can only affect exposed scheduling/storage jitter. It cannot reduce
+  expert bytes, improve cache hit rate, or change kernel math.
+- The hard observable n96 opportunity from 7OF is the difference between the
+  slow repeat and fast run:
+  - iouring wait range: `52.875301 s - 47.042905 s = 5.832396 s`;
+  - decode range: `58.39117 s - 54.77905 s = 3.61212 s`.
+- If priority eliminates all observed decode jitter, the best expected n96
+  decode is still roughly the 7OF A band, about `54.8 s / 77` or `1.40 tok/s`.
+- This cannot approach `5 tok/s`; it is only a stability/production recipe
+  probe.
+- If the block scheduler ignores cgroup weight/ioprio, the result should match
+  normal variance and be rejected.
+
+Experiment sequence:
+
+1. Commit and push this plan.
+2. Sync server to the plan commit.
+3. Run a tiny systemd preflight to verify the properties are accepted:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  /bin/true
+```
+
+4. Run cold-start n96 production candidate:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7og-priority-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+5. If candidate beats the 7MU reference `56696.97 ms / 77` and all gates pass,
+   run one same-command cold-start n96 repeat.
+6. Accept as a production launch recipe only if the repeat also beats 7MU and
+   quality/RAM/TTFT/IO gates pass.
+7. If candidate or repeat fails, reject the priority recipe and keep SOTA
+   unchanged.
+
+Strict gates:
+
+- exit `0`;
+- full France paragraph is coherent and semantically correct;
+- TTFT within `127598.064 ms`;
+- `memory.peak <= 15899996160`;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- same iouring bytes/tensor path as 7MU/7OF, unless explicitly explained.
+
+Reproducibility:
+
+- Store run directory artifacts from `scripts/kimi-phase7fb-min-profile-repro.sh`.
+- Additionally store:
+  - `system-audit.txt`;
+  - `systemd-props.txt`;
+  - `priority-preflight.txt`;
+  - exact systemd command used.
+- Commit and push the 7OG result before any follow-up experiment.
