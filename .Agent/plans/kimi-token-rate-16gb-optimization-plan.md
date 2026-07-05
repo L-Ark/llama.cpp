@@ -74774,3 +74774,65 @@ Decision:
 - Do not continue the first-use overlay/coalescing family without a new design
   that directly proves higher inflight and lower span-slot waits before endpoint
   testing.
+
+## Phase 7MN - post-async-coalesce rollback n32 guard
+
+Timestamp: 2026-07-06 21:31:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify that reverting `d42c4af45` restores the default runtime path.
+- Ensure the server binary no longer contains/activates async coalescing before
+  any next optimization.
+
+Required setup:
+
+- Sync server to the pushed revert head.
+- Rebuild `build-cuda-batch`.
+- Do not set any overlay-extra or coalescing env.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 89390dbae
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mn-post-async-coalesce-revert-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain:
+  - `async coalesced staging`;
+  - `expert pack async coalesce`.
+
+Decision rule:
+
+- If the run returns to the current default n32 band, keep the revert and move
+  to the next non-coalescing bottleneck.
+- If coalescing still appears or endpoint is outside the recent default band,
+  stop and inspect source/binary state before another optimization.
+
+Reproducibility:
+
+- Commit and push this guard plan before running.
+- Record run directory, source commit, build status, metrics, output, memory,
+  activation absence, and comparison to 7MD/7LY default references.
