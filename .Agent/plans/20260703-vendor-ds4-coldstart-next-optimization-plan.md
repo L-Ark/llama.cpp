@@ -4,9 +4,53 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: Post-MMVQ Non-Duplicate Gate
+### 2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续不能从已关闭路线直接继续写 runtime 代码，必须先在本节或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清新的硬性上界、正确性门槛和复现信息。
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先在本节或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
+
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 forced-batch 诊断结果，也不是任何 trace/warm/steady-state/top1-only 结果：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Source/runtime head before this documentation update: `b5d98651485d775b80e6b3f69e140f294824d6e9` (`vendor-ds4: reject mtp n2 verifier bound`)
+- Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
+- Promotion gate remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct and coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction.
+
+Latest forced-batch target-verifier diagnostic:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/forced-batch-target-verifier-diagnostic.json`.
+- Purpose: coarse check whether current vendor fixed-text target evaluation shows sublinear multi-token batch behavior that could support an `A>=5` DSpark/MTP verifier route.
+- Valid run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T092532Z-forced-batch-verifier-cost-v2`.
+- Aborted v1 root: `/root/lfz/runs/vendor-ds4-16gb/20260705T091814Z-forced-batch-verifier-cost`; this is rejected because the first script mistakenly hashed the full `145.42 GiB` model file before running.
+- Shared config: `llama-results`, fixed France text, `-c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts`, accepted gate-only one-stream pack/cache env, strict `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`.
+- Sequential mode: `--sequential-logits`, `elapsed_seconds=107.623408161`, `n_tokens=145`, `top1_matches_next_token=119`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14842507264`, `oom=0`, `oom_kill=0`, `swaps=0`.
+- Batch16 mode: default `llama-results` chunking with `-b 16 -ub 16`, `elapsed_seconds=107.597260262`, `n_tokens=145`, `top1_matches_next_token=119`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14834040832`, `oom=0`, `oom_kill=0`, `swaps=0`.
+- Comparison: `seq_over_batch16_speedup=1.0002430164014988`; batch16 is only `0.026147899 s` faster over the whole fixed-text run, i.e. no measurable fixed-text batch speedup at this coarse level.
+- Limitation: this is not an MTP verifier implementation. It includes model/context startup, cache prefill, expert pack IO, and result writing, so it is a coarse negative/proxy diagnostic rather than a per-verifier-pass measurement. It cannot be promoted as SOTA.
+
+Decision after this diagnostic:
+
+- Current vendor target fixed-text path does not demonstrate the sublinear multi-token verifier cost needed to justify DSpark/MTP source work.
+- Antirez exact N=2 MTP remains closed for the `10 tok/s` objective: at most 3 emitted tokens per target verification pass require `C_verify + C_draft <= 1.32x` one current token pass (`<=300 ms`), while decode CPU up/down fallback alone is about `139.9 ms/token`.
+- DSpark/MTP can only reopen if a new artifact first proves `A>=5` average acceptance with target verification that avoids per-token CPU up/down fallback and fully accounts for the extra model/module bytes, VRAM, 16GB host/page-cache, TTFT, and correctness.
+- The next viable optimization direction is a new hard-bound for an exact compact representation or other exact algorithm that reduces both source bytes and CPU up/down compute by construction. It must show enough margin over the accepted `4.4 tok/s` baseline before any runtime patch.
+
+Next execution plan:
+
+1. Keep the accepted `4.4 tok/s` strict-cold SOTA as the only baseline for comparison.
+2. Do not repeat closed routes without new math: source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, standalone MMVQ skip/write, current sparse retained top64 graph, transient MXFP4 repack, no-source lookahead/ngram speculation, and antirez exact N=2 MTP.
+3. Before any new source edit, write a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` that includes exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and expected token-rate ceiling.
+4. First acceptable implementation candidate must either:
+   - prove a compatible `A>=5` DSpark/MTP verifier with sublinear target verification and strict rollback/commit semantics; or
+   - prove an exact compact representation path that keeps enough up/down work on GPU without violating VRAM or the 16GB cgroup including page cache.
+5. First gate for any default-off source probe is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
+6. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
+
+### 2026-07-05 Historical Plan: Post-MMVQ Non-Duplicate Gate
+
+本节已被上方 `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` 覆盖；内容只作为历史实验记录保留。后续不能从已关闭路线直接继续写 runtime 代码，必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清新的硬性上界、正确性门槛和复现信息。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
@@ -90,9 +134,9 @@ DeepSeek4 MTP N=2 verifier cost bound:
 - Because MTP draft has nonzero layer/output/cache/file cost, and antirez documents the reference MTP path as only a slight speedup, exact N=2 MTP has no credible `10 tok/s` hard-bound under the current 16GB/TTFT/correctness constraints.
 - Decision: close antirez exact N=2 MTP as a 10 tok/s route. Do not implement MTP loader/verifier for the 10 tok/s objective unless a new MTP/DSpark mechanism proves `A>=5` with sublinear target verification and full RAM/VRAM/TTFT/correctness accounting.
 
-### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
+### 2026-07-05 Historical Plan: Current Head After Full Up/Down Bound
 
-本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。
+本节已被上方 `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` 覆盖；内容只作为历史实验记录保留。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 `4.2`，也不是任何 trace/diagnostic run：
 
@@ -137,9 +181,9 @@ Current allowed source probe:
 - Result: rejected before strict cold benchmark. The default-off dirty source probe built, but fixed-text top1 failed with `same_top1=142/145`, `first_mismatch_pos=9`, `max_abs=4.79565`, `mean_abs=0.146238`. It also allocated a 544 MiB direct pool and caused the accepted gate VRAM cache allocation (`13.2 GiB`) to fail, so the config did not preserve the accepted gate path.
 - Source action: the uncommitted runtime source probe was reverted after recording, and `llama-cli`/`llama-results` were rebuilt from clean source. Do not run a strict cold SOTA benchmark for standalone MMVQ skip/write. Reopen only with a new correctness-preserving design and a VRAM allocation plan that preserves gate cache behavior.
 
-### 2026-07-05 Latest Active Plan Override After Sparse-Retained Planner
+### 2026-07-05 Historical Active Plan Override After Sparse-Retained Planner
 
-This section is the latest active plan and supersedes the older active-plan text below when there is any conflict. Historical sections remain as experiment records.
+This section has been superseded by `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` and is retained only as historical experiment record.
 
 Current accepted strict cold SOTA is still `4.4 tok/s`:
 
@@ -237,7 +281,7 @@ Mandatory record/push rule:
 
 ### 2026-07-05 Current Active Plan Update
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan Override` 段落；历史段落保留为实验记录。后续执行必须以本节为入口，先更新计划/实验 artifact，再做 runtime 改动或长跑。
+本节已被上方 `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` 覆盖；内容只作为历史实验记录保留。
 
 当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被后续 direct hot pool、Q8_0、CPU batch、payload compression、CUDA graph、VRAM recovery 或 hot-batch compare 候选替代：
 
@@ -403,9 +447,9 @@ Immediate execution plan:
 10. If a compliant new SOTA appears, stop exploration immediately. Commit and push source plus artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promotion.
 11. If a candidate regresses throughput, violates 16GB including page cache, fails correctness, or exceeds the accepted TTFT gate for a promotable result, revert/guard off runtime source back to the accepted SOTA path and keep only rejected documentation/artifacts.
 
-### 2026-07-05 Latest Active Plan Override
+### 2026-07-05 Historical Active Plan Override
 
-本节是当前生效计划，覆盖下面较早的 2026-07-04 active plan。历史记录保留不改；后续执行必须先按本节更新/记录计划，再做任何 runtime 实验。
+本节已被上方 `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` 覆盖；内容只作为历史实验记录保留。
 
 当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被 direct-reader、Q8_0、CUDA graph 或其他候选替代：
 
@@ -495,9 +539,9 @@ Immediate execution plan:
 - TTFT gate for any future accepted SOTA remains `<=33617.688744 ms`
 - Correctness answer for the accepted SOTA is semantic, coherent, and complete for `Please introduce France in a short paragraph.`
 
-### 2026-07-04 Latest Active Plan Override
+### 2026-07-04 Historical Active Plan Override
 
-本节是当前生效计划，覆盖下面较早的 Phase 计划中已经被实验关闭的方向。旧记录保留为历史证据。
+本节已被上方 `2026-07-05 Latest Plan: Forced-Batch Verifier Diagnostic After MTP Closure` 覆盖；内容只作为历史实验记录保留。
 
 当前 accepted SOTA 仍为 `4.4 tok/s`，不是 lightning `4.5`：
 
