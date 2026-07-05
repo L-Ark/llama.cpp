@@ -68920,6 +68920,100 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, command, output, gates, activation absence, and metrics.
 
+## Phase 7LH - current-head low-frequency perf-record hotspot audit
+
+Timestamp: 2026-07-05 22:05:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Find whether the current post-rollback default path still has an unclosed
+  source-level hotspot above the implementation threshold.
+- Use low-frequency whole-process `perf record` and `perf report --stdio` to
+  distinguish:
+  - kernel lock/page-fault/memcg time;
+  - io_uring/SQPOLL polling;
+  - user-space staging/copy wrappers;
+  - CUDA runtime synchronization;
+  - OpenMP/thread-barrier overhead.
+- This phase is diagnostic only and cannot promote SOTA.
+
+Why this is needed:
+
+- Recent implementation attempts show a consistent pattern:
+  - 7LE reduced local iouring wait and improved batch occupancy but regressed
+    endpoint decode;
+  - 7KW and 7AY had similar local-counter improvements but worse wall time.
+- The current default path has no obvious safe knob left:
+  - VRAM/RAM tier, IO depth/refill/SQPOLL, pinned slots, thread count,
+    prefetch-depth, cache policy, Q4_0 down, IQ3/IQ2 VDR, same-type IQ3
+    parallelism, CUDA graph, broad page-cache/mmap advice, and small-batch IO
+    reshaping are all rejected or bounded.
+- 7KI/7KR perf stat showed high system CPU time and page-fault/kernel pressure,
+  but did not name a narrow source location. Before declaring the remaining
+  runtime work as storage/kernel-bound, collect one current-head sampled profile.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 74b96d784
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lh-perf-record-n32
+mkdir -p "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      bash -lc 'perf record -F 49 -g --call-graph fp -o "$RUN/perf.data" -- scripts/kimi-phase7fb-min-profile-repro.sh && perf report --stdio --no-children --sort comm,dso,symbol -i "$RUN/perf.data" > "$RUN/perf-report.txt"'
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `perf.data` and `perf-report.txt` present.
+
+Analysis:
+
+- Treat endpoint timing as diagnostic because perf record adds overhead.
+- Extract top symbols from `perf-report.txt`.
+- Compute whether any non-rejected source family has a credible n32 wall-time
+  upper bound:
+  - if top samples are kernel spin locks, memcg, filemap, page faults, or
+    io_uring SQPOLL internals, do not write user-space CUDA/staging source
+    changes;
+  - if top samples are in `moe_stream_batch.cu` wrappers, staging rings,
+    route/cache maps, or repeated tensor-name parsing with enough sample share,
+    write a focused source plan before coding;
+  - if CUDA runtime synchronization or event calls dominate, plan a targeted
+    sync/event reduction experiment instead of CUDA graph;
+  - if OpenMP/barrier/user CPU dominates, plan a narrow CPU scheduling change.
+
+Decision rule:
+
+- Do not implement from this diagnostic unless the sampled hotspot maps to a
+  source-owned bucket with an estimated n32 upper bound above `2 s` and does
+  not duplicate a rejected family.
+- If the profile confirms kernel/page-cache/memcg/io_uring internals dominate,
+  record the path as externally bounded under the 16GB cold-start constraint and
+  move to documenting remaining SOTA limits rather than guessing another patch.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, command, output, gates, perf report top symbols, and
+  decision.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
