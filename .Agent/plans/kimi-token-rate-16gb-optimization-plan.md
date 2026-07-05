@@ -69473,6 +69473,107 @@ Rollback criteria:
 - If rejected, revert the source commit and record the run. Do not stack another
   optimization on top.
 
+### 7LJ-A result
+
+Timestamp: 2026-07-05.
+
+Source commits:
+
+- Plan commit: `6498e7fba` (`docs: plan cpu fallback pack read experiment`).
+- Experiment commit: `bdb48d578` (`cuda: add cpu fallback expert pack read path`).
+- Revert commit: `67fc9bdd0` (`Revert "cuda: add cpu fallback expert pack read path"`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-062852Z-phase7lj-pack-read-n32`.
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard bdb48d578
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-062852Z-phase7lj-pack-read-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_CPU_FALLBACK_PACK_READ=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Build:
+
+- `cmake --build build-cuda-batch -j 8` succeeded.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `74705.50 ms`, under the `127598.064 ms` gate;
+- decode `33372.56 ms / 31`, `0.93 tok/s`;
+- memory peak `15899996160`;
+- memory final `15020441600`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- cgroup events:
+  - `oom=0`;
+  - `oom_kill=0`.
+
+Activation counters:
+
+```text
+[kimi_cpu_fallback_pack_read] enabled=1 hits=1727 misses=9 alloc_failures=0 bytes=14260764672 fallback_mmap_or_gguf=9
+[kimi_cpu_fallback_pack_mmap] enabled=1 hits=0 misses=9 bytes=0 fallback_gguf=9
+```
+
+Other IO counters:
+
+- expert-pack direct reads increased to `2398`;
+- iouring reads stayed `22647`;
+- iouring wait `20111991 us`;
+- iouring batches `5178`;
+- fallback pack read moved about `14.26 GiB` through synchronous direct reads.
+
+Comparison:
+
+- 7KX current-head n32:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - iouring wait `19756301 us`;
+  - memory peak `15899996160`.
+- 7LG post-rollback repeat n32:
+  - decode `22862.71 ms / 31`, `1.36 tok/s`;
+  - iouring wait `19704580 us`;
+  - memory peak `15899996160`.
+- 7LJ-A:
+  - decode `33372.56 ms / 31`, `0.93 tok/s`;
+  - slower than 7KX by `10770.99 ms`;
+  - slower than 7LG by `10509.85 ms`.
+
+Interpretation:
+
+- The implementation activated and preserved correctness, TTFT, host RAM, and
+  read-failure gates, so this is a valid negative result.
+- Explicit per-active-expert direct reads remove expert-pack mmap hits, but they
+  serialize about `14.26 GiB` of CPU fallback input reads before vec-dot compute.
+- This confirms the remaining cost is not improved by replacing decode fallback
+  mmap faults with synchronous direct reads into anonymous memory.
+- The regression is consistent with losing the kernel's mmap/page-cache overlap
+  with CPU compute and replacing it with blocking pre-compute IO.
+
+Decision:
+
+- Reject 7LJ-A.
+- Source commit `bdb48d578` was reverted by `67fc9bdd0` and pushed.
+- Do not retry synchronous CPU fallback pack reads.
+- A future attempt would need true asynchronous read-ahead into a bounded
+  workspace that overlaps with previous layer compute; otherwise it is expected
+  to remain slower than mmap/page-cache faulting.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
