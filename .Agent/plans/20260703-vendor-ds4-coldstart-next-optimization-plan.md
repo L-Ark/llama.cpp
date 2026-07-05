@@ -17,6 +17,7 @@ Current accepted SOTA remains:
 - Config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT gate expert pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
 - Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
 - Latest added artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/promptset-union-dynamic-route-audit-20260706.json`
+- Latest storage approval artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/storage-cleanup-approval-audit-20260706.json`
 
 Latest state to carry forward:
 
@@ -27,7 +28,7 @@ Latest state to carry forward:
 - Current no-source knobs are closed unless a new hard-bound appears. `OMP_WAIT_POLICY=ACTIVE` had one `4.5 tok/s` candidate but clean reproduction was `4.3 tok/s`; `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=2800` similarly failed clean reproduction; `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` tied, not improved; CUDA graph was measured below SOTA and rejected.
 - Current source-level exact routes are closed before implementation: async up/down I/O, page-touch/willneed prefetch, full MoE layer GPU placement, gate-cache sacrifice for exact up/down residency, fine-grained exact row/column/subtensor residency, exact up/down fallback removal, and speculative/MTP/DFlash all lack a concrete hard-bound above `10 tok/s` with integration margin under 16GB RAM and TTFT constraints.
 - Current metadata-only alternate GGUF hard-bounds do not justify source work or a SOTA claim. The best full single-file metadata candidate remains below `10 tok/s` before correctness, allocator, TTFT, and implementation overhead; `cloudyu` 4Expert remains interesting only as an empirical correctness/performance candidate after disk approval, not as a metadata-proven SOTA path.
-- Disk remains the active empirical blocker. `/root` has only about `1.8 GiB` free, so full alternate GGUF downloads and hashable benchmark artifacts cannot be produced without explicit user-approved cleanup or relocation. No files should be deleted without explicit approval.
+- Disk remains the active empirical blocker. `/root` has only about `1.76 GiB` free, so full alternate GGUF downloads and hashable benchmark artifacts cannot be produced without explicit user-approved cleanup or relocation. Current approval candidates are: unrelated GLM storage `/root/lfz/models/GLM-5.2-UD-IQ3_XXS` at about `263G` (recommended if approved), unknown-owner `/root/yibins/ssd16-cache` at about `128G`, or DeepSeek-adjacent non-accepted `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` at `147174760448` bytes. No files should be deleted without explicit approval.
 
 Updated next executable plan:
 

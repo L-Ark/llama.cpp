@@ -1,0 +1,78 @@
+{
+  "created_at_utc": "2026-07-05T22:02:00Z",
+  "purpose": "Record the current storage blocker and explicit cleanup/relocation approval options for the next vendor DeepSeek 16GB cold-start empirical GGUF test.",
+  "source_head_before_audit": "fae233ad2eef2c2ab4a8a1397018caac819a6723",
+  "current_filesystem": {
+    "root_device": "/dev/root",
+    "root_size_bytes": 1065418129408,
+    "root_used_bytes": 1063514021888,
+    "root_available_bytes": 1887330304,
+    "root_available_gib": 1.7578039169311523,
+    "dev_shm_available_bytes": 46384889856,
+    "dev_shm_note": "RAM-backed tmpfs; not acceptable as model storage for the 16GB host-RAM target and smaller than the best 50.44GB compact GGUF candidate."
+  },
+  "must_preserve": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "size_bytes": 156148189760,
+      "reason": "Accepted native DeepSeek model for current 4.4 tok/s SOTA."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "reason": "Accepted France gate one-stream pack for current 4.4 tok/s SOTA."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+      "reason": "Accepted strict-cold SOTA run record."
+    },
+    {
+      "path": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+      "reason": "Current source branch, scripts, plans, profiles, and pushed-source reproduction state."
+    }
+  ],
+  "large_paths_observed": [
+    {"path": "/root/lfz/models", "du_human": "548G", "role": "model storage"},
+    {"path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS", "du_human": "263G", "role": "unrelated GLM model; best cleanup candidate if user approves"},
+    {"path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF", "du_human": "286G", "role": "contains accepted native GGUF and a non-accepted native expert-pack; high risk"},
+    {"path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack", "size_bytes": 147174760448, "role": "DeepSeek-adjacent non-accepted expert-pack; delete/move only with explicit approval"},
+    {"path": "/root/lfz/runs/vendor-ds4-16gb", "du_human": "66G", "role": "run and diagnostic artifacts"},
+    {"path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs", "du_human": "59G", "role": "expert packs including accepted France pack and prompt-set union pack; high risk"},
+    {"path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack", "size_bytes": 38420348928, "role": "historical prompt-set union diagnostic; insufficient alone for best compact GGUF and not current accepted SOTA"},
+    {"path": "/root/yibins/ssd16-cache", "du_human": "128G", "role": "unknown owner/non-current-task cache; cleanup only with explicit approval"},
+    {"path": "/root/wici-diffgemma", "du_human": "18G", "role": "unrelated project; insufficient alone for best compact GGUF"}
+  ],
+  "space_targets": {
+    "minimum_for_best_q2_reap_candidate": "about 60GB free for model plus hash/run artifacts",
+    "minimum_for_low_bit_native_topology_candidates": "about 90-100GB free",
+    "preferred_for_cloudyu_4expert_candidate": "at least 180GB free for full GGUF plus hash/run artifacts"
+  },
+  "approval_options": [
+    {
+      "option": "approve moving or deleting /root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+      "expected_space": "about 263G",
+      "risk": "Lowest observed risk for current DeepSeek SOTA because it is unrelated GLM storage.",
+      "enables": "cloudyu 4Expert full empirical test and compact GGUF tests with SHA256/run artifacts."
+    },
+    {
+      "option": "approve moving or deleting /root/yibins/ssd16-cache",
+      "expected_space": "about 128G",
+      "risk": "Unknown owner/task ownership; requires explicit approval.",
+      "enables": "best Q2 REAP and many low-bit native-topology empirical tests; may be tight for cloudyu 4Expert plus artifacts."
+    },
+    {
+      "option": "approve moving or deleting /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "expected_space": "about 147GB",
+      "risk": "DeepSeek-adjacent; not current accepted SOTA input, but high risk without explicit confirmation.",
+      "enables": "best Q2 REAP and many low-bit candidates; cloudyu 4Expert may still be tight depending artifact overhead."
+    }
+  ],
+  "decision": {
+    "files_deleted": false,
+    "files_moved": false,
+    "full_model_downloaded": false,
+    "new_sota": false,
+    "accepted_sota_unchanged": true,
+    "next_action_requires_user_approval": true,
+    "recommended_request": "Ask the user to approve moving/deleting /root/lfz/models/GLM-5.2-UD-IQ3_XXS first, while preserving the accepted native GGUF, France gate pack, accepted run, and source artifacts."
+  }
+}
