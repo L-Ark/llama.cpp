@@ -72409,3 +72409,232 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, metrics, generated CSV files, aggregated summaries, and
   the next implementation decision.
+
+### Phase 7MA result
+
+Timestamp: 2026-07-06 02:31:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32`
+
+Source:
+
+- `4e5aafb99`
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `76501.49 ms`;
+- decode `25452.98 ms / 31`, `1.22 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Note:
+
+- Decode is slower because heavy CSV/H2D profiling is enabled. This run is
+  diagnostic only.
+
+Generated files:
+
+- `io-batch-profile.csv`: `5179` lines;
+- `io-wait-trace.csv`: `13985` lines;
+- `copy-profile.csv`: `23502` lines;
+- `current-down-overlap-profile.csv`: `33` lines.
+
+IO batch aggregation:
+
+- `runtime_load`:
+  - rows `4318`;
+  - jobs/read jobs `19143/19143`;
+  - avg inflight `3.40`;
+  - submit `81.713 ms`;
+  - wait `16283.405 ms`;
+  - enqueue `375.872 ms`;
+  - wall `21773.895 ms`.
+- `current_down_overlap`:
+  - rows `860`;
+  - jobs/read jobs `3504/3504`;
+  - avg inflight `3.29`;
+  - submit `20.202 ms`;
+  - wait `2264.949 ms`;
+  - enqueue `49.770 ms`;
+  - wall `3260.757 ms`.
+
+Foreground `runtime_load` by tensor kind:
+
+- up:
+  - rows `1792`;
+  - jobs/read jobs `7854/7854`;
+  - avg inflight `3.21`;
+  - wait `6833.645 ms`;
+  - enqueue `206.576 ms`;
+  - wall `9048.488 ms`.
+- gate:
+  - rows `1792`;
+  - jobs/read jobs `7855/7855`;
+  - avg inflight `3.47`;
+  - wait `7061.259 ms`;
+  - enqueue `122.072 ms`;
+  - wall `9284.612 ms`.
+- down:
+  - rows `734`;
+  - jobs/read jobs `3434/3434`;
+  - avg inflight `3.67`;
+  - wait `2388.502 ms`;
+  - enqueue `47.224 ms`;
+  - wall `3440.796 ms`.
+
+Copy/H2D profile by tensor kind:
+
+- up:
+  - rows `8153`;
+  - bytes `37.354 GiB`;
+  - summed H2D event time `1531.197 ms`;
+  - summed enqueue time `212.619 ms`;
+  - summed per-copy wall `34516.878 ms`.
+- gate:
+  - rows `8154`;
+  - bytes `40.128 GiB`;
+  - summed H2D event time `1654.512 ms`;
+  - summed enqueue time `128.530 ms`;
+  - summed per-copy wall `37375.234 ms`.
+- down:
+  - rows `7194`;
+  - bytes `44.632 GiB`;
+  - summed H2D event time `1773.554 ms`;
+  - summed enqueue time `102.322 ms`;
+  - summed per-copy wall `26903.330 ms`.
+
+Wait-trace shape:
+
+- up/gate waits are broad and frequent, not concentrated in a few extreme
+  calls.
+- Largest single wait is only `11.703 ms`.
+- Each up and gate tensor batch drains to zero inflight at the batch boundary:
+  - up zero-inflight-after count `1792`;
+  - gate zero-inflight-after count `1792`.
+- This confirms the boundary itself is exposed by design; queue-depth/refill
+  changes have already been rejected and cannot remove this without changing
+  the staging/compute contract.
+
+Layer/type profile:
+
+- aggregate up/gate:
+  - calls `869`;
+  - wall `7.602 ms/call`;
+  - up wait `3.920 ms/call`;
+  - gate wait `4.070 ms/call`.
+- type `(18,18)`:
+  - calls `311`;
+  - wall `9.480 ms/call`;
+  - wait `0`;
+  - compute dominated.
+- type `(22,22)`:
+  - calls `558`;
+  - wall `6.555 ms/call`;
+  - up wait `6.104 ms/call`;
+  - gate wait `6.338 ms/call`.
+
+Interpretation:
+
+- No single IO wait or layer is large enough for a narrow special case.
+- H2D event time is not dominant alone, but up+gate H2D plus host enqueue is a
+  measured multi-second bucket in n32 diagnostic data.
+- 7LX proved that merging IO scheduling can reduce raw wait but worsen endpoint
+  overlap. Therefore the next source probe should not alter IO ordering.
+- A narrower, non-IO candidate is to reduce host-side H2D enqueue overhead by
+  batching independent H2D copies within a tensor batch while keeping the same
+  stream order.
+
+## Phase 7MB - cudaMemcpyBatchAsync H2D enqueue probe
+
+Timestamp: 2026-07-06 02:39:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether replacing per-CQE `cudaMemcpyAsync` enqueues with
+  `cudaMemcpyBatchAsync` for completed copies in the same tensor batch can
+  reduce endpoint decode time without changing expert selection, IO ordering,
+  cache policy, or output math.
+
+Theory:
+
+- Current `expert_pack_iouring_copy_jobs()` handles each CQE by immediately
+  calling one `cudaMemcpyAsync` and recording one slot event.
+- 7MA shows tens of thousands of H2D enqueue operations:
+  - up rows `8153`;
+  - gate rows `8154`;
+  - down rows `7194`.
+- CUDA 12 exposes `cudaMemcpyBatchAsync`, whose batch as a whole executes in
+  stream order while copies within the batch are independent and unordered.
+- Expert H2D copies within one tensor batch are independent:
+  - sources are distinct pinned staging slots;
+  - destinations are distinct cache slots;
+  - no copy depends on another copy.
+- If several CQEs are drained together, batching their H2D enqueues may reduce
+  host enqueue overhead and possibly improve copy engine scheduling.
+
+Hard upper bound:
+
+- 7MA summed H2D event time:
+  - up+gate `3185.709 ms`;
+  - all tensors `4959.263 ms`.
+- 7MA summed enqueue time:
+  - up+gate `341.149 ms`;
+  - all tensors `443.471 ms`.
+- The realistic first-pass n32 gain is small:
+  - target `0.2-0.8 s`;
+  - reject if endpoint decode does not improve, even if enqueue counters
+    improve.
+
+Implementation constraints:
+
+- Default off behind `GGML_MOE_H2D_BATCH_ASYNC=1`.
+- Compile only when CUDA runtime exposes `cudaMemcpyBatchAsync`
+  (`CUDART_VERSION >= 12080`).
+- Apply only inside `expert_pack_iouring_copy_jobs()`.
+- Preserve all existing fallback behavior:
+  - if batch API fails, return false so the existing fallback path handles it;
+  - if the env is unset, behavior is identical to current default.
+- Keep H2D on the same CUDA stream as the current tensor batch.
+- Use batch enqueue only for the CQEs drained in one wait/peek cycle, because
+  those copies are ready at the same time.
+- Record slot completion events after the batch enqueue so cache slot readiness
+  remains correct.
+
+Acceptance gates:
+
+- Build succeeds.
+- n32 strict cold-start run with `GGML_MOE_H2D_BATCH_ASYNC=1` passes:
+  - host RAM peak `<= 15899996160`;
+  - swap max `0`;
+  - output quality `pass`;
+  - manual France semantic pass;
+  - TTFT `<127598.064 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Hard reject if n32 decode is worse than the current default band.
+- If n32 improves, repeat n32 once and then run n96 before promotion.
+
+Rollback:
+
+- If build fails, quality fails, TTFT fails, memory fails, fallbacks appear, or
+  decode regresses, revert the source patch and record the rejection.
+
+Reproducibility:
+
+- Commit and push this plan before editing source.
+- Commit source separately.
+- Record source commit, build command, run directory, metrics, activation line,
+  and exact env.
