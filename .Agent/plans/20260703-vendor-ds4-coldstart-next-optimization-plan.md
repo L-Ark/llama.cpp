@@ -10846,3 +10846,81 @@ Decision:
 - Commit and push this default-off infrastructure because it is source progress toward Q4_K/4Expert validation and repeat guard confirms no accepted-path regression.
 - Current accepted SOTA remains `4.4 tok/s`.
 - Full 4Expert validation remains blocked by disk space until at least `180G` safe free space is available or the user explicitly approves cleanup of non-SOTA large assets.
+
+### 2026-07-05 4Expert Header Alias Probe And Plan
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-header-alias-probe-and-plan.json`
+
+Header-only probe:
+
+- Downloaded only the first `64MiB` of the cloudyu 4Expert GGUF, not the full model.
+- Local header path: `/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert.header64m.gguf.part`
+- Header SHA256: `dfa48de9479bd36c7e9b02e58635726a3a5b2215aa17c975a44975cf89704222`
+- Parsed header:
+  - `general.architecture=deepseek4`
+  - `block_count=43`
+  - `expert_count=256`
+  - `expert_used_count=4`
+  - tensor type counts: `Q4_K=129`, `Q8_0=366`, `F32=492`, `F16=338`, `I32=3`
+  - tensor info ends at byte `5845209`, so the 64MiB range is sufficient for metadata.
+
+Routing alias evidence:
+
+- Current vendor tensor name is `blk.%d.ffn_gate_tid2eid`.
+- 4Expert header contains:
+  - `blk.0.ffn_gate_tid2eid.weight`, `I32`, shape `[4, 129280]`
+  - `blk.1.ffn_gate_tid2eid.weight`, `I32`, shape `[4, 129280]`
+  - `blk.2.ffn_gate_tid2eid.weight`, `I32`, shape `[4, 129280]`
+- 4Expert routed expert tensors are Q4_K, for example:
+  - `blk.0.ffn_gate_exps.weight`, `Q4_K`, shape `[4096, 2048, 256]`
+  - `blk.0.ffn_up_exps.weight`, `Q4_K`, shape `[4096, 2048, 256]`
+  - `blk.0.ffn_down_exps.weight`, `Q4_K`, shape `[2048, 4096, 256]`
+
+Prepared alias patch:
+
+- Add `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`.
+- For DeepSeek4 `ffn_gate_tid2eid` only:
+  - first try the current tensor name;
+  - if absent and the env is set, try the `.weight` alias;
+  - create the tensor using the discovered metadata shape and selected name.
+- Env unset behavior must stay unchanged for accepted native SOTA.
+
+Validation required:
+
+1. Build must pass.
+2. Default-off accepted-path guard must pass with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS` unset.
+3. Full alias-on model load cannot be validated until the full 4Expert GGUF is available.
+4. No SOTA promotion is possible from header-only metadata or alias infrastructure alone.
+
+### 2026-07-05 Default-Off Tid2Eid Alias Validation
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-tid2eid-alias-defaultoff-validation.json`
+
+Patch:
+
+- Added `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`.
+- In DeepSeek4 `llama-model.cpp`, `ffn_gate_tid2eid` now:
+  - tries current name `blk.%d.ffn_gate_tid2eid` first;
+  - if absent and env is set, tries `blk.%d.ffn_gate_tid2eid.weight`;
+  - creates the tensor with the selected name and discovered metadata shape.
+- Env unset behavior is unchanged.
+
+Validation:
+
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli -j 8`
+- Default-off guard did not set `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS` or `GGML_MOE_STREAM_ONE_Q4K`.
+- Guard run:
+  - `/root/lfz/runs/vendor-ds4-16gb/20260705T133334Z-20260705_tid2eid_alias_defaultoff_guard/france-tid2eid-alias-defaultoff-cpu40-vram0gb`
+  - `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=33430.771645 ms`
+  - `memory_peak_bytes=16000000000`, `memory_file_bytes=15095029760`
+  - `ram_ok=true`, `correctness_ok=true`, no OOM
+
+Decision:
+
+- Commit and push this default-off alias infrastructure.
+- Current accepted SOTA remains `4.4 tok/s`; this guard only ties SOTA and is not a new result.
+- Alias-on full load and any Q4_K/4Expert correctness benchmark remain blocked until the complete 4Expert GGUF is available.

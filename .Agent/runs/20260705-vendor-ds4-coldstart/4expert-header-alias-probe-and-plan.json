@@ -1,0 +1,65 @@
+{
+  "date": "2026-07-05",
+  "title": "Probe: 4Expert GGUF header routing alias and Q4_K metadata",
+  "result": "header_confirms_weight_alias_default_off_patch_prepared",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": true,
+  "header_probe": {
+    "source_url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf",
+    "range": "bytes=0-67108863",
+    "local_path": "/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert.header64m.gguf.part",
+    "size_bytes": 67108864,
+    "sha256": "dfa48de9479bd36c7e9b02e58635726a3a5b2215aa17c975a44975cf89704222",
+    "full_model_downloaded": false
+  },
+  "parsed_header": {
+    "magic": "GGUF",
+    "version": 3,
+    "n_tensors": 1328,
+    "n_kv": 48,
+    "tensor_info_end_byte": 5845209,
+    "general_architecture": "deepseek4",
+    "block_count": 43,
+    "context_length": 65536,
+    "attention_head_count": 64,
+    "expert_count": 256,
+    "expert_used_count": 4,
+    "type_counts": {
+      "F16": 338,
+      "Q8_0": 366,
+      "F32": 492,
+      "I32": 3,
+      "Q4_K": 129
+    }
+  },
+  "routing_alias_evidence": {
+    "current_vendor_name": "blk.%d.ffn_gate_tid2eid",
+    "candidate_header_names": [
+      {"name": "blk.0.ffn_gate_tid2eid.weight", "type": "I32", "shape": [4, 129280], "offset": 1765923392},
+      {"name": "blk.1.ffn_gate_tid2eid.weight", "type": "I32", "shape": [4, 129280], "offset": 1912079424},
+      {"name": "blk.2.ffn_gate_tid2eid.weight", "type": "I32", "shape": [4, 129280], "offset": 2088656960}
+    ],
+    "tid2eid_count": 3,
+    "decision": "A .weight alias is required if the 4Expert GGUF needs these routing tensors loaded into layer.ffn_gate_tid2eid."
+  },
+  "expert_tensor_evidence": [
+    {"name": "blk.0.ffn_gate_exps.weight", "type": "Q4_K", "shape": [4096, 2048, 256], "offset": 8633133120},
+    {"name": "blk.0.ffn_up_exps.weight", "type": "Q4_K", "shape": [4096, 2048, 256], "offset": 9841092672},
+    {"name": "blk.0.ffn_down_exps.weight", "type": "Q4_K", "shape": [2048, 4096, 256], "offset": 11049052224},
+    {"name": "blk.1.ffn_gate_exps.weight", "type": "Q4_K", "shape": [4096, 2048, 256], "offset": 12257011776},
+    {"name": "blk.1.ffn_up_exps.weight", "type": "Q4_K", "shape": [4096, 2048, 256], "offset": 13464971328},
+    {"name": "blk.1.ffn_down_exps.weight", "type": "Q4_K", "shape": [2048, 4096, 256], "offset": 14672930880}
+  ],
+  "prepared_default_off_patch": {
+    "env": "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1",
+    "file": "src/llama-model.cpp",
+    "behavior": "For DeepSeek4 ffn_gate_tid2eid only, first try the current tensor name. If absent and the env is set, try the .weight alias and create the tensor with the alias name and discovered shape.",
+    "default_behavior": "unchanged when env is unset",
+    "validation_limits": "Cannot perform full model load or correctness benchmark until at least 180G disk space is available for the full 4Expert GGUF."
+  },
+  "next_steps": [
+    "Build alias patch.",
+    "Run default-off accepted-path guard with env unset.",
+    "After disk is available, load full 4Expert GGUF with LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1 and GGML_MOE_STREAM_ONE_Q4K=1 for metadata/load-only validation before any generation benchmark."
+  ]
+}

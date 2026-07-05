@@ -1,0 +1,58 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: default-off DeepSeek4 tid2eid .weight alias",
+  "result": "build_passed_defaultoff_guard_passed_no_new_sota",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": true,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "pre_commit_head": "666713548ab8d09e174e10d1783675cd54d7ca69",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "patch": {
+    "env_gate": "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1",
+    "file": "src/llama-model.cpp",
+    "behavior": "For DeepSeek4 ffn_gate_tid2eid only, try the current name first. If absent and env gate is set, try blk.%d.ffn_gate_tid2eid.weight and create the tensor using the alias metadata shape.",
+    "default_behavior": "unchanged when env is unset"
+  },
+  "header_evidence": {
+    "partial_header_path": "/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert.header64m.gguf.part",
+    "partial_header_sha256": "dfa48de9479bd36c7e9b02e58635726a3a5b2215aa17c975a44975cf89704222",
+    "tid2eid_alias_names": [
+      "blk.0.ffn_gate_tid2eid.weight",
+      "blk.1.ffn_gate_tid2eid.weight",
+      "blk.2.ffn_gate_tid2eid.weight"
+    ],
+    "expert_used_count": 4,
+    "expert_tensor_type": "Q4_K"
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli -j 8",
+    "status": "passed"
+  },
+  "defaultoff_guard": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T133334Z-20260705_tid2eid_alias_defaultoff_guard/france-tid2eid-alias-defaultoff-cpu40-vram0gb",
+    "alias_env_present": false,
+    "q4k_env_present": false,
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 33430.771645,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ok_for_promotion": true,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15095029760,
+    "ram_ok": true,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "systemd_status": 0,
+    "exit_status": 0
+  },
+  "correctness_answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "decision": {
+    "new_sota": "no",
+    "accepted_sota_eval_tok_s": 4.4,
+    "alias_route_status": "default_off_infrastructure_ready",
+    "full_alias_on_validation": "blocked_until_full_4expert_gguf_available"
+  }
+}

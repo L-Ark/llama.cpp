@@ -5597,8 +5597,19 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                         layer.ffn_gate_inp = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP, "weight", i), { n_embd, n_expert }, 0);
                         layer.ffn_exp_probs_b = create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B, i), { n_expert }, TENSOR_NOT_REQUIRED);
 
-                        if (const auto * meta_tid2eid = ml.get_tensor_meta(tn(LLM_TENSOR_FFN_GATE_TID2EID, i).str().c_str())) {
-                            layer.ffn_gate_tid2eid = create_tensor(tn(LLM_TENSOR_FFN_GATE_TID2EID, i), { meta_tid2eid->ne[0], meta_tid2eid->ne[1] }, 0);
+                        {
+                            const LLM_TN_IMPL tid2eid_tn = tn(LLM_TENSOR_FFN_GATE_TID2EID, i);
+                            const LLM_TN_IMPL tid2eid_weight_tn = tn(LLM_TENSOR_FFN_GATE_TID2EID, "weight", i);
+                            const char * alias_env = std::getenv("LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS");
+                            const bool use_weight_alias = alias_env && alias_env[0] && alias_env[0] != '0';
+                            const auto * meta_tid2eid = ml.get_tensor_meta(tid2eid_tn.str().c_str());
+                            const bool use_alias = !meta_tid2eid && use_weight_alias &&
+                                ml.get_tensor_meta(tid2eid_weight_tn.str().c_str());
+                            if (meta_tid2eid || use_alias) {
+                                const LLM_TN_IMPL & selected_tid2eid_tn = use_alias ? tid2eid_weight_tn : tid2eid_tn;
+                                const auto * selected_meta = use_alias ? ml.get_tensor_meta(tid2eid_weight_tn.str().c_str()) : meta_tid2eid;
+                                layer.ffn_gate_tid2eid = create_tensor(selected_tid2eid_tn, { selected_meta->ne[0], selected_meta->ne[1] }, 0);
+                            }
                         }
 
                         if (n_expert == 0) {
