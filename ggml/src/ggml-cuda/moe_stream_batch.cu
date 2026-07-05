@@ -6059,6 +6059,7 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
+        case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
@@ -6120,6 +6121,9 @@ static bool launch_moe_mmq_slot_batch(
 
     ggml_backend_cuda_context * null_ctx = nullptr;
     switch (src0_type) {
+        case GGML_TYPE_Q4_0:
+            launch_mul_mat_q<GGML_TYPE_Q4_0, 8>(*null_ctx, args, st);
+            break;
         case GGML_TYPE_IQ3_XXS:
             launch_mul_mat_q<GGML_TYPE_IQ3_XXS, 8>(*null_ctx, args, st);
             break;
