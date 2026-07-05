@@ -65677,3 +65677,122 @@ Reproducibility:
 - Use existing 7JS cold-start route trace:
   `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile`.
 - Record exact offline output and decision here before source changes.
+
+### 7KN result
+
+Timestamp: 2026-07-05.
+
+Source data:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/route-trace.csv`.
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/io-batch-profile.csv`.
+- 7JS was a strict cold-start trace run that passed output quality and hard
+  memory gates. This phase is offline and did not change runtime behavior.
+
+Offline output:
+
+```text
+upgate
+  events 29776 unique 9712 cap 1735
+  lru_hits 13469 lru_misses 16307 hit_pct 45.23 miss_gib 77.482
+  belady_hits 18183 belady_misses 11593 hit_pct 61.07 miss_gib 55.155
+  extra_hits 4714 saved_gib 22.327 wait_ms 6863.609 bound_ms 1977.814
+down
+  events 13152 unique 4284 cap 766
+  lru_hits 5982 lru_misses 7170 hit_pct 45.48 miss_gib 44.491
+  belady_hits 8063 belady_misses 5089 hit_pct 61.31 miss_gib 31.551
+  extra_hits 2081 saved_gib 12.94 wait_ms 2794.145 bound_ms 812.671
+total_cache_policy_upper_bound_ms 2790.484
+```
+
+Interpretation:
+
+- Fixed-capacity LRU is not optimal on the current trace:
+  - up/gate could theoretically save `22.327 GiB` of movement;
+  - down could theoretically save `12.940 GiB`;
+  - proportional IO-wait bound is `2790.484 ms` n32.
+- This is a hard offline upper bound, not an achievable implementation result.
+  It assumes exact future route knowledge.
+- The bound is large enough to justify one more cache-policy investigation, but
+  it is not large enough to justify prompt-specific oracle code or a policy
+  already proven unstable.
+
+Decision:
+
+- Do not implement Belady / future-distance eviction.
+- Do not retry:
+  - Phase 7EJ prompt route-trace oracle;
+  - Phase 7GQ `lfu_lru`;
+  - profile-guided hybrid LFU/LRU;
+  - exact-key hot pin/protect.
+- Run one offline-only screen of prompt-independent online policies against the
+  same trace before touching source:
+  - if no online policy recovers at least `1.5 s` of the `2.79 s` bound in this
+    trace, reject cache-policy work and move to movement-byte/layout work;
+  - if an online policy passes the offline screen, write a separate source
+    implementation plan before modifying runtime code.
+
+## Phase 7KO - online cache-policy offline screen
+
+Timestamp: 2026-07-05 13:31:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether a prompt-independent online cache policy can recover a meaningful
+  fraction of the 7KN Belady bound without future route knowledge.
+- This is still offline over 7JS trace data; no runtime behavior changes.
+- Only policies that can be implemented with local cache state are allowed.
+
+Candidate policies:
+
+- `lru`: current baseline.
+- `slru`: segmented LRU with probation/protected segments and promotion on hit.
+- `twoq`: FIFO admission queue plus LRU main queue and ghost history.
+- `admit2_lru`: admit an expert only after the second observed request, then
+  manage admitted entries with LRU.
+- `lru2`: evict by oldest second-most-recent use, falling back to LRU for
+  single-use entries.
+
+Why these policies:
+
+- They do not need future tokens or prompt-specific route traces.
+- They target scan resistance, which is the plausible source of the LRU-vs-
+  Belady gap.
+- They avoid LFU's known failure mode from Phase 7GQ where early-hot experts are
+  over-protected and later decode quality/hit rate regresses.
+
+Offline experiment:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+python3 scripts/kimi-cache-policy-sim.py "$RUN/route-trace.csv" "$RUN/io-batch-profile.csv"
+```
+
+If the helper script does not exist, create it as a local analysis script with:
+
+- no dependency on model runtime;
+- inputs exactly `route-trace.csv` and `io-batch-profile.csv`;
+- fixed accepted capacities: `upgate=1735`, `down=766`;
+- output per policy and cache class:
+  - hits;
+  - misses;
+  - hit rate;
+  - miss GiB;
+  - saved GiB vs LRU;
+  - proportional wait bound vs LRU.
+
+Decision rule:
+
+- Reject source implementation if the best online policy recovers less than
+  `1500 ms` n32 proportional wait bound or damages either cache class badly.
+- If a policy recovers `>= 1500 ms` and does not regress one class by more than
+  `250 ms`, write a source plan for an env-gated implementation.
+- Source implementation is only allowed after this result is recorded and
+  pushed.
+
+Reproducibility:
+
+- Commit and push this plan before running the offline screen.
+- Record exact script path, command, output, and source commit here.
