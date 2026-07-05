@@ -68384,3 +68384,196 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record the run directory, command, output, gates, and full up/gate layer
   summary in the result section.
+
+### 7LC result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `4c50bf659` (`docs: record residual audit and plan upgate layer profile`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-053244Z-phase7lc-upgate-layer-audit-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `79512.98 ms`;
+- decode `23264.53 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- memory final `15102238720`;
+- final memory.stat:
+  - `anon=454656`;
+  - `file=14864560128`;
+  - `inactive_file=1487855616`;
+  - `active_file=13376126976`;
+  - `kernel=234754048`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Activation:
+
+- `env.txt` contains:
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE=1`;
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=64`.
+- stderr contains:
+  - `up/gate layer profile enabled`;
+  - `up/gate layer profile summary: records=869`.
+
+Layer summary:
+
+- The report printed `28` decode layer-pair rows.
+- Sum over printed rows:
+  - wall `6107.289 ms`;
+  - kernel `6026.407 ms`;
+  - `up_wait + gate_wait` `6462.552 ms`;
+  - wall gap `27.978 ms`;
+  - stage jobs `8109`.
+- By type:
+  - type `(22,22)` (`IQ2_S/IQ2_S`):
+    - rows `18`;
+    - wall `3426.958 ms`;
+    - kernel `3381.812 ms`;
+    - summed up+gate wait counters `6462.552 ms`;
+    - wall gap `11.216 ms`;
+    - jobs `5105`;
+    - calls `558`.
+  - type `(18,18)` (`IQ3_XXS/IQ3_XXS`):
+    - rows `10`;
+    - wall `2680.331 ms`;
+    - kernel `2644.595 ms`;
+    - summed up+gate wait counters `0.000 ms`;
+    - wall gap `16.762 ms`;
+    - jobs `3004`;
+    - calls `311`.
+
+Top contributors:
+
+- Top compute/wall row:
+  - `blk.60.ffn_up_exps.weight` / `blk.60.ffn_gate_exps.weight`;
+  - type `(18,18)`;
+  - wall `431.459 ms`;
+  - kernel `417.329 ms`;
+  - wall gap `12.050 ms`.
+- Top wait row:
+  - `blk.1.ffn_up_exps.weight` / `blk.1.ffn_gate_exps.weight`;
+  - type `(22,22)`;
+  - wall `317.639 ms`;
+  - summed up+gate wait counters `600.210 ms`;
+  - kernel `314.976 ms`;
+  - jobs `346`.
+- The next wait-heavy type `(22,22)` rows are broad:
+  - `blk.16`: wall `215.636 ms`, wait counters `406.305 ms`;
+  - `blk.10`: wall `207.522 ms`, wait counters `395.476 ms`;
+  - `blk.24`: wall `193.721 ms`, wait counters `367.299 ms`;
+  - `blk.12`: wall `189.774 ms`, wait counters `359.491 ms`;
+  - `blk.25`: wall `190.045 ms`, wait counters `356.859 ms`;
+  - `blk.23`: wall `187.622 ms`, wait counters `354.397 ms`.
+
+Interpretation:
+
+- There is no single-layer hot spot large enough to justify a layer-specific
+  source change. Even the largest row is only `431.459 ms` in this n32 run.
+- The printed layer rows are broad:
+  - type `(22,22)` is wait/staging dominated but spread over `18` rows;
+  - type `(18,18)` is compute dominated and spread over `10` rows.
+- `wall_gap_total` is only `27.978 ms`, so the bottleneck is not a visible
+  bookkeeping or launch gap between profiled stages.
+- The type `(22,22)` wait counters overlap by design. Their sum exceeds wall
+  because the accepted path runs up/gate staging on separate streams and starts
+  up compute while gate copy is still running.
+- Existing default-off alternatives for this exact shape are already rejected:
+  - `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT=1` in Phase 7AY regressed type-22
+    wall and endpoint decode;
+  - broad combined staging in Phases 7DJ/7DK/7FX/7FY regressed or lost overlap;
+  - same-type IQ3 parallel staging/compute in Phases 7KD/7KE regressed.
+
+Decision:
+
+- Do not implement a single-layer special case.
+- Do not retry split staging, combined staging, or same-type IQ3 parallelism.
+- The next source-level candidate must change the broad up/gate staging shape
+  without losing the existing up-copy/up-compute/gate-copy overlap. It needs a
+  new implementation plan before editing code.
+
+## Phase 7LD - broad up/gate staging-shape candidate design
+
+Timestamp: 2026-07-05 19:28:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Design the next implementation around the remaining broad up/gate bottleneck,
+  using 7LB/7LC evidence and without repeating rejected knobs.
+
+Current bottleneck:
+
+- 7LB foreground `runtime_load`:
+  - up wait `7615.883 ms`;
+  - gate wait `7683.275 ms`;
+  - down wait `2758.829 ms`.
+- 7LC printed up/gate layer rows:
+  - type `(22,22)` wall `3426.958 ms`, wait-heavy and broad;
+  - type `(18,18)` wall `2680.331 ms`, compute-heavy and broad.
+
+Rejected implementation families:
+
+- More VRAM cache budget or hot expert RAM tiers.
+- Queue-depth/refill-only tuning.
+- Whole up+gate combined staging.
+- Split staging with auxiliary rings.
+- Same-type IQ3 dual-stream staging/compute.
+- Single-layer current-down overlap or broad same-type down overlap.
+- Q4_0 down GPU enablement.
+
+Candidate direction to design before code:
+
+- Preserve the accepted overlap order:
+  1. plan up jobs and gate jobs;
+  2. start up copy and gate copy concurrently;
+  3. as soon as up copy completes, launch up compute without waiting for gate;
+  4. only then join gate copy and launch gate compute.
+- Reduce foreground IO wait without merging up+gate into a single blocking
+  batch. Any implementation must keep the up batch independently launchable.
+- The only acceptable source candidate is therefore a finer-grained scheduler
+  inside `copy_stage_jobs()`/`expert_pack_iouring_copy_jobs()` that can keep
+  more io_uring requests in flight inside each tensor batch while preserving the
+  existing per-stream ownership and early up compute.
+
+Hard upper bound:
+
+- From 7LB, the absolute n32 bound is the foreground up+gate wait:
+  `15299.158 ms`.
+- Because 7KW proved that reducing IO wait can lose overlap, the realistic
+  target for a first implementation is much smaller:
+  - reduce foreground up+gate wall by `5-10%`;
+  - expected n32 gain `~0.8-1.6 s`;
+  - expected n96 gain `~2-4 s` if it scales.
+- Any implementation that increases current-down worker time, increases TTFT by
+  more than 20%, reduces semantic quality, increases RAM above 16GB, or lowers
+  endpoint token rate is rejected even if local wait counters improve.
+
+Next required step before source edits:
+
+- Inspect the current `expert_pack_iouring_copy_jobs()` loop and design a
+  default-off implementation that changes intra-batch scheduling only.
+- The design must explicitly explain:
+  - why 7KY immediate refill failed and how the new scheduling differs;
+  - why 7KW combined IO lost overlap and how the new scheduling preserves it;
+  - how many requests can be kept in flight for typical 2-4 and 5-8 job batches;
+  - why it will not increase host RAM or pinned memory beyond the existing
+    12-slot rings;
+  - exact rollback criteria and n32/n96 reproduction commands.
+
+Reproducibility:
+
+- Commit and push this plan/result section before any source changes.
+- Append the candidate-specific implementation plan before editing code.
