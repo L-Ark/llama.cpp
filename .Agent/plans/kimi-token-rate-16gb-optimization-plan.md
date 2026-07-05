@@ -65871,3 +65871,148 @@ Decision:
 - Keep accepted default LRU and current cache split.
 - Next work must target required expert movement bytes or layout/quantization,
   not another cache eviction policy.
+
+## Phase 7KP - expert movement byte-reduction upper-bound
+
+Timestamp: 2026-07-05 13:48:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Quantify whether reducing expert tensor byte size can plausibly beat the
+  current n32 SOTA by a meaningful amount under the same VRAM budget.
+- This is an offline upper-bound screen, not a model-quality claim.
+- Use the current route trace and fixed VRAM budgets inferred from accepted
+  cache slots:
+  - up/gate budget: `1735 * 5619712` bytes;
+  - down budget: `766 * 7798784` bytes.
+
+Why this is needed:
+
+- 7KN shows an oracle cache policy could save `2.79 s`, but 7KO shows simple
+  online policies cannot recover it.
+- Therefore the next larger bucket is required expert movement bytes, not cache
+  eviction.
+- Smaller expert representation has two effects:
+  - fewer bytes per miss;
+  - more cache slots inside the same VRAM budget.
+- If this upper bound is small, quant/layout work is not the next best path. If
+  it is large, the next plan should focus on a reproducible expert-pack
+  conversion plus semantic-quality validation.
+
+Offline experiment:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+python3 - <<'PY'
+import csv, os, collections
+
+run = os.environ["RUN"]
+trace_path = os.path.join(run, "route-trace.csv")
+io_path = os.path.join(run, "io-batch-profile.csv")
+
+def kind(t):
+    if ".ffn_down_exps." in t:
+        return "down"
+    if ".ffn_up_exps." in t or ".ffn_gate_exps." in t:
+        return "upgate"
+    return None
+
+events = {"upgate": [], "down": []}
+cur_size = {}
+for r in csv.DictReader(open(trace_path)):
+    k = kind(r["tensor"])
+    if not k:
+        continue
+    key = (r["tensor"], int(r["expert_idx"]))
+    events[k].append(key)
+    cur_size[key] = int(r["expert_bytes"])
+
+wait = collections.Counter()
+for r in csv.DictReader(open(io_path)):
+    if r.get("op") != "runtime_load":
+        continue
+    k = kind(r.get("first_tensor", ""))
+    if k:
+        wait[k] += float(r.get("wait_ms", 0) or 0)
+
+def lru_bytes(seq, cap, size_fn):
+    cache, used = set(), {}
+    hits = misses = miss_bytes = 0
+    for i, key in enumerate(seq):
+        if key in cache:
+            hits += 1
+            used[key] = i
+            continue
+        misses += 1
+        miss_bytes += size_fn(key)
+        if len(cache) >= cap:
+            victim = min(cache, key=lambda x: used[x])
+            cache.remove(victim)
+            used.pop(victim, None)
+        cache.add(key)
+        used[key] = i
+    return hits, misses, miss_bytes
+
+budgets = {
+    "upgate": 1735 * 5619712,
+    "down": 766 * 7798784,
+}
+targets = {
+    "upgate_current": {"upgate": None, "down": None},
+    "upgate_to_4.48MiB": {"upgate": 4702208, "down": None},
+    "down_to_6.02MiB": {"upgate": None, "down": 6307840},
+    "down_to_4.48MiB": {"upgate": None, "down": 4702208},
+    "both_upgate4.48_down6.02": {"upgate": 4702208, "down": 6307840},
+    "both_4.48MiB": {"upgate": 4702208, "down": 4702208},
+}
+
+base = {}
+for k in ("upgate", "down"):
+    cap = {"upgate": 1735, "down": 766}[k]
+    base[k] = lru_bytes(events[k], cap, lambda key: cur_size[key])
+
+for name, repl in targets.items():
+    total_bound = 0.0
+    print(name)
+    for k in ("upgate", "down"):
+        target_size = repl[k]
+        if target_size is None:
+            cap = {"upgate": 1735, "down": 766}[k]
+            size_fn = lambda key, k=k: cur_size[key]
+        else:
+            cap = budgets[k] // target_size
+            size_fn = lambda key, target_size=target_size: target_size
+        hits, misses, miss_bytes = lru_bytes(events[k], int(cap), size_fn)
+        base_bytes = base[k][2]
+        saved = base_bytes - miss_bytes
+        bound = wait[k] * saved / base_bytes if base_bytes else 0.0
+        total_bound += bound
+        print(" ", k, "cap", int(cap), "hits", hits, "misses", misses,
+              "miss_gib", round(miss_bytes / 2**30, 3),
+              "saved_gib", round(saved / 2**30, 3),
+              "bound_ms", round(bound, 3))
+    print(" total_bound_ms", round(total_bound, 3))
+PY
+```
+
+Decision rule:
+
+- If no realistic scenario exceeds `2 s` n32 bound, reject expert byte-size work
+  for this round.
+- If only `both_4.48MiB` exceeds `2 s`, treat it as a model/quality-risk project
+  and do not change runtime until a real converted pack exists.
+- If `upgate_to_4.48MiB` alone exceeds `1.5 s`, prioritize up/gate expert-pack
+  conversion because it is the current largest movement bucket.
+- Any converted pack must be validated with cold-start n32 and n96:
+  - RAM peak below `15900000000`;
+  - no read/iouring failures;
+  - France prompt semantically correct;
+  - TTFT within the existing 20% gate;
+  - decode faster than current SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact output and whether the next step is pack conversion or rejection.
