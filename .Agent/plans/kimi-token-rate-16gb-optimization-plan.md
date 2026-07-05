@@ -72121,3 +72121,65 @@ Reproducibility:
 - Commit and push this result/guard plan before running.
 - Record run directory, source commit, metrics, output, activation absence, and
   memory files.
+
+### Phase 7LY result
+
+Timestamp: 2026-07-06 01:58:00 CST.
+
+Status: accepted rollback guard.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-083803Z-phase7ly-post-shared-io-revert-n32`
+
+Source:
+
+- `09831a4a9`, with source revert `293934e00` included.
+
+Build:
+
+- server build succeeded with existing warnings only.
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `76432.21 ms`;
+- decode `22256.21 ms / 31`, `1.39 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- shared-IO activation match count `0`.
+
+Counters:
+
+- expert-pack iouring bytes `126391910400`;
+- iouring wait `19105692 us`;
+- iouring batches `5178`;
+- iouring inflight avg `3.31`;
+- current-down worker `3061002 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- The source rollback is clean.
+- Default runtime behavior is restored:
+  - no `type22 shared IO early-up staging active` line;
+  - iouring batch histogram returned to the default shape with no `9-16`
+    combined batches.
+- The n32 endpoint is in the recent default band and faster than 7LW/7LU, but
+  this comes after reverting a rejected patch and should be treated as run
+  variance, not a promoted source improvement.
+
+Decision:
+
+- Keep the source revert.
+- Do not promote 7LX.
+- Continue future optimization from the default path at `09831a4a9`.
+- The next implementation must not simply reduce iouring wait; it must preserve
+  or improve endpoint overlap as measured by decode wall time.
