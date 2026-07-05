@@ -83941,3 +83941,185 @@ Reproducibility:
   benchmark.
 - The run directory must include the exact commands and scripts used to produce
   every estimate.
+
+### Phase 7OE result
+
+Timestamp: 2026-07-06 06:42 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-222403Z-phase7oe-iq2xxs-conversion-feasibility`
+
+Plan commit before audit:
+
+- `ed2d27fe7` (`docs: plan iq2 xxs conversion feasibility`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7oe_iq2xxs_conversion_feasibility.py`
+- `quantize_help.txt`
+- `imatrix_help.txt`
+- `gguf_inventory.tsv`
+- `gguf_metadata.json`
+- `tensor_type_inventory.tsv`
+- `conversion_space_estimate.md`
+- `expert_pack_space_estimate.md`
+- `quantize_dryrun_no_allow.txt`
+- `quantize_dryrun_allow.txt`
+- `decision.md`
+
+Execution:
+
+- Metadata/help audit plus bounded `llama-quantize --dry-run`.
+- No model inference.
+- No source edit.
+- No model asset download.
+- No full quantization.
+- No GGUF output file was written.
+
+Real Kimi `IQ3_S` shard inventory:
+
+```text
+00001  0.006438 GiB
+00002 45.034656 GiB
+00003 45.522448 GiB
+00004 45.735314 GiB
+00005 45.676230 GiB
+00006 46.539418 GiB
+00007 44.978965 GiB
+00008 46.539418 GiB
+00009 44.759360 GiB
+00010 12.758601 GiB
+total 377.550849 GiB
+```
+
+GGUF metadata:
+
+- `general.architecture`: `deepseek2`.
+- `general.name`: `Kimi K2.7 Code`.
+- `general.file_type`: `12`.
+- `general.quantization_version`: `2`.
+- `split.count`: `10`.
+- `split.tensors.count`: `1096`.
+- Existing quantization metadata in shard 0:
+  - `quantize.imatrix.file`: points to a previous external path under
+    `/mnt/srv/...`;
+  - `quantize.imatrix.entries_count`: `789`;
+  - `quantize.imatrix.chunks_count`: `50`.
+- The referenced imatrix file is not present locally from Phase 7OD's valid
+  asset classification, so this metadata is provenance, not a usable local
+  input.
+
+Tensor type/category summary from metadata:
+
+```text
+attention/F32          183
+attention/Q8_0         366
+dense_or_shared/F32     61
+dense_or_shared/Q8_0      2
+moe_down/IQ4_XS         12
+moe_down/Q3_K           41
+moe_down/Q4_0            7
+moe_gate/IQ2_S          21
+moe_gate/IQ3_XXS        39
+moe_other/F32          121
+moe_other/Q8_0         183
+moe_up/IQ2_S            47
+moe_up/IQ3_XXS          13
+```
+
+Tool help findings:
+
+- `llama-quantize --help` supports `IQ2_XXS`.
+- `llama-quantize --help` supports `--imatrix file_name`.
+- Help says `--allow-requantize` allows requantizing tensors that have already
+  been quantized and warns this can severely reduce quality compared to
+  quantizing from 16-bit or 32-bit.
+- Help exposes `--dry-run`.
+
+Dry-run commands:
+
+```bash
+timeout 120s build-cuda-batch/bin/llama-quantize --dry-run \
+  /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  IQ2_XXS 32
+
+timeout 120s build-cuda-batch/bin/llama-quantize --dry-run --allow-requantize \
+  /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  IQ2_XXS 32
+```
+
+Dry-run result:
+
+- Both dry-runs exited `0`.
+- Tool-reported model size:
+  `386605.41 MiB` (`377.544 GiB`), `3.16 BPW`.
+- Tool-reported `IQ2_XXS` quant size:
+  `254735.35 MiB` (`248.765 GiB`), `2.08 BPW`.
+- Tool warning:
+  completing this quantization requires an imatrix.
+- Tool warning:
+  `61 / 1096` tensors required fallback quantization.
+- `attn_k_b` tensors fall back to `IQ4_NL` because `ncols=128` is not
+  divisible by the `IQ2_XXS` requirement `256`.
+
+Disk decision:
+
+- Current filesystem available at audit time:
+  `87.788 GiB`.
+- Exact dry-run output size exceeds available disk by about:
+  `160.977 GiB`.
+- Exact dry-run output plus one largest-shard temporary allowance exceeds
+  available disk by about:
+  `207.516 GiB`.
+- Therefore local full-model `IQ2_XXS` conversion on the current filesystem is
+  rejected.
+
+Expert-pack size estimate:
+
+- Using the Phase 7NZ movement ratio as a lower-bound proxy:
+
+```text
+current pack 163.105 GiB -> estimated IQ2_XXS 110.614 GiB  no fit
+current pack 159.901 GiB -> estimated IQ2_XXS 108.442 GiB  no fit
+current pack  74.081 GiB -> estimated IQ2_XXS  50.240 GiB  fits disk
+current pack   7.161 GiB -> estimated IQ2_XXS   4.856 GiB  fits disk
+current pack   4.696 GiB -> estimated IQ2_XXS   3.185 GiB  fits disk
+```
+
+This is only a storage estimate. It is not a quality-safe asset path because no
+valid local Kimi imatrix data file was found.
+
+Decision:
+
+- `IQ2_XXS` remains blocked by assets, not by the prompt-kernel selftest.
+- Do not start local `IQ2_XXS` conversion on this filesystem.
+- Do not treat current `IQ3_S` shards as a quality-safe source for `IQ2_XXS`
+  without a valid imatrix and later strict n96 quality validation.
+- Do not continue `IQ2_XXS` runtime source activation until a valid asset path
+  exists.
+- Next token-rate work should return to current `IQ3_S` runtime optimization
+  under the 16GB host-RAM cold-start gate.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard ed2d27fe7
+
+RUN_DIR=/root/lfz/runs/vendor-kimi-token-rate/20260705-222403Z-phase7oe-iq2xxs-conversion-feasibility \
+python3 /root/lfz/runs/vendor-kimi-token-rate/20260705-222403Z-phase7oe-iq2xxs-conversion-feasibility/phase7oe_iq2xxs_conversion_feasibility.py
+
+timeout 120s build-cuda-batch/bin/llama-quantize --dry-run \
+  /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  IQ2_XXS 32
+
+timeout 120s build-cuda-batch/bin/llama-quantize --dry-run --allow-requantize \
+  /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+  IQ2_XXS 32
+
+cat /root/lfz/runs/vendor-kimi-token-rate/20260705-222403Z-phase7oe-iq2xxs-conversion-feasibility/decision.md
+```
