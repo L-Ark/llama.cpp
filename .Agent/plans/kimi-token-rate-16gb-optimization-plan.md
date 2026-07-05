@@ -67774,3 +67774,95 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record source commit, run directory, command, output, TTFT, decode, token
   rate, memory, swap, IO counters, and comparison with 7KU/7JY.
+
+### 7KZ result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `2934aa244` (`docs: plan current head n96 guard`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-050646Z-phase7kz-current-head-n96`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-050646Z-phase7kz-current-head-n96 \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+- manual semantic quality `pass`;
+- TTFT `78143.95 ms`;
+- decode `56777.55 ms / 77`, `1.36 tok/s`;
+- memory peak `15899996160`;
+- memory final `15086997504`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `63050`, misses `633`;
+- iouring reads `56535`;
+- iouring bytes `315379728384`;
+- iouring wait `50680085 us`;
+- iouring submit `115704 us`;
+- global io_uring detail:
+  - batches `12722`;
+  - submit calls `12722`;
+  - wait calls `45680`;
+  - inflight avg `3.37`;
+  - inflight max `8`;
+  - batch histogram `1:437,2-4:6446,5-8:5839`;
+- current-down overlap:
+  - calls `2464`;
+  - planned/completed jobs `9199/9199`;
+  - cache hits `8665`;
+  - missing tensor `231`;
+  - missing pack `99`;
+  - worker `8071453 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.0%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `44.1%`.
+
+Comparison:
+
+- 7JY accepted n96:
+  - decode `57169.16 ms / 77`, `1.35 tok/s`;
+  - TTFT `73810.16 ms`.
+- 7KU current-head n96:
+  - decode `56613.00 ms / 77`, `1.36 tok/s`;
+  - TTFT `77706.41 ms`.
+- 7KZ post-revert n96:
+  - decode `56777.55 ms / 77`, `1.36 tok/s`;
+  - TTFT `78143.95 ms`.
+- 7KZ is `391.61 ms` faster than 7JY n96 and `164.55 ms` slower than 7KU,
+  within normal long cold-run variance.
+- TTFT is slower than 7JY by `4333.79 ms`, but still far below the 20% gate
+  (`127598.064 ms`).
+
+Decision:
+
+- Record 7KZ as the current post-revert strict n96 guard baseline.
+- Keep 7KU as the fastest current-head n96 measurement and 7JY/7KU as SOTA
+  references.
+- Do not change runtime defaults.
+- Use 7KZ evidence to confirm that rejected 7KW/7KY source experiments were
+  cleanly reverted and did not destabilize the default path.
