@@ -61,6 +61,20 @@ Current-head candidate screen:
 - Closest mixed paper route is source/page elimination + remaining CPU at microprobe speed + top128 hot residual exact kernel. Even after estimated gate penalty, it allows only `179.257 ms` for the top128 kernel/integration over `44.152 GiB` call-weighted source, requiring about `246.305 GiB/s`. Existing raw/transposed exact GPU probes are only `72-75 GiB/s`, so this is not implementable by wrapping the current kernel.
 - Therefore no immediate runtime patch is allowed. The only next source edit that may be planned is a default-off kernel microprobe with a new memory-access design and a hard-bound explaining how it can exceed the top128 `~246 GiB/s` threshold while preserving fixed-text top1. Otherwise continue looking for a new exact algorithmic source; do not repeat cache-size, source-only, prefetch, or existing hot-batch kernel variants.
 
+Next microprobe plan:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/top128-rowtile-q80-hot-batch-microprobe-plan.json`.
+- The only currently allowed source edit is a default-off compare probe gated by `GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1`. It must run after normal CPU fallback, compare against CPU `dst`, keep logits unchanged, and keep CPU fallback counts unchanged.
+- Hypothesis: the existing warp2 kernels compute one output element per half-warp, so every output column rereads the same Q8_0 activation row from global memory. A row-tiled kernel can keep the exact 16-lane CPU-compatible accumulation order per output while sharing each Q8_0 block pair through shared memory across 16 columns. This is the only local mechanism identified so far that could plausibly move beyond the current `72-75 GiB/s` effective source bandwidth toward the required top128 `246.305 GiB/s`.
+- Hard gate before any strict cold run: build passes; fixed-text `llama-results` top1 remains `same_top1 == n_tokens`; op-level compare `max_abs=0`; 16GB cgroup including page cache/no swap/no OOM; projected top128 kernel+integration is `<=179.257 ms` with margin. If the row-tile probe misses that bound, reject it and do not promote or benchmark it as SOTA.
+
+Row-tile microprobe result:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/top128-rowtile-q80-hot-batch-microprobe-validation.json`.
+- Source change is default-off under `GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1`; it runs only in compare probe mode after CPU fallback, does not write logits, and does not clear fallback counts.
+- Correctness passed: smoke raw/transposed compare had `max_abs=0`, and fixed-text transposed compare512 passed `same_top1=145/145`, op-level `max_abs=0`, no OOM/no swap under 16GB cgroup including page cache.
+- Performance rejected: transposed compare512 sample measured only `62.907 GiB/s` effective source bandwidth, projecting top128 kernel time to about `701.853 ms` before integration overhead, far above the allowed `179.257 ms`. It is slower than the prior raw/transposed warp probes (`74.590/72.434 GiB/s`). Do not run strict cold SOTA benchmarks for row-tile/shared-Q8 variants; the accepted SOTA remains `4.4 tok/s`.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.

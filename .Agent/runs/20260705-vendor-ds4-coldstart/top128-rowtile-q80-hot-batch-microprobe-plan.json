@@ -1,0 +1,51 @@
+{
+  "accepted_sota_unchanged": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "ttft_ms": 32892.55329
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/top128-rowtile-q80-hot-batch-microprobe-plan.json",
+  "date": "2026-07-05",
+  "decision_before_source_edit": {
+    "default_behavior_may_change": false,
+    "runtime_promotion_allowed_before_probe": false,
+    "source_edit_allowed": "default-off compare microprobe only"
+  },
+  "framework": "vendor",
+  "hard_bound_from_current_head_candidate_screen": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    "closest_route": "source/page elimination plus remaining CPU at best microprobe speed plus top128 exact hot residual",
+    "existing_raw_warp_gib_s": 74.59,
+    "existing_transposed_warp_gib_s": 72.434,
+    "top128_allowed_kernel_and_integration_ms_for_10tok": 179.25662243236,
+    "top128_call_weighted_source_gib": 44.15185546875,
+    "top128_gate_penalty_ms_est": 147.4635172782332,
+    "top128_payload_mib": 544,
+    "top128_required_effective_source_gib_s": 246.30529611484835
+  },
+  "hypothesis": {
+    "current_warp_issue": "The existing warp2 kernels compute one output element per half-warp. For a single activation row, every output column rereads the same Q8_0 row from global memory, so kernel physical traffic includes repeated activation reads that are not counted in the source-only GiB/s metric.",
+    "new_probe": "Tile one activation row by 16 output columns per CTA. Keep the same 16-lane CPU-compatible dot mapping per output column, but copy each pair of Q8_0 blocks into shared memory once per CTA before the 16 column groups consume it.",
+    "why_it_can_reopen": "If the current 72-75 GiB/s effective source bandwidth is limited by repeated Q8_0 global reads and poor reuse, sharing Q8_0 across 16 columns can reduce that repeated traffic by about 16x for the activation side. This is the only identified local mechanism that could plausibly move the effective source bandwidth toward the required 246 GiB/s without changing arithmetic.",
+    "why_it_may_still_fail": "The kernel adds two __syncthreads per MXFP4 block pair and still reads the MXFP4 source per output column. If source loads or integer/fma instruction throughput dominate instead of repeated Q8_0 traffic, the probe will remain far below the threshold."
+  },
+  "implementation_plan": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "new_env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE",
+    "probe_only_behavior": "Active only when GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE is enabled. It runs after normal CPU fallback, compares against CPU dst, does not write logits, and does not clear matrix_row_counts.",
+    "raw_layout": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1",
+    "transposed_layout": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1 with GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_TRANSPOSE=1 and GGML_MOE_STREAM_ONE_DIRECT_TRANSPOSE=1"
+  },
+  "pass_fail_gates": {
+    "build": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8 must pass",
+    "correctness": "fixed-text llama-results check must exit 0 with same_top1 == n_tokens; op-level compare max_abs must remain 0 for the probed rows",
+    "memory": "16GB cgroup including page cache, MemorySwapMax=0, no OOM and no swap",
+    "performance_reopen": "fixed-text compare512 projected top128 kernel+integration must be <= 179.257 ms, or the route remains rejected",
+    "sota_promotion": "No strict cold SOTA run is allowed unless the probe first satisfies correctness and the projected top128 budget with margin"
+  },
+  "status": "planned_source_edit_default_off"
+}

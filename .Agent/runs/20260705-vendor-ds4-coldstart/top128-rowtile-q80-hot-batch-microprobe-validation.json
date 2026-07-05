@@ -1,0 +1,147 @@
+{
+  "accepted_sota_unchanged": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "ttft_ms": 32892.55329
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/top128-rowtile-q80-hot-batch-microprobe-validation.json",
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true
+  },
+  "date": "2026-07-05",
+  "decision": {
+    "correctness_gate": "passed",
+    "performance_gate": "rejected",
+    "reason": "The transposed row-tile compare512 sample measured only 62.907 GiB/s effective source bandwidth. Projecting the current top128 candidate's 44.152 GiB call-weighted source at that speed gives about 701.85 ms of kernel time before integration overhead, far above the 179.257 ms top128 budget. It is also slower than the previous raw/transposed warp probes at 74.590/72.434 GiB/s.",
+    "sota_changed": false,
+    "strict_cold_performance_allowed": false
+  },
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "requirements": {
+    "top128_allowed_kernel_and_integration_ms_for_10tok": 179.25662243236,
+    "top128_call_weighted_source_gib": 44.15185546875,
+    "top128_required_effective_source_gib_s": 246.30529611484835
+  },
+  "runs": {
+    "smoke_rowtile_compare32": {
+      "compare_ok": 4,
+      "compare_ran": 4,
+      "diff_count": 0,
+      "exit_status": 0,
+      "max_abs": 0,
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_peak_bytes": 16000000000,
+        "memory_swap_max": "0",
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T042449Z-rowtile-q80-hot-batch/smoke-rowtile-compare32",
+      "sample_ready_rows": 6,
+      "sample_src0_bytes": 26738688,
+      "timing_us": {
+        "alloc": 136,
+        "compare": 60,
+        "d2h": 48,
+        "elapsed": 1904,
+        "free": 45,
+        "h2d": 143,
+        "kernel": 1401
+      }
+    },
+    "smoke_rowtile_transpose_compare32": {
+      "compare_ok": 4,
+      "compare_ran": 4,
+      "diff_count": 0,
+      "exit_status": 0,
+      "max_abs": 0,
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_peak_bytes": 7825620992,
+        "memory_swap_max": "0",
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T042449Z-rowtile-q80-hot-batch/smoke-rowtile-transpose-compare32",
+      "sample_ready_rows": 6,
+      "sample_src0_bytes": 26738688,
+      "timing_us": {
+        "alloc": 106,
+        "compare": 53,
+        "d2h": 44,
+        "elapsed": 772,
+        "free": 35,
+        "h2d": 59,
+        "kernel": 425
+      }
+    },
+    "transposed_fixed_text_compare512": {
+      "baseline_exit_status": 0,
+      "bytes_all": {
+        "out": 402325504,
+        "q80": 106754560,
+        "src0": 145832804352
+      },
+      "check_exit_status": 0,
+      "compare_ok": 262,
+      "compare_ran": 262,
+      "hashes": {
+        "hot-batch-probe.csv": "108804d98d844064ea144f0797d5fc464df29b436731a653fdac6fad23defaa4",
+        "run.sh": "a341617d45f901d9592f465f3ed3c0aa64922f8e88a15a95ec81d95a72d2086e",
+        "top1-baseline.json": "f87331a65bd46bd760b3318f1ee97e91a80e16e5b0c5e800cc8fc5d5b6a3aa36",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_peak_bytes": 16000000000,
+        "memory_swap_max": "0",
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "op_level_diff_count": 0,
+      "op_level_max_abs": 0,
+      "ready_rows_all": 32724,
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T042449Z-rowtile-q80-hot-batch/probe-rowtile-transpose-compare512",
+      "sample": {
+        "kernel_source_bandwidth_gib_s": 62.90740030674847,
+        "output_elements": 1163264,
+        "projected_kernel_ms_by_ready_rows": 2159.004857142857,
+        "projected_kernel_ms_by_src_bytes": 2159.004857142857,
+        "projected_top128_kernel_ms_at_sample_bandwidth": 701.8528599752018,
+        "projected_total_ms_by_ready_rows": 3573.9282857142857,
+        "q80_bytes": 1231616,
+        "ready_rows": 378,
+        "src0_bytes": 1684537344,
+        "timing_us": {
+          "alloc": 3902,
+          "compare": 3707,
+          "d2h": 2715,
+          "elapsed": 43765,
+          "free": 2434,
+          "h2d": 3586,
+          "kernel": 24939
+        }
+      },
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145
+      }
+    }
+  },
+  "source_change": {
+    "default_off": true,
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "new_env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE",
+    "summary": "Adds a compare-only row-tiled CPU-compatible Q8_0 hot-batch kernel. It keeps the 16-lane CPU accumulation order per output, shares each Q8_0 block pair through shared memory across 16 output columns, runs after CPU fallback, compares against CPU dst, and does not change logits or fallback counts."
+  },
+  "status": "correctness_passed_performance_rejected"
+}

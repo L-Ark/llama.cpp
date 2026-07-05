@@ -2207,6 +2207,89 @@ static __global__ void moe_stream_q80_hot_batch_cpu_compat_warp2_transposed_kern
     }
 }
 
+template<bool TRANSPOSED>
+static __global__ void moe_stream_q80_hot_batch_cpu_compat_rowtile_kernel(
+        const char * const * __restrict__ src0_rows,
+        size_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        int64_t ne00,
+        int rows_to_probe,
+        int cols_to_probe,
+        float * __restrict__ out) {
+    constexpr int tile_cols = 16;
+    __shared__ block_q8_0 sh_y[2];
+
+    const int row = (int) blockIdx.x;
+    const int tile_col0 = (int) blockIdx.y * tile_cols;
+    const int col_group = threadIdx.x >> 4;
+    const int sublane = threadIdx.x & 15;
+    const int lane = threadIdx.x & 31;
+    const int col = tile_col0 + col_group;
+    const bool active = row < rows_to_probe && col < cols_to_probe;
+    const int base_lane = (lane & 16) ? 16 : 0;
+    const uint32_t half_mask = (lane & 16) ? 0xffff0000u : 0x0000ffffu;
+    const int lane8 = sublane & 7;
+
+    const char * src0 = active ? src0_rows[row] : nullptr;
+    const block_mxfp4 * x_raw = (const block_mxfp4 *) (active ? src0 + (size_t) col * nb01 : nullptr);
+    const block_mxfp4 * x_transposed = (const block_mxfp4 *) src0;
+    const block_q8_0 * y = (const block_q8_0 *) (q80 + (size_t) row * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float acc = 0.0f;
+    int64_t ib = 0;
+    for (; ib + 1 < nb; ib += 2) {
+        char * sh_bytes = (char *) sh_y;
+        const char * y_bytes = (const char *) (y + ib);
+        for (int off = (int) threadIdx.x; off < (int) (2 * sizeof(block_q8_0)); off += (int) blockDim.x) {
+            sh_bytes[off] = y_bytes[off];
+        }
+        __syncthreads();
+
+        if (active) {
+            const bool second = sublane >= 8;
+            const int64_t block_idx = ib + (second ? 1 : 0);
+            const block_mxfp4 & xb = TRANSPOSED ?
+                x_transposed[block_idx * (int64_t) cols_to_probe + col] :
+                x_raw[block_idx];
+            const block_q8_0 & yb = sh_y[second ? 1 : 0];
+            const int p = moe_stream_q80_cpu_compat_one_lane(xb, yb, lane8);
+            const float scale = __half2float(yb.d) * (ggml_cuda_e8m0_to_fp32(xb.e) * 0.5f);
+            acc = fmaf(scale, (float) p, acc);
+        }
+        __syncthreads();
+    }
+
+    float acc1[8];
+    float acc2[8];
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        acc1[i] = __shfl_sync(half_mask, acc, base_lane + i);
+        acc2[i] = __shfl_sync(half_mask, acc, base_lane + 8 + i);
+    }
+
+    if (active && sublane == 0) {
+        float sum = moe_stream_q80_cpu_compat_hsum8(acc1, acc2);
+        for (; ib < nb; ++ib) {
+            int sumi1 = 0;
+            int sumi2 = 0;
+            const block_mxfp4 & xb = TRANSPOSED ?
+                x_transposed[ib * (int64_t) cols_to_probe + col] :
+                x_raw[ib];
+#pragma unroll
+            for (int j = 0; j < QK_MXFP4/2; ++j) {
+                const uint8_t q = xb.qs[j];
+                sumi1 += y[ib].qs[j] * moe_stream_mxfp4_value_dev(q & 0x0F);
+                sumi2 += y[ib].qs[j + QK_MXFP4/2] * moe_stream_mxfp4_value_dev(q >> 4);
+            }
+            const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(xb.e) * 0.5f);
+            sum = fmaf(scale, (float) (sumi1 + sumi2), sum);
+        }
+        out[(size_t) row * (size_t) cols_to_probe + (size_t) col] = sum;
+    }
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_probe(
     int src0_type_int,
     const char *src0_name,
@@ -2599,6 +2682,14 @@ static bool moe_stream_q80_hot_batch_probe_transpose_enabled() {
     return enabled != 0;
 }
 
+static bool moe_stream_q80_hot_batch_probe_row_tile_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE");
+        return (env && env[0] && env[0] != '0') ? 1 : 0;
+    }();
+    return enabled != 0;
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     int src0_type_int,
     const char *src0_name,
@@ -2724,8 +2815,23 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
         }
         const auto t_h2d = std::chrono::steady_clock::now();
         if (ok) {
-            const int threads = 128;
-            if (moe_stream_q80_hot_batch_probe_warp_enabled()) {
+            if (moe_stream_q80_hot_batch_probe_row_tile_enabled()) {
+                const int threads = 256;
+                const dim3 blocks(
+                        (unsigned int) ready_rows,
+                        (unsigned int) (((int64_t) ne01 + 15) / 16),
+                        1);
+                if (moe_stream_q80_hot_batch_probe_transpose_enabled()) {
+                    moe_stream_q80_hot_batch_cpu_compat_rowtile_kernel<true><<<blocks, threads>>>(
+                            d_src0_rows, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                            ne00, (int) ready_rows, (int) ne01, d_out);
+                } else {
+                    moe_stream_q80_hot_batch_cpu_compat_rowtile_kernel<false><<<blocks, threads>>>(
+                            d_src0_rows, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                            ne00, (int) ready_rows, (int) ne01, d_out);
+                }
+            } else if (moe_stream_q80_hot_batch_probe_warp_enabled()) {
+                const int threads = 128;
                 const size_t warps = (out_elems + 1) / 2;
                 const int blocks = (int) ((warps * 32 + (size_t) threads - 1) / (size_t) threads);
                 if (moe_stream_q80_hot_batch_probe_transpose_enabled()) {
@@ -2738,6 +2844,7 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
                             ne00, (int) ready_rows, (int) ne01, d_out);
                 }
             } else {
+                const int threads = 128;
                 const int blocks = (int) ((out_elems + (size_t) threads - 1) / (size_t) threads);
                 moe_stream_q80_hot_batch_cpu_compat_kernel<<<blocks, threads>>>(
                         d_src0_rows, nb01, (const char *) d_q80, src1_q8_0_row_size,
