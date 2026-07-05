@@ -74376,3 +74376,107 @@ Rollback:
 
 - No source rollback is needed because this is runtime-only.
 - If endpoint regresses or only matches noise, keep `UPGATE_PCT=62`.
+
+7ML result:
+
+Timestamp: 2026-07-06 20:50:00 CST.
+
+Status: rejected.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-104945Z-phase7ml-upgate50-n32`
+- Code head: `eb492bd22`.
+- Reproduction:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-104945Z-phase7ml-upgate50-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=50 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gates:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT `75060.21 ms`, below `127598.064 ms`;
+- decode `25102.18 ms / 31`, `1.23 tok/s`;
+- memory.peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert-pack:
+  - hits `27585`, misses `192`;
+  - iouring reads `25107`;
+  - iouring bytes `137891332096`;
+  - iouring wait `23828822 us`.
+- current-down overlap:
+  - planned/completed jobs `3363`;
+  - cache hits `3829`;
+  - worker `3094744 us`.
+- down cache:
+  - slots `1008`, slot `7.44 MiB`;
+  - hits `9979`, misses `3141`;
+  - hit rate `76.1%`.
+- upgate cache:
+  - slots `1399`, slot `5.36 MiB`;
+  - hits `10271`, misses `19505`;
+  - hit rate `34.5%`.
+
+Comparison:
+
+- 7MD current default n32:
+  - decode `22659.98 ms / 31`, `1.37 tok/s`;
+  - TTFT `66044.43 ms`;
+  - down hit rate `73.4%`;
+  - upgate hit rate `45.2%`.
+- 7ML improves down hit rate from `73.4%` to `76.1%`.
+- 7ML regresses upgate hit rate from `45.2%` to `34.5%`.
+- 7ML increases total iouring wait from about `20.67 s` to `23.83 s`.
+- Endpoint decode regresses by `2442.20 ms` versus 7MD.
+
+Decision:
+
+- Reject `UPGATE_PCT=50`.
+- Keep default `UPGATE_PCT=62`.
+- Do not run n96.
+- No source rollback is required because this phase was runtime-only.
+
+Gap analysis:
+
+- The 7MK calibrated trace underestimated the endpoint cost of reducing
+  upgate capacity.
+- Although down misses decreased, the larger upgate miss increase dominated
+  wall time.
+- This confirms that broad VRAM reallocation toward down is not the right
+  lever under the current split-cache design.
+- Do not continue lower-`UPGATE_PCT` probes unless a future implementation can
+  protect upgate residency while selectively improving down residency.
+
+Next direction:
+
+- Keep cache split at the accepted default.
+- The next source-level candidates must avoid repeating already rejected
+  broad cache-policy/admission paths:
+  - plain `lfu_lru` was rejected in Phase 7GQ;
+  - `admit_after=2` scratch was rejected in Phase 7FI;
+  - broad Q4 down production was rejected in Phases 7MG/7MH/7MJ.
+- Re-focus on targeted non-Q4 work that can reduce per-token wall without
+  adding expert traffic:
+  - up/gate type18 compute path, where 7MK still shows `2639.421 ms` kernel
+    time on n32;
+  - narrower type22 up/gate wait reductions that preserve current upgate
+    capacity;
+  - partial-row Q4 down split only if it can keep CPU fallback correctness and
+    avoid all-or-nothing Q4 residency.
