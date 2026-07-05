@@ -71537,3 +71537,55 @@ Next direction:
 - The next source design should either:
   - implement async coalesced span reads with a proper completion pipeline; or
   - move away from movement scheduling and inspect the type18 compute bucket.
+
+## Phase 7LU - post-coalescing rollback n32 guard
+
+Timestamp: 2026-07-06 00:51:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify that reverting `4efc27e1c` restores the default runtime path.
+- Ensure no coalesced staging activation remains before any next optimization.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard f1215c8ed
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lu-post-coalesce-rollback-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `coalesced staging active` or
+  `expert pack coalesce`.
+
+Decision rule:
+
+- If 7LU returns near the current clean default band, continue from the default
+  runtime.
+- If it regresses or shows coalesce activation, stop and inspect source/binary
+  state before any new plan.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact run directory, metrics, output, stderr activation absence, and
+  source commit.
