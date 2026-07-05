@@ -213,9 +213,13 @@ struct pinned_stage_slot {
 
 struct pinned_stage_ring {
     std::vector<pinned_stage_slot> slots;
+    std::vector<pinned_stage_slot> coalesce_slots;
     size_t slot_sz = 0;
+    size_t coalesce_slot_sz = 0;
     size_t next = 0;
+    size_t coalesce_next = 0;
     bool failed = false;
+    bool coalesce_failed = false;
     bool report_registered = false;
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     io_uring *uring = nullptr;
@@ -246,6 +250,11 @@ struct pinned_stage_ring {
     uint64_t granularity_max_jobs = 0;
     uint64_t granularity_max_read_jobs = 0;
     uint64_t granularity_max_depth = 0;
+    uint64_t coalesce_groups = 0;
+    uint64_t coalesce_jobs = 0;
+    uint64_t coalesce_read_bytes = 0;
+    uint64_t coalesce_h2d_enqueues = 0;
+    uint64_t coalesce_waits = 0;
 };
 
 struct batch_ctx {
@@ -661,6 +670,10 @@ struct expert_pack_state {
     std::atomic<uint64_t> iouring_batch_hist_9_16{0};
     std::atomic<uint64_t> iouring_batch_hist_17_32{0};
     std::atomic<uint64_t> iouring_batch_hist_gt32{0};
+    std::atomic<uint64_t> coalesce_groups{0};
+    std::atomic<uint64_t> coalesce_jobs{0};
+    std::atomic<uint64_t> coalesce_read_bytes{0};
+    std::atomic<uint64_t> coalesce_h2d_enqueues{0};
     // RAM hot tier
     void *ram_tier_base = nullptr;
     size_t ram_tier_bytes = 0;
@@ -2372,6 +2385,14 @@ static void expert_pack_report_atexit() {
                      g_expert_pack.iouring_batch_hist_5_8.load(), g_expert_pack.iouring_batch_hist_9_16.load(),
                      g_expert_pack.iouring_batch_hist_17_32.load(), g_expert_pack.iouring_batch_hist_gt32.load());
     }
+    if (g_expert_pack.coalesce_groups.load() > 0 || g_expert_pack.coalesce_jobs.load() > 0) {
+        std::fprintf(stderr,
+                     "[moe_stream_batch] expert pack async coalesce: groups=%lu jobs=%lu read_bytes=%lu h2d_enqueues=%lu\n",
+                     g_expert_pack.coalesce_groups.load(),
+                     g_expert_pack.coalesce_jobs.load(),
+                     g_expert_pack.coalesce_read_bytes.load(),
+                     g_expert_pack.coalesce_h2d_enqueues.load());
+    }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
                      "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB\n",
@@ -3914,42 +3935,56 @@ static void pinned_stage_release(pinned_stage_ring &ring) {
         ring.uring_depth = 0;
     }
 #endif
-    for (pinned_stage_slot &slot : ring.slots) {
-        if (slot.pending && slot.done) {
-            cudaEventSynchronize(slot.done);
-            slot.pending = false;
+    auto release_slots = [&](std::vector<pinned_stage_slot> &slots, bool collect_timing) {
+        for (pinned_stage_slot &slot : slots) {
+            if (slot.pending && slot.done) {
+                cudaEventSynchronize(slot.done);
+                slot.pending = false;
+            }
+            if (collect_timing) {
+                pinned_stage_collect_timing(ring, slot);
+            }
+            if (slot.host) {
+                cudaFreeHost(slot.host);
+                slot.host = nullptr;
+            }
+            if (slot.done) {
+                cudaEventDestroy(slot.done);
+                slot.done = nullptr;
+            }
+            if (slot.copy_start) {
+                cudaEventDestroy(slot.copy_start);
+                slot.copy_start = nullptr;
+            }
+            if (slot.copy_done) {
+                cudaEventDestroy(slot.copy_done);
+                slot.copy_done = nullptr;
+            }
         }
-        pinned_stage_collect_timing(ring, slot);
-        if (slot.host) {
-            cudaFreeHost(slot.host);
-            slot.host = nullptr;
-        }
-        if (slot.done) {
-            cudaEventDestroy(slot.done);
-            slot.done = nullptr;
-        }
-        if (slot.copy_start) {
-            cudaEventDestroy(slot.copy_start);
-            slot.copy_start = nullptr;
-        }
-        if (slot.copy_done) {
-            cudaEventDestroy(slot.copy_done);
-            slot.copy_done = nullptr;
-        }
-    }
-    ring.slots.clear();
+        slots.clear();
+    };
+    release_slots(ring.slots, true);
+    release_slots(ring.coalesce_slots, false);
     ring.slot_sz = 0;
+    ring.coalesce_slot_sz = 0;
     ring.next = 0;
+    ring.coalesce_next = 0;
 }
 
 static void pinned_stage_report_atexit() {
     auto report_ring = [](const char *name, pinned_stage_ring &ring) {
         for (pinned_stage_slot &slot : ring.slots) {
+        if (slot.pending && slot.done) {
+            cudaEventSynchronize(slot.done);
+            slot.pending = false;
+        }
+        pinned_stage_collect_timing(ring, slot);
+    }
+        for (pinned_stage_slot &slot : ring.coalesce_slots) {
             if (slot.pending && slot.done) {
                 cudaEventSynchronize(slot.done);
                 slot.pending = false;
             }
-            pinned_stage_collect_timing(ring, slot);
         }
         if (ring.copies == 0 && ring.fallbacks == 0) return;
         if (ring.h2d_timed > 0 || ring.host_stage_ms > 0.0 || ring.enqueue_ms > 0.0 || ring.slot_wait_ms > 0.0) {
@@ -3987,6 +4022,18 @@ static void pinned_stage_report_atexit() {
                 ring.granularity_max_jobs,
                 ring.granularity_max_read_jobs,
                 ring.granularity_max_depth);
+        }
+        if (ring.coalesce_groups > 0 || ring.coalesce_jobs > 0) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] pinned staging%s async coalesce: groups=%lu jobs=%lu read_bytes=%lu h2d_enqueues=%lu waits=%lu slots=%zu slot=%.2f MiB\n",
+                name,
+                ring.coalesce_groups,
+                ring.coalesce_jobs,
+                ring.coalesce_read_bytes,
+                ring.coalesce_h2d_enqueues,
+                ring.coalesce_waits,
+                ring.coalesce_slots.size(),
+                ring.coalesce_slot_sz / (1024.0 * 1024.0));
         }
     };
     report_ring("", g_batch.stage_ring);
@@ -4042,6 +4089,76 @@ static bool pinned_stage_ensure(pinned_stage_ring &ring, size_t need, bool force
     ring.report_registered = true;
     std::fprintf(stderr, "[moe_stream_batch] pinned staging: enabled, %d slots of %.2f MiB\n",
                  n_slots, need / (1024.0 * 1024.0));
+    return true;
+}
+
+static bool expert_pack_coalesce_adjacent_async_enabled() {
+    return expert_pack_env_bool("GGML_MOE_IO_COALESCE_ADJACENT_ASYNC", false);
+}
+
+static size_t expert_pack_coalesce_max_bytes() {
+    const char *env = std::getenv("GGML_MOE_IO_COALESCE_MAX_BYTES");
+    if (env && env[0]) {
+        const long long v = std::atoll(env);
+        if (v > 0) return (size_t)v;
+    }
+    return 16ull * 1024ull * 1024ull;
+}
+
+static int expert_pack_coalesce_slot_count() {
+    const char *env = std::getenv("GGML_MOE_IO_COALESCE_SLOTS");
+    if (env && env[0]) {
+        const int v = std::atoi(env);
+        if (v > 0) return v;
+    }
+    return 8;
+}
+
+static bool pinned_stage_coalesce_ensure(pinned_stage_ring &ring, size_t need) {
+    if (ring.coalesce_failed) return false;
+    const size_t alloc_need = (size_t)align_up_u64((uint64_t)need, (uint64_t)expert_pack_direct_alignment());
+    const int n_slots = expert_pack_coalesce_slot_count();
+    if (!ring.coalesce_slots.empty() && (int)ring.coalesce_slots.size() == n_slots && ring.coalesce_slot_sz >= alloc_need) {
+        return true;
+    }
+
+    for (pinned_stage_slot &slot : ring.coalesce_slots) {
+        if (slot.pending && slot.done) {
+            cudaEventSynchronize(slot.done);
+            slot.pending = false;
+        }
+        if (slot.host) cudaFreeHost(slot.host);
+        if (slot.done) cudaEventDestroy(slot.done);
+        slot.host = nullptr;
+        slot.done = nullptr;
+    }
+    ring.coalesce_slots.clear();
+    ring.coalesce_slot_sz = alloc_need;
+    ring.coalesce_next = 0;
+    ring.coalesce_slots.resize((size_t)n_slots);
+    for (pinned_stage_slot &slot : ring.coalesce_slots) {
+        if (cudaHostAlloc(&slot.host, ring.coalesce_slot_sz, cudaHostAllocDefault) != cudaSuccess ||
+                cudaEventCreateWithFlags(&slot.done, cudaEventDisableTiming) != cudaSuccess) {
+            for (pinned_stage_slot &cleanup : ring.coalesce_slots) {
+                if (cleanup.host) cudaFreeHost(cleanup.host);
+                if (cleanup.done) cudaEventDestroy(cleanup.done);
+                cleanup.host = nullptr;
+                cleanup.done = nullptr;
+            }
+            ring.coalesce_slots.clear();
+            ring.coalesce_slot_sz = 0;
+            ring.coalesce_failed = true;
+            std::fprintf(stderr,
+                "[moe_stream_batch] async coalesced staging: init failed for %d slots of %.2f MiB\n",
+                n_slots, need / (1024.0 * 1024.0));
+            return false;
+        }
+    }
+    if (!g_pinned_stage_report_registered.exchange(true)) {
+        std::atexit(pinned_stage_report_atexit);
+    }
+    std::fprintf(stderr, "[moe_stream_batch] async coalesced staging: enabled, %d slots of %.2f MiB\n",
+            n_slots, need / (1024.0 * 1024.0));
     return true;
 }
 
@@ -4335,23 +4452,9 @@ static bool expert_pack_iouring_copy_jobs(
             std::fclose(f);
         }
     }
-    expert_pack_record_iouring_batch(read_jobs.size());
-    ring.iouring_batches += 1;
-    ring.iouring_jobs += read_jobs.size();
-    const size_t bucket = expert_pack_iouring_batch_bucket(read_jobs.size());
-    if (bucket < 6) {
-        ring.iouring_batch_hist[bucket] += 1;
-    }
-
-    struct pending_job {
-        size_t job_idx = 0;
-        size_t slot_idx = 0;
-        size_t bytes = 0;
-        std::chrono::steady_clock::time_point copy_start;
-    };
-
+    const bool async_coalesce = expert_pack_coalesce_adjacent_async_enabled();
     std::vector<size_t> job_order;
-    if (sort_by_offset && read_jobs.size() > 1) {
+    if ((sort_by_offset || async_coalesce) && read_jobs.size() > 1) {
         job_order.resize(read_jobs.size());
         for (size_t i = 0; i < read_jobs.size(); ++i) {
             job_order[i] = i;
@@ -4367,6 +4470,73 @@ static bool expert_pack_iouring_copy_jobs(
     auto ordered_job_idx = [&](size_t seq_idx) -> size_t {
         const size_t read_idx = job_order.empty() ? seq_idx : job_order[seq_idx];
         return read_jobs[read_idx];
+    };
+
+    struct read_unit {
+        size_t first_seq = 0;
+        size_t n_jobs = 1;
+        size_t bytes = 0;
+        bool coalesced = false;
+    };
+
+    std::vector<read_unit> read_units;
+    read_units.reserve(read_jobs.size());
+    size_t coalesced_groups_this_batch = 0;
+    if (async_coalesce && read_jobs.size() > 1 && pinned_stage_coalesce_ensure(ring, expert_pack_coalesce_max_bytes())) {
+        const size_t max_span = expert_pack_coalesce_max_bytes();
+        size_t seq = 0;
+        while (seq < read_jobs.size()) {
+            const size_t first_job_idx = ordered_job_idx(seq);
+            const expert_pack_entry *first_entry = jobs[first_job_idx].pack_entry;
+            size_t group_end = seq + 1;
+            uint64_t span_end = first_entry->offset + read_sz;
+            while (group_end < read_jobs.size()) {
+                const size_t next_job_idx = ordered_job_idx(group_end);
+                const expert_pack_entry *next_entry = jobs[next_job_idx].pack_entry;
+                if (!next_entry || next_entry->source_idx != first_entry->source_idx) break;
+                if (next_entry->offset != span_end) break;
+                const uint64_t next_end = next_entry->offset + read_sz;
+                if (next_end - first_entry->offset > max_span) break;
+                span_end = next_end;
+                ++group_end;
+            }
+            const size_t group_jobs = group_end - seq;
+            if (group_jobs >= 2) {
+                read_units.push_back({seq, group_jobs, (size_t)(span_end - first_entry->offset), true});
+                ++coalesced_groups_this_batch;
+            } else {
+                read_units.push_back({seq, 1, read_sz, false});
+            }
+            seq = group_end;
+        }
+        if (coalesced_groups_this_batch > 0) {
+            static std::atomic<int> first_async_coalesce_log{0};
+            if (first_async_coalesce_log.fetch_add(1) == 0) {
+                std::fprintf(stderr,
+                    "[moe_stream_batch] async coalesced staging active: op=%s groups=%zu read_jobs=%zu\n",
+                    trace_op ? trace_op : "", coalesced_groups_this_batch, read_jobs.size());
+            }
+        }
+    } else {
+        for (size_t seq = 0; seq < read_jobs.size(); ++seq) {
+            read_units.push_back({seq, 1, read_sz, false});
+        }
+    }
+
+    expert_pack_record_iouring_batch(read_jobs.size());
+    ring.iouring_batches += 1;
+    ring.iouring_jobs += read_jobs.size();
+    const size_t bucket = expert_pack_iouring_batch_bucket(read_jobs.size());
+    if (bucket < 6) {
+        ring.iouring_batch_hist[bucket] += 1;
+    }
+
+    struct pending_job {
+        size_t unit_idx = 0;
+        size_t slot_idx = 0;
+        size_t bytes = 0;
+        bool coalesced = false;
+        std::chrono::steady_clock::time_point copy_start;
     };
 
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
@@ -4409,9 +4579,11 @@ static bool expert_pack_iouring_copy_jobs(
     uint64_t io_batch_inflight_sum = 0;
     uint64_t io_batch_inflight_samples = 0;
     uint64_t io_batch_inflight_max = 0;
-    auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
-        const Job &job = jobs[job_idx];
-        pinned_stage_slot &slot = ring.slots[slot_idx];
+    auto submit_one = [&](size_t unit_idx, size_t slot_idx, size_t pending_idx) -> bool {
+        const read_unit &unit = read_units[unit_idx];
+        const size_t first_job_idx = ordered_job_idx(unit.first_seq);
+        const Job &job = jobs[first_job_idx];
+        pinned_stage_slot &slot = unit.coalesced ? ring.coalesce_slots[slot_idx] : ring.slots[slot_idx];
         if (slot.pending) {
             const auto wait_start = (profile_stage || profile_io_batch) ?
                 std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -4419,48 +4591,57 @@ static bool expert_pack_iouring_copy_jobs(
             if (profile_stage || profile_io_batch) {
                 const auto wait_end = std::chrono::steady_clock::now();
                 const double slot_wait_ms = std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
-                if (profile_stage) ring.slot_wait_ms += slot_wait_ms;
+                if (profile_stage && !unit.coalesced) ring.slot_wait_ms += slot_wait_ms;
                 if (profile_io_batch) io_batch_slot_wait_ms += slot_wait_ms;
             }
             slot.pending = false;
-            ++ring.waits;
+            if (unit.coalesced) {
+                ++ring.coalesce_waits;
+            } else {
+                ++ring.waits;
+            }
         }
-        pinned_stage_collect_timing(ring, slot);
+        if (!unit.coalesced) {
+            pinned_stage_collect_timing(ring, slot);
+        }
 
         io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
         if (!sqe) return false;
         pending[pending_idx] = {
-            job_idx,
+            unit_idx,
             slot_idx,
-            read_sz,
+            unit.bytes,
+            unit.coalesced,
             (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
-        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)unit.bytes, (off_t)job.pack_entry->offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };
 
     const auto submit_start = std::chrono::steady_clock::now();
-    size_t next_job = 0;
+    size_t next_unit = 0;
     size_t inflight = 0;
     const size_t refill_batch = std::min(expert_pack_io_refill_batch(), depth);
     struct reusable_pending {
         size_t pending_idx = 0;
         size_t slot_idx = 0;
+        bool coalesced = false;
     };
     std::vector<reusable_pending> reusable_pending_slots;
     reusable_pending_slots.reserve(depth);
-    while (next_job < read_jobs.size() && inflight < depth) {
+    while (next_unit < read_units.size() && inflight < depth) {
         const size_t pending_idx = free_pending.back();
         free_pending.pop_back();
-        const size_t slot_idx = ring.next++ % ring.slots.size();
-        if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+        const read_unit &unit = read_units[next_unit];
+        const size_t slot_idx = unit.coalesced ? ring.coalesce_next++ % ring.coalesce_slots.size() : ring.next++ % ring.slots.size();
+        if (!submit_one(next_unit, slot_idx, pending_idx)) {
             ++g_expert_pack.iouring_fallbacks;
             return false;
         }
-        ++next_job;
+        ++next_unit;
         ++inflight;
     }
     if (io_uring_submit(ring_io) < 0) {
@@ -4476,7 +4657,7 @@ static bool expert_pack_iouring_copy_jobs(
         io_batch_submit_ms += initial_submit_ms;
         ++io_batch_submit_calls;
     }
-    const size_t initial_submit_jobs = next_job;
+    const size_t initial_submit_jobs = next_unit;
 
     size_t completed = 0;
     while (completed < read_jobs.size()) {
@@ -4505,23 +4686,36 @@ static bool expert_pack_iouring_copy_jobs(
             }
 
             const pending_job done = pending[pending_idx];
-            const Job &job = jobs[done.job_idx];
-            pinned_stage_slot &slot = ring.slots[done.slot_idx];
+            const read_unit &unit = read_units[done.unit_idx];
+            const size_t first_job_idx = ordered_job_idx(unit.first_seq);
+            const Job &first_job = jobs[first_job_idx];
+            pinned_stage_slot &slot = done.coalesced ? ring.coalesce_slots[done.slot_idx] : ring.slots[done.slot_idx];
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
             ++ring.iouring_cqes;
 
             const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch || profile_io_wait;
             const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if ((profile_stage || profile_copy_h2d) && slot.copy_start) {
+            if (!done.coalesced && (profile_stage || profile_copy_h2d) && slot.copy_start) {
                 if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) {
                     return false;
                 }
             }
-            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
-                return false;
+            if (done.coalesced) {
+                for (size_t i = 0; i < unit.n_jobs; ++i) {
+                    const size_t job_idx = ordered_job_idx(unit.first_seq + i);
+                    const Job &job = jobs[job_idx];
+                    const size_t delta = (size_t)(job.pack_entry->offset - first_job.pack_entry->offset);
+                    if (cudaMemcpyAsync(job.dst, (const char *)slot.host + delta, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                        return false;
+                    }
+                }
+            } else {
+                if (cudaMemcpyAsync(first_job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                    return false;
+                }
             }
-            if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
+            if (!done.coalesced && (profile_stage || profile_copy_h2d) && slot.copy_done) {
                 if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) {
                     return false;
                 }
@@ -4534,7 +4728,7 @@ static bool expert_pack_iouring_copy_jobs(
                 return false;
             }
             double enqueue_ms = 0.0;
-            if (profile_stage) {
+            if (profile_stage && !done.coalesced) {
                 const auto enqueue_end = std::chrono::steady_clock::now();
                 enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
                 ring.enqueue_ms += enqueue_ms;
@@ -4548,15 +4742,25 @@ static bool expert_pack_iouring_copy_jobs(
             if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
             if (profile_io_wait) io_wait_enqueue_ms += enqueue_ms;
             slot.pending = true;
-            ++ring.copies;
-            ++g_expert_pack.iouring_reads;
-            g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
-            ++g_expert_pack.iouring_h2d_enqueues;
+            ring.copies += unit.n_jobs;
+            g_expert_pack.iouring_reads.fetch_add(unit.n_jobs);
+            g_expert_pack.iouring_bytes.fetch_add(expert_bytes * unit.n_jobs);
+            g_expert_pack.iouring_h2d_enqueues.fetch_add(unit.n_jobs);
+            if (done.coalesced) {
+                ++ring.coalesce_groups;
+                ring.coalesce_jobs += unit.n_jobs;
+                ring.coalesce_read_bytes += unit.bytes;
+                ring.coalesce_h2d_enqueues += unit.n_jobs;
+                ++g_expert_pack.coalesce_groups;
+                g_expert_pack.coalesce_jobs.fetch_add(unit.n_jobs);
+                g_expert_pack.coalesce_read_bytes.fetch_add(unit.bytes);
+                g_expert_pack.coalesce_h2d_enqueues.fetch_add(unit.n_jobs);
+            }
             if (profile_io_batch) ++io_batch_cqes;
 
             if (done.copy_start != std::chrono::steady_clock::time_point{}) {
                 double h2d_ms = -1.0;
-                if (profile_copy_h2d && slot.copy_start && slot.copy_done &&
+                if (!done.coalesced && profile_copy_h2d && slot.copy_start && slot.copy_done &&
                         cudaEventSynchronize(slot.copy_done) == cudaSuccess) {
                     float h2d_ms_f = 0.0f;
                     if (cudaEventElapsedTime(&h2d_ms_f, slot.copy_start, slot.copy_done) == cudaSuccess) {
@@ -4565,43 +4769,49 @@ static bool expert_pack_iouring_copy_jobs(
                 }
                 const auto copy_end = std::chrono::steady_clock::now();
                 const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
-                if (batch_ttft_trace_enabled()) {
-                    batch_ttft_trace_record(
-                        trace_op,
-                        job.tensor,
-                        job.expert_idx,
-                        expert_bytes,
-                        false,
-                        true,
-                        false,
-                        wall_ms);
-                }
-                if (profile_copy) {
-                    copy_profile_record(
-                            trace_op, job.tensor, job.expert_idx, expert_bytes,
-                            true, false, true,
-                            0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
+                for (size_t i = 0; i < unit.n_jobs; ++i) {
+                    const size_t job_idx = ordered_job_idx(unit.first_seq + i);
+                    const Job &job = jobs[job_idx];
+                    if (batch_ttft_trace_enabled()) {
+                        batch_ttft_trace_record(
+                            trace_op,
+                            job.tensor,
+                            job.expert_idx,
+                            expert_bytes,
+                            false,
+                            true,
+                            false,
+                            wall_ms);
+                    }
+                    if (profile_copy) {
+                        copy_profile_record(
+                                trace_op, job.tensor, job.expert_idx, expert_bytes,
+                                true, false, true,
+                                0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
+                    }
                 }
             }
 
-            ++completed;
+            completed += unit.n_jobs;
             --inflight;
-            reusable_pending_slots.push_back({pending_idx, done.slot_idx});
+            reusable_pending_slots.push_back({pending_idx, done.slot_idx, done.coalesced});
             return true;
         };
 
         auto refill_pending = [&]() -> bool {
             size_t submitted = 0;
-            while (next_job < read_jobs.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
+            while (next_unit < read_units.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
                 const reusable_pending reusable = reusable_pending_slots.back();
                 reusable_pending_slots.pop_back();
                 const size_t pending_idx = reusable.pending_idx;
-                const size_t slot_idx = reusable.slot_idx;
-                if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+                const read_unit &unit = read_units[next_unit];
+                const size_t slot_idx = unit.coalesced ? ring.coalesce_next++ % ring.coalesce_slots.size() :
+                    (reusable.coalesced ? ring.next++ % ring.slots.size() : reusable.slot_idx);
+                if (!submit_one(next_unit, slot_idx, pending_idx)) {
                     ++g_expert_pack.iouring_fallbacks;
                     return false;
                 }
-                ++next_job;
+                ++next_unit;
                 ++inflight;
                 ++submitted;
             }
@@ -4625,7 +4835,7 @@ static bool expert_pack_iouring_copy_jobs(
         const auto wait_start = std::chrono::steady_clock::now();
         const size_t wait_completed_before = completed;
         const size_t wait_inflight_before = inflight;
-        const size_t wait_next_job_before = next_job;
+        const size_t wait_next_job_before = next_unit;
         const double wait_enqueue_before = io_wait_enqueue_ms;
         io_uring_cqe *cqe = nullptr;
         ++g_expert_pack.iouring_wait_calls;
