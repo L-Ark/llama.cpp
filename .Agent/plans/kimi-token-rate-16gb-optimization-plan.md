@@ -63571,3 +63571,108 @@ Decision rule:
   `57169.16 ms / 77`, semantic output passes, and all memory/TTFT/IO gates pass.
 - If promoted, update the reproducible script default, commit immediately, and
   push to `wici/vendor/kimi-moe-stream-on-vendor`.
+
+### 7KD result
+
+Timestamp: 2026-07-05.
+
+Implementation tested:
+
+- Commit `1169ff099624db671bf0980de21514c9acd89cc0`.
+- Added a default-off `GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE=1` gate for
+  same-type `IQ3_XXS/IQ3_XXS` up/gate rows.
+- The code compiled successfully in `build-cuda-batch`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kd-same-iq3-parallel-n32`.
+
+Actual command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 1169ff099
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kd-same-iq3-parallel-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Reproducibility note:
+
+- This rejected run passed the new env var directly to `systemd-run`.
+- Future promoted runs should pass new runtime vars through
+  `EXTRA_RUNTIME_ENV` or script defaults so `env.txt` records them. In this run,
+  `stderr.txt` confirms activation:
+
+```text
+[moe_stream] same-type parallel up/gate streams active: type=18
+[moe_stream] mixed-type up/gate parallel stage active
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75857.65 ms`;
+- decode `23098.45 ms / 31`, `1.34 tok/s`;
+- total `98970.53 ms / 48 tokens`;
+- memory peak `15899996160`;
+- memory final `15095541760`;
+- swap max `0`;
+- anon `450560`;
+- file `14857498624`;
+- kernel `234606592`;
+- inactive_file `3052101632`;
+- active_file `11804794880`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring wait `23018056 us`;
+- iouring batches `5178`, wait calls `18717`;
+- current-down overlap planned jobs `3673`, worker `3318552 us`;
+- down hit rate `73.4%`, slots `766`;
+- upgate hit rate `45.2%`, slots `1735`.
+
+Comparison:
+
+- Current accepted script-default n32: `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KD same-type IQ3 parallel n32: `23098.45 ms / 31`, `1.34 tok/s`.
+- 7KD is `431.06 ms` slower on n32.
+
+Gap analysis:
+
+- The same-type IQ3 branch did activate and should have reduced exposed
+  up+gate compute time.
+- However runtime iouring wait increased to `23.0 s`, higher than the accepted
+  default n32 and the 7JZ diagnostic baseline.
+- The likely reason is that same-type IQ3 dual-stream staging increases
+  concurrent movement pressure on the same SSD/pinned/copy resources. The extra
+  IO wait erases the theoretical compute overlap.
+- This is consistent with the broader post-7JY finding that the current SOTA is
+  movement-bound, not compute-bound.
+
+Decision:
+
+- Reject 7KD.
+- Do not run n96.
+- Revert the runtime code to the previous IQ2-only same-type parallel behavior.
+- Keep production default unchanged:
+  - mixed-type up/gate parallel staging remains enabled;
+  - same-type IQ3 up/gate parallel staging is not promoted.

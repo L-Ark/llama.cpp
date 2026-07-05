@@ -6456,20 +6456,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         std::fprintf(stderr, "[moe_stream] IQ2_S batched MMVQ up/gate path active\n");
     }
     const char *parallel_env = std::getenv("GGML_MOE_STREAM_UP_GATE_PARALLEL");
-    const bool same_type_iq3_parallel_stage =
-        src0_type == GGML_TYPE_IQ3_XXS &&
-        expert_pack_env_bool("GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE", false);
-    const bool same_type_parallel_supported =
-        src0_type == GGML_TYPE_IQ2_S || same_type_iq3_parallel_stage;
     const bool parallel_up_gate =
         parallel_env && parallel_env[0] && parallel_env[0] != '0' &&
         !mixed_types &&
-        same_type_parallel_supported && iq2s_batch_mmvq && !serial_up_gate &&
+        src0_type == GGML_TYPE_IQ2_S && iq2s_batch_mmvq && !serial_up_gate &&
         !exact_prompt_q8k &&
         bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
     static std::atomic<int> first_parallel_up_gate{0};
     if (parallel_up_gate && first_parallel_up_gate.fetch_add(1) == 0) {
-        std::fprintf(stderr, "[moe_stream] same-type parallel up/gate streams active: type=%d\n", (int)src0_type);
+        std::fprintf(stderr, "[moe_stream] IQ2_S parallel up/gate streams active\n");
     }
     const char *parallel_stage_env = std::getenv("GGML_MOE_STREAM_UP_GATE_PARALLEL_STAGE");
     const bool parallel_stage =
