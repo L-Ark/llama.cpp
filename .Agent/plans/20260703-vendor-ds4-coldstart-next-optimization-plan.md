@@ -4,6 +4,45 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Full Native Expert-Pack mmap Reproduction Rejected, Return to Bottleneck Decomposition
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full native expert-pack mmap 的 `5.1 tok/s` 诊断信号未通过当前源码严格复现，因此不能升级为 SOTA，也不能继续作为已证明优化路线反复采样。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`156.15 GB`, `145.42 GiB`)
+- Accepted gate pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- Accepted config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT France gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Full native expert-pack mmap rejection:
+
+- Rejection artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/native-full-pack-mmap-rebuild-repro-rejected-20260706.json`
+- Diagnostic-only positive signal: `/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb`, `eval_tok_s=5.1`, `TTFT=26197.922333 ms`, `memory_peak_bytes=16000000000`, `correctness_ok=true`.
+- Clean rebuilt-source reproduction: `/root/lfz/runs/vendor-ds4-16gb/20260705T230203Z-20260706_full_native_pack_mmap_rebuild_repro_71fe344/france-cpu40-vram0gb`, `eval_tok_s=4.2`, `prompt_tok_s=1.9`, `TTFT=33035.198922 ms`, `elapsed_seconds=64.49`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15051735040`, `memory_max_events=18032`, `pgmajfault=288389`, `workingset_refault_file=1227814`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- France output was manually reviewed as semantic and coherent.
+- Full pack mmap worked mechanically in the rejected reproduction: `hits=35880`, `misses=0`, `fallback_gguf=0`, `bytes=159897354240`; gate one-pack also had `hits=4886`, `misses=0`.
+- Rejection reason: token-rate gate failed because `4.2 tok/s <= 4.4 tok/s`. TTFT/RAM/correctness passed, but SOTA promotion requires all gates. There is no pushed-source reproduction step because the first clean reproduction did not become a candidate.
+
+Updated bottleneck interpretation:
+
+- The current accepted path remains cold expert source/page movement plus exact up/down CPU fallback dominated.
+- The full native expert-pack mmap route can remove GGUF fallback reads in this build, but the clean reproduction shows that this alone does not reliably improve token rate under the 16GB page-cache-constrained cgroup. It may also increase cgroup reclaim pressure and prefill time (`4665.907 ms` in the rejected run versus `4092.052 ms` in the accepted SOTA run).
+- The next step must be a fresh bottleneck decomposition of the accepted `4.4 tok/s` path, not another unbounded source patch. The decomposition should quantify per-token time in: gate one-pack prefill, gate/cache decode hits/misses, CPU fallback source movement, CPU fallback math, CUDA single/batch work, cgroup reclaim/refault pressure, and synchronization.
+
+Updated next executable plan:
+
+1. Commit and push this rejection artifact plus plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately, so the failed candidate and its exact reproduction metadata are not lost.
+2. Run one strict cold diagnostic on the accepted `4.4 tok/s` config with profiling enabled only for bottleneck attribution, not for SOTA promotion. Keep model, pack, cgroup, prompt, `cpu_moe=40`, `vram_cache=0`, `drop_caches`, and accepted env unchanged; add only CPU MoE/profile counters needed to split fallback math/source/sync time.
+3. Compare that profiling run against the accepted SOTA and the rejected full-pack mmap run. Record token rates, TTFT, cgroup memory/file bytes, major faults, refaults, gate prefill timing, one-pack reads, VRAM cache hits/misses, CPU fallback profile, and full France answer.
+4. Use the measured time split to choose the next optimization only if it has a concrete upper bound above `10 tok/s` after RAM/TTFT/correctness costs. Candidate directions must be rejected before implementation if the hard bound cannot exceed target with margin.
+5. Do not delete or move model files during this profiling step. Disk cleanup, alternate GGUF downloads, and GLM deletion remain separate actions requiring explicit user approval.
+6. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct/coherent France output.
+7. If any future run improves token rate but violates TTFT or another gate, commit and push it only as a rejected diagnostic, clearly marked `not accepted`.
+8. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Future rollback must be able to reproduce the exact metric from the remote branch.
+
 ### 2026-07-06 Latest Active Plan: Reopen Full Native Expert-Pack mmap, Reproduce Before Promotion
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。刚发现的 full native expert-pack mmap `5.1 tok/s` 结果只能视为 positive diagnostic candidate，不能直接标记为 SOTA；必须先用当前源码重建、严格 cold 复现、记录完整复现信息、push 到 `ssd/vendor/deepseek-token-rate-16gb`，再从 pushed source 做 clean reproduction 后才允许升级。

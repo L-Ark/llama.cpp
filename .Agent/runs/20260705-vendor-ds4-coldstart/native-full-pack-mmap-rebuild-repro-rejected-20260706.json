@@ -1,0 +1,167 @@
+{
+  "created_at_utc": "2026-07-05T23:07:35Z",
+  "decision": "rejected_not_sota",
+  "reason": "The clean strict-cold rebuilt-source reproduction reached eval_tok_s=4.2, which is below the accepted 4.4 tok/s SOTA. RAM, TTFT, and correctness gates passed, but the token-rate promotion gate failed.",
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "memory_max_events": 16879,
+    "pgmajfault": 272731,
+    "workingset_refault_file": 1638880,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "diagnostic_candidate_reference": {
+    "eval_tok_s": 5.1,
+    "prompt_tok_s": 1.9,
+    "ttft_ms": 26197.922333,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 12725145600,
+    "memory_max_events": 26,
+    "pgmajfault": 287105,
+    "workingset_refault_file": 1914608,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb",
+    "status": "positive_diagnostic_only_not_promoted"
+  },
+  "rebuild_reproduction": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T230203Z-20260706_full_native_pack_mmap_rebuild_repro_71fe344",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T230203Z-20260706_full_native_pack_mmap_rebuild_repro_71fe344/france-cpu40-vram0gb",
+    "eval_tok_s": 4.2,
+    "prompt_tok_s": 1.9,
+    "ttft_ms": 33035.198922,
+    "elapsed_seconds": 64.49,
+    "exit_status": 0,
+    "systemd_status": 0,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required; manual review: coherent and semantically correct France paragraph",
+    "memory_peak_bytes": 16000000000,
+    "memory_current_bytes": 15184465920,
+    "memory_file_bytes": 15051735040,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 18032,
+    "pgmajfault": 288389,
+    "pgfault": 2515694,
+    "workingset_refault_file": 1227814,
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "source_and_build": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "source_head_at_run": "71fe3440cd58fce397fd4f4526195a555d148b9f",
+    "remote": "ssd",
+    "remote_branch": "vendor/deepseek-token-rate-16gb",
+    "remote_head_before_rejection_commit": "71fe3440cd58fce397fd4f4526195a555d148b9f",
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli",
+    "binary_build_string": "b14879-477e51109",
+    "binary_sha256": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+    "binary_mtime_utc": "2026-07-05 22:52:53.830163411 +0000",
+    "binary_size_bytes": 1625488,
+    "build_command": "cmake --build build-ds4-moe-stream-batch-probe -j 16",
+    "cmake_flags": {
+      "CMAKE_BUILD_TYPE": "Release",
+      "GGML_CUDA_MOE_STREAM": "ON",
+      "GGML_CUDA_MOE_STREAM_BATCH": "ON"
+    }
+  },
+  "model_and_packs": {
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "model_size_bytes": 156148189760,
+    "gate_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "gate_pack_size_bytes": 20495904768,
+    "gate_pack_mtime_utc": "2026-07-02 11:13:53.933524157 +0000",
+    "full_native_expert_pack": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "full_native_expert_pack_size_bytes": 147174760448,
+    "full_native_expert_pack_mtime_utc": "2026-06-23 08:18:58.555834225 +0000",
+    "full_native_expert_pack_format": "GGMLMOEPACKv1",
+    "full_native_expert_pack_entries": 33024,
+    "full_native_expert_pack_coverage": "43 layers x 256 experts x gate/up/down roles",
+    "full_native_expert_pack_sha256": "not_computed_large_file"
+  },
+  "env_delta": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "GGML_MOE_CPU_FALLBACK_PACK_MMAP": "1",
+    "GGML_KIMI_CPU_MOE_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_NAME_PROFILE": "1",
+    "GGML_MOE_VRAM_CACHE_GB": "0"
+  },
+  "cli": {
+    "runner": ".Agent/run-tools/strict_ds4_runner.py",
+    "memory_max_bytes": 16000000000,
+    "ram_kill_threshold_bytes": 16000000000,
+    "drop_caches_before_case": true,
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "extra_args": ["-c", "256", "-b", "16", "-ub", "16"]
+  },
+  "counters": {
+    "gate_one_prefill": {
+      "attempted": 3000,
+      "inserted": 3000,
+      "bytes": 13369344000,
+      "elapsed_ms": 4665.907,
+      "pack_misses": 0,
+      "read_failures": 0
+    },
+    "gate_one_expert_pack": {
+      "hits": 4886,
+      "misses": 0,
+      "reads": 4886,
+      "bytes": 21774204928,
+      "direct_reads": 4886,
+      "direct_failures": 0
+    },
+    "vram_cache": {
+      "hits": 33265,
+      "misses": 1886,
+      "hit_rate": "94.6%"
+    },
+    "full_pack_mmap": {
+      "entries": 33024,
+      "hits": 35880,
+      "misses": 0,
+      "read_failures": 0,
+      "fallback_gguf": 0,
+      "bytes": 159897354240
+    },
+    "kimi_cpu_moe_profile": {
+      "down_calls": 16920,
+      "total_ms_per_call": 2.047,
+      "fallback_t0_ms_per_call": 1.551,
+      "cuda_single_ms_per_call": 0.481,
+      "single_accept": 35151,
+      "single_decline": 38222
+    }
+  },
+  "comparison": {
+    "accepted_sota_eval_tok_s": 4.4,
+    "rebuild_repro_eval_tok_s": 4.2,
+    "delta_tok_s": -0.2,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_pass": true,
+    "ram_pass": true,
+    "correctness_pass": true,
+    "token_rate_pass": false,
+    "promotion_allowed": false
+  },
+  "next_action": "Do not promote full native expert-pack mmap. Update plan to keep accepted SOTA at 4.4 tok/s and run a fresh bottleneck decomposition before attempting any new optimization route."
+}
