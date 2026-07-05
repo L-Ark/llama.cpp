@@ -1,0 +1,117 @@
+{
+  "created_at_utc": "2026-07-05T23:42:59Z",
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-pointer-key-no-prefill-rejected-20260706.json",
+  "decision": "rejected_not_sota",
+  "reason": "Omitting GGML_MOE_STREAM_ONE_PREFILL_PROFILE entirely, to emulate 88de4bb09 pointer-key cache behavior, still reached only 3.9 tok/s. It passed TTFT/RAM/correctness but failed the token-rate gate against the accepted 4.4 tok/s SOTA.",
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "plan_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-pointer-key-no-prefill-plan-20260706.json",
+  "run": {
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T234010Z-20260706_full_pack_mmap_pointer_key_no_prefill_c673668",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T234010Z-20260706_full_pack_mmap_pointer_key_no_prefill_c673668/france-cpu40-vram0gb",
+    "eval_tok_s": 3.9,
+    "prompt_tok_s": 1.6,
+    "ttft_ms": 30289.066496,
+    "elapsed_seconds": 63.73,
+    "exit_status": 0,
+    "systemd_status": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_current_bytes": 15171506176,
+    "memory_file_bytes": 15040167936,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 18530,
+    "pgmajfault": 291193,
+    "pgfault": 2497051,
+    "workingset_refault_file": 1155670,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required; manual review: coherent and semantically correct France paragraph",
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "source_and_build": {
+    "source_head_at_run": "c67366840",
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli",
+    "binary_sha256": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+    "binary_build_string": "b14879-477e51109",
+    "cmake_flags": {
+      "CMAKE_BUILD_TYPE": "Release",
+      "GGML_CUDA_MOE_STREAM": "ON",
+      "GGML_CUDA_MOE_STREAM_BATCH": "ON"
+    }
+  },
+  "env_delta": {
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "unset",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "unset",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "GGML_MOE_CPU_FALLBACK_PACK_MMAP": "1",
+    "GGML_KIMI_CPU_MOE_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_NAME_PROFILE": "1"
+  },
+  "counters": {
+    "gate_prefill": {
+      "prefill_profile_env_seen": false,
+      "prefill_lines_seen": false,
+      "interpretation": "Current source used pointer-key mode for this run."
+    },
+    "gate_one_expert_pack": {
+      "hits": 4623,
+      "misses": 0,
+      "reads": 4623,
+      "bytes": 20602159104,
+      "direct_reads": 4623,
+      "direct_failures": 0,
+      "direct_fallbacks": 0
+    },
+    "vram_cache": {
+      "hits": 30528,
+      "misses": 4623,
+      "hit_rate": "86.8%"
+    },
+    "full_pack_mmap": {
+      "entries": 33024,
+      "hits": 35880,
+      "misses": 0,
+      "fallback_gguf": 0,
+      "bytes": 159897354240
+    },
+    "kimi_cpu_moe_profile": {
+      "calls": 16920,
+      "total_ms_per_call": 2.002,
+      "total_ms_est": 33873.84,
+      "fallback_t0_ms_per_call": 1.567,
+      "fallback_t0_ms_est": 26519.64,
+      "cuda_single_ms_per_call": 0.420,
+      "cuda_single_ms_est": 7106.40,
+      "batch_accept": 0,
+      "single_accept": 35151,
+      "single_decline": 38222
+    }
+  },
+  "comparison": {
+    "old_88de_diagnostic_eval_tok_s": 5.1,
+    "old_88de_diagnostic_memory_file_bytes": 12725145600,
+    "old_88de_diagnostic_memory_max_events": 26,
+    "devnull_no_prefill_eval_tok_s": 3.9,
+    "pointer_key_no_prefill_eval_tok_s": 3.9,
+    "pointer_key_no_prefill_memory_file_bytes": 15040167936,
+    "pointer_key_no_prefill_memory_max_events": 18530,
+    "conclusion": "Pointer-key cache behavior is not sufficient to reproduce the old 5.1 result on current source. The regression likely comes from another source change between 88de4bb09 and current, or from old binary/runtime state that must be reproduced directly before promotion."
+  },
+  "acceptance": {
+    "token_rate_pass": false,
+    "ttft_pass": true,
+    "ram_pass": true,
+    "correctness_pass": true,
+    "promotion_allowed": false
+  },
+  "next_action": "Plan an old-source 88de4bb09 rebuild/reproduction if disk and branch-state constraints allow. Do not promote current-source full-pack mmap variants."
+}

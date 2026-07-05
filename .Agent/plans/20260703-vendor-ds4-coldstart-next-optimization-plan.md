@@ -4,6 +4,33 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Pointer-Key No-Prefill Rejected, Plan Old 88de Reproduction
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。当前源码下 full-pack mmap 的三个变体已经全部失败：prefill 版 `4.2 tok/s`，`/dev/null` no-prefill `3.9 tok/s`，pointer-key no-prefill `3.9 tok/s`。因此不能再把旧 `5.1 tok/s` 当作当前源码候选；必须先复现或关闭旧 `88de4bb09` 二进制来源。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target remains `ssd/vendor/deepseek-token-rate-16gb` with git identity `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest rejection artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-pointer-key-no-prefill-rejected-20260706.json`
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T234010Z-20260706_full_pack_mmap_pointer_key_no_prefill_c673668/france-cpu40-vram0gb`
+- Metrics: `eval_tok_s=3.9`, `prompt_tok_s=1.6`, `TTFT=30289.066496 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15040167936`, `memory_max_events=18530`, `pgmajfault=291193`, `workingset_refault_file=1155670`, `ram_ok=true`, `correctness_ok=true`.
+- Counters: no prefill env, no prefill lines, gate one-pack `hits=4623 misses=0`, VRAM cache `hits=30528 misses=4623 hit_rate=86.8%`, full-pack mmap `hits=35880 misses=0 fallback_gguf=0`, CPU fallback `total=2.002 ms/call`, `fallback_t0=1.567 ms/call`.
+- Conclusion: pointer-key behavior is not enough to reproduce old `5.1 tok/s`; current-source full-pack mmap remains below accepted SOTA.
+
+Updated next executable plan:
+
+1. Commit and push this pointer-key rejection artifact plus plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Plan a bounded old-source reproduction of `88de4bb09`, because the old positive diagnostic binary reported build string `b14646-88de4bb09`. This is a diagnostic only; it does not promote SOTA until source is brought back to a pushed branch state and reproduced.
+3. Before switching source, confirm worktree is clean, remote branch is pushed, `/root` free space is sufficient, and current build hash is recorded. Do not delete or move model files.
+4. Use the existing build directory if possible to avoid creating a new large build tree: switch clean worktree to detached `88de4bb09`, rebuild `build-ds4-moe-stream-batch-probe/bin/llama-cli`, record old binary hash/build string, switch back to `feat/ds4-moe-stream-on-vendor`, then run strict runner against the old binary path. After the diagnostic, rebuild current head so future runs are not accidentally using the old binary.
+5. Old-source run acceptance for diagnostic: strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, correct/coherent France output, and record all token/TTFT/memory/counter metrics. If `eval_tok_s <= 4.4` or any gate fails, close old `5.1` as non-reproducible.
+6. If old source reproduces `>4.4`, do not promote immediately. First identify the exact source regression window and either revert/port the responsible behavior onto current branch or create a pushed source state that can cleanly reproduce the metric. Then rerun pushed-source reproduction before accepted SOTA promotion.
+
 ### 2026-07-06 Latest Active Plan: Test Full-Pack mmap Pointer-Key No-Prefill
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。`/dev/null` no-prefill 已失败；新的窄实验只测试一个源码差异：旧 `88de4bb09` 没有 `ONE_PREFILL_PROFILE`/named-key 逻辑，cache key 使用 `src0_data` pointer。当前要完全不设置 `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`，而不是用 `/dev/null`。
