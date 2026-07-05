@@ -63859,3 +63859,424 @@ Decision:
 - Revert the runtime code to the previous behavior.
 - Do not target same-type IQ3 up/gate parallelism again until an IO-miss
   reduction changes the bottleneck.
+
+## Phase 7KF - post-mixed IO wait attribution refresh
+
+Timestamp: 2026-07-05 10:24:41 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-run low-level IO wait attribution under the current accepted post-7JY SOTA
+  runtime.
+- Use the result to choose the next implementation target; do not change
+  runtime behavior in this phase.
+- Preserve all hard gates:
+  - host RAM below `15900000000` bytes including page cache;
+  - swap `0`;
+  - cold start only;
+  - semantic pass for `Please introduce France in a short paragraph.`;
+  - TTFT no more than 20% above `106331.72 ms`;
+  - `read_failures=0` and `iouring_fallbacks=0`.
+
+Why this is needed now:
+
+- 7JR showed pre-7JY foreground up+gate wait was the largest target:
+  `6723.351 ms` on n32.
+- 7JY then changed the up/gate schedule with mixed up/gate parallel staging and
+  improved n96 from `1.08 tok/s` to `1.35 tok/s`.
+- The post-7JY 7JZ profile still shows a large movement bucket:
+  - `runtime_load` wait `18589.233 ms`;
+  - `current_down_overlap` wait `2658.309 ms`;
+  - accepted-down stage `4032.474 ms`;
+  - down hit `73.0%`, upgate hit `44.1%`.
+- However 7JZ did not include the joined per-wait/per-read traces needed to
+  decide whether the next safe implementation should target:
+  - foreground up/gate misses;
+  - remaining foreground down misses;
+  - current-down overlap hiding/completeness;
+  - a specific tensor/layer outlier.
+
+Bottleneck hypothesis:
+
+- If post-7JY foreground up+gate still accounts for multiple seconds of
+  runtime wait, the next implementation should focus on earlier submission or
+  selective protection for up/gate misses.
+- If down foreground wait or current-down overlap dominates, the next phase
+  should target down overlap completeness instead.
+- If wait is evenly spread across many tensors with no safe concentration, avoid
+  scheduling changes and search for cache/admission improvements.
+
+Diagnostic experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 83a6e4799
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Offline analysis:
+
+- Join `io-wait-trace.csv`, `io-read-trace.csv`, and
+  `io-batch-profile.csv` by `batch_seq`.
+- Classify each batch by op and tensor kind:
+  - `ffn_up_exps` -> up;
+  - `ffn_gate_exps` -> gate;
+  - `ffn_down_exps` -> down;
+  - other -> other.
+- Compute:
+  - wait rows, wait sum, wall sum, read jobs, average first wait;
+  - split for `runtime_load` and `current_down_overlap`;
+  - top layers/tensors by wait;
+  - first-CQE wait share versus tail wait share;
+  - concentration of top 16/32/64 tensor keys.
+
+Decision rule:
+
+- If one safe bucket has `> 2 s` n32 wait upper bound and a plausible
+  implementation path that does not add reads or host RAM, write the next
+  implementation phase before coding.
+- If no bucket has enough concentration or the only large bound requires
+  already-rejected ideas, record that and do not implement.
+- This phase cannot become SOTA by itself; it is a diagnostic step required
+  before the next runtime change.
+
+### 7KF result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32`.
+
+Source:
+
+- commit `83a6e479980f7577bd1475708aace3b2e9eccc3b`.
+- No runtime source changes.
+- Diagnostic-only env:
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79516.39 ms`;
+- decode `23379.51 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- memory final `15075102720`;
+- swap max `0`;
+- anon `462848`;
+- file `14837592064`;
+- kernel `234602496`;
+- inactive_file `8501006336`;
+- active_file `6336204800`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring wait `19848093 us`;
+- iouring batches `5178`, wait calls `18177`;
+- current-down overlap planned jobs `3673`, worker `3313188 us`;
+- down hit rate `73.4%`, slots `766`;
+- upgate hit rate `45.2%`, slots `1735`.
+
+Wait trace summary:
+
+- wait rows `18177`;
+- wait sum `19857.069 ms`;
+- p50 `0.818212 ms`;
+- p90 `2.489119 ms`;
+- p99 `3.772514 ms`;
+- max `11.732651 ms`.
+
+By op/kind:
+
+| bucket | batches | read jobs | wait ms | first-CQE ms | tail ms | bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| runtime_load/all | 4318 | 19143 | 17303.732 | 9881.973 | 7421.759 | 97.127 GiB |
+| runtime_load/up | 1792 | 7854 | 7279.187 | 3851.094 | 3428.093 | 36.009 GiB |
+| runtime_load/gate | 1792 | 7855 | 7372.392 | 4473.598 | 2898.793 | 38.652 GiB |
+| runtime_load/down | 734 | 3434 | 2652.153 | 1557.280 | 1094.873 | 22.466 GiB |
+| current_down_overlap/down | 860 | 3504 | 2553.337 | 1612.711 | 940.626 | 20.585 GiB |
+
+Interpretation:
+
+- Post-7JY, foreground up+gate remains the largest exposed wait bucket:
+  `14651.579 ms` on diagnostic n32.
+- Remaining foreground down wait is smaller but still meaningful:
+  `2652.153 ms`.
+- Current-down overlap contributes `2553.337 ms` of worker-side wait, but that
+  path is at least partly hidden by existing overlap.
+- First-CQE wait is still a large part of the exposed runtime path:
+  - runtime all first-CQE wait `9881.973 ms`;
+  - up+gate first-CQE wait `8324.692 ms`.
+
+Tensor concentration:
+
+- Top runtime-load tensors by wait are broadly spread:
+  - top tensor `blk.28.ffn_gate_exps.weight`: `169.647 ms`;
+  - top layer `blk.24`: `444.396 ms`;
+  - top 64 tensors cover `8770.257 ms`, `50.68%` of runtime wait;
+  - top 128 tensors cover `15917.800 ms`, `91.99%` of runtime wait.
+- This is tensor-wide concentration, not expert-key concentration.
+
+Expert-key concentration for up+gate:
+
+- Attributed up+gate wait total: `14651.578 ms`.
+- Unique up+gate keys: `9406`.
+- Top expert-key coverage:
+  - top 16 keys: `104.865 ms`, `0.72%`, `79.62 MiB`;
+  - top 32 keys: `195.296 ms`, `1.33%`, `159.25 MiB`;
+  - top 64 keys: `367.917 ms`, `2.51%`, `315.88 MiB`;
+  - top 128 keys: `689.372 ms`, `4.71%`, `616.00 MiB`;
+  - top 256 keys: `1264.688 ms`, `8.63%`, `1240.75 MiB`;
+  - top 512 keys: `2271.601 ms`, `15.50%`, `2443.88 MiB`;
+  - top 1024 keys: `3926.457 ms`, `26.80%`, `4892.12 MiB`.
+
+Decision:
+
+- Do not implement exact up/gate key pinning/protection from this evidence:
+  the key-level distribution is too diffuse for the VRAM cost.
+- Do not retry same-type IQ3 parallelism: 7KD/7KE already showed movement and
+  synchronization regressions.
+- Do not retry broad depth/refill/wait-CQE tuning: wait remains first-CQE
+  latency, not syscall overhead.
+- The next viable implementation must reduce or hide foreground up+gate batch
+  first-CQE latency at the tensor/layer scheduling level, without adding reads
+  or host RAM.
+
+## Phase 7KG - post-mixed down fallback attribution
+
+Timestamp: 2026-07-05 10:34:28 CST.
+
+Status: planned.
+
+Goal:
+
+- Attribute the remaining post-7JY CPU fallback/down wall cost before any new
+  fallback implementation.
+- Determine whether Q4_0 down fallback is concentrated enough for a narrow
+  local optimization, or whether it is too diffuse and should remain on the
+  existing CPU fallback path.
+- Do not change runtime behavior in this phase.
+
+Why this is needed:
+
+- 7KF shows post-7JY foreground up+gate IO wait is still large, but prior
+  attempts to aggregate or parallelize up/gate either failed or did not release
+  critical-path wall time.
+- 7GN already warned that the next source optimization should be based on
+  wall-time profiles, with down path/fallback as a candidate.
+- 7JZ CPU aggregate still shows down fallback is large:
+  - down calls `2038`;
+  - down total `39.360 ms/call`;
+  - down cuda batch `2.242 ms/call`;
+  - down fallback `37.068 ms/call`.
+- Broad Q4_0 GPU/cache/down changes were rejected historically. A new fallback
+  change is only justified if the post-mixed fallback distribution is narrow
+  enough for a small, safe intervention.
+
+Theory and upper bound:
+
+- If fallback is concentrated in a tiny set of down tensor/expert keys, a
+  targeted fix could reduce repeated CPU fallback without moving all Q4_0 down
+  to GPU.
+- If fallback is spread across many layers/experts, the VRAM/RAM cost or
+  scheduling cost of fixing it will likely exceed the benefit, and the path
+  should be rejected.
+- The hard upper bound is the measured fallback wall bucket. Any practical
+  implementation must preserve:
+  - 16GB host RAM including page cache;
+  - current semantic quality;
+  - TTFT gate;
+  - zero read failures and zero iouring fallbacks.
+
+Diagnostic experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 83a6e4799
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kg-post-mixed-fallback-profile-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Offline analysis:
+
+- Parse `fallback-profile.csv` and stderr profile summaries.
+- Group fallback by:
+  - phase;
+  - `src0_type`;
+  - tensor name;
+  - layer;
+  - expert index when present;
+  - byte volume and wall time.
+- Compute concentration:
+  - top 16/32/64/128 tensor keys by fallback time;
+  - top layers by fallback time;
+  - decode-only Q4_0 down fallback share.
+
+Decision rule:
+
+- If top 64 exact fallback keys account for less than `~25%` of fallback wall,
+  reject exact fallback pinning/protection as too diffuse.
+- If one or two layers dominate and total candidate memory is under `750 MiB`,
+  write a separate implementation phase before coding.
+- If fallback is dominated by unsupported prompt types, do not optimize decode
+  fallback from this data.
+- This phase cannot become SOTA by itself; it only chooses or rejects the next
+  fallback implementation target.
+
+### 7KG result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kg-post-mixed-fallback-profile-n32`.
+
+Source:
+
+- commit `83a6e479980f7577bd1475708aace3b2e9eccc3b`.
+- No runtime source changes.
+- `MIN_PROFILE=0` enabled existing fallback/name/upgate/down profiles.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75650.10 ms`;
+- decode `24435.05 ms / 31`, `1.27 tok/s`;
+- memory peak `15899996160`;
+- memory final `15077203968`;
+- swap max `0`;
+- anon `454656`;
+- file `14837755904`;
+- kernel `234848256`;
+- inactive_file `7614050304`;
+- active_file `7222939648`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring wait `21254406 us`;
+- current-down overlap planned jobs `3673`, worker `3330642 us`;
+- CPU fallback pack mmap:
+  - hits `1727`;
+  - misses `9`;
+  - bytes `14260764672`;
+  - fallback GGUF `9`;
+- down profile:
+  - calls `2037`;
+  - total `38.244 ms/call`;
+  - cuda batch `2.311 ms/call`;
+  - fallback `35.890 ms/call`;
+- up/gate profile:
+  - calls `869`;
+  - wall `7.468 ms/call`;
+  - type `18/18` wall `9.265 ms/call`;
+  - type `22/22` wall `6.466 ms/call`.
+
+Fallback profile summary:
+
+- Total fallback profile:
+  - `73098.020 ms`;
+  - calls `14719`;
+  - count `25672`.
+- Prompt fallback dominates total fallback accounting:
+  - prompt all `70701.084 ms`;
+  - prompt type `22`: `21185.079 ms`;
+  - prompt type `11`: `20716.757 ms`;
+  - prompt type `18`: `17265.304 ms`;
+  - prompt type `23`: `8007.951 ms`;
+  - prompt type `2`: `3525.993 ms`.
+- Decode fallback is small and entirely Q4_0:
+  - decode all `2396.936 ms`;
+  - decode type `2`: `2396.936 ms`.
+
+Decode Q4_0 fallback by tensor/layer:
+
+| tensor | fallback ms | share | calls | approximate summed bytes |
+| --- | ---: | ---: | ---: | ---: |
+| `blk.9.ffn_down_exps.weight` | `409.672` | `17.09%` | `248` | `677.25 MiB` |
+| `blk.10.ffn_down_exps.weight` | `388.232` | `16.20%` | `248` | `748.12 MiB` |
+| `blk.18.ffn_down_exps.weight` | `383.072` | `15.98%` | `248` | `630.00 MiB` |
+| `blk.6.ffn_down_exps.weight` | `377.992` | `15.77%` | `248` | `653.62 MiB` |
+| `blk.8.ffn_down_exps.weight` | `315.600` | `13.17%` | `248` | `653.62 MiB` |
+| `blk.7.ffn_down_exps.weight` | `266.904` | `11.14%` | `248` | `637.88 MiB` |
+| `blk.15.ffn_down_exps.weight` | `255.464` | `10.66%` | `248` | `504.00 MiB` |
+
+Decode exact-key concentration:
+
+- top 8 keys: `224.160 ms`, `9.35%`, about `63.00 MiB`;
+- top 16 keys: `394.280 ms`, `16.45%`, about `126.00 MiB`;
+- top 32 keys: `647.539 ms`, `27.02%`, about `252.00 MiB`;
+- top 64 keys: `987.779 ms`, `41.21%`, about `504.00 MiB`;
+- top 128 keys: `1439.927 ms`, `60.07%`, about `1008.00 MiB`;
+- top 256 keys: `1961.062 ms`, `81.82%`, about `2016.00 MiB`;
+- top 512 keys: `2369.307 ms`, `98.85%`, about `4032.00 MiB`.
+
+Interpretation:
+
+- The post-mixed decode fallback bucket is real but bounded at about `2.4 s` on
+  diagnostic n32.
+- It is entirely `Q4_0` down fallback across seven layers:
+  `blk.6/7/8/9/10/15/18`.
+- Exact-key concentration is not strong enough for a low-risk cache/pin fix:
+  covering `41.21%` of fallback requires about `504 MiB`, and covering `60.07%`
+  requires about `1 GiB`.
+- CPU fallback pack mmap is already effective for this prompt:
+  only `9` misses fall back to GGUF, so this is not primarily a missing-pack or
+  page-cache cleanup problem.
+- Historical Q4_0 GPU batch support removed decode type-2 CPU fallback but
+  regressed wall time. 7KG does not change that decision because the current
+  bounded upper bound is still too small for another broad Q4_0 GPU/cache retry.
+
+Decision:
+
+- Do not implement Q4_0 fallback GPU/cache/pinning in the next phase.
+- Keep Q4_0 down CPU fallback as a documented residual cost.
+- If Q4_0 is revisited later, it must be a materially different design that:
+  - does not increase up/gate or down staging critical path;
+  - does not consume multi-GiB VRAM for broad key coverage;
+  - proves a wall-time upper bound larger than the current `~2.4 s` n32 bucket.
+- The next optimization should return to critical-path wall reduction rather
+  than summed fallback/IO counters alone.
