@@ -1,0 +1,150 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-compare-kernel-validation.json",
+  "date": "2026-07-05",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "diagnostic_accepted_default_off_but_performance_path_rejected",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "source_change": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off": true,
+    "new_env": [
+      "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE",
+      "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE_MAX_RECORDS"
+    ],
+    "behavior": "Extends HOT_BATCH_PROBE_OUT to optionally run a resident-source CPU-compatible CUDA compare after normal CPU fallback, compare GPU output to authoritative CPU dst, and write CSV timing/correctness metrics. It does not clear CPU fallback counts, skip CPU fallback, or change logits by default.",
+    "implementation_note": "The current compare kernel is intentionally simple: one output element per CUDA thread using CPU-compatible accumulation. It is a diagnostic lower implementation, not the intended optimized kernel."
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true,
+    "notes": "Only existing warnings were observed."
+  },
+  "runs": {
+    "smoke_compare32": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T014658Z-hot-batch-compare/smoke-hi-compare32",
+      "exit_status": 0,
+      "records": 246,
+      "compare_ran": 4,
+      "compare_ok": 4,
+      "max_abs": 0.0,
+      "diff_count": 0,
+      "rows_total": 3444,
+      "ready_rows": 202,
+      "not_in_manifest_rows": 3242,
+      "not_ready_rows": 0,
+      "src0_bytes_projected": 900202496,
+      "q80_bytes_projected": 661504,
+      "out_bytes_projected": 2473984,
+      "timing_us": {
+        "alloc": 107,
+        "h2d": 595,
+        "kernel": 3943,
+        "d2h": 47,
+        "compare": 65,
+        "free": 39,
+        "elapsed": 6873
+      },
+      "memory": {
+        "oom": 0,
+        "oom_kill": 0,
+        "swap": 0
+      }
+    },
+    "fixed_text_compare512": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T014841Z-hot-batch-compare/probe-cpu41-compare512",
+      "baseline_exit_status": 0,
+      "check_exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "records": 11890,
+      "compare_ran": 262,
+      "compare_ok": 262,
+      "op_level_max_abs": 0.0,
+      "op_level_diff_count": 0,
+      "rows": {
+        "ready_rows_all": 32724,
+        "not_in_manifest_rows_all": 38616,
+        "not_ready_rows_all": 0,
+        "sample_ready_rows": 378
+      },
+      "projected_bytes_all": {
+        "src0": 145832804352,
+        "q80": 106754560,
+        "out": 402325504
+      },
+      "sample": {
+        "covered_outputs": 1163264,
+        "all_outputs": 100581376,
+        "timing_us": {
+          "alloc": 3423,
+          "h2d": 2970,
+          "kernel": 214715,
+          "d2h": 2667,
+          "compare": 3541,
+          "free": 2318,
+          "compute_total": 229634
+        },
+        "projected_full_ms_by_ready_rows": 19879.743,
+        "projected_full_ms_by_output_count": 19855.255
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "note": "This validation run was not a strict cold SOTA memory proof; use the accepted SOTA run for the 16GB page-cache proof."
+      }
+    },
+    "default_off_top1_after_compare_source": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T015230Z-hot-batch-compare/defaultoff-top1-check",
+      "exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 2975686656,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      },
+      "hashes": {
+        "top1_check_json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "check_stderr": "dec039a5256f782f44af72bbac4aab0e37483ef34ae4765fa103921d1d6c2ede",
+        "check_stdout": "32978891d859d0d369c774270dd2026c2d7d7263c236a4cc0310567996710194"
+      }
+    }
+  },
+  "decision": {
+    "correctness": "passed for bounded compare probes and default-off top1",
+    "performance": "rejected",
+    "reason": "The current exact one-output-thread CPU-compatible kernel projects about 19.9 seconds for the fixed-text ready set, far above the 446.414 ms top768 overhead budget and the rough 23 us/call budget.",
+    "sota_changed": false
+  },
+  "next_plan": [
+    "Keep the accepted 4.4 tok/s runtime path unchanged by default.",
+    "Do not run strict cold performance for the current hot-batch compare implementation.",
+    "Before further runtime source edits, write a hard-bound design for an optimized resident-source parallel/token-stable kernel with arithmetic mapping, work decomposition, bandwidth estimate, launch/sync plan, D2H/scatter estimate, and projection against 446.414 ms.",
+    "Implement only behind default-off env gates and only if the hard bound fits with margin.",
+    "If the optimized kernel cannot fit the bound, reject cpu_moe=41 + top768 and restart bottleneck search from the accepted 4.4 tok/s SOTA."
+  ]
+}

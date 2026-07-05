@@ -1818,6 +1818,63 @@ static __global__ void moe_stream_q80_probe_cpu_compat_kernel(
     out[idx] = sum;
 }
 
+static __global__ void moe_stream_q80_hot_batch_cpu_compat_kernel(
+        const char * const * __restrict__ src0_rows,
+        size_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        int64_t ne00,
+        int rows_to_probe,
+        int cols_to_probe,
+        float * __restrict__ out) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total = rows_to_probe * cols_to_probe;
+    if (idx >= total) {
+        return;
+    }
+
+    const int k = idx / cols_to_probe;
+    const int col = idx - k * cols_to_probe;
+    const char * src0 = src0_rows[k];
+    const block_mxfp4 * x = (const block_mxfp4 *) (src0 + (size_t) col * nb01);
+    const block_q8_0 * y = (const block_q8_0 *) (q80 + (size_t) k * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float acc1[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float acc2[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+    int64_t ib = 0;
+    for (; ib + 1 < nb; ib += 2) {
+        int p1[8];
+        int p2[8];
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 0], y[ib + 0], p1);
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 1], y[ib + 1], p2);
+
+        const float scale0 = __half2float(y[ib + 0].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+        const float scale1 = __half2float(y[ib + 1].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+#pragma unroll
+        for (int lane = 0; lane < 8; ++lane) {
+            acc1[lane] = fmaf(scale0, (float) p1[lane], acc1[lane]);
+            acc2[lane] = fmaf(scale1, (float) p2[lane], acc2[lane]);
+        }
+    }
+
+    float sum = moe_stream_q80_cpu_compat_hsum8(acc1, acc2);
+    for (; ib < nb; ++ib) {
+        int sumi1 = 0;
+        int sumi2 = 0;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4/2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            sumi1 += y[ib].qs[j] * moe_stream_mxfp4_value_dev(q & 0x0F);
+            sumi2 += y[ib].qs[j + QK_MXFP4/2] * moe_stream_mxfp4_value_dev(q >> 4);
+        }
+        const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+        sum = fmaf(scale, (float) (sumi1 + sumi2), sum);
+    }
+    out[idx] = sum;
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_probe(
     int src0_type_int,
     const char *src0_name,
@@ -2174,7 +2231,8 @@ static FILE * moe_stream_q80_hot_batch_probe_fp() {
                 std::fprintf(fp,
                     "seq,tensor,n_as,ne01,ne00,rows_total,ready_rows,not_in_manifest_rows,not_ready_rows,"
                     "ready_experts,src0_bytes_projected,q80_bytes_projected,out_bytes_projected,"
-                    "pool_ready,async_started,async_done,elapsed_us\n");
+                    "pool_ready,async_started,async_done,compare_enabled,compare_ran,compare_ok,"
+                    "max_abs,mean_abs,diff_count,alloc_us,h2d_us,kernel_us,d2h_us,compare_us,free_us,elapsed_us\n");
             } else {
                 std::fprintf(stderr, "[moe_stream_q80_hot_batch_probe] failed to open report: %s\n", path);
             }
@@ -2184,6 +2242,14 @@ static FILE * moe_stream_q80_hot_batch_probe_fp() {
 }
 
 static std::atomic<uint64_t> g_q80_hot_batch_probe_seq{0};
+
+static bool moe_stream_q80_hot_batch_probe_compare_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE");
+        return (env && env[0] && env[0] != '0') ? 1 : 0;
+    }();
+    return enabled != 0;
+}
 
 extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     int src0_type_int,
@@ -2201,12 +2267,7 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const float *dst,
     size_t dst_nb1,
     size_t dst_nb2) {
-    (void) matrix_rows;
-    (void) dst;
-    (void) dst_nb1;
-    (void) dst_nb2;
-
-    if (src0_type_int != GGML_TYPE_MXFP4 || !src0_name || !src1_q8_0 || !matrix_row_counts) {
+    if (src0_type_int != GGML_TYPE_MXFP4 || !src0_name || !src1_q8_0 || !matrix_row_counts || !matrix_rows || !dst) {
         return;
     }
     if (n_as <= 0 || ne01 <= 0 || ne00 <= 0 || nb01 == 0 || src1_q8_0_row_size == 0 ||
@@ -2224,6 +2285,9 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     uint64_t q80_bytes_projected = 0;
     uint64_t out_bytes_projected = 0;
     bool any_pool_ready = false;
+    std::vector<const char *> h_src0_rows;
+    std::vector<const float *> h_dst_rows;
+    std::vector<uint8_t> h_q80;
 
     for (int64_t expert = 0; expert < n_as; ++expert) {
         const int64_t cne1 = matrix_row_counts[expert];
@@ -2242,26 +2306,136 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             not_in_manifest_rows += cne1;
             continue;
         }
-        ready_experts++;
-        ready_rows += cne1;
-        src0_bytes_projected += (uint64_t) cne1 * (uint64_t) ne01 * (uint64_t) nb01;
-        q80_bytes_projected += (uint64_t) cne1 * (uint64_t) src1_q8_0_row_size;
-        out_bytes_projected += (uint64_t) cne1 * (uint64_t) ne01 * (uint64_t) sizeof(float);
+        int64_t expert_ready_rows = 0;
+        const ggml_moe_row_mapping * rows = matrix_rows + expert * rows_per_expert;
+        for (int64_t k = 0; k < cne1; ++k) {
+            int64_t i11 = rows[k].i1 % src1_ne1;
+            if (i11 < 0) {
+                i11 += src1_ne1;
+            }
+            const int64_t i12 = rows[k].i2;
+            if (i12 < 0) {
+                continue;
+            }
+            const char * q80_row = (const char *) src1_q8_0 + (size_t) (i11 + i12 * src1_ne1) * src1_q8_0_row_size;
+            const float * dst_row = (const float *) ((const char *) dst + (size_t) rows[k].i1 * dst_nb1 + (size_t) rows[k].i2 * dst_nb2);
+            h_src0_rows.push_back((const char *) d_src0);
+            h_dst_rows.push_back(dst_row);
+            const size_t old = h_q80.size();
+            h_q80.resize(old + src1_q8_0_row_size);
+            std::memcpy(h_q80.data() + old, q80_row, src1_q8_0_row_size);
+            expert_ready_rows++;
+        }
+        if (expert_ready_rows > 0) {
+            ready_experts++;
+            ready_rows += expert_ready_rows;
+            src0_bytes_projected += (uint64_t) expert_ready_rows * (uint64_t) ne01 * (uint64_t) nb01;
+            q80_bytes_projected += (uint64_t) expert_ready_rows * (uint64_t) src1_q8_0_row_size;
+            out_bytes_projected += (uint64_t) expert_ready_rows * (uint64_t) ne01 * (uint64_t) sizeof(float);
+        }
+    }
+
+    if (rows_total == 0) {
+        return;
+    }
+    const uint64_t seq = g_q80_hot_batch_probe_seq.fetch_add(1, std::memory_order_relaxed);
+    const bool compare_enabled = moe_stream_q80_hot_batch_probe_compare_enabled();
+    const int compare_max_records = moe_stream_env_int("GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE_MAX_RECORDS", 0);
+    const bool compare_allowed_by_limit = compare_max_records <= 0 || seq < (uint64_t) compare_max_records;
+
+    bool compare_ran = false;
+    bool compare_ok = false;
+    double max_abs = 0.0;
+    double mean_abs = 0.0;
+    uint64_t diff_count = 0;
+    uint64_t alloc_us = 0;
+    uint64_t h2d_us = 0;
+    uint64_t kernel_us = 0;
+    uint64_t d2h_us = 0;
+    uint64_t compare_us = 0;
+    uint64_t free_us = 0;
+
+    if (compare_enabled && compare_allowed_by_limit && ready_rows > 0 && ready_rows <= INT32_MAX && ne01 <= INT32_MAX) {
+        const auto t_alloc0 = std::chrono::steady_clock::now();
+        const char ** d_src0_rows = nullptr;
+        void * d_q80 = nullptr;
+        float * d_out = nullptr;
+        const size_t ptr_bytes = (size_t) ready_rows * sizeof(const char *);
+        const size_t q80_bytes = h_q80.size();
+        const size_t out_elems = (size_t) ready_rows * (size_t) ne01;
+        const size_t out_bytes = out_elems * sizeof(float);
+        std::vector<float> h_out(out_elems);
+        bool ok = cudaSetDevice(0) == cudaSuccess &&
+            cudaMalloc((void **) &d_src0_rows, ptr_bytes) == cudaSuccess &&
+            cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
+            cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+        const auto t_alloc1 = std::chrono::steady_clock::now();
+        if (ok) {
+            ok = cudaMemcpy(d_src0_rows, h_src0_rows.data(), ptr_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+                cudaMemcpy(d_q80, h_q80.data(), q80_bytes, cudaMemcpyHostToDevice) == cudaSuccess;
+        }
+        const auto t_h2d = std::chrono::steady_clock::now();
+        if (ok) {
+            const int threads = 128;
+            const int blocks = (int) ((out_elems + (size_t) threads - 1) / (size_t) threads);
+            moe_stream_q80_hot_batch_cpu_compat_kernel<<<blocks, threads>>>(
+                    d_src0_rows, nb01, (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, (int) ready_rows, (int) ne01, d_out);
+            ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess;
+        }
+        const auto t_kernel = std::chrono::steady_clock::now();
+        if (ok) {
+            ok = cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+        }
+        const auto t_d2h = std::chrono::steady_clock::now();
+        if (ok) {
+            double sum_abs = 0.0;
+            for (int64_t row = 0; row < ready_rows; ++row) {
+                const float * dst_row = h_dst_rows[(size_t) row];
+                const float * out_row = h_out.data() + (size_t) row * (size_t) ne01;
+                for (int64_t col = 0; col < ne01; ++col) {
+                    const double diff = std::fabs((double) out_row[col] - (double) dst_row[col]);
+                    if (diff != 0.0) {
+                        diff_count++;
+                    }
+                    sum_abs += diff;
+                    max_abs = std::max(max_abs, diff);
+                }
+            }
+            mean_abs = out_elems ? sum_abs / (double) out_elems : 0.0;
+        }
+        const auto t_compare = std::chrono::steady_clock::now();
+        if (d_src0_rows) {
+            cudaFree(d_src0_rows);
+        }
+        if (d_q80) {
+            cudaFree(d_q80);
+        }
+        if (d_out) {
+            cudaFree(d_out);
+        }
+        const auto t_free = std::chrono::steady_clock::now();
+
+        compare_ran = true;
+        compare_ok = ok;
+        alloc_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_alloc1 - t_alloc0).count();
+        h2d_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_h2d - t_alloc1).count();
+        kernel_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_kernel - t_h2d).count();
+        d2h_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_d2h - t_kernel).count();
+        compare_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_compare - t_d2h).count();
+        free_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_free - t_compare).count();
     }
 
     const auto t1 = std::chrono::steady_clock::now();
     const uint64_t elapsed_us =
         (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
-    if (rows_total == 0) {
-        return;
-    }
     if (FILE * fp = moe_stream_q80_hot_batch_probe_fp()) {
-        const uint64_t seq = g_q80_hot_batch_probe_seq.fetch_add(1, std::memory_order_relaxed);
         flockfile(fp);
         std::fprintf(fp,
             "%" PRIu64 ",%s,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
-            ",%" PRId64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%d,%d,%" PRIu64 "\n",
+            ",%" PRId64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%d,%d,%d,%d,%d,%.9g,%.9g,%" PRIu64
+            ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
             seq,
             src0_name,
             n_as,
@@ -2278,6 +2452,18 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             any_pool_ready ? 1 : 0,
             g_one_direct_hot_pool.async_started.load(std::memory_order_acquire) ? 1 : 0,
             g_one_direct_hot_pool.async_done.load(std::memory_order_acquire) ? 1 : 0,
+            compare_enabled ? 1 : 0,
+            compare_ran ? 1 : 0,
+            compare_ok ? 1 : 0,
+            max_abs,
+            mean_abs,
+            diff_count,
+            alloc_us,
+            h2d_us,
+            kernel_us,
+            d2h_us,
+            compare_us,
+            free_us,
             elapsed_us);
         funlockfile(fp);
     }
