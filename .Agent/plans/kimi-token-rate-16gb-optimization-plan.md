@@ -76285,3 +76285,104 @@ Decision:
   no runtime artifact was produced.
 - Next work should return to the existing IQ3/expert-pack runtime path, or use
   an external conversion machine with enough disk before revisiting FP4.
+
+## Phase 7MU - current IQ3 runtime n96 refresh
+
+Timestamp: 2026-07-05 21:02:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Return to the existing IQ3 GGUF plus expert-pack runtime path after closing
+  the current-server FP4 conversion route.
+- Reproduce the current n96 cold-start baseline on the latest branch head.
+- Refresh the low-overhead bottleneck counters before choosing the next source
+  optimization.
+
+Why this is needed:
+
+- 7MT rejected full FP4 conversion on this server because the external FP4
+  assets are `514.87-554.31 GiB`, far above the current `88 GiB` free disk.
+- The plan therefore returns to runtime work on the existing runnable artifact.
+- The last accepted n96 band is still around:
+  - 7JY: `57169.16 ms / 77`, `1.35 tok/s`;
+  - 7LZ: `56768.45 ms / 77`, `1.36 tok/s`, with iouring wait
+    `50.857 s`.
+- Before another source edit, verify the latest head still has a clean,
+  reproducible cold-start n96 result under the strict 16GB host RAM gate.
+
+Experiment:
+
+- No source changes.
+- Run the standard min-profile reproduction script at `N=96`.
+- Use the accepted production env:
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `UPGATE_PCT=62`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - `MIN_PROFILE=1`.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7mu-plan-commit>
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mu-current-iq3-n96-refresh
+mkdir -p "$RUN"
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- quality `pass`;
+- manual semantic pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- no unexpected fallback path or async coalescing activation.
+
+Metrics to record:
+
+- exact source commit and run directory;
+- generated answer;
+- TTFT, decode ms, decode runs, token rate;
+- cgroup memory peak/current and final `memory.stat`;
+- `expert_pack` hit/read/byte/wait details;
+- pinned staging totals;
+- current-down overlap counters;
+- VRAM down/upgate cache slots and hit rates;
+- stdout/stderr tails needed for reproduction.
+
+Decision rule:
+
+- If the run fails any gate, do not edit source; diagnose the baseline failure
+  first.
+- If token rate lands in the recent n96 band (`1.33-1.36 tok/s`), treat it as a
+  baseline refresh only and write the next implementation plan from the
+  refreshed bottleneck counters.
+- If token rate unexpectedly beats the accepted band without source changes,
+  repeat n96 before considering a baseline/SOTA update.
+- No source SOTA promotion can happen in this phase.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact command, run dir, source commit, metrics, output answer, and
+  decision in the plan.
