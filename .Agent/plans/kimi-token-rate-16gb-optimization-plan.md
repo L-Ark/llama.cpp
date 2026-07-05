@@ -81712,3 +81712,79 @@ python3 "$RUN/phase7ns_verifier_bound.py"
 cat "$RUN/verifier_bound.tsv"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7NT - multi-token verifier route-reuse hard upper-bound
+
+Status: planned.
+
+Timestamp: 2026-07-06 05:08 CST.
+
+Reason:
+
+- Phase 7NS proved that a serial one-token target verifier cannot exceed the
+  current target decode rate and cannot approach `5 tok/s`.
+- The only speculative path still open would require a true multi-token MoE
+  streaming verifier that can verify accepted target tokens at
+  `<=200 ms/output-token`.
+- Before writing that broad verifier, test the hardest prerequisite: whether
+  consecutive decode tokens reuse enough expert tensors that a perfect
+  multi-token verifier could reduce required expert movement by at least
+  `3.68x` versus current one-token decode.
+- This phase is an offline upper-bound audit. It does not edit source, run model
+  inference, download assets, or promote SOTA.
+
+Inputs:
+
+- 7NN current n32 low-level I/O profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32`
+- Current n96 SOTA baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh`
+- Any available copy/profile CSV in recent accepted n32/n96 runs that records
+  tensor name, token/decode index, layer, expert, tensor kind, and bytes.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nt-route-reuse-bound`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - source artifact list used for the audit;
+   - `phase7nt_route_reuse_bound.py`;
+   - `route_reuse_bound.tsv`;
+   - `decision.md`.
+3. Locate the freshest accepted decode copy/route profile that includes per-copy
+   tensor identity and bytes. If no per-token identity exists, record that the
+   implementation is blocked and add the exact instrumentation target instead
+   of guessing.
+4. For block sizes `B=2/4/8/16`, compute:
+   - serial bytes per block;
+   - perfect-reuse unique bytes per block keyed by
+     `(layer, expert, tensor_kind, tensor_name/type)`;
+   - byte-reduction factor;
+   - ideal lower-bound ms/token using the 7NN measured iouring wait-side
+     throughput (`5.854 GiB/s`);
+   - required gap to the `200 ms/token` verifier envelope.
+5. Separately report the same bound for:
+   - all expert tensors;
+   - up/gate only;
+   - down only;
+   - fallback-only tensors, if the profile contains that split.
+
+Decision rule:
+
+- Proceed to source design for true multi-token MoE verification only if the
+  measured route-reuse upper bound reaches both:
+  - `>=3.68x` expert-movement reduction versus serial decode; and
+  - `<=200 ms/token` ideal movement lower bound at the measured 7NN bandwidth,
+    before compute/draft overhead.
+- If route reuse misses either threshold, reject the broad verifier source work
+  for this asset/runtime and return to direct runtime or asset-format changes.
+- If the required per-token trace is unavailable, do not infer. Add a narrow
+  default-off instrumentation phase before any verifier source implementation.
+
+Reproducibility:
+
+- Commit and push this 7NT plan before running the audit.
+- Commit and push the 7NT result before any follow-up source, model, or asset
+  work.
