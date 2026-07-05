@@ -83529,3 +83529,75 @@ Reproducibility:
 - Commit and push this 7OC plan before editing source.
 - Commit and push the 7OC source/result if accepted.
 - If rejected, revert source changes and commit/push only the result record.
+
+### Phase 7OC result
+
+Timestamp: 2026-07-06 06:03 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-220219Z-phase7oc-iq2xxs-q8k-selftest`
+
+Plan commit before source edit:
+
+- `41ace8973` (`docs: plan iq2 xxs q8k prompt selftest`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `build.log`
+- `selftest.log`
+- `source.diff`
+- `source_refs.txt`
+- `exported_symbol.txt`
+- `decision.md`
+
+Source changes:
+
+- Added `moe_iq2_xxs_q8k_block_sum()`.
+- Added an `IQ2_XXS` branch in the existing prompt `Q8_K` kernel.
+- Added explicit probe string:
+  `GGML_MOE_STREAM_PROMPT_UP_GATE=exact-q8-k-iq2-xxs-probe`.
+- Added exported model-free selftest:
+  `ggml_cuda_moe_iq2_xxs_q8k_selftest()`.
+- Kept `moe_stream_type_supported()` unchanged; normal model execution still
+  rejects `IQ2_XXS` tensors in this phase.
+
+Verification:
+
+- Build command:
+  `cmake --build build-cuda-batch --target ggml-cuda -j $(nproc)`
+- Build result: PASS.
+- Exported symbol:
+  `00000000003271f0 T ggml_cuda_moe_iq2_xxs_q8k_selftest`
+- `ctypes` selftest command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+LD_LIBRARY_PATH=$PWD/build-cuda-batch/bin python3 - <<'PY'
+import ctypes
+lib = ctypes.CDLL("./build-cuda-batch/bin/libggml-cuda.so.0.10.0")
+lib.ggml_cuda_moe_iq2_xxs_q8k_selftest.restype = ctypes.c_bool
+ok = lib.ggml_cuda_moe_iq2_xxs_q8k_selftest()
+print(f"iq2_xxs_q8k_selftest={int(ok)}")
+raise SystemExit(0 if ok else 1)
+PY
+```
+
+- Selftest output:
+
+```text
+[moe_stream_batch] IQ2_XXS Q8_K selftest: ok max_abs=0 rows=5
+iq2_xxs_q8k_selftest=1
+```
+
+Decision:
+
+- Accept and commit/push the 7OC source patch.
+- This closes the prompt-kernel code blocker for `IQ2_XXS`.
+- No model inference was run.
+- No asset was downloaded or converted.
+- No token-rate/SOTA claim is made.
+- Remaining blocker before strict n32/n96 performance work:
+  reproducible Kimi `IQ2_XXS` asset/imatrix validation.

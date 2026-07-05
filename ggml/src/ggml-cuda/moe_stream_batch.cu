@@ -13,6 +13,7 @@ bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
+bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t, const char **, size_t *, uint64_t *) { return nullptr; }
@@ -5265,6 +5266,34 @@ static __device__ __forceinline__ int moe_iq3_xxs_q8k_block_sum(
     return bsum;
 }
 
+static __device__ __forceinline__ int moe_iq2_xxs_q8k_block_sum(
+        const block_iq2_xxs * x,
+        const block_q8_K * y) {
+    const int8_t * q8 = y->qs;
+    int bsum = 0;
+    for (int ib32 = 0; ib32 < QK_K/32; ++ib32) {
+        const uint16_t * q2 = x->qs + 4*ib32;
+        const uint32_t aux0 = (uint32_t)q2[0] | ((uint32_t)q2[1] << 16);
+        const uint32_t aux1 = (uint32_t)q2[2] | ((uint32_t)q2[3] << 16);
+        int sumi = 0;
+        for (int l = 0; l < 4; ++l) {
+            const uint8_t grid_id = (uint8_t)((aux0 >> (8*l)) & 0xff);
+            const uint2 grid_pos = ((const uint2 *)iq2xxs_grid)[grid_id];
+            const uint8_t signs = ksigns_iq2xs[(aux1 >> (7*l)) & 127];
+            const int q8_base = 32*ib32 + 8*l;
+            for (int j = 0; j < 8; ++j) {
+                const uint32_t grid_word = j < 4 ? grid_pos.x : grid_pos.y;
+                const int grid = (int)((grid_word >> (8*(j & 3))) & 0xff);
+                const int sign = (signs & kmask_iq2xs[j]) ? -1 : 1;
+                sumi += grid * sign * (int)q8[q8_base + j];
+            }
+        }
+        const int ls = 2 * (int)(aux1 >> 28) + 1;
+        bsum += sumi * ls;
+    }
+    return bsum;
+}
+
 static __device__ __forceinline__ int moe_iq2_s_q8k_block_sum(
         const block_iq2_s * x,
         const block_q8_K * y) {
@@ -5450,6 +5479,10 @@ static __global__ void moe_iq3_xxs_q8k_mat_kernel(
             const block_iq3_xxs * x_iq3 = (const block_iq3_xxs *)x_row_base;
             const float d = __half2float(x_iq3[ib].d) * y_row[ib].d;
             sum += 0.25f * d * (float)moe_iq3_xxs_q8k_block_sum(x_iq3 + ib, y_row + ib);
+        } else if (src0_type == GGML_TYPE_IQ2_XXS) {
+            const block_iq2_xxs * x_iq2_xxs = (const block_iq2_xxs *)x_row_base;
+            const float d = __half2float(x_iq2_xxs[ib].d) * y_row[ib].d;
+            sum += 0.125f * d * (float)moe_iq2_xxs_q8k_block_sum(x_iq2_xxs + ib, y_row + ib);
         } else if (src0_type == GGML_TYPE_IQ2_S) {
             const block_iq2_s * x_iq2 = (const block_iq2_s *)x_row_base;
             if (iq2_direct) {
@@ -5487,7 +5520,8 @@ static bool exact_prompt_q8k_enabled() {
     const char *env = std::getenv("GGML_MOE_STREAM_PROMPT_UP_GATE");
     return env && (std::strcmp(env, "exact-q8-k") == 0 ||
         std::strcmp(env, "exact-q8-k-iq2-probe") == 0 ||
-        std::strcmp(env, "exact-q8-k-iq2-direct-probe") == 0);
+        std::strcmp(env, "exact-q8-k-iq2-direct-probe") == 0 ||
+        std::strcmp(env, "exact-q8-k-iq2-xxs-probe") == 0);
 }
 
 static bool exact_prompt_q8k_iq2_probe_enabled() {
@@ -5498,6 +5532,11 @@ static bool exact_prompt_q8k_iq2_probe_enabled() {
 static bool exact_prompt_q8k_iq2_direct_probe_enabled() {
     const char *env = std::getenv("GGML_MOE_STREAM_PROMPT_UP_GATE");
     return env && std::strcmp(env, "exact-q8-k-iq2-direct-probe") == 0;
+}
+
+static bool exact_prompt_q8k_iq2_xxs_probe_enabled() {
+    const char *env = std::getenv("GGML_MOE_STREAM_PROMPT_UP_GATE");
+    return env && std::strcmp(env, "exact-q8-k-iq2-xxs-probe") == 0;
 }
 
 static bool launch_moe_iq3_xxs_q8k_batch(
@@ -5550,9 +5589,176 @@ static void moe_iq2_selftest_fill_row(uint8_t * dst, int row, int k) {
     }
 }
 
+static void moe_iq2_xxs_selftest_fill_row(uint8_t * dst, int row, int k) {
+    const int n_blocks = k / QK_K;
+    block_iq2_xxs * blocks = (block_iq2_xxs *)dst;
+    for (int ib = 0; ib < n_blocks; ++ib) {
+        block_iq2_xxs & b = blocks[ib];
+        b.d = __float2half(0.0078125f * (float)(1 + ((row + ib) % 7)));
+        for (int ib32 = 0; ib32 < QK_K/32; ++ib32) {
+            uint8_t raw[8];
+            for (int l = 0; l < 4; ++l) {
+                raw[l] = (uint8_t)(((row + 1) * 37 + ib * 17 + ib32 * 29 + l * 43) & 0xff);
+            }
+            uint32_t sign_bits = 0;
+            for (int l = 0; l < 4; ++l) {
+                sign_bits |= (uint32_t)(((row * 11 + ib * 13 + ib32 * 7 + l * 19) & 0x7f) << (7*l));
+            }
+            const uint32_t scale = (uint32_t)((row + ib + 3*ib32) & 0x0f);
+            const uint32_t aux1 = (sign_bits & 0x0fffffff) | (scale << 28);
+            raw[4] = (uint8_t)((aux1 >> 0) & 0xff);
+            raw[5] = (uint8_t)((aux1 >> 8) & 0xff);
+            raw[6] = (uint8_t)((aux1 >> 16) & 0xff);
+            raw[7] = (uint8_t)((aux1 >> 24) & 0xff);
+            std::memcpy(b.qs + 4*ib32, raw, sizeof(raw));
+        }
+    }
+}
+
+static void moe_iq2_xxs_selftest_fill_q8k(block_q8_K * y, int nblocks) {
+    for (int ib = 0; ib < nblocks; ++ib) {
+        block_q8_K & b = y[ib];
+        b.d = 0.03125f * (float)(1 + (ib % 5));
+        for (int i = 0; i < QK_K; ++i) {
+            b.qs[i] = (int8_t)(((ib * 31 + i * 7 + (i / 13) * 3) % 255) - 127);
+        }
+        for (int i = 0; i < QK_K/16; ++i) {
+            int sum = 0;
+            for (int j = 0; j < 16; ++j) {
+                sum += b.qs[16*i + j];
+            }
+            b.bsums[i] = (int16_t)sum;
+        }
+    }
+}
+
+static int moe_iq2_xxs_q8k_block_sum_host(const block_iq2_xxs * x, const block_q8_K * y) {
+    const int8_t * q8 = y->qs;
+    int bsum = 0;
+    for (int ib32 = 0; ib32 < QK_K/32; ++ib32) {
+        const uint16_t * q2 = x->qs + 4*ib32;
+        const uint32_t aux0 = (uint32_t)q2[0] | ((uint32_t)q2[1] << 16);
+        const uint32_t aux1 = (uint32_t)q2[2] | ((uint32_t)q2[3] << 16);
+        int sumi = 0;
+        for (int l = 0; l < 4; ++l) {
+            const uint8_t grid_id = (uint8_t)((aux0 >> (8*l)) & 0xff);
+            const uint8_t * grid = (const uint8_t *)(iq2xxs_grid + grid_id);
+            const uint8_t sign_idx = (uint8_t)((aux1 >> (7*l)) & 127);
+            const uint8_t signs = (uint8_t)(sign_idx | ((__builtin_parity((unsigned int)sign_idx) & 1) << 7));
+            const int q8_base = 32*ib32 + 8*l;
+            for (int j = 0; j < 8; ++j) {
+                const int sign = (signs & (1u << j)) ? -1 : 1;
+                sumi += (int)grid[j] * sign * (int)q8[q8_base + j];
+            }
+        }
+        const int ls = 2 * (int)(aux1 >> 28) + 1;
+        bsum += sumi * ls;
+    }
+    return bsum;
+}
+
+static float moe_iq2_xxs_q8k_dot_host(const block_iq2_xxs * x, const block_q8_K * y, int nblocks) {
+    float sum = 0.0f;
+    for (int ib = 0; ib < nblocks; ++ib) {
+        const float d = __half2float(x[ib].d) * y[ib].d;
+        sum += 0.125f * d * (float)moe_iq2_xxs_q8k_block_sum_host(x + ib, y + ib);
+    }
+    return sum;
+}
+
 extern "C" bool ggml_cuda_moe_iq2_q8k_r8_selftest(void) {
     std::fprintf(stderr, "[moe_stream_batch] IQ2_S Q8_K_R8 selftest unavailable in vendor correctness path\n");
     return false;
+}
+
+extern "C" bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) {
+    if (cudaSetDevice(0) != cudaSuccess) {
+        std::fprintf(stderr, "[moe_stream_batch] IQ2_XXS Q8_K selftest failed: cudaSetDevice\n");
+        return false;
+    }
+
+    constexpr int ne00 = QK_K;
+    constexpr int ne01 = 5;
+    constexpr int nblocks = ne00 / QK_K;
+    const size_t nb01 = (size_t)nblocks * sizeof(block_iq2_xxs);
+    const size_t expert_bytes = (size_t)ne01 * nb01;
+    const size_t q8k_bytes = (size_t)nblocks * sizeof(block_q8_K);
+    const size_t dst_bytes = (size_t)ne01 * sizeof(float);
+
+    std::vector<uint8_t> host_expert(expert_bytes);
+    std::vector<block_q8_K> host_q8k(nblocks);
+    std::vector<float> expect(ne01, 0.0f);
+    std::vector<float> got(ne01, 0.0f);
+
+    for (int row = 0; row < ne01; ++row) {
+        moe_iq2_xxs_selftest_fill_row(host_expert.data() + (size_t)row * nb01, row, ne00);
+    }
+    moe_iq2_xxs_selftest_fill_q8k(host_q8k.data(), nblocks);
+    for (int row = 0; row < ne01; ++row) {
+        const block_iq2_xxs * x = (const block_iq2_xxs *)(host_expert.data() + (size_t)row * nb01);
+        expect[row] = moe_iq2_xxs_q8k_dot_host(x, host_q8k.data(), nblocks);
+    }
+
+    cudaStream_t stream = nullptr;
+    uint8_t *d_expert = nullptr;
+    block_q8_K *d_q8k = nullptr;
+    int32_t *d_x_ids = nullptr;
+    int32_t *d_dst_ids = nullptr;
+    float *d_dst = nullptr;
+
+    bool ok = cudaStreamCreate(&stream) == cudaSuccess;
+    ok = ok && cudaMalloc(&d_expert, expert_bytes) == cudaSuccess;
+    ok = ok && cudaMalloc(&d_q8k, q8k_bytes) == cudaSuccess;
+    ok = ok && cudaMalloc(&d_x_ids, sizeof(int32_t)) == cudaSuccess;
+    ok = ok && cudaMalloc(&d_dst_ids, sizeof(int32_t)) == cudaSuccess;
+    ok = ok && cudaMalloc(&d_dst, dst_bytes) == cudaSuccess;
+
+    const int32_t zero = 0;
+    if (ok) {
+        ok = ok && cudaMemcpyAsync(d_expert, host_expert.data(), expert_bytes, cudaMemcpyHostToDevice, stream) == cudaSuccess;
+        ok = ok && cudaMemcpyAsync(d_q8k, host_q8k.data(), q8k_bytes, cudaMemcpyHostToDevice, stream) == cudaSuccess;
+        ok = ok && cudaMemcpyAsync(d_x_ids, &zero, sizeof(zero), cudaMemcpyHostToDevice, stream) == cudaSuccess;
+        ok = ok && cudaMemcpyAsync(d_dst_ids, &zero, sizeof(zero), cudaMemcpyHostToDevice, stream) == cudaSuccess;
+        ok = ok && cudaMemsetAsync(d_dst, 0, dst_bytes, stream) == cudaSuccess;
+    }
+    if (ok) {
+        ok = launch_moe_iq3_xxs_q8k_batch(GGML_TYPE_IQ2_XXS, (const char *)d_expert, d_q8k,
+                d_dst_ids, d_x_ids, d_dst, ne00, ne01, nb01, expert_bytes, 1, 1, false, stream);
+    }
+    ok = ok && cudaMemcpyAsync(got.data(), d_dst, dst_bytes, cudaMemcpyDeviceToHost, stream) == cudaSuccess;
+    ok = ok && cudaStreamSynchronize(stream) == cudaSuccess;
+
+    double max_abs = 0.0;
+    int worst = -1;
+    if (ok) {
+        for (int row = 0; row < ne01; ++row) {
+            const double err = std::fabs((double)got[row] - (double)expect[row]);
+            if (err > max_abs) {
+                max_abs = err;
+                worst = row;
+            }
+        }
+        ok = max_abs <= 1.0e-4;
+    }
+
+    if (!ok) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] IQ2_XXS Q8_K selftest failed: max_abs=%.9g worst_row=%d got=%.9g expect=%.9g\n",
+                max_abs, worst, worst >= 0 ? got[worst] : 0.0f, worst >= 0 ? expect[worst] : 0.0f);
+    } else {
+        std::fprintf(stderr, "[moe_stream_batch] IQ2_XXS Q8_K selftest: ok max_abs=%.9g rows=%d\n",
+                max_abs, ne01);
+    }
+
+    cudaFree(d_dst);
+    cudaFree(d_dst_ids);
+    cudaFree(d_x_ids);
+    cudaFree(d_q8k);
+    cudaFree(d_expert);
+    if (stream) {
+        cudaStreamDestroy(stream);
+    }
+    return ok;
 }
 
 static float moe_host_silu(float x) {
@@ -5722,7 +5928,8 @@ static bool prompt_up_gate_stream_enabled() {
     return env && (std::strcmp(env, "unsafe-q8-1") == 0 ||
         std::strcmp(env, "exact-q8-k") == 0 ||
         std::strcmp(env, "exact-q8-k-iq2-probe") == 0 ||
-        std::strcmp(env, "exact-q8-k-iq2-direct-probe") == 0);
+        std::strcmp(env, "exact-q8-k-iq2-direct-probe") == 0 ||
+        std::strcmp(env, "exact-q8-k-iq2-xxs-probe") == 0);
 }
 
 static bool moe_stream_type_supported(ggml_type type) {
@@ -6476,7 +6683,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool prompt_exact_requested = exact_prompt_q8k_enabled();
     const bool exact_prompt_type = src0_type == GGML_TYPE_IQ3_XXS ||
         (src0_type == GGML_TYPE_IQ2_S &&
-            (exact_prompt_q8k_iq2_probe_enabled() || exact_prompt_q8k_iq2_direct_probe_enabled()));
+            (exact_prompt_q8k_iq2_probe_enabled() || exact_prompt_q8k_iq2_direct_probe_enabled())) ||
+        (src0_type == GGML_TYPE_IQ2_XXS && exact_prompt_q8k_iq2_xxs_probe_enabled());
     const bool prompt_mode = rows_stride > 1 &&
         (prompt_exact_requested ? exact_prompt_type : prompt_up_gate_stream_enabled());
     const bool exact_prompt_q8k = prompt_mode && prompt_exact_requested && exact_prompt_type;
