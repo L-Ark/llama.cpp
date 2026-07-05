@@ -145,6 +145,22 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_q80_skip(
     size_t dst_nb1,
     size_t dst_nb2,
     const ggml_moe_stream_row_mapping * rows);
+__attribute__((weak)) extern void ggml_cuda_moe_stream_q80_hot_batch_probe(
+    int src0_type_int,
+    const char * src0_name,
+    int64_t n_as,
+    int64_t ne01,
+    int64_t ne00,
+    size_t nb01,
+    const void * src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_ne1,
+    const int64_t * matrix_row_counts,
+    const ggml_moe_stream_row_mapping * matrix_rows,
+    int64_t rows_per_expert,
+    const float * dst,
+    size_t dst_nb1,
+    size_t dst_nb2);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int src0_type_int,
     const char * src0_name,
@@ -1166,6 +1182,15 @@ static bool ggml_moe_stream_q80_skip_enabled(void) {
     static int enabled = -1;
     if (enabled < 0) {
         const char * env = getenv("GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER");
+        enabled = env && env[0] ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static bool ggml_moe_stream_q80_hot_batch_probe_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT");
         enabled = env && env[0] ? 1 : 0;
     }
     return enabled != 0;
@@ -3677,6 +3702,34 @@ static void ggml_compute_forward_mul_mat_id(
                         nb1, nb2,
                         (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
             }
+        }
+        ggml_barrier(params->threadpool);
+    }
+
+    if (ggml_moe_stream_q80_hot_batch_probe_enabled() &&
+            ggml_cuda_moe_stream_q80_hot_batch_probe &&
+            src0->type == GGML_TYPE_MXFP4 &&
+            src1->type != vec_dot_type &&
+            vec_dot_type == GGML_TYPE_Q8_0 &&
+            ne13 == 1 &&
+            dst->type == GGML_TYPE_F32) {
+        ggml_barrier(params->threadpool);
+        if (ith == 0) {
+            const void * q80_base = params->wdata;
+            const size_t q80_row_size = ggml_row_size(vec_dot_type, ne10);
+            ggml_cuda_moe_stream_q80_hot_batch_probe(
+                    src0->type,
+                    src0->name,
+                    n_as,
+                    ne01, ne00, nb01,
+                    q80_base,
+                    q80_row_size,
+                    ne11,
+                    matrix_row_counts,
+                    (const ggml_moe_stream_row_mapping *) matrix_rows,
+                    ids->ne[0] * ids->ne[1],
+                    (const float *) dst->data,
+                    nb1, nb2);
         }
         ggml_barrier(params->threadpool);
     }

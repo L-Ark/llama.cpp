@@ -1,0 +1,123 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: default-off HOT_BATCH_PROBE coverage skeleton",
+  "result": "passed_as_coverage_probe_skeleton",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head_before_commit": "74f8678e5a91220be0509d8ff1a3c4ca379c6ddb",
+    "changed_files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ]
+  },
+  "implementation": {
+    "env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT",
+    "default_off": true,
+    "changes_logits": false,
+    "clears_cpu_fallback_counts": false,
+    "launches_compute_kernel": false,
+    "summary": "Adds a post-CPU-fallback probe hook that scans each mul_mat_id op, checks whether selected tensor/expert rows are present in the ready top768 direct hot pool, and writes coverage/projected byte counters to CSV. It does not write dst or skip CPU fallback."
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "status": "passed"
+  },
+  "smoke_probe": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T012414Z-hot-batch-probe/smoke-hi",
+    "status": "passed",
+    "service_runtime_s": 18.283,
+    "exit_status": 0,
+    "prompt": "Hi",
+    "records": 246,
+    "rows_total": 3444,
+    "ready_rows": 202,
+    "not_in_manifest_rows": 3242,
+    "not_ready_rows": 0,
+    "ready_experts": 112,
+    "src0_bytes_projected": 900202496,
+    "q80_bytes_projected": 661504,
+    "out_bytes_projected": 2473984,
+    "probe_elapsed_us_sum": 1474,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "memory_peak_bytes": 9522470912,
+    "oom": 0,
+    "oom_kill": 0,
+    "swaps": 0,
+    "probe_csv_sha256": "794aeb069d1036e65e28e99e1ca1da146ac107beb8dd52f3947c3c1f4dd62ede",
+    "stdout_sha256": "81c6327bbd0ba1833dcae024eeb9eb963a354d07f9e342a4227bc7d1f892bf50"
+  },
+  "default_off_top1": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T012651Z-hot-batch-probe/defaultoff-top1-check",
+    "status": "passed",
+    "check_exit_status": 0,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14980792320,
+    "oom": 0,
+    "oom_kill": 0,
+    "swaps": 0,
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+  },
+  "probe_top1_wrong_baseline": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T012903Z-hot-batch-probe/probe-top1-check",
+    "status": "not_used_as_probe_failure",
+    "check_exit_status": 1,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "max_abs": 0.297234,
+    "mean_abs": 0.0153235,
+    "reason": "This compared a cpu_moe=41 direct-pool/probe run against an older cpu_moe=40 baseline result. Top1 stayed stable, but exact logits differed due to baseline configuration mismatch."
+  },
+  "probe_cpu41_selfcheck": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T013230Z-hot-batch-probe/probe-cpu41-selfcheck",
+    "status": "passed",
+    "baseline_exit_status": 0,
+    "check_exit_status": 0,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "records": 11890,
+    "rows_total": 71340,
+    "ready_rows": 32724,
+    "not_in_manifest_rows": 38616,
+    "not_ready_rows": 0,
+    "ready_experts": 32724,
+    "src0_bytes_projected": 145832804352,
+    "q80_bytes_projected": 106754560,
+    "out_bytes_projected": 402325504,
+    "probe_elapsed_us_sum": 35612,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "oom": 0,
+    "oom_kill": 0,
+    "swaps": 0,
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "probe_csv_sha256": "6125fcffeae460d5ac41abb5da4408e3ad155565952a18c463e84e1098e8b714"
+  },
+  "analysis": {
+    "coverage_note": "The fixed-text cpu_moe41 selfcheck reports 32724 ready rows, higher than the 19410 decode-only top768 bound because the fixed-text verifier includes prompt/prefill positions and this skeleton counts all rows seen by the op, not only accepted-SOTA decode-phase covered calls.",
+    "next_gap": "This skeleton does not measure GPU kernel/D2H/scatter cost. It only proves ready hot-pool lookup and reporting are wired into the real mul_mat_id path without changing outputs.",
+    "next_step": "Add the actual resident-source batched compare kernel under the same default-off probe env and keep CPU dst authoritative."
+  },
+  "decision": {
+    "commit_source": true,
+    "sota_status": "unchanged",
+    "allowed_next_runtime_step": "Implement kernel/D2H compare timing inside HOT_BATCH_PROBE. Do not enable HOT_BATCH_SKIP or run strict cold performance until probe overhead and top1 pass."
+  }
+}
