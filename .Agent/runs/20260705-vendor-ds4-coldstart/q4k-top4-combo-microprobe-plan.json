@@ -1,0 +1,55 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: Q4_K CPU dot microprobe for 4Expert plus source/page combined bound",
+  "purpose": "Close or reopen the only plausible combination left by the external refresh: top_k=4 Q4_K routed experts plus source/page elimination plus a faster CPU fallback kernel.",
+  "runtime_source_modified": false,
+  "default_path_modified": false,
+  "accepted_sota_baseline": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "hypothesis": {
+    "positive_case": "4Expert reduces active experts from 6 to 4, but Q4_K expert role bytes are 4.5 MiB versus native MXFP4 4.25 MiB. The active source ratio is therefore 0.705882. If Q4_K x Q8_K CPU dot throughput is high enough and source/page stalls can also be eliminated, the combined route might exceed 10 tok/s.",
+    "negative_case": "If Q4_K CPU dot throughput is below the combined threshold, then 4Expert/Q4_K cannot reopen the route even before accounting for routing tensor compatibility, Q4_K stream/cache implementation, full-model download, TTFT, and correctness risk."
+  },
+  "hard_bound_inputs": {
+    "decoded_tokens_for_rate_model": 136.608765524,
+    "target_10_tok_s_decode_window_ms": 13660.8765524,
+    "non_fallback_decode_ms": 12017.99,
+    "source_page_exposed_saving_ms": 15856.166,
+    "hot_fallback_after_source_touch_ms": 3173.291,
+    "current_hot_fallback_payload_gib": 148.916016,
+    "top4_q4k_active_payload_ratio": 0.7058823529411764,
+    "top4_q4k_hot_payload_gib": 105.11718776470589,
+    "remaining_hot_ms_allowed_after_perfect_source_elimination": 1642.8865524000012,
+    "required_q4k_src_gib_s_zero_overhead": 63.98322825865537,
+    "required_q4k_src_gib_s_with_500ms_overhead": 91.97849002237468
+  },
+  "microprobe": {
+    "harness": ".Agent/run-tools/q4k_dot_harness.cpp",
+    "runner": ".Agent/run-tools/run_q4k_dot_harness.sh",
+    "shapes": [
+      {
+        "name": "up_or_gate_like",
+        "k": 4096,
+        "rows": 2048,
+        "q4_source_bytes_per_expert": 4718592
+      },
+      {
+        "name": "down_like",
+        "k": 2048,
+        "rows": 4096,
+        "q4_source_bytes_per_expert": 4718592
+      }
+    ],
+    "thread_counts": [1, 8, 20, 24, 32],
+    "iters": 400,
+    "metric": "q4_src_gib_s; compare against 63.983 GiB/s zero-overhead and 91.978 GiB/s with 500ms integration overhead"
+  },
+  "accept_reject_rules": {
+    "reopen_condition": "Only if both DS4-like shapes exceed 91.978 GiB/s with enough margin should a source plan be considered. A value between 63.983 and 91.978 is still not source-ready because routing/Q4_K stream/full-model/TTFT/correctness integration overhead has no budget.",
+    "reject_condition": "Reject the combined 4Expert+Q4_K+source-page route if either shape is below 63.983 GiB/s or if margin over 91.978 GiB/s is absent.",
+    "no_sota_claim": "This standalone microprobe is not a model run and cannot be promoted as SOTA. Any later SOTA still requires strict-cold vendor France correctness, 16GB cgroup including page cache, TTFT gate, and clean pushed-source reproduction."
+  }
+}
