@@ -1,0 +1,86 @@
+{
+  "created_at_utc": "2026-07-05T21:55:00Z",
+  "purpose": "Close the historical prompt-set union pack and dynamic pack-selection route as a 10 tok/s path for the vendor DeepSeek strict-cold France SOTA.",
+  "source_head_before_audit": "9fa04362c02a4bcfd5720da078628739c82d1eb2",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ram_limit_bytes": 16000000000,
+    "page_cache_counted": true,
+    "correctness_ok": true
+  },
+  "union_trace_artifact": ".Agent/runs/20260703-vendor-ds4-coldstart/promptset-one-trace-union-analysis.json",
+  "union_pack": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+    "file_size_bytes": 38420348928,
+    "union_entries": 8621,
+    "union_payload_bytes": 38419038208,
+    "union_payload_gib": 35.780517578125
+  },
+  "current_france_pack_promptset_diagnostic": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/promptset-current-sota-cold-review-20260706.json",
+    "results": [
+      {"prompt": "france", "eval_tok_s": 4.4, "ttft_ms": 33046.91427, "manual_semantic_correctness": "pass", "ram_ok": true},
+      {"prompt": "quantum", "eval_tok_s": 1.7, "ttft_ms": 34977.402762, "manual_semantic_correctness": "fail_for_clean_correctness_gate", "ram_ok": true},
+      {"prompt": "fibonacci", "eval_tok_s": 1.6, "ttft_ms": 36410.50939, "manual_semantic_correctness": "fail_for_clean_correctness_gate", "ram_ok": true},
+      {"prompt": "japan", "eval_tok_s": 3.1, "ttft_ms": 34096.659341, "manual_semantic_correctness": "pass", "ram_ok": true},
+      {"prompt": "climate", "eval_tok_s": 2.4, "ttft_ms": 33967.516044, "manual_semantic_correctness": "pass", "ram_ok": true}
+    ]
+  },
+  "historical_union_pack_results": [
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T120943Z-20260702_promptset_union_pack_top6000_cold",
+      "mode": "union_top6000",
+      "results": [
+        {"prompt": "france", "eval_tok_s": 3.1, "prompt_tok_s": 1.3, "ttft_ms": 32351.363691, "ram_ok": true},
+        {"prompt": "quantum", "eval_tok_s": 2.2, "prompt_tok_s": 1.1, "ttft_ms": 33565.646946, "ram_ok": true},
+        {"prompt": "fibonacci", "eval_tok_s": 2.0, "prompt_tok_s": 1.1, "ttft_ms": 36178.671713, "ram_ok": true},
+        {"prompt": "japan", "eval_tok_s": 2.8, "prompt_tok_s": 1.1, "ttft_ms": 35774.536681, "ram_ok": true},
+        {"prompt": "climate", "eval_tok_s": 2.5, "prompt_tok_s": 1.1, "ttft_ms": 36088.057943, "ram_ok": true}
+      ]
+    },
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T122316Z-20260702_promptset_union_pack_top5000_cold",
+      "mode": "union_top5000",
+      "results": [
+        {"prompt": "france", "eval_tok_s": 3.2, "prompt_tok_s": 1.3, "ttft_ms": 30798.766947, "ram_ok": true},
+        {"prompt": "quantum", "eval_tok_s": 2.1, "prompt_tok_s": 1.1, "ttft_ms": 32161.322809, "ram_ok": true},
+        {"prompt": "fibonacci", "eval_tok_s": 2.1, "prompt_tok_s": 1.1, "ttft_ms": 35470.001, "ram_ok": true},
+        {"prompt": "japan", "eval_tok_s": 2.8, "prompt_tok_s": 1.1, "ttft_ms": 36151.630049, "ram_ok": true},
+        {"prompt": "climate", "eval_tok_s": 2.5, "prompt_tok_s": 1.1, "ttft_ms": 36220.687595, "ram_ok": true}
+      ]
+    },
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260702T124533Z-20260702_promptset_union_pack_top5000_chunk32_cold",
+      "mode": "union_top5000_chunk32",
+      "results": [
+        {"prompt": "france", "eval_tok_s": 3.2, "prompt_tok_s": 1.4, "ttft_ms": 31730.642417, "ram_ok": true},
+        {"prompt": "quantum", "eval_tok_s": 2.1, "prompt_tok_s": 1.1, "ttft_ms": 32700.944698, "ram_ok": true},
+        {"prompt": "fibonacci", "eval_tok_s": 2.1, "prompt_tok_s": 1.3, "ttft_ms": 32431.971485, "ram_ok": true},
+        {"prompt": "japan", "eval_tok_s": 2.7, "prompt_tok_s": 1.3, "ttft_ms": 33632.141471, "ram_ok": true},
+        {"prompt": "climate", "eval_tok_s": 2.5, "prompt_tok_s": 1.2, "ttft_ms": 34390.096317, "ram_ok": true}
+      ]
+    }
+  ],
+  "dynamic_selector_bound": {
+    "best_possible_france_choice": "select accepted France pack/profile",
+    "best_possible_france_eval_tok_s": 4.4,
+    "best_possible_france_delta_vs_sota": 0.0,
+    "best_observed_union_france_eval_tok_s": 3.2,
+    "best_observed_union_non_france_eval_tok_s": 2.8,
+    "upper_bound_for_current_sota_objective": "Dynamic prompt-specific pack selection cannot improve the accepted France SOTA because the only non-regressing choice for France is the current France pack. It can change average prompt-set behavior, but not the 10 tok/s France strict-cold objective.",
+    "ten_tok_s_gap": "Even the best historical union result is 6.8 tok/s below the 10 tok/s objective and 1.2 tok/s below the accepted 4.4 SOTA."
+  },
+  "decision": {
+    "new_sota": false,
+    "accepted_sota_unchanged": true,
+    "route_status": "closed_for_10_tok_s_france_sota",
+    "reason": "Union pack removes one-stream gate misses for broader prompts but materially slows the France SOTA path. Dynamic selection can preserve France only by choosing the existing France pack, leaving token rate unchanged. This route does not attack the remaining cold up/down CPU fallback and source/page movement enough to approach 10 tok/s.",
+    "next_step": "Continue with the active plan: obtain explicit disk cleanup/relocation approval for full alternate GGUF empirical testing, or produce a new hard-bound above 10 tok/s before source work."
+  },
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "benchmark_run": false
+}
