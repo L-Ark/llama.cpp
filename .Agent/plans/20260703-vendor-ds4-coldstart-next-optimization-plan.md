@@ -4,43 +4,45 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: Accepted 4.5 tok/s Prefill 2800 SOTA, Then Pushed-Source Repro
+### 2026-07-05 Latest Plan: Prefill 2800 Candidate Rejected After Pushed-Source Repro
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe 或非 vendor 结果提升为 SOTA。
 
-Current accepted strict cold SOTA 先提升到 `4.5 tok/s`，等待 pushed-source 复现确认：
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`。`PREFILL_LIMIT=2800` 出现过单次 `4.5 tok/s`，但 pushed-source 复现只达到 `4.3 tok/s`，所以不能作为 accepted SOTA：
 
-- SOTA candidate artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-sota-result.json`
-- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T152833Z-20260705_prefill2800_sota_probe/france-prefill2800-cpu40-vram0gb`
-- Source commit used for the run: `aa1f749bd` (`vendor-ds4: record prefill3192 rejection`)
-- Metrics: `eval_tok_s=4.5`, `prompt_tok_s=1.8`, `TTFT=33068.106725 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15055704064`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Accepted SOTA metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Rejected candidate artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-sota-result.json`
+- Rejected candidate run: `/root/lfz/runs/vendor-ds4-16gb/20260705T152833Z-20260705_prefill2800_sota_probe/france-prefill2800-cpu40-vram0gb`
+- Candidate metrics: `eval_tok_s=4.5`, `prompt_tok_s=1.8`, `TTFT=33068.106725 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15055704064`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Pushed-source repro artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-pushed-repro-result.json`
+- Pushed-source repro run: `/root/lfz/runs/vendor-ds4-16gb/20260705T153526Z-20260705_prefill2800_pushed_repro/france-prefill2800-pushed-repro-cpu40-vram0gb`
+- Pushed-source repro metrics: `eval_tok_s=4.3`, `prompt_tok_s=1.8`, `TTFT=32688.396257 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15095111680`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
 - France answer was semantic and coherent, with correct statements about France, Europe, landmarks, culture, cuisine, and economic/cultural role.
 - Config delta from previous accepted `4.4 tok/s` SOTA: only `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=2800` instead of `3000`; `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `cpu_moe=40`, `vram_cache=0`, accepted gate O_DIRECT pack, topk env, and strict 16GB/no-swap cold run remain unchanged.
-- Previous accepted SOTA for comparison: `4.4 tok/s`, `TTFT=32087.738292 ms`, run `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`.
-- TTFT increase is about `980.368 ms` / `3.06%`, below the accepted gate `33617.688744 ms` and below the 20% TTFT ceiling.
+- Candidate TTFT increase was about `980.368 ms` / `3.06%`, below the accepted gate `33617.688744 ms` and below the 20% TTFT ceiling. This was not enough because token rate did not reproduce.
 
 Why this improved:
 
 - `PREFILL_LIMIT=3192` was rejected: it filled all 3192 cache slots, increased prefill time to `5052.580 ms`, increased misses to `1980`, and regressed eval to `4.3 tok/s`.
 - `PREFILL_LIMIT=2800` keeps `392` slots free for dynamic admission and reduces prefill payload to `12478054400` bytes. It still has more misses than the previous 3000 run (`1974` vs `1886`), but reduces total direct pack reads and end-to-end elapsed time enough to improve the reported eval rate.
-- This is a no-source parameter SOTA, not a new algorithmic route. It does not solve the 10 tok/s target by itself, but it is a valid stricter baseline while larger routes are still blocked or closed.
+- This is a no-source parameter candidate, not a new algorithmic route. Because reproduction failed, it must remain a rejected variance record and not a stricter baseline.
 
 Immediate required action:
 
-1. Commit and push `.Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-sota-result.json` and this plan update to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
-2. Run a clean pushed-source reproduction with the exact same env/CLI and strict cold 16GB cgroup.
-3. If reproduction also reports `eval_tok_s > 4.4`, TTFT gate pass, RAM/page-cache pass, no OOM/swap, and semantic France correctness, record it as the fully accepted SOTA reproduction and push that artifact.
-4. If reproduction fails, keep the `4.5 tok/s` run as a candidate/rejected-variance record and revert the active accepted SOTA back to `4.4 tok/s` in the plan.
+1. Commit and push `.Agent/runs/20260705-vendor-ds4-coldstart/prefill-limit-2800-pushed-repro-result.json` and this plan update to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`.
+2. Do not promote `PREFILL_LIMIT=2800` without a future clean reproduction that beats `4.4 tok/s`; current accepted SOTA remains `4.4 tok/s`.
+3. Because `PREFILL_LIMIT=3192` and `2800` both failed to produce a reproducible SOTA, stop this small prefill sweep unless a new hard-bound justifies another point.
 
 Next optimization direction after reproduction:
 
-- Continue current-route no-source parameter screening only if it is bounded and cheap: possible follow-up is `PREFILL_LIMIT=2600` only after the pushed-source reproduction status is known.
+- Continue current-route no-source parameter screening only if it is bounded and cheap. `PREFILL_LIMIT=2600` is not allowed by default after the failed 2800 reproduction unless a new artifact explains why it should behave differently.
 - Larger 10 tok/s work remains the 4Expert/Q4_K route if disk is explicitly freed for the full `164.5GB` GGUF, or a genuinely new external artifact/representation/graph-dataflow proof. DFlash remains closed by the oracle verifier probe below.
 - No runtime source edit is allowed without a new hard-bound artifact covering exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and token-rate ceiling.
 
 Promotion gate remains strict:
 
-- Any future accepted SOTA requires `eval_tok_s > 4.5`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a France answer that is semantically correct and coherent.
+- Any future accepted SOTA requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a France answer that is semantically correct and coherent.
 - Any result with improved token rate but TTFT above the gate may be committed and pushed only as a rejected diagnostic, never as accepted SOTA.
 - Required SOTA metadata remains: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous SOTA.
 
