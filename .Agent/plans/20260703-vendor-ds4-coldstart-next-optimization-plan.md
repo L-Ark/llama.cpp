@@ -4,6 +4,32 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Test Full-Pack mmap Without Gate Prefill
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full-pack mmap + 3000-entry gate prefill 已经严格复现失败；新的窄实验只验证一个差异：关闭 gate prefill，保留 full native expert-pack mmap 和 named cache admission。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New experiment plan:
+
+- Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-no-prefill-plan-20260706.json`
+- Target bottleneck: cgroup page-cache/reclaim pressure and prefill overhead introduced by current-source `one prefill`.
+- Why this is justified: the old positive diagnostic `/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb` reached `5.1 tok/s` with `memory_file_bytes=12725145600` and `memory_max_events=26`, and stderr shows no `one prefill` load/completion lines. The clean rebuilt reproduction with current source and prefill enabled reached only `4.2 tok/s`, with `one prefill elapsed_ms=4665.907`, `bytes=13369344000`, `memory_file_bytes=15051735040`, and `memory_max_events=18032`.
+- Method: use `build-ds4-moe-stream-batch-probe/bin/llama-cli`, full native expert-pack mmap, strict cold 16GB cgroup, and the same France prompt; set `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=/dev/null` to load zero prefill entries while keeping named cache-key mode enabled. Keep `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` pointed at the accepted profile.
+- Important code detail: `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=0` is not a disable switch in current source; it means all entries. Therefore `/dev/null` is used for this diagnostic.
+- Expected upper signal: if this reproduces the old no-prefill trajectory, token rate should approach `5.0-5.1 tok/s`, TTFT should remain below `33617.688744 ms`, and `memory_file_bytes`/`memory_max_events` should move closer to the old diagnostic than to the rejected prefill run.
+- Risk: more gate misses may offset the removed prefill, or current source may still hit high file-cache/refault pressure. In that case reject and keep accepted SOTA at `4.4`.
+
+Accept/reject rule:
+
+1. Accept as SOTA candidate only if `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output all pass.
+2. If it passes, immediately record full reproduction metadata, commit and push source/artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then run a clean pushed-source reproduction before accepted SOTA promotion.
+3. If `eval_tok_s <= 4.4` or any gate fails, record as rejected, keep `4.4 tok/s` accepted, and do not repeatedly sample this route without a new hard-bound.
+
 ### 2026-07-06 Latest Active Plan: Full Native Expert-Pack mmap Reproduction Rejected, Return to Bottleneck Decomposition
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full native expert-pack mmap 的 `5.1 tok/s` 诊断信号未通过当前源码严格复现，因此不能升级为 SOTA，也不能继续作为已证明优化路线反复采样。

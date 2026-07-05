@@ -1,0 +1,81 @@
+{
+  "created_at_utc": "2026-07-05T23:25:00Z",
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-no-prefill-plan-20260706.json",
+  "status": "planned_before_run",
+  "objective": "Test whether full native expert-pack mmap only improves when gate one-prefill is disabled, matching the earlier 5.1 tok/s diagnostic behavior while preserving strict 16GB RAM, TTFT, and correctness gates.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "ttft_ms": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "observations_triggering_this_plan": {
+    "positive_diagnostic_without_prefill": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb",
+      "eval_tok_s": 5.1,
+      "ttft_ms": 26197.922333,
+      "memory_file_bytes": 12725145600,
+      "memory_max_events": 26,
+      "gate_prefill_lines_seen": false,
+      "vram_cache_hits": 30528,
+      "vram_cache_misses": 4623,
+      "vram_cache_hit_rate": "86.8%",
+      "cpu_fallback_pack_mmap_hits": 35880,
+      "cpu_fallback_pack_mmap_misses": 0,
+      "cpu_fallback_pack_mmap_fallback_gguf": 0,
+      "kimi_cpu_moe_total_ms_per_call": 1.609,
+      "kimi_cpu_moe_fallback_t0_ms_per_call": 1.170
+    },
+    "rejected_rebuild_with_prefill": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T230203Z-20260706_full_native_pack_mmap_rebuild_repro_71fe344/france-cpu40-vram0gb",
+      "eval_tok_s": 4.2,
+      "ttft_ms": 33035.198922,
+      "memory_file_bytes": 15051735040,
+      "memory_max_events": 18032,
+      "gate_prefill_elapsed_ms": 4665.907,
+      "gate_prefill_bytes": 13369344000,
+      "vram_cache_hits": 33265,
+      "vram_cache_misses": 1886,
+      "vram_cache_hit_rate": "94.6%",
+      "cpu_fallback_pack_mmap_hits": 35880,
+      "cpu_fallback_pack_mmap_misses": 0,
+      "cpu_fallback_pack_mmap_fallback_gguf": 0,
+      "kimi_cpu_moe_total_ms_per_call": 2.047,
+      "kimi_cpu_moe_fallback_t0_ms_per_call": 1.551
+    }
+  },
+  "hypothesis": "The rebuilt full-pack mmap route regressed because current source eagerly prefills 3000 gate entries, adding about 13.37GB of O_DIRECT reads and pushing cgroup file cache/reclaim pressure near the 16GB cap. Disabling only the gate prefill may preserve named cache admission and full-pack CPU fallback mmap while restoring the lower file-cache pressure seen in the 5.1 diagnostic.",
+  "method": {
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli",
+    "binary_sha256_before_run": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+    "source_head_before_run": "63ca303f5",
+    "base_env": "same as rejected full-pack mmap rebuild reproduction",
+    "env_change": {
+      "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/dev/null",
+      "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000 retained but inert because /dev/null loads zero prefill entries"
+    },
+    "why_dev_null": "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=0 means unlimited/all entries in current source. An empty prefill profile disables prefill while keeping one_prefill_key_mode_enabled() true, preserving named cache keys.",
+    "strict_runner": ".Agent/run-tools/strict_ds4_runner.py",
+    "run_name": "20260706_full_pack_mmap_no_prefill_devnull"
+  },
+  "theoretical_bound": {
+    "best_empirical_upper_signal_tok_s": 5.1,
+    "required_to_improve_current_sota_tok_s": 4.4,
+    "expected_best_case": "If disabling prefill reproduces the old diagnostic trajectory, token rate should be near 5.0-5.1 tok/s with TTFT well under the gate and memory_file near 12-13GB.",
+    "expected_risk": "More gate cache misses may offset the removed prefill. If current source still incurs high file-cache pressure or slow fallback_t0, token rate will remain <=4.4 and the route is rejected."
+  },
+  "acceptance": {
+    "token_rate": "eval_tok_s > 4.4",
+    "ttft": "ttft_ms <= 33617.688744",
+    "ram": "memory_peak_bytes <= 16000000000 including page cache, MemorySwapMax=0, no OOM or ram_limit_killed",
+    "correctness": "France output must be semantically correct and coherent",
+    "promotion": "If it passes, record a SOTA-candidate artifact, commit/push immediately to ssd/vendor/deepseek-token-rate-16gb, then run clean pushed-source reproduction before accepted SOTA promotion."
+  },
+  "rejection": {
+    "rule": "If eval_tok_s <= 4.4 or any gate fails, record as rejected and keep accepted SOTA at 4.4 tok/s.",
+    "no_repeated_sampling": "Do not keep sampling this route unless a new hard-bound explains the variance and predicts a stable pass."
+  }
+}
