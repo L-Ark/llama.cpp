@@ -76386,3 +76386,157 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact command, run dir, source commit, metrics, output answer, and
   decision in the plan.
+
+### Phase 7MU result
+
+Timestamp: 2026-07-05 21:10:00 CST.
+
+Status: accepted baseline refresh; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh`
+
+Source:
+
+- Runtime source commit: `4c146eb8f645c749b9c2432d58704fdf093eac78`.
+- Plan command commit: `f6e6bc8b3` (docs-only update that records the runtime
+  source commit).
+- Branch: `vendor/kimi-moe-stream-on-vendor`.
+
+Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Systemd:
+
+- result `success`;
+- service runtime `2min 37.626s`;
+- CPU time `58min 1.622s`.
+
+Gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- quality `pass`, reason `ok`;
+- manual semantic quality `pass`;
+- TTFT `72840.46 ms`, below `127598.064 ms`;
+- host cgroup `memory.max = 15899996160`;
+- `memory.swap.max = 0`;
+- `memory.peak = 15899996160`;
+- `memory.events`: `oom = 0`, `oom_kill = 0`;
+- `read_failures = 0`;
+- `iouring_fallbacks = 0`;
+- no async coalesce activation.
+
+Output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+Timing:
+
+- prompt tokens: `17`;
+- TTFT / prompt eval: `72840.46 ms`;
+- decode: `56696.97 ms / 77 runs`;
+- token rate: `1.36 tok/s`;
+- total time: `129571.38 ms / 94 tokens`;
+- graphs reused: `76`.
+
+Memory:
+
+- final `memory.current = 15091728384`;
+- final `anon = 458752`;
+- final `file = 14838345728`;
+- final `inactive_file = 14699683840`;
+- final `active_file = 138076160`;
+- final `kernel = 248868864`;
+- final `pgmajfault = 984958`;
+- final `workingset_refault_file = 45140`.
+
+Runtime counters:
+
+- expert pack:
+  - hits `63050`;
+  - misses `633`;
+  - direct reads `2229`;
+  - iouring reads `56535`;
+  - iouring bytes `315379728384`;
+  - iouring submit `130362 us`;
+  - iouring wait `50085670 us`;
+  - iouring H2D enqueues `56535`;
+  - iouring batches `12722`;
+  - wait calls `45178`;
+  - CQEs `56535`;
+  - inflight avg `3.39`, max `8`;
+  - batch histogram `1:437,2-4:6446,5-8:5839`.
+- pinned staging:
+  - main copies `42558`, waits `42522`, fallbacks `0`,
+    slots `12`, slot size `7.44 MiB`;
+  - main iouring jobs `40529`, wait calls `32468`, CQEs `40529`,
+    inflight avg `3.39`, max `8`;
+  - gate copies `16813`, waits `16789`, fallbacks `0`,
+    slots `12`, slot size `5.36 MiB`;
+  - gate iouring jobs `16006`, wait calls `12710`, CQEs `16006`,
+    inflight avg `3.38`, max `8`.
+- current down overlap:
+  - calls `2464`;
+  - planned/completed jobs `9199`;
+  - cache hits `8665`;
+  - missing tensor `231`;
+  - missing pack `99`;
+  - submitted batches `2224`;
+  - failed batches `0`;
+  - worker `8068709 us`.
+- VRAM cache:
+  - total hits `56420`, misses `50140`, preloads `9199`,
+    hit rate `52.9%`;
+  - down slots `766`, slot `7.44 MiB`, hits `23812`,
+    misses `8812`, hit rate `73.0%`;
+  - upgate slots `1735`, slot `5.36 MiB`, hits `32608`,
+    misses `41328`, hit rate `44.1%`.
+- down prefetch:
+  - loads `9199`;
+  - hits `9199`;
+  - evicted unused `0`;
+  - useful rate `100.0%`;
+  - async waits `9199`.
+- CPU fallback pack mmap:
+  - enabled `1`;
+  - hits `4286`;
+  - misses `26`;
+  - bytes `35391799296`;
+  - fallback GGUF `26`.
+
+Interpretation:
+
+- The current branch still reproduces the accepted n96 band:
+  - 7MU: `56696.97 ms / 77`, `1.36 tok/s`;
+  - 7LZ reference: `56768.45 ms / 77`, `1.36 tok/s`;
+  - 7JY reference: `57169.16 ms / 77`, `1.35 tok/s`.
+- This is a baseline refresh, not a new improvement.
+- The dominant measured bucket remains expert-pack iouring wait:
+  `50.086 s` inside a `56.697 s` decode.
+- Current-down overlap is active and useful, with `100%` down-prefetch useful
+  rate, but it still contributes `8.069 s` worker time and cannot hide the
+  broader upgate/down expert movement.
+- Host RAM is compliant but exactly at the configured cgroup peak. Any next
+  optimization that adds pinned/RAM cache must first prove it stays below
+  `15899996160` including page cache.
+
+Decision:
+
+- Do not promote SOTA.
+- Use 7MU as the current runtime baseline for the next implementation plan.
+- The next candidate must target the remaining expert-pack movement/wait
+  without repeating already rejected broad cache split, pack layout, adjacent
+  coalescing, or FP4 conversion directions.
