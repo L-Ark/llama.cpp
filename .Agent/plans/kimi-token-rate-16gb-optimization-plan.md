@@ -79625,7 +79625,7 @@ Decision:
 
 Timestamp: 2026-07-06 03:18:00 CST.
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -79716,3 +79716,52 @@ Reproducibility:
 - Store the extraction/classification script and raw TSV outputs in the run
   directory.
 - Commit and push the result before any follow-up benchmark or source change.
+
+Result:
+
+- Timestamp: 2026-07-06 01:46:30 CST.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-173912Z-phase7nj-runtime-switch-audit`
+- This phase did not run the model by design; no source files were changed.
+- Extraction scope:
+  - source strings only from `getenv(...)` or env-helper call sites;
+  - runner strings only from direct env assignments or `echo "KEY=..."`
+    writes;
+  - compile constants such as `GGML_ASSERT` were excluded.
+- Runtime envs audited: `146`.
+- Classification counts:
+  - `already_covered_alias`: `40`;
+  - `diagnostic_only`: `52`;
+  - `rejected_family`: `47`;
+  - `prompt_only`: `5`;
+  - `correctness_risk`: `1`;
+  - `disable_path`: `1`.
+- Unclassified switches: `0`.
+- Production candidates: `0`.
+
+Decision:
+
+- No remaining current-source runtime switch qualifies as a production
+  candidate.
+- Do not spend a cold-start n32 run on these switches.
+- Continue only with a new algorithmic/model-format/external-asset plan.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-173912Z-phase7nj-runtime-switch-audit
+python3 audit_runtime_switches.py
+cat decision.md
+```
+
+Artifacts:
+
+- `commands.log`
+- `repo_state.txt`
+- `audit_runtime_switches.py`
+- `all_runtime_switches.tsv`
+- `unseen_runtime_switches.tsv`
+- `classification.tsv`
+- `source_context.txt`
+- `decision.md`
