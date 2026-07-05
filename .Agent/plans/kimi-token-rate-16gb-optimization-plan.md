@@ -67958,3 +67958,99 @@ Reproducibility:
 - Record source commit, run directory, command, output, TTFT, decode, token
   rate, memory, swap, IO counters, actual VRAM cache budget line, cache slots,
   hit rates, and decision.
+
+### 7LA result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `26da0e929` (`docs: plan narrow vram cache probe`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-051439Z-phase7la-vram15256-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-051439Z-phase7la-vram15256-n32 \
+      N=32 VRAM_MIB=15256 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `74974.36 ms`;
+- decode `23611.48 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- memory final `15104086016`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+VRAM/cache counters:
+
+- budget line:
+  `requested=15256 MiB actual=15256 MiB free=15890 MiB total=32109 MiB graph_reserve=0 MiB safety=512 MiB clamp=1`;
+- upgate cache:
+  - slots `1764` versus 7KX `1735`;
+  - hits `13477`, misses `16299`, hit rate `45.3%`;
+- down cache:
+  - slots `779` versus 7KX `766`;
+  - hits `9657`, misses `3463`, hit rate `73.6%`;
+- expert pack:
+  - hits `25002`, misses `192`;
+  - iouring reads `22604`;
+  - iouring bytes `126124228608`;
+  - iouring wait `20981156 us`;
+  - iouring submit `49016 us`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3664/3664`;
+  - cache hits `3528`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3260362 us`.
+
+Comparison:
+
+- 7KX current-head n32 baseline:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - iouring reads `22647`;
+  - iouring wait `19756301 us`;
+  - upgate slots `1735`, down slots `766`.
+- 7LA:
+  - decode `23611.48 ms / 31`, `1.31 tok/s`;
+  - iouring reads `22604`;
+  - iouring wait `20981156 us`;
+  - upgate slots `1764`, down slots `779`.
+
+Interpretation:
+
+- The larger budget was not clamped and did increase resident slots:
+  - upgate `+29` slots;
+  - down `+13` slots.
+- It slightly reduced expert-pack reads (`-43`) and improved hit rates, but the
+  endpoint decode regressed by `1009.91 ms` versus 7KX.
+- The likely causes are CUDA memory pressure, cache allocation/layout side
+  effects, or normal cold-run variance exceeding the tiny miss reduction. In
+  either case, the measured gain from +256MiB cache is not enough to justify
+  changing defaults.
+
+Decision:
+
+- Reject `VRAM_MIB=15256`.
+- Do not run n96.
+- Keep production default `VRAM_MIB=15000`.
+- Treat narrow total VRAM budget increase as closed unless a future trace shows
+  a much larger cache-capacity bound.
