@@ -68860,3 +68860,62 @@ Decision:
 - Revert `d012a8c24` before continuing.
 - Do not retry shared-IO dual-fence unless a future profile proves that the
   additional handoff/synchronization cost can be removed.
+
+## Phase 7LF - post-7LE rollback n32 guard
+
+Timestamp: 2026-07-05 19:56:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify that the source rollback after rejected 7LE restores the accepted
+  default runtime path and that no 7LE binary/source residue remains.
+
+Reason:
+
+- 7LE changed `moe_stream_batch.cu` and built a new CUDA library on the server.
+- The source has been reverted in git, but the server must rebuild and run a
+  cold-start guard to prove the default path is back to the known n32 baseline
+  range before further optimization work.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 6e3b4c58c
+cmake --build build-cuda-batch -j
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lf-post-7le-rollback-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `up/gate shared IO dual-fence active`.
+
+Decision rule:
+
+- If decode returns near the current n32 baseline range (`~22.6-22.8 s / 31`)
+  and all gates pass, record rollback verified.
+- If it materially regresses, inspect git/build/env first. Do not start a new
+  optimization until rollback is proven clean.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, command, output, gates, activation absence, and metrics.
