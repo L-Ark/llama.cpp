@@ -73026,3 +73026,130 @@ Decision:
 - Do not retry H2D batch or shared IO.
 - The next source plan must come from a new measured bottleneck, not from the
   already rejected IO/H2D scheduler family.
+
+## Phase 7ME - Q4_0 down GPU correctness-parity diagnostic design
+
+Timestamp: 2026-07-06 03:48:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-open the Q4_0 down fallback direction only as a correctness diagnostic.
+- Determine why broad Q4_0 down GPU batch in 7LL-C removed CPU fallback but
+  failed quality and regressed speed.
+- Do not enable broad Q4_0 GPU down for performance testing until parity is
+  understood.
+
+Why this is the next measured direction:
+
+- 7MA/7MB closed the newest IO/H2D scheduler candidates:
+  - shared IO early-up reduced raw iouring wait but worsened endpoint;
+  - H2D batch enqueue activated but did not improve endpoint;
+  - current default returned to baseline after reverts.
+- The remaining measured decode bucket with a clear hard upper bound is Q4_0
+  down CPU fallback:
+  - 7LK-B measured `2369.816 ms / 31`;
+  - 7LO measured `2612.160 ms`;
+  - all decode fallback is Q4_0 down.
+- 7LL-C proved activation is possible:
+  - CPU fallback dropped to zero;
+  - but output quality failed and decode regressed.
+- Therefore the only valid next step is numeric parity, not another broad
+  enablement.
+
+Diagnostic theory:
+
+- For a selected Q4_0 `ffn_down_exps.weight` tensor and one decode call, the
+  function has enough inputs to compute a CPU reference:
+  - `src0_data` points to quantized Q4_0 expert weights;
+  - `src1_f32` contains the active expert input rows;
+  - `active_experts`, `dst_ids`, and `token_ids` identify the routed rows;
+  - `dst` is the target accumulation buffer.
+- A diagnostic can:
+  1. run the existing CUDA down batch path for a single allowed layer/call;
+  2. copy the GPU result for that call back;
+  3. compute a CPU Q4_0 reference for the same active experts and rows;
+  4. report max/mean absolute error and a few worst columns;
+  5. decline/fallback after the diagnostic if needed, so output quality is not
+     affected in the full model run.
+
+Implementation constraints:
+
+- Default off behind `GGML_MOE_Q4_DOWN_PARITY=1`.
+- Require a target layer/tensor filter:
+  - `GGML_MOE_Q4_DOWN_PARITY_TENSOR=blk.6.ffn_down_exps.weight` by default in
+    the first run.
+- Limit to one or a small number of calls:
+  - `GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=1`.
+- Do not remove CPU fallback in production mode.
+- Do not change default script env.
+- If the diagnostic runs CUDA Q4_0, it must either:
+  - write only diagnostic output and then return `false` so the original CPU
+    fallback still produces model output; or
+  - run in an isolated executable/test path that does not affect generation.
+- Record:
+  - selected tensor;
+  - active experts;
+  - route ids;
+  - max absolute error;
+  - mean absolute error;
+  - max relative error where reference magnitude is non-trivial;
+  - worst output columns;
+  - whether accumulation/scatter indexing matches.
+
+Hard upper bound:
+
+- If parity can be fixed and a selective subset can be made faster, the maximum
+  n32 gain is the Q4_0 decode fallback time:
+  `~2.4-2.6 s`.
+- Because broad Q4_0 GPU down added IO/H2D and regressed to `1.07 tok/s`, a
+  later performance patch must be selective and must prove endpoint gain; parity
+  alone is not a promotion.
+
+First diagnostic command after source implementation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7me-q4-parity-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_PARITY=1 GGML_MOE_Q4_DOWN_PARITY_TENSOR=blk.6.ffn_down_exps.weight GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates for the diagnostic run:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`, because CPU fallback should still produce final model
+  output;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- parity report must be present.
+
+Decision rule:
+
+- If parity error is large, inspect indexing/layout/accumulation before any
+  performance attempt.
+- If parity error is small but broad Q4 still quality-failed, inspect whether
+  7LL-C changed accumulation order/scatter across multiple calls or caused cache
+  churn rather than kernel math error.
+- If parity is good and the fallback path remains the only issue, plan a
+  selective Q4_0 down subset experiment for only the measured fallback-heavy
+  layers, with n32 repeat and n96 confirmation.
+- If parity implementation is too invasive or cannot preserve CPU fallback
+  output, revert it and close Q4_0 GPU down as not currently viable.
+
+Reproducibility:
+
+- Commit and push this plan before source edits.
+- Commit diagnostic source separately.
+- Record build result, exact run directory, output, gates, and parity report.
