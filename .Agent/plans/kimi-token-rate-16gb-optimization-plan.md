@@ -78170,7 +78170,7 @@ Decision:
 
 Timestamp: 2026-07-06 00:32:00 CST.
 
-Status: planned.
+Status: rejected; source reverted and rebuilt back to clean `bb54fd80a`.
 
 Reason for this phase:
 
@@ -78303,3 +78303,96 @@ Required result artifacts:
 - `summary.tsv`;
 - final plan update with raw metrics, output text, decision, and reproduce
   commands.
+
+Execution result:
+
+- Timestamp: 2026-07-06 00:12:00 CST to 2026-07-06 00:22:00 CST.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-161207Z-phase7nc-active-expert-parallel`
+- Source state:
+  - tested as uncommitted probe on top of
+    `bb54fd80a docs: plan active expert parallel probe`;
+  - full tested patch saved in run artifact `source.patch`;
+  - source was reverted after n32-a regression;
+  - server CUDA build was rebuilt after revert, so build artifacts are back to
+    clean `bb54fd80a`;
+  - no source commit was pushed.
+- Build:
+  - CUDA build succeeded before the run;
+  - CUDA build succeeded again after source revert.
+
+n32-a command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+TOP=/root/lfz/runs/vendor-kimi-token-rate/20260705-161207Z-phase7nc-active-expert-parallel
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$TOP/n32-a" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_ACTIVE_EXPERT_PARALLEL=1' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+n32-a result:
+
+- `exit=0`;
+- activation present:
+  `[moe_stream_batch] active-expert parallel MMVQ active`;
+- quality:
+  - `quality=pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- timing:
+  - `ttft_ms=74587.93`;
+  - `decode_ms=22439.76`;
+  - `decode_runs=31`;
+  - `token_rate=1.38`;
+- memory:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `oom=0`, `oom_kill=0`;
+- expert-pack counters:
+  - `hits=25045`;
+  - `misses=192`;
+  - `read_failures=0`;
+  - `iouring_reads=22647`;
+  - `iouring_bytes=126391910400`;
+  - `iouring_wait_us=18462319`;
+- current down overlap:
+  - `calls=992`;
+  - `planned_jobs=3673`;
+  - `completed_jobs=3673`;
+  - `failed_batches=0`;
+  - `worker_us=2951104`;
+- down profile:
+  - `calls=2038`;
+  - `total=38.345 ms/call`;
+  - `cuda_batch=2.128 ms/call`;
+  - `fallback_t0=36.175 ms/call`;
+  - `batch_accept=1644`.
+
+Decision:
+
+- Rejected.
+- Although activation, France quality, TTFT, and memory gates passed, endpoint
+  throughput regressed from the current strict n32 reference `1.42 tok/s` to
+  `1.38 tok/s`.
+- The result suggests the active-expert MMVQ kernels do not overlap usefully on
+  two streams in this execution shape, or the added stream/event scheduling
+  competes with H2D/current-down overlap enough to erase any compute gain.
+- No n32-b or n96 run was allowed because the first n32 run failed the
+  performance gate.
+- Do not retry two-stream active-expert MMVQ split as a SOTA path without a
+  lower-level kernel occupancy/stream-concurrency proof.
+
+Next direction:
+
+- Return to measured bottlenecks that remove work from the critical path rather
+  than adding more concurrent scheduling:
+  - reduce CPU fallback work;
+  - find why `fallback_t0` remains large in down profile;
+  - inspect whether the accepted GPU handoff/down path still forces CPU backend
+    graph work after custom CUDA has produced the output.
