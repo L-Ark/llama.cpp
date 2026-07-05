@@ -1,0 +1,138 @@
+{
+  "artifact": "disk-cleanup-candidates-after-payload-refresh",
+  "candidate_space_targets": [
+    {
+      "candidate": "0xSero Q2 REAP GGUF metadata candidate",
+      "download_bytes": 52593532000,
+      "recommended_free_bytes": 60000000000
+    },
+    {
+      "candidate": "bullerwins IQ2_S GGUF metadata candidate",
+      "download_bytes": 88019539296,
+      "recommended_free_bytes": 100000000000
+    },
+    {
+      "candidate": "tarruda Q2_K split GGUF metadata candidate",
+      "download_bytes": 96962159168,
+      "recommended_free_bytes": 110000000000
+    },
+    {
+      "candidate": "cloudyu 4Expert GGUF",
+      "download_bytes": 164465760544,
+      "recommended_free_bytes": 180000000000
+    }
+  ],
+  "cleanup_candidates": [
+    {
+      "bytes": 281688457065,
+      "exists": true,
+      "note": "Unrelated GLM model; repeatedly identified as not used by current vendor DS4 SOTA.",
+      "path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+      "risk": "low"
+    },
+    {
+      "bytes": 147174760448,
+      "exists": true,
+      "note": "Not used by accepted SOTA env; adjacent DeepSeek asset and may be useful for other experiments.",
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "risk": "medium_high"
+    },
+    {
+      "bytes": 137329871769,
+      "exists": true,
+      "note": "Owner/use unknown; contains DeepSeek disk-layer packs from another workspace.",
+      "path": "/root/yibins/ssd16-cache",
+      "risk": "medium_high"
+    },
+    {
+      "bytes": 38420348928,
+      "exists": true,
+      "note": "Prompt-set diagnostic pack, not accepted SOTA France pack.",
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+      "risk": "medium"
+    },
+    {
+      "bytes": 19148717883,
+      "exists": true,
+      "note": "Unrelated project/model, but user asset unknown.",
+      "path": "/root/wici-diffgemma",
+      "risk": "low_medium"
+    },
+    {
+      "bytes": 17179869184,
+      "exists": true,
+      "note": "System swapfile-like path; not needed for MemorySwapMax=0 runs but removing may affect system config.",
+      "path": "/root/lfz/swapfile",
+      "risk": "do_not_touch_without_system_approval"
+    },
+    {
+      "bytes": 4768453597,
+      "exists": true,
+      "note": "ik_llama historical runs; not vendor SOTA but may be evidence.",
+      "path": "/root/lfz/runs/ik_llama_migrated",
+      "risk": "medium"
+    },
+    {
+      "bytes": 3938387273,
+      "exists": true,
+      "note": "ik_llama historical runs; not vendor SOTA but may be evidence.",
+      "path": "/root/lfz/runs/ik_llama",
+      "risk": "medium"
+    },
+    {
+      "bytes": 2965893719,
+      "exists": true,
+      "note": "Contains incomplete Hugging Face cache fragment; small relative to model downloads.",
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download",
+      "risk": "low"
+    },
+    {
+      "bytes": 2799526777,
+      "exists": true,
+      "note": "Rebuildable cache, small relative to 4Expert.",
+      "path": "/root/.cache/pip",
+      "risk": "low"
+    }
+  ],
+  "cleanup_policy": "No deletion or relocation without explicit user approval. This artifact only ranks candidates.",
+  "created_utc": "2026-07-05T17:53:48Z",
+  "current_df_root_fields": [
+    "/dev/root",
+    "1065418129408",
+    "1063539355648",
+    "1861996544",
+    "100%",
+    "/"
+  ],
+  "decision": {
+    "best_single_cleanup_candidate": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+    "can_continue_empirical_alternate_without_cleanup": false,
+    "reason": "It is about 263GB and unrelated to current vendor DeepSeek SOTA, enough for cloudyu 4Expert or low-bit GGUF tests. Still requires explicit approval because it is a user/model asset."
+  },
+  "free_bytes": 1861996544,
+  "must_preserve_for_current_sota": [
+    "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "/root/lfz/vendor/llama.cpp-deepseek-v4"
+  ],
+  "safe_sequences_if_approved": [
+    {
+      "minimum": "Approve deleting/relocating GLM model or equivalent >=60GB; download only after df confirms space.",
+      "target": "test_0xSero_Q2_REAP"
+    },
+    {
+      "minimum": "Approve deleting/relocating GLM model (263GB) or equivalent >=180GB while preserving current SOTA assets.",
+      "target": "test_cloudyu_4Expert_GGUF"
+    },
+    {
+      "minimum": "Before deletion, record sha256/paths of accepted GGUF, France gate pack, current SOTA run, and pushed source commit.",
+      "target": "preserve_sota_then_cleanup"
+    }
+  ],
+  "source": {
+    "head": "e9479da485b5d12ccbf83c974cbf312140ae49aa",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": ""
+  }
+}
