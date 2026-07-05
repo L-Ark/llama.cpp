@@ -4,7 +4,7 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-06 Latest Plan: Preserve 4.4 SOTA, Then Run Bounded KEEP_TOPK Probe
+### 2026-07-06 Latest Plan: Close Unsafe KEEP_TOPK Value2, Return To Exact Up/Down
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama、fixed-text oracle probe、不可复现单次结果、或非 vendor 结果提升为 SOTA。
 
@@ -27,6 +27,13 @@ Closed or rejected routes that must not be accidentally promoted:
 - 4Expert sidecar bypass remains closed with current loader. A small expert pack cannot change hparams, tensor metadata, `expert_used_count`, or `ffn_gate_tid2eid.weight` routing. Reopen only with the full `164.5GB` 4Expert GGUF after disk is explicitly freed, or with a separate split-loader hard-bound before source code.
 - External artifact refresh after top4 rejection found no new vendor-loadable route that is both disk-feasible now and hard-bound above `10 tok/s`.
 
+KEEP_TOPK audit result:
+
+- Audit artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/keep-topk-layer-value2-audit-closure.json`
+- Implementation finding: `GGML_MOE_KEEP_TOPK_*` applies only to `ffn_up_exps` and `ffn_down_exps`. For selected expert rows with `id >= keep_topk`, `ggml_compute_forward_mul_mat_id` zero-fills the destination slice and skips enqueuing the row. This is approximate model-math pruning, not a cache/offload/I/O optimization.
+- Historical evidence: global `0-39=>top3` reached only `3.6 tok/s` and produced an incomplete France answer; narrow `0-2=>top3` reached only `3.6 tok/s` and produced an incomplete answer; `30-39=>top2` reached only `3.5 tok/s` and failed manual correctness with a semantic error and incomplete closing. The true skip/zero-row audit also concluded that additional row removal is approximate top-k pruning and that relevant top2 variants already failed trajectory/correctness/performance.
+- Decision: do not run the `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` strict France probe. The previous plan allowed this only if the audit supported a cheap bounded test. The audit shows it would be a blind, more aggressive repeat of a closed approximate-pruning route.
+
 Disk and preservation state before the next step:
 
 - `/root` is effectively full: about `991G/993G` used and only about `1.8G-1.9G` free.
@@ -35,14 +42,11 @@ Disk and preservation state before the next step:
 
 Next executable plan:
 
-1. First audit the current `GGML_MOE_KEEP_TOPK_*` implementation and existing artifacts, without source edits, to confirm exactly what is pruned today and whether the risk is bounded enough for one strict probe.
-2. If the audit supports a cheap bounded probe, write a run-plan artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` before execution. The first candidate is `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` with the accepted SOTA config otherwise unchanged: `cpu_moe=40`, `vram_cache=0`, accepted O_DIRECT gate pack, `PREFILL_LIMIT=3000`, strict cold `drop_caches`, 16GB cgroup including page cache, and no trace.
-3. The theory to record before the run: lowering layer keep-topk from `3` to `2` can reduce CPU fallback up/down work and source/page pressure in layers `10-39`, but it is correctness-risky because it prunes routed expert contribution. The expected upside is bounded by the fraction of decode time currently attributable to CPU up/down fallback and source/page exposure; it cannot be accepted without semantic France correctness and the strict TTFT/RAM gates.
-4. Run the strict France prompt first. The France answer must be semantically correct and coherent; outputs with repetition, self-correction such as `Wait, I already said that`, truncation, contradictory country facts, or landmark/cuisine hallucinations are rejected even if the script heuristic passes.
-5. If the probe improves token rate but fails correctness, RAM, OOM/swap, or TTFT, immediately record it as rejected and restore the accepted SOTA environment. Do not promote it.
-6. If the probe reaches `eval_tok_s > 4.4` and passes correctness, `TTFT <= 33617.688744 ms`, strict 16GB RAM/page-cache, no swap/OOM, and all run counters, immediately commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then run a clean pushed-source reproduction before treating it as accepted.
-7. If the pushed-source reproduction does not also beat `4.4 tok/s` under the same gates, record the candidate as rejected variance, like `PREFILL_LIMIT=2800`, and keep `4.4 tok/s` as accepted SOTA.
-8. If `KEEP_TOPK_LAYER_VALUE=2` fails or is not justified by the audit, do not continue a blind top-k sweep. Close the no-source top-k route unless a new hard-bound explains a specific next point and its correctness risk.
+1. Close no-source approximate top-k pruning. Do not run `KEEP_TOPK_LAYER_VALUE=2`, wider top2 ranges, or another top-k sweep unless a future artifact proves a correctness-preserving routing model before the performance run.
+2. Return to exact up/down fallback elimination. The current candidate screen already shows why this is the remaining useful bottleneck: source/page-only reaches only about `9.22 tok/s`, source/page plus the best existing CPU microprobe reaches only about `9.81 tok/s`, and `source_page_plus_full_fallback_removed` is the first hard-bound row above 10 at about `11.45 tok/s`.
+3. Before any runtime source edit, write or refresh a hard-bound artifact that identifies one exact kernel/layout/dataflow change, its exact code path, expected saved milliseconds, required GiB/s, VRAM impact, page-cache impact, TTFT impact, fixed-text top1 verifier, strict France correctness gate, rollback criteria, and full env/CLI.
+4. The nearest non-source blocker is full 4Expert/alternate artifact testing. That remains blocked by disk until the user explicitly approves deletion or relocation of large non-SOTA assets while preserving accepted SOTA evidence.
+5. If a new exact source probe is proposed, first run fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Only after top1 stability can a strict cold France generation run be used for SOTA consideration.
 
 Promotion gate remains strict:
 

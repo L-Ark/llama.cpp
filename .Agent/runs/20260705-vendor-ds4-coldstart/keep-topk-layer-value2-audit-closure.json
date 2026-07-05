@@ -1,0 +1,98 @@
+{
+  "artifact": "keep-topk-layer-value2-audit-closure",
+  "created_utc": "2026-07-05T16:17:36Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "source_head_before_artifact": "7a7ae29ad",
+  "objective": "Decide whether the latest plan's optional no-source GGML_MOE_KEEP_TOPK_LAYER_VALUE=2 strict France probe is justified.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "key_env": {
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_CUDA_DISABLE_GRAPHS": "1"
+    }
+  },
+  "implementation_audit": {
+    "file": "ggml/src/ggml-cpu/ggml-cpu.c",
+    "functions": [
+      "ggml_moe_keep_topk_updown",
+      "ggml_moe_keep_topk_applies",
+      "ggml_moe_keep_topk_for_tensor",
+      "ggml_compute_forward_mul_mat_id"
+    ],
+    "applies_to": [
+      "ffn_up_exps",
+      "ffn_down_exps"
+    ],
+    "mechanism": "For selected expert rows with id >= keep_topk, the code zero-fills the destination slice and does not enqueue the row for CPU fallback or CUDA one-stream handling.",
+    "exactness": "approximate_model_math_pruning",
+    "not_a_cache_or_io_optimization": true,
+    "correctness_risk": "Changing keep_topk changes routed expert contribution and can change generation trajectory, answer length, and semantic correctness."
+  },
+  "historical_evidence": [
+    {
+      "candidate": "global 0-39 top3",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T100937Z-20260703T100937Z-early-layer-top3-probe/france-cpu40-vram0gb",
+      "eval_tok_s": 3.6,
+      "ttft_ms": 29979.512524,
+      "ram_ok": true,
+      "manual_correctness": "rejected_incomplete_answer",
+      "diagnosis": "Output ended incomplete and gate/cache counters changed materially."
+    },
+    {
+      "candidate": "layer 0-2 top3 via inverse range",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T101357Z-20260703T101357Z-narrow-layer0-2-top3-probe/france-cpu40-vram0gb",
+      "eval_tok_s": 3.6,
+      "ttft_ms": 29360.514084,
+      "ram_ok": true,
+      "manual_correctness": "rejected_incomplete_answer",
+      "diagnosis": "Even the smallest early-layer pruning changed output trajectory and increased misses/refault pressure."
+    },
+    {
+      "candidate": "layer 30-39 top2 with temporary second range",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T112234Z-20260703T-late-layer30-39-top2-probe/france-cpu40-vram0gb",
+      "eval_tok_s": 3.5,
+      "ttft_ms": 28826.576851,
+      "ram_ok": true,
+      "manual_correctness": "rejected_semantic_error_and_incomplete_closing",
+      "diagnosis": "Late-layer top2 changed cache trajectory, increased misses/refaults, and failed manual France correctness."
+    },
+    {
+      "candidate": "true skip/zero-row bound",
+      "artifact": ".Agent/runs/20260704-vendor-ds4-coldstart/true-skip-zero-row-bound-analysis.json",
+      "decision": "closed",
+      "diagnosis": "Remaining CPU fallback already matches unpruned rows. Additional row removal is approximate top-k pruning; relevant top2 variants already failed trajectory/correctness/performance."
+    }
+  ],
+  "candidate_under_audit": {
+    "env_delta": {
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "2"
+    },
+    "relative_to_sota": "Prunes one more routed up/down expert for every layer 10-39 compared with accepted SOTA.",
+    "risk_vs_prior_failures": "This is more aggressive than the already failed layer 30-39 top2 probe and affects three times as many late/mid layers.",
+    "bounded_speed_reason": "It could only save part of remaining up/down fallback by removing model work. It does not solve source/page stalls, exact compute throughput, or prompt-general correctness."
+  },
+  "decision": {
+    "run_strict_probe": false,
+    "sota_changed": false,
+    "accepted_sota_remains_eval_tok_s": 4.4,
+    "reason": "The plan allowed value=2 only if the audit supported a cheap bounded probe. Current implementation and historical evidence show it is approximate model pruning with repeated correctness and performance failures. Running 10-39=>2 would be a blind, more aggressive repeat, not a correctness-preserving optimization.",
+    "next_direction": "Close no-source top-k pruning and return to exact up/down fallback elimination or a disk-enabled full 4Expert/alternate artifact route."
+  },
+  "next_required_artifact_before_source_edit": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+  "push_policy": "This closure artifact and plan update must be committed and pushed to ssd/vendor/deepseek-token-rate-16gb. Any future accepted SOTA still requires full reproduction metadata and immediate push before promotion."
+}
