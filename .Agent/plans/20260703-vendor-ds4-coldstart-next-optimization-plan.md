@@ -74,6 +74,15 @@ Compact retained CUDA branch hard-bound result:
 - Decision: close the current sparse retained top64 route for now. Do not add a logit-changing sparse retained/hot write path on this graph. Reopen only if a new placement probe first proves a retained CUDA `gate_all` tensor and a bounded combine-copy cost with meaningful margin.
 - Next optimization step must be a fresh bottleneck search from the accepted `4.4 tok/s` SOTA or a separate full-MoE CUDA design with its own hard-bound; it must not repeat source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or rectangular `DS4_HOT_DISPATCH`.
 
+Current-head accepted-path baseline guard:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-sota44-no-trace-after-sparse-close.json`.
+- Source head and remote head: `9775091756ee0c3a0e5f06e68bd27c609be0e671`.
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`.
+- Config: accepted path, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, strict cold `drop_caches`, 16GB cgroup including page cache, no swap.
+- Result: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- France answer was semantically correct and coherent. This ties the accepted SOTA class and is a guardrail/baseline record, not a new SOTA promotion.
+
 Mandatory record/push rule:
 
 - Every practice step must first update this plan or an artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.

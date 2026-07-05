@@ -1,0 +1,42 @@
+{
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+  "config": {
+    "cli_override": "-c 256 -b 16 -ub 16 -t 20 -tb 20 --n-cpu-moe 40 --defer-experts",
+    "cpu_moe": 40,
+    "expert_pack_io": "direct",
+    "gate_cache_mib": 13568,
+    "gate_name_filter": "ffn_gate_exps",
+    "gate_prefill_limit": 3000,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "strict_cold_drop_caches": true,
+    "vram_cache_gb": 0
+  },
+  "decision": "This reproduces the accepted 4.4 tok/s class on current pushed head after default-off sparse retained probe work. It ties, so it is a guardrail/baseline record and not a new SOTA promotion.",
+  "metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 62.9,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_max_events": 16879,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 272731,
+    "prompt_tok_s": 1.8,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 32087.738292,
+    "workingset_refault_file": 1638880
+  },
+  "previous_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "remote_head": "9775091756ee0c3a0e5f06e68bd27c609be0e671",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close",
+  "source_head": "9775091756ee0c3a0e5f06e68bd27c609be0e671",
+  "status": "accepted_path_reproduced_tie_not_new_sota"
+}
