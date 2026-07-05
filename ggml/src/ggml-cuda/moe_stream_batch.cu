@@ -4445,6 +4445,7 @@ static bool expert_pack_iouring_copy_jobs(
     size_t next_job = 0;
     size_t inflight = 0;
     const size_t refill_batch = std::min(expert_pack_io_refill_batch(), depth);
+    const bool refill_immediate = expert_pack_env_bool("GGML_MOE_IO_REFILL_IMMEDIATE", false);
     struct reusable_pending {
         size_t pending_idx = 0;
         size_t slot_idx = 0;
@@ -4642,7 +4643,7 @@ static bool expert_pack_iouring_copy_jobs(
         size_t drained_cqes = 0;
         if (!handle_cqe(cqe)) return false;
         ++drained_cqes;
-        if (refill_batch == 1 && !refill_pending()) return false;
+        if ((refill_immediate || refill_batch == 1) && !refill_pending()) return false;
 
         while (completed < read_jobs.size() && inflight > 0) {
             io_uring_cqe *extra_cqe = nullptr;
@@ -4652,7 +4653,7 @@ static bool expert_pack_iouring_copy_jobs(
             }
             if (!handle_cqe(extra_cqe)) return false;
             ++drained_cqes;
-            if (refill_batch == 1 && !refill_pending()) return false;
+            if ((refill_immediate || refill_batch == 1) && !refill_pending()) return false;
         }
         if (profile_io_wait) {
             io_wait_trace_record(
@@ -4672,7 +4673,7 @@ static bool expert_pack_iouring_copy_jobs(
                     completed,
                     inflight);
         }
-        if (refill_batch > 1 && !refill_pending()) {
+        if (!refill_immediate && refill_batch > 1 && !refill_pending()) {
             return false;
         }
     }
