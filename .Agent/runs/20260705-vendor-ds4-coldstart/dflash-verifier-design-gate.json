@@ -1,0 +1,92 @@
+{
+  "date": "2026-07-05",
+  "title": "DFlash verifier design gate after external draft refresh",
+  "result": "design_candidate_only_no_runtime_patch",
+  "promoted_to_sota": false,
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "decode_window_ms": 31047.44671,
+    "decoded_tokens_for_rate_model": 136.608765524,
+    "ttft_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head_before_record": "57ac4af0c",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "runtime_source_modified": false,
+    "model_run_performed": false,
+    "full_download_performed": false
+  },
+  "candidate": {
+    "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+    "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+    "file": "model.safetensors",
+    "size_bytes": 3607596760,
+    "payload_bytes_from_safetensors_offsets": 3607590144,
+    "payload_mib": 3440.466064453125,
+    "algorithm": "DFlash",
+    "speculative_tokens": 7,
+    "block_size": 8,
+    "aux_hidden_state_layer_ids": [3, 13, 23, 32, 42],
+    "draft_layers": 5,
+    "dtype": "BF16",
+    "important_tensors": [
+      {"name": "embed_tokens.weight", "shape": [129280, 4096], "bytes": 1059061760},
+      {"name": "fc.weight", "shape": [4096, 81920], "bytes": 671088640},
+      {"name": "lm_head.weight", "shape": [32000, 4096], "bytes": 262144000},
+      {"name": "d2t", "shape": [32000], "bytes": 256000},
+      {"name": "t2d", "shape": [129280], "bytes": 129280}
+    ],
+    "metrics": {
+      "full_acc_epoch": 0.41588552218285346,
+      "position_acc": [0.7878868554365931, 0.5875753957980987, 0.4541761259979246, 0.35903399619091536, 0.28966203790287387, 0.23638368573594648, 0.19339194045398048],
+      "optimistic_tokens_per_target_verify_upper_bound": 3.9081090376713704
+    }
+  },
+  "hard_bound": {
+    "target_tok_s": 10.0,
+    "required_speedup_from_4p4": 2.272727272727273,
+    "optimistic_tokens_per_verify": 3.9081090376713704,
+    "ideal_decode_ms_if_upper_bound_realized": 7943.084688188594,
+    "overhead_budget_to_10tok_ms_before_gate_penalty": 5717.791864211405,
+    "gpu_residency_gate_penalty_estimates": [
+      {"representation": "BF16", "payload_mib": 3440.466064453125, "stolen_gate_slots": 754, "lost_gate_score": 1726, "gate_penalty_ms": 1767.5141029321564, "remaining_overhead_budget_ms": 3950.277761279249},
+      {"representation": "Q8_estimate", "payload_mib": 1720.2330322265625, "stolen_gate_slots": 349, "lost_gate_score": 698, "gate_penalty_ms": 714.7884379181027, "remaining_overhead_budget_ms": 5003.003426293302},
+      {"representation": "Q4_estimate", "payload_mib": 860.1165161132812, "stolen_gate_slots": 147, "lost_gate_score": 294, "gate_penalty_ms": 301.0713477763928, "remaining_overhead_budget_ms": 5416.720516435012}
+    ],
+    "interpretation": "The math is only positive under optimistic acceptance and sublinear target verification. BF16 GPU residency likely damages the accepted gate cache; Q8/Q4 may fit better but can reduce draft acceptance and must be measured."
+  },
+  "source_readiness": {
+    "current_vendor_has": [
+      "common speculative/ngram helpers",
+      "NextN/MTP metadata and tensor placeholders",
+      "llama-results top1 verifier infrastructure"
+    ],
+    "current_vendor_missing": [
+      "DFlash safetensors loader or GGUF conversion",
+      "DFlash draft graph/runtime",
+      "hidden-state tap capture for layers [3,13,23,32,42]",
+      "exact greedy multi-token verifier integrated with DeepSeek4 target logits",
+      "measured target batch verification cost under the strict cold 16GB path"
+    ],
+    "nextn_mismatch": "Vendor NextN placeholders use blk.%d.nextn.* names; RedHat DFlash uses standalone tensors fc.weight, embed_tokens.weight, layers.*, d2t, and t2d."
+  },
+  "implementation_gate": [
+    "Do not patch runtime source until a loader/conversion and verifier plan exists.",
+    "Free persistent disk for the 3.6GB artifact or prove a safe staged conversion path.",
+    "Keep all DFlash behavior default-off and preserve accepted SOTA behavior when disabled.",
+    "First implementation must be compare-only and measure actual accepted tokens per target verification on fixed France text and the five-prompt set.",
+    "Any quantized draft representation must re-measure acceptance; training metrics from BF16 are not valid for Q8/Q4.",
+    "Only run strict cold performance after fixed-text top1/greedy equivalence and France semantic correctness pass."
+  ],
+  "decision": {
+    "runtime_patch_allowed_now": false,
+    "strict_benchmark_allowed_now": false,
+    "dflash_status": "plausible_design_candidate_not_source_ready",
+    "preferred_next_if_no_disk_cleanup": "Write a detailed DFlash verifier implementation plan and only then decide whether to free disk for the 3.6GB artifact or implement a converter.",
+    "accepted_sota_unchanged": true
+  }
+}

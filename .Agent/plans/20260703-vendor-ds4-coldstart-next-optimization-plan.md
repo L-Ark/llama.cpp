@@ -11014,3 +11014,43 @@ Next concrete action:
 1. Preserve the current 4Expert/Q4_K blocker record and do not delete protected SOTA assets.
 2. If the user approves freeing disk, prioritize full 4Expert GGUF validation because Q4_K/top4 already has default-off loader/cache infrastructure in this branch.
 3. If no disk cleanup is approved, write a DFlash verifier design/bound artifact before touching runtime source. The design must prove that target verification is sublinear enough to beat `10 tok/s` after draft and hidden-state overhead, and it must define an exact correctness gate before any performance run.
+
+### 2026-07-05 DFlash Verifier Design Gate
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-verifier-design-gate.json`
+
+Purpose:
+
+- Convert the external DFlash refresh into a concrete implementation gate before any runtime source edit.
+- This is design-only: no draft weights were downloaded, no source was modified, and no model benchmark was run.
+
+Hard bound:
+
+- Accepted SOTA is `4.4 tok/s`; target `10 tok/s` requires `2.272727x` effective speedup.
+- RedHat DFlash's optimistic positional upper bound is `1 + sum(position_acc) = 3.908109 tokens/target-verify`.
+- If that upper bound were fully realized, the ideal decode window would be about `7944 ms`, leaving about `5717 ms` for all draft, hidden-state capture, target batch-verify overhead, KV/cache overhead, and integration overhead before the `10 tok/s` decode target.
+- A GPU-resident BF16 DFlash draft would require about `3440 MiB` persistent payload. With the accepted gate cache only about `238 MiB` free, it would steal an estimated `754` gate-cache slots and add about `1768 ms` of gate penalty. That leaves only about `3949 ms` for all remaining DFlash overhead.
+- Estimated draft quantization footprints would reduce the gate penalty: Q8 about `1720 MiB` with `715 ms` penalty; Q4 about `860 MiB` with `301 ms` penalty. These are not correctness evidence because quantizing the draft can reduce acceptance.
+
+Source-readiness result:
+
+- Current vendor source has generic speculative/ngram helpers and NextN/MTP placeholders, but no DFlash safetensors loader, no DFlash graph, no hidden-state tap capture for layers `[3,13,23,32,42]`, and no exact greedy multi-token verifier wired to DeepSeek4.
+- The current NextN/MTP loader names `blk.%d.nextn.*`, while DFlash uses standalone safetensors tensors such as `fc.weight`, `embed_tokens.weight`, `layers.*`, `d2t`, and `t2d`.
+- Therefore DFlash is a plausible design candidate but not an implementation-ready patch.
+
+Implementation gate before source edits:
+
+1. Free enough disk for at least the `3.6GB` RedHat DFlash artifact, or implement a metadata-only converter plan that does not require persistent full download yet.
+2. Decide the draft representation: BF16 GPU, Q8/Q4 quantized GPU, or CPU draft. The plan must include gate-cache penalty, draft KV/workspace, and TTFT impact.
+3. Add only default-off loader/conversion infrastructure; accepted SOTA behavior must be unchanged when DFlash env/config is unset.
+4. Implement a compare-only verifier first: generate DFlash proposals, verify them against target logits, and record actual accepted tokens per target call on fixed France text and the five-prompt set.
+5. Correctness gate: fixed-text target output must remain exact/top1-equivalent before any speed benchmark; France output must be semantic and coherent.
+6. Only if measured accepted tokens and overhead predict `>10 tok/s` with margin should a strict cold benchmark run. Promotion still requires `eval_tok_s > 4.4`, TTFT `<=33617.688744 ms`, strict 16GB cgroup including page cache, no OOM/swap, full metrics, immediate commit/push, and pushed-source reproduction.
+
+Decision:
+
+- Do not implement DFlash runtime source yet.
+- DFlash is the next non-4Expert design candidate if disk cleanup is not approved, but it needs a verifier-design artifact and either persistent disk space or a carefully bounded loader/conversion path before coding.
+- Current accepted SOTA remains `4.4 tok/s`.
