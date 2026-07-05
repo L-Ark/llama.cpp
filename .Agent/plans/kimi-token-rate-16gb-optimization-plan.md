@@ -77955,7 +77955,8 @@ Next recommended phase:
 
 Timestamp: 2026-07-05 23:48:00 CST.
 
-Status: planned.
+Status: completed; diagnostic executed, DFlash/block-verify route rejected for
+the current `5 tok/s` track.
 
 Source baseline:
 
@@ -78084,3 +78085,83 @@ Reproducibility:
 - Commit and push the diagnostic tool only after it builds and is confirmed to
   be behavior-isolated from production paths.
 - Commit and push all result documentation before any DFlash runtime work.
+
+Execution result:
+
+- Timestamp: 2026-07-06 00:02:00 CST to 2026-07-06 00:15:00 CST.
+- Tool commit:
+  `8e1c88a84 tools: add kimi target verify bench`.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench`
+- Generated artifacts:
+  - `summary.tsv`;
+  - `decision.md`;
+  - `baseline-n32/metrics.txt`;
+  - `verify-B1/verify.json` and `metrics.txt`;
+  - `verify-B2/verify.json` and `metrics.txt`;
+  - `verify-B4/verify.json` and `metrics.txt`;
+  - `verify-B8/verify.json` and `metrics.txt`;
+  - `verify-B16/verify.json` and `metrics.txt`.
+
+Strict n32 baseline before diagnostic:
+
+- Command:
+  ```bash
+  cd /root/lfz/llama.cpp-vendor-kimi
+  TOP=/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench
+  systemd-run --wait --collect --same-dir \
+    -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+    env RUN="$TOP/baseline-n32" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+        UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+        MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+        scripts/kimi-phase7fb-min-profile-repro.sh
+  ```
+- Result:
+  - `exit=0`;
+  - `quality=pass`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+  - `ttft_ms=71452.89`;
+  - `decode_ms=21878.07`;
+  - `token_rate=1.42`;
+  - `memory.peak=15899996160`;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`, `oom=0`, `oom_kill=0`;
+  - expert-pack counters:
+    `hits=25045`, `misses=192`, `read_failures=0`,
+    `iouring_reads=22647`, `iouring_bytes=126391910400`,
+    `iouring_wait_us=17861087`;
+  - VRAM cache:
+    `down hit_rate=73.4%`, `upgate hit_rate=45.2%`.
+
+Target same-sequence verification matrix:
+
+| B | exit | prompt_tokens | prefill_ms | verify_ms | verify_tps | memory_peak | iouring_bytes | iouring_wait_us | down_hit | upgate_hit |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0 | 17 | 72995.600 | 1670.540 | 0.599 | 15899996160 | 7576518656 | 1194643 | 58.0% | 0.2% |
+| 2 | 0 | 17 | 79352.300 | 11238.700 | 0.178 | 15899996160 | 140378112 | 22859 | 0.0% | 0.0% |
+| 4 | 0 | 17 | 69734.100 | 18555.800 | 0.216 | 15899996160 | 140378112 | 18948 | 0.0% | 0.0% |
+| 8 | 0 | 17 | 69837.800 | 33609.700 | 0.238 | 15899996160 | 140378112 | 19538 | 0.0% | 0.0% |
+| 16 | 0 | 17 | 63677.900 | 51832.100 | 0.309 | 15899996160 | 140378112 | 22856 | 0.0% | 0.0% |
+
+Decision:
+
+- Baseline steady decode average after TTFT is about `705.744 ms/token`
+  (`21878.07 ms / 31`).
+- Target-only forced verification did not meet the feasibility thresholds:
+  - required `B=4` well below `0.800 s`; measured `18.556 s`;
+  - required `B=8` well below `1.600 s`; measured `33.610 s`;
+  - required `B=16` well below `3.200 s`; measured `51.832 s`.
+- This is not an accepted optimization and must not be promoted as SOTA.
+- The likely reason is that this exact single-sequence block shape does not
+  reuse the current decode hot path/cache behavior: for `B>=2`, measured VRAM
+  `down` and `upgate` hit rates collapse to `0.0%`, and verification cost is
+  dominated by target MoE work instead of amortized block verification.
+- Do not implement DFlash runtime next on this path. It would add draft overhead
+  on top of a target verifier that is already slower than current decode.
+- Next valid implementation phase should return to bottlenecks that can improve
+  the accepted runtime directly:
+  - make active experts within a layer truly batch/parallel where possible;
+  - reduce per-expert H2D stalls and refill scheduling overhead;
+  - investigate CUDA Graph only after the per-token execution shape is stable;
+  - avoid moving dense/attention to CPU, because freeing VRAM for more experts
+    is unlikely to compensate for losing GPU dense/attention throughput.
