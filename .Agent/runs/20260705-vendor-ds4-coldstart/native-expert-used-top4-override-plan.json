@@ -1,0 +1,80 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: native DeepSeek4 expert_used_count=4 override probe",
+  "status": "planned",
+  "purpose": "Test a no-download behavior-changing route inspired by the 4Expert artifact: override the native model's expert_used_count from 6 to 4 to reduce active MoE expert work, while preserving all strict correctness/RAM/TTFT gates.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "hypothesis": {
+    "positive": "Reducing n_expert_used from 6 to 4 should reduce selected gate/up/down expert work and source pressure by roughly one third in the MoE path, potentially producing a larger token-rate jump than cache-prefill tweaks.",
+    "negative": "The native model was trained/configured for 6 selected experts. A simple metadata override is not equivalent to the external 4Expert model because it lacks ffn_gate_tid2eid.weight routing constraints and Q4_K expert quantization. Accuracy may degrade even if France remains superficially fluent."
+  },
+  "hard_bound": {
+    "current_eval_tok_s": 4.4,
+    "optimistic_active_expert_ratio": 0.6666666666666666,
+    "current_decode_window_ms_estimate": 31047.44671,
+    "target_10_tok_s_decode_window_ms_for_136p608765524_tokens": 13660.8765524,
+    "comment": "Even a perfect one-third reduction of active-expert-specific work is unlikely to reach 10 tok/s alone because non-MoE and source/page buckets remain, but it is the largest no-download current-route probe left and can clarify the practical correctness/performance bound."
+  },
+  "experiment": {
+    "source_changes": "none",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "override": "--override-kv deepseek4.expert_used_count=int:4",
+    "constant_env": {
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+      "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+      "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
+    },
+    "strict_runner": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 0,
+      "context": 256,
+      "batch": 16,
+      "ubatch": 16,
+      "threads": 20,
+      "threads_batch": 20,
+      "drop_caches": true,
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0
+    }
+  },
+  "acceptance": {
+    "accepted_if": [
+      "France answer is semantic, coherent, and factually acceptable",
+      "eval_tok_s > 4.4",
+      "TTFT <= 33617.688744 ms",
+      "memory_peak_bytes <= 16000000000 including page cache",
+      "no OOM and no swap",
+      "full reproduction metadata is recorded and pushed immediately",
+      "clean pushed-source reproduction also passes"
+    ],
+    "rejected_if": [
+      "France answer is incoherent, semantically wrong, or visibly degraded",
+      "eval_tok_s <= 4.4",
+      "TTFT exceeds gate",
+      "RAM/page-cache/OOM violation",
+      "pushed-source reproduction fails"
+    ]
+  },
+  "notes": [
+    "This probe cannot be treated as equivalent to cloudyu 4Expert GGUF.",
+    "If it passes France, a five-prompt semantic gate should be run before using it as a general route.",
+    "If it fails correctness or reproduction, do not continue native top-k overrides."
+  ]
+}
