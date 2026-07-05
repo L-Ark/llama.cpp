@@ -80057,6 +80057,89 @@ Reproducibility:
 - Commit and push only accepted improvements.
 - If rejected, revert source and commit/push the documentation result only.
 
+### Phase 7NW result
+
+Timestamp: 2026-07-06 11:35 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-203507Z-phase7nw-same-layer-io-fill-closure`
+
+Plan commit before execution:
+
+- `caff63a54` (`docs: plan same layer io fill scheduler`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `history_and_source_closure.txt`
+- `decision.md`
+
+Execution notes:
+
+- No source code was changed.
+- No build was run.
+- No model inference was run.
+- No asset was downloaded or deleted.
+- The source/history audit found that the implementable pieces of the 7NW idea
+  had already been tested and rejected in earlier phases.
+
+Closure evidence:
+
+- Phase 7GG tested `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1`:
+  - first n32 decode `28927.32 ms / 31`;
+  - repeat n32 decode `29231.83 ms / 31`;
+  - repeat fell inside baseline noise;
+  - rejected as non-reproducible and no n96 was run.
+- Phase 7GH tested `GGML_MOE_CURRENT_DOWN_OVERLAP_AUX_RING=1`:
+  - first n32 decode `28555.78 ms / 31`;
+  - repeat n32 decode `29252.51 ms / 31`;
+  - current-down worker time returned to `~3.4 s`;
+  - rejected as non-reproducible and reverted.
+- Phase 7KW tested `GGML_MOE_MIXED_UP_GATE_COMBINED_IO=1`:
+  - iouring wait dropped from the diagnostic baseline by about `4.72 s`;
+  - endpoint decode was still `23278.73 ms / 31`;
+  - accepted n32 reference was `22667.39 ms / 31`;
+  - rejected because combined staging lost useful up-copy/up-compute overlap.
+- Phase 7LE tested `GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1`:
+  - mechanism activated and increased inflight from about `3.32` to `3.77`;
+  - iouring wait dropped by about `2.10 s` versus 7KX;
+  - endpoint decode regressed to `23345.77 ms / 31` versus 7KX
+    `22601.57 ms / 31`;
+  - rejected and reverted because handoff/synchronization cost outweighed IO
+    gains.
+
+Interpretation:
+
+- Phase 7NV correctly identified that many same-layer jobs are available
+  online, but historical source experiments already show why simply exposing
+  that concurrency is not sufficient.
+- The key repeated failure mode is endpoint overlap loss:
+  - IO wait can drop;
+  - inflight/batch size can improve;
+  - endpoint decode can still regress because the current copy/compute overlap
+    is disturbed or because extra worker/fence synchronization becomes visible.
+- A new 7NW patch would duplicate combinations of 7GG/7GH/7KW/7LE unless it
+  first proves how to remove the added handoff/synchronization cost.
+
+Decision:
+
+- Reject 7NW source implementation for now.
+- Do not edit source.
+- Keep current SOTA unchanged.
+- Next valid optimization direction should be byte-reduction / asset-format, or
+  a fundamentally different pipeline design that first proves how it avoids the
+  7KW/7LE overlap-loss gap.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-203507Z-phase7nw-same-layer-io-fill-closure
+cat "$RUN/history_and_source_closure.txt"
+cat "$RUN/decision.md"
+```
+
 Artifacts:
 
 - `commands.log`
