@@ -64,6 +64,16 @@ External DSpark/MTP current audit:
 - Current vendor source has no support for `general.architecture=deepseek4_mtp_support`, `deepseek4.mtp_layer_count`, or `mtp.0.*` tensor runtime handling. Therefore this MTP file is not directly loadable or benchmarkable as a compliant SOTA candidate.
 - Decision: external MTP is now the most concrete future 10 tok/s candidate class, but no runtime patch/download/benchmark is allowed yet. Next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-loader-verifier-hard-bound-plan.json`, covering loader scope, verifier semantics, expected accepted-token speedup, 3.807 GB file/page-cache impact under the 16GB cgroup, VRAM/gate-cache preservation, TTFT, and fixed-text top1/France correctness gates.
 
+DeepSeek4 MTP loader/verifier hard-bound plan:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-loader-verifier-hard-bound-plan.json`.
+- Theory: with current `4.4 tok/s`, speculative/MTP only reaches `10 tok/s` if `tok_s = 4.4 * (A + 1) / (C_verify + C_draft)` exceeds 10. Ideal minimum average accepted draft tokens is `A >= 1.272727`, but this assumes one target verification pass is not linear in the number of verified tokens.
+- For `A=5` (official `dspark_block_size`) the total target-verification plus draft cost must be `<=2.64x` one current target-token pass. For `A=7` (official vLLM example `num_speculative_tokens`) it must be `<=3.52x`.
+- If target verification still invokes the expensive CPU up/down fallback once per verified token, the route cannot improve token rate; proving sublinear verification cost is the first hard gate.
+- Current blockers before source edit: no `deepseek4_mtp_support` loader, no `mtp.0.*` runtime mapping, no target hidden export from layers `[40,41,42]`, no KV/cache commit-rollback verifier, no RAM/VRAM/TTFT proof for the extra `3807602400` byte MTP GGUF.
+- Full MTP preload is currently rejected on TTFT math: `3.546 GiB / 1.85 GiB/s ~= 1.917s`, which exceeds the current `1.530s` TTFT slack versus the `33617.688744 ms` gate.
+- Decision: route is `open_but_not_source_ready`. No runtime patch, full download, or strict-cold benchmark is allowed yet. Next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-tensor-mapping-and-verify-design.json`.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。

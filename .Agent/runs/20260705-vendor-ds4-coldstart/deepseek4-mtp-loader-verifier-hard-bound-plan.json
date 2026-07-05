@@ -1,0 +1,175 @@
+{
+  "artifact": "deepseek4-mtp-loader-verifier-hard-bound-plan",
+  "created_utc": "2026-07-05T08:55:45Z",
+  "source_head": "ec7ce9d5e8859d81d2262b004cdda1022227c374",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "candidate": "DeepSeek4 supplementary MTP/DSpark verifier path using antirez DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf and official DSpark semantics as reference",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "external_artifacts": {
+    "official_dspark": {
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "sha": "62af8fffb2f7030cac4de2f0169f5b8d1101b646",
+      "format": "safetensors plus Python/PyTorch inference",
+      "config_keys": {
+        "num_nextn_predict_layers": 1,
+        "dspark_block_size": 5,
+        "dspark_target_layer_ids": [
+          40,
+          41,
+          42
+        ],
+        "dspark_markov_rank": 256
+      },
+      "readme_vllm_speculative_tokens": 7,
+      "semantic_note": "Official model.py constructs an MTP module under mtp.*, shares target embed/head, collects target main_hidden from dspark_target_layer_ids, then forward_spec returns draft output_ids, logits, and confidence."
+    },
+    "antirez_mtp_gguf": {
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "repo_sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "content_length_bytes": 3807602400,
+      "content_length_gib": 3.546106,
+      "gguf_header": {
+        "general.architecture": "deepseek4_mtp_support",
+        "tensor_count": 32,
+        "kv_count": 5,
+        "deepseek4.mtp_layer_count": 1,
+        "deepseek4.nextn_predict_layers": 1,
+        "deepseek4.expert_count": 256
+      },
+      "interpretation": "The MTP GGUF is a supplementary one-layer MTP module, not a standalone target model. It appears to rely on target embed/head and target hidden states, matching official DSpark code."
+    }
+  },
+  "why_this_route_has_a_nonzero_upper_bound": {
+    "baseline_ms_per_token": 227.272727,
+    "baseline_tok_s": 4.4,
+    "target_tok_s": 10.0,
+    "ideal_required_average_accepted_draft_tokens_per_target_pass": 1.272727,
+    "rate_formula": "tok_s = 4.4 * (A + 1) / (C_verify + C_draft), where A is average accepted draft tokens per committed target pass, C_verify is target verification cost in units of current one-token target decode, and C_draft is MTP draft cost in the same units.",
+    "key_condition": "The path only improves token rate if target verification is sublinear in the number of verified tokens. If target verification runs target decode serially per token, C_verify is about A + 1 and token rate cannot exceed the current 4.4 tok/s after draft overhead.",
+    "upper_bound_table": [
+      {
+        "accepted_draft_tokens_A": 1,
+        "ideal_tok_s_if_C_total_1": 8.8,
+        "max_C_verify_plus_C_draft_for_10_tok_s": 0.88,
+        "decision": "insufficient unless it also makes one target pass faster, so not a viable target"
+      },
+      {
+        "accepted_draft_tokens_A": 2,
+        "ideal_tok_s_if_C_total_1": 13.2,
+        "max_C_verify_plus_C_draft_for_10_tok_s": 1.32,
+        "decision": "possible only if verification plus draft overhead is barely above one current token"
+      },
+      {
+        "accepted_draft_tokens_A": 3,
+        "ideal_tok_s_if_C_total_1": 17.6,
+        "max_C_verify_plus_C_draft_for_10_tok_s": 1.76,
+        "decision": "plausible only with strong target batch verification and very small MTP overhead"
+      },
+      {
+        "accepted_draft_tokens_A": 5,
+        "ideal_tok_s_if_C_total_1": 26.4,
+        "max_C_verify_plus_C_draft_for_10_tok_s": 2.64,
+        "decision": "matches official dspark_block_size; this is the first attractive bound if target verification can batch MoE work sublinearly"
+      },
+      {
+        "accepted_draft_tokens_A": 7,
+        "ideal_tok_s_if_C_total_1": 35.2,
+        "max_C_verify_plus_C_draft_for_10_tok_s": 3.52,
+        "decision": "matches official vLLM example num_speculative_tokens; attractive if compatible with this MTP GGUF and acceptance is high"
+      }
+    ]
+  },
+  "hard_blockers_before_runtime_patch": [
+    {
+      "blocker": "loader_support",
+      "status": "missing",
+      "details": "Current vendor source has no general.architecture=deepseek4_mtp_support support and no mtp.0 tensor loader/runtime mapping. Generic nextn_predict_layers handling is insufficient because this MTP file is supplementary and has only 32 tensors."
+    },
+    {
+      "blocker": "target_hidden_exports",
+      "status": "missing",
+      "details": "Official DSpark uses target hidden states from layers [40, 41, 42]. Current llama.cpp generation path does not expose or retain these per-token hiddens for a supplementary MTP module."
+    },
+    {
+      "blocker": "target_verification_semantics",
+      "status": "missing",
+      "details": "A correct implementation must draft tokens, verify them with target logits, commit only accepted tokens, and preserve or roll back KV/cache state exactly. Historical lookahead failed on DeepSeek4 coupled-sequence behavior, so this must be proven with a fixed-token verifier before generation."
+    },
+    {
+      "blocker": "batched_target_verification_bound",
+      "status": "unproven",
+      "details": "The 10 tok/s route requires target verification cost to be sublinear. If the target still runs the expensive CPU up/down fallback once per verified token, speculative decoding gives no token-rate improvement."
+    },
+    {
+      "blocker": "16GB_RAM_and_TTFT",
+      "status": "unproven",
+      "details": "The MTP GGUF is 3.807 GB decimal / 3.546 GiB. Current accepted cgroup already peaks at 16GB and has about 15.10GB file cache. Full MTP read at the measured 1.85 GiB/s O_DIRECT rate would take about 1.917s, exceeding the 1.530s TTFT slack versus the current guard. Full preload is therefore rejected unless later measurements show a faster path or lower current TTFT."
+    },
+    {
+      "blocker": "VRAM_gate_cache_preservation",
+      "status": "unproven",
+      "details": "Keeping MTP tensors resident on GPU may require several GiB, likely forcing reduction of the accepted gate cache. Any plan must account for lost gate hits and workspace allocations before coding."
+    }
+  ],
+  "next_design_steps_before_any_source_edit": [
+    {
+      "step": 1,
+      "name": "tensor_mapping_design",
+      "deliverable": "Map every observed mtp.0 tensor to a vendor structure. Confirm which tensors are absent by design because embed/head/tokenizer are shared from target. No code edit yet."
+    },
+    {
+      "step": 2,
+      "name": "verification_algorithm_design",
+      "deliverable": "Define the exact target verification algorithm in llama.cpp terms: how to copy/branch/restore KV, how to avoid contaminating accepted cache state, how to compare target top1 against draft tokens, and how to commit accepted prefixes."
+    },
+    {
+      "step": 3,
+      "name": "batch_cost_bound",
+      "deliverable": "Use existing current-head trace numbers to estimate C_verify for verifying 2, 3, 5, and 7 drafted tokens in one target batch. Runtime code remains frozen unless the bound shows C_verify + C_draft below the table threshold."
+    },
+    {
+      "step": 4,
+      "name": "memory_bound",
+      "deliverable": "Produce a cgroup and VRAM budget for three placement options: MTP CPU mmap, MTP O_DIRECT stream, and MTP GPU resident. Include page cache, anonymous allocations, gate-cache impact, and TTFT."
+    },
+    {
+      "step": 5,
+      "name": "correctness_gate_plan",
+      "deliverable": "Define fixed-text llama-results top1 checks, target-only vs MTP-verified generated sequence checks, France semantic check, and the small prompt-set check before any performance benchmark."
+    }
+  ],
+  "implementation_gate_if_design_passes": [
+    "All source changes must be default-off behind an explicit MTP env/config such as DS4_MTP_GGUF.",
+    "First source patch may only add supplementary MTP metadata/tensor loading and must prove default-path top1 unchanged under strict 16GB.",
+    "Second patch may add target hidden capture and MTP draft logits in shadow mode, with target output unchanged.",
+    "Third patch may add verifier mode that still emits target-only tokens until fixed-text top1 and generated sequence equality pass.",
+    "Strict cold performance benchmark is allowed only after correctness, RAM, TTFT, default-path preservation, and C_verify+C_draft bound pass."
+  ],
+  "rollback_and_reject_rules": [
+    "Reject if MTP loading or shadow mode raises cgroup memory above 16000000000 bytes or causes swap/OOM.",
+    "Reject if TTFT exceeds 33617.688744 ms for an accepted SOTA candidate; TTFT-regressed diagnostic results may be committed only as rejected records.",
+    "Reject if fixed-text top1 differs from target-only at any checked position.",
+    "Reject if France output is semantically wrong or incoherent.",
+    "Reject if batched verification cost is effectively linear in accepted tokens, because the upper bound then cannot reach 10 tok/s.",
+    "Reject if preserving enough gate cache is impossible after MTP placement."
+  ],
+  "decision": {
+    "route_status": "open_but_not_source_ready",
+    "runtime_patch_allowed_now": false,
+    "full_download_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "reason": "The route has a real theoretical upper bound, but loader support, target hidden capture, verification semantics, batch cost, RAM/page-cache, VRAM, TTFT, and correctness are all unproven.",
+    "next_required_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-tensor-mapping-and-verify-design.json"
+  }
+}
