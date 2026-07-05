@@ -15,7 +15,7 @@ Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 `4.2`，也不�
 - Current-head guard after the latest rejected-route work: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`, with `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
 - Promotion gate: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct/coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction
 - Model file: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`)
-- Current pushed source for this plan: `cb120711469807ec677a37416a83d409c73fd5b8` on local branch `feat/ds4-moe-stream-on-vendor`, pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`
+- Pushed source at the start of the lightning strict-cold benchmark: `4e8a6fcde6f4d51c2b740886f008032deeb2eb31` on local branch `feat/ds4-moe-stream-on-vendor`, pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`
 
 Closed routes and constraints from the latest hard bounds:
 
@@ -30,7 +30,9 @@ Immediate one-time candidate screen:
 - Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-plan.json`.
 - This is not the primary 10 tok/s route and does not remove CPU up/down fallback. It is allowed once because it is an existing default-off env, previous repeat once reached `4.5 tok/s` but failed pushed-source promotion, and current-head guard has more TTFT slack.
 - Correctness precheck already passed under strict 16GB/no-swap cgroup: `/root/lfz/runs/vendor-ds4-16gb/20260705T072454Z-current-head-lightning-recheck/top1-lightning`, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
-- Next allowed action is exactly one strict cold France benchmark with the accepted SOTA env plus `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1`. If it does not beat `4.4 tok/s`, or if TTFT/RAM/correctness fails, record it as rejected and stop sampling this candidate. If it beats `4.4 tok/s` and passes all gates, immediately record full reproduction metadata, commit and push, then do a clean pushed-source strict cold reproduction before promotion.
+- Strict cold result: `/root/lfz/runs/vendor-ds4-16gb/20260705T073651Z-20260705_current_head_lightning_recheck/france-lightning-current-head-cpu40-vram0gb`, `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=33269.766728 ms`, `elapsed_seconds=64.12`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15104135168`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- Decision: `rejected_tie_not_new_sota`. This candidate passed correctness/RAM/TTFT, but it tied the accepted `4.4 tok/s` SOTA and failed the strict `eval_tok_s > 4.4` promotion gate. Stop sampling `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` for SOTA.
+- Result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-result.json`.
 
 Next optimization direction after the lightning candidate:
 
