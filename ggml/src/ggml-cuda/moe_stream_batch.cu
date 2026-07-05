@@ -59,7 +59,6 @@ const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t,
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/uio.h>
 #if defined(__linux__) && !defined(GGML_MOE_DISABLE_LIBURING) && __has_include(<liburing.h>)
 #include <liburing.h>
 #define GGML_MOE_HAS_LIBURING 1
@@ -221,10 +220,6 @@ struct pinned_stage_ring {
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     io_uring *uring = nullptr;
     size_t uring_depth = 0;
-    bool uring_buffers_registered = false;
-    bool uring_buffers_register_failed = false;
-    size_t uring_registered_slots = 0;
-    size_t uring_registered_slot_sz = 0;
 #endif
     uint64_t copies = 0;
     uint64_t waits = 0;
@@ -666,10 +661,6 @@ struct expert_pack_state {
     std::atomic<uint64_t> iouring_batch_hist_9_16{0};
     std::atomic<uint64_t> iouring_batch_hist_17_32{0};
     std::atomic<uint64_t> iouring_batch_hist_gt32{0};
-    std::atomic<uint64_t> iouring_fixedbuf_register_attempts{0};
-    std::atomic<uint64_t> iouring_fixedbuf_register_success{0};
-    std::atomic<uint64_t> iouring_fixedbuf_register_failures{0};
-    std::atomic<uint64_t> iouring_fixedbuf_reads{0};
     // RAM hot tier
     void *ram_tier_base = nullptr;
     size_t ram_tier_bytes = 0;
@@ -2381,15 +2372,6 @@ static void expert_pack_report_atexit() {
                      g_expert_pack.iouring_batch_hist_5_8.load(), g_expert_pack.iouring_batch_hist_9_16.load(),
                      g_expert_pack.iouring_batch_hist_17_32.load(), g_expert_pack.iouring_batch_hist_gt32.load());
     }
-    if (g_expert_pack.iouring_fixedbuf_register_attempts.load() > 0 ||
-            g_expert_pack.iouring_fixedbuf_reads.load() > 0) {
-        std::fprintf(stderr,
-                     "[moe_stream_batch] expert pack iouring fixed buffers: attempts=%lu success=%lu failures=%lu fixed_reads=%lu\n",
-                     g_expert_pack.iouring_fixedbuf_register_attempts.load(),
-                     g_expert_pack.iouring_fixedbuf_register_success.load(),
-                     g_expert_pack.iouring_fixedbuf_register_failures.load(),
-                     g_expert_pack.iouring_fixedbuf_reads.load());
-    }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
                      "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB\n",
@@ -3926,13 +3908,6 @@ static void pinned_stage_collect_timing(pinned_stage_ring &ring, pinned_stage_sl
 static void pinned_stage_release(pinned_stage_ring &ring) {
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     if (ring.uring) {
-        if (ring.uring_buffers_registered) {
-            io_uring_unregister_buffers(ring.uring);
-            ring.uring_buffers_registered = false;
-            ring.uring_buffers_register_failed = false;
-            ring.uring_registered_slots = 0;
-            ring.uring_registered_slot_sz = 0;
-        }
         io_uring_queue_exit(ring.uring);
         delete ring.uring;
         ring.uring = nullptr;
@@ -4210,86 +4185,6 @@ static bool batch_cache_copy_h2d(
     return batch_cache_copy_h2d(g_batch.stage_ring, dst, host_data, sz, st, pack_entry, nullptr);
 }
 
-#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
-static bool expert_pack_iouring_fixed_buffers_enabled() {
-    return expert_pack_env_bool("GGML_MOE_IO_REGISTER_BUFFERS", false);
-}
-
-static void expert_pack_iouring_unregister_fixed_buffers(pinned_stage_ring &ring) {
-    if (ring.uring && ring.uring_buffers_registered) {
-        io_uring_unregister_buffers(ring.uring);
-    }
-    ring.uring_buffers_registered = false;
-    ring.uring_buffers_register_failed = false;
-    ring.uring_registered_slots = 0;
-    ring.uring_registered_slot_sz = 0;
-}
-
-static bool expert_pack_iouring_ensure_fixed_buffers(
-        pinned_stage_ring &ring,
-        io_uring *ring_io,
-        size_t read_sz) {
-    if (!expert_pack_iouring_fixed_buffers_enabled()) {
-        return false;
-    }
-    if (!ring_io || ring.slots.empty() || ring.slot_sz < read_sz) {
-        return false;
-    }
-    if (ring.uring_buffers_register_failed) {
-        return false;
-    }
-    if (ring.uring_buffers_registered &&
-            (ring.uring_registered_slots != ring.slots.size() ||
-             ring.uring_registered_slot_sz != ring.slot_sz)) {
-        expert_pack_iouring_unregister_fixed_buffers(ring);
-    }
-    if (ring.uring_buffers_registered) {
-        return true;
-    }
-
-    std::vector<iovec> iovecs;
-    iovecs.reserve(ring.slots.size());
-    for (const pinned_stage_slot &slot : ring.slots) {
-        if (!slot.host) {
-            return false;
-        }
-        iovec iov;
-        iov.iov_base = slot.host;
-        iov.iov_len = ring.slot_sz;
-        iovecs.push_back(iov);
-    }
-
-    ++g_expert_pack.iouring_fixedbuf_register_attempts;
-    const int rc = io_uring_register_buffers(ring_io, iovecs.data(), (unsigned)iovecs.size());
-    if (rc == 0) {
-        ring.uring_buffers_registered = true;
-        ring.uring_registered_slots = ring.slots.size();
-        ring.uring_registered_slot_sz = ring.slot_sz;
-        ++g_expert_pack.iouring_fixedbuf_register_success;
-        static std::atomic<int> first_fixed_buffers{0};
-        if (first_fixed_buffers.fetch_add(1) == 0) {
-            std::fprintf(stderr,
-                    "[moe_stream_batch] expert pack iouring fixed buffers active: slots=%zu slot=%.2f MiB\n",
-                    ring.uring_registered_slots,
-                    ring.uring_registered_slot_sz / (1024.0 * 1024.0));
-        }
-        return true;
-    }
-
-    ++g_expert_pack.iouring_fixedbuf_register_failures;
-    ring.uring_buffers_register_failed = true;
-    static std::atomic<int> first_fixed_buffer_failure{0};
-    if (first_fixed_buffer_failure.fetch_add(1) == 0) {
-        std::fprintf(stderr,
-                "[moe_stream_batch] expert pack iouring fixed buffers registration failed: rc=%d slots=%zu slot=%.2f MiB\n",
-                rc,
-                ring.slots.size(),
-                ring.slot_sz / (1024.0 * 1024.0));
-    }
-    return false;
-}
-#endif
-
 template <typename Job>
 static bool expert_pack_iouring_copy_jobs(
         const std::vector<Job> &jobs,
@@ -4477,7 +4372,6 @@ static bool expert_pack_iouring_copy_jobs(
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
     if (!ring.uring || ring.uring_depth != depth) {
         if (ring.uring) {
-            expert_pack_iouring_unregister_fixed_buffers(ring);
             io_uring_queue_exit(ring.uring);
             delete ring.uring;
             ring.uring = nullptr;
@@ -4493,8 +4387,6 @@ static bool expert_pack_iouring_copy_jobs(
         ring.uring_depth = depth;
     }
     io_uring *ring_io = ring.uring;
-    const bool fixed_buffers_active =
-        expert_pack_iouring_ensure_fixed_buffers(ring, ring_io, read_sz);
 
     std::vector<pending_job> pending(depth);
     std::vector<size_t> free_pending;
@@ -4545,14 +4437,7 @@ static bool expert_pack_iouring_copy_jobs(
         };
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
-        if (fixed_buffers_active && slot_idx < ring.uring_registered_slots) {
-            io_uring_prep_read_fixed(
-                    sqe, source->fd_direct, slot.host, (unsigned)read_sz,
-                    (off_t)job.pack_entry->offset, (int)slot_idx);
-            ++g_expert_pack.iouring_fixedbuf_reads;
-        } else {
-            io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
-        }
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };
