@@ -71435,3 +71435,105 @@ Reproducibility:
 - Record generation command/log, overlay path/size, exact source commit, run
   directory, metrics, output text, stderr coalesce counters, and disk free
   space before/after deletion.
+
+### Phase 7LT result
+
+Timestamp: 2026-07-06 00:42:00 CST.
+
+Status: rejected; source rollback required.
+
+Source under test:
+
+- `4efc27e1c cuda: add adjacent expert pack coalescing`
+
+Build:
+
+- server build completed successfully on `build-cuda-batch`.
+
+Generation:
+
+- generated temporary overlay:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7lt-firstuse-trace-overlay.expert-pack`
+- entries `13556`;
+- size `75681923072` bytes (`71G`);
+- disk after generation `18G` free;
+- disk after deletion `88G` free.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-080550Z-phase7lt-coalesced-adjacent-n32`
+
+Runtime activation:
+
+- loaded main pack entries `30831`;
+- loaded regular overlay entries `768`;
+- loaded first-use overlay-extra entries `13556`;
+- duplicate replacement:
+  `expert pack: replaced 13556 duplicate keys with later pack sources`;
+- coalesced staging activated:
+  - total groups `4308`;
+  - total jobs `13547`;
+  - coalesced read bytes `75605426176`;
+  - coalesced H2D enqueues `13547`;
+  - main ring coalesce groups `3098`, jobs `9738`, waits `3092`;
+  - gate ring coalesce groups `1210`, jobs `3809`, waits `1206`.
+
+Result:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `77426.88 ms`;
+- decode `24632.61 ms / 31`, `1.26 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `8142670 us`;
+- iouring wait calls `7484`;
+- current-down overlap worker `3674554 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Comparison:
+
+- 7LS layout-only overlay: `24150.53 ms / 31`, `1.28 tok/s`,
+  iouring wait `21377567 us`.
+- 7LO/7LP default diagnostic: `~1.37 tok/s`,
+  iouring wait `~19.45-19.49 s`.
+- 7LM clean n32: `20196.41 ms / 31`, `1.53 tok/s`,
+  iouring wait `16442997 us`.
+
+Interpretation:
+
+- The coalesced path activated and reduced the reported `iouring_wait_us`
+  counter from the 19-21 s range to `8.14 s`.
+- Endpoint decode still regressed to `1.26 tok/s`.
+- Root cause: this first coalesced implementation uses blocking `pread` for the
+  larger spans before enqueuing H2D slices. That moves time out of the io_uring
+  wait counter but places blocking disk read and coalesce-slot reuse waits on
+  the critical path.
+- The high coalesce-slot wait count (`4298` waits across rings) confirms that
+  two 32 MiB span slots are insufficient to preserve the previous overlap.
+- Therefore the current implementation proves adjacency is exploitable, but the
+  execution model is wrong.
+
+Decision:
+
+- Reject Phase 7LT.
+- Delete the temporary 71G overlay pack.
+- Revert source commit `4efc27e1c`.
+- Do not retry blocking `pread` coalescing.
+- If coalescing is revisited, it must use asynchronous span reads with enough
+  span slots and must overlap read completion with existing up/gate/down compute
+  instead of serializing before H2D.
+
+Next direction:
+
+- After source rollback, run a default n32 guard if another source change is
+  planned.
+- The next source design should either:
+  - implement async coalesced span reads with a proper completion pipeline; or
+  - move away from movement scheduling and inspect the type18 compute bucket.
