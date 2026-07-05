@@ -67596,3 +67596,115 @@ Reproducibility:
 - Record build result, source commit, run directory, command, output, TTFT,
   decode, token rate, memory, swap, IO counters, inflight statistics, and
   decision.
+
+### 7KY result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `d66d8a4ff` (`cuda: add immediate iouring refill option`).
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard d66d8a4ff
+cmake --build build-cuda-batch -j$(nproc)
+```
+
+Build result:
+
+- success;
+- only existing warning classes were emitted.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-045857Z-phase7ky-immediate-refill-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-045857Z-phase7ky-immediate-refill-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_REFILL_IMMEDIATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `76976.07 ms`;
+- decode `23491.78 ms / 31`, `1.32 tok/s`;
+- memory peak `15899996160`;
+- memory final `15099572224`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`;
+- iouring bytes `126391910400`;
+- iouring wait `20896167 us`;
+- iouring submit `49702 us`;
+- global io_uring detail:
+  - batches `5178`;
+  - submit calls `5178`;
+  - wait calls `18255`;
+  - inflight avg `3.33`;
+  - inflight max `8`;
+  - batch histogram `1:176,2-4:2679,5-8:2323`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3321180 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.4%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `45.2%`.
+
+Comparison:
+
+- 7KX current-head baseline:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - iouring wait `19756301 us`;
+  - inflight avg `3.32`.
+- 7KY immediate refill:
+  - decode `23491.78 ms / 31`, `1.32 tok/s`;
+  - iouring wait `20896167 us`;
+  - inflight avg `3.33`.
+
+Interpretation:
+
+- Immediate refill did not materially improve effective queue occupancy:
+  `inflight_avg` moved only from `3.32` to `3.33`.
+- It also increased measured iouring wait and regressed endpoint decode by
+  `890.21 ms` versus the same-commit 7KX baseline.
+- Therefore the low average inflight is primarily caused by small per-call job
+  shape and independent up/gate/down call boundaries, not by the drain-before-
+  refill timing.
+- 7KW already showed that forcing larger combined up/gate batches reduces IO
+  wait but loses useful copy/compute overlap. Together, 7KW and 7KY close the
+  simple io_uring scheduling/batching directions.
+
+Decision:
+
+- Reject `GGML_MOE_IO_REFILL_IMMEDIATE`.
+- Revert source commit `d66d8a4ff`.
+- Do not enable immediate refill in the repro script.
+- Keep accepted runtime defaults unchanged.
