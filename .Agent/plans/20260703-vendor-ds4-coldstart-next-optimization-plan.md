@@ -4,6 +4,30 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Payload/Artifact Refresh Still Blocks Source, Need Disk Approval For Empirical Alternate Test
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
+
+Latest refresh artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/payload-artifact-breakthrough-refresh-after-membership.json`
+- Method: metadata-only Hugging Face API checks with `?blobs=true`, plus local hard-bound artifacts. No model weights were downloaded.
+- Disk state: `/root` has only about `1.86GB` free; `/root/lfz/models/DeepSeek-V4-Flash-GGUF` is only an `8.0K` placeholder and contains no usable alternate GGUF. Do not delete files without explicit user approval.
+- Exact payload reduction remains closed: top1024 needs about `2.49x` compression to preserve gate cache with cpu41, but has only `6.56 ms` zero-overhead slack; top1500 has useful speed slack but needs about `3.64x` compression to preserve gate cache with cpu41. Prior observed lossless compression is only `1.040149x`, with duplicate and zero block ratios both `0`.
+- Current metadata candidates checked include `bartowski/DeepSeek-V4-Flash-GGUF`, `tarruda/DeepSeek-V4-Flash-GGUF`, `bullerwins/DeepSeek-V4-Flash-GGUF`, `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF`, `cloudyu/DeepSeek-V4-Flash-4Expert`, `0xSero/DeepSeek-V4-Flash-162B-GGUF`, `RedHatAI/DeepSeek-V4-Flash-speculator.dflash`, and `inference-optimization` DFlash repos.
+- Nearest empirical candidate remains `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF`, file `ds4flash-4expert.gguf`, size `164465760544` bytes. It is disk-blocked; native top4 override already failed correctness/performance, and sidecar bypass is closed, so the full GGUF must be tested before any promotion claim.
+- Low-bit GGUF candidates may change bytes but are not locally available and require large downloads plus correctness validation. Examples from metadata: `0xSero` Q2 REAP `52593532000` bytes, `bullerwins` IQ2_S `88019539296` bytes, `tarruda` Q2_K split total about `96962159168` bytes. Metadata alone does not allow a source patch or SOTA benchmark.
+- DFlash/speculator candidates are safetensors/custom-code artifacts, not current vendor-loadable GGUFs; current vendor target-verifier path remains closed by the oracle verifier window probe.
+
+Updated next executable plan:
+
+1. Commit and push the payload/artifact refresh and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not write runtime source for top48 MMVQ, raw top1024/top1500 exact hot-pair residency, DFlash, or low-bit GGUF assumptions from metadata alone.
+3. To make empirical progress, request explicit user approval for disk cleanup/relocation. Minimum useful targets: about `60GB` for the 0xSero Q2 REAP candidate, about `100GB` for tarruda/bullerwins low-bit GGUFs, and preferably `>=180GB` for cloudyu 4Expert GGUF plus run artifacts.
+4. If disk is approved, first test the smallest candidate that can plausibly change the frontier with existing vendor loader and strict gates. The candidate test must record full metadata, run strict 16GB/no-swap, check fixed-text/top1 or France correctness before performance promotion, and push any compliant improvement immediately.
+5. If no disk cleanup is approved, continue only with metadata/hard-bound work or a new exact representation proof that demonstrates at least the required compression/coverage ratio before code.
+6. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a semantically correct/coherent France answer, followed by immediate source/artifact push and clean pushed-source reproduction.
+
 ### 2026-07-06 Latest Active Plan: Larger Exact Hot-Pair Rejected Before Source, Need Payload/Artifact Breakthrough
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。

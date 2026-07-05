@@ -1,0 +1,1159 @@
+{
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "memory_max_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744
+  },
+  "artifact": "payload-artifact-breakthrough-refresh-after-membership",
+  "candidate_decisions": [
+    {
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size_bytes": 39630611872
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size_bytes": 39628788224
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size_bytes": 39546993120
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size_bytes": 37198265248
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 2190
+        }
+      ],
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash-MXFP4": 156004658464,
+        "README": 2190
+      },
+      "url": "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "notable_files": [
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size_bytes": 49994259008
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size_bytes": 49983378752
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size_bytes": 49310047712
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size_bytes": 49196411616
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size_bytes": 49179918240
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size_bytes": 49065891232
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size_bytes": 49056582912
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size_bytes": 49056582912
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+          "size_bytes": 47646863008
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+          "size_bytes": 25912511712
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+          "size_bytes": 12932559648
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00005-of-00005.gguf",
+          "size_bytes": 9194039648
+        },
+        {
+          "name": "imatrix.gguf",
+          "size_bytes": 470338784
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size_bytes": 5248156
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 1350
+        }
+      ],
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "total_by_prefix_preview": {
+        "IQ3_XXS": 112111985344,
+        "MXFP4": 156378344860,
+        "Q2_K": 96962159168,
+        "Q3_K": 125097550528,
+        "README": 1350,
+        "imatrix": 470338784
+      },
+      "url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size_bytes": 156378344544
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size_bytes": 155095231840
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size_bytes": 151270026592
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size_bytes": 134056602976
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size_bytes": 113974275424
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size_bytes": 102431550816
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size_bytes": 88019539296
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 5256
+        }
+      ],
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash.IQ2_S": 88019539296,
+        "DeepSeek-V4-Flash.IQ3_XXS": 113974275424,
+        "DeepSeek-V4-Flash.IQ3_XXS-AS": 102431550816,
+        "DeepSeek-V4-Flash.IQ3_XXS-L21": 134056602976,
+        "DeepSeek-V4-Flash.IQ3_XXS-L39": 151270026592,
+        "DeepSeek-V4-Flash.IQ4_XS": 155095231840,
+        "DeepSeek-V4-Flash.Q8_0": 156378344544,
+        "README": 5256
+      },
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "decision": "nearest_empirical_candidate_but_disk_blocked_full_164gb_download_required; native_top4_override_already_failed; sidecar_bypass_closed",
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "notable_files": [
+        {
+          "name": "ds4flash-4expert.gguf",
+          "size_bytes": 164465760544
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 16896
+        }
+      ],
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "total_by_prefix_preview": {
+        "README": 16896,
+        "ds4flash-4expert": 164465760544
+      },
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF"
+    },
+    {
+      "decision": "safetensors_not_vendor_loadable_without_new_loader; total_sharded_artifact_large; can inform 4Expert semantics only",
+      "lastModified": "2026-06-27T06:16:15.000Z",
+      "notable_files": [
+        {
+          "name": "model-00004-of-00046.safetensors",
+          "size_bytes": 3594160776
+        },
+        {
+          "name": "model-00046-of-00046.safetensors",
+          "size_bytes": 3593956092
+        },
+        {
+          "name": "model-00012-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00014-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00016-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00018-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00020-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00022-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00024-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00026-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00028-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00030-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00032-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00034-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00036-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00038-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00040-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00042-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00044-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00006-of-00046.safetensors",
+          "size_bytes": 3590024776
+        }
+      ],
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert",
+      "total_by_prefix_preview": {
+        "model-00004-of-00046": 3594160776,
+        "model-00012-of-00046": 3590026352,
+        "model-00014-of-00046": 3590026352,
+        "model-00016-of-00046": 3590026352,
+        "model-00018-of-00046": 3590026352,
+        "model-00020-of-00046": 3590026352,
+        "model-00022-of-00046": 3590026352,
+        "model-00024-of-00046": 3590026352,
+        "model-00026-of-00046": 3590026352,
+        "model-00028-of-00046": 3590026352,
+        "model-00030-of-00046": 3590026352,
+        "model-00046-of-00046": 3593956092
+      },
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert"
+    },
+    {
+      "decision": "smallest metadata GGUF candidate around 52.6GB but prior alternate-GGUF bound did not reach 10tok on current 32GB setup; empirical test disk-blocked",
+      "lastModified": "2026-05-30T10:14:15.000Z",
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size_bytes": 52593532000
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 4174
+        },
+        {
+          "name": "validation/20260528T160633Z/summary.json",
+          "size_bytes": 1828
+        },
+        {
+          "name": "validation/20260528T160633Z/SUMMARY.md",
+          "size_bytes": 1798
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/models.json",
+          "size_bytes": 465
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/api-bench-summary-20260529T001105.json",
+          "size_bytes": 407
+        }
+      ],
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4": 52593532000,
+        "README": 4174,
+        "validation": 4498
+      },
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 3109
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1816
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 385
+        }
+      ],
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "total_by_prefix_preview": {
+        "README": 3109,
+        "config": 1816,
+        "model": 3607596760,
+        "val_metrics": 385
+      },
+      "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1817
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 1427
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 381
+        }
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "total_by_prefix_preview": {
+        "README": 1427,
+        "config": 1817,
+        "model": 3607596760,
+        "val_metrics": 381
+      },
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1590
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 382
+        }
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "total_by_prefix_preview": {
+        "config": 1590,
+        "model": 3607596760,
+        "val_metrics": 382
+      },
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    }
+  ],
+  "created_utc": "2026-07-05T17:48:19Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "new_source_patch_allowed": false,
+    "new_strict_cold_benchmark_allowed": false,
+    "next_reopen_conditions": [
+      "User approves cleanup/relocation to free enough disk for at least one candidate download and its run artifacts, preferably >=180GB for cloudyu 4Expert GGUF.",
+      "A vendor-loadable artifact appears whose metadata and header imply a hard-bound >10tok with >=500ms overhead slack under 32GB VRAM and 16GB host/page-cache.",
+      "A new exact representation proves >=3.64x payload reduction with fixed-text top1 safety before any performance run."
+    ],
+    "reason": "No metadata-only candidate is both locally available/vendor-loadable and hard-bound above 10tok under strict 16GB RAM. Exact payload compression is far below the required ratio. The nearest empirical candidates require large downloads while /root has only about 1.8GB free."
+  },
+  "disk_state": {
+    "df_root_bytes_fields": [
+      "/dev/root",
+      "1065418129408",
+      "1063538880512",
+      "1862471680",
+      "100%",
+      "/"
+    ],
+    "do_not_delete_without_user_approval": true,
+    "du_models": "548G\t/root/lfz/models",
+    "free_bytes": 1862471680,
+    "local_deepseek_alt_dir_bytes": "8.0K /root/lfz/models/DeepSeek-V4-Flash-GGUF"
+  },
+  "frontier_summary": {
+    "top1024": {
+      "accepted_path_free_mib": 238,
+      "fallback_fraction": 0.7168538465394291,
+      "fallback_ms_est": 17261.427,
+      "fit_preserve_gate_cpu40": false,
+      "fit_preserve_gate_cpu41": false,
+      "gate_payload_remaining_mib_if_stolen_after_cpu41": 8364.0,
+      "payload_mib_updown": 8704.0,
+      "projected_decode_ms_zero_overhead": 13550.834708000002,
+      "projected_tok_s_zero_overhead": 10.00484135749669,
+      "rows": 27690,
+      "shortfall_mib_preserve_gate_cpu40": 8466.0,
+      "shortfall_mib_with_cpu41_preserve_gate": 5202.0,
+      "slack_to_10_tok_s_ms_zero_overhead": 6.560443519998444,
+      "top_n": 1024
+    },
+    "top1500": {
+      "accepted_path_free_mib": 238,
+      "fallback_fraction": 0.8471497012200002,
+      "fallback_ms_est": 20398.876,
+      "fit_preserve_gate_cpu40": false,
+      "fit_preserve_gate_cpu41": false,
+      "gate_payload_remaining_mib_if_stolen_after_cpu41": 4318.0,
+      "payload_mib_updown": 12750.0,
+      "projected_decode_ms_zero_overhead": 10413.385708000002,
+      "projected_tok_s_zero_overhead": 13.019200029347457,
+      "rows": 31232,
+      "shortfall_mib_preserve_gate_cpu40": 12512.0,
+      "shortfall_mib_with_cpu41_preserve_gate": 9248.0,
+      "slack_to_10_tok_s_ms_zero_overhead": 3144.009443519999,
+      "top_n": 1500
+    },
+    "top2000": {
+      "accepted_path_free_mib": 238,
+      "fallback_fraction": 0.9335168039533173,
+      "fallback_ms_est": 22478.546,
+      "fit_preserve_gate_cpu40": false,
+      "fit_preserve_gate_cpu41": false,
+      "gate_payload_remaining_mib_if_stolen_after_cpu41": 68.0,
+      "payload_mib_updown": 17000.0,
+      "projected_decode_ms_zero_overhead": 8333.715708000003,
+      "projected_tok_s_zero_overhead": 16.268127719434315,
+      "rows": 34344,
+      "shortfall_mib_preserve_gate_cpu40": 16762.0,
+      "shortfall_mib_with_cpu41_preserve_gate": 13498.0,
+      "slack_to_10_tok_s_ms_zero_overhead": 5223.679443519997,
+      "top_n": 2000
+    }
+  },
+  "hf_metadata": [
+    {
+      "downloads": 236134,
+      "files": [
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size_bytes": 39630611872
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size_bytes": 39628788224
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size_bytes": 39546993120
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size_bytes": 37198265248
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 2190
+        }
+      ],
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "likes": 30,
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "tags": [
+        "gguf",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "url": "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "downloads": 3297,
+      "files": [
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size_bytes": 49994259008
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size_bytes": 49983378752
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size_bytes": 49310047712
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size_bytes": 49196411616
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size_bytes": 49179918240
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size_bytes": 49065891232
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size_bytes": 49056582912
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size_bytes": 49056582912
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+          "size_bytes": 47646863008
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+          "size_bytes": 25912511712
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+          "size_bytes": 12932559648
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00005-of-00005.gguf",
+          "size_bytes": 9194039648
+        },
+        {
+          "name": "imatrix.gguf",
+          "size_bytes": 470338784
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size_bytes": 5248448
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size_bytes": 5248156
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 1350
+        }
+      ],
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "likes": 15,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "tags": [
+        "gguf",
+        "imatrix",
+        "conversational",
+        "deepseek",
+        "llama.cpp",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "downloads": 1586,
+      "files": [
+        {
+          "name": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size_bytes": 156378344544
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size_bytes": 155095231840
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size_bytes": 151270026592
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size_bytes": 134056602976
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size_bytes": 113974275424
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size_bytes": 102431550816
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size_bytes": 88019539296
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 5256
+        }
+      ],
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "likes": 3,
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "tags": [
+        "gguf",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "downloads": 904,
+      "files": [
+        {
+          "name": "ds4flash-4expert.gguf",
+          "size_bytes": 164465760544
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 16896
+        }
+      ],
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "likes": 0,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "quantized",
+        "moe",
+        "4bit",
+        "q4_k",
+        "text-generation",
+        "en",
+        "zh",
+        "dataset:cloudyu/DeepSeek-V4-Flash-4Expert",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF"
+    },
+    {
+      "downloads": 121,
+      "files": [
+        {
+          "name": "model-00004-of-00046.safetensors",
+          "size_bytes": 3594160776
+        },
+        {
+          "name": "model-00046-of-00046.safetensors",
+          "size_bytes": 3593956092
+        },
+        {
+          "name": "model-00012-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00014-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00016-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00018-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00020-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00022-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00024-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00026-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00028-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00030-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00032-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00034-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00036-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00038-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00040-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00042-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00044-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00006-of-00046.safetensors",
+          "size_bytes": 3590024776
+        },
+        {
+          "name": "model-00008-of-00046.safetensors",
+          "size_bytes": 3590024776
+        },
+        {
+          "name": "model-00010-of-00046.safetensors",
+          "size_bytes": 3590024776
+        },
+        {
+          "name": "model-00013-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00015-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00017-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00019-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00021-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00023-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00025-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00027-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00029-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00031-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00033-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00035-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00037-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00039-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00041-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00043-of-00046.safetensors",
+          "size_bytes": 3568770544
+        },
+        {
+          "name": "model-00005-of-00046.safetensors",
+          "size_bytes": 3568768976
+        },
+        {
+          "name": "model-00007-of-00046.safetensors",
+          "size_bytes": 3568768976
+        },
+        {
+          "name": "model-00009-of-00046.safetensors",
+          "size_bytes": 3568768976
+        },
+        {
+          "name": "model-00011-of-00046.safetensors",
+          "size_bytes": 3568768976
+        },
+        {
+          "name": "model-00002-of-00046.safetensors",
+          "size_bytes": 3564252680
+        },
+        {
+          "name": "model-00003-of-00046.safetensors",
+          "size_bytes": 3564252680
+        },
+        {
+          "name": "model-00045-of-00046.safetensors",
+          "size_bytes": 1059332516
+        },
+        {
+          "name": "model-00001-of-00046.safetensors",
+          "size_bytes": 1059061856
+        },
+        {
+          "name": "tokenizer.json",
+          "size_bytes": 6367146
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "size_bytes": 5371381
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 11612
+        },
+        {
+          "name": "eval/report_mmlupro_topk_compare.md",
+          "size_bytes": 9882
+        },
+        {
+          "name": "eval/report_humaneval_topk_compare.md",
+          "size_bytes": 8611
+        },
+        {
+          "name": "encoding/README.md",
+          "size_bytes": 8118
+        },
+        {
+          "name": "encoding/tests/test_input_3.json",
+          "size_bytes": 4546
+        },
+        {
+          "name": "encoding/tests/test_input_1.json",
+          "size_bytes": 2748
+        },
+        {
+          "name": "encoding/tests/test_input_4.json",
+          "size_bytes": 2730
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1929
+        },
+        {
+          "name": "inference/config.json",
+          "size_bytes": 991
+        },
+        {
+          "name": "inference/README.md",
+          "size_bytes": 951
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size_bytes": 801
+        },
+        {
+          "name": "encoding/tests/test_input_2.json",
+          "size_bytes": 526
+        }
+      ],
+      "lastModified": "2026-06-27T06:16:15.000Z",
+      "likes": 0,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert",
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "deepseek",
+        "moe",
+        "mixture-of-experts",
+        "topk-4",
+        "efficient-inference",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert"
+    },
+    {
+      "downloads": 15949,
+      "files": [
+        {
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size_bytes": 52593532000
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 4174
+        },
+        {
+          "name": "validation/20260528T160633Z/summary.json",
+          "size_bytes": 1828
+        },
+        {
+          "name": "validation/20260528T160633Z/SUMMARY.md",
+          "size_bytes": 1798
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/models.json",
+          "size_bytes": 465
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/api-bench-summary-20260529T001105.json",
+          "size_bytes": 407
+        }
+      ],
+      "lastModified": "2026-05-30T10:14:15.000Z",
+      "likes": 25,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "dgx-spark",
+        "ds4",
+        "dwarfstar",
+        "reap",
+        "text-generation",
+        "arxiv:2510.13999",
+        "base_model:0xSero/DeepSeek-V4-Flash-162B",
+        "base_model:quantized:0xSero/DeepSeek-V4-Flash-162B",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "downloads": 11,
+      "files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 3109
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1816
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 385
+        }
+      ],
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "likes": 1,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "downloads": 124,
+      "files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1817
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 1427
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "likes": 1,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "downloads": 1219,
+      "files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1590
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 382
+        }
+      ],
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    }
+  ],
+  "method": "Metadata-only Hugging Face API checks with ?blobs=true plus local hard-bound artifacts; no model weights downloaded.",
+  "payload_reduction_bound": {
+    "current_needed_ratio_top1024_cpu41_preserve_gate": 2.4854368932038833,
+    "current_needed_ratio_top1500_cpu41_preserve_gate": 3.6407766990291264,
+    "current_needed_ratio_top2000_cpu41_preserve_gate": 4.854368932038835,
+    "decision": "exact byte compression/dedup remains closed; observed 1.040149x is far below 2.49x for top1024 and 3.64x for top1500, and top1024 has only 6.56ms zero-overhead slack anyway.",
+    "dedup_sample_duplicate_ratio": 0,
+    "dedup_sample_zero_ratio": 0,
+    "observed_best_lossless_ratio_prior": 1.040149
+  },
+  "source": {
+    "head": "53ac3ab4dabf08247b60ef0f926db75d1cc1ab09",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": ""
+  },
+  "source_links": [
+    "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+    "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert",
+    "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF",
+    "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+    "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+    "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+  ]
+}
