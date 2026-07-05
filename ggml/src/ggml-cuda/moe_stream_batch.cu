@@ -6594,6 +6594,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        size_t nbytes = 0;
         int expert_idx = -1;
         char tensor[128] = {};
     };
@@ -6626,6 +6627,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 job.dst = dst_slot;
                 job.host_data = expert_host;
                 job.pack_entry = pack_entry;
+                job.nbytes = src0_bytes;
                 job.expert_idx = active_experts[j];
                 std::snprintf(job.tensor, sizeof(job.tensor), "%s", key_name);
                 jobs.push_back(job);
@@ -6639,18 +6641,67 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         return true;
     };
 
+    auto plan_tensor_sized = [&](
+            const char *key_name, const void *host_base,
+            size_t expert_stride, size_t expert_bytes,
+            int32_t *h_x_ids, int *slots_out,
+            const int *avoid_slots, int n_avoid_slots,
+            std::vector<stage_copy_job> &jobs) -> bool {
+        jobs.clear();
+        for (int j = 0; j < n_active; ++j) {
+            const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * expert_stride;
+            const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
+            int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            if (cache_slot < 0) {
+                cache_slot = batch_cache_insert_slot(
+                    cache, cache_key, expert_host, expert_bytes, st, true, false,
+                    avoid_slots, n_avoid_slots, false, key_name, active_experts[j]);
+                if (cache_slot < 0) return false;
+                const expert_pack_entry *pack_entry = expert_pack_lookup(key_name, active_experts[j], expert_bytes);
+                void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
+                stage_copy_job job;
+                job.slot = cache_slot;
+                job.dst = dst_slot;
+                job.host_data = expert_host;
+                job.pack_entry = pack_entry;
+                job.nbytes = expert_bytes;
+                job.expert_idx = active_experts[j];
+                std::snprintf(job.tensor, sizeof(job.tensor), "%s", key_name);
+                jobs.push_back(job);
+            } else {
+                batch_ttft_trace_record("cache_hit", key_name, active_experts[j], expert_bytes, true, false, false, 0.0);
+            }
+            h_x_ids[j] = cache_slot;
+            if (slots_out) slots_out[j] = cache_slot;
+            batch_route_profile_hit(key_name, active_experts[j], expert_bytes);
+        }
+        return true;
+    };
+
     auto copy_stage_jobs = [&](const std::vector<stage_copy_job> &jobs, cudaStream_t run_stream, pinned_stage_ring &ring) -> bool {
         if (cudaSetDevice(0) != cudaSuccess) return false;
-        if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+        size_t copy_bytes = src0_bytes;
+        bool uniform_bytes = true;
+        if (!jobs.empty() && jobs[0].nbytes != 0) {
+            copy_bytes = jobs[0].nbytes;
+            for (const stage_copy_job &job : jobs) {
+                if (job.nbytes != 0 && job.nbytes != copy_bytes) {
+                    uniform_bytes = false;
+                    break;
+                }
+            }
+        }
+        if (uniform_bytes && expert_pack_iouring_copy_jobs(jobs, copy_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
         for (const stage_copy_job &job : jobs) {
+            const size_t job_bytes = job.nbytes != 0 ? job.nbytes : src0_bytes;
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,
+            if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, job_bytes, run_stream, job.pack_entry, &copy_trace,
                         "runtime_load", job.tensor, job.expert_idx)) {
                 if (!job.pack_entry ||
-                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, nullptr, &copy_trace,
+                        !batch_cache_copy_h2d(ring, job.dst, job.host_data, job_bytes, run_stream, nullptr, &copy_trace,
                             "runtime_load", job.tensor, job.expert_idx)) {
                     return false;
                 }
@@ -6664,7 +6715,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     "runtime_load",
                     job.tensor,
                     job.expert_idx,
-                    src0_bytes,
+                    job_bytes,
                     false,
                     copy_trace.pack_hit,
                     copy_trace.ram_hit,
@@ -6922,17 +6973,14 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 "[moe_stream] mixed-type up/gate compact path active: up_type=%d gate_type=%d up_bytes=%zu gate_bytes=%zu rows=%d\n",
                 (int)src0_type, (int)gate_type, up_expert_bytes, gate_expert_bytes, n_active);
         }
+        const bool mixed_parallel_stage =
+            expert_pack_env_bool("GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE", false) &&
+            bc.up_stream && bc.gate_stream && bc.ev_stage_ready && bc.ev_up_done && bc.ev_gate_done;
+        static std::atomic<int> first_mixed_parallel_stage{0};
+        if (mixed_parallel_stage && first_mixed_parallel_stage.fetch_add(1) == 0) {
+            std::fprintf(stderr, "[moe_stream] mixed-type up/gate parallel stage active\n");
+        }
         int up_slots[MOE_STREAM_MAX_ACTIVE] = {};
-        if (!stage_tensor_slots_only_sized(
-                up_key_name, src0_up_data, up_nb02, up_expert_bytes, st,
-                bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
-            return decline("mixed_stage_up");
-        }
-        if (!stage_tensor_slots_only_sized(
-                gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes, st,
-                bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
-            return decline("mixed_stage_gate");
-        }
         const bool early_current_down_overlap = current_down_overlap_early_enabled();
         if (early_current_down_overlap) {
             start_current_down_overlap();
@@ -6941,28 +6989,127 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             (void)join_current_down_overlap();
             return decline(reason);
         };
-        if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
-            return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_up") : decline("mixed_memset_up");
+        if (mixed_parallel_stage) {
+            if (cudaEventRecord(bc.ev_stage_ready, st) != cudaSuccess) {
+                return mixed_overlap_fail("mixed_record_stage_ready");
+            }
+            if (cudaStreamWaitEvent(bc.up_stream, bc.ev_stage_ready, 0) != cudaSuccess ||
+                    cudaStreamWaitEvent(bc.gate_stream, bc.ev_stage_ready, 0) != cudaSuccess) {
+                return mixed_overlap_fail("mixed_wait_stage_ready");
+            }
+            if (profile && bc.ev_up_start) cudaEventRecord(bc.ev_up_start, bc.up_stream);
+            if (profile && bc.ev_gate_work_start) cudaEventRecord(bc.ev_gate_work_start, bc.gate_stream);
+
+            std::vector<stage_copy_job> up_jobs;
+            std::vector<stage_copy_job> gate_jobs;
+            if (!plan_tensor_sized(
+                    up_key_name, src0_up_data, up_nb02, up_expert_bytes,
+                    bc.h_x_ids_up, up_slots, nullptr, 0, up_jobs)) {
+                clear_stage_jobs(up_jobs);
+                return mixed_overlap_fail("mixed_plan_up");
+            }
+            if (!plan_tensor_sized(
+                    gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes,
+                    bc.h_x_ids_gate, nullptr, up_slots, n_active, gate_jobs)) {
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return mixed_overlap_fail("mixed_plan_gate");
+            }
+            up_stage_jobs_count = (int)up_jobs.size();
+            gate_stage_jobs_count = (int)gate_jobs.size();
+            submit_planned_host_prefetch(up_jobs);
+            submit_planned_host_prefetch(gate_jobs);
+
+            bool up_copy_ok = true;
+            bool gate_copy_ok = true;
+            std::thread up_thread([&]() {
+                up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
+            });
+            std::thread gate_thread([&]() {
+                gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
+            });
+
+            up_thread.join();
+            if (!up_copy_ok) {
+                gate_thread.join();
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return mixed_overlap_fail("mixed_copy_up");
+            }
+            if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
+            if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), bc.up_stream) != cudaSuccess) {
+                gate_thread.join();
+                return mixed_overlap_fail("mixed_memset_up");
+            }
+            if (!launch_moe_mmvq_compact_batch(
+                    src0_type,
+                    (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_up, (float *)bc.d_up, n_active, bc.up_stream)) {
+                gate_thread.join();
+                return mixed_overlap_fail("mixed_launch_up");
+            }
+            if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
+
+            if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
+            gate_thread.join();
+            if (!gate_copy_ok) {
+                clear_stage_jobs(up_jobs);
+                clear_stage_jobs(gate_jobs);
+                return mixed_overlap_fail("mixed_copy_gate");
+            }
+            if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
+            if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), bc.gate_stream) != cudaSuccess) {
+                return mixed_overlap_fail("mixed_memset_gate");
+            }
+            if (!launch_moe_mmvq_compact_batch(
+                    gate_type,
+                    (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, bc.gate_stream)) {
+                return mixed_overlap_fail("mixed_launch_gate");
+            }
+            if (profile) cudaEventRecord(bc.ev_gate, bc.gate_stream);
+            if (cudaEventRecord(bc.ev_up_done, bc.up_stream) != cudaSuccess ||
+                    cudaEventRecord(bc.ev_gate_done, bc.gate_stream) != cudaSuccess ||
+                    cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess ||
+                    cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) {
+                return mixed_overlap_fail("mixed_wait_done");
+            }
+        } else {
+            if (!stage_tensor_slots_only_sized(
+                    up_key_name, src0_up_data, up_nb02, up_expert_bytes, st,
+                    bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
+                return decline("mixed_stage_up");
+            }
+            if (!stage_tensor_slots_only_sized(
+                    gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes, st,
+                    bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
+                return decline("mixed_stage_gate");
+            }
+            if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
+                return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_up") : decline("mixed_memset_up");
+            }
+            if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
+                return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_gate") : decline("mixed_memset_gate");
+            }
+            if (!launch_moe_mmvq_compact_batch(
+                    src0_type,
+                    (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_up, (float *)bc.d_up, n_active, st)) {
+                return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_up") : decline("mixed_launch_up");
+            }
+            if (profile) cudaEventRecord(bc.ev_up, st);
+            if (!launch_moe_mmvq_compact_batch(
+                    gate_type,
+                    (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
+                    ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                    bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, st)) {
+                return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_gate") : decline("mixed_launch_gate");
+            }
+            if (profile) cudaEventRecord(bc.ev_gate, st);
         }
-        if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), st) != cudaSuccess) {
-            return early_current_down_overlap ? mixed_overlap_fail("mixed_memset_gate") : decline("mixed_memset_gate");
-        }
-        if (!launch_moe_mmvq_compact_batch(
-                src0_type,
-                (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
-                ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
-                bc.d_src1_q8_up, (float *)bc.d_up, n_active, st)) {
-            return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_up") : decline("mixed_launch_up");
-        }
-        if (profile) cudaEventRecord(bc.ev_up, st);
-        if (!launch_moe_mmvq_compact_batch(
-                gate_type,
-                (const char *)cache->pool, bc.h_x_ids_gate, cache->slot_sz,
-                ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
-                bc.d_src1_q8_gate, (float *)bc.d_gate, n_active, st)) {
-            return early_current_down_overlap ? mixed_overlap_fail("mixed_launch_gate") : decline("mixed_launch_gate");
-        }
-        if (profile) cudaEventRecord(bc.ev_gate, st);
         if (!early_current_down_overlap) {
             start_current_down_overlap();
         }

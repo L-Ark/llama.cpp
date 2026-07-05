@@ -62414,3 +62414,417 @@ Decision:
   - empty-thread creation is not a material bottleneck;
   - inline single-list dispatch may reduce scheduling flexibility or CUDA stream progress enough to lose more time than it saves;
   - next work should return to measured custom MoE sub-buckets rather than thread-dispatch micro-optimization.
+
+## Phase 7JW - current SOTA custom MoE sub-bucket refresh
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Source baseline:
+
+- `f9c83899a` (`docs: reject down inline staging`), with runtime code identical
+  to the accepted SOTA path.
+
+Bottleneck hypothesis:
+
+- 7JU showed decode split wall is `99.43%` CPU-assigned, but source inspection
+  confirms those CPU splits contain custom CUDA MoE work, IO/cache staging, D2H
+  copies, fallback, and CPU wrapper barriers.
+- 7JV showed a wrapper-thread micro-optimization regressed decode, so the next
+  high-signal step is to refresh the fine-grained custom MoE sub-buckets under
+  the current SOTA rather than guessing another dispatch change.
+
+Experiment:
+
+- Run strict cold-start n32 with current SOTA runtime and default-off profiles:
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32`;
+  - `GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv`;
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - keep `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Why this can lead to a token-rate improvement:
+
+- The next implementation must target the largest measured sub-bucket:
+  - up/gate staging or iouring wait: consider a bounded overlap/prefetch change;
+  - up/gate kernel/quant: consider kernel fusion or MMQ path changes;
+  - D2H/scatter: reconsider a corrected, bounded handoff only if it is dominant;
+  - down staging: optimize current-down overlap or down iouring depth only if it
+    is still dominant;
+  - fallback: target the specific fallback bucket only if it is large enough.
+- Theoretical upper bound will be computed after the profile:
+  - maximum useful gain is bounded by the largest compressible measured
+    sub-bucket, not by the full CPU split wall.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard f9c83899a
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jw-sota-moe-subprofile-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- This diagnostic is not a SOTA candidate unless it unexpectedly improves
+  decode while passing all gates.
+- Use the measured largest compressible bucket to design the next runtime
+  candidate before changing code.
+- Maintain the same strict gates:
+  - exit `0`;
+  - host RAM peak `< 16 GB`, including page cache;
+  - swap max `0`;
+  - quality and manual semantic pass for the France prompt;
+  - TTFT `<= 106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+### 7JW result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jw-sota-moe-subprofile-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75351.58 ms`;
+- decode `29610.17 ms / 31`, `1.05 tok/s`;
+- memory peak `15899996160`;
+- memory final `15081472000`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Profile results:
+
+- `up-gate-profile.csv` was written:
+  - rows `869`;
+  - wall `6279.176 ms`;
+  - kernel window `6202.690 ms`;
+  - `up_ms=4800.507`, `gate_ms=1369.967`;
+  - `up_wait_ms=3226.904`, `gate_wait_ms=3381.916`;
+  - `up_compute_ms=109.615`, `gate_compute_ms=65.775`;
+  - `d2h_ms=6.232`;
+  - `scatter_ms=14.084`.
+- `io-batch-profile.csv` was written:
+  - `runtime_load`: rows `2420`, jobs `11315`, wait `9914.184 ms`,
+    wall `10198.700 ms`;
+  - `current_down_overlap`: rows `860`, jobs `3504`, wait `2721.379 ms`,
+    wall `2822.600 ms`.
+- CPU aggregate profile:
+  - up_gate calls `1861`, total `11.442 ms/call`, cuda_batch
+    `11.327 ms/call`;
+  - down calls `2038`, total `38.239 ms/call`, cuda_batch
+    `2.177 ms/call`, fallback `36.020 ms/call`.
+
+Incomplete diagnostic:
+
+- `down-batch-profile.csv` was not written even though
+  `GGML_MOE_DOWN_BATCH_PROFILE_OUT` was set.
+- Source check shows down CSV recording is inside the `profile` block guarded by
+  `g_bprof.enabled`, which is enabled by `GGML_MOE_BATCH_PROFILE=1`.
+- Therefore this run is useful for up/gate and IO attribution, but incomplete
+  for down detailed stage/kernel/D2H attribution.
+
+Decision:
+
+- Do not use this diagnostic alone for the next implementation.
+- Run a corrected follow-up with `GGML_MOE_BATCH_PROFILE=1` so down CSV is
+  produced.
+
+## Phase 7JX - corrected down batch subprofile
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Correction over 7JW:
+
+- Add `GGML_MOE_BATCH_PROFILE=1` to the same strict n32 diagnostic so
+  `down-batch-profile.csv` is actually emitted.
+- Keep all other runtime knobs identical.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard f9c83899a
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jx-sota-down-subprofile-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- Use 7JX to compute the next candidate's theoretical upper bound.
+- Do not accept it as SOTA unless it unexpectedly improves decode while passing
+  all gates.
+
+### 7JX result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jx-sota-down-subprofile-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79070.15 ms`;
+- decode `28769.52 ms / 31`, `1.08 tok/s`;
+- memory peak `15899996160`;
+- memory final `15111929856`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Detailed sub-buckets:
+
+- Up/gate decode profile:
+  - rows `869`;
+  - wall `6041.297 ms`;
+  - kernel window `5964.182 ms`;
+  - up `4629.592 ms`;
+  - gate `1293.364 ms`;
+  - up wait `3065.920 ms`;
+  - gate wait `3238.563 ms`;
+  - up compute `123.037 ms`;
+  - gate compute `65.119 ms`;
+  - D2H `6.091 ms`;
+  - scatter `14.107 ms`;
+  - up cache misses `4054`;
+  - gate cache misses `4055`.
+- Down accepted batch profile:
+  - rows `1644`;
+  - wall `4137.542 ms`;
+  - stage `3833.001 ms`;
+  - kernel `190.207 ms`;
+  - D2H `21.903 ms`;
+  - scatter `27.038 ms`;
+  - cache hits `9631`;
+  - cache misses/staged jobs `3521`.
+- IO batch profile:
+  - `runtime_load`: rows `2420`, jobs `11315`, wait `9417.296 ms`,
+    wall `9670.278 ms`;
+  - `current_down_overlap`: rows `860`, jobs `3504`, wait `2661.886 ms`,
+    wall `2749.732 ms`.
+- CPU aggregate:
+  - up_gate calls `1861`, total `11.102 ms/call`, cuda_batch
+    `10.996 ms/call`;
+  - down calls `2038`, total `39.284 ms/call`, cuda_batch
+    `2.133 ms/call`, fallback `37.110 ms/call`.
+
+Interpretation:
+
+- D2H/scatter is not a meaningful target (`< 70 ms` for accepted down and
+  up/gate combined).
+- Down compute is not a meaningful target (`190 ms` accepted batch kernel).
+- The remaining compressible decode time is dominated by expert movement and
+  wait windows:
+  - up/gate wait/kernel window around `6.0 s`;
+  - accepted down stage around `3.8 s`;
+  - runtime iouring wait around `9.4 s`.
+- Current Kimi path is mixed type (`IQ3_XXS` up and `IQ2_S` gate). The mixed
+  branch stages and computes up then gate sequentially, unlike the same-type
+  parallel up/gate branch.
+
+## Phase 7JY - default-off mixed up/gate parallel stage and compute
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Candidate:
+
+- Add `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1`.
+- Only affect the existing mixed-type up/gate branch where up and gate expert
+  tensor types differ.
+- Preserve default behavior when the env is unset.
+- In the env-gated path:
+  - reserve/cache slots for up and gate with the existing avoid-slot logic;
+  - copy up jobs on `bc.up_stream` / `bc.stage_ring`;
+  - copy gate jobs on `bc.gate_stream` / `bc.stage_ring_gate`;
+  - launch up MMVQ on `bc.up_stream`;
+  - launch gate MMVQ on `bc.gate_stream`;
+  - wait for both streams before the existing fuse, D2H, scatter, and
+    current-down overlap flow.
+
+Why it can improve token rate:
+
+- 7JX measured up/gate wall `6041.297 ms`, with large wait windows:
+  `up_wait=3065.920 ms`, `gate_wait=3238.563 ms`.
+- The current mixed branch serializes up and gate staging/compute.
+- The theoretical upper bound is bounded by the smaller of the two overlappable
+  up/gate sides, roughly `min(up_ms, gate_ms) = 1293 ms` on n32 plus any staging
+  overlap that is currently hidden in the wait windows.
+- Actual gain may be lower because both sides still share SSD bandwidth,
+  io_uring queues, cache metadata, and CUDA copy engines.
+
+Validation sequence:
+
+1. Build and run strict n4 correctness smoke with:
+   `EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1"`.
+2. Require semantic pass on the France prompt and no read/iouring failures.
+3. If n4 passes, run strict n32.
+4. Accept only if n32 decode improves over current min-profile n32 baseline
+   (`28921.86 ms / 31` from 7JU) while all gates pass.
+5. If accepted, run strict n96 and commit/push immediately with reproduction
+   commands and metrics.
+6. If quality fails or decode regresses, revert the runtime code and record the
+   rejection.
+
+### 7JY n4 smoke result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-n4-smoke`.
+
+Command delta:
+
+- `EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1"`.
+
+Gate metrics:
+
+- exit `0`;
+- output: `France is a country`;
+- automatic quality `fail` only because `N=4` is too short for the paragraph
+  checker (`missing_location_or_landmark_cue`);
+- manual smoke quality: no corruption observed;
+- TTFT `75546.67 ms`;
+- decode `3342.36 ms / 3`, `0.90 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- activation logs:
+  - `mixed-type up/gate compact path active`;
+  - `mixed-type up/gate parallel stage active`.
+
+Decision:
+
+- n4 smoke is not sufficient for quality or performance acceptance, but it
+  confirms the path activates without crash or IO failure.
+- Proceed to strict n32.
+
+### 7JY n32 result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-n32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard f9c83899a
+# apply the 7JY mixed up/gate parallel stage candidate diff
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76823.56 ms`;
+- decode `23747.58 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- memory final `15083769856`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- activation logs:
+  - `mixed-type up/gate compact path active`;
+  - `mixed-type up/gate parallel stage active`.
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`, wait `20930689 us`;
+- iouring batches `5178`, wait calls `18357`;
+- current-down overlap worker time `3281364 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Comparison:
+
+- 7JU current SOTA n32: decode `28921.86 ms / 31`, `1.07 tok/s`.
+- 7JY n32: decode `23747.58 ms / 31`, `1.31 tok/s`.
+- Improvement: `5174.28 ms` faster on 31 decode runs, about `17.9%` lower
+  decode time.
+- TTFT remains below the gate `106331.72 ms`.
+
+Decision:
+
+- Accept 7JY as an n32 performance improvement.
+- Commit and push the default-off code path immediately.
+- Run strict n96 from the pushed commit with
+  `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1` before promoting it as the new n96
+  SOTA.
