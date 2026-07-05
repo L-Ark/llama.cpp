@@ -1,0 +1,225 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-target-representation-hard-bound.json",
+  "created_at_utc": "2026-07-05T11:16:00Z",
+  "source_head_before_artifact": "50a9a5a4a13338e38a54ec8c185bc0df57e049f5",
+  "decision": "no_alternate_gguf_download_or_benchmark_allowed_now",
+  "runtime_source_modified": false,
+  "full_model_download_performed": false,
+  "model_run_performed": false,
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "decode_window_ms": 31047.44671,
+    "decoded_tokens_for_bound": 136.608765524,
+    "decode_fallback_ms": 19115.399,
+    "decode_non_fallback_ms": 11932.04771,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "environment": {
+    "filesystem_free_root_gib": 1.8,
+    "disk_blocker": "full candidate downloads need at least 50.44GB plus safety margin; do not delete accepted SOTA run evidence",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "gpu_vram_mib": 32109,
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+    "binary_version": "14799 (9a1732045)",
+    "build_flags": {
+      "GGML_CUDA": true,
+      "GGML_CUDA_GRAPHS": true,
+      "GGML_CUDA_MOE_STREAM": true,
+      "GGML_CUDA_COMPRESSION_MODE": "size"
+    },
+    "binary_sha256": {
+      "llama_cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+      "llama_results": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10",
+      "llama_gguf": "d2c27663a4237fd3c30714e87e8ccc1a2ea19d5f9a88e8c9792a4db2d9202fae"
+    },
+    "cuda_lowbit_source_support_seen": [
+      "GGML_TYPE_Q2_K",
+      "GGML_TYPE_IQ2_XXS",
+      "GGML_TYPE_IQ1_M"
+    ]
+  },
+  "candidate_size_only_bounds": [
+    {
+      "candidate": "tarruda/DeepSeek-V4-Flash-GGUF Q2_K",
+      "size_bytes": 96962159168,
+      "size_ratio_vs_native": 0.6209624288122134,
+      "decode_ms_if_only_fallback_scales": 23801.99230075456,
+      "tok_s_bound": 5.739383653177188,
+      "decision": "below_10"
+    },
+    {
+      "candidate": "antirez/deepseek-v4-gguf IQ2XXS",
+      "size_bytes": 86720111200,
+      "size_ratio_vs_native": 0.5553705831190803,
+      "decode_ms_if_only_fallback_scales": 22548.177999183885,
+      "tok_s_bound": 6.058527900965855,
+      "decision": "below_10"
+    },
+    {
+      "candidate": "teamblobfish/DeepSeek-V4-Flash-GGUF IQ1_M",
+      "size_bytes": 64508046688,
+      "size_ratio_vs_native": 0.4131206822643859,
+      "decode_ms_if_only_fallback_scales": 19829.01438663596,
+      "tok_s_bound": 6.889337153140066,
+      "decision": "below_10"
+    },
+    {
+      "candidate": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size_bytes": 50439361920,
+      "size_ratio_vs_native": 0.3230223930070875,
+      "decode_ms_if_only_fallback_scales": 18106.74963826529,
+      "tok_s_bound": 7.544632153929078,
+      "decision": "below_10"
+    },
+    {
+      "candidate": "0xSero/DeepSeek-V4-Flash-162B-GGUF Spark-Mini-Q2-REAP-ds4",
+      "size_bytes": 52593532000,
+      "size_ratio_vs_native": 0.33681807058305535,
+      "decode_ms_if_only_fallback_scales": 18370.45951960527,
+      "tok_s_bound": 7.436328164693365,
+      "decision": "below_10"
+    }
+  ],
+  "header_probes": {
+    "tarruda_q2k_first_split_shard": {
+      "repo_url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF",
+      "downloaded_probe_path": "/root/lfz/models/_gguf_header_probe/tarruda-q2k/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+      "downloaded_probe_size_bytes": 5248448,
+      "sha256": "4354d44996e96581bac84aa592502897e291159cbb596f4746c2260605fd3eb9",
+      "gguf_magic": "GGUF",
+      "general_architecture": "deepseek4",
+      "general_file_type": 18,
+      "deepseek4_block_count": 43,
+      "deepseek4_expert_count": 256,
+      "deepseek4_expert_used_count": 6,
+      "split_count": 3,
+      "split_no": 0,
+      "split_tensors_count": 1328,
+      "n_tensors_in_first_shard": 0,
+      "decision": "valid_metadata_but_size_bound_below_10"
+    },
+    "0xsero_spark_mini_q2_reap_partial_header": {
+      "repo_url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "remote_file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "remote_file_size_bytes": 52593532000,
+      "downloaded_probe_path": "/root/lfz/models/_gguf_header_probe/0xsero-mini-q2/header-16m.gguf.part",
+      "downloaded_probe_size_bytes": 16777216,
+      "sha256": "718bf2fb6e271bf2179b499d425d2482ae0ae87e94b31693f51508e3ae5a6703",
+      "gguf_magic": "GGUF",
+      "general_architecture": "deepseek4",
+      "general_file_type": 19,
+      "deepseek4_block_count": 43,
+      "deepseek4_expert_count": 144,
+      "deepseek4_expert_used_count": 6,
+      "deepseek4_nextn_predict_layers": 1,
+      "n_tensors": 1328,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "expert_tensor_shape": {
+        "gate_up_dims": [
+          4096,
+          2048,
+          144
+        ],
+        "down_dims": [
+          2048,
+          4096,
+          144
+        ],
+        "gate_up_type": "IQ2_XXS",
+        "down_type": "Q2_K"
+      },
+      "decision": "valid_metadata_but_vram_bound_below_10"
+    }
+  },
+  "0xsero_vram_placement_bound": {
+    "expert_payload_per_layer_bytes": 1019215872,
+    "expert_payload_per_layer_gib": 0.94921875,
+    "non_expert_payload_estimate_bytes": 8767249504,
+    "non_expert_payload_estimate_gib": 8.165137380361557,
+    "native_extra_gpu_moe_layer_reference_bytes": 3422552064,
+    "candidate_per_layer_ratio_vs_native_reference": 0.2977941176470588,
+    "projection_method": "decode_ms = non_fallback_ms + fallback_ms * min(cpu_layers, 40) / 40 * candidate_per_layer_ratio_vs_native_reference; ignores scheduler overhead, so it is optimistic",
+    "projections": [
+      {
+        "vram_reserve_gib": 0,
+        "gpu_moe_layers_fit": 24,
+        "cpu_moe_layers_remaining": 19,
+        "decode_ms": 14635.963064871325,
+        "tok_s": 9.333773590334012
+      },
+      {
+        "vram_reserve_gib": 1,
+        "gpu_moe_layers_fit": 23,
+        "cpu_moe_layers_remaining": 20,
+        "decode_ms": 14778.274399338236,
+        "tok_s": 9.243891528372034
+      },
+      {
+        "vram_reserve_gib": 2,
+        "gpu_moe_layers_fit": 22,
+        "cpu_moe_layers_remaining": 21,
+        "decode_ms": 14920.585733805148,
+        "tok_s": 9.155724042018631
+      },
+      {
+        "vram_reserve_gib": 3,
+        "gpu_moe_layers_fit": 21,
+        "cpu_moe_layers_remaining": 22,
+        "decode_ms": 15062.897068272061,
+        "tok_s": 9.069222534338879
+      },
+      {
+        "vram_reserve_gib": 4,
+        "gpu_moe_layers_fit": 20,
+        "cpu_moe_layers_remaining": 23,
+        "decode_ms": 15205.208402738972,
+        "tok_s": 8.984340227746708
+      }
+    ],
+    "vram_needed_for_10_tok_s_condition": {
+      "required_gpu_moe_layers": 33,
+      "vram_needed_gib_at_zero_reserve": 39.48935613036156,
+      "vram_needed_gib_at_3gib_reserve": 42.48935613036156,
+      "available_vram_mib": 32109,
+      "decision": "not_possible_on_current_gpu_under_this_bound"
+    }
+  },
+  "correctness_policy_if_reopened": {
+    "fixed_text_top1_gate": "must pass under strict 16GB no-swap cgroup before strict cold benchmark",
+    "france_prompt_gate": "Please introduce France in a short paragraph. Output must be semantically correct and coherent.",
+    "small_prompt_set_gate": [
+      "Please introduce France in a short paragraph.",
+      "Explain quantum computing briefly.",
+      "Write a short Python function for Fibonacci.",
+      "Introduce Japan in a short paragraph.",
+      "Summarize climate change in one paragraph."
+    ],
+    "alternate_model_disclosure": "Any low-bit or REAP GGUF result must be labeled as an alternate model/quantization artifact, not the same native GGUF SOTA."
+  },
+  "promotion_gate_if_reopened": {
+    "eval_tok_s_must_exceed": 4.4,
+    "goal_tok_s": 10.0,
+    "ttft_ms_must_not_exceed": 33617.688744,
+    "memory_peak_bytes_must_not_exceed": 16000000000,
+    "memory_swap_max": 0,
+    "page_cache_included": true,
+    "push_remote": "https://github.com/wici-ai/ssd-llama.git",
+    "push_branch": "vendor/deepseek-token-rate-16gb",
+    "identity": "L-Ark <fliangae@connect.ust.hk>"
+  }
+}
