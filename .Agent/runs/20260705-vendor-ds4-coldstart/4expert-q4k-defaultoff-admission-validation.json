@@ -1,0 +1,92 @@
+{
+  "date": "2026-07-05",
+  "title": "Validation: default-off Q4_K stream-one admission patch",
+  "result": "build_passed_defaultoff_guard_passed_on_repeat_no_new_sota",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": true,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "pre_commit_head": "d2d51046cee9d37775f25dc1108aea7475bde15b",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "git_status_at_runs": "dirty: default-off Q4_K admission patch plus plan/artifact"
+  },
+  "patch": {
+    "env_gate": "GGML_MOE_STREAM_ONE_Q4K=1",
+    "cpu_bridge": "ggml/src/ggml-cpu/ggml-cpu.c adds ggml_cuda_moe_stream_supports_one_type() and uses it only in stream-one eligibility",
+    "cuda_gate": "ggml/src/ggml-cuda/moe_stream.cu allows GGML_TYPE_Q4_K in moe_stream_one_type_allowed() only when env gate and name_filter allow it",
+    "not_changed": [
+      "generic ggml_cuda_moe_stream_supports_type() behavior for batch/up-gate paths",
+      "down-batch support",
+      "up-gate batch support",
+      "accepted MXFP4/F8_E4M3_B128 DS4 stream path when GGML_MOE_STREAM_ONE_Q4K is unset"
+    ]
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli -j 8",
+    "status": "passed",
+    "notes": "Only pre-existing warnings were emitted."
+  },
+  "guard_config": {
+    "framework": "vendor",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "prompt": "Please introduce France in a short paragraph.",
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "cgroup_memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "drop_caches_before_case": true,
+    "q4k_env_present": false,
+    "key_env": {
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+      "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+      "GGML_CUDA_DISABLE_GRAPHS": "1"
+    }
+  },
+  "runs": [
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T131626Z-20260705_q4k_admission_defaultoff_guard/france-q4k-admission-defaultoff-cpu40-vram0gb",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 1.8,
+      "ttft_ms": 33939.958018,
+      "ttft_gate_ms": 33617.688744,
+      "ttft_ok_for_promotion": false,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15096578048,
+      "ram_ok": true,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "systemd_status": 0,
+      "exit_status": 0,
+      "verdict": "defaultoff_guard_ok_but_ttft_slightly_over_promotion_gate"
+    },
+    {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T131824Z-20260705_q4k_admission_defaultoff_guard_repeat/france-q4k-admission-defaultoff-repeat-cpu40-vram0gb",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 1.8,
+      "ttft_ms": 32626.042709,
+      "ttft_gate_ms": 33617.688744,
+      "ttft_ok_for_promotion": true,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15098937344,
+      "ram_ok": true,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "systemd_status": 0,
+      "exit_status": 0,
+      "verdict": "defaultoff_guard_pass"
+    }
+  ],
+  "correctness_answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+  "decision": {
+    "new_sota": "no",
+    "accepted_sota_eval_tok_s": 4.4,
+    "defaultoff_safety": "pass_on_repeat",
+    "q4k_route_status": "source_admission_ready_for_future_4expert_metadata_and_cache_tests",
+    "full_4expert_download_status": "blocked_until_disk_space_available"
+  }
+}

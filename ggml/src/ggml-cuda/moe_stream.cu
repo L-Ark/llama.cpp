@@ -3444,6 +3444,10 @@ static bool moe_stream_one_type_allowed(ggml_type type, const char * name) {
     if (type == GGML_TYPE_IQ3_XXS) {
         return moe_stream_one_name_filter_allows(name);
     }
+    if (type == GGML_TYPE_Q4_K) {
+        const char * env = std::getenv("GGML_MOE_STREAM_ONE_Q4K");
+        return env && env[0] && env[0] != '0' && moe_stream_one_name_filter_allows(name);
+    }
     if (!moe_stream_one_experimental_ds4_enabled()) {
         return false;
     }

@@ -237,6 +237,16 @@ static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
            type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
 }
 
+static bool ggml_cuda_moe_stream_one_q4k_enabled(void) {
+    const char * env = getenv("GGML_MOE_STREAM_ONE_Q4K");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool ggml_cuda_moe_stream_supports_one_type(enum ggml_type type) {
+    return ggml_cuda_moe_stream_supports_type(type) ||
+           (type == GGML_TYPE_Q4_K && ggml_cuda_moe_stream_one_q4k_enabled());
+}
+
 static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_type gate_type) {
     return (up_type == GGML_TYPE_IQ2_S && gate_type == GGML_TYPE_IQ3_XXS) ||
            (up_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
@@ -3268,7 +3278,7 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_cuda_moe_stream_one &&
         ggml_cuda_moe_stream_available &&
         ggml_cuda_moe_stream_available() &&
-        ggml_cuda_moe_stream_supports_type(src0->type) &&
+        ggml_cuda_moe_stream_supports_one_type(src0->type) &&
         src1->type == GGML_TYPE_F32 &&
         ne13 == 1 &&
         dst->type == GGML_TYPE_F32;

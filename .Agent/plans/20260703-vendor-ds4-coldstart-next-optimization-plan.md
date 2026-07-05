@@ -10764,3 +10764,85 @@ Execution order:
 4. Run top1 correctness comparison before any long model benchmark.
 5. Run strict cold France benchmark only after top1 and output correctness pass.
 6. For any compliant new SOTA, immediately record full reproduction information, commit and push to `ssd/vendor/deepseek-token-rate-16gb`, then reproduce from pushed source before promotion.
+
+### 2026-07-05 4Expert/Q4_K Disk Audit And Default-Off Admission Plan
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-q4k-disk-and-admission-plan.json`
+
+Disk result:
+
+- Full 4Expert GGUF download is not safe right now.
+- Only large filesystem is `/dev/root`, size `993G`, used `991G`, available about `1.8G`.
+- Candidate file is `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf`, expected size `164465760544 bytes`.
+- Practical free-space requirement is at least `180G` so the file can download, hash, and leave room for records.
+- No deletion was performed.
+
+Protected SOTA assets:
+
+- `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+- `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+
+Large cleanup candidates that require explicit approval before deletion:
+
+- `/root/lfz/models/GLM-5.2-UD-IQ3_XXS`, about `263G`, unrelated to current vendor DS4 SOTA.
+- `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`, `147174760448 bytes`, not used by the accepted SOTA env but adjacent to accepted DeepSeek model assets.
+- `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack`, `38420348928 bytes`, not the accepted France SOTA pack but useful for prompt-set diagnostics.
+
+Source audit:
+
+- Routing alias gap remains: current name is `blk.%d.ffn_gate_tid2eid`; 4Expert candidate uses `blk.%d.ffn_gate_tid2eid.weight`.
+- Q4_K kernel support exists in CUDA MMVQ (`ggml/src/ggml-cuda/mmvq.cu` includes Q4_K vec-dot and switch support).
+- Q4_K stream-one admission is currently blocked by CPU bridge and CUDA stream-one type gates.
+- The patch to try now must be default-off:
+  - add `GGML_MOE_STREAM_ONE_Q4K=1` gate;
+  - allow Q4_K only in stream-one eligibility;
+  - do not broaden down-batch or up-gate batch support;
+  - keep accepted MXFP4 SOTA path unchanged when the env is unset.
+
+Validation required for this patch:
+
+1. Build must pass.
+2. Default-off accepted-path guard must pass or at minimum prove no default runtime branch changed.
+3. No SOTA promotion is possible from this patch alone because no 4Expert model run, TTFT, 16GB cgroup, or correctness benchmark has happened.
+4. Full 4Expert download remains blocked until disk space is explicitly made available without deleting protected SOTA assets.
+
+### 2026-07-05 Default-Off Q4_K Admission Validation
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-q4k-defaultoff-admission-validation.json`
+
+Patch:
+
+- Added `GGML_MOE_STREAM_ONE_Q4K=1` as an explicit env gate.
+- CPU bridge now uses `ggml_cuda_moe_stream_supports_one_type()` only for stream-one eligibility.
+- CUDA stream-one type gate allows `GGML_TYPE_Q4_K` only when `GGML_MOE_STREAM_ONE_Q4K` is set and `GGML_MOE_STREAM_ONE_NAME_FILTER` allows the tensor.
+- Generic batch/down-batch/up-gate support is not broadened.
+- Accepted MXFP4 SOTA behavior is unchanged when `GGML_MOE_STREAM_ONE_Q4K` is unset.
+
+Validation:
+
+- Build command passed: `cmake --build build-ds4-moe-stream --target llama-cli -j 8`
+- Default-off guard did not set `GGML_MOE_STREAM_ONE_Q4K`.
+- Guard 1:
+  - Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T131626Z-20260705_q4k_admission_defaultoff_guard/france-q4k-admission-defaultoff-cpu40-vram0gb`
+  - `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=33939.958018 ms`
+  - `memory_peak_bytes=16000000000`, `memory_file_bytes=15096578048`
+  - `ram_ok=true`, `correctness_ok=true`, no OOM
+  - TTFT was slightly over the promotion gate, so this run is guard-only and not promotable.
+- Guard 2 repeat:
+  - Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T131824Z-20260705_q4k_admission_defaultoff_guard_repeat/france-q4k-admission-defaultoff-repeat-cpu40-vram0gb`
+  - `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32626.042709 ms`
+  - `memory_peak_bytes=16000000000`, `memory_file_bytes=15098937344`
+  - `ram_ok=true`, `correctness_ok=true`, no OOM
+  - This repeat satisfies the accepted SOTA guard constraints but only ties `4.4 tok/s`, so it is not a new SOTA.
+
+Decision:
+
+- Commit and push this default-off infrastructure because it is source progress toward Q4_K/4Expert validation and repeat guard confirms no accepted-path regression.
+- Current accepted SOTA remains `4.4 tok/s`.
+- Full 4Expert validation remains blocked by disk space until at least `180G` safe free space is available or the user explicitly approves cleanup of non-SOTA large assets.
