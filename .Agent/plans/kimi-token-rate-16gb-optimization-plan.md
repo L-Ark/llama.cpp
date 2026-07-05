@@ -80167,7 +80167,7 @@ Artifacts:
 
 ## Phase 7NM - CLI CPU poll wait-policy probe
 
-Status: planned.
+Status: rejected after n32 probe.
 
 Timestamp: 2026-07-06 02:18 CST.
 
@@ -80276,3 +80276,85 @@ Reproducibility:
 - This plan must be committed and pushed before the n32 probe.
 - The result must be committed and pushed before any follow-up experiment or
   source implementation.
+
+Result:
+
+- Timestamp: 2026-07-06 02:26 CST.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-181935Z-phase7nm-cpu-poll-n32`
+- Repo commit during run:
+  `67299dacc` (`docs: plan cpu poll cli probe`).
+- Source files were not changed.
+- Only the copied run script was patched. The saved diff is:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-181935Z-phase7nm-cpu-poll-n32/script.diff`
+- Required activation passed:
+  `command.txt` contains `--poll 0 --poll-batch 0`.
+
+Strict gate results:
+
+- Exit: `0`.
+- Quality: `pass`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Manual semantic check: pass. The answer is coherent, France-specific, and
+  includes Western Europe / Paris / culture cues, although it ends early because
+  `N=32`.
+- TTFT: `73646.20 ms`, below the cap `127598.064 ms`.
+- Decode: `23248.05 ms / 31 runs = 1.33 tok/s`.
+- `memory.max`: `15899996160`.
+- `memory.swap.max`: `0`.
+- `memory.peak`: `15899996160`.
+- `memory.current.final`: `15104368640`.
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`.
+
+Expert-pack and cache counters:
+
+- `iouring_reads=22647`.
+- `iouring_bytes=126391910400`.
+- `iouring_submit_us=53916`.
+- `iouring_wait_us=20866275`.
+- `iouring_fallbacks=0`.
+- `read_failures=0`.
+- `inflight_avg=3.31`, `inflight_max=8`.
+- Down VRAM cache: `slots=766`, `hit_rate=73.4%`.
+- Up/gate VRAM cache: `slots=1735`, `hit_rate=45.2%`.
+- Current-down overlap: `completed_jobs=3673`, `failed_batches=0`,
+  `worker_us=3281832`.
+
+Comparison:
+
+- Primary accepted n32 baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-045134Z-phase7kx-current-head-n32`
+  had decode `22601.57 ms / 31 = 1.37 tok/s`.
+- 7NM `--poll 0 --poll-batch 0` is slower by `646.48 ms` over the same decode
+  length and reduces token rate from `1.37` to `1.33 tok/s`.
+- Expert-pack wait time is effectively unchanged compared with the 7MY
+  full-profile reference (`20866275 us` vs `20984633 us`), so the hypothesis
+  that default ggml polling was materially inflating exposed io wait is not
+  supported.
+
+Decision:
+
+- Reject `--poll 0 --poll-batch 0`.
+- Do not run n96 validation.
+- Do not add these arguments to the repo repro script or default runtime.
+- Do not continue to affinity variants from this result, because the isolated
+  wait-policy probe failed the primary performance comparison and no new
+  bottleneck evidence justifies a larger CPU-placement sweep.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-181935Z-phase7nm-cpu-poll-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      "$RUN/kimi-phase7nm-poll0-repro.sh"
+cat "$RUN/metrics.txt"
+cat "$RUN/command.txt"
+cat "$RUN/script.diff"
+```
