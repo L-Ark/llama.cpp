@@ -78574,7 +78574,7 @@ Decision:
 
 Timestamp: 2026-07-06 00:58:00 CST.
 
-Status: planned.
+Status: complete; diagnostic accepted; source implementation rejected.
 
 Goal:
 
@@ -78693,3 +78693,85 @@ Reproducibility:
 - Commit and push this plan before the audit.
 - Store the audit script and all raw summaries in the run directory.
 - Commit and push the result into this plan before any source change.
+
+Result:
+
+- Plan commit before execution:
+  `592d9f8f4 docs: plan upgate pair-read audit`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-164337Z-phase7ne-upgate-pair-read-audit`.
+- Server repo state during audit:
+  `592d9f8f4e0e3876d2415c997ac0ad6804ea6ddf`.
+- No source code was changed.
+- No model run was launched.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `audit_pair_reads.py`;
+- `pack_pair_layout.tsv`;
+- `pair_opportunity.tsv`;
+- `summary.md`;
+- `decision.md`;
+- `audit_stdout.txt`.
+
+Key result:
+
+- `route_groups=1861`;
+- `upgate_profile_rows=869`;
+- analyzed rows: `869` decode up/gate calls;
+- active up/gate pairs: `6952`;
+- up misses: `4054`;
+- gate misses: `4055`;
+- estimated both-miss pairs: `4054`;
+- pairable up/gate both-miss pairs with gap `<=4 KiB`: `0`;
+- pairable up/gate both-miss pairs with gap `<=2 MiB`: `0`;
+- layout classes among analyzed active pairs:
+  - `far=6922`;
+  - `missing=30`;
+  - `adjacent_0=0`;
+  - `gap_le_4k=0`;
+  - `gap_le_2m=0`;
+  - `different_source=0`.
+
+By type:
+
+| type | calls | both-miss estimate | pairable <=4 KiB | pairable <=2 MiB |
+|---|---:|---:|---:|---:|
+| `18/18` | `311` | `1502` | `0` | `0` |
+| `22/22` | `558` | `2552` | `0` | `0` |
+
+Physical layout examples:
+
+- `blk.60` same-expert up/gate pairs are separated by about `882294784`
+  bytes in the current pack.
+- `blk.1` same-expert up/gate pairs are separated by about `813481984`
+  bytes in the current pack.
+- Therefore a same-expert pair read would add hundreds of MiB of gap per pair
+  if implemented against the current pack layout.
+
+Upper-bound result:
+
+- Conservative submit/CQE-only savings: `0.000 ms / n32`.
+- Even the intentionally impossible average-wait savings bound is
+  `0.000 ms / n32`, because there are no physically pairable current-pack
+  both-miss pairs.
+- Optimistic combined bytes vs separate bytes: `0.000 GiB` vs `0.000 GiB`,
+  because no pair qualifies for a combined read.
+
+Decision:
+
+- Reject up/gate pair-read source implementation for the current expert-pack
+  layout.
+- Do not implement `GGML_MOE_UPGATE_PAIR_MERGED_READ` or similar runtime logic
+  unless a new expert-pack layout first makes same-expert up/gate pairs
+  contiguous and proves byte/wait reduction.
+- This closes another local IO micro-patch family for the current SOTA path.
+- The remaining viable token-rate routes are no longer small vendor source
+  toggles:
+  - a new model/expert-pack format or layout prepared specifically to reduce
+    exposed read volume;
+  - a real draft/speculative path with accepted-token multiplier above `3.68x`;
+  - or a deeper kernel/runtime rewrite with a hard bound exceeding the current
+    micro-patch ceiling before implementation.
