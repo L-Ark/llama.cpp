@@ -1,0 +1,130 @@
+{
+  "created_at_utc": "2026-07-05T22:15:37Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "files_deleted": false,
+    "full_model_downloaded": false,
+    "inaccessible_files": [
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "config.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "generation_config.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/README.md"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_100k.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_4k_batch1.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_4k_topk64.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_4k_topk128.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_4k_topk256.json"
+      },
+      {
+        "error": "<HTTPError 401: 'Unauthorized'>",
+        "name": "inference/config_test_no_mtp.json"
+      }
+    ],
+    "new_sota": false,
+    "next_step": "Continue with the active plan: obtain disk approval for full empirical GGUF testing, or require a new accessible artifact with hard-bound above 10 tok/s before source work.",
+    "public_files": [
+      "README.md"
+    ],
+    "reason": "Only README.md was publicly readable. The small inference configs, including topk64/topk128/topk256 names, returned HTTP 401 without credentials. File names alone are not reproducible technical evidence and cannot justify a vendor source edit, correctness change, or SOTA claim. The single accessible README describes the native-size model and general architecture, not a new exact 10 tok/s route under the 16GB RAM/page-cache and TTFT gates.",
+    "runtime_source_edit_allowed": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "files": [
+    {
+      "matched_lines": [
+        "We present a preview version of **DeepSeek-V4** series, including two strong Mixture-of-Experts (MoE) language models \u2014 **DeepSeek-V4-Pro** with 1.6T parameters (49B activated) and **DeepSeek-V4-Flash** with 284B parameters (13B activated) \u2014 both supporting a context length of **one million tokens**.",
+        "1. **Hybrid Attention Architecture:** We design a hybrid attention mechanism combining Compressed Sparse Attention (CSA) and Heavily Compressed Attention (HCA) to dramatically improve long-context efficiency. In the 1M-token context setting, DeepSeek-V4-Pro requires only **27% of single-token inference FLOPs** and **10% of KV cache** compared with DeepSeek-V3.2.",
+        "We pre-train both models on more than **32T** diverse and high-quality tokens, followed by a comprehensive post-training pipeline. The post-training features a two-stage paradigm: independent cultivation of domain-specific experts (through SFT and RL with GRPO), followed by unified model consolidation via on-policy distillation, integrating distinct proficiencies across diverse domains into a single model.",
+        "*\\*FP4 + FP8 Mixed: MoE expert parameters use FP4 precision; most other parameters use FP8.*",
+        "| Architecture | - | MoE | MoE | MoE |",
+        "| Think Max | Push reasoning to its fullest extent | Exploring the boundary of model reasoning capability | Special system prompt + `<think>` thinking `</think>` summary |"
+      ],
+      "name": "README.md",
+      "ok": true,
+      "text_prefix": "---\nlicense: mit\nlibrary_name: transformers\n---\n# DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence\n\n<!-- markdownlint-disable first-line-h1 -->\n<!-- markdownlint-disable html -->\n<!-- markdownlint-disable no-duplicate-header -->\n\n<div align=\"center\">\n  <img src=\"https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg?raw=true\" width=\"60%\" alt=\"DeepSeek-V4\" />\n</div>\n<hr>\n<div align=\"center\" style=\"line-height: 1;\">\n  <a href=\"https://www.deepseek.com/\" target=\"_blank\" style=\"margin: 2px;\">\n    <img alt=\"Homepage\" src=\"https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/badge.svg?raw=true\" style=\"display: inline-block; vertical-align: middle;\"/>\n  </a>\n  <a href=\"https://chat.deepseek.com/\" target=\"_blank\" style=\"margin: 2px;\">\n    <img alt=\"Chat\" src=\"https://img.shields.io/badge/\ud83e\udd16%20Chat-DeepSeek%20V4-536af5?color=536af5&logoColor=white\" style=\"display: inline-block; vertical-align: middle;\"/>\n  </a>\n</div>\n<div align=\"center\" style=\"line-height: 1;\">\n  <a href=\"https://huggingface.co/deepseek-ai\" target=\"_blank\" style=\"margin: 2px;\">\n    <img alt=\"Hugging Face\" src=\"https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-DeepSeek%20AI-ffc107?color=ffc107&logoColor=white\" style=\"display: inline-block; vertical-align: middle;\"/>\n  </a>\n  <a href=\"https://twitter.com/deepseek_ai\" target=\"_blank\" style=\"margin: 2px;\">\n    <img alt=\"Twitter Follow\" src=\"https://img.shields.io/badge/Twitter-deepseek_ai-white?logo=x&logoColor=white\" style=\"display: inline-block; vertical-align: middle;\"/>\n  </a>\n</div>\n<div align=\"center\" style=\"line-height: 1;\">\n  <a href=\"LICENSE\" style=\"margin: 2px;\">\n    <img alt=\"License\" src=\"https://img.shields.io/badge/License-MIT-f5de53?&color=f5de53\" style=\"display: inline-block; vertical-align: middle;\"/>\n  </a>\n</div>\n\n<p align=\"center\">\n  <a href=\"https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf\"><b>Technical Report</b>\ud83d\udc41\ufe0f</a>\n</p>\n\n## Introduction\n\nWe present a preview version of **DeepSeek-V4** series, including two strong Mixture-of-Experts (MoE) language models \u2014 **DeepSeek-V4-Pro** with 1.6T parameters (49B activated) and **DeepSeek-V4-Flash** with 284B parameters (13B activated) \u2014 both supporting a context length of **one million tokens**.\n\nDeepSeek-V4 series incorporate several key upgrades in architecture and optimization:\n\n1. **Hybrid Attention Architecture:** We design a hybrid attention mechanism combining Compressed Sparse Attention (CSA) and Heavily Compressed Attention (HCA) to dramatically improve long-context efficiency. In the 1M-token context setting, DeepSeek-V4-Pro requires only **27% of single-token inference FLOPs** and **10% of KV cache** compared with DeepSeek-V3.2.\n2. **Manifold-Constrained Hyper-Connections (mHC):** We incorporate mHC to strengthen conventional residual connections, enhancing stability of signal propagation across layers while preserving model expressivity.\n3. **Muon Optimizer:** We employ the Muon optimizer for faster convergence and greater training stability.\n\nWe pre-train both models on more than **32T** diverse and high-quality tokens, followed by a comprehensive post-training pipeline. The post-training features a two-stage paradigm: independent cultivation of domain-specific experts (through SFT and RL with GRPO), followed by unified model consolidation via on-policy distillation, integrating distinct proficiencies across diverse domains into a single model.\n\n**DeepSeek-V4-Pro-Max**, the maximum reasoning effort mode of DeepSeek-V4-Pro, significantly advances the knowledge capabilities of open-source models, firmly establishing itself as the best open-source model available today. It achieves top-tier performance in coding benchmarks and significantly bridges the gap with leading closed-source models on reasoning and agentic tasks. Meanwhile, **DeepSeek-V4-Flash-Max** achieves comparable reasoning performance to the Pro version when given a larger thinking budget, though its sm"
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "config.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "generation_config.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/README.md",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_100k.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_4k_batch1.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_4k_topk64.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_4k_topk128.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_4k_topk256.json",
+      "ok": false
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "name": "inference/config_test_no_mtp.json",
+      "ok": false
+    }
+  ],
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "json_interesting_key_summary": [],
+  "purpose": "Audit small asidaddy DeepSeek V4 Flash inference config files for any new vendor-applicable 10 tok/s optimization clue; no weights downloaded.",
+  "repo": "asidaddy/Deepseek-V4-Flash-GGUF",
+  "source_head_before_audit": "7638f860256af8a23cad17372ef14425729c17e0",
+  "updated_at_utc": "2026-07-05T22:16:49Z"
+}
