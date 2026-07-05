@@ -85796,3 +85796,114 @@ cat "$RUN/space_scenarios.tsv"
 cat "$RUN/streaming_pack_feasibility.json"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7OL - GGUF expert-pack streaming dry-run tool
+
+Status: planned.
+
+Timestamp: 2026-07-06 10:16 CST.
+
+Reason:
+
+- Phase 7OK shows a full `IQ2_XXS` download plus full pack generation does not
+  fit current disk, but a one-shard-at-a-time streaming pack path may fit after
+  cleanup approval or external storage.
+- Before requesting destructive cleanup or downloading remote shards, we need a
+  reproducible tool that can:
+  - scan GGUF shards for MoE expert tensor metadata;
+  - estimate complete `GGMLMOEPACKv1` output size;
+  - estimate streaming temporary space;
+  - report tensor type/kind/layer coverage;
+  - do all of this in dry-run mode with no pack output.
+- Existing scripts can copy selected expert slices into an overlay pack, but do
+  not provide a full-shard expert inventory or streaming pack size plan.
+
+Goal:
+
+- Add a repo script for GGUF expert-pack dry-run planning.
+- Run it on the existing local `IQ3_S` shard set to validate:
+  - GGUF metadata scanning works;
+  - expert tensor detection matches expected Kimi tensors;
+  - estimated full pack size is comparable to existing production pack sizes;
+  - no data-copy or output-pack generation occurs.
+
+Selected change:
+
+- Add:
+
+```text
+scripts/kimi-build-expert-pack-from-gguf.py
+```
+
+- Initial supported mode:
+  `--dry-run`.
+- Required outputs:
+  - summary JSON;
+  - tensor inventory TSV;
+  - size by tensor kind/type;
+  - streaming temporary-space estimate.
+- Do not implement remote download in this phase.
+- Do not implement pack writing in this phase unless dry-run output first
+  proves correct and a later plan authorizes data movement.
+
+Design requirements:
+
+- Use `gguf-py` structured metadata reader, not ad-hoc binary parsing.
+- Match only MoE expert weight tensors by default:
+  - `blk.<layer>.ffn_up_exps.weight`;
+  - `blk.<layer>.ffn_gate_exps.weight`;
+  - `blk.<layer>.ffn_down_exps.weight`.
+- Infer per-expert slice size from `tensor.n_bytes / n_experts`.
+- Default `n_experts=384`, configurable.
+- Validate:
+  - tensor byte size divisible by `n_experts`;
+  - tensor names fit `GGMLMOEPACKv1` index field;
+  - no duplicate `(tensor, expert_idx)` keys would be generated;
+  - estimated pack entries and byte offsets are 4096-byte aligned like the
+    runtime pack format.
+- Include `--include-kind up,gate,down` so future phases can plan partial packs,
+  but default to all three.
+
+Dry-run experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ol-gguf-pack-dry-run-iq3s
+mkdir -p "$RUN"
+python3 scripts/kimi-build-expert-pack-from-gguf.py \
+  --model-glob '/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/*.gguf' \
+  --n-experts 384 \
+  --dry-run \
+  --json "$RUN/pack-plan.json" \
+  --tsv "$RUN/tensor-inventory.tsv" \
+  > "$RUN/stdout.txt" 2> "$RUN/stderr.txt"
+```
+
+Acceptance:
+
+- Plan is committed and pushed before script implementation.
+- Script passes `bash -n` where relevant and `python3 -m py_compile`.
+- Server dry-run exits `0`.
+- No output `.expert-pack` is created.
+- Dry-run artifacts include:
+  - git state;
+  - command;
+  - `pack-plan.json`;
+  - `tensor-inventory.tsv`;
+  - stdout/stderr.
+- Estimated pack size and tensor counts are recorded.
+- If dry-run reveals unexpected tensor counts/types or metadata errors, do not
+  proceed to cleanup/download; record the blocker and fix the planner first.
+
+Decision rule:
+
+- If the dry-run planner works on local `IQ3_S`, use it in the next phase to
+  specify the exact streaming builder requirements for external `IQ2_XXS`.
+- If it fails on local `IQ3_S`, keep `IQ2_XXS` blocked and debug the planner
+  before any cleanup or download.
+
+Reproducibility:
+
+- Commit and push this plan before editing scripts.
+- Commit and push the script before server execution.
+- Commit and push the 7OL result before any follow-up cleanup/download plan.
