@@ -67489,3 +67489,110 @@ Decision:
 - Keep the accepted defaults unchanged.
 - Continue using `22667.39 ms / 31` as the n32 acceptance reference and require
   n96 confirmation before promoting any future change.
+
+## Phase 7KY - immediate io_uring refill experiment
+
+Timestamp: 2026-07-05 17:31:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Improve decode token rate by increasing effective io_uring queue occupancy
+  without changing cache policy, tensor bytes, routing, VRAM split, current-down
+  overlap, or up/gate compute scheduling.
+- Keep the implementation default-off until strict n32 and n96 prove it.
+
+Current bottleneck:
+
+- 7KX current-head n32 no-profile:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - iouring wait `19756301 us`;
+  - iouring reads `22647`;
+  - iouring batches `5178`;
+  - wait calls `18265`;
+  - inflight avg `3.32`;
+  - inflight max `8`.
+- The configured depth is `8`, but the measured average inflight is only `3.32`.
+- 7KW proved that a larger combined up/gate batch can reduce iouring wait
+  (`19756301 us`-class baseline to `15832493 us`) but can still lose endpoint
+  decode by destroying the useful overlap where up compute starts while gate
+  copy continues.
+
+Theory:
+
+- `expert_pack_iouring_copy_jobs` currently handles CQEs, drains all immediately
+  visible completions, and only then refills when `refill_batch > 1`.
+- This can temporarily reduce inflight far below the configured depth during
+  bursts, especially for many 2-8 job batches.
+- A default-off "immediate refill" mode can refill as soon as a CQE is handled,
+  before draining all pending CQEs, while preserving:
+  - the same jobs;
+  - the same streams;
+  - the same cache keys;
+  - the same current-down/up-gate overlap topology.
+- Hard upper bound:
+  - cannot exceed the 7KX iouring wait budget, `19.756 s` on n32;
+  - practical target is much smaller because much of that wait overlaps GPU/CPU
+    work and more submit calls may add CPU/kernel overhead.
+- Expected signal:
+  - `inflight_avg` should rise above `3.32`;
+  - endpoint n32 must beat `22667.39 ms / 31`;
+  - if submit calls rise but endpoint does not improve, reject.
+
+Implementation:
+
+- Add a default-off env flag:
+  `GGML_MOE_IO_REFILL_IMMEDIATE=1`.
+- In `expert_pack_iouring_copy_jobs`, when the flag is enabled:
+  - after each handled CQE, call `refill_pending()` immediately if more jobs
+    remain;
+  - keep existing behavior when the flag is unset;
+  - keep `MOE_IO_REFILL_BATCH=4`, depth `8`, SQPOLL on, and sort-by-offset on.
+- Do not change `MOE_IO_REFILL_BATCH` defaults or the reproduction script until
+  the experiment passes.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <7KY-source-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ky-immediate-refill-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_REFILL_IMMEDIATE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If strict n32 decode improves versus `22667.39 ms / 31` and all gates pass,
+  run strict n96 confirmation before promotion.
+- If n96 improves over 7KU/7JY while all gates pass, enable the flag in
+  `scripts/kimi-phase7fb-min-profile-repro.sh`, commit, and push immediately.
+- If n32 is slower, quality fails, TTFT/memory/fallback gates fail, or n96 does
+  not improve, revert source changes and record rejection.
+
+Reproducibility:
+
+- Commit and push this plan before source edits.
+- Commit and push the default-off implementation before running.
+- Record build result, source commit, run directory, command, output, TTFT,
+  decode, token rate, memory, swap, IO counters, inflight statistics, and
+  decision.
