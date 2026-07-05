@@ -80428,6 +80428,125 @@ Reproducibility:
 - Commit and push this 7NZ plan before running the audit.
 - Commit and push the 7NZ result before any follow-up source or asset work.
 
+### Phase 7NZ result
+
+Timestamp: 2026-07-06 05:20 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-211955Z-phase7nz-lowerbit-support`
+
+Plan commit before execution:
+
+- `2c9baea96` (`docs: plan lower bit quant support audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7nz_lowerbit_support.py`
+- `source_type_support.tsv`
+- `lowerbit_budget.tsv`
+- `current_mix.json`
+- `decision.md`
+
+Execution notes:
+
+- No model inference was run.
+- No runtime/source code was edited.
+- No asset was downloaded or converted.
+- The audit used the 7MA copy trace and the 7MY type profiles:
+  - copy trace:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv`
+  - up/gate types:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/up-gate-profile.csv`
+  - down types:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/down-batch-profile.csv`
+- The audit uses the same decode-token segmentation as 7NT:
+  - raw iouring rows `22647`;
+  - excluded partial prefix `1` segment (`blk.60`, `140378112` bytes);
+  - used decode segments `31`;
+  - audited iouring bytes `117.581 GiB`.
+- Existing up/gate profile files cover only `56` of `120` up/gate tensors in
+  the copy trace. The audit therefore learned `(kind, expert-slice-bytes) ->
+  type` from profiled rows and inferred the remaining rows:
+  - profile rows `14795`;
+  - inferred rows `7828`;
+  - unknown bytes after inference `0`;
+  - inference map:
+    - `up:4702208 -> IQ2_S`;
+    - `up:5619712 -> IQ3_XXS`;
+    - `gate:4702208 -> IQ2_S`;
+    - `gate:5619712 -> IQ3_XXS`.
+
+Current iouring byte mix:
+
+| kind | type | GiB | percent |
+|---|---:|---:|---:|
+| down | `IQ4_XS` | `11.992` | `10.20%` |
+| down | `Q3_K` | `31.012` | `26.38%` |
+| gate | `IQ2_S` | `12.604` | `10.72%` |
+| gate | `IQ3_XXS` | `26.007` | `22.12%` |
+| up | `IQ2_S` | `26.122` | `22.22%` |
+| up | `IQ3_XXS` | `9.845` | `8.37%` |
+
+Source support findings:
+
+- Current Kimi MoE-stream fast path already supports:
+  - `IQ2_S`, `IQ3_XXS`, `Q3_K`, `IQ3_S`, `IQ4_XS`.
+- `IQ1_S`, `IQ1_M`, `IQ2_XXS`, `IQ2_XS`, `Q2_K`, `MXFP4`, and `NVFP4`
+  have generic CUDA support in `mmvq` and/or `mmq`, but are not registered in
+  `moe_stream_type_supported()` and are not accepted by the current compact
+  MoE stream kernels.
+- `TQ1_0` and `TQ2_0` require new kernel work for the CUDA/MoE path.
+- `NVFP4` is `4.5000 bpw` and `MXFP4` is `4.2500 bpw`, so they are larger
+  than the current `IQ2_S`/`IQ3_XXS` up/gate mix and larger than `Q3_K` down.
+
+Budget results:
+
+| scope | target | support | target GiB | saved GiB | saved % | GiB/token | decision |
+|---|---|---|---:|---:|---:|---:|---|
+| all expert | `IQ2_S` | current MoE stream | `99.072` | `18.509` | `15.74%` | `3.196` | misses raw12 `20%` |
+| down only | `IQ1_S` | generic CUDA only | `93.082` | `24.499` | `20.84%` | `3.003` | unsupported + very high quality risk |
+| up/gate only | `IQ1_S` | generic CUDA only | `84.909` | `32.672` | `27.79%` | `2.739` | unsupported + very high quality risk |
+| all expert | `IQ2_XXS` | generic CUDA only | `79.741` | `37.840` | `32.18%` | `2.572` | unsupported + high quality risk |
+| all expert | `IQ1_S` | generic CUDA only | `60.410` | `57.171` | `48.62%` | `1.949` | unsupported + very high quality risk |
+| all expert | `MXFP4` | generic CUDA only | `164.315` | `-46.734` | `-39.75%` | `5.300` | byte movement increases |
+| all expert | `NVFP4` | generic CUDA only | `173.981` | `-56.400` | `-47.97%` | `5.612` | byte movement increases |
+
+Decision:
+
+- Accept 7NZ as a reproducible lower-bit source-support and byte-budget audit.
+- Reject immediate source work that only converts the current expert pack into
+  an already-supported Kimi MoE-stream type, because the best direct target
+  (`all expert -> IQ2_S`) saves only `15.74%` and misses the Phase 7NX raw12
+  `20%` threshold.
+- Reject `NVFP4`/`MXFP4` as token-rate byte-reduction targets for the current
+  asset; they increase expert movement.
+- The only byte-reduction candidates that clear the raw12 threshold require a
+  separate plan for MoE stream support plus strict quality validation:
+  - `all expert -> IQ2_XXS` (`32.18%` save, high quality risk);
+  - `all expert -> IQ1_S/IQ1_M` or `TQ1_0` (larger saves but very high quality
+    risk);
+  - `down only -> IQ1_S` barely clears raw12 (`20.84%`) but is unsupported and
+    very high risk.
+- Current SOTA is unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN_DIR=/root/lfz/runs/vendor-kimi-token-rate/20260705-211955Z-phase7nz-lowerbit-support \
+COPY_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv \
+UPGATE_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/up-gate-profile.csv \
+DOWN_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/down-batch-profile.csv \
+DECODE_TOKENS=31 \
+python3 "$RUN_DIR/phase7nz_lowerbit_support.py"
+cat "$RUN_DIR/source_type_support.tsv"
+cat "$RUN_DIR/lowerbit_budget.tsv"
+cat "$RUN_DIR/decision.md"
+```
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
