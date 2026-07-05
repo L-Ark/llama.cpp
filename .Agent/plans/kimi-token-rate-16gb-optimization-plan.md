@@ -76954,3 +76954,120 @@ Decision:
   regression.
 - Source rollback was pushed immediately as `9bbd30d16`, and the server was
   reset to that reverted HEAD and rebuilt.
+
+## Phase 7MX - ik_llama feature and asset gap audit
+
+Timestamp: 2026-07-05 22:06:47 CST.
+
+Status: planned.
+
+Goal:
+
+- Implement the next optimization step by first auditing whether any credible
+  ik_llama Kimi speed path remains unported to vendor and unclosed by previous
+  experiments.
+- Do not write source code in this phase unless the audit finds a specific
+  unported candidate whose bottleneck theory, hard upper bound, activation
+  signal, and validation command can be written into a new phase first.
+- Keep the strict deployment target unchanged:
+  - cold start only;
+  - host RAM including page cache and process memory below 16 GB;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - VRAM as full as feasible;
+  - France prompt quality pass;
+  - TTFT no more than 20% above baseline;
+  - every accepted improvement must be reproducible, committed, and pushed
+    immediately.
+
+Why this phase is necessary:
+
+- The current accepted SOTA remains 7MU/7LZ around `1.36 tok/s` at n96 under
+  the 16 GB RAM gate.
+- The latest source-level probes were rejected and reverted:
+  - 7MV fixed-buffer io_uring: n32 `1.27 tok/s`;
+  - 7MW dynamic-X vendor MMQ: n32 `0.76 tok/s`.
+- Earlier phases already rejected the obvious local micro-optimization families:
+  - larger RAM expert tier / hot expert expansion;
+  - broad VRAM cache reallocations;
+  - IO depth/refill/SQPOLL/shared scheduling;
+  - pinned-slot growth;
+  - trace/host prefetch;
+  - first-use overlay/layout and adjacent coalescing;
+  - direct CPU fallback expert-pack reads;
+  - broad Q4 down-on-GPU variants;
+  - dense mmap/page-cache advice variants;
+  - CUDA graph;
+  - VDR/MMVQ/MMQ/Q8_K/same-type IQ3 paths.
+- Continuing to make local patches without a fresh gap audit is likely to
+  repeat already rejected ideas.
+
+Audit inputs:
+
+- Current vendor repo:
+  `/root/lfz/llama.cpp-vendor-kimi`
+- Historical ik_llama overlap repo if present:
+  `/root/lfz/ik_llama-overlap-5tps`
+- Current plan:
+  `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
+- Historical run records under:
+  - `/root/lfz/runs/ik_llama`
+  - `/root/lfz/runs/vendor-kimi-token-rate`
+- Local model and auxiliary assets under bounded searches:
+  - `/root/lfz/models`
+  - `/root/lfz/runs/ik_llama`
+
+Implementation:
+
+- Create an audit directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7mx-ikllama-feature-asset-audit`
+- Record exact git heads and dirty states for both repos.
+- Produce a bounded feature matrix:
+  - environment flags and code symbols present in old ik_llama but missing from
+    current vendor;
+  - whether each symbol is already closed by the plan;
+  - whether it changes IO, staging, CUDA compute, scheduling, speculative
+    decoding, model format, or prompt/decode behavior;
+  - whether it has an activation signal that can be checked in stderr.
+- Extract historical ik_llama metrics only from machine-readable logs such as
+  `record_row.tsv`, `env_summary.json`, and run stderr summaries. Avoid broad
+  recursive output that can overload the SSH session.
+- Search for local draft/MTP/speculative assets and FP4/NVFP4/MXFP4 assets by
+  filename and metadata only. Do not download large files in this phase.
+- Compare any candidate against current bottlenecks:
+  - n96 decode `56696.97 ms / 77`, `1.36 tok/s`;
+  - iouring wait `50085670 us`;
+  - VRAM total hit rate `52.9%`, down `73.0%`, up/gate `44.1%`;
+  - current-down overlap worker `8068709 us`;
+  - host RAM peak at the 16 GB cgroup cap.
+
+Required outputs:
+
+- `repo_state.txt`
+- `ikllama_only_symbols.txt`
+- `vendor_only_symbols.txt`
+- `feature_matrix.tsv`
+- `historical_runs.tsv`
+- `local_assets.txt`
+- `decision.md`
+
+Decision rule:
+
+- If no credible candidate remains, record that the next optimization must be
+  model-format/algorithmic or require new assets/hardware capacity, not another
+  local micro-patch.
+- If a candidate remains, do not implement it directly in 7MX. First append a
+  new phase that includes:
+  - bottleneck measurement it targets;
+  - theory of improvement;
+  - hard upper bound from bytes, bandwidth, expert size, or launch count;
+  - activation signal;
+  - exact cold-start command;
+  - quality, RAM, TTFT, and reproducibility gates;
+  - commit/push/revert rule.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Record every audit command in `commands.log`.
+- Record timestamps in `decision.md`.
+- Push the final audit record after the results are written into this plan.
