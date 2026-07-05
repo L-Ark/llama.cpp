@@ -1,0 +1,259 @@
+{
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_ms": 32087.738292
+  },
+  "created_at_utc": "2026-07-05T21:37:00Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "new_sota": false,
+    "next_step": "Do not switch to broad promptset union gate pack for France SOTA; historical union pack improved worst non-France prompts but regressed France. Continue with disk-approved alternate GGUF or a new hard-bound route.",
+    "reason": "Current accepted path remains France-specialized. France reproduces 4.4 tok/s, but non-France prompts run at 1.6-3.1 tok/s with lower VRAM cache hit rates and several TTFT values over the SOTA gate. Manual semantic review rejects quantum/fibonacci as clean correctness examples because they are truncated or contain confusing/invalid extra code. Do not claim prompt-set-general SOTA from the France pack."
+  },
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "purpose": "Current-head strict-cold five-prompt diagnostic using accepted France SOTA configuration and France gate pack/profile.",
+  "raw_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/promptset-current-sota-cold-20260706-raw.json",
+  "results": [
+    {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T212415Z-promptset-current-sota-cold-20260706-france/france-cpu40-vram0gb",
+      "counters": {
+        "expert_pack": {
+          "bytes": 21774204928,
+          "direct_failures": 0,
+          "direct_fallbacks": 0,
+          "failures": 0,
+          "hits": 4886,
+          "misses": 0,
+          "reads": 4886
+        },
+        "one_prefill": {
+          "attempted": 3000,
+          "bytes": 13369344000,
+          "elapsed_ms": 4606.254,
+          "enabled": 1,
+          "inserted": 3000,
+          "limit": 3000,
+          "loaded": 3313,
+          "pack_misses": 0,
+          "read_failures": 0
+        },
+        "vram_cache": {
+          "hit_rate_pct": 94.6,
+          "hits": 33265,
+          "misses": 1886
+        }
+      },
+      "elapsed_seconds": 64.01,
+      "eval_tok_s": 4.4,
+      "manual_reason": "Coherent short paragraph about France; includes Western Europe, history/culture, landmarks, cuisine, EU/economy.",
+      "manual_semantic_correctness": "pass",
+      "memory_file_bytes": 15084646400,
+      "memory_peak_bytes": 16000000000,
+      "name": "france",
+      "near_france_sota_perf": true,
+      "prompt": "Please introduce France in a short paragraph.",
+      "prompt_tok_s": 1.8,
+      "ram_ok": true,
+      "runner_correctness_ok": true,
+      "runner_correctness_reason": "heuristic_pass_manual_review_required",
+      "ttft_ms": 33046.91427,
+      "ttft_ok_vs_sota_gate": true
+    },
+    {
+      "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T212525Z-promptset-current-sota-cold-20260706-quantum/quantum-cpu40-vram0gb",
+      "counters": {
+        "expert_pack": {
+          "bytes": 36279943168,
+          "direct_failures": 0,
+          "direct_fallbacks": 0,
+          "failures": 0,
+          "hits": 8141,
+          "misses": 18330,
+          "reads": 8141
+        },
+        "one_prefill": {
+          "attempted": 3000,
+          "bytes": 13369344000,
+          "elapsed_ms": 4634.156,
+          "enabled": 1,
+          "inserted": 3000,
+          "limit": 3000,
+          "loaded": 3313,
+          "pack_misses": 0,
+          "read_failures": 0
+        },
+        "vram_cache": {
+          "hit_rate_pct": 50.7,
+          "hits": 24174,
+          "misses": 23471
+        }
+      },
+      "elapsed_seconds": 147.44,
+      "eval_tok_s": 1.7,
+      "manual_reason": "Core explanation is mostly correct, but output starts with a stray leading token and ends mid-sentence at amplify, so it is not a clean coherent complete answer.",
+      "manual_semantic_correctness": "fail_for_clean_correctness_gate",
+      "memory_file_bytes": 15011893248,
+      "memory_peak_bytes": 16000000000,
+      "name": "quantum",
+      "near_france_sota_perf": false,
+      "prompt": "Explain quantum computing briefly.",
+      "prompt_tok_s": 1.4,
+      "ram_ok": true,
+      "runner_correctness_ok": true,
+      "runner_correctness_reason": "heuristic_pass_manual_review_required",
+      "ttft_ms": 34977.402762,
+      "ttft_ok_vs_sota_gate": false
+    },
+    {
+      "answer": "that's a classic! Here's a short Python function that computes the Fibonacci sequence:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\n```\n\nThis is a generator function that yields Fibonacci numbers up to the nth term. It's memory-efficient and works well for large values of n.\n\nIf you prefer a more compact version that returns a list:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    return [a if i == 0 else a := b for i in range(n) for b in [a+b]][:n]\n```\n\nBut the generator version is generally preferred for its memory efficiency, especially when n is large.\n\nHere's a simpler version that returns a list:\n\n```python\ndef fib_list(n):\n    a, b = 0, 1",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T212757Z-promptset-current-sota-cold-20260706-fibonacci/fibonacci-cpu40-vram0gb",
+      "counters": {
+        "expert_pack": {
+          "bytes": 38445776896,
+          "direct_failures": 0,
+          "direct_fallbacks": 0,
+          "failures": 0,
+          "hits": 8627,
+          "misses": 23381,
+          "reads": 8627
+        },
+        "one_prefill": {
+          "attempted": 3000,
+          "bytes": 13369344000,
+          "elapsed_ms": 4760.779,
+          "enabled": 1,
+          "inserted": 3000,
+          "limit": 3000,
+          "loaded": 3313,
+          "pack_misses": 0,
+          "read_failures": 0
+        },
+        "vram_cache": {
+          "hit_rate_pct": 39.5,
+          "hits": 18928,
+          "misses": 29008
+        }
+      },
+      "elapsed_seconds": 155.07,
+      "eval_tok_s": 1.6,
+      "manual_reason": "First generator function is usable, but the answer then adds an unnecessary compact alternative that is likely invalid/confusing and truncates during a third function; not a clean short function answer.",
+      "manual_semantic_correctness": "fail_for_clean_correctness_gate",
+      "memory_file_bytes": 15008047104,
+      "memory_peak_bytes": 16000000000,
+      "name": "fibonacci",
+      "near_france_sota_perf": false,
+      "prompt": "Write a short Python function for Fibonacci.",
+      "prompt_tok_s": 1.4,
+      "ram_ok": true,
+      "runner_correctness_ok": true,
+      "runner_correctness_reason": "heuristic_pass_manual_review_required",
+      "ttft_ms": 36410.50939,
+      "ttft_ok_vs_sota_gate": false
+    },
+    {
+      "answer": "Japan is an island nation in East Asia, known for its unique blend of ancient traditions and cutting-edge modernity. It is renowned for its rich cultural heritage, including tea ceremonies, kimono, and traditional temples, alongside its technological advancements and bustling cities like Tokyo and Osaka. The country is famous for its cuisine, such as sushi and ramen, and its natural beauty, from Mount Fuji to cherry blossoms. With a strong economy and a high standard of living, Japan is also known for its politeness, efficiency, and innovation in fields like robotics and electronics. Its culture deeply values respect, honor, and community, making it a fascinating blend of old and new.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T213039Z-promptset-current-sota-cold-20260706-japan/japan-cpu40-vram0gb",
+      "counters": {
+        "expert_pack": {
+          "bytes": 23895474176,
+          "direct_failures": 0,
+          "direct_fallbacks": 0,
+          "failures": 0,
+          "hits": 5362,
+          "misses": 3861,
+          "reads": 5362
+        },
+        "one_prefill": {
+          "attempted": 3000,
+          "bytes": 13369344000,
+          "elapsed_ms": 4715.983,
+          "enabled": 1,
+          "inserted": 3000,
+          "limit": 3000,
+          "loaded": 3313,
+          "pack_misses": 0,
+          "read_failures": 0
+        },
+        "vram_cache": {
+          "hit_rate_pct": 81.9,
+          "hits": 28220,
+          "misses": 6223
+        }
+      },
+      "elapsed_seconds": 76.53999999999999,
+      "eval_tok_s": 3.1,
+      "manual_reason": "Coherent paragraph about Japan with geography, culture, cities, food, nature, economy and social traits.",
+      "manual_semantic_correctness": "pass",
+      "memory_file_bytes": 15044816896,
+      "memory_peak_bytes": 16000000000,
+      "name": "japan",
+      "near_france_sota_perf": false,
+      "prompt": "Introduce Japan in a short paragraph.",
+      "prompt_tok_s": 1.7,
+      "ram_ok": true,
+      "runner_correctness_ok": true,
+      "runner_correctness_reason": "heuristic_pass_manual_review_required",
+      "ttft_ms": 34096.659341,
+      "ttft_ok_vs_sota_gate": false
+    },
+    {
+      "answer": "Climate change refers to the long-term, large-scale alteration of Earth's climate patterns, primarily driven by human activities such as burning fossil fuels, deforestation, and industrial processes that release greenhouse gases like carbon dioxide, methane, and nitrous oxide into the atmosphere. These gases trap heat, leading to a rise in global average temperatures, a phenomenon known as global warming. The consequences are far-reaching and include more frequent and severe weather events like hurricanes, droughts, and floods; rising sea levels; melting polar ice and glaciers; and disruptions to ecosystems and biodiversity. While natural factors have historically influenced the climate, the current rapid change is overwhelmingly attributed to human actions, and its effects are already being observed worldwide, threatening both natural environments and human societies with the challenges of adaptation and mitigation.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T213203Z-promptset-current-sota-cold-20260706-climate/climate-cpu40-vram0gb",
+      "counters": {
+        "expert_pack": {
+          "bytes": 28539092992,
+          "direct_failures": 0,
+          "direct_fallbacks": 0,
+          "failures": 0,
+          "hits": 6404,
+          "misses": 9019,
+          "reads": 6404
+        },
+        "one_prefill": {
+          "attempted": 3000,
+          "bytes": 13369344000,
+          "elapsed_ms": 4749.001,
+          "enabled": 1,
+          "inserted": 3000,
+          "limit": 3000,
+          "loaded": 3313,
+          "pack_misses": 0,
+          "read_failures": 0
+        },
+        "vram_cache": {
+          "hit_rate_pct": 68.3,
+          "hits": 26822,
+          "misses": 12423
+        }
+      },
+      "elapsed_seconds": 98.67,
+      "eval_tok_s": 2.4,
+      "manual_reason": "Coherent paragraph covering causes, greenhouse gases, warming, impacts, and adaptation/mitigation.",
+      "manual_semantic_correctness": "pass",
+      "memory_file_bytes": 15047729152,
+      "memory_peak_bytes": 16000000000,
+      "name": "climate",
+      "near_france_sota_perf": false,
+      "prompt": "Summarize climate change in one paragraph.",
+      "prompt_tok_s": 1.6,
+      "ram_ok": true,
+      "runner_correctness_ok": true,
+      "runner_correctness_reason": "heuristic_pass_manual_review_required",
+      "ttft_ms": 33967.516044,
+      "ttft_ok_vs_sota_gate": false
+    }
+  ],
+  "source_head": "9f15e87b5e7d7b686fb4eb5154fa50b671bca7f8",
+  "summary": {
+    "all_memory_peak_at_or_below_16gb": true,
+    "all_ram_ok": true,
+    "manual_semantic_pass_count": 3,
+    "near_france_sota_perf_count": 1,
+    "total_prompts": 5,
+    "ttft_ok_vs_sota_gate_count": 1
+  }
+}
