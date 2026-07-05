@@ -74,6 +74,14 @@ DeepSeek4 MTP loader/verifier hard-bound plan:
 - Full MTP preload is currently rejected on TTFT math: `3.546 GiB / 1.85 GiB/s ~= 1.917s`, which exceeds the current `1.530s` TTFT slack versus the `33617.688744 ms` gate.
 - Decision: route is `open_but_not_source_ready`. No runtime patch, full download, or strict-cold benchmark is allowed yet. Next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-tensor-mapping-and-verify-design.json`.
 
+DeepSeek4 MTP tensor mapping and verifier design:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-tensor-mapping-and-verify-design.json`.
+- The antirez MTP GGUF has 32 tensors and maps mostly onto a supplementary DeepSeek4 layer: its HC, attention, MoE, and shared-expert tensors are structurally close to existing vendor DeepSeek4 fields, while `e_proj`, `h_proj`, `enorm`, `hnorm`, `norm`, and separate `hc_head_*` require new supplementary MTP fields.
+- This GGUF is not identical to official DSpark safetensors: the GGUF does not contain `markov_w1`, `markov_w2`, or `confidence_head` tensors. Treat it as the antirez one-layer MTP support model, not as the official DSpark module.
+- Reference source `antirez/ds4` binds the same `mtp.0.*` tensors, keeps a separate MTP raw cache, and has an exact N=2 verifier path. Its README says the current MTP/speculative path is experimental, correctness-gated, and provides at most slight speedup.
+- Decision: still no runtime patch. The next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json`. If exact N=2 cannot show a meaningful hard-bound under strict 16GB RAM, TTFT, and correctness gates, close MTP for the 10 tok/s objective rather than implementing loader code.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。

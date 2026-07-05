@@ -1,0 +1,255 @@
+{
+  "artifact": "deepseek4-mtp-tensor-mapping-and-verify-design",
+  "created_utc": "2026-07-05T09:04:47Z",
+  "source_head": "d49db7e0106b1ef15ea5f482589dd47690aea136",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "candidate": "Map antirez DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf tensors to vendor DeepSeek4 structures and define a correctness-first verifier design.",
+  "inputs": {
+    "mtp_gguf": {
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "repo_sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "content_length_bytes": 3807602400,
+      "general.architecture": "deepseek4_mtp_support",
+      "tensor_count": 32,
+      "deepseek4.mtp_layer_count": 1,
+      "deepseek4.nextn_predict_layers": 1
+    },
+    "reference_source": {
+      "repo": "https://github.com/antirez/ds4",
+      "repo_pushed_at": "2026-07-03T17:30:19Z",
+      "observed_mtp_notes": [
+        "README says download_model.sh mtp fetches optional speculative decoding support GGUF for Flash.",
+        "README says the current MTP/speculative decoding path is experimental, correctness-gated, and provides at most a slight speedup.",
+        "ds4.c binds the same mtp.0 tensor names observed in the GGUF.",
+        "ds4.c comments describe a separate MTP raw cache and exact N=2 target verifier for MTP."
+      ]
+    }
+  },
+  "tensor_inventory_and_mapping": {
+    "hyper_connection_head": [
+      {
+        "tensor": "mtp.0.hc_head_base.weight",
+        "shape": [
+          4
+        ],
+        "type": "F32",
+        "vendor_mapping": "new supplementary MTP hc_head_base, analogous to model.hc_head_base but not shared with target output head"
+      },
+      {
+        "tensor": "mtp.0.hc_head_fn.weight",
+        "shape": [
+          16384,
+          4
+        ],
+        "type": "F32",
+        "vendor_mapping": "new supplementary MTP hc_head_fn"
+      },
+      {
+        "tensor": "mtp.0.hc_head_scale.weight",
+        "shape": [
+          1
+        ],
+        "type": "F32",
+        "vendor_mapping": "new supplementary MTP hc_head_scale"
+      }
+    ],
+    "mtp_input_projection": [
+      {
+        "tensor": "mtp.0.e_proj.weight",
+        "shape": [
+          4096,
+          4096
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "new MTP e_proj; antirez source applies RMSNorm(enorm) to token embedding, matmul e_proj, then repeats into HC lanes"
+      },
+      {
+        "tensor": "mtp.0.h_proj.weight",
+        "shape": [
+          4096,
+          4096
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "new MTP h_proj; antirez source applies RMSNorm(hnorm) to previous target HC hidden/state and matmul h_proj"
+      },
+      {
+        "tensor": "mtp.0.enorm.weight",
+        "shape": [
+          4096
+        ],
+        "type": "F32",
+        "vendor_mapping": "new MTP token-embedding RMSNorm"
+      },
+      {
+        "tensor": "mtp.0.hnorm.weight",
+        "shape": [
+          4096
+        ],
+        "type": "F32",
+        "vendor_mapping": "new MTP previous-hidden RMSNorm"
+      },
+      {
+        "tensor": "mtp.0.norm.weight",
+        "shape": [
+          4096
+        ],
+        "type": "F32",
+        "vendor_mapping": "new MTP output RMSNorm before target-shared output head or MTP head path"
+      }
+    ],
+    "mtp_block_hc": [
+      {
+        "tensors": [
+          "mtp.0.hc_attn_base.weight",
+          "mtp.0.hc_attn_fn.weight",
+          "mtp.0.hc_attn_scale.weight",
+          "mtp.0.hc_ffn_base.weight",
+          "mtp.0.hc_ffn_fn.weight",
+          "mtp.0.hc_ffn_scale.weight"
+        ],
+        "types": "F32",
+        "vendor_mapping": "can reuse existing DeepSeek4 hc_pre/hc_post math but needs a separate supplementary layer instance; target llama_layer cannot be reused because this is not one of the 43 target layers"
+      }
+    ],
+    "mtp_attention": [
+      {
+        "tensor": "mtp.0.attn_norm.weight",
+        "shape": [
+          4096
+        ],
+        "type": "F32",
+        "vendor_mapping": "existing llama_layer.attn_norm field is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_q_a.weight",
+        "shape": [
+          4096,
+          1024
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "existing DeepSeek4 q_a path is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_q_a_norm.weight",
+        "shape": [
+          1024
+        ],
+        "type": "F32",
+        "vendor_mapping": "existing llama_layer.attn_q_a_norm field is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_q_b.weight",
+        "shape": [
+          1024,
+          32768
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "existing DeepSeek4 q_b/grouped attention shape is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_kv.weight",
+        "shape": [
+          4096,
+          512
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "likely maps to a DSpark/MTP-specific attn_kv latent projection. Do not blindly reuse target build_attn_v4 until shape/rope/cache semantics are checked against antirez MTP path."
+      },
+      {
+        "tensor": "mtp.0.attn_kv_a_norm.weight",
+        "shape": [
+          512
+        ],
+        "type": "F32",
+        "vendor_mapping": "existing attn_kv_a_norm math is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_sinks.weight",
+        "shape": [
+          64
+        ],
+        "type": "F32",
+        "vendor_mapping": "existing attn_sinks field is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_output_a.weight",
+        "shape": [
+          4096,
+          8192
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "existing grouped output projection A is structurally compatible"
+      },
+      {
+        "tensor": "mtp.0.attn_output_b.weight",
+        "shape": [
+          8192,
+          4096
+        ],
+        "type": "Q8_0",
+        "vendor_mapping": "existing grouped output projection B is structurally compatible"
+      }
+    ],
+    "mtp_moe_and_shared_expert": [
+      {
+        "tensors": [
+          "mtp.0.ffn_norm.weight",
+          "mtp.0.ffn_gate_inp.weight",
+          "mtp.0.exp_probs_b.bias",
+          "mtp.0.ffn_gate_shexp.weight",
+          "mtp.0.ffn_up_shexp.weight",
+          "mtp.0.ffn_down_shexp.weight",
+          "mtp.0.ffn_gate_exps.weight",
+          "mtp.0.ffn_up_exps.weight",
+          "mtp.0.ffn_down_exps.weight"
+        ],
+        "vendor_mapping": "existing build_moe_v4/build_expert_mix and shared expert math are structurally compatible, but this layer must have its own memory/source policy and cannot inherit accepted target gate-only cache behavior without a hard-bound."
+      }
+    ],
+    "not_present_in_antirez_mtp_gguf": [
+      "token embedding tensor",
+      "full output head tensor",
+      "official DSpark markov_w1 / markov_w2 tensors",
+      "official DSpark confidence_head tensor"
+    ],
+    "interpretation": "The antirez GGUF is not the same artifact shape as the official DeepSeek-V4-Flash-DSpark safetensors inference module. It is a supplementary one-layer MTP support model that relies on target embed/output and its own e_proj/h_proj path."
+  },
+  "verifier_design": {
+    "minimum_correct_flow": [
+      "Run the accepted target model for one committed token and capture target HC state needed by MTP without changing target logits.",
+      "Run supplementary MTP in shadow mode from the accepted target token/state to draft a short greedy suffix.",
+      "Run target verification over the drafted suffix using an isolated KV/cache branch or restorable checkpoint.",
+      "Compare target top1 at each drafted position against the draft token and accept only the longest matching prefix.",
+      "Commit exactly the target KV/cache state for the accepted prefix and discard/rewind rejected suffix state.",
+      "Emit only target-verified tokens, never unverified MTP tokens."
+    ],
+    "state_requirements": [
+      "MTP needs a separate raw cache because it evaluates speculative future tokens.",
+      "Target KV/cache must not be contaminated by rejected speculative rows.",
+      "DeepSeek4 compression/indexer frontiers and raw ring positions must be restored exactly on partial accept or reject.",
+      "Existing llama-lookahead failure means generic llama_memory_seq_cp/rm is not enough evidence; DeepSeek4-specific cache state must be verified."
+    ],
+    "cost_requirement": "The verifier must batch target work sublinearly. Antirez source comments indicate an exact N=2 target verifier, and README says current MTP gives only slight speedup. Therefore an initial vendor implementation must not assume A=5 or A=7 acceptance; it must first measure N=2 correctness and cost as a diagnostic.",
+    "first_safe_runtime_probe_if_later_allowed": {
+      "scope": "default-off shadow mode only",
+      "allowed_env_example": "DS4_MTP_GGUF=/path/to/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf DS4_MTP_SHADOW=1",
+      "behavior": "load supplementary MTP, capture target state, compute draft logits, but emit target-only tokens and do not change target KV/cache commits",
+      "must_pass_before_verifier": [
+        "default path top1 unchanged",
+        "shadow path fixed-text top1 unchanged",
+        "strict 16GB cgroup including page cache",
+        "no swap/OOM",
+        "TTFT recorded and marked rejected if above gate"
+      ]
+    }
+  },
+  "current_decision": {
+    "can_start_loader_runtime_patch_now": false,
+    "reason": "Tensor mapping is now mostly understood, but verifier semantics and target batch cost remain unproven. The reference implementation itself documents only slight speedup, so this is not yet a credible 10 tok/s implementation route.",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "next_required_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json",
+    "next_required_question": "Could an exact N=2 verifier, implemented in vendor with strict cache rollback, beat 4.4 tok/s and approach the 10 tok/s bound under 16GB RAM and TTFT gates? If the N=2 upper bound is far below 10, do not implement MTP."
+  }
+}
