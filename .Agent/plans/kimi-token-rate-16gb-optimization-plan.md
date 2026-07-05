@@ -83355,3 +83355,90 @@ Reproducibility:
 - Commit and push this 7OB plan before running the audit.
 - Commit and push the 7OB result before any source implementation or asset
   work.
+
+### Phase 7OB result
+
+Timestamp: 2026-07-06 05:42 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-214131Z-phase7ob-iq2xxs-q8k-math`
+
+Plan commit before execution:
+
+- `f6cc1e26c` (`docs: plan iq2 xxs q8k prompt math audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7ob_iq2xxs_q8k_math.py`
+- `math_sources.tsv`
+- `formula_check.tsv`
+- `selftest_design.md`
+- `decision.md`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was edited.
+- No asset was downloaded or converted.
+- The first 7OB run had a source-locator typo for `block_iq2_xxs`; the script
+  was corrected and the accepted run is `20260705-214131Z`.
+
+Source references:
+
+| source | file | line |
+|---|---|---:|
+| `block_iq2_xxs` | `ggml/src/ggml-common.h` | `384` |
+| CPU dequant | `ggml/src/ggml-quants.c` | `2523` |
+| CUDA dequant | `ggml/src/ggml-cuda/convert.cu` | `295` |
+| MMVQ dot | `ggml/src/ggml-cuda/vecdotq.cuh` | `1216` |
+| MMQ tile load | `ggml/src/ggml-cuda/mmq.cuh` | `2682` |
+| prompt kernel | `ggml/src/ggml-cuda/moe_stream_batch.cu` | `5421` |
+
+Formula:
+
+- CPU dequant uses:
+  `db = x.d * (0.5 + scale) * 0.25`.
+- Therefore:
+  `db = x.d * (2*scale + 1) / 8`.
+- The exact prompt `Q8_K` dot can use:
+  `0.125f * x.d * y.d * sum((2*scale + 1) * grid * sign * q8)`.
+- This matches the current `IQ2_S` direct prompt branch shape, but uses
+  `IQ2_XXS` grid/sign unpacking.
+
+Parity result:
+
+- Deterministic cases: `32`.
+- Max abs error between CPU dequant-dot and derived `Q8_K` integer-dot:
+  `0.000000000000`.
+- Formula parity: `PASS`.
+- Current prompt kernel contains an `IQ2_XXS` branch: `0`.
+
+Decision:
+
+- Accept 7OB as a reproducible prompt math feasibility audit.
+- `IQ2_XXS x Q8_K` prompt math is local and equivalent to existing source
+  formulas.
+- A future source patch may add:
+  - `moe_iq2_xxs_q8k_block_sum`;
+  - an `IQ2_XXS` branch in the prompt kernel;
+  - a default-off synthetic parity selftest.
+- This closes only the prompt math blocker. It does not validate Kimi output
+  quality.
+- Do not claim SOTA or run strict n32/n96 until an `IQ2_XXS` Kimi asset/imatrix
+  path exists.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN_DIR=/root/lfz/runs/vendor-kimi-token-rate/20260705-214131Z-phase7ob-iq2xxs-q8k-math \
+PHASE7OA_RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-213240Z-phase7oa-iq2xxs-moe-feasibility \
+python3 "$RUN_DIR/phase7ob_iq2xxs_q8k_math.py"
+cat "$RUN_DIR/math_sources.tsv"
+cat "$RUN_DIR/formula_check.tsv"
+cat "$RUN_DIR/selftest_design.md"
+cat "$RUN_DIR/decision.md"
+```
