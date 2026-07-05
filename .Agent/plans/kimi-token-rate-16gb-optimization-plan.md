@@ -78775,3 +78775,112 @@ Decision:
   - a real draft/speculative path with accepted-token multiplier above `3.68x`;
   - or a deeper kernel/runtime rewrite with a hard bound exceeding the current
     micro-patch ceiling before implementation.
+
+## Phase 7NF - current FP4/GGUF asset and converter refresh
+
+Timestamp: 2026-07-06 01:20:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Continue after 7NE by checking whether the remaining viable read-volume route
+  has become actionable with current local source and current public assets.
+- Audit only metadata and source support:
+  - local disk and local Kimi assets;
+  - public Kimi FP4/NVFP4/MXFP4/GGUF assets;
+  - current `convert_hf_to_gguf.py` support for NVFP4/MXFP4/Kimi-style expert
+    tensors;
+  - whether any asset can be turned into a strict cold-start n32 candidate under
+    `MemoryMax=15900000000`.
+- Do not edit source and do not download large weight files in this phase.
+
+Why this is the next valid step:
+
+- 7ND closed the apparent down `fallback_t0` route as prompt-dominated and
+  confirmed decode fallback is only small Q4_0 work already backed by pack mmap.
+- 7NE closed current-layout up/gate pair-read because same-expert up/gate pack
+  entries are separated by hundreds of MiB.
+- 7MY showed direct local micro-optimizations cannot approach `5 tok/s`:
+  exposed reads are about `3.80 GiB/token`, while `5 tok/s` would need about
+  `0.21 GiB/token` at the measured throughput.
+- Therefore the next useful step is to look for a materially smaller or more
+  runtime-friendly model/expert format, not another CUDA/IO toggle.
+
+Audit inputs:
+
+- Current repo:
+  `/root/lfz/llama.cpp-vendor-kimi`
+- Current local assets:
+  `/root/lfz/models`;
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets`
+- Current disk:
+  `df -h / /root/lfz`
+- Current converter:
+  `convert_hf_to_gguf.py`
+- Public metadata sources:
+  - Hugging Face API/model pages for `Kimi-K2.7-Code` FP4/NVFP4/MXFP4/GGUF
+    candidates;
+  - any candidate model card that claims llama.cpp/GGUF runtime support.
+
+Audit method:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nf-fp4-asset-refresh`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `disk_and_local_assets.txt`;
+  - `converter_support.txt`;
+  - `hf_search_results.jsonl`;
+  - `hf_model_metadata.jsonl`;
+  - `candidate_matrix.tsv`;
+  - `decision.md`.
+- Use metadata-only network/API calls:
+  - no full weight downloads;
+  - no converter execution against full assets;
+  - no deletion of local models, packs, overlays, or runs.
+- Candidate matrix fields:
+  - `candidate`;
+  - `url`;
+  - `format`;
+  - `reported_size_gib`;
+  - `local_available`;
+  - `fits_current_free_disk`;
+  - `drop_in_gguf`;
+  - `requires_conversion`;
+  - `converter_support_evidence`;
+  - `requires_new_runtime_support`;
+  - `expected_read_volume_factor`;
+  - `can_enter_strict_n32_next`;
+  - `decision_or_blocker`.
+
+Hard-bound criteria:
+
+- A non-speculative direct-format candidate must plausibly reduce exposed
+  expert read volume by far more than the local micro-patch ceiling. The target
+  remains roughly `94-95%` exposed-read reduction for `5 tok/s`; smaller
+  reductions can still be tested only if the asset is drop-in and low-risk.
+- A conversion candidate must fit available disk with source shards plus any
+  output/intermediate files, without deleting existing assets.
+- A GGUF candidate must be runnable by the current vendor tree or require a
+  clearly bounded loader patch that can be planned separately.
+- Any candidate that cannot run under 16 GB host RAM including page cache is not
+  accepted as the next strict benchmark step.
+
+Decision rule:
+
+- If a local or small public drop-in GGUF candidate exists, write the next phase
+  as a strict n32 cold-start benchmark plan before running it.
+- If an FP4/NVFP4/MXFP4 asset is conversion-feasible on this server, write a
+  conversion dry-run phase with disk/RAM gates before conversion.
+- If all candidates require hundreds of GiB download/conversion or unsupported
+  runtime paths, record the blocker and do not attempt partial downloads.
+- Do not promote SOTA in this phase.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store all raw metadata and commands in the run directory.
+- Commit and push the audit result into this plan before any follow-up
+  benchmark or source work.
