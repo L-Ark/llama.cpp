@@ -70763,3 +70763,152 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Save CSV and stderr summaries in the run directory.
+
+### Phase 7LP result
+
+Timestamp: 2026-07-05 23:43:00 CST.
+
+Status: accepted diagnostic.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-072805Z-phase7lp-upgate-profile-n32`
+
+Result:
+
+- source commit: `d58ca392d`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `74426.56 ms`;
+- decode `22693.12 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `19451750 us`;
+- current-down overlap worker `3188157 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Up/gate profile:
+
+- total decode up/gate profile: `869` calls, wall `5810.872 ms`;
+- type `(22,22)`:
+  - calls `558`;
+  - wall `3203.944 ms`;
+  - stage `24.684 ms`;
+  - up `3029.063 ms`;
+  - gate `83.113 ms`;
+  - up_wait `2920.180 ms`;
+  - gate_wait `3081.214 ms`;
+  - up_compute `108.883 ms`;
+  - gate_compute `64.687 ms`;
+  - fuse `3.794 ms`;
+  - d2h `4.087 ms`;
+  - scatter `10.308 ms`;
+  - up misses/jobs `2552`;
+  - gate misses/jobs `2553`.
+- type `(18,18)`:
+  - calls `311`;
+  - wall `2606.928 ms`;
+  - stage `15.324 ms`;
+  - up `1379.585 ms`;
+  - gate `1181.557 ms`;
+  - wait counters `0`;
+  - compute is inside kernel totals;
+  - up misses/jobs `1502`;
+  - gate misses/jobs `1502`.
+
+Layer profile highlights:
+
+- top decode `(18,18)` layer `blk.60` wall `446.428 ms`;
+- top decode `(22,22)` layer `blk.1` wall `288.884 ms`, with
+  `up_wait_total=254.968 ms`, `gate_wait_total=281.722 ms`;
+- many `(22,22)` layers have `~150-190 ms` wall and wait-dominated profiles.
+
+Interpretation:
+
+- The next largest up/gate bucket is not D2H/scatter/fuse; those are tiny.
+- `(22,22)` is movement/wait dominated, while `(18,18)` is compute dominated.
+- A cache-residency/runtime split probe has a hard n32 upper bound of about
+  `3.2 s`: if all `(22,22)` exposed movement vanished without side effects,
+  token rate would be roughly `31 / (22.69 - 3.20) = 1.59 tok/s`.
+- Prior global split probes around `55/62/65` were inconclusive or regressed,
+  but 7LP now gives a concrete reason to test one more higher upgate split:
+  specifically whether type22 wait falls enough to offset any down miss increase.
+
+Decision:
+
+- Run one env-only `UPGATE_PCT=68` probe.
+- Do not promote unless endpoint improves, quality passes, TTFT stays within
+  gate, and down movement does not regress more than the up/gate gain.
+- If it regresses, reject cache split as next path and do not continue split
+  sweeps.
+
+## Phase 7LQ - upgate-heavy VRAM split probe
+
+Timestamp: 2026-07-05 23:44:00 CST.
+
+Status: planned.
+
+Theory:
+
+- Current upgate cache hit rate is `45.2%`, with `(22,22)` up/gate misses
+  accounting for `5105` staged jobs and `3.20 s` profiled wall.
+- Raising `UPGATE_PCT` from `62` to `68` gives more VRAM slots to up/gate and
+  may reduce type22 movement wait.
+- The cost is fewer down slots, so the probe must measure down hit rate,
+  current-down overlap worker time, and decode fallback.
+
+Hard upper bound:
+
+- n32 upper bound from 7LP: `3.20 s` removable `(22,22)` up/gate wall.
+- Baseline decode `22693.12 ms / 31`.
+- Absolute optimistic endpoint if all type22 wait vanished:
+  `31 / (22.693 - 3.204) = 1.59 tok/s`.
+- A realistic success is much smaller; accept only if the full endpoint beats
+  clean current n32 references without violating any hard gate.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard d58ca392d
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lq-upgate-pct68-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=68 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- Accept only if token rate beats the current clean n32 band and the result has
+  a credible counter explanation: upgate hit-rate improves and the down
+  slowdown is smaller than the upgate gain.
+- If it is slower, immediately record rejection and keep `UPGATE_PCT=62`.
+- If it is faster, repeat n32 once, then validate n96 before treating it as a
+  new runtime SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record all metrics, output text, cache split counters, IO counters, and run
+  directory.
