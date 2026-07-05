@@ -76737,3 +76737,141 @@ Decision:
   pressure. There is no basis to run n96 because the n32 gate failed.
 - Source rollback was pushed immediately as `b5957f689`, and the server was
   reset to that reverted HEAD.
+
+## Phase 7MW - dynamic-X vendor MMQ up/gate probe
+
+Timestamp: 2026-07-05 21:58:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Close one unported ik_llama overlap-branch compute-path delta before declaring
+  the remaining current IQ3 runtime locally exhausted.
+- Port only the default-off dynamic-X selector for the vendor MMQ up/gate path:
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X=1`.
+- Keep expert selection, cache policy, expert-pack IO, pinned staging, H2D,
+  quantized bytes, and output math contract unchanged.
+
+Why this is not another IO/cache retry:
+
+- 7MV closed fixed-buffer io_uring reads.
+- 7MM/7LT closed layout/coalescing under the current staging designs.
+- 7KY/7LE/7LX closed depth/refill/shared IO scheduling families.
+- 7LA/7ML closed broad cache split/VRAM reallocation.
+- This probe changes only the CUDA compute launch variant used after up/gate
+  tensors are already staged in VRAM.
+
+Why this is still high-risk:
+
+- Phase 2K rejected the ordinary vendor fused-MMQ path:
+  - n32 decode `157639.97 ms / 31`, `0.19665 tok/s`;
+  - correctness and memory passed, but endpoint was much slower.
+- The ik_llama overlap branch later added dynamic-X MMQ selectors:
+  - `GGML_MOE_STREAM_UP_GATE_DYNAMIC_X`;
+  - `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X`.
+- Current vendor has the ordinary `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ` gate but
+  lacks the dynamic-X selector. This plan tests whether the fixed
+  `launch_mul_mat_q<..., 8>` shape was a material reason the MMQ path was slow.
+- If dynamic-X does not drastically improve MMQ, the whole vendor-MMQ import
+  line remains rejected.
+
+Current bottleneck basis:
+
+- 7MU n96 baseline:
+  - decode `56696.97 ms / 77`, `1.36 tok/s`;
+  - expert-pack iouring wait `50085670 us`;
+  - upgate hit rate `44.1%`;
+  - down hit rate `73.0%`.
+- 7MO n32 full profile:
+  - type `(18,18)` IQ3 up/gate wall `2982.227 ms`, kernel dominated;
+  - type `(22,22)` IQ2 up/gate wall `3722.125 ms`, mostly movement/wait but
+    still executed through the same up/gate compute contract;
+  - broad type18/IQ3 paths were closed by VDR/MMVQ/MMQ/Q8_K attempts, but this
+    specific dynamic-X selector was not present in vendor and is not mentioned
+    in the historical plan.
+
+Theory and upper bound:
+
+- The patch changes `launch_moe_mmq_slot_batch()` so that when
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X=1` is set, it dispatches
+  `mul_mat_q_case<T>()` instead of the fixed `launch_mul_mat_q<T, 8>()`.
+- If the fixed `X=8` specialization was the main cause of Phase 2K's poor MMQ
+  performance, dynamic-X could reduce the same-type IQ3/IQ2 MMQ kernel wall.
+- Hard optimistic n32 upper bound is removing all 7MO type18 wall:
+  `31 / (25.416 - 2.982) = 1.38 tok/s`; this alone is not enough for a new
+  SOTA unless it also avoids the Phase 2K endpoint regression and improves
+  hidden current-path overhead.
+- A valid result therefore must beat the current clean n32 default band, not
+  merely improve the rejected Phase 2K MMQ result:
+  - current references: `~1.33-1.39 tok/s`;
+  - 7MU/7LZ n96: `~1.36 tok/s`.
+
+Implementation:
+
+- Add a default-off env flag:
+  `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X=1`.
+- In `launch_moe_mmq_slot_batch()`:
+  - parse the flag once per call;
+  - for `IQ3_XXS`, `IQ2_S`, `Q3_K`, and `IQ4_XS`, call
+    `mul_mat_q_case<T>()` when the flag is enabled;
+  - otherwise keep the existing `launch_mul_mat_q<T, 8>()` path unchanged.
+- Add one stderr activation line:
+  `[moe_stream] vendor MMQ dynamic-X up/gate path active: type=<type>`.
+- Do not enable this path by default in `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Experiment A: strict n32 activation and performance gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <source-commit>
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mw-dynamicx-mmq-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_UP_GATE_FUSED_MMQ=1 GGML_MOE_STREAM_UP_GATE_FUSED_MMQ_DYNAMIC_X=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- plan committed and pushed before source edit;
+- source committed and pushed before running;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160` including page cache and pinned buffers;
+- swap max `0`;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- quality `pass`;
+- manual semantic pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr proves both:
+  - `vendor MMQ up/gate path active`;
+  - `vendor MMQ dynamic-X up/gate path active`.
+
+Decision rule:
+
+- If activation is missing, revert source and record why.
+- If n32 is not faster than the current clean default band, revert source and
+  do not run n96.
+- If n32 improves with activation and no quality/memory/TTFT regression, repeat
+  n32 once.
+- Only after repeated n32 improvement, run n96 before any SOTA promotion.
+- If n96 does not beat 7MU/7LZ (`~1.36 tok/s`) with compliant output, do not
+  promote.
+
+Reproducibility:
+
+- Record source commit, build command, exact env, run directory, answer,
+  metrics, memory files, activation lines, expert-pack counters, and decision.
+- Accepted improvement must remain committed and pushed immediately with the
+  exact reproduction command.
+- Rejected source must be reverted and pushed immediately.
