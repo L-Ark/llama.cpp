@@ -80930,7 +80930,7 @@ cat "$RUN/dry-run-iq2s.pipe.txt" | tail
 
 ## Phase 7NP - up/gate byte-reduction feasibility audit
 
-Status: planned.
+Status: completed; diagnostic accepted; source implementation rejected.
 
 Timestamp: 2026-07-06 03:08 CST.
 
@@ -81003,3 +81003,92 @@ Reproducibility:
 
 - Commit and push this plan before running the offline audit.
 - Commit and push the audit result before any source implementation plan.
+
+### Phase 7NP result
+
+Timestamp: 2026-07-06 03:20 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-190545Z-phase7np-upgate-byte-bound`
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7np_upgate_bound.py`
+- `upgate-byte-summary.md`
+- `upgate-type-by-tensor.tsv`
+- `upgate-read-by-type.tsv`
+- `upgate-target-bounds.tsv`
+- `analyze_stdout.txt`
+
+Execution notes:
+
+- The first heredoc attempt failed before producing the summary because shell
+  quoting corrupted Python dictionary accesses.
+- The fixed script was copied into the same run directory and executed with the
+  same inputs.
+- No model inference was run.
+- No source, GGUF, or expert-pack asset was changed.
+- SSH printed a local `8080` forwarding warning during later inspection, but
+  the remote commands completed and generated all expected artifacts.
+
+Current 7NN up/gate read bytes by family/type:
+
+| family | type | read GiB | full size MiB |
+|---|---:|---:|---:|
+| gate | `iq2_s` | `12.604` | `36162.000` |
+| gate | `iq3_xxs` | `26.048` | `80262.000` |
+| up | `iq2_s` | `26.122` | `80934.000` |
+| up | `iq3_xxs` | `9.887` | `26754.000` |
+
+Target byte-reduction bounds:
+
+| target | scope | current GiB | new GiB | save GiB | save % | wait bound s |
+|---|---|---:|---:|---:|---:|---:|
+| `IQ2_S` | up | `36.009` | `34.395` | `1.614` | `4.48` | `0.276` |
+| `IQ2_S` | gate | `38.652` | `34.399` | `4.253` | `11.00` | `0.726` |
+| `IQ2_S` | up+gate | `74.661` | `68.794` | `5.867` | `7.86` | `1.002` |
+| `IQ3_XXS` | up+gate | `74.661` | `74.661` | `0.000` | `0.00` | `0.000` |
+| `Q3_K` | up+gate | `74.661` | `74.661` | `0.000` | `0.00` | `0.000` |
+| `IQ4_XS` | up+gate | `74.661` | `74.661` | `0.000` | `0.00` | `0.000` |
+
+Interpretation:
+
+- Current up/gate tensors observed by the strict 7NN path are already only
+  `iq2_s` and `iq3_xxs`.
+- The only supported target that reduces bytes is `IQ2_S`; all other listed
+  targets are equal or larger than the current tensors and produce no byte
+  saving.
+- The best bound, all up+gate reads to `IQ2_S`, saves only `5.867 GiB` on n32
+  before overlap discount.
+- At the 7NN wait-side effective throughput `5.854 GiB/s`, this is only
+  `1.002 s` aggregate wait upper bound before endpoint overlap and semantic
+  quality risk.
+- This misses the Phase 7NP source-work threshold of `>=20 GiB` hard n32
+  read-byte reduction.
+- It also relies on pushing already low-bit `iq3_xxs` up/gate tensors down to
+  `IQ2_S`, which is a high-risk semantic quality move for a small bounded gain.
+
+Decision:
+
+- Accept Phase 7NP as a reproducible diagnostic result.
+- Reject up/gate typed-pack/requantization source work for the current cycle.
+- Do not generate or test an `IQ2_S` up/gate asset on this server.
+- Current SOTA remains unchanged.
+- The next optimization must return to an implementation path that can reduce
+  per-token work by more than a few GiB of movement, or prove an accepted-token
+  parallelism path with the strict France quality gate.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-190545Z-phase7np-upgate-byte-bound
+cat "$RUN/repo_state.txt"
+cat "$RUN/commands.log"
+python3 "$RUN/phase7np_upgate_bound.py"
+cat "$RUN/upgate-byte-summary.md"
+cat "$RUN/upgate-target-bounds.tsv"
+```
