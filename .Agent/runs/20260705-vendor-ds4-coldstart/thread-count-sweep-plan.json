@@ -1,0 +1,53 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: strict-cold no-source thread-count sweep on current accepted DS4 route",
+  "purpose": "Check whether current accepted vendor DeepSeek strict-cold route is leaving CPU fallback throughput on the table by using only -t 20 -tb 20 on a 61 vCPU AMD EPYC 7B13 host.",
+  "source_change_allowed": false,
+  "runtime_source_modified": false,
+  "accepted_sota_baseline": {
+    "eval_tok_s": 4.4,
+    "ttft_accept_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "hypothesis": {
+    "positive_case": "If CPU fallback is under-threaded, increasing -t/-tb may reduce hot up/down fallback wall time without changing model bytes, page-cache accounting, or output semantics.",
+    "negative_case": "If the bottleneck is page-cache major faults, O_DIRECT expert-pack reads, memory bandwidth, scheduler overhead, or per-expert small-chunk overhead, more threads may not improve eval token rate and can increase TTFT or contention."
+  },
+  "hard_bounds": {
+    "target_eval_tok_s": 10.0,
+    "promotion_min_eval_tok_s": 4.4,
+    "max_allowed_ttft_ms": 33617.688744,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "correctness_gate": "France answer must be semantically correct and coherent; no top1-only promotion."
+  },
+  "test_matrix": {
+    "thread_counts": [24, 32, 40, 60],
+    "constant_config": {
+      "framework": "vendor",
+      "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "prompt": "Please introduce France in a short paragraph.",
+      "n_cpu_moe": 40,
+      "ngl": "all",
+      "context": 256,
+      "batch": 16,
+      "ubatch": 16,
+      "defer_experts": true,
+      "drop_caches": true,
+      "cgroup": "systemd-run MemoryMax=16000000000 MemorySwapMax=0",
+      "gate_cache_env": {
+        "GGML_MOE_STREAM_ONE_CACHE_MIB": 13568,
+        "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+        "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": 3000,
+        "GGML_MOE_VRAM_CACHE_GB": 0,
+        "GGML_CUDA_DISABLE_GRAPHS": 1
+      }
+    }
+  },
+  "accept_reject_rules": {
+    "accept_as_new_sota": "Only if strict cold eval_tok_s > 4.4, TTFT <= 33617.688744 ms, memory_peak_bytes <= 16000000000 with file page cache counted, no swap/OOM, and France output passes semantic correctness. If accepted, immediately record full reproduction metadata, commit, push to ssd/vendor/deepseek-token-rate-16gb, then do a clean pushed-source reproduction.",
+    "reject": "Reject any run with lower token rate, TTFT regression beyond the gate, RAM/cgroup violation, OOM/swap, or incorrect/incoherent answer.",
+    "do_not_claim_10": "This sweep alone is expected to be a parameter check, not a source-ready 10 tok/s route unless measured strict-cold results prove it."
+  }
+}
