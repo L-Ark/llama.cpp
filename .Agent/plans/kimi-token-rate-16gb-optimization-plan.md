@@ -76331,7 +76331,7 @@ Run command:
 ```bash
 cd /root/lfz/llama.cpp-vendor-kimi
 git fetch wici vendor/kimi-moe-stream-on-vendor
-git reset --hard <phase-7mu-plan-commit>
+git reset --hard 4c146eb8f
 
 RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mu-current-iq3-n96-refresh
 mkdir -p "$RUN"
