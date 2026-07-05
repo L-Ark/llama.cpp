@@ -5726,7 +5726,7 @@ static bool prompt_up_gate_stream_enabled() {
 
 static bool moe_stream_type_supported(ggml_type type) {
     return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S ||
-        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS || type == GGML_TYPE_Q4_0;
+        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
 static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
