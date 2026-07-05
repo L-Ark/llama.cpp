@@ -64831,3 +64831,104 @@ Decision:
   `GGML_MOE_IO_SQPOLL=1`.
 - Do not target SQPOLL removal unless a later source change materially changes
   the IO submission topology again.
+
+## Phase 7KK - post-mixed dense mmap retention probe
+
+Timestamp: 2026-07-05 11:58:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether keeping dense/attention GGUF mmap pages resident improves
+  post-7JY decode by reducing major faults or file-cache refault churn.
+- Keep expert mmap drop enabled; only disable dense mmap drops.
+- Env-only first; no source change unless n32 and n96 prove a reproducible
+  improvement under all gates.
+
+Why this is worth testing:
+
+- Strict cold-start runs still show high major faults:
+  - 7KI `pgmajfault=927759`;
+  - 7KJ `pgmajfault=961723`.
+- Current script forces both:
+  - `LLAMA_DROP_DENSE_MMAP_CACHE=1`;
+  - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`.
+- These drops were introduced to stay under the 16GB host RAM cap, but current
+  post-prompt/page-cache behavior changed after later VRAM and expert-cache
+  optimizations.
+- No current-plan record shows a post-7JY A/B with dense mmap retention.
+
+Theory and upper bound:
+
+- If decode still faults dense/attention/norm/output GGUF pages after prompt,
+  retaining dense mmap cache could reduce decode page faults and lower TTFT or
+  decode wall time.
+- If those dense pages are not needed during decode, or if retaining them
+  increases cgroup pressure, the run will be slower or hit the memory cap.
+- The hard upper bound is unknown before measurement; the signal to inspect is:
+  - decode time;
+  - `pgmajfault`;
+  - file/inactive/active split;
+  - iouring wait and expert-pack read counters.
+
+Strict n32 experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 8f65447d5
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kk-dense-retain-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_DROP_DENSE_MMAP_CACHE=0
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=0" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Strict n96 promotion experiment, only if n32 improves:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kk-dense-retain-n96
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_DROP_DENSE_MMAP_CACHE=0
+LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=0" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through the runner's cache-drop path;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for:
+  `Please introduce France in a short paragraph.`;
+- `env.txt` must record the overriding dense-drop env values.
+
+Decision rule:
+
+- If n32 is slower than current accepted script-default n32
+  `22667.39 ms / 31`, or memory/fallback/quality gates fail, reject and do not
+  run n96.
+- If n32 improves and all gates pass, run n96.
+- Promote only if n96 improves over current SOTA `57169.16 ms / 77` and all
+  gates pass.
+- If promoted, update the reproducible runner defaults and push immediately.
+- If rejected, keep both dense mmap drop defaults enabled.
