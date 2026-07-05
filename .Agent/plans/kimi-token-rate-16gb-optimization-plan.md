@@ -84123,3 +84123,134 @@ timeout 120s build-cuda-batch/bin/llama-quantize --dry-run --allow-requantize \
 
 cat /root/lfz/runs/vendor-kimi-token-rate/20260705-222403Z-phase7oe-iq2xxs-conversion-feasibility/decision.md
 ```
+
+## Phase 7OF - current-head IQ3_S baseline and bottleneck refresh
+
+Status: planned.
+
+Timestamp: 2026-07-06 06:52 CST.
+
+Reason:
+
+- Phase 7OE closed the local `IQ2_XXS` path for now:
+  - no valid local Kimi imatrix data file;
+  - no local `IQ2_XXS` Kimi shard set;
+  - exact dry-run output size `248.765 GiB`, far above current `87.788 GiB`
+    free disk.
+- The next token-rate work must return to current `IQ3_S` runtime behavior.
+- Before any new source design, refresh the current-head cold-start baseline and
+  bottleneck record at the latest pushed commit.
+- The latest code since the accepted IQ3_S SOTA includes default-off
+  `IQ2_XXS` prompt selftest code and documentation only. This phase verifies
+  that the production path remains stable and records the current per-token
+  movement profile.
+
+Goal:
+
+- Run a strict current-head `IQ3_S` n32 diagnostic with low-level IO traces.
+- Run a strict current-head `IQ3_S` n96 production validation for the full
+  France semantic quality gate and current token rate.
+- Keep host RAM under `16GB` including page cache.
+- Keep cold-start method explicit and reproducible.
+- Do not edit source.
+- Do not download, convert, or delete assets.
+- Do not promote SOTA from a single run.
+
+Baseline references:
+
+- Current n96 production reference:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh`
+  - decode `56696.97 ms / 77`, `1.36 tok/s`;
+  - TTFT `72840.46 ms`;
+  - memory peak `15899996160`;
+  - quality pass.
+- Current n32 low-level IO reference:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32`
+  - decode `23428.83 ms / 31`, `1.32 tok/s`;
+  - iouring bytes `117.712 GiB`;
+  - iouring wait `20.097441 s`;
+  - effective wait-side throughput `5.854 GiB/s`;
+  - memory peak `15899996160`.
+
+Experiment A: n32 low-level IO/bottleneck refresh
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <7OF-plan-commit>
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7of-current-head-n32-io-refresh
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment A gates:
+
+- exit `0`;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- `memory.peak <= 15899996160`;
+- `memory.events` has `oom=0`, `oom_kill=0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- France output remains on-topic. Because `N=32` can truncate the paragraph, it
+  is a diagnostic smoke only, not the final semantic quality gate.
+
+Experiment B: n96 production quality/token-rate validation
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7of-current-head-n96-production
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Experiment B gates:
+
+- exit `0`;
+- full France paragraph is coherent and semantically correct;
+- TTFT within the existing cap `127598.064 ms`;
+- `memory.peak <= 15899996160`;
+- `memory.events` has `oom=0`, `oom_kill=0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Analysis:
+
+- Compare current-head n96 against 7MU:
+  - TTFT;
+  - decode time/token rate;
+  - iouring bytes and wait;
+  - VRAM hit rates;
+  - page-cache distribution at exit.
+- Compare current-head n32 IO refresh against 7NN:
+  - iouring bytes/token;
+  - wait-side throughput;
+  - batch histogram and inflight;
+  - current-down overlap;
+  - page-cache distribution.
+- Decide the next optimization family:
+  - if bottleneck remains unchanged, do not repeat rejected IO/coalescing,
+    typed-requant, compression, cache-policy, previous-token predictor, or
+    verifier paths;
+  - only write a new implementation plan if the refreshed profile reveals a new
+    measurable bucket with a hard expected gain and no conflict with prior
+    rejected phases.
+
+Reproducibility:
+
+- Commit and push this 7OF plan before running.
+- Commit and push the 7OF result before any source change or follow-up
+  experiment.
+- Store exact commands, env, metrics, stdout/stderr, memory files, and IO trace
+  artifacts in the run directories.
