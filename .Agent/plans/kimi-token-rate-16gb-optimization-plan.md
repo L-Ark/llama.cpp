@@ -77479,7 +77479,7 @@ Decision:
 
 Timestamp: 2026-07-05 22:43:17 CST.
 
-Status: planned.
+Status: complete.
 
 Goal:
 
@@ -77599,3 +77599,111 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Store all audit commands and raw metadata in the run directory.
 - Commit and push the result into this plan.
+
+Result:
+
+- Plan commit before execution:
+  `78a5e13af docs: plan asset speculative preflight`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-144801Z-phase7mz-asset-spec-preflight`.
+- Server repo state during audit:
+  `78a5e13af1c23b6018b11aac654b79b1bfac1b09`.
+- Audit method:
+  - metadata-only Hugging Face API/page checks;
+  - bounded local `df`, `du`, and `find` checks;
+  - no source changes;
+  - no large model downloads;
+  - no asset deletion.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `disk_and_local_assets.txt`;
+- `local_speculative_assets.txt`;
+- `hf_model_metadata.jsonl`;
+- `hf_search_results.jsonl`;
+- `candidate_matrix.tsv`;
+- `decision.md`;
+- `hf_asset_audit.py`;
+- `refine_candidates.py`;
+- `hf_readme_snippets.md`.
+
+Current local/server asset state:
+
+- Available disk on `/` and `/root/lfz`: `88G`.
+- Local target GGUF:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`, `378G`.
+- Current main expert pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`,
+  `164G` (`175133036544` bytes).
+- Other large local expert assets:
+  - `kimi-iq3s-france.expert-pack`, `160G`;
+  - `kimi-iq3s-tracefirst-n64-20260630.expert-pack`, `75G`;
+  - overlay packs at `7.2G`, `4.7G`, `4.6G`, and smaller.
+- Local speculative/MTP artifacts are records/logs/runs only, not a new runnable
+  draft GGUF that meets the current strict gate.
+
+Candidate matrix summary:
+
+- `decart-ai/Kimi-K2.7-Code-NVFP4`
+  (`https://huggingface.co/decart-ai/Kimi-K2.7-Code-NVFP4`):
+  `554.341 GiB`, NVFP4 safetensors, experts-only, vLLM/Blackwell-oriented.
+  Not local, does not fit current `88G` free disk, requires new runtime or
+  conversion support, and is not a drop-in read-volume reduction.
+- `amd/Kimi-K2.7-Code-MXFP4`
+  (`https://huggingface.co/amd/Kimi-K2.7-Code-MXFP4`):
+  `514.886 GiB`, MXFP4 safetensors, Quark/vLLM/ROCm-oriented. Not local, does
+  not fit current disk, requires runtime/conversion support.
+- `freakyskittle/Kimi-K2.7-Code-Dflash`
+  (`https://huggingface.co/freakyskittle/Kimi-K2.7-Code-Dflash`):
+  `8.422 GiB`, DFlash draft GGUF, includes a small Q4_0 draft around `1.12GB`.
+  This is the best next design candidate because the asset shape is closest to
+  current llama.cpp, but it targets Oxidize speculative decoding and is not
+  immediately runnable in this vendor tree.
+- `cm00cm/Kimi-K2.7-Code-DFlash`
+  (`https://huggingface.co/cm00cm/Kimi-K2.7-Code-DFlash`):
+  `6.481 GiB`, DFlash draft safetensors. Fits disk but requires runtime support
+  and likely conversion/integration work.
+- `cm00cm/Kimi-K2.7-Code-EAGLE3`
+  (`https://huggingface.co/cm00cm/Kimi-K2.7-Code-EAGLE3`):
+  `2.697 GiB`, EAGLE3 draft safetensors. Fits disk but requires EAGLE3 verifier
+  integration and acceptance validation.
+- `novita/kimi-k2.7-code-eagle3-mla`
+  (`https://huggingface.co/novita/kimi-k2.7-code-eagle3-mla`):
+  `3.430 GiB`, EAGLE3 MLA draft safetensors. Fits disk but requires verifier
+  integration. Public card reports accept length `2.348-3.201` at
+  `num_speculative_tokens=3`, below the required `~3.68x` before draft overhead.
+- `AQ-MedAI/Kimi-K2.7-Code-eagle3`
+  (`https://huggingface.co/AQ-MedAI/Kimi-K2.7-Code-eagle3`):
+  `3.074 GiB`, EAGLE3 draft safetensors. Fits disk but requires verifier
+  integration and acceptance validation.
+- Larger target GGUF bundles, for example
+  `cyberneurova/CyberNeurova-Kimi-K2.7-Code-GGUF` at `296.135 GiB`, do not fit
+  current disk and do not provide the required `94-95%` exposed-read reduction.
+
+Historical local speculative records:
+
+- ngram safe-spec variants: about `0.28-1.01 tok/s`, quality mixed, slower than
+  the current strict SOTA.
+- MTP n16: about `0.81 tok/s`, slower than current strict SOTA.
+- Lookahead/route-trace diagnostic n32 runs: about `1.03-1.08 tok/s`, not enough
+  for the `5 tok/s` target and not a strict current promotion candidate.
+
+Decision:
+
+- No candidate is immediately runnable on the current server under the strict
+  16 GB host RAM, cold-start, quality, TTFT, and disk constraints.
+- Preserve current SOTA; no code change, no performance promotion, and no
+  revert is needed.
+- The next valid optimization phase should be a DFlash GGUF
+  compatibility/design audit centered on
+  `freakyskittle/Kimi-K2.7-Code-Dflash`.
+- Do not start source implementation until that phase defines:
+  - DFlash math contract;
+  - hidden-state interface between target Kimi and draft head/model;
+  - exact verifier/acceptance algorithm;
+  - acceptance metric on the France prompt;
+  - activation signals and counters;
+  - strict cold-start validation command under `MemoryMax=15900000000`;
+  - rollback criteria if token rate, quality, TTFT, or memory gates fail.
