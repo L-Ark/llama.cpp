@@ -4,6 +4,43 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Preserve 4.4 SOTA, Resolve Empirical Artifact Blocker Before New Source Work
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。下一阶段优先级是先解除候选 GGUF 的 empirical validation 阻塞，而不是继续做无硬上界支持的 runtime/source sweep。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`156.15 GB`, `145.42 GiB`)
+- Accepted gate pack: `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- Config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT gate expert pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest state to carry forward:
+
+- Current bottleneck is still cold expert source/page movement plus exact up/down CPU fallback on cache misses. The accepted France path relies on a France-specialized gate one-stream pack; up/down expert roles are not broadly resident in VRAM. When gate/up/down needed for a selected expert is not served by the accepted cache path, the current exact route falls back to CPU-side work and source/page reads.
+- The prompt-set diagnostic confirms the accepted SOTA is France-specialized, not prompt-set-general performance. Strict cold 16GB runs stayed RAM-safe for all five prompts, but non-France prompts were only `1.6-3.1 tok/s`, TTFT often exceeded the SOTA gate, and clean manual correctness only passed France/Japan/Climate. Do not claim current SOTA as general prompt-set throughput.
+- The historical prompt-set union pack is not a replacement for the accepted France SOTA. Its union payload is about `35.78 GiB`; earlier top5000/top6000 union runs improved some non-France behavior but materially regressed France from the SOTA range. A dynamic prompt-specific pack selector could preserve France only by selecting the current France pack, which leaves the SOTA unchanged and does not create a route to `10 tok/s`.
+- Current no-source knobs are closed unless a new hard-bound appears. `OMP_WAIT_POLICY=ACTIVE` had one `4.5 tok/s` candidate but clean reproduction was `4.3 tok/s`; `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=2800` similarly failed clean reproduction; `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` tied, not improved; CUDA graph was measured below SOTA and rejected.
+- Current source-level exact routes are closed before implementation: async up/down I/O, page-touch/willneed prefetch, full MoE layer GPU placement, gate-cache sacrifice for exact up/down residency, fine-grained exact row/column/subtensor residency, exact up/down fallback removal, and speculative/MTP/DFlash all lack a concrete hard-bound above `10 tok/s` with integration margin under 16GB RAM and TTFT constraints.
+- Current metadata-only alternate GGUF hard-bounds do not justify source work or a SOTA claim. The best full single-file metadata candidate remains below `10 tok/s` before correctness, allocator, TTFT, and implementation overhead; `cloudyu` 4Expert remains interesting only as an empirical correctness/performance candidate after disk approval, not as a metadata-proven SOTA path.
+- Disk remains the active empirical blocker. `/root` has only about `1.8 GiB` free, so full alternate GGUF downloads and hashable benchmark artifacts cannot be produced without explicit user-approved cleanup or relocation. No files should be deleted without explicit approval.
+
+Updated next executable plan:
+
+1. Commit and push this plan/document update to `ssd/vendor/deepseek-token-rate-16gb` so the current decision point is recoverable from the remote branch.
+2. Do not implement new runtime/source changes until one prerequisite is satisfied: either a new hard-bound artifact proves a concrete route above `10 tok/s` with margin after RAM/VRAM/TTFT/correctness costs, or explicit disk cleanup/relocation approval allows full empirical alternate GGUF testing.
+3. Request explicit user approval before deleting or moving any large files. Minimum useful free-space targets remain about `60GB` for the best Q2 REAP candidate, `90-100GB` for low-bit native-topology candidates, and preferably `>=180GB` for cloudyu 4Expert plus SHA256/run artifacts.
+4. Preserve these assets before any cleanup: accepted native GGUF, accepted France gate pack, accepted SOTA run, current source branch, profile files, demo script, and pushed-source reproduction artifacts.
+5. If disk is approved, first run a full empirical candidate test, not a source patch. Required order: download full GGUF, record URL/path/size/SHA256, verify loader metadata, confirm 16GB/no-swap accounting, run correctness gates, run five-prompt semantic check, then run strict cold France benchmark only if correctness passes.
+6. Candidate order after disk approval: test `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf` if enough space is available for full file plus artifacts; otherwise test the best compact/native-topology low-bit GGUF that fits the approved space. Treat all alternate artifacts as new-model/quantization evidence requiring correctness proof, not same-model source optimizations.
+7. Before every practical optimization, update this plan with the bottleneck being targeted, the theoretical upper bound, expected TTFT/RAM impact, required correctness gates, and the exact accept/reject rule.
+8. After every run, record all metrics: token rates, prompt rate, TTFT, elapsed time, full output, correctness decision, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, env/CLI, model path/size/hash, source commit, and comparison against `4.4 tok/s`.
+9. If a run improves token rate but TTFT rises more than 20%, commit and push it only as a rejected diagnostic, clearly marked `not accepted`; do not promote it as SOTA until TTFT is brought back within gate.
+10. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Future rollback must be able to reproduce the exact metric from the remote branch.
+11. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct/coherent France output.
+
 ### 2026-07-06 Latest Active Plan: Prompt-Set Diagnostic Confirms France-Specialized SOTA, Disk Approval Required
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
