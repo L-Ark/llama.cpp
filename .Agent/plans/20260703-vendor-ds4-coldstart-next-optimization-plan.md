@@ -4,7 +4,7 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: Forced-Batch and MTP-Union Bounds After MTP Closure
+### 2026-07-05 Latest Plan: Forced-Batch, MTP-Union, and Exact-Compact Closure
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先在本节或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
 
@@ -48,14 +48,24 @@ Latest MTP/source-union amortization bound:
 - `W=8` reaches `10.512 tok/s` only in that extreme no-overhead lower bound, with just `665.975 ms` margin. There is no current vendor DSpark/MTP verifier, no compatible local DSpark/MTP artifact, and the forced-batch diagnostic showed `1.00024x` speedup, so this does not justify a runtime patch.
 - Decision: source-union estimates do not reopen DSpark/MTP or multi-token verifier implementation. DSpark/MTP can only reopen with a concrete `A>=7` or `A>=5` verifier artifact that proves accepted-token rate, sublinear target verification, RAM/VRAM/TTFT accounting, and fixed-text/France correctness before coding.
 
+Latest exact compact representation closure:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-compact-representation-closure-bound.json`.
+- The first positive raw exact hotset bound is top4096: `payload_gib=17.0`, `zero_overhead_tok_s=10.797`, `slack_to_10_ms=1008.842`. Top3072 is not enough: `payload_gib=12.75`, `zero_overhead_tok_s=9.946`, `slack_to_10_ms=-73.955`.
+- Current measured extra pool preserving the accepted gate path is only about `3.188 GiB`; therefore top3072 would need about `4.0x` exact reduction and top4096 about `5.33x` exact reduction.
+- Prior full top4096 zstd level 1 ratio was only `1.040149`; top512 prefix zstd level 10 was `1.040140`.
+- New deterministic entropy sample read `256` evenly spaced top4096 entries and `4096` native MXFP4 blocks per entry: `1,048,576` sampled blocks, `1,048,576` unique blocks, `0` duplicate blocks, `0` zero blocks.
+- Entropy result: byte entropy `7.658319` bits gives ideal byte lossless ratio `1.044616x`; independent native-block entropy gives only `1.085041x`. This is far below the `4.0x-5.33x` ratio required to make the top3072/top4096 hotsets fit.
+- Decision: close exact compact representation for the current native MXFP4 payload. Do not implement lossless compression, dedup, dequantized resident, or raw top4096 residency runtime paths. Lower-bit/codebook/low-rank/sparsified/MMVQ-like paths are not exact representations and can only reopen with fixed-text top1/France correctness proof before performance; the prior MMVQ write probe already failed top1.
+
 Next execution plan:
 
 1. Keep the accepted `4.4 tok/s` strict-cold SOTA as the only baseline for comparison.
-2. Do not repeat closed routes without new math: source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, standalone MMVQ skip/write, current sparse retained top64 graph, transient MXFP4 repack, no-source lookahead/ngram speculation, and antirez exact N=2 MTP.
+2. Do not repeat closed routes without new math: source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, standalone MMVQ skip/write, current sparse retained top64 graph, transient MXFP4 repack, no-source lookahead/ngram speculation, antirez exact N=2 MTP, native MXFP4 lossless compression/dedup, and raw top4096 residency.
 3. Before any new source edit, write a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` that includes exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and expected token-rate ceiling.
 4. First acceptable implementation candidate must either:
    - prove a compatible `A>=7` or otherwise high-acceptance DSpark/MTP verifier with sublinear target verification and strict rollback/commit semantics; or
-   - prove an exact compact representation path that keeps enough up/down work on GPU without violating VRAM or the 16GB cgroup including page cache.
+   - prove a new non-native representation or algorithm with measured `>5.33x` effective payload reduction, fixed-text top1 proof, France correctness, and decode overhead below the top4096 `1008.842 ms` slack.
 5. First gate for any default-off source probe is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
 

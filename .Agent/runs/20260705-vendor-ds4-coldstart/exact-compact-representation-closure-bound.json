@@ -1,0 +1,111 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-compact-representation-closure-bound.json",
+  "date": "2026-07-05",
+  "source_head": "6ad18b017b99c27694de4796db21fdd287af2070",
+  "runtime_source_modified": false,
+  "sota_changed": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "strict_ram": "16GB cgroup including file page cache, MemorySwapMax=0"
+  },
+  "purpose": "Close the remaining exact compact representation route unless a new non-lossless but top1-verified algorithm is proposed with a verifier. The immediate question is whether native MXFP4 top4096 up/down payload can be represented exactly in enough less VRAM to make the first positive 10 tok/s hotset fit.",
+  "current_hard_numbers": {
+    "accepted_decode_window_ms": 31047.44671,
+    "accepted_decoded_tokens_estimate": 136.608765524,
+    "target_10tok_decode_ms": 13660.8765524,
+    "required_decode_saving_ms_for_10tok": 17386.5701576,
+    "top3072_payload_gib": 12.75,
+    "top3072_zero_overhead_tok_s": 9.946,
+    "top3072_slack_to_10_ms": -73.955,
+    "top4096_payload_gib": 17.0,
+    "top4096_zero_overhead_tok_s": 10.797,
+    "top4096_slack_to_10_ms": 1008.842,
+    "measured_extra_pool_that_fits_with_gate_preserved_gib": 3.188,
+    "required_exact_reduction_top3072_over_extra_pool": 4.0,
+    "required_exact_reduction_top4096_over_extra_pool": 5.33
+  },
+  "prior_payload_audit": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-payload-reduction-audit.json",
+    "top4096_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.offset_manifest.csv",
+    "top4096_manifest_sha256": "68e0b26a47681b5fecc2cb5b43fdf5600478bfe6570af5d59a96769a4ae8b807",
+    "entries": 4096,
+    "payload_bytes": 18253611008,
+    "payload_mib": 17408.0,
+    "unique_tensors": 80,
+    "up_entries": 2054,
+    "down_entries": 2042,
+    "full_zstd_level1_ratio": 1.040149,
+    "top512_prefix_zstd_level10_ratio": 1.04014,
+    "sampled_blocks": 1048576,
+    "sample_duplicate_blocks": 0,
+    "sample_zero_blocks": 0,
+    "decision": "generic lossless compression and block/row dedup were already far below the required 4.0x-5.33x ratio"
+  },
+  "new_entropy_sample": {
+    "command": "Read 256 entries evenly spaced over the ranked top4096 manifest and the first 4096 native MXFP4 blocks per sampled entry; compute byte, nibble, scale, payload-nibble entropy plus block uniqueness.",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.offset_manifest.csv",
+    "entries_total": 4096,
+    "entries_sampled": 256,
+    "sampling": "256 entries evenly spaced over ranked top4096; first 4096 MXFP4 blocks per entry",
+    "sampled_bytes": 17825792,
+    "block_size": 17,
+    "blocks_per_entry_sample": 4096,
+    "sampled_blocks": 1048576,
+    "unique_sampled_blocks": 1048576,
+    "duplicate_blocks": 0,
+    "duplicate_ratio": 0.0,
+    "zero_blocks": 0,
+    "zero_ratio": 0.0,
+    "byte_entropy_bits": 7.658319375898761,
+    "nibble_entropy_bits": 3.9132326323265554,
+    "scale_entropy_bits": 0.9790272618623073,
+    "payload_nibble_entropy_bits": 3.8863080933702827,
+    "ideal_byte_entropy_lossless_ratio": 1.0446156143835592,
+    "raw_bits_per_mxfp4_block": 136,
+    "independent_entropy_bits_per_mxfp4_block": 125.34088624971136,
+    "ideal_block_independent_lossless_ratio": 1.0850409955539404,
+    "sample_sha256": "935025e1388c2aea67af8c9e3399d6d19077866d2b9afc74cc9cff9b024d4c3b"
+  },
+  "representation_classes": [
+    {
+      "class": "lossless byte/block compression of native MXFP4 hotset",
+      "decision": "rejected",
+      "reason": "Full zstd and entropy sampling both show only about 1.04x practical/byte-entropy ratio; the independent block entropy model is only 1.085x. Required is 4.0x for top3072 or 5.33x for top4096 over the measured extra pool."
+    },
+    {
+      "class": "deduplication, zero-block skip, row/block dictionary",
+      "decision": "rejected",
+      "reason": "The deterministic sample found 1,048,576 unique blocks out of 1,048,576, with zero duplicate blocks and zero all-zero blocks."
+    },
+    {
+      "class": "dequantized or partially dequantized resident representation",
+      "decision": "rejected",
+      "reason": "Any dequantized representation is larger than native 17-byte-per-32-value MXFP4, so it worsens the 17 GiB top4096 payload fit problem before compute/workspace."
+    },
+    {
+      "class": "lower-bit recoding, approximate codebook, low-rank, sparsification, or MMVQ-like non-exact representation",
+      "decision": "not_an_exact_compact_representation",
+      "reason": "These can only be considered with an explicit token-stability/top1 verifier. The prior MMVQ skip/write probe failed fixed-text top1 and broke the accepted gate-cache allocation, so this class is not open as an exact route."
+    },
+    {
+      "class": "prompt-specific route/output cache",
+      "decision": "not_promotable_without_general correctness proof",
+      "reason": "It would not be an exact model representation. Any such path would need a separate verifier proving greedy token equivalence and prompt-set behavior before a SOTA claim."
+    }
+  ],
+  "decision": {
+    "status": "close_exact_compact_representation_under_current_native_mxfp4_payload",
+    "reason": "The first positive raw-hotset 10 tok/s bound requires top4096 at 17 GiB with about 1.009 s zero-overhead slack, while the only fitting extra pool is about 3.188 GiB. Native MXFP4 payload is already information-dense; measured and entropy-implied exact lossless reduction is about 1.04x, far below the required 5.33x. Therefore no current exact compact representation path can make top4096 fit without a fundamentally new model representation or a correctness-verified non-exact verifier.",
+    "runtime_patch_allowed": false,
+    "sota_changed": false,
+    "next_allowed_work": [
+      "Do not implement lossless compression, dedup, dequantized resident, or raw top4096 residency as runtime paths.",
+      "Only reopen this class if a new representation comes with measured compression above 5.33x and a decode overhead bound under the 1008.842 ms top4096 slack, or a non-exact path passes fixed-text top1 and France semantic correctness before any performance run.",
+      "The remaining plausible 10 tok/s route class is a concrete high-acceptance verifier/draft artifact with measured sublinear target verification, not a native MXFP4 compact hotset."
+    ]
+  }
+}
