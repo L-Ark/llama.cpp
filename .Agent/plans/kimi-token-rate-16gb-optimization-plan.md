@@ -78165,3 +78165,141 @@ Decision:
   - investigate CUDA Graph only after the per-token execution shape is stable;
   - avoid moving dense/attention to CPU, because freeing VRAM for more experts
     is unlikely to compensate for losing GPU dense/attention throughput.
+
+## Phase 7NC - two-stream active-expert MMVQ probe
+
+Timestamp: 2026-07-06 00:32:00 CST.
+
+Status: planned.
+
+Reason for this phase:
+
+- Phase 7NB rejected DFlash/block verification and points back to direct runtime
+  bottlenecks.
+- The current Kimi decode hot path still reports one layer call with
+  `rows=8`, meaning the layer has eight active experts per token.
+- Source inspection shows that the current compact MMVQ path still calls
+  `ggml_cuda_moe_stream_mmvq_dev(...)` once per active expert:
+  - `launch_moe_mmvq_compact_batch(...)` loops over `j < n_active`;
+  - each active expert launches its own Q8 quantization plus MMVQ work on the
+    same stream;
+  - mixed IQ2/IQ3 up/gate uses this compact path;
+  - down also uses this compact path after cache/staging.
+- Latest strict n32 profile basis from
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench/baseline-n32`:
+  - quality pass;
+  - `ttft_ms=71452.89`;
+  - `decode_ms=21878.07`;
+  - `token_rate=1.42`;
+  - up/gate profile:
+    `calls=869`, `avg_active=8.00`, `total=6.479 ms/call`;
+  - down CUDA batch profile:
+    `calls=2038`, `cuda_batch=2.092 ms/call`, `batch_accept=1644`;
+  - expert-pack iouring:
+    `iouring_wait_us=17861087`;
+  - memory peak exactly within the strict cgroup:
+    `memory.peak=15899996160`.
+
+Theory and hard upper bound:
+
+- The candidate splits the eight independent active experts for a compact MMVQ
+  call across two CUDA streams:
+  - even active rows stay on the original stream;
+  - odd active rows go to an auxiliary non-blocking stream;
+  - the auxiliary stream waits on a ready event after shared staging/memset;
+  - the original stream waits on an auxiliary done event before fuse, D2H, or
+    scatter.
+- Correctness should be unchanged because each active expert writes a disjoint
+  row of the compact output and reads a disjoint Q8 row/weight slot.
+- Hard upper bound:
+  - up/gate direct measured bucket is about `869 * 6.479 ms = 5.63 s` in the
+    n32 strict profile;
+  - down CUDA batch direct measured bucket is about
+    `1644 * 2.092 ms = 3.44 s`;
+  - perfect two-way overlap of only those active-expert compute pieces would
+    save at most about `(5.63 + 3.44) / 2 = 4.54 s` from the n32 endpoint;
+  - using the current n32 decode `21.878 s`, the impossible upper-bound endpoint
+    would be about `17.34 s`, or `31 / 17.34 = 1.79 tok/s`;
+  - realistic gain is lower because IO wait, staging, CPU fallback, D2H,
+    fuse/scatter, and CUDA scheduling remain.
+- This cannot reach `5 tok/s` alone, but it tests the only currently visible
+  active-expert parallelism gap without changing model format or cache policy.
+
+Implementation design:
+
+- Add an env-gated probe, default off:
+  `GGML_MOE_ACTIVE_EXPERT_PARALLEL=1`.
+- Scope:
+  - only compact MMVQ calls with `n_active >= 2`;
+  - no prompt-specific broad behavior change;
+  - no cache-policy change;
+  - no new RAM tier or pinned-buffer growth;
+  - no model output format change.
+- Add helper logic around `launch_moe_mmvq_compact_batch(...)`:
+  - optional auxiliary stream;
+  - optional auxiliary event;
+  - original stream records a ready event after required staging/memset;
+  - auxiliary stream waits on ready event;
+  - active rows alternate between original and auxiliary streams;
+  - original stream waits on auxiliary done event before any consumer kernel.
+- Add a one-time activation log:
+  `[moe_stream_batch] active-expert parallel MMVQ active`.
+- If CUDA event/stream setup is missing, silently fall back to the current serial
+  compact loop.
+
+Risk:
+
+- Some MMVQ kernels may already occupy enough GPU resources that concurrent
+  streams do not overlap and only add scheduling overhead.
+- Auxiliary stream ordering must be exact; missing waits can corrupt up/gate
+  fusion or down D2H.
+- More concurrent kernels may compete with current down overlap and H2D.
+
+Acceptance gates:
+
+- Build succeeds on the server CUDA build.
+- n32 strict cold start with `GGML_MOE_ACTIVE_EXPERT_PARALLEL=1` must pass:
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - page cache included;
+  - no OOM or OOM kill;
+  - semantic France output quality pass;
+  - TTFT `<= 127598.064 ms`;
+  - activation log present;
+  - `token_rate` better than the current strict n32 reference band, not merely
+    profile noise.
+- If n32 improves, repeat n32 once. Only if both n32 runs improve, run n96.
+- n96 promotion requires:
+  - semantic France output quality pass;
+  - host RAM below 16 GB including page cache;
+  - TTFT within the 20% cap;
+  - token rate above current accepted strict n96 band around `1.35-1.36 tok/s`;
+  - exact reproduce command and metrics recorded.
+- If performance regresses, quality fails, memory exceeds the cgroup, TTFT
+  exceeds the cap, or activation is missing, revert the source and push the
+  rollback immediately.
+
+Reproduce command shape:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+TOP=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nc-active-expert-parallel
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$TOP/n32-a" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_ACTIVE_EXPERT_PARALLEL=1' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required result artifacts:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `implementation_notes.md`;
+- `n32-a/`;
+- `n32-b/` if the first run improves;
+- `n96/` only if both n32 runs improve;
+- `summary.tsv`;
+- final plan update with raw metrics, output text, decision, and reproduce
+  commands.
