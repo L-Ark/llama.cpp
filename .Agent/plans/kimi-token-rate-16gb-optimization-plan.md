@@ -81416,6 +81416,109 @@ Reproducibility:
 - Commit and push this 7NU plan before running the audit.
 - Commit and push the 7NU result before any follow-up source or asset work.
 
+### Phase 7NU result
+
+Timestamp: 2026-07-06 10:32 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-201256Z-phase7nu-raw-io-ceiling`
+
+Plan commit before execution:
+
+- `d32879529` (`docs: plan expert pack io ceiling audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `inventory.txt`
+- `expert_pack_files.tsv`
+- `phase7nu_io_ceiling.c`
+- `phase7nu_io_ceiling`
+- `raw_outputs.tsv`
+- `phase7nu_summarize.py`
+- `summary_stdout.txt`
+- `io_ceiling_summary.tsv`
+- `decision.md`
+
+Execution notes:
+
+- No model inference was run.
+- No repo source code was changed.
+- No asset was downloaded or deleted.
+- `fio` and `numactl` were not available, so the audit used a temporary
+  read-only C benchmark artifact with `O_DIRECT`.
+- Sequential test reads `32 GiB` from the main expert pack.
+- Trace tests replay
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32/io-read-trace.csv`
+  against:
+  - source0:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - source1:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Trace replay input has `22647` reads and `117.711639 GiB`, matching the
+  current n32 iouring read volume scale.
+
+Reference thresholds:
+
+- 7NN effective foreground wait-side throughput: `5.854 GiB/s`.
+- Current movement volume: `3.797 GiB/token`.
+- Throughput needed for `5 tok/s`: `18.985 GiB/s`.
+- Throughput implied by current `1.36 tok/s`: `5.164 GiB/s`.
+
+Measured raw direct-read ceiling:
+
+| mode | threads | read GiB | seconds | GiB/s | vs 7NN effective | movement-only tok/s bound | vs 5 tok/s requirement |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| seq | `1` | `32.000` | `6.402` | `4.998` | `0.854x` | `1.316` | `0.263x` |
+| trace | `1` | `117.712` | `29.313` | `4.016` | `0.686x` | `1.058` | `0.212x` |
+| trace | `4` | `117.712` | `12.267` | `9.596` | `1.639x` | `2.527` | `0.505x` |
+| trace | `8` | `117.712` | `9.021` | `13.048` | `2.229x` | `3.436` | `0.687x` |
+| trace | `12` | `117.712` | `7.754` | `15.181` | `2.593x` | `3.998` | `0.800x` |
+
+Interpretation:
+
+- The storage path is not limited to the current runtime's `5.854 GiB/s`.
+- Runtime-shaped direct reads can reach `15.181 GiB/s` with `12` independent
+  workers, about `2.59x` the 7NN effective throughput.
+- However, at the current `3.797 GiB/token`, even this best raw trace replay
+  only implies a movement-only upper bound of `4.00 tok/s`.
+- IO-only optimization therefore cannot reach `5 tok/s`; it reaches only
+  `0.80x` of the required throughput before compute/H2D overhead.
+- The raw gap still justifies one scheduler-level audit, but only if it proves
+  the extra concurrency is available online without future-token route oracle
+  prefetch, which has already been rejected.
+
+Decision:
+
+- Accept 7NU as a reproducible raw I/O ceiling audit.
+- Do not promote SOTA; no model run was performed.
+- Do not pursue pure IO as a complete `5 tok/s` path.
+- Any future IO-only source work must be bounded by the measured
+  `4.00 tok/s` movement-only ceiling unless it also reduces bytes/token.
+- Because raw trace replay is `>=1.5x` above the runtime effective throughput,
+  the next valid plan may be an online-concurrency audit: determine whether
+  current runtime can expose more same-layer or same-token read work without
+  oracle prefetch.
+
+Reproduce:
+
+```bash
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-201256Z-phase7nu-raw-io-ceiling
+gcc -O2 -pthread phase7nu_io_ceiling.c -o phase7nu_io_ceiling
+./phase7nu_io_ceiling --mode seq --source0 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack --seq-gib 32
+for t in 1 4 8 12; do
+  ./phase7nu_io_ceiling --mode trace \
+    --source0 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+    --source1 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+    --trace /root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32/io-read-trace.csv \
+    --threads "$t"
+done
+cat io_ceiling_summary.tsv
+cat decision.md
+```
+
 ## Phase 7NR - target block verifier prompt-mode root-cause audit
 
 Status: planned.
