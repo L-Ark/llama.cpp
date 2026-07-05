@@ -888,17 +888,37 @@ struct one_direct_hot_pool_state {
     uint64_t copy_failures = 0;
     uint64_t bytes = 0;
     double prefill_elapsed_ms = 0.0;
+    bool async_started = false;
+    bool async_done = false;
+    std::thread async_thread;
 };
 
 static one_direct_hot_pool_state g_one_direct_hot_pool;
 
+static bool one_direct_hot_pool_async_prefill_enabled() {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC");
+        enabled = env && env[0] && std::strcmp(env, "0") != 0 ? 1 : 0;
+    }
+    return enabled != 0;
+}
+
+static void one_direct_hot_pool_join_async() {
+    if (g_one_direct_hot_pool.async_thread.joinable()) {
+        g_one_direct_hot_pool.async_thread.join();
+    }
+}
+
 static void one_direct_hot_pool_report_atexit() {
+    one_direct_hot_pool_join_async();
     if (!g_one_direct_hot_pool.enabled && g_one_direct_hot_pool.attempted == 0) {
         return;
     }
     std::fprintf(stderr,
         "[moe_stream] one direct hot pool: enabled=%d slots=%d slot_sz=%zu pool_sz=%zu"
-        " attempted=%lu inserted=%lu read_failures=%lu copy_failures=%lu bytes=%lu elapsed_ms=%.3f\n",
+        " attempted=%lu inserted=%lu read_failures=%lu copy_failures=%lu bytes=%lu elapsed_ms=%.3f"
+        " async_started=%d async_done=%d\n",
         g_one_direct_hot_pool.enabled ? 1 : 0,
         g_one_direct_hot_pool.n_slots,
         g_one_direct_hot_pool.slot_sz,
@@ -908,7 +928,9 @@ static void one_direct_hot_pool_report_atexit() {
         g_one_direct_hot_pool.read_failures,
         g_one_direct_hot_pool.copy_failures,
         g_one_direct_hot_pool.bytes,
-        g_one_direct_hot_pool.prefill_elapsed_ms);
+        g_one_direct_hot_pool.prefill_elapsed_ms,
+        g_one_direct_hot_pool.async_started ? 1 : 0,
+        g_one_direct_hot_pool.async_done ? 1 : 0);
 }
 
 static uint64_t one_direct_hot_pool_env_u64(const char * name, uint64_t fallback) {
@@ -972,6 +994,75 @@ static void one_direct_hot_pool_init_once() {
             alloc / (1024.0 * 1024.0), n_slots, slot_sz);
 }
 
+static void one_direct_hot_pool_prefill_worker(uint64_t limit) {
+    const auto t0 = std::chrono::steady_clock::now();
+
+    void * h_tmp = nullptr;
+    bool h_tmp_pinned = false;
+    if (cudaHostAlloc(&h_tmp, g_one_direct_hot_pool.slot_sz, cudaHostAllocDefault) == cudaSuccess) {
+        h_tmp_pinned = true;
+    } else {
+        h_tmp = std::malloc(g_one_direct_hot_pool.slot_sz);
+    }
+
+    cudaStream_t st = nullptr;
+    const bool have_stream = cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking) == cudaSuccess;
+
+    if (!h_tmp) {
+        g_one_direct_hot_pool.read_failures += limit;
+    } else {
+        for (uint64_t i = 0; i < limit; ++i) {
+            const one_expert_pack_entry & e = g_one_direct_manifest.entries[(size_t) i];
+            g_one_direct_hot_pool.attempted++;
+            if (e.nbytes > g_one_direct_hot_pool.slot_sz) {
+                g_one_direct_hot_pool.read_failures++;
+                continue;
+            }
+            if (!one_direct_manifest_read_entry(&e, h_tmp, (size_t) e.nbytes)) {
+                g_one_direct_hot_pool.read_failures++;
+                continue;
+            }
+            void * dst = (char *) g_one_direct_hot_pool.pool + (size_t) i * g_one_direct_hot_pool.slot_sz;
+            cudaError_t copy_err = cudaSuccess;
+            if (have_stream) {
+                copy_err = cudaMemcpyAsync(dst, h_tmp, (size_t) e.nbytes, cudaMemcpyHostToDevice, st);
+                if (copy_err == cudaSuccess) {
+                    copy_err = cudaStreamSynchronize(st);
+                }
+            } else {
+                copy_err = cudaMemcpy(dst, h_tmp, (size_t) e.nbytes, cudaMemcpyHostToDevice);
+            }
+            if (copy_err != cudaSuccess) {
+                g_one_direct_hot_pool.copy_failures++;
+                continue;
+            }
+            g_one_direct_hot_pool.slot_entries[(size_t) i] = e;
+            g_one_direct_hot_pool.inserted++;
+            g_one_direct_hot_pool.bytes += e.nbytes;
+        }
+    }
+
+    if (have_stream) {
+        cudaStreamDestroy(st);
+    }
+    if (h_tmp_pinned) {
+        cudaFreeHost(h_tmp);
+    } else {
+        std::free(h_tmp);
+    }
+
+    const auto t1 = std::chrono::steady_clock::now();
+    g_one_direct_hot_pool.prefill_elapsed_ms =
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
+    g_one_direct_hot_pool.async_done = true;
+    std::fprintf(stderr,
+        "[moe_stream] one direct hot pool: async prefill completed attempted=%lu inserted=%lu bytes=%lu elapsed_ms=%.3f\n",
+        g_one_direct_hot_pool.attempted,
+        g_one_direct_hot_pool.inserted,
+        g_one_direct_hot_pool.bytes,
+        g_one_direct_hot_pool.prefill_elapsed_ms);
+}
+
 static void one_direct_hot_pool_prefill_maybe(slot_ctx & ctx, cudaStream_t st) {
     one_direct_hot_pool_init_once();
     std::lock_guard<std::mutex> lk(g_one_direct_hot_pool.mu);
@@ -989,6 +1080,16 @@ static void one_direct_hot_pool_prefill_maybe(slot_ctx & ctx, cudaStream_t st) {
     }
     if (limit > (uint64_t) g_one_direct_manifest.entries.size()) {
         limit = (uint64_t) g_one_direct_manifest.entries.size();
+    }
+
+    if (one_direct_hot_pool_async_prefill_enabled()) {
+        g_one_direct_hot_pool.async_started = true;
+        g_one_direct_hot_pool.async_done = false;
+        g_one_direct_hot_pool.async_thread = std::thread(one_direct_hot_pool_prefill_worker, limit);
+        std::fprintf(stderr,
+            "[moe_stream] one direct hot pool: async prefill started limit=%lu\n",
+            limit);
+        return;
     }
 
     if (!ensure_host_pinned(ctx.h_src0_pack, ctx.h_src0_pack_sz, g_one_direct_hot_pool.slot_sz)) {

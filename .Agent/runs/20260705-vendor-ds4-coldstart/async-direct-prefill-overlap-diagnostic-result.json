@@ -1,0 +1,128 @@
+{
+  "date": "2026-07-05",
+  "title": "Result: default-off async direct prefill overlap diagnostic for top768",
+  "result": "passed_for_continuing_to_compute_design",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "head_before_commit": "92f4ceedcda60b71ff379e44d887c2bd7c1598dc",
+    "changed_file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off_env": "GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1"
+  },
+  "implementation": {
+    "summary": "Adds a default-off async direct hot-pool prefill diagnostic. When GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1 is set, the top768 direct hot-pool prefill starts on a background thread with its own nonblocking CUDA stream and is joined at process exit before reporting.",
+    "default_behavior_changed": false,
+    "logits_changed": false,
+    "compute_integration": false,
+    "sota_candidate": false
+  },
+  "invalid_attempt": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T004011Z-async-direct-prefill-overlap/combined-prefill-short-async",
+    "status": "aborted_invalid_measurement",
+    "reason": "The first script hashed the 145GB model inside the measurement cgroup before llama-cli, polluting page cache and timing. It is not used as performance evidence."
+  },
+  "warm_diagnostic_not_used_for_cold_decision": {
+    "async_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T004344Z-async-direct-prefill-overlap/combined-prefill-short-async-clean",
+    "gate_only_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T004546Z-async-direct-prefill-overlap/gate-only-short-baseline",
+    "reason_not_decisive": "The prior invalid hash attempt made model pages hot; both warm runs had major_faults=0.",
+    "async_service_runtime_s": 11.043,
+    "gate_only_service_runtime_s": 10.562,
+    "async_direct_prefill_ms": 2026.514,
+    "async_gate_prefill_ms": 5148.087,
+    "gate_only_gate_prefill_ms": 4696.177,
+    "swaps": 0
+  },
+  "cold_cgroup_diagnostic": {
+    "drop_caches_before_each_run": true,
+    "async_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T004846Z-async-direct-prefill-overlap/async-cold-cgrouppeak",
+    "gate_only_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T004846Z-async-direct-prefill-overlap/gate-only-cold-cgrouppeak",
+    "async": {
+      "service_runtime_s": 29.881,
+      "wall_time_s": 29.70,
+      "direct_prefill_ms": 1764.712,
+      "gate_prefill_ms": 5112.198,
+      "direct_attempted": 768,
+      "direct_inserted": 768,
+      "direct_read_failures": 0,
+      "direct_copy_failures": 0,
+      "direct_bytes": 3422552064,
+      "async_started": true,
+      "async_done": true,
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max_bytes": 0,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15143325696,
+      "oom": 0,
+      "oom_kill": 0,
+      "swaps": 0,
+      "major_faults": 159895,
+      "filesystem_inputs": 81981952,
+      "stderr_sha256": "7196a9ef98e048c781a30f77fbedfc3bd3bafd8cf6590a84af98ede1c7046127",
+      "stdout_sha256": "2c1d6abc790d2a104b9dfc1fc79d033cc283f8ed0b4c3a4711c5d8c17b1de399",
+      "run_sh_sha256": "5d6e7fa74a01d89b2b90c04b1720e224232adb0cb6d2e300e6c37ea6b80e72da"
+    },
+    "gate_only": {
+      "service_runtime_s": 29.234,
+      "wall_time_s": 29.06,
+      "gate_prefill_ms": 4845.699,
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max_bytes": 0,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15175204864,
+      "oom": 0,
+      "oom_kill": 0,
+      "swaps": 0,
+      "major_faults": 160141,
+      "filesystem_inputs": 75284360,
+      "stderr_sha256": "7677c5394062c7e3d56957de880457936fc0b820a952b9184f530ee9fa9197fc",
+      "stdout_sha256": "9e787cfaf0a95165e0242c9d0cd90a358985604312cc88d099102f2146aba74d",
+      "run_sh_sha256": "1e0913bd902d8c273927f228063a36a08adf6f12e66e0a13c3136c882ad2ff08"
+    },
+    "derived": {
+      "async_added_service_cost_ms_vs_gate_only": 647.0,
+      "async_added_wall_cost_ms_vs_gate_only": 640.0,
+      "gate_prefill_slowdown_ms_vs_gate_only": 266.499,
+      "direct_prefill_hide_fraction_vs_current_direct_ms": 0.633,
+      "direct_prefill_hide_fraction_vs_prior_serial_direct_ms": 0.629,
+      "required_hide_fraction": 0.584503,
+      "accepted_ttft_slack_ms": 725.135454,
+      "passes_overlap_gate": true,
+      "margin_to_ttft_slack_ms": 78.135454
+    }
+  },
+  "correctness_default_off": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T005605Z-async-direct-prefill-overlap/defaultoff-top1-check",
+    "check_exit_status": 0,
+    "same_top1": 145,
+    "n_tokens": 145,
+    "same_top1_ratio": 1.0,
+    "first_mismatch_pos": -1,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14877229056,
+    "oom": 0,
+    "oom_kill": 0,
+    "swaps": 0,
+    "service_runtime": "1min 26.585s",
+    "top1_check_sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+    "stderr_sha256": "bf3ae94c0c73433d95da0d9591b26d16e465224d2cfcb73ea34516b23c5d3402",
+    "environment_sha256": "7c26ae2c22171e7cad891538060b53186a6611e31b6735b73ecab4047d78a00b"
+  },
+  "decision": {
+    "accepted_as_sota": false,
+    "accepted_for_next_design": true,
+    "reason": "The cold cgroup async run hid enough direct prefill cost for the top768 route to remain conditionally viable: added service cost was 647 ms, below the 725.135454 ms TTFT slack, with no OOM, no swap, no direct read/copy failures, and default-off top1 correctness unchanged.",
+    "risk": "The margin is only about 78 ms and gate prefill slows under concurrent O_DIRECT reads. Any compute integration must include this contention cost and still fit under the tight decode overhead budget.",
+    "next_step": "Write a separate batched/fused exact top768 compute design before any logit-changing source edit or strict cold performance run."
+  }
+}
