@@ -70361,3 +70361,62 @@ Reproducibility:
 - This run used the cold-start repro script and 16GB cgroup.
 - The exact command and run directory above are sufficient to reproduce the
   rejected behavior.
+
+## Phase 7LM - post-Q4 rollback n32 guard
+
+Timestamp: 2026-07-05 23:13:00 CST.
+
+Status: planned.
+
+Why this is required:
+
+- Phase 7LL-C removed decode Q4_0 CPU fallback, but failed quality and regressed
+  decode speed. The source commits were reverted.
+- Before another optimization, the default path must be validated again under
+  the strict 16GB cold-start gate so the next candidate is compared against a
+  clean baseline.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e8b9b25e3
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lm-post-q4-rollback-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- Q4_0 CPU fallback should return to the default observed range instead of
+  `hits=0`;
+- token rate should return near current clean n32 references:
+  - 7KX: `1.37 tok/s`;
+  - 7LG: `1.36 tok/s`.
+
+Decision rule:
+
+- If 7LM passes gates and returns near `1.36-1.37 tok/s`, treat rollback as
+  clean and continue to the next bottleneck-location step.
+- If 7LM is materially slower, stop source changes and profile current head
+  before designing another optimization.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact run directory, metrics, output text, stderr counters, and the
+  rollback commit id.
