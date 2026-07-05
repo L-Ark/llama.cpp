@@ -48,7 +48,7 @@ Promotion gate remains strict:
 
 ### 2026-07-05 Historical Plan: DFlash Closed After Oracle Verifier Probe
 
-本节已被上方 `2026-07-05 Latest Plan: Accepted 4.5 tok/s Prefill 2800 SOTA, Then Pushed-Source Repro` 覆盖；内容只作为历史实验记录保留。本次历史更新完成 DFlash oracle verifier window probe，并关闭当前 vendor target-verifier 路径下的 DFlash 10 tok/s 路线。
+本节已被上方 `2026-07-05 Latest Plan: Prefill 2800 Candidate Rejected After Pushed-Source Repro` 覆盖；内容只作为历史实验记录保留。本次历史更新完成 DFlash oracle verifier window probe，并关闭当前 vendor target-verifier 路径下的 DFlash 10 tok/s 路线。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
