@@ -79770,7 +79770,7 @@ Artifacts:
 
 Timestamp: 2026-07-06 01:55:00 CST.
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -79877,3 +79877,84 @@ Reproducibility:
 - Commit and push this plan before any inventory, trace simulation, or model
   run.
 - Commit and push the result before any source implementation plan.
+
+Result:
+
+- Timestamp: 2026-07-06 01:57:51 CST.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-175247Z-phase7nk-cache-oracle`
+- No model run was needed. Existing strict n32 trace artifacts were sufficient:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile`
+- Source files were not changed.
+- Events simulated from `route-trace.csv`: `42928`.
+- Parsed current slot counts:
+  - down: `766`;
+  - upgate: `1735`.
+- Baseline used for the hard bound:
+  - decode: `26045.71 ms / 31`;
+  - `iouring_wait_us`: `20984633`;
+  - `iouring_bytes`: `126391910400`.
+
+Baseline validation:
+
+- Upgate simple LRU matches measured counters exactly:
+  - measured `13469` hits / `16307` misses;
+  - simulated `13469` hits / `16307` misses.
+- Down simple LRU shows fewer hits than the measured demand counter because
+  accepted runtime down-prefetch converts many demand misses into demand hits:
+  - measured demand `9631` hits / `3489` misses;
+  - measured down preloads: `3673`;
+  - simulated simple LRU `5982` hits / `7170` misses;
+  - simulated down misses roughly match measured `misses + preloads`.
+
+Policy results:
+
+- `current_lru_simple`:
+  - hit rate `45.31%`;
+  - miss bytes `130968190976`.
+- `belady_oracle_same_slots`:
+  - hit rate `61.14%`;
+  - miss bytes `93100048384`;
+  - miss-byte reduction `28.91%`;
+  - optimistic n32 bound `1.55 tok/s`.
+- `static_hot_full_oracle`:
+  - hit rate `55.44%`;
+  - miss-byte reduction `18.48%`.
+- `static_hot_prefix_50pct`:
+  - hit rate `51.33%`;
+  - miss-byte reduction `10.94%`;
+  - optimistic n32 bound `1.31 tok/s`.
+- `layer_equal_lru` and `layer_events_lru`:
+  - miss-byte reduction `-4.82%`.
+- `layer_unique_lru`:
+  - miss-byte reduction `-5.33%`.
+- `static_hot_prefix_25pct`:
+  - miss-byte reduction `-5.59%`.
+
+Decision:
+
+- Same-slot Belady oracle proves theoretical cache-policy headroom exists, but
+  the tested implementable policies do not meet the 7NK acceptance threshold.
+- Per-layer pool partitioning is rejected for now because it worsens miss bytes.
+- Static hot-set pinning is rejected for now because realistic prefix-derived
+  hot sets are below the threshold.
+- Do not implement a layer-aware/cache-policy source change from this evidence.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-175247Z-phase7nk-cache-oracle
+python3 phase7nk_cache_oracle.py
+cat policy_results.tsv
+cat bound.md
+```
+
+Artifacts:
+
+- `commands.log`
+- `repo_state.txt`
+- `trace_inventory.tsv`
+- `phase7nk_cache_oracle.py`
+- `policy_results.tsv`
+- `bound.md`
