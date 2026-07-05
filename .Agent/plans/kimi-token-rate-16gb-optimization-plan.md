@@ -81788,3 +81788,92 @@ Reproducibility:
 - Commit and push this 7NT plan before running the audit.
 - Commit and push the 7NT result before any follow-up source, model, or asset
   work.
+
+### Phase 7NT result
+
+Timestamp: 2026-07-06 05:31 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-195747Z-phase7nt-route-reuse-bound`
+
+Plan commit before execution:
+
+- `fd3b91aaa` (`docs: plan verifier route reuse bound`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `candidate_files.txt`
+- `phase7nt_route_reuse_bound.py`
+- `trace_inventory.json`
+- `route_reuse_bound.tsv`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was changed.
+- No asset was downloaded or deleted.
+- The first parser attempt used `route-trace.csv`; that trace records all
+  active route rows and over-counted movement (`7.184 GiB/token`).
+- The final accepted audit uses
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv`
+  and filters actual `iouring=1` copy rows. Its observed iouring total
+  (`117.581 GiB`, `3.793 GiB/token`) matches the 7NN movement scale
+  (`117.712 GiB`, `3.797 GiB/token`).
+
+Trace inventory:
+
+- Decode segments used: `31`.
+- Excluded partial prefix: `1` segment (`blk.60`, `140378112` bytes).
+- Copy bytes: `121.984 GiB`, `3.935 GiB/token`.
+- iouring bytes: `117.581 GiB`, `3.793 GiB/token`.
+- Rows: `23501`; iouring rows: `22647`; non-iouring rows: `854`.
+- Ops: `runtime_load=19828`, `current_down_overlap=3673`.
+
+Verifier route-reuse upper bound:
+
+| category | block | serial GiB/token | unique GiB/token | avg reduction | ideal ms/token at 5.854 GiB/s | gap to 200 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| all | `2` | `3.755` | `3.754` | `1.000x` | `641.3` | `3.21x` |
+| all | `4` | `3.748` | `3.693` | `1.015x` | `630.8` | `3.15x` |
+| all | `8` | `3.736` | `3.378` | `1.106x` | `577.0` | `2.89x` |
+| all | `16` | `3.672` | `2.757` | `1.332x` | `471.0` | `2.36x` |
+| upgate | `16` | `2.332` | `1.754` | `1.330x` | `299.6` | `1.50x` |
+| down | `16` | `1.341` | `1.004` | `1.336x` | `171.4` | `0.86x` |
+
+Interpretation:
+
+- Consecutive tokens do not reuse enough iouring expert copies for a
+  multi-token verifier to hit the required movement envelope.
+- Even with perfect block reuse and zero compute/draft overhead, all expert
+  movement at `B=16` bottoms out at `471.0 ms/token`.
+- The required all-expert reduction is `>=3.68x`; measured perfect-reuse upper
+  bound is only `1.332x`.
+- Down-only `B=16` can fit under `200 ms/token`, but up/gate remains
+  `299.6 ms/token` and total all-expert movement remains far above the target.
+
+Decision:
+
+- Accept 7NT as a reproducible route-reuse hard upper-bound audit.
+- Reject true multi-token verifier source work for the current IQ3/expert-pack
+  asset/runtime as an immediate SOTA path.
+- Do not implement DFlash/EAGLE/speculative verifier source work unless a new
+  asset/layout/quantization change first reduces all-expert movement enough to
+  satisfy the `<=200 ms/token` verifier envelope.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-195747Z-phase7nt-route-reuse-bound
+TRACE=/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv \
+IO_GIB_S=5.854 \
+python3 "$RUN/phase7nt_route_reuse_bound.py"
+cat "$RUN/route_reuse_bound.tsv"
+cat "$RUN/decision.md"
+```
