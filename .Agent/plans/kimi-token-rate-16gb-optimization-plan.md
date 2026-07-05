@@ -58674,6 +58674,145 @@ Decision rule:
 - If decode is flat/worse, iouring wait rises, or down worker time rises
   materially, reject single-ring down staging.
 
+### 7JD n32 result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `7c1f47ad9 ggml: add down single-ring staging probe`.
+
+Build command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 7c1f47ad9
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+```
+
+First n32 diagnostic run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jd-down-single-ring-n32`;
+- env:
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `73764.24 ms`, below `106331.72 ms`;
+- decode `28973.17 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15109554176` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- single-ring log present:
+  `down single-ring staging probe active`;
+- iouring reads `14819`, bytes `85991915520`, wait `12161389 us`;
+- iouring batches `3280`, down from normal `4013`;
+- down hit `73.4%`;
+- upgate hit `45.2%`.
+
+Wait/batch profile effect:
+
+- wait rows `11608`, wait sum `12167.111 ms`;
+- `runtime_load`:
+  - rows `9007`;
+  - wait `9496.341 ms`;
+  - first-wait sum `5377.752 ms`;
+- `current_down_overlap`:
+  - rows `2601`;
+  - wait `2670.770 ms`;
+  - first-wait sum `1690.765 ms`;
+- batch profile:
+  - `runtime_load` rows `2420`, read jobs `11315`, wait `9496.341 ms`,
+    average jobs `4.676`;
+  - `current_down_overlap` rows `860`, read jobs `3504`, wait `2670.770 ms`,
+    average jobs `4.074`.
+
+Repeat n32 production-shape run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jd-down-single-ring-n32-repeat`;
+- env:
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+- exit `0`;
+- quality `pass`, `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75832.52 ms`, below `106331.72 ms`;
+- decode `29014.79 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160` bytes;
+- memory final `15083278336` bytes;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring reads `14819`, bytes `85991915520`, wait `12280644 us`;
+- iouring batches `3280`;
+- down hit `73.4%`;
+- upgate hit `45.2%`.
+
+Interpretation:
+
+- The joined-trace prediction was directionally correct:
+  single-ring down staging reduces iouring batches from about `4013` to `3280`
+  and total iouring wait from the usual `14-15 s` range to about `12.2 s`.
+- Decode improvement is modest:
+  - accepted pct62 n32 repeat 7IM: `29348.93 ms / 31`;
+  - single-ring repeat: `29014.79 ms / 31`.
+- This is enough to justify n96 validation, but not enough to accept without
+  n96 because n32 variance is still material.
+
+### 7JD n96 validation plan
+
+Run strict cold-start n96 with production-shape single-ring env:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 7c1f47ad9
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jd-down-single-ring-n96
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_DOWN_STAGE_SINGLE_RING=1
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- cold start through the cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`
+
+Decision rule:
+
+- If n96 beats accepted pct62 n96 `72282.91 ms / 77` and all gates pass, run a
+  second n96 repeat before accepting single-ring down staging as SOTA.
+- If n96 is flat/worse, reject `GGML_MOE_DOWN_STAGE_SINGLE_RING=1` as a SOTA
+  runtime change and keep it only as default-off infrastructure.
+
 ### Result
 
 Timestamp: 2026-07-05.
