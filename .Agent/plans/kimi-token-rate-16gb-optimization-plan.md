@@ -85672,3 +85672,127 @@ mkdir -p "$RUN"
 python3 "$RUN/phase7ok_iq2xxs_space_plan.py"
 cat "$RUN/decision.md"
 ```
+
+### Phase 7OK result
+
+Timestamp: 2026-07-06 10:01 CST.
+
+Status: accepted space audit; next action requires cleanup approval or external
+storage.
+
+Plan commit before execution:
+
+- `1713f3255` (`docs: plan iq2 xxs space feasibility audit`)
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-234621Z-phase7ok-iq2xxs-space-plan`
+
+Artifacts:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `local_assets.tsv`;
+- `space_scenarios.tsv`;
+- `streaming_pack_feasibility.json`;
+- `decision.md`;
+- `phase7ok_iq2xxs_space_plan.py`.
+
+Execution notes:
+
+- No files were deleted.
+- No GGUF shard was downloaded.
+- No model inference was run.
+- No source code was changed.
+
+Current required assets:
+
+- Current runner references these expert packs:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`:
+    `175133036544` bytes (`163.105 GiB`);
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`:
+    `4844539904` bytes (`4.512 GiB`).
+- Runner-required expert-pack total:
+  `179977576448` bytes (`167.617 GiB`).
+- Current `IQ3_S` model directory:
+  `405392140983` bytes (`377.551 GiB`).
+
+Historical or diagnostic expert-pack cleanup candidates:
+
+| file | size GiB |
+|---|---:|
+| `kimi-iq3s-france.expert-pack` | `159.901` |
+| `kimi-iq3s-tracefirst-n64-20260630.expert-pack` | `74.081` |
+| `kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack` | `7.161` |
+| `kimi-iq3s-phase7gz-combined-overlay.expert-pack` | `4.696` |
+| `tmp-hot-upgate-pair-smoke.expert-pack` | `0.320` |
+| `kimi-iq3s-phase7gz-missing-down-overlay.expert-pack` | `0.185` |
+
+Total non-runner expert-pack bytes:
+
+- `264511246336` bytes (`246.345 GiB`).
+
+Space scenarios:
+
+| scenario | available GiB | fits download-only | fits full download+pack | fits streaming high estimate |
+|---|---:|---:|---:|---:|
+| current | `87.748` | no | no | no |
+| free non-runner expert packs | `334.094` | yes | no | yes |
+| free diagnostic model dirs | `87.749` | no | no | no |
+| free non-runner packs and diagnostic model dirs | `334.094` | yes | no | yes |
+| free all expert packs reference only | `501.711` | yes | no | yes |
+
+Streaming-pack estimates:
+
+- Largest remote `IQ2_XXS` shard:
+  `49970132416` bytes (`46.538 GiB`).
+- Low output estimate:
+  `125270941465` bytes (`116.668 GiB`);
+  required with largest shard `163.206 GiB`.
+- High output estimate:
+  `179977576448` bytes (`167.617 GiB`);
+  required with largest shard `214.155 GiB`.
+- Current disk misses the high streaming estimate by:
+  `126.407 GiB`.
+- Freeing non-runner expert packs would provide:
+  `334.094 GiB`, enough for the high streaming estimate while preserving the
+  current runner-required packs.
+
+Interpretation:
+
+- The full conservative path (`download all shards` + `generate full pack`) is
+  still too large even after deleting all non-runner expert packs:
+  it would still miss by about `238.023 GiB`.
+- A streaming one-shard-at-a-time pack path is plausible after cleanup approval:
+  it needs about `214.155 GiB` under the high estimate, and cleanup would make
+  about `334.094 GiB` available.
+- Since current disk does not fit even the streaming high estimate, no download
+  or pack generation should start before either:
+  - explicit approval to remove the listed historical/diagnostic expert packs;
+  - external storage;
+  - or a stronger streaming design with lower proven output bounds.
+
+Decision:
+
+- Accept 7OK as a reproducible space feasibility audit.
+- Do not delete any file without explicit approval.
+- Do not download the external `IQ2_XXS` shards in the current disk state.
+- The next executable `IQ2_XXS` phase should be one of:
+  - ask for cleanup approval for the listed non-runner expert packs and then
+    write a controlled cleanup/download/streaming-pack plan;
+  - use external storage and write a controlled download/pack plan;
+  - design a bounded streaming extractor that proves a lower temporary-space
+    requirement before touching remote shards.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 1713f3255
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-234621Z-phase7ok-iq2xxs-space-plan
+RUN="$RUN" "$RUN/phase7ok_iq2xxs_space_plan.py"
+cat "$RUN/local_assets.tsv"
+cat "$RUN/space_scenarios.tsv"
+cat "$RUN/streaming_pack_feasibility.json"
+cat "$RUN/decision.md"
+```
