@@ -65796,3 +65796,78 @@ Reproducibility:
 
 - Commit and push this plan before running the offline screen.
 - Record exact script path, command, output, and source commit here.
+
+### 7KO result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `f2adca4f8` (`tools: add kimi cache policy simulator`).
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard f2adca4f8
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+python3 scripts/kimi-cache-policy-sim.py "$RUN/route-trace.csv" "$RUN/io-batch-profile.csv"
+```
+
+Output:
+
+```text
+upgate: events=29776 unique=9712 cap=1735 wait_ms=6863.609
+  lru        hits= 13469 misses= 16307 hit_pct= 45.23 miss_gib=  77.482 saved_gib=   0.000 bound_ms=   0.000
+  admit2_lru hits= 12518 misses= 17258 hit_pct= 42.04 miss_gib=  82.062 saved_gib=  -4.580 bound_ms=-405.708
+  lru2       hits= 13564 misses= 16212 hit_pct= 45.55 miss_gib=  77.105 saved_gib=   0.378 bound_ms=  33.447
+  slru_p50   hits=     0 misses= 29776 hit_pct=  0.00 miss_gib= 141.430 saved_gib= -63.948 bound_ms=-5664.720
+  slru_p70   hits=     0 misses= 29776 hit_pct=  0.00 miss_gib= 141.430 saved_gib= -63.948 bound_ms=-5664.720
+  slru_p80   hits=     0 misses= 29776 hit_pct=  0.00 miss_gib= 141.430 saved_gib= -63.948 bound_ms=-5664.720
+  twoq_a20   hits= 11796 misses= 17980 hit_pct= 39.62 miss_gib=  85.492 saved_gib=  -8.010 bound_ms=-709.560
+  twoq_a25   hits= 12110 misses= 17666 hit_pct= 40.67 miss_gib=  84.010 saved_gib=  -6.527 bound_ms=-578.213
+  twoq_a33   hits= 12511 misses= 17265 hit_pct= 42.02 miss_gib=  82.136 saved_gib=  -4.653 bound_ms=-412.208
+  belady     hits= 18183 misses= 11593 hit_pct= 61.07 miss_gib=  55.155 saved_gib=  22.327 bound_ms=1977.814
+down: events=13152 unique=4284 cap=766 wait_ms=2794.145
+  lru        hits=  5982 misses=  7170 hit_pct= 45.48 miss_gib=  44.491 saved_gib=   0.000 bound_ms=   0.000
+  admit2_lru hits=  5567 misses=  7585 hit_pct= 42.33 miss_gib=  46.999 saved_gib=  -2.507 bound_ms=-157.470
+  lru2       hits=  6022 misses=  7130 hit_pct= 45.79 miss_gib=  44.190 saved_gib=   0.302 bound_ms=  18.943
+  slru_p50   hits=     0 misses= 13152 hit_pct=  0.00 miss_gib=  81.396 saved_gib= -36.904 bound_ms=-2317.651
+  slru_p70   hits=     0 misses= 13152 hit_pct=  0.00 miss_gib=  81.396 saved_gib= -36.904 bound_ms=-2317.651
+  slru_p80   hits=     0 misses= 13152 hit_pct=  0.00 miss_gib=  81.396 saved_gib= -36.904 bound_ms=-2317.651
+  twoq_a20   hits=  5287 misses=  7865 hit_pct= 40.20 miss_gib=  48.764 saved_gib=  -4.273 bound_ms=-268.359
+  twoq_a25   hits=  5413 misses=  7739 hit_pct= 41.16 miss_gib=  47.969 saved_gib=  -3.477 bound_ms=-218.385
+  twoq_a33   hits=  5605 misses=  7547 hit_pct= 42.62 miss_gib=  46.770 saved_gib=  -2.279 bound_ms=-143.101
+  belady     hits=  8063 misses=  5089 hit_pct= 61.31 miss_gib=  31.551 saved_gib=  12.940 bound_ms= 812.671
+totals_vs_lru:
+  lru        total_bound_ms=0.000
+  admit2_lru total_bound_ms=-563.177
+  lru2       total_bound_ms=52.390
+  slru_p50   total_bound_ms=-7982.370
+  slru_p70   total_bound_ms=-7982.370
+  slru_p80   total_bound_ms=-7982.370
+  twoq_a20   total_bound_ms=-977.919
+  twoq_a25   total_bound_ms=-796.598
+  twoq_a33   total_bound_ms=-555.309
+  belady     total_bound_ms=2790.484
+```
+
+Interpretation:
+
+- The best prompt-independent online policy in this screen is `lru2`, but it
+  recovers only `52.390 ms` of proportional wait, far below the `1500 ms`
+  implementation threshold.
+- `admit2_lru` and `twoq` are scan-resistant but reject too much useful reuse
+  for this trace.
+- SLRU with the tested protected ratios is catastrophic because the probation
+  segment is too small for the first-reuse distance in this decode trace.
+- Belady remains the only large result, confirming that the 7KN gap depends on
+  future knowledge rather than a simple online local-state policy.
+
+Decision:
+
+- Reject cache-policy source implementation for this optimization round.
+- Do not implement `admit2_lru`, `lru2`, `slru`, or `twoq` in runtime.
+- Keep accepted default LRU and current cache split.
+- Next work must target required expert movement bytes or layout/quantization,
+  not another cache eviction policy.
