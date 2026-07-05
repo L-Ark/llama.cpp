@@ -1,0 +1,296 @@
+{
+  "artifact": "mmvq-hot-batch-skip-top1-rejected",
+  "baseline_exit_status": 0,
+  "baseline_top1_summary": {
+    "mode": "single",
+    "n_tokens": 145,
+    "n_vocab": 129280,
+    "next_token_positions": 144,
+    "top1_matches_next_token": 119
+  },
+  "candidate_plan": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-standalone-small-sota-hard-bound.json",
+  "check_exit_status": 1,
+  "created_at_utc": "2026-07-05T08:25:32Z",
+  "decision": {
+    "reason": "The first correctness gate failed before any strict cold performance run. Because MMVQ is non-bit-exact and changed token top1, this candidate cannot be promoted. The direct pool also displaced the accepted gate cache.",
+    "sota_changed": false,
+    "source_action": "revert_uncommitted_runtime_source_after_recording",
+    "strict_cold_benchmark_allowed": false,
+    "verdict": "rejected_top1_mismatch_and_gate_cache_cliff"
+  },
+  "memory": {
+    "memory_current_bytes": 15076270080,
+    "memory_events": "low 0\nhigh 0\nmax 94830\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_events_parsed": {
+      "high": 0,
+      "low": 0,
+      "max": 94830,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_max": "16000000000\n",
+    "memory_peak_bytes": 16000000000,
+    "memory_swap_max": "0\n",
+    "oom": false,
+    "oom_group_kill": false,
+    "oom_kill": false
+  },
+  "observed_runtime_notes": [
+    "fixed-text top1 failed: same_top1=142/145, first_mismatch_pos=9, max_abs=4.79565, mean_abs=0.146238",
+    "direct pool top128 allocated 544 MiB and caused gate VRAM cache cudaMalloc 13.2 GiB FAILED in both baseline/check runs, so this config does not preserve the accepted gate path",
+    "MMVQ skip processed 5181 rows across 1774 successful skip calls before the top1 mismatch; no OOM/no swap occurred under the 16GB cgroup"
+  ],
+  "remote_branch": "vendor/deepseek-token-rate-16gb",
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T081643Z-mmvq-hot-batch-skip-top1",
+  "skip_report": {
+    "aggregate": {
+      "first_ok_records": [
+        {
+          "alloc_us": "69",
+          "d2h_us": "12",
+          "elapsed_us": "168",
+          "h2d_us": "33",
+          "kernel_us": "24",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "1",
+          "seq": "47",
+          "tensor": "blk.15.ffn_down_exps.weight"
+        },
+        {
+          "alloc_us": "34",
+          "d2h_us": "10",
+          "elapsed_us": "102",
+          "h2d_us": "15",
+          "kernel_us": "21",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "1",
+          "seq": "160",
+          "tensor": "blk.13.ffn_up_exps.weight"
+        },
+        {
+          "alloc_us": "22",
+          "d2h_us": "11",
+          "elapsed_us": "105",
+          "h2d_us": "26",
+          "kernel_us": "24",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "2",
+          "seq": "161",
+          "tensor": "blk.13.ffn_down_exps.weight"
+        },
+        {
+          "alloc_us": "31",
+          "d2h_us": "11",
+          "elapsed_us": "98",
+          "h2d_us": "14",
+          "kernel_us": "19",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "1",
+          "seq": "241",
+          "tensor": "blk.0.ffn_up_exps.weight"
+        },
+        {
+          "alloc_us": "19",
+          "d2h_us": "11",
+          "elapsed_us": "91",
+          "h2d_us": "13",
+          "kernel_us": "23",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "2",
+          "seq": "242",
+          "tensor": "blk.0.ffn_down_exps.weight"
+        },
+        {
+          "alloc_us": "16",
+          "d2h_us": "10",
+          "elapsed_us": "78",
+          "h2d_us": "12",
+          "kernel_us": "19",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "1",
+          "seq": "244",
+          "tensor": "blk.1.ffn_up_exps.weight"
+        },
+        {
+          "alloc_us": "17",
+          "d2h_us": "11",
+          "elapsed_us": "85",
+          "h2d_us": "13",
+          "kernel_us": "22",
+          "processed_experts": "1",
+          "ready_rows": "1",
+          "scatter_us": "3",
+          "seq": "245",
+          "tensor": "blk.1.ffn_down_exps.weight"
+        },
+        {
+          "alloc_us": "34",
+          "d2h_us": "12",
+          "elapsed_us": "212",
+          "h2d_us": "28",
+          "kernel_us": "38",
+          "processed_experts": "3",
+          "ready_rows": "3",
+          "scatter_us": "3",
+          "seq": "271",
+          "tensor": "blk.10.ffn_up_exps.weight"
+        },
+        {
+          "alloc_us": "17",
+          "d2h_us": "14",
+          "elapsed_us": "120",
+          "h2d_us": "13",
+          "kernel_us": "39",
+          "processed_experts": "3",
+          "ready_rows": "3",
+          "scatter_us": "7",
+          "seq": "272",
+          "tensor": "blk.10.ffn_down_exps.weight"
+        },
+        {
+          "alloc_us": "16",
+          "d2h_us": "10",
+          "elapsed_us": "93",
+          "h2d_us": "13",
+          "kernel_us": "27",
+          "processed_experts": "2",
+          "ready_rows": "2",
+          "scatter_us": "2",
+          "seq": "274",
+          "tensor": "blk.11.ffn_up_exps.weight"
+        }
+      ],
+      "invalid_rows": 0,
+      "not_in_manifest_rows": 64371,
+      "not_ready_rows": 48,
+      "ok_calls": 1774,
+      "ok_rows": 5181,
+      "processed_experts": 5181,
+      "ready_rows": 5181,
+      "rows": 17400
+    },
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T081643Z-mmvq-hot-batch-skip-top1/mmvq-skip-report.csv",
+    "sha256": "7d449201fa55071f388e19cc59608747a948ced6f277bee3fc2403bc0b7ce6d0"
+  },
+  "source_diff_patch": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T081643Z-mmvq-hot-batch-skip-top1/source_diff.patch",
+    "sha256": "4bd2c846a66f04c94b566ef3ec3bfd7382d39f0657981a5c88f38a3b8ff7f5e8"
+  },
+  "source_head": "9a1732045802c0ac93c383ea88217e11dcee15ee",
+  "source_status": "dirty_candidate_reverted_after_recording",
+  "systemd_unit": "vendor-ds4-mmvq-hot-skip-top1-rerun-081755.service",
+  "top1": {
+    "base_top1_matches_next_token": 119,
+    "calc_top1_matches_next_token": 122,
+    "first_mismatch_pos": 9,
+    "max_abs": 4.79565,
+    "mean_abs": 0.146238,
+    "mismatches_preview": [
+      {
+        "actual_next_token": {
+          "id": 260,
+          "logit": 0,
+          "piece": " a"
+        },
+        "base_margin": 0.210262,
+        "base_top1": {
+          "id": 270,
+          "logit": 26.5752,
+          "piece": " the"
+        },
+        "base_top2": {
+          "id": 260,
+          "logit": 26.365,
+          "piece": " a"
+        },
+        "calc_margin": 0.237385,
+        "calc_top1": {
+          "id": 260,
+          "logit": 26.4192,
+          "piece": " a"
+        },
+        "calc_top2": {
+          "id": 270,
+          "logit": 26.1818,
+          "piece": " the"
+        },
+        "position": 9,
+        "predicts_token_position": 10
+      },
+      {
+        "actual_next_token": {
+          "id": 3107,
+          "logit": 0,
+          "piece": " short"
+        },
+        "base_margin": 0.0130424,
+        "base_top1": {
+          "id": 9708,
+          "logit": 25.5236,
+          "piece": " brief"
+        },
+        "base_top2": {
+          "id": 6810,
+          "logit": 25.5106,
+          "piece": " sample"
+        },
+        "calc_margin": 0.100872,
+        "calc_top1": {
+          "id": 3107,
+          "logit": 25.6647,
+          "piece": " short"
+        },
+        "calc_top2": {
+          "id": 9708,
+          "logit": 25.5638,
+          "piece": " brief"
+        },
+        "position": 10,
+        "predicts_token_position": 11
+      },
+      {
+        "actual_next_token": {
+          "id": 7267,
+          "logit": 0,
+          "piece": " cultural"
+        },
+        "base_margin": 0.0390034,
+        "base_top1": {
+          "id": 8469,
+          "logit": 30.6294,
+          "piece": " player"
+        },
+        "base_top2": {
+          "id": 7267,
+          "logit": 30.5904,
+          "piece": " cultural"
+        },
+        "calc_margin": 0.26795,
+        "calc_top1": {
+          "id": 7267,
+          "logit": 30.5078,
+          "piece": " cultural"
+        },
+        "calc_top2": {
+          "id": 8469,
+          "logit": 30.2398,
+          "piece": " player"
+        },
+        "position": 135,
+        "predicts_token_position": 136
+      }
+    ],
+    "n_tokens": 145,
+    "n_vocab": 129280,
+    "next_token_positions": 144,
+    "same_top1": 142,
+    "same_top1_ratio": 0.97931
+  }
+}

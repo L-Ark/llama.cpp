@@ -47,9 +47,9 @@ Current allowed source probe:
 
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-standalone-small-sota-hard-bound.json`.
 - Scope: this is not a 10 tok/s route. It is only a small accepted-SOTA candidate because top128 standalone MMVQ projects about `401.874 ms` net saving before scatter/scheduler overhead, i.e. about `4.458 tok/s` on paper.
-- Source edit allowed only after this artifact is committed: add a default-off pre-CPU-fallback MMVQ hot-batch skip/write path, proposed env `GGML_MOE_STREAM_MMVQ_HOT_BATCH_SKIP=1`, using direct hot pool top128 (`GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=544`, `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=128`) and clearing `matrix_row_counts` only after CUDA success.
-- First gate is fixed-text `llama-results` top1 only, not a performance benchmark. Required: `same_top1 == n_tokens`, `first_mismatch_pos == -1`, strict 16GB/no-swap cgroup, no OOM, default path unchanged. Because MMVQ compare-only had nonzero op error (`max_abs=0.000209331512`), any top1 mismatch rejects this path before strict cold France.
-- Strict cold France benchmark is allowed only after top1 passes. Promotion still requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB including page cache, coherent France answer, immediate commit/push, and clean pushed-source reproduction.
+- Result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-batch-skip-top1-rejected.json`.
+- Result: rejected before strict cold benchmark. The default-off dirty source probe built, but fixed-text top1 failed with `same_top1=142/145`, `first_mismatch_pos=9`, `max_abs=4.79565`, `mean_abs=0.146238`. It also allocated a 544 MiB direct pool and caused the accepted gate VRAM cache allocation (`13.2 GiB`) to fail, so the config did not preserve the accepted gate path.
+- Source action: the uncommitted runtime source probe was reverted after recording, and `llama-cli`/`llama-results` were rebuilt from clean source. Do not run a strict cold SOTA benchmark for standalone MMVQ skip/write. Reopen only with a new correctness-preserving design and a VRAM allocation plan that preserves gate cache behavior.
 
 ### 2026-07-05 Latest Active Plan Override After Sparse-Retained Planner
 
