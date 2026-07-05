@@ -1,0 +1,113 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-route-and-disk-audit-after-mtp-sidecar.json",
+  "created_at_utc": "2026-07-05T11:32:25Z",
+  "source_head_before_artifact": "0336a2e3c1422b99b5820f9f0b064dbc534522fd",
+  "decision": "no_source_ready_10tok_route_currently_open",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "files_deleted": false,
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "memory_events_max": 16879,
+    "pgmajfault": 272731,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "answer": "Here is a short paragraph introducing France:\\n\\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "accepted_reproduction_surface": {
+    "model_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "model_size_bytes": 156148189760,
+    "expert_pack_used_by_sota": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "expert_pack_used_by_sota_size_bytes": 20495904768,
+    "profile_used_by_sota": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "must_preserve": [
+      "accepted SOTA run and summary",
+      "current-head guard run",
+      "native GGUF model",
+      "accepted France gate-miss expert pack",
+      "current_sota_gate_freq_ge2.tsv profile",
+      "source commit and .Agent artifacts"
+    ]
+  },
+  "current_bottleneck_split": {
+    "accepted_decode_window_ms": 31047.44671,
+    "decoded_tokens_for_rate_model": 136.608765524,
+    "target_10_tok_s_decode_window_ms": 13660.8765524,
+    "required_decode_saving_for_10_tok_s_ms": 17386.5701576,
+    "source_page_exposed_saving_ms_from_touch_split": 15856.166,
+    "hot_cpu_fallback_after_source_touch_ms": 3173.291,
+    "non_fallback_decode_ms": 12017.99,
+    "source_page_only_zero_overhead_tok_s": 8.993,
+    "source_page_plus_best_cpu_microprobe_tok_s": 9.75,
+    "source_page_plus_best_cpu_microprobe_shortfall_ms_before_overhead": 350.127,
+    "interpretation": "Current remaining bottleneck is not a single small overhead. Source/page exposure must be nearly perfectly hidden and hot CPU fallback must be faster than the best measured microprobe before 10 tok/s becomes possible."
+  },
+  "cpu_microprobe_closure": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu-batch-microprobe-validation.json",
+    "top1_passed": true,
+    "same_top1": "145/145 for up and down probes",
+    "best_source_payload_bandwidth_gib_s": 74.719,
+    "required_bandwidth_gib_s_zero_overhead": 90.643,
+    "required_bandwidth_gib_s_with_500ms_overhead": 130.298,
+    "decision": "current CPU batch/microkernel family rejected as 10 tok/s path"
+  },
+  "route_status": {
+    "external_dspark_mtp": "closed_for_current_public_artifacts",
+    "external_lowbit_gguf": "closed_for_screened_candidates_on_32gb_vram",
+    "source_page_plus_cpu_batch": "closed_for_current_microprobe_and_same_op_overlap_evidence",
+    "native_exact_compact_representation": "closed_until >5.33x effective reduction or equivalent fallback reduction is proven",
+    "exact_graph_dataflow": "closed_until retained CUDA gate/up/down and >246GiB/s-class kernel proof is available",
+    "cuda_graph": "closed_by prior strict-cold tie/regression and graph-capture abort evidence",
+    "disk_cleanup": "not an optimization; only a prerequisite for optional alternate artifact tests"
+  },
+  "disk_audit": {
+    "root_free_gib": 1.8,
+    "large_paths": [
+      {
+        "path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+        "size_human": "263G",
+        "policy": "user/external asset; do not delete without explicit instruction"
+      },
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+        "size_bytes": 147174760448,
+        "policy": "not used by current accepted env, but associated with DeepSeek model; do not delete without explicit preservation policy"
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+        "size_bytes": 38420348928,
+        "policy": "not accepted France SOTA pack; may be historical prompt-set evidence, preserve unless explicitly approved"
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+        "size_bytes": 20495904768,
+        "policy": "used by accepted SOTA; must preserve"
+      },
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/AgEKDDObETLESPB-bwGREqjQfJM=.82822c4c3330cdc17762cff6f044fd50abb04278779309a157d4401ef8a9c17b.42532000.incomplete",
+        "size_bytes": 2965889623,
+        "policy": "incomplete HF cache fragment; likely safe to delete, but insufficient alone for 50GB+ tests"
+      }
+    ],
+    "minimum_space_needed_for_smallest_screened_alt_model_bytes": 50439361920,
+    "conclusion": "Only explicit cleanup of large non-SOTA assets would enable full alternate GGUF tests; cleanup must preserve accepted SOTA evidence."
+  },
+  "next_reopen_conditions": [
+    "new vendor-loadable high-acceptance draft/verifier artifact with A>=7 or A>=5 plus measured sublinear target verification",
+    "new exact representation or kernel proof that beats the measured CPU/GPU bandwidth thresholds with correctness proof",
+    "explicit disk-reclamation approval plus a candidate whose hard-bound exceeds 10 tok/s before download",
+    "all future probes must start with fixed-text top1 under strict 16GB/no-swap and cannot be promoted without France semantic correctness and TTFT <= 33617.688744 ms"
+  ],
+  "push_requirement": {
+    "remote": "https://github.com/wici-ai/ssd-llama.git",
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "identity": "L-Ark <fliangae@connect.ust.hk>",
+    "on_new_sota": "commit and push source plus full artifacts immediately, then reproduce from pushed source"
+  }
+}
