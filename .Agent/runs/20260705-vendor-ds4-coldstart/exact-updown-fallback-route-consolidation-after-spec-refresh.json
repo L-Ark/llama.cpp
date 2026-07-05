@@ -1,0 +1,176 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ms": 32087.738292
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-updown-fallback-route-consolidation-after-spec-refresh.json",
+  "created_at_utc": "2026-07-05T20:27:53Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "exact_updown_fallback_route_source_edit_allowed_now": false,
+    "new_sota": false,
+    "reason": "The ideal full decode up/down fallback removal ceiling is above 10, but every current exact implementation family fails a hard gate: source/page-only is sub-10, exact full CUDA kernels exceed the entire margin, raw resident topN payloads do not fit, current CPU microkernel/source overlap remains sub-10 or too tight, exact graph/dataflow has no retained CUDA path, and non-native representations lack exactness/top1 proof.",
+    "reopen_conditions": [
+      "A new exact graph/dataflow proof that reduces both source bytes and compute by construction and shows >10 tok/s with meaningful integration margin.",
+      "A new correctness-verified representation artifact that proves fixed-text top1 and an effective >5.33x payload/fallback reduction before runtime source changes.",
+      "A new external high-acceptance verifier/draft artifact with measured sublinear target verification and full RAM/VRAM/TTFT/correctness accounting.",
+      "Or explicit disk cleanup/relocation approval enabling full alternate GGUF correctness/performance tests."
+    ],
+    "strict_cold_benchmark_allowed_now": false
+  },
+  "evidence_artifacts": {
+    "async_source_cpu_batch": "async-source-plus-cpu-batch-hard-bound.json",
+    "async_updown_io": "async-updown-io-hard-bound-after-fine-grained.json",
+    "candidate_screen": "current-head-exact-decode-updown-candidate-screen.json",
+    "cpu_microkernel": "cpu-fallback-microkernel-hard-bound.json",
+    "exact_graph_dataflow": "exact-graph-dataflow-current-hard-bound.json",
+    "fallback_byte_reduction": "fallback-byte-reduction-hard-bound-after-cpu-probe.json",
+    "fine_grained_exact": "fine-grained-exact-subtensor-hard-bound-after-external-refresh.json",
+    "full_cuda_streaming": "full-decode-updown-cuda-streaming-hard-bound.json",
+    "full_layer_gpu": "full-layer-gpu-placement-hard-bound-after-async-io.json",
+    "hot_cpu_lower_bound": "hot-cpu-fallback-lower-bound.json",
+    "non_native_representation": "non-native-representation-next-hard-bound.json",
+    "q80_source_resident": "q80-source-resident-batched-hard-bound-v2.json"
+  },
+  "purpose": "Consolidate the remaining non-speculative exact decode up/down CPU fallback removal route after latest alternate/speculative/diskless refreshes.",
+  "route_table": [
+    {
+      "evidence": [
+        "current-head-exact-decode-updown-candidate-screen.json",
+        "async-updown-io-hard-bound-after-fine-grained.json"
+      ],
+      "reason": "Source/page-only reaches about 9.221 tok/s and async/updown I/O requires far beyond measured bandwidth/dependency windows.",
+      "route": "source/page only overlap or prefetch",
+      "status": "closed"
+    },
+    {
+      "evidence": [
+        "full-decode-updown-cuda-streaming-hard-bound.json"
+      ],
+      "reason": "Raw/transposed exact kernels require about 2.0s for the full 148.916GiB call-weighted decode payload, exceeding the full fallback-removal margin before source/integration overhead; full resident payload is about 21.81GiB and does not fit.",
+      "route": "full exact CUDA/streaming up/down replacement",
+      "status": "closed"
+    },
+    {
+      "evidence": [
+        "cpu-fallback-microkernel-hard-bound.json",
+        "hot-cpu-fallback-lower-bound.json",
+        "fallback-byte-reduction-hard-bound-after-cpu-probe.json"
+      ],
+      "reason": "Even perfect source/page overlap plus best CPU microprobe remains below 10 (about 9.810 tok/s); current hot path is about 46.9GiB/s and needs at least about 90.6GiB/s with zero overhead or 130+GiB/s with 500ms overhead.",
+      "route": "source/page plus current/best CPU microkernel tuning",
+      "status": "closed"
+    },
+    {
+      "evidence": [
+        "q80-source-resident-batched-hard-bound-v2.json",
+        "fallback-byte-reduction-hard-bound-after-cpu-probe.json"
+      ],
+      "reason": "Top3072 needs 12.75GiB and still misses 10 with zero overhead; top4096 first crosses 10 but needs 17.0GiB raw payload before gate/workspace, far above the ~3.2GiB extra pool that fits while preserving gate cache.",
+      "route": "Q8_0/source-resident topN exact hotset",
+      "status": "closed_for_10"
+    },
+    {
+      "evidence": [
+        "fine-grained-exact-subtensor-hard-bound-after-external-refresh.json"
+      ],
+      "reason": "Exact DS4 gate/up/down math requires full selected expert-role payloads; row/column/subtensor slicing does not reduce bytes without changing math.",
+      "route": "fine-grained exact row/column/subtensor residency",
+      "status": "closed"
+    },
+    {
+      "evidence": [
+        "full-layer-gpu-placement-hard-bound-after-async-io.json"
+      ],
+      "reason": "Whole MoE layer placement costs about 3264MiB per layer; at most four layers fit by destroying gate cache, and even extreme zero-overhead frontiers remain below 10.",
+      "route": "full MoE layer GPU placement",
+      "status": "closed"
+    },
+    {
+      "evidence": [
+        "exact-graph-dataflow-current-hard-bound.json"
+      ],
+      "reason": "Current DS4 graph has no retained gate output, current DS4_HOT recomputes/inflates payload, sparse retained top64 has only ~19ms theoretical margin and no dataflow proof, and exact kernels are too slow.",
+      "route": "exact graph/dataflow retained CUDA branch",
+      "status": "closed_current_graph"
+    },
+    {
+      "evidence": [
+        "non-native-representation-next-hard-bound.json"
+      ],
+      "reason": "Exact compression is far below the required 5.33x; token-stable Q8_0 fitting payload is below 10; standalone MMVQ failed top1/gate-cache preservation; more aggressive representations lack fixed-text top1 proof.",
+      "route": "non-native/approx representation",
+      "status": "closed_without_new_top1_proof"
+    }
+  ],
+  "source_head": "0e3c494f0f674cd419d806e797774528f97cb149",
+  "summary_numbers": {
+    "accepted_sota_eval_tok_s": 4.4,
+    "async_source_cpu_batch_decision": {
+      "next_step": "Before runtime code, write and execute a hot CPU fallback lower-bound/microkernel feasibility audit: estimate the minimum possible hot fallback time from bytes, memory bandwidth, thread scheduling, and existing chunk traces. If it cannot save at least 1.53-2.53s, reject the joint path.",
+      "predictive_source_plus_cpu_batch": "not_implemented_without_hot_compute_lower_bound",
+      "reason": "The only mathematically positive 10 tok/s case requires near-perfect source overlap and at least about 50% hot compute reduction with almost no overhead. Existing exact same-op touch regressed badly, and no current evidence proves the required hot compute reduction.",
+      "same_op_exact_async_source_plus_cpu_batch": "rejected"
+    },
+    "decode_call_weighted_gib": 148.916015625,
+    "exact_graph_rejection": {
+      "accepted_sota_eval_tok_s": 4.4,
+      "accepted_sota_unchanged": true,
+      "next_allowed_work": [
+        "Do not write a logit-changing exact graph/dataflow runtime patch from current evidence.",
+        "Reopen this class only after a new placement/kernel proof artifact satisfies the reopen conditions above.",
+        "Otherwise continue from the remaining classes in the plan: a new external high-acceptance verifier/draft artifact or a new correctness-verified representation artifact."
+      ],
+      "reason": "The current exact graph/dataflow candidates all fail a hard gate: current DS4 graph has no retained gate output, current DS4_HOT recomputes gate and inflates payload, sparse retained top64 has only 18.947 ms theoretical margin and no dataflow proof, exact hot/full kernels are 3-5x too slow for the relevant bounds, and full payload/layer placement violates VRAM or gate-cache tradeoffs.",
+      "runtime_patch_allowed_now": false,
+      "status": "no_exact_graph_dataflow_source_patch_allowed_now",
+      "strict_cold_benchmark_allowed_now": false
+    },
+    "fallback_byte_reduction_decision": {},
+    "full_cuda_kernel_rejection": {
+      "extra_gpu_layers": "rejected: moving one full MoE layer to GPU costs about 3264 MiB and steals roughly 712 gate-cache slots, with an estimated gate penalty larger than the optimistic per-layer fallback saving; historical cpu_moe=39/38 runs already regressed.",
+      "full_exact_gpu_kernel": "rejected: exact raw/transposed probes require about 2.0s kernel time for the full 148.916 GiB call-weighted decode payload, exceeding the 1.729s total margin before source or integration overhead.",
+      "full_mmvq_gpu_kernel": "rejected before source edit: the measured non-exact MMVQ kernel leaves about 1.19s for source and integration, requiring at least about 18 GiB/s even with perfect per-run unique expert reuse or about 125 GiB/s without reuse; measured O_DIRECT is about 1.85 GiB/s and current page-source effective rate is about 9.17 GiB/s.",
+      "full_resident_payload": "rejected: the decode unique up/down payload is about 21.81 GiB, larger than available VRAM and larger than the 16GB host/page-cache budget; preloading it at measured O_DIRECT speed would add about 11.8s TTFT.",
+      "sota_changed": false,
+      "strict_cold_benchmark_allowed": false
+    },
+    "ideal_full_decode_updown_fallback_removal_tok_s": 11.448895348407891,
+    "ideal_full_decode_updown_margin_ms": 1728.828842400002,
+    "non_native_rejection": {
+      "accepted_sota_eval_tok_s": 4.4,
+      "accepted_sota_unchanged": true,
+      "next_allowed_work": [
+        "Do not implement a new runtime representation path from the current evidence.",
+        "A future non-native route must begin with an offline or compare-only artifact that proves fixed-text top1 and the >5.33x/equivalent fallback reduction before source changes.",
+        "If no such representation appears, the remaining 10 tok/s route requires a new external high-acceptance verifier/draft artifact or a new exact graph/dataflow breakthrough with a hard bound above 10."
+      ],
+      "reason": "Every current non-native route fails one of the hard gates: exact compression is far below the needed 5.33x reduction; Q8_0 exact arithmetic is token-stable but has a sub-10 fitting-payload ceiling; standalone MMVQ failed fixed-text top1 and gate-cache preservation; graph-level zero-transfer MMVQ lacks the retained CUDA dataflow and has only ~19 ms paper margin; more aggressive low-rank/sparsified/codebook representations have no top1 proof.",
+      "runtime_patch_allowed_now": false,
+      "status": "no_non_native_representation_source_patch_allowed_now",
+      "strict_cold_benchmark_allowed_now": false
+    },
+    "q80_source_resident_decision": {
+      "allowed_next": [
+        "A top768 resident batched path may be planned only as an intermediate SOTA candidate with a separate cost/TTFT bound.",
+        "For the 10 tok/s goal, the next candidate must reduce payload footprint, avoid needing resident raw source for thousands of experts, or remove CPU fallback time through a different exact batching/microkernel path."
+      ],
+      "do_not_do": [
+        "Do not implement a large source-resident top768 path as a claimed 10 tok/s route.",
+        "Do not rerun the slow per-call Q8_0 strict cold benchmark.",
+        "Do not sacrifice gate cache for a topN pool unless a new bound includes the resulting gate miss penalty and still exceeds the acceptance gate."
+      ],
+      "reason": "The smallest near-10 payload is at least 12.75 GiB with no overhead slack, and the first positive 10 tok/s bound needs 17.0 GiB. Current extra usable VRAM with gate cache preserved is about 3.2 GiB.",
+      "source_resident_batched_topn_as_10_path": "rejected"
+    },
+    "required_saving_ms": 17386.5701576,
+    "source_page_only_tok_s": 9.221406072790955,
+    "source_page_plus_best_cpu_microprobe_tok_s": 9.810280775266627,
+    "target_tok_s": 10.0
+  }
+}
