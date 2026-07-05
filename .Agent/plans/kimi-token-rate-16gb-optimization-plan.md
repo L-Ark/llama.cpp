@@ -66625,3 +66625,90 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, gates, representative dryrun lines, split wall summary,
   and decision.
+
+### 7KT result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `6f48f06ce` (`docs: plan current upgate cuda dryrun`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-041141Z-phase7kt-upgate-cuda-dryrun-n32`.
+
+Metrics:
+
+- exit `0`;
+- output quality `pass`;
+- TTFT `77248.59 ms`;
+- decode `23130.18 ms / 31`, `1.34 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `iouring_reads=22647`;
+- `iouring_bytes=126391910400`;
+- `iouring_wait_us=20609103`;
+- current-down overlap worker `3221218 us`.
+
+Split profile summary:
+
+- decode total wall `23083.774 ms`;
+- decode CPU wall `22938.056 ms`;
+- decode CUDA0 wall `145.718 ms`;
+- decode CPU share `99.37%`;
+- top decode CPU splits remain `ffn_moe_swiglu-*` to `ffn_moe_down-*`.
+
+Dryrun aggregation:
+
+```text
+upgate_lines 32
+upgate_support_rowmap_weights {('0', '1', '1'): 32}
+down_support_weightcopy {('1', '1', '1'): 32}
+top_type_pairs [(('iq2_s', 'iq2_s'), 18), (('iq2_s', 'iq3_xxs'), 6),
+                (('iq3_xxs', 'iq3_xxs'), 5), (('iq3_xxs', 'iq2_s'), 3)]
+```
+
+Representative dryrun lines:
+
+```text
+[kimi_upgate_cuda_dryrun] split=2 backend=CPU cuda_backend=CUDA0
+  upgate=ffn_moe_swiglu-1 op=MOE_FUSED_UP_GATE type=f32
+  out_buf=CUDA_Host cuda_support=0
+  ids=CPU#ffn_moe_topk-1#0 ids_type=i32 rows_stride=8
+  act=CPU#ffn_norm-1 (reshaped)#0 act_buf=CUDA_Host
+  up_w=blk.1.ffn_up_exps.weight up_type=iq2_s up_buf=CPU_Mapped
+  gate_w=blk.1.ffn_gate_exps.weight gate_type=iq2_s gate_buf=CPU_Mapped
+  helper_needs_cpu_rowmap=1 weights_cpu_mapped=1
+
+[kimi_upgate_cuda_dryrun] split=2 down=ffn_moe_down-1 op=MUL_MAT_ID
+  type=f32 out_buf=CUDA_Host cuda_support=1
+  down_w=blk.1.ffn_down_exps.weight down_type=q3_K down_buf=CPU_Mapped
+  down_weight_cpu_mapped=1
+  current_chain_cpu_because_upgate_cuda_support=0
+  estimated_next_if_upgate_cuda=down_requires_selected_weight_copy_or_cache=1
+```
+
+Interpretation:
+
+- Current-head/post-7JY evidence matches the earlier scheduler diagnosis:
+  - `MOE_FUSED_UP_GATE` is still not supported by CUDA backend assignment;
+  - the helper still needs CPU rowmap;
+  - up/gate weights are still CPU-mapped;
+  - down is CUDA-supported, but the chain remains CPU-assigned because upgate is
+    not CUDA-supported and down would still need selected expert copy/cache.
+- Therefore a small scheduler relabel or bypass is not safe. It would require a
+  deeper CUDA backend implementation of `MOE_FUSED_UP_GATE` and selected expert
+  residency semantics, overlapping substantially with the custom streaming path
+  already used today.
+- The run is diagnostic only; do not promote SOTA from it even though decode is
+  within normal n32 variance.
+
+Decision:
+
+- Reject a small scheduler/bypass implementation.
+- Do not pursue CUDA backend relabeling for `MOE_FUSED_UP_GATE`.
+- Continue to require a measured `> 2 s` source-level bucket before making
+  runtime changes.
