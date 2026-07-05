@@ -1,0 +1,203 @@
+{
+  "artifact": "sparse-fused-mmvq-membership-validation",
+  "build": {
+    "binary_hashes_sha256": {
+      "llama_cli": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+      "llama_results": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10"
+    },
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8"
+  },
+  "created_utc": "2026-07-05T17:33:52Z",
+  "decision": {
+    "default_behavior_changed": false,
+    "fixed_text_top1_passed": true,
+    "next_step": "Do not implement a logit-writing top48 MMVQ path. Recompute a larger compact exact hot-pair bound and VRAM-fit plan; this run estimates about top1024 pairs / 8704 MiB updown payload are needed to cover the prior required saving before overhead.",
+    "probe_clears_cpu_fallback_counts": false,
+    "probe_writes_logits": false,
+    "reason": "top48 profile hit only 3441.406 ms of 24079.423 ms estimated up/down CPU fallback in the strict fixed-text verifier; this is far below the 17254.867 ms decode saving required by the current 10 tok/s bound.",
+    "strict_cold_benchmark_allowed": false,
+    "top48_compare_route_status": "rejected_insufficient_runtime_coverage"
+  },
+  "membership_probe": {
+    "csv": "/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation/membership/membership.csv",
+    "csv_rows": 37700,
+    "csv_sha256": "4a2e683c9e91d9fea545c330828f675881e3d36cb4cb17570f10282abbd3b803",
+    "env": {
+      "GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT": "/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation/membership/membership.csv",
+      "GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE_TSV": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.tsv"
+    },
+    "fallback_us_est": 24079423,
+    "hit_fallback_fraction": 0.14291895615605074,
+    "hit_fallback_us_est": 3441406,
+    "hit_records": 8736,
+    "hit_rows": 8736,
+    "hit_source_bytes": 38931529728,
+    "hit_source_fraction": 0.2317241379310345,
+    "oracle_frontier_from_this_run": [
+      {
+        "fallback_fraction": 0.1546927847897352,
+        "fallback_ms_est": 3724.913,
+        "payload_mib_updown": 408.0,
+        "rows": 8290,
+        "top_n": 48
+      },
+      {
+        "fallback_fraction": 0.18215224675441766,
+        "fallback_ms_est": 4386.121,
+        "payload_mib_updown": 544.0,
+        "rows": 10072,
+        "top_n": 64
+      },
+      {
+        "fallback_fraction": 0.22499156229781753,
+        "fallback_ms_est": 5417.667,
+        "payload_mib_updown": 816.0,
+        "rows": 12000,
+        "top_n": 96
+      },
+      {
+        "fallback_fraction": 0.25944325991532274,
+        "fallback_ms_est": 6247.244,
+        "payload_mib_updown": 1088.0,
+        "rows": 13330,
+        "top_n": 128
+      },
+      {
+        "fallback_fraction": 0.3161392613103728,
+        "fallback_ms_est": 7612.451,
+        "payload_mib_updown": 1632.0,
+        "rows": 15824,
+        "top_n": 192
+      },
+      {
+        "fallback_fraction": 0.3641279942629855,
+        "fallback_ms_est": 8767.992,
+        "payload_mib_updown": 2176.0,
+        "rows": 17562,
+        "top_n": 256
+      },
+      {
+        "fallback_fraction": 0.4443784637198325,
+        "fallback_ms_est": 10700.377,
+        "payload_mib_updown": 3264.0,
+        "rows": 20354,
+        "top_n": 384
+      },
+      {
+        "fallback_fraction": 0.5123398098035821,
+        "fallback_ms_est": 12336.847,
+        "payload_mib_updown": 4352.0,
+        "rows": 22232,
+        "top_n": 512
+      },
+      {
+        "fallback_fraction": 0.6244543733460722,
+        "fallback_ms_est": 15036.501,
+        "payload_mib_updown": 6528.0,
+        "rows": 25242,
+        "top_n": 768
+      },
+      {
+        "fallback_fraction": 0.7168538465394291,
+        "fallback_ms_est": 17261.427,
+        "payload_mib_updown": 8704.0,
+        "rows": 27690,
+        "top_n": 1024
+      },
+      {
+        "fallback_fraction": 0.8471497012200002,
+        "fallback_ms_est": 20398.876,
+        "payload_mib_updown": 12750.0,
+        "rows": 31232,
+        "top_n": 1500
+      },
+      {
+        "fallback_fraction": 0.9335168039533173,
+        "fallback_ms_est": 22478.546,
+        "payload_mib_updown": 17000.0,
+        "rows": 34344,
+        "top_n": 2000
+      }
+    ],
+    "pairs_needed_for_prior_required_saving_ms": {
+      "fallback_ms_est": 17261.427,
+      "payload_mib_updown": 8704.0,
+      "required_ms": 17254.86655648,
+      "rows": 27690,
+      "top_n": 1024
+    },
+    "profile_pairs_loaded": 48,
+    "profile_top48": {
+      "pairs": 48,
+      "sum_fused_calls_from_prior_profile": 4434,
+      "sum_hot_ms_from_prior_profile": 757.6469999999999,
+      "tsv": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.tsv",
+      "tsv_sha256": "beeb1dd7a8b2641f3e5afac5a4fe3dcc824f1d96f4dac9d7e6e1f4dd5689936b"
+    },
+    "records": 37700,
+    "role_stats": {
+      "down": {
+        "fallback_us_est": 11664493,
+        "hit_fallback_us_est": 1683447,
+        "hit_records": 4368,
+        "hit_rows": 4368,
+        "hit_source_bytes": 19465764864,
+        "records": 18850,
+        "rows": 18850,
+        "source_bytes": 84004044800
+      },
+      "up": {
+        "fallback_us_est": 12414930,
+        "hit_fallback_us_est": 1757959,
+        "hit_records": 4368,
+        "hit_rows": 4368,
+        "hit_source_bytes": 19465764864,
+        "records": 18850,
+        "rows": 18850,
+        "source_bytes": 84004044800
+      }
+    },
+    "rows": 37700,
+    "source_bytes": 168008089600
+  },
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation",
+  "source": {
+    "diffstat": "ggml/src/ggml-cpu/ggml-cpu.c | 322 +++++++++++++++++++++++++++++++++++++++++++\n 1 file changed, 322 insertions(+)",
+    "head_before_commit": "d9e56fcdf1d15a2eb2145fc377e17848c43180a2",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "M ggml/src/ggml-cpu/ggml-cpu.c"
+  },
+  "validation": {
+    "defaultoff_systemd_status": 0,
+    "defaultoff_top1": {
+      "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation/defaultoff",
+      "check_n_tokens": 145,
+      "check_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "first_mismatch_pos": -1,
+      "memory_current_bytes": 15166283776,
+      "memory_events": "low 0\nhigh 0\nmax 16464\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "memory_peak_bytes": 16000000000,
+      "mode": "defaultoff",
+      "n_tokens": 145,
+      "same_top1": 145,
+      "status": "pass"
+    },
+    "membership_systemd_status": 0,
+    "membership_top1": {
+      "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation/membership",
+      "check_n_tokens": 145,
+      "check_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+      "first_mismatch_pos": -1,
+      "memory_current_bytes": 15177330688,
+      "memory_events": "low 0\nhigh 0\nmax 17474\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "memory_peak_bytes": 16000000000,
+      "mode": "defaultoff",
+      "n_tokens": 145,
+      "same_top1": 145,
+      "status": "pass"
+    },
+    "strict_cgroup": "systemd-run MemoryMax=16000000000 MemorySwapMax=0"
+  }
+}

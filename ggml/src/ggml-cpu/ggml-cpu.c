@@ -1098,6 +1098,297 @@ static int ggml_moe_tensor_layer(const char * name) {
     return atoi(blk + 4);
 }
 
+#define GGML_DS4_SPARSE_FUSED_MMVQ_MAX_LAYERS 128
+#define GGML_DS4_SPARSE_FUSED_MMVQ_MAX_EXPERTS 512
+
+struct ggml_ds4_sparse_fused_mmvq_membership_state {
+    bool initialized;
+    bool enabled;
+    bool registered;
+    bool profile_load_attempted;
+    bool profile_loaded;
+    const char * out;
+    const char * profile;
+    FILE * fp;
+    pthread_mutex_t mutex;
+    uint8_t hot[GGML_DS4_SPARSE_FUSED_MMVQ_MAX_LAYERS][GGML_DS4_SPARSE_FUSED_MMVQ_MAX_EXPERTS];
+    uint64_t profile_pairs;
+    uint64_t profile_duplicates;
+    uint64_t profile_invalid;
+    uint64_t records;
+    uint64_t hit_records;
+    uint64_t rows;
+    uint64_t hit_rows;
+    uint64_t prompt_rows;
+    uint64_t prompt_hit_rows;
+    uint64_t decode_rows;
+    uint64_t decode_hit_rows;
+    uint64_t source_bytes;
+    uint64_t hit_source_bytes;
+    uint64_t fallback_us;
+    uint64_t hit_fallback_us;
+    uint64_t touch_us;
+    uint64_t hit_touch_us;
+};
+
+static struct ggml_ds4_sparse_fused_mmvq_membership_state ggml_ds4_sparse_fused_mmvq_membership = {
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+};
+
+static void ggml_ds4_sparse_fused_mmvq_membership_add_profile_pair_locked(int layer, int expert) {
+    if (layer < 0 || layer >= GGML_DS4_SPARSE_FUSED_MMVQ_MAX_LAYERS ||
+            expert < 0 || expert >= GGML_DS4_SPARSE_FUSED_MMVQ_MAX_EXPERTS) {
+        ggml_ds4_sparse_fused_mmvq_membership.profile_invalid++;
+        return;
+    }
+    if (ggml_ds4_sparse_fused_mmvq_membership.hot[layer][expert]) {
+        ggml_ds4_sparse_fused_mmvq_membership.profile_duplicates++;
+        return;
+    }
+    ggml_ds4_sparse_fused_mmvq_membership.hot[layer][expert] = 1;
+    ggml_ds4_sparse_fused_mmvq_membership.profile_pairs++;
+}
+
+static bool ggml_ds4_sparse_fused_mmvq_parse_json_int(const char * line, const char * key, int * out) {
+    const char * p = strstr(line, key);
+    if (!p) {
+        return false;
+    }
+    p += strlen(key);
+    while (*p && ((*p < '0' || *p > '9') && *p != '-')) {
+        ++p;
+    }
+    if (!*p) {
+        return false;
+    }
+    *out = atoi(p);
+    return true;
+}
+
+static void ggml_ds4_sparse_fused_mmvq_membership_load_profile_locked(void) {
+    if (ggml_ds4_sparse_fused_mmvq_membership.profile_load_attempted) {
+        return;
+    }
+    ggml_ds4_sparse_fused_mmvq_membership.profile_load_attempted = true;
+
+    const char * path = getenv("GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE");
+    if (!path || !path[0]) {
+        path = getenv("GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE_TSV");
+    }
+    if (!path || !path[0]) {
+        path = getenv("DS4_SPARSE_FUSED_MMVQ_PROFILE");
+    }
+    ggml_ds4_sparse_fused_mmvq_membership.profile = path;
+    if (!path || !path[0]) {
+        fprintf(stderr, "[ds4_sparse_fused_mmvq_membership] profile env is unset\n");
+        return;
+    }
+
+    FILE * f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "[ds4_sparse_fused_mmvq_membership] failed to open profile: %s\n", path);
+        return;
+    }
+
+    char line[2048];
+    int json_layer = -1;
+    int json_expert = -1;
+    while (fgets(line, sizeof(line), f)) {
+        int rank = 0;
+        int layer = -1;
+        int expert = -1;
+        double hot_ms = 0.0;
+        double up_hot_ms = 0.0;
+        double down_hot_ms = 0.0;
+        uint64_t up_calls = 0;
+        uint64_t down_calls = 0;
+        uint64_t fused_calls = 0;
+        if (sscanf(line, "%d\t%d\t%d\t%lf\t%lf\t%lf\t%" SCNu64 "\t%" SCNu64 "\t%" SCNu64,
+                    &rank, &layer, &expert, &hot_ms, &up_hot_ms, &down_hot_ms,
+                    &up_calls, &down_calls, &fused_calls) >= 3) {
+            ggml_ds4_sparse_fused_mmvq_membership_add_profile_pair_locked(layer, expert);
+            continue;
+        }
+
+        if (strchr(line, '{')) {
+            json_layer = -1;
+            json_expert = -1;
+        }
+        (void) ggml_ds4_sparse_fused_mmvq_parse_json_int(line, "\"layer\"", &json_layer);
+        (void) ggml_ds4_sparse_fused_mmvq_parse_json_int(line, "\"expert\"", &json_expert);
+        if (strchr(line, '}') && json_layer >= 0 && json_expert >= 0) {
+            ggml_ds4_sparse_fused_mmvq_membership_add_profile_pair_locked(json_layer, json_expert);
+            json_layer = -1;
+            json_expert = -1;
+        }
+    }
+    fclose(f);
+
+    ggml_ds4_sparse_fused_mmvq_membership.profile_loaded =
+        ggml_ds4_sparse_fused_mmvq_membership.profile_pairs > 0;
+    fprintf(stderr,
+            "[ds4_sparse_fused_mmvq_membership] loaded profile=%s pairs=%" PRIu64
+            " duplicates=%" PRIu64 " invalid=%" PRIu64 "\n",
+            path,
+            ggml_ds4_sparse_fused_mmvq_membership.profile_pairs,
+            ggml_ds4_sparse_fused_mmvq_membership.profile_duplicates,
+            ggml_ds4_sparse_fused_mmvq_membership.profile_invalid);
+}
+
+static void ggml_ds4_sparse_fused_mmvq_membership_report(void) {
+    if (!ggml_ds4_sparse_fused_mmvq_membership.enabled) {
+        return;
+    }
+    if (ggml_ds4_sparse_fused_mmvq_membership.fp) {
+        fclose(ggml_ds4_sparse_fused_mmvq_membership.fp);
+        ggml_ds4_sparse_fused_mmvq_membership.fp = NULL;
+    }
+    fprintf(stderr,
+            "[ds4_sparse_fused_mmvq_membership] profile_loaded=%d pairs=%" PRIu64
+            " records=%" PRIu64 " hit_records=%" PRIu64
+            " rows=%" PRIu64 " hit_rows=%" PRIu64
+            " prompt_rows=%" PRIu64 " prompt_hit_rows=%" PRIu64
+            " decode_rows=%" PRIu64 " decode_hit_rows=%" PRIu64
+            " source_bytes=%" PRIu64 " hit_source_bytes=%" PRIu64
+            " fallback_us=%" PRIu64 " hit_fallback_us=%" PRIu64
+            " touch_us=%" PRIu64 " hit_touch_us=%" PRIu64 "\n",
+            ggml_ds4_sparse_fused_mmvq_membership.profile_loaded ? 1 : 0,
+            ggml_ds4_sparse_fused_mmvq_membership.profile_pairs,
+            ggml_ds4_sparse_fused_mmvq_membership.records,
+            ggml_ds4_sparse_fused_mmvq_membership.hit_records,
+            ggml_ds4_sparse_fused_mmvq_membership.rows,
+            ggml_ds4_sparse_fused_mmvq_membership.hit_rows,
+            ggml_ds4_sparse_fused_mmvq_membership.prompt_rows,
+            ggml_ds4_sparse_fused_mmvq_membership.prompt_hit_rows,
+            ggml_ds4_sparse_fused_mmvq_membership.decode_rows,
+            ggml_ds4_sparse_fused_mmvq_membership.decode_hit_rows,
+            ggml_ds4_sparse_fused_mmvq_membership.source_bytes,
+            ggml_ds4_sparse_fused_mmvq_membership.hit_source_bytes,
+            ggml_ds4_sparse_fused_mmvq_membership.fallback_us,
+            ggml_ds4_sparse_fused_mmvq_membership.hit_fallback_us,
+            ggml_ds4_sparse_fused_mmvq_membership.touch_us,
+            ggml_ds4_sparse_fused_mmvq_membership.hit_touch_us);
+}
+
+static bool ggml_ds4_sparse_fused_mmvq_membership_enabled(void) {
+    if (!ggml_ds4_sparse_fused_mmvq_membership.initialized) {
+        ggml_ds4_sparse_fused_mmvq_membership.initialized = true;
+        ggml_ds4_sparse_fused_mmvq_membership.out =
+            getenv("GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT");
+        ggml_ds4_sparse_fused_mmvq_membership.enabled =
+            ggml_ds4_sparse_fused_mmvq_membership.out &&
+            ggml_ds4_sparse_fused_mmvq_membership.out[0];
+        if (ggml_ds4_sparse_fused_mmvq_membership.enabled &&
+                !ggml_ds4_sparse_fused_mmvq_membership.registered) {
+            ggml_ds4_sparse_fused_mmvq_membership.registered = true;
+            atexit(ggml_ds4_sparse_fused_mmvq_membership_report);
+        }
+    }
+    return ggml_ds4_sparse_fused_mmvq_membership.enabled;
+}
+
+static FILE * ggml_ds4_sparse_fused_mmvq_membership_fp_locked(void) {
+    if (ggml_ds4_sparse_fused_mmvq_membership.fp) {
+        return ggml_ds4_sparse_fused_mmvq_membership.fp;
+    }
+    const char * path = ggml_ds4_sparse_fused_mmvq_membership.out;
+    if (!path || !path[0]) {
+        return NULL;
+    }
+    ggml_ds4_sparse_fused_mmvq_membership.fp = fopen(path, "w");
+    if (!ggml_ds4_sparse_fused_mmvq_membership.fp) {
+        fprintf(stderr, "[ds4_sparse_fused_mmvq_membership] failed to open output: %s\n", path);
+        return NULL;
+    }
+    setvbuf(ggml_ds4_sparse_fused_mmvq_membership.fp, NULL, _IOLBF, 0);
+    fprintf(ggml_ds4_sparse_fused_mmvq_membership.fp,
+            "seq,phase,role,tensor,type,layer,expert,cne1,profile_hit,expert_bytes,source_bytes,"
+            "fallback_us_est,touch_us,pack_mmap_source,profile_path,profile_pairs_loaded\n");
+    return ggml_ds4_sparse_fused_mmvq_membership.fp;
+}
+
+static void ggml_ds4_sparse_fused_mmvq_membership_record(
+        const char * name,
+        int src0_type,
+        bool prompt_phase,
+        int expert_idx,
+        int64_t count,
+        size_t expert_bytes,
+        uint64_t fallback_us,
+        uint64_t touch_us,
+        bool pack_mmap_source) {
+    if (!ggml_ds4_sparse_fused_mmvq_membership_enabled() || count <= 0) {
+        return;
+    }
+
+    const char * role = ggml_moe_tensor_role(name);
+    if (strcmp(role, "up") != 0 && strcmp(role, "down") != 0) {
+        return;
+    }
+    const int layer = ggml_moe_tensor_layer(name);
+    if (layer < 0 || expert_idx < 0) {
+        return;
+    }
+
+    pthread_mutex_lock(&ggml_ds4_sparse_fused_mmvq_membership.mutex);
+    ggml_ds4_sparse_fused_mmvq_membership_load_profile_locked();
+    const bool profile_hit =
+        layer < GGML_DS4_SPARSE_FUSED_MMVQ_MAX_LAYERS &&
+        expert_idx < GGML_DS4_SPARSE_FUSED_MMVQ_MAX_EXPERTS &&
+        ggml_ds4_sparse_fused_mmvq_membership.hot[layer][expert_idx] != 0;
+
+    const uint64_t rows = (uint64_t) count;
+    const uint64_t source_bytes = (uint64_t) expert_bytes;
+
+    const uint64_t seq = ggml_ds4_sparse_fused_mmvq_membership.records++;
+    ggml_ds4_sparse_fused_mmvq_membership.rows += rows;
+    ggml_ds4_sparse_fused_mmvq_membership.source_bytes += source_bytes;
+    ggml_ds4_sparse_fused_mmvq_membership.fallback_us += fallback_us;
+    ggml_ds4_sparse_fused_mmvq_membership.touch_us += touch_us;
+    if (prompt_phase) {
+        ggml_ds4_sparse_fused_mmvq_membership.prompt_rows += rows;
+    } else {
+        ggml_ds4_sparse_fused_mmvq_membership.decode_rows += rows;
+    }
+    if (profile_hit) {
+        ggml_ds4_sparse_fused_mmvq_membership.hit_records++;
+        ggml_ds4_sparse_fused_mmvq_membership.hit_rows += rows;
+        ggml_ds4_sparse_fused_mmvq_membership.hit_source_bytes += source_bytes;
+        ggml_ds4_sparse_fused_mmvq_membership.hit_fallback_us += fallback_us;
+        ggml_ds4_sparse_fused_mmvq_membership.hit_touch_us += touch_us;
+        if (prompt_phase) {
+            ggml_ds4_sparse_fused_mmvq_membership.prompt_hit_rows += rows;
+        } else {
+            ggml_ds4_sparse_fused_mmvq_membership.decode_hit_rows += rows;
+        }
+    }
+
+    FILE * fp = ggml_ds4_sparse_fused_mmvq_membership_fp_locked();
+    if (fp) {
+        fprintf(fp,
+                "%" PRIu64 ",%s,%s,%s,%d,%d,%d,%" PRId64 ",%d,%zu,%" PRIu64
+                ",%" PRIu64 ",%" PRIu64 ",%d,%s,%" PRIu64 "\n",
+                seq,
+                prompt_phase ? "prompt" : "decode",
+                role,
+                name ? name : "",
+                src0_type,
+                layer,
+                expert_idx,
+                count,
+                profile_hit ? 1 : 0,
+                expert_bytes,
+                source_bytes,
+                fallback_us,
+                touch_us,
+                pack_mmap_source ? 1 : 0,
+                ggml_ds4_sparse_fused_mmvq_membership.profile ?
+                    ggml_ds4_sparse_fused_mmvq_membership.profile : "",
+                ggml_ds4_sparse_fused_mmvq_membership.profile_pairs);
+    }
+    pthread_mutex_unlock(&ggml_ds4_sparse_fused_mmvq_membership.mutex);
+}
+
 static int ggml_moe_keep_topk_for_tensor(const char * name) {
     if (!ggml_moe_keep_topk_applies(name)) {
         return 0;
@@ -3079,6 +3370,7 @@ static void ggml_compute_forward_mul_mat_id(
     const int ith = params->ith;
     const int nth = params->nth;
     const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
+    const bool ds4_sparse_fused_mmvq_membership = ggml_ds4_sparse_fused_mmvq_membership_enabled();
     const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
 
     const enum ggml_type type = src0->type;
@@ -3459,6 +3751,8 @@ static void ggml_compute_forward_mul_mat_id(
     }
 
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    const uint64_t ds4_sparse_fused_mmvq_fallback_start =
+        (ds4_sparse_fused_mmvq_membership && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -3639,6 +3933,34 @@ static void ggml_compute_forward_mul_mat_id(
                     sink);
             }
             ggml_barrier(params->threadpool);
+        }
+    }
+    if (ds4_sparse_fused_mmvq_membership && ith == 0) {
+        const uint64_t ds4_sparse_fused_mmvq_fallback_us =
+            ggml_time_us() - ds4_sparse_fused_mmvq_fallback_start;
+        int64_t fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            fallback_rows += matrix_row_counts[cur_a];
+        }
+        if (fallback_rows > 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const uint64_t expert_fallback_us =
+                    (uint64_t) (((double) ds4_sparse_fused_mmvq_fallback_us * (double) cne1) / (double) fallback_rows);
+                ggml_ds4_sparse_fused_mmvq_membership_record(
+                        src0->name,
+                        src0->type,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        (size_t) nb02,
+                        expert_fallback_us,
+                        fallback_touch_us[cur_a],
+                        fallback_pack_mmap_ptrs[cur_a] != NULL);
+            }
         }
     }
     if (kimi_cpu_moe_profile && ith == 0) {

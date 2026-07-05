@@ -4,6 +4,41 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Top48 Runtime Membership Rejected, Rebound Larger Exact Hot-Pair Route
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Accepted SOTA metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target for all source/artifact updates remains `ssd` remote, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest source/proof result:
+
+- Added a default-off runtime membership probe in `ggml/src/ggml-cpu/ggml-cpu.c`, enabled only by `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT`.
+- Profile envs: `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE`, `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE_TSV`, or fallback `DS4_SPARSE_FUSED_MMVQ_PROFILE`.
+- The probe records actual runtime up/down CPU fallback rows after `matrix_row_counts/matrix_rows` are built and after exact CPU fallback has executed. It does not write logits, does not clear CPU fallback counts, does not skip fallback, and does not change model outputs.
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8`.
+- Validation artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-validation.json`
+- Validation run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation`
+- Default-off fixed-text top1 gate: pass, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, no OOM/swap.
+- Membership-probe fixed-text top1 gate: pass, `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, no OOM/swap.
+- Membership CSV: `/root/lfz/runs/vendor-ds4-16gb/20260705T172642Z-sparse-fused-mmvq-membership-validation/membership/membership.csv`, `37700` rows.
+- Runtime coverage result for current top48 profile: total estimated up/down CPU fallback `24079.423 ms`; top48 profile hit only `3441.406 ms` (`14.29%`) and `8736/37700` fallback rows; hit source bytes `38931529728 / 168008089600` (`23.17%`).
+- Role split: up hit `1757.959 ms` of `12414.930 ms`; down hit `1683.447 ms` of `11664.493 ms`.
+- Required saving from the refreshed accepted decode bound remains about `17254.867 ms`. The current top48 route is therefore far below the required coverage before any kernel/sync/scatter overhead.
+- Oracle frontier from this membership run estimates: top256 pairs cover about `8767.992 ms` with `2176 MiB` up/down payload; top512 covers `12336.847 ms` with `4352 MiB`; top768 covers `15036.501 ms` with `6528 MiB`; top1024 covers `17261.427 ms` with `8704 MiB`; top1500 covers `20398.876 ms` with `12750 MiB`.
+- Decision: close the top48 MMVQ write/skip route. Do not implement a logit-writing top48 MMVQ path because the runtime coverage gate already fails. The previous top48 hard-bound was too optimistic because it did not validate actual fallback membership coverage before assuming enough removable decode work.
+
+Updated next executable plan:
+
+1. Commit and push the runtime membership probe, validation artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb` before further source changes.
+2. Recompute the next hard-bound around larger compact exact hot-pair residency, not top48 MMVQ. First candidate is the top1024-class up/down profile because this run estimates it is the smallest frontier point that reaches the prior `17254.867 ms` required saving before overhead.
+3. Before code, verify VRAM feasibility from the current SOTA memory layout. Top1024 exact up/down payload is about `8704 MiB`; this must fit alongside the existing model GPU residency and the 13.2GiB gate one-stream cache without increasing host RAM/page cache beyond 16GB.
+4. If top1024 does not fit with enough overhead margin, reject this route before source work. If it fits, generate a compact profile/manifest and a placement-only default-off proof path that allocates only exact selected up/down pairs, no `K+P+1` dummy rows, and no logit writes.
+5. Any future write/skip path must be exact or must pass fixed-text `llama-results` top1 under strict 16GB/no-swap before any strict cold France generation run. No strict cold SOTA benchmark is allowed from membership/placement diagnostics alone.
+6. Promotion remains unchanged: a new accepted SOTA requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a semantically correct/coherent France answer.
+7. When a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`; then perform a clean pushed-source reproduction before treating it as accepted.
+
 ### 2026-07-06 Latest Active Plan: Sparse Fused MMVQ Placement Validated, Next Compare-Only Probe
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA：
