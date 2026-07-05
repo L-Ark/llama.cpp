@@ -4,7 +4,7 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: High-Acceptance and Non-Native Gates After Exact-Compact Closure
+### 2026-07-05 Latest Plan: Current 10 tok/s Source Gates After Exact-Compact Closure
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。
 
@@ -13,7 +13,7 @@ Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 - Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
 - Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
-- Current source/artifact head before this plan update: `e9e7263866496a2d1174f390253e03e74c062b24` (`vendor-ds4: audit high acceptance draft gate`)
+- Current source/artifact head before this plan update: `7f1c61fb88d034396e59a304c6381ac317c1fc43` (`vendor-ds4: bound non native representation routes`)
 - Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
 - Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
 - Promotion gate remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct and coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction.
@@ -46,18 +46,29 @@ Latest non-native representation hard-bound:
 - Graph-level zero-transfer sparse MMVQ/top64 has only `18.947 ms` paper margin and requires retained CUDA gate/up/down dataflow. Current accepted graph has `graph_gate_output_input_available=0`, `hot_active=0`, `hot_ready=0`, and many observed full up/down tensors are not CUDA-resident, so this is not source-ready.
 - More aggressive low-bit, low-rank, sparsified, or learned-codebook representations have no top1 proof. They may only reopen through an offline/compare-only artifact proving fixed-text top1 plus `>5.33x` effective payload reduction or equivalent fallback removal before source changes.
 
+Latest exact graph/dataflow hard-bound:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json`.
+- Result: `no_exact_graph_dataflow_source_patch_allowed_now`; runtime source remains frozen.
+- Source/dataflow audit: `build_expert_mix` receives `cur_ffn`, `selected_experts`, and `weights`, but no reusable retained gate output. The sparse retained probe hardcodes/records `graph_gate_output_input_available=0`; current `DS4_HOT_DISPATCH` recomputes gate/up/down and uses a K+P+1 rectangular hot-expert shape.
+- Compact sparse top64 graph branch is closed for the current graph: paper bound is only `10.014 tok/s` with `18.947 ms` margin; one combine-copy lower bound at `24 GiB/s` consumes `17.197 ms`, leaving only `1.75 ms` before scheduler/launch/sync/correctness overhead, and the pushed probe shows `hot_active=0`, `hot_ready=0`, `dispatch_dual=0`.
+- Adapting current `DS4_HOT_DISPATCH` is closed: 64 real sparse pairs inflate to `295` rectangular entries, `2507.5 MiB` up/down or `3761.25 MiB` gate/up/down payload; gate recompute bound is only `9.861 tok/s`.
+- Current exact kernels are too slow for the remaining bounds: top128 needs about `246 GiB/s` before integration overhead, while raw/transposed/row-tile exact probes measured about `74.59`, `72.434`, and `62.907 GiB/s`. The top768 exact route needs `<=446.414 ms` overhead but measured exact kernel projections are about `1.82-2.16 s`.
+- Full selected-MoE exact CUDA replacement is closed for current payload/kernel shape: full exact raw/transposed projections need about `2.0 s` kernel time against only `1.729 s` total fallback-removal margin, and unique decode up/down payload is `21.806 GiB`, too large for VRAM and the strict 16GB host/page-cache budget.
+
 Next active plan:
 
 1. Keep the accepted `4.4 tok/s` strict-cold SOTA as the comparison baseline. Do not make a runtime/source patch before a new hard-bound artifact proves the route can clear the promotion gate.
 2. Verifier/draft work is closed for current artifacts. Reopen it only with a concrete compatible DSpark/MTP/draft artifact and a hard-bound proving `A>=7`, or `A>=5` with measured sublinear target verification, while preserving the 16GB page-cache budget, accepted gate-cache behavior, TTFT limit, fixed-text top1, and France correctness.
 3. Non-native representation work is closed for current artifacts. Reopen it only through an offline or compare-only artifact proving fixed-text top1 plus `>5.33x` effective payload reduction, or equivalent source+CPU fallback reduction, with VRAM/RAM/TTFT and overhead accounting before source changes.
-4. The remaining route classes are: a new external high-acceptance verifier/draft artifact, a new exact graph/dataflow breakthrough that keeps hot gate/up/down on CUDA without hidden copies and with enough margin, or a new correctness-verified representation artifact. Any of these must start from a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
-5. First gate for any default-off source probe is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
-6. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
+4. Exact graph/dataflow work is closed for current artifacts. Reopen it only with a new placement/kernel proof that shows retained CUDA gate/up/down, hidden scheduler-copy counts, fixed-text top1, and enough margin above the current top64/top128/top768/full-MoE hard bounds before source changes.
+5. The remaining route classes are: a new external high-acceptance verifier/draft artifact, a new correctness-verified representation artifact, or a genuinely new exact graph/dataflow proof satisfying item 4. Any of these must start from a hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.
+6. First gate for any default-off source probe is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup, plus confirmation that the default accepted path is unchanged. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
+7. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
 
 ### 2026-07-05 Historical Plan: Forced-Batch, MTP-Union, and Exact-Compact Closure
 
-本节已被上方 `2026-07-05 Latest Plan: High-Acceptance and Non-Native Gates After Exact-Compact Closure` 覆盖；内容只作为历史实验记录保留。后续执行必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
+本节已被上方 `2026-07-05 Latest Plan: Current 10 tok/s Source Gates After Exact-Compact Closure` 覆盖；内容只作为历史实验记录保留。后续执行必须先在最新计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清硬性上界、正确性门槛、16GB page-cache 约束、TTFT 约束和完整复现信息，再做 runtime 改动或长跑。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`，不是 forced-batch 诊断结果，也不是任何 trace/warm/steady-state/top1-only 结果：
 

@@ -1,0 +1,178 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json",
+  "created_utc": "2026-07-05T10:37:01Z",
+  "source_head_before_artifact": "7f1c61fb88d034396e59a304c6381ac317c1fc43",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "git_identity_required": "L-Ark <fliangae@connect.ust.hk>",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "purpose": "Current hard-bound screen for the remaining exact graph/dataflow class: keep hot gate/up/down on CUDA without hidden copies and with enough margin to reach 10 tok/s under strict cold 16GB constraints.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "strict_ram_rule": "16GB cgroup including file page cache, MemorySwapMax=0, no swap/OOM",
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "hard_requirements": {
+    "target_tok_s": 10.0,
+    "accepted_decode_window_ms": 31047.44671,
+    "decoded_tokens_estimate": 136.608765524,
+    "target_decode_window_ms_for_10_tok_s": 13660.8765524,
+    "required_decode_saving_ms_for_10_tok_s": 17386.5701576,
+    "promotion_gate": "eval_tok_s > 4.4, TTFT <= 33617.688744 ms, memory.peak <= 16000000000 bytes including page cache, no swap/OOM, fixed-text top1 before performance, France answer coherent before SOTA promotion"
+  },
+  "source_dataflow_audit": {
+    "deepseek4_build_expert_mix": {
+      "file": "src/models/deepseek4.cpp",
+      "finding": "build_expert_mix receives cur_ffn, selected_experts, and weights. It does not receive a reusable retained gate output tensor.",
+      "probe_constant": "graph_gate_output_input_available is hardcoded false in the sparse retained graph probe.",
+      "implication": "Any hot branch that needs gate output either recomputes gate or requires a new graph/dataflow interface and placement proof before logit-changing code."
+    },
+    "current_ds4_hot_dispatch": {
+      "files": [
+        "src/models/deepseek4.cpp",
+        "src/llama-deepseek4-hot.cpp",
+        "src/llama-deepseek4-hot.h"
+      ],
+      "default": "off unless DS4_HOT_DISPATCH is enabled",
+      "shape": "K real hot experts + P per-pick dummy experts + 1 padding expert per active layer",
+      "gate_behavior": "hot path computes gate/up/down again through hot tensors; it does not reuse an existing retained gate output",
+      "implication": "The existing DS4_HOT shape is not the compact sparse top64 route and cannot be promoted from the current hard bound."
+    }
+  },
+  "evidence_consulted": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/compact-retained-cuda-branch-hard-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-graph-probe-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/full-decode-updown-cuda-streaming-hard-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-warp-probe-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-transposed-compare-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/top128-rowtile-q80-hot-batch-microprobe-validation.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/top768-batched-fused-exact-compute-design.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json"
+  ],
+  "candidate_screen": [
+    {
+      "candidate": "compact sparse retained top64 graph branch using current accepted graph",
+      "paper_bound": {
+        "top64_graph_zero_transfer_tok_s": 10.014,
+        "graph_margin_ms": 18.947,
+        "ideal_sparse_updown_payload_mib": 544.0,
+        "ideal_sparse_gate_updown_payload_mib": 816.0
+      },
+      "current_probe_facts": {
+        "graph_gate_output_input_available_sum": 0,
+        "hot_active_sum": 0,
+        "hot_ready_sum": 0,
+        "dispatch_dual_sum": 0,
+        "full_up_backend_counts": {
+          "CPU_Mapped": 5960,
+          "CUDA0": 459,
+          "CUDA_Host": 160
+        },
+        "full_down_backend_counts": {
+          "CPU_Mapped": 5960,
+          "CUDA0": 459,
+          "CUDA_Host": 160
+        },
+        "combine_bytes_fixed_text": 646742016,
+        "combine_copy_ms_at_24_gib_s": 17.197,
+        "remaining_margin_after_24_gib_s_combine_ms": 1.75
+      },
+      "decision": "closed_for_current_graph",
+      "reason": "The only positive bound has only 18.947 ms margin and assumes retained CUDA gate/up/down plus near-zero combine overhead. The pushed-source probe shows no retained gate tensor, no active hot manager state, and enough combine traffic to consume almost all margin before scheduler, launch, event, allocation, or correctness overhead."
+    },
+    {
+      "candidate": "adapt current DS4_HOT_DISPATCH to the sparse profile",
+      "current_shape_facts": {
+        "rectangular_entries_for_64_real_pairs": 295,
+        "rectangular_updown_payload_mib": 2507.5,
+        "rectangular_gate_updown_payload_mib": 3761.25,
+        "ideal_sparse_updown_payload_mib": 544.0,
+        "gate_recompute_tok_s": 9.861,
+        "gate_recompute_margin_ms": -191.953
+      },
+      "decision": "closed",
+      "reason": "The current hot manager inflates the compact sparse profile through per-layer K+P+1 allocation and recomputes gate. Gate recompute is below 10 tok/s even before hidden copies, and the inflated payload would steal gate-cache capacity."
+    },
+    {
+      "candidate": "exact top64/top128/top256 hot residual GPU kernel with retained source",
+      "measured_kernel_facts": {
+        "raw_warp_gib_s": 74.59,
+        "transposed_warp_gib_s": 72.434,
+        "rowtile_transposed_gib_s": 62.907,
+        "top64_required_gib_s": 305.844,
+        "top128_required_gib_s": 246.305,
+        "top256_required_gib_s": 393.243
+      },
+      "decision": "closed_for_current_kernels",
+      "reason": "All measured exact kernels are far below the required bandwidth. Top128 needs about 246 GiB/s before integration overhead, while measured exact probes are only about 63-75 GiB/s. This is a kernel/math gap, not a launch-only gap."
+    },
+    {
+      "candidate": "top768 exact resident batched/fused compute as a 10 tok/s route",
+      "bound_facts": {
+        "conditional_zero_overhead_tok_s": 10.338,
+        "decode_overhead_budget_ms": 446.414,
+        "async_direct_prefill_ttft_margin_ms": 78.135454,
+        "raw_warp_projected_kernel_ms": 1820.86,
+        "transposed_projected_kernel_ms": 1875.05,
+        "rowtile_projected_kernel_ms": 2159.005
+      },
+      "decision": "closed_for_current_exact_kernel_family",
+      "reason": "The conditional top768 route relies on source/page overlap plus resident exact compute. The measured exact kernels alone exceed the full 446 ms overhead budget by roughly 4x, and TTFT margin for the supporting prefill path is only about 78 ms."
+    },
+    {
+      "candidate": "full selected MoE CUDA op / full up-down exact graph replacement",
+      "bound_facts": {
+        "full_fallback_removal_margin_ms": 1728.829,
+        "total_decode_call_weighted_gib": 148.916,
+        "exact_raw_full_kernel_ms": 1996.461,
+        "exact_transposed_full_kernel_ms": 2055.886,
+        "decode_unique_updown_payload_gib": 21.806,
+        "current_source_effective_call_weighted_gib_s": 9.174,
+        "measured_odirect_gib_s": 1.85
+      },
+      "decision": "closed_for_current_exact_kernels_and_payload",
+      "reason": "Even with zero source cost, current exact raw/transposed full-kernel projections exceed the entire 1.729 s margin. Full resident payload is 21.806 GiB, too large for VRAM and incompatible with the strict 16GB host/page-cache budget."
+    },
+    {
+      "candidate": "move additional full MoE layer(s) to GPU",
+      "bound_facts": {
+        "one_full_gate_up_down_layer_mib": 3264.0,
+        "estimated_gate_slots_stolen": 712,
+        "estimated_gate_penalty_ms": 1458.25,
+        "best_single_layer_optimistic_saved_ms": 1172.844
+      },
+      "decision": "closed",
+      "reason": "A single extra full MoE layer costs about 3264 MiB and the estimated gate-cache penalty exceeds the best optimistic per-layer saving. Historical cpu_moe=39/38 runs already regressed."
+    }
+  ],
+  "reopen_conditions": [
+    "A placement probe must show a real retained CUDA gate/up/down path in the accepted DeepSeek4 graph: graph_gate_output_input_available > 0, hot_active/hot_ready > 0, and hidden scheduler copies counted.",
+    "A compact sparse branch must prove final combine/scheduler/launch/sync overhead with meaningful margin above the 18.947 ms paper bound; a one-copy lower bound that leaves only 1.75 ms margin is not enough.",
+    "An exact kernel route must demonstrate fixed-text top1 and measured effective bandwidth above the relevant threshold, e.g. >246 GiB/s for top128 before integration overhead, with H2D/D2H/scatter/sync included.",
+    "A full-MoE route must provide a new payload/VRAM/RAM proof; current 21.806 GiB unique up/down payload and 16GB page-cache limit reject full residency.",
+    "Any reopened source probe must be default-off, pass fixed-text top1 under strict 16GB/no-swap cgroup, preserve the default accepted path, and only then proceed to strict cold France benchmarking."
+  ],
+  "decision": {
+    "status": "no_exact_graph_dataflow_source_patch_allowed_now",
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "runtime_patch_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "reason": "The current exact graph/dataflow candidates all fail a hard gate: current DS4 graph has no retained gate output, current DS4_HOT recomputes gate and inflates payload, sparse retained top64 has only 18.947 ms theoretical margin and no dataflow proof, exact hot/full kernels are 3-5x too slow for the relevant bounds, and full payload/layer placement violates VRAM or gate-cache tradeoffs.",
+    "next_allowed_work": [
+      "Do not write a logit-changing exact graph/dataflow runtime patch from current evidence.",
+      "Reopen this class only after a new placement/kernel proof artifact satisfies the reopen conditions above.",
+      "Otherwise continue from the remaining classes in the plan: a new external high-acceptance verifier/draft artifact or a new correctness-verified representation artifact."
+    ]
+  }
+}
