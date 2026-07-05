@@ -67218,3 +67218,116 @@ Reproducibility:
 - Commit and push the default-off implementation before running.
 - Record run directory, exact command, source commit, output, TTFT, decode,
   token rate, memory, swap, IO counters, and decision.
+
+### 7KW result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `a38cad83c` (`cuda: add combined mixed upgate io path`).
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard a38cad83c
+cmake --build build-cuda-batch -j$(nproc)
+```
+
+Build result:
+
+- success;
+- only existing warning classes were emitted.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-044350Z-phase7kw-combined-upgate-io-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-044350Z-phase7kw-combined-upgate-io-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_COMBINED_IO=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `75914.96 ms`;
+- decode `23278.73 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- memory final `15113310208`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`;
+- iouring bytes `126391910400`;
+- iouring wait `15832493 us`;
+- iouring submit `65398 us`;
+- combined path was active:
+  `[moe_stream] mixed-type up/gate combined io_uring stage active`;
+- global io_uring detail:
+  - batches `4229`;
+  - submit calls `5341`;
+  - wait calls `17495`;
+  - inflight avg `4.00`;
+  - inflight max `8`;
+  - batch histogram `1:94,2-4:1757,5-8:2016,9-16:362`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3306268 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.4%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `45.2%`.
+
+Comparison:
+
+- accepted n32 reference:
+  - decode `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KV diagnostic baseline:
+  - decode `23776.55 ms / 31`, `1.30 tok/s`;
+  - iouring wait `20549141 us`.
+- 7KW:
+  - decode `23278.73 ms / 31`, `1.33 tok/s`;
+  - iouring wait `15832493 us`.
+
+Interpretation:
+
+- The implementation did reduce measured io_uring wait by about `4.72 s`
+  versus 7KV, and it created larger mixed batches (`9-16` bucket: `362`).
+- However, endpoint decode stayed `611.34 ms` slower than the accepted n32
+  reference.
+- The likely gap is that the combined copy path removes the current overlap
+  where up copy can finish, up compute can start, and gate copy continues on the
+  second ring. Reducing IO wait was not enough to compensate for the lost
+  copy/compute overlap and the larger single-ring staging dependency.
+- Therefore the hard acceptance rule is not met.
+
+Decision:
+
+- Reject `GGML_MOE_MIXED_UP_GATE_COMBINED_IO`.
+- Revert source commit `a38cad83c`.
+- Do not enable combined up/gate IO in the repro script.
+- Keep the current accepted runtime defaults unchanged.
