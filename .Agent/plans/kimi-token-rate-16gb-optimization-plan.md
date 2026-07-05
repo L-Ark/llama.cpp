@@ -62050,3 +62050,85 @@ Decision:
 - Keep Q4_0 fallback as a documented residual cost.
 - Next design should target a broad per-miss cost reduction or a scheduler-level
   reduction that does not increase IO, cache churn, or TTFT.
+
+## Phase 7JU: current-SOTA scheduler split refresh
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7JT confirms Q4_0 decode fallback is bounded and historically unsafe to
+  retry.
+- 7IF previously showed decode split wall was almost entirely CPU backend MoE
+  work, but that measurement predates the current accepted runtime deltas:
+  - `UPGATE_PCT=62`;
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`.
+- Before attempting any scheduler-level change, the current SOTA must be
+  re-profiled with the same split/backend instrumentation.
+
+Hypothesis:
+
+- If decode CPU split wall remains near total decode wall, the largest remaining
+  target is still scheduler/CPU wrapper ownership of MoE nodes.
+- If the current accepted movement optimizations shift the profile so IO wait
+  dominates and decode CPU split shrinks, scheduler work should not be the next
+  implementation target.
+
+Experiment:
+
+- Run one strict cold-start n32 diagnostic on current head with:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=32`;
+  - `GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE=1`.
+- Keep current production runtime defaults:
+  - default `UPGATE_PCT=62`;
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Required gates:
+
+- cold start through cache-drop runner;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for
+  `Please introduce France in a short paragraph.`;
+- logs must contain split backend totals for `phase=decode`.
+
+Analysis:
+
+- Extract:
+  - measured decode time;
+  - graph submit/sync totals;
+  - split total for `phase=decode`;
+  - `phase=decode backend=CPU`;
+  - `phase=decode backend=CUDA0`;
+  - top decode split signatures;
+  - MoE assignment diagnostics.
+- Compare with 7IF:
+  - 7IF decode `29481.60 ms`;
+  - decode CPU split `29282.294 ms`;
+  - decode CUDA split `155.146 ms`.
+
+Decision rule:
+
+- If decode CPU split remains above `20 s` and above `80%` of decode split wall,
+  write the next phase around a guarded scheduler/CPU-wrapper bypass feasibility
+  analysis.
+- If decode CPU split is much lower, target the new dominant bucket instead.
+- This diagnostic is not a SOTA candidate unless it unexpectedly improves
+  token rate while passing all gates.
