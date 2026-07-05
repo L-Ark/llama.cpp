@@ -72638,3 +72638,133 @@ Reproducibility:
 - Commit source separately.
 - Record source commit, build command, run directory, metrics, activation line,
   and exact env.
+
+### Phase 7MB result
+
+Timestamp: 2026-07-06 03:07:00 CST.
+
+Status: rejected and reverted.
+
+Source:
+
+- initial source patch: `ee119d0b9`
+  (`cuda: add optional batched h2d copies`);
+- build fix: `5acf9bdd4`
+  (`cuda: fix h2d batch pending reuse`);
+- revert commits:
+  - `cabd9009b`
+    (`Revert "cuda: fix h2d batch pending reuse"`);
+  - `6e9872d21`
+    (`Revert "cuda: add optional batched h2d copies"`).
+
+Build:
+
+- `ee119d0b9` failed because `pending_job` did not retain `pending_idx` after
+  the refactor.
+- `5acf9bdd4` fixed the build.
+- Server build passed with existing warnings only.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-090354Z-phase7mb-h2d-batch-n32`
+
+Activation:
+
+- stderr contains:
+  `[moe_stream_batch] H2D batch memcpy active`
+- activation appears twice because both relevant staging rings enter the helper.
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `71039.72 ms`;
+- decode `22684.39 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Counters:
+
+- expert-pack iouring bytes `126391910400`;
+- iouring wait `21017972 us`;
+- iouring batches `5178`;
+- iouring inflight avg `3.33`;
+- current-down worker `3301963 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- The source path activated and preserved output quality.
+- It did not provide a reproducible endpoint improvement:
+  - 7MB n32 `22684.39 ms / 31`, `1.37 tok/s`;
+  - recent default references include 7KX `22601.57 ms / 31`, 7LY
+    `22256.21 ms / 31`, and 7LZ n96 matching 7KZ.
+- Raw iouring wait increased versus the nearby default guards, so any reduced
+  H2D enqueue overhead was not visible at endpoint level.
+- This rejects H2D batch enqueue as a current SOTA path.
+
+Decision:
+
+- Reject Phase 7MB.
+- Keep the source revert.
+- Do not retry `cudaMemcpyBatchAsync` unless a later diagnostic shows a larger
+  exposed H2D enqueue bucket or a way to avoid the increased wait.
+
+## Phase 7MC - post-H2D-batch revert n32 guard
+
+Timestamp: 2026-07-06 03:11:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Verify that reverting 7MB restores the default runtime path and removes H2D
+  batch activation.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 6e9872d21
+cmake --build build-cuda-batch -j$(nproc)
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mc-post-h2d-batch-revert-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `H2D batch memcpy active`.
+
+Decision rule:
+
+- If default n32 returns to the recent `~1.33-1.39 tok/s` band, keep the
+  revert and continue from default.
+- If activation remains or gates fail, inspect binary/source state before any
+  new source plan.
+
+Reproducibility:
+
+- Commit and push this result/guard plan before running.
+- Record run directory, metrics, output, source commit, build status, and
+  activation absence.
