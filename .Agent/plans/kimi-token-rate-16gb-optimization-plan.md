@@ -68919,3 +68919,116 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Record run directory, command, output, gates, activation absence, and metrics.
+
+### 7LF result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `b10ce4de5` (`docs: plan post 7le rollback guard`), which includes:
+  - `c0846de1c` recording 7LE rejection;
+  - `6e3b4c58c` reverting `d012a8c24`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-055614Z-phase7lf-post-7le-rollback-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `76102.23 ms`;
+- decode `23307.78 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- memory final `15091548160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- cgroup events:
+  - `oom=0`;
+  - `oom_kill=0`.
+
+Rollback evidence:
+
+- git status clean at run start.
+- stderr activation absence:
+  - `shared IO dual-fence active` count `0`;
+  - `IQ2_S parallel up/gate streams active` present;
+  - `up/gate parallel CPU staging active` present.
+- default iouring shape restored:
+  - batches `5178`;
+  - submit calls `5178`;
+  - iouring reads `22647`;
+  - iouring bytes `126391910400`;
+  - inflight avg `3.32`;
+  - batch hist `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+
+Interpretation:
+
+- Source and activation rollback are clean.
+- Endpoint decode is still slower than the 7KX baseline (`22601.57 ms / 31`)
+  by `706.21 ms`.
+- The IO shape matches the default path, so this is not residual 7LE behavior.
+- Before starting another optimization, run one repeat guard to distinguish
+  normal cold-run variance from a current-head baseline shift.
+
+Decision:
+
+- Treat rollback as source-clean but performance not fully re-baselined.
+- Do not start a new source optimization until a repeat guard is recorded.
+
+## Phase 7LG - post-rollback n32 repeat guard
+
+Timestamp: 2026-07-05 20:04:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Repeat the default n32 guard after 7LF to decide whether the slower
+  `~23.3 s / 31` decode is run variance or the current post-rollback baseline.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard b10ce4de5
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lg-post-rollback-repeat-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must not contain `up/gate shared IO dual-fence active`.
+
+Decision rule:
+
+- If 7LG returns near 7KX (`~22.6 s / 31`), treat 7LF as cold-run variance and
+  continue from the accepted default path.
+- If 7LG repeats `~23.3 s / 31`, update the current n32 baseline range and use
+  that stricter current-head evidence for the next candidate, while keeping n96
+  SOTA references unchanged.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, command, output, gates, activation absence, and metrics.
