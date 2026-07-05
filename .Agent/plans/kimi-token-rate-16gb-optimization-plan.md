@@ -68920,6 +68920,84 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, command, output, gates, activation absence, and metrics.
 
+### 7LG result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `9a1f39f2a` (`docs: record rollback guard and plan repeat`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-060013Z-phase7lg-post-rollback-repeat-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `76160.29 ms`;
+- decode `22862.71 ms / 31`, `1.36 tok/s`;
+- memory peak `15899996160`;
+- memory final `15040425984`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- cgroup events:
+  - `oom=0`;
+  - `oom_kill=0`.
+
+Rollback evidence:
+
+- git status clean at run start.
+- stderr activation absence:
+  - `shared IO dual-fence active` count `0`;
+  - `IQ2_S parallel up/gate streams active` present;
+  - `up/gate parallel CPU staging active` present.
+- default iouring shape restored:
+  - batches `5178`;
+  - submit calls `5178`;
+  - iouring reads `22647`;
+  - iouring bytes `126391910400`;
+  - inflight avg `3.30`;
+  - batch hist `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+
+Comparison:
+
+- 7KX current-head n32:
+  - decode `22601.57 ms / 31`;
+  - iouring wait `19756301 us`.
+- 7LF post-rollback first guard:
+  - decode `23307.78 ms / 31`;
+  - iouring wait `20831418 us`.
+- 7LG post-rollback repeat:
+  - decode `22862.71 ms / 31`;
+  - iouring wait `19704580 us`.
+
+Interpretation:
+
+- 7LG confirms rollback is clean and most of 7LF's slowness was cold-run
+  variance or transient IO pressure.
+- The current default path is back near the accepted n32 baseline range, but
+  still not faster than 7KX.
+- 7LE's mechanism should remain rejected:
+  - it improved IO occupancy and wait locally;
+  - the reverted default has better endpoint decode.
+
+Decision:
+
+- Treat post-7LE rollback as verified.
+- Keep current accepted defaults unchanged.
+- Use 7KX/7LG as n32 baseline references for the next candidate:
+  - strict promotion requires beating `22601.57 ms / 31` or at least showing a
+    repeatable improvement over the current repeated range with n96 confirmation;
+  - local IO wait improvements alone are not enough.
+- Do not retry small-batch IO reshaping without a design that removes the
+  additional host-thread/stream handoff cost observed in 7LE.
+
 ### 7LF result
 
 Timestamp: 2026-07-05.
