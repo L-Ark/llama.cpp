@@ -64468,3 +64468,105 @@ Decision:
 - Next optimization must find a different bottleneck family with a measured
   n32 wall-time upper bound above `2 s`; do not revisit up/gate scheduling
   without new evidence.
+
+## Phase 7KI - wall-vs-CPU runtime attribution with perf stat
+
+Timestamp: 2026-07-05 11:22:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Identify the next bottleneck family after rejecting:
+  - new up/gate first-CQE scheduling in 7KH;
+  - Q4_0 down fallback GPU/cache retry in 7KG;
+  - exact hot-key pinning/cache admission in 7KF/7JS;
+  - same-type IQ3 parallelism in 7KD/7KE.
+- Use a strict cold-start n32 run with low-overhead process-level counters to
+  separate CPU-bound wrapper work from blocked IO/CUDA-runtime wait.
+- Do not change runtime behavior in this phase.
+
+Why this is needed:
+
+- Existing detailed profilers explain many summed buckets, but several source
+  changes that improved a local counter regressed wall time.
+- The next source change should be based on whole-process behavior:
+  - high CPU time and hot user/kernel stacks would justify CPU wrapper or
+    scheduler optimization;
+  - low CPU utilization with large blocked time would keep the target on
+    storage/CUDA wait hiding;
+  - high major faults would reopen page-cache/mmap work;
+  - high context-switch/syscall pressure would justify a narrower dispatch or
+    thread-management change.
+
+Experiment:
+
+- Run current accepted SOTA runtime with `perf stat`.
+- Keep the same strict cold-start runner and memory guard.
+- Use n32 first; this is diagnostic and cannot become SOTA unless the measured
+  token rate unexpectedly improves while all gates pass.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 45d8251ad
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ki-perf-stat-n32
+rm -rf "$RUN"
+mkdir -p "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      bash -lc 'perf stat -d -d -o "$RUN/perf-stat.txt" -- scripts/kimi-phase7fb-min-profile-repro.sh'
+```
+
+Required gates:
+
+- cold start through the runner's cache-drop path;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for:
+  `Please introduce France in a short paragraph.`;
+- `perf-stat.txt` must be present and contain task-clock/context-switch/fault
+  counters.
+
+Analysis:
+
+- Compare n32 wall metrics with current accepted n32 default:
+  `22667.39 ms / 31`, `1.37 tok/s`.
+- Extract:
+  - `task-clock`;
+  - CPUs utilized;
+  - context switches;
+  - CPU migrations;
+  - major/minor page faults;
+  - cycles/instructions if present;
+  - elapsed time.
+- Compute whether CPU task-clock is large enough to justify CPU-side
+  optimization:
+  - if total process task-clock during the run is high but token rate is low,
+    inspect `perf record` or a narrower CPU profile next;
+  - if CPUs utilized is low while iouring wait remains high, CPU wrapper is not
+    the next source target;
+  - if major faults are high, plan a page-cache/mmap/fallback source diagnosis;
+  - if context switches are high, plan a dispatch/thread-lifetime source probe.
+
+Decision rule:
+
+- This phase can only choose the next implementation family.
+- If perf shows a CPU-side family with a credible `> 2 s` n32 upper bound,
+  write a focused implementation plan before coding.
+- If perf confirms blocked IO/CUDA wait is still dominant and no new CPU/page
+  signal appears, reject CPU wrapper changes and plan a different low-level
+  storage/CUDA wait diagnostic.
+- Record all counters, gates, output, and reproduction method, then commit and
+  push.
