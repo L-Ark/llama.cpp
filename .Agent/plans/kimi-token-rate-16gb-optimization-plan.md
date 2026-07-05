@@ -84799,3 +84799,87 @@ systemd-run --wait --collect --same-dir \
       MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+## Phase 7OH - priority-launch n32 IO bottleneck refresh
+
+Status: planned.
+
+Timestamp: 2026-07-06 08:03 CST.
+
+Reason:
+
+- Phase 7OG accepted a small but reproducible launch-level improvement:
+  - priority n96 A: `55528.61 ms / 77`;
+  - priority n96 B: `55755.91 ms / 77`;
+  - both beat the 7MU reference `56696.97 ms / 77`;
+  - quality, TTFT, RAM, read-failure, and iouring-fallback gates passed.
+- Future experiments should compare against the 7OG launch recipe, but the most
+  recent detailed n32 IO trace was collected before those launch properties.
+- Before designing any new source or runtime change, refresh the n32 IO
+  decomposition under the accepted 7OG launch recipe.
+
+Goal:
+
+- Run one strict cold-start n32 diagnostic with 7OG systemd properties and the
+  same low-level IO trace envs as 7OF/7NN.
+- Compare against:
+  - 7OF n32 IO refresh:
+    `21832.95 ms / 31`, `iouring_wait_us=18234702`;
+  - 7NN n32 IO reference:
+    `23428.83 ms / 31`, `iouring_wait_us=20097441`.
+- Do not edit source.
+- Do not change runtime MoE env knobs beyond diagnostics.
+- Do not promote SOTA from n32; this is a bottleneck refresh.
+
+Experiment:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oh-priority-n32-io-refresh
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Strict gates:
+
+- exit `0`;
+- France output remains on-topic. `N=32` can truncate, so final semantic
+  promotion remains n96-only;
+- TTFT within `127598.064 ms`;
+- `memory.peak <= 15899996160`;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- trace artifacts exist:
+  - `io-batch-profile.csv`;
+  - `io-wait-trace.csv`;
+  - `io-locality-profile.csv`;
+  - `current-down-overlap-profile.csv`.
+
+Analysis:
+
+- Record:
+  - decode ms/token rate;
+  - iouring bytes/wait/effective throughput;
+  - batch hist and inflight;
+  - current-down overlap worker time;
+  - page-cache distribution.
+- If the 7OG priority launch does not materially change the n32 IO shape, keep
+  the same bottleneck conclusion: bytes/token and exposed IO wait remain the
+  limiting path.
+- If it does materially change n32 wait, use the refreshed numbers in the next
+  optimization plan.
+
+Reproducibility:
+
+- Commit and push this 7OH plan before running.
+- Commit and push the result before any follow-up experiment or source change.
