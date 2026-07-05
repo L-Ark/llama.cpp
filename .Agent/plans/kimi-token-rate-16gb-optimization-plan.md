@@ -78569,3 +78569,127 @@ Decision:
   - read-volume/effective-token reduction; or
   - a deeper runtime redesign with a hard bound above the local micro-patch
     ceiling.
+
+## Phase 7NE - up/gate pair-read feasibility audit
+
+Timestamp: 2026-07-06 00:58:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test one read-volume/runtime redesign candidate before writing any source:
+  whether same-layer same-expert up/gate tensors can be read as physical pairs
+  from the expert pack.
+- Do not change source and do not run a model in this phase.
+- Decide whether a future default-off `up+gate paired read` implementation has
+  enough hard bound to justify coding, or whether it is another closed IO
+  coalescing variant.
+
+Why this is not a repeat of rejected work:
+
+- Broad cache split and global VRAM budget sweeps are closed.
+- Q4_0 fallback and Q4 GPU/cache paths are closed.
+- Generic adjacent-span/coalescing was rejected in 7MM because it changed many
+  reads, lowered inflight behavior, and introduced span-slot waits.
+- This audit is narrower: only same expert, same layer, up/gate pairs, and only
+  if current expert-pack offsets show the two entries are physically adjacent
+  or near-adjacent enough to avoid extra bytes.
+- 7MX found old `GGML_MOE_UPGATE_PAIR_MERGED_READ` env names but no recoverable
+  source implementation or activation proof. This phase re-evaluates the idea
+  from current pack metadata and current trace evidence, not from old env names.
+
+Current bottleneck basis:
+
+- 7MY full-profile n32:
+  - decode `26045.71 ms / 31`, profiling run;
+  - expert-pack iouring bytes `126391910400`;
+  - expert-pack iouring wait `20984633 us`;
+  - up/gate wall `6405.311 ms`;
+  - type22 up/gate wall `3600.223 ms`, with large wait counters;
+  - type18 up/gate wall `2805.088 ms`;
+  - up/gate route bytes: up `67.960 GiB`, gate `73.470 GiB`.
+- 7NB strict n32 baseline:
+  - decode `21878.07 ms / 31`, `1.42 tok/s`;
+  - expert-pack iouring bytes `126391910400`;
+  - expert-pack iouring wait `17861087 us`.
+
+Theory and hard upper bound:
+
+- Current up and gate cache misses are staged as independent expert-pack reads
+  and independent H2D copies.
+- If a pair's pack entries are contiguous or near-contiguous, one read into a
+  paired host buffer could replace two read submissions, then split/copy into
+  the existing device cache slots.
+- The hard upper bound is limited by the number of up/gate miss pairs that:
+  - occur in the same layer/expert during the same decode call;
+  - both miss cache;
+  - are present in the same expert-pack source;
+  - have a physical gap small enough that the combined read does not add
+    material bytes.
+- This cannot reduce the bytes of non-paired misses, down reads, Q4 fallback,
+  or up/gate compute. If current pack layout is not pair-contiguous, the idea is
+  rejected before source work.
+- A future implementation is only worth coding if metadata shows a hard n32
+  endpoint upper bound above `0.5 s` and avoids the 7MM failure mode of broad
+  span-slot waits.
+
+Audit method:
+
+- Create a run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ne-upgate-pair-read-audit`.
+- Parse current expert-pack indexes from:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Parse current 7MY trace/profile artifacts:
+  - `route-trace.csv`;
+  - `route-profile.csv`;
+  - `up-gate-profile.csv`;
+  - stderr expert-pack counters.
+- For each same-layer expert pair:
+  - map `blk.X.ffn_up_exps.weight` and `blk.X.ffn_gate_exps.weight`;
+  - compare source index, offset, nbytes, and physical gap;
+  - count pairs with exact adjacency, same 4 KiB page adjacency, same 2 MiB
+    window, and non-adjacent layout.
+- Estimate current decode pair opportunity:
+  - same-call up+gate active pairs from `up-gate-profile.csv`;
+  - up/gate miss/job counts from profiles;
+  - approximate both-miss pairs as the minimum of up misses and gate misses by
+    layer/type when exact per-expert miss rows are unavailable.
+- Compute optimistic savings:
+  - removed read submissions/CQEs for pairable both-miss pairs;
+  - bytes saved only when layout has alignment waste or duplicate page reads;
+  - endpoint upper bound using observed 7NB/7MY iouring wait and read count.
+
+Required artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `pack_pair_layout.tsv`;
+- `pair_opportunity.tsv`;
+- `summary.md`;
+- `decision.md`;
+- `audit_pair_reads.py`.
+
+Decision rule:
+
+- If less than `50%` of both-miss up/gate opportunities are physically
+  pairable with negligible gap, reject without source implementation.
+- If pairable opportunities are high but byte savings are near zero and the
+  only benefit is fewer submits/CQEs, reject unless read-count timing gives a
+  hard upper bound above `0.5 s / n32`.
+- If the hard upper bound is credible, write a separate source implementation
+  phase before coding. That phase must include:
+  - exact buffer/slot design;
+  - activation line;
+  - correctness argument for unchanged math;
+  - n32 strict cold-start command;
+  - quality/RAM/TTFT gates;
+  - repeat and n96 promotion rules;
+  - immediate revert rule.
+
+Reproducibility:
+
+- Commit and push this plan before the audit.
+- Store the audit script and all raw summaries in the run directory.
+- Commit and push the result into this plan before any source change.
