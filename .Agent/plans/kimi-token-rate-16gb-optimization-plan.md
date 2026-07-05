@@ -62828,3 +62828,142 @@ Decision:
 - Run strict n96 from the pushed commit with
   `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1` before promoting it as the new n96
   SOTA.
+
+### 7JY n96 result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `820729ab3` (`cuda: add mixed upgate parallel staging`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-n96`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 820729ab3
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-n96
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+- TTFT `73810.16 ms`;
+- decode `57169.16 ms / 77`, `1.35 tok/s`;
+- memory peak `15899996160`;
+- memory final `15089491968`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- activation logs:
+  - `mixed-type up/gate compact path active`;
+  - `mixed-type up/gate parallel stage active`.
+- expert pack hits `63050`, misses `633`;
+- iouring reads `56535`, bytes `315379728384`, wait `51025982 us`;
+- iouring batches `12722`, wait calls `45840`;
+- current-down overlap worker time `8157471 us`;
+- down hit `73.0%`, slots `766`;
+- upgate hit `44.1%`, slots `1735`.
+
+Comparison:
+
+- Previous accepted strict n96 SOTA:
+  - decode `71024.41 ms / 77`, `1.08 tok/s`;
+  - TTFT `77412.40 ms`.
+- 7JY strict n96:
+  - decode `57169.16 ms / 77`, `1.35 tok/s`;
+  - TTFT `73810.16 ms`.
+- Decode improvement:
+  - `13855.25 ms` faster on 77 decode runs;
+  - about `19.5%` lower decode time.
+- TTFT also improved and remains well below the `+20%` gate.
+
+Decision:
+
+- Accept 7JY as the new strict n96 SOTA.
+- Promote `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1` into the reproduction
+  runner default environment so future SOTA runs do not require an extra env
+  override.
+
+### 7JY script-default n32 result
+
+Timestamp: 2026-07-05.
+
+Source state:
+
+- Base code commit on server: `820729ab3`.
+- Uncommitted runner/doc diff:
+  - `scripts/kimi-phase7fb-min-profile-repro.sh` adds
+    `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1` to the default env;
+  - this plan records the promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-script-default-n32`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 820729ab3
+# apply the script-default promotion diff
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jy-mixed-parallel-script-default-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Default verification:
+
+- `env.txt` contains `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1`;
+- stderr contains `mixed-type up/gate parallel stage active`;
+- no `EXTRA_RUNTIME_ENV` was used.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79515.29 ms`;
+- decode `22667.39 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- memory final `15101480960`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision:
+
+- Runner promotion is accepted.
+- Commit and push the script-default promotion and final 7JY result records.
