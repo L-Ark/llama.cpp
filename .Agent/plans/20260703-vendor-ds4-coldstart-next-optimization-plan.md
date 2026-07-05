@@ -4,6 +4,48 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-05 Current Active Plan Update
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan Override` 段落；历史段落保留为实验记录。后续执行必须以本节为入口，先更新计划/实验 artifact，再做 runtime 改动或长跑。
+
+当前 accepted strict cold SOTA 仍为 `4.4 tok/s`，没有被后续 direct hot pool、Q8_0、CPU batch、payload compression、CUDA graph 或 VRAM recovery 候选替代：
+
+- Accepted run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Accepted metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32892.55329 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102607360`, `ram_ok=true`, `correctness_ok=true`
+- Accepted constraints: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
+- Promotion gate remains: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB host RAM including file page cache, no swap, coherent/semantically correct France output, source+artifacts committed and pushed, then clean pushed-source reproduction
+- Model file: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`)
+- Latest pushed code/audit head before this plan update: `756722eefc5b2958ba080db8212c616375792480` (`vendor-ds4: recheck top768 source hidden bound`) on `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, author `L-Ark <fliangae@connect.ust.hk>`
+
+Current measured bottleneck:
+
+- Accepted decode is still dominated by DeepSeek CPU up/down fallback plus source/page behavior, not by gate cache alone.
+- Current decode CPU up/down fallback is about `19029.457 ms`. Reaching `10 tok/s` requires saving about `17386.570 ms` while adding less than about `1642.887 ms` total overhead.
+- Perfect source/page overlap alone has a zero-overhead ceiling around `8.993 tok/s`; source-only streaming/io_uring/prefetch remains rejected.
+- Best CPU microprobe bandwidth is `74.719 GiB/s`, below the `90.643 GiB/s` zero-overhead requirement and far below the `130.298 GiB/s` requirement with `500 ms` integration overhead; CPU batch rewrite remains rejected.
+- Exact raw up/down hot payload under current VRAM does not fit a 10 route: top3072 needs `12.75 GiB` and is still `73.955 ms` short before overhead; top4096 reaches a positive bound but needs `17.0 GiB` raw payload before gate/workspace. zstd/dedup only gave about `1.04x`, far below the needed `4.0x-5.33x`.
+- `cpu_moe=41 + top768 exact Q8_0 hot residual` is the only remaining tight paper candidate. Its best zero-overhead bound is about `10.338 tok/s` with about `446.414 ms` decode slack, but only if the extra CPU layer and top768 source reads are mostly hidden. If top768 source is not hidden, slack drops to about `120 ms`, which is not enough for kernel/D2H/scatter/sync overhead.
+
+Latest closed decisions:
+
+- Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.
+- Current per-call Q8_0 CUDA path is rejected for performance. It measured about `3140.36 us/call` total and `1088.488 us/call` kernel sync, while top768 has only about `23 us/call` budget if it is to fit the `10 tok/s` bound.
+- Q8_0 CPU-compatible arithmetic is token-stable for combined all-up/all-down in fixed-text `llama-results`, but the strict cold all-up performance path regressed to `1.8 tok/s` and raised TTFT above gate. It is correctness evidence only, not a SOTA path.
+- CUDA graph is not an accepted DeepSeek SOTA change. It has no current evidence of improving the accepted path under the strict 16GB/TTFT/correctness gates.
+
+Immediate execution plan:
+
+1. Keep the accepted `4.4 tok/s` runtime path unchanged by default. No candidate may change default behavior until it has passed the fixed-text verifier and a strict cold benchmark.
+2. Execute only the next written plan artifact first: `.Agent/runs/20260705-vendor-ds4-coldstart/async-direct-prefill-overlap-diagnostic-plan.json`.
+3. Implement the async direct prefill experiment as a default-off, source-only diagnostic behind `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1`. It may overlap top768 direct pool prefill with gate prefill/prompt cold work, but it must not change logits, accepted default behavior, or any promoted runtime configuration.
+4. Run the async diagnostic under `MemoryMax=16000000000`, `MemorySwapMax=0`, no swap, full cgroup memory/page-cache logging. The target is to prove whether at least `58.5%` of the measured `1745.225 ms` direct prefill can be hidden while keeping accepted-path TTFT within `33617.688744 ms`.
+5. If async direct prefill cannot meet that TTFT overlap requirement, reject the `cpu_moe=41 + top768` route before writing batched/fused compute kernels. Record the rejection artifact with run path, env, stderr hashes, direct/gate elapsed time, async flags, cgroup stats, and decision.
+6. If async direct prefill does meet the overlap requirement, do not benchmark it as SOTA yet. First write a separate batched/fused exact compute design that explains CPU-compatible MXFP4 x Q8_0 arithmetic, source/pool layout, expected overhead under the remaining `446.414 ms` decode slack, fixed-text top1 gate, RAM/page-cache pressure, rollback rule, and exact commands.
+7. Any logit-changing candidate must pass fixed-text `llama-results` top1 with `same_top1 == n_tokens` before any strict cold performance run. France output must remain semantically correct, coherent, and complete.
+8. Any strict cold performance run must record: run path, full command/env, source head, branch, binary/library hashes, model/profile/pack hashes, memory stats including file page cache, `oom`/`oom_kill`, swap counters, TTFT, prompt/eval token rates, counters, exact output, and correctness decision.
+9. If a compliant new SOTA appears, stop exploration immediately. Commit and push source plus artifacts to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then clean-rebuild and reproduce from pushed source before promotion.
+10. If a candidate regresses throughput, violates 16GB including page cache, fails correctness, or exceeds the accepted TTFT gate for a promotable result, revert/guard off runtime source back to the accepted SOTA path and keep only rejected documentation/artifacts.
+
 ### 2026-07-05 Latest Active Plan Override
 
 本节是当前生效计划，覆盖下面较早的 2026-07-04 active plan。历史记录保留不改；后续执行必须先按本节更新/记录计划，再做任何 runtime 实验。
