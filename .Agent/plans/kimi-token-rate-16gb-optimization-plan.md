@@ -80048,6 +80048,99 @@ Reproducibility:
 - Commit and push this 7NX plan before running the audit.
 - Commit and push the 7NX result before any follow-up source or asset work.
 
+### Phase 7NX result
+
+Timestamp: 2026-07-06 11:56 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-204104Z-phase7nx-byte-reduction-budget`
+
+Plan commit before execution:
+
+- `3c38e8451` (`docs: plan byte reduction budget audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7nx_byte_budget.py`
+- `byte_budget_summary.tsv`
+- `candidate_budget.tsv`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was changed.
+- No asset was downloaded or deleted.
+- The audit used actual `iouring=1` rows from the 7MA copy profile and
+  excluded the partial prefix segment.
+
+Current byte mix:
+
+- Total actual iouring movement: `117.581 GiB / 31 tokens =
+  3.793 GiB/token`.
+- Up: `35.967 GiB`, `1.160 GiB/token`.
+- Gate: `38.610 GiB`, `1.245 GiB/token`.
+- Down: `43.004 GiB`, `1.387 GiB/token`.
+
+Required bytes/token for `5 tok/s`:
+
+| throughput assumption | GiB/s | required GiB/token | required reduction |
+|---|---:|---:|---:|
+| current 7NN effective | `5.854` | `1.171` | `69.1%` |
+| 7NU raw trace 8-worker | `13.048` | `2.610` | `31.2%` |
+| 7NU raw trace 12-worker | `15.181` | `3.036` | `20.0%` |
+
+Candidate budget:
+
+| candidate | save GiB/n32 | new GiB/token | required GiB/s for 5 tok/s | tok/s at current | tok/s at raw8 | tok/s at raw12 |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | `0.000` | `3.793` | `18.965` | `1.54` | `3.44` | `4.00` |
+| 7NO all-down IQ2-style | `12.667` | `3.384` | `16.922` | `1.73` | `3.86` | `4.49` |
+| 7NP all-upgate IQ2-style | `5.867` | `3.604` | `18.018` | `1.62` | `3.62` | `4.21` |
+| 7NO + 7NP combined | `18.534` | `3.195` | `15.975` | `1.83` | `4.08` | `4.75` |
+| ideal remove all down | `43.004` | `2.406` | `12.029` | `2.43` | `5.42` | `6.31` |
+| ideal remove all up/gate | `74.577` | `1.387` | `6.936` | `4.22` | `9.41` | `10.94` |
+| uniform shrink 20% | `23.516` | `3.034` | `15.172` | `1.93` | `4.30` | `5.00` |
+| uniform shrink 30% | `35.274` | `2.655` | `13.275` | `2.20` | `4.91` | `5.72` |
+| uniform shrink 70% | `82.307` | `1.138` | `5.689` | `5.14` | `11.47` | `13.34` |
+
+Interpretation:
+
+- At current runtime throughput, `5 tok/s` requires `69.1%` byte reduction,
+  which is far beyond local typed-pack tweaks.
+- At the best measured 7NU raw trace-replay ceiling, `5 tok/s` still requires
+  `20.0%` byte reduction and a pipeline that avoids the 7KW/7LE overlap-loss
+  gap.
+- Known 7NO+7NP typed-requant candidates save `18.534 GiB/n32`, leaving
+  `3.195 GiB/token`.
+- That combined candidate would still require `15.975 GiB/s` effective
+  read throughput for `5 tok/s`, above the measured 7NU raw 12-worker
+  `15.181 GiB/s`, before compute/H2D overhead.
+
+Decision:
+
+- Accept 7NX as a reproducible byte-reduction budget audit.
+- Reject narrow 7NO+7NP typed-requant source work as a complete `5 tok/s` path.
+- Keep current SOTA unchanged.
+- Next asset-format work must target a larger global byte reduction or a new
+  pre-quantized asset; local scheduler-only work remains insufficient.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-204104Z-phase7nx-byte-reduction-budget
+COPY_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv \
+python3 "$RUN/phase7nx_byte_budget.py"
+cat "$RUN/byte_budget_summary.tsv"
+cat "$RUN/candidate_budget.tsv"
+cat "$RUN/decision.md"
+```
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
