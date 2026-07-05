@@ -1,0 +1,39 @@
+{
+  "accepted_sota_unchanged": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "ttft_ms": 32892.55329
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-plan.json",
+  "date": "2026-07-05",
+  "framework": "vendor",
+  "hard_bound": {
+    "current_exact_rowtile_status": "rejected at 62.907 GiB/s",
+    "current_exact_warp_status": "rejected at 72.434-74.590 GiB/s",
+    "top128_allowed_kernel_and_integration_ms_for_10tok": 179.25662243236,
+    "top128_call_weighted_source_gib": 44.15185546875,
+    "top128_required_effective_source_gib_s": 246.30529611484835
+  },
+  "hypothesis": {
+    "route": "Use the existing optimized CUDA MMVQ rows kernel against the direct resident hot-source pool as a compare-only diagnostic.",
+    "why_new": "The closed exact Q8_0 probes preserve CPU-compatible MXFP4 x Q8_0 arithmetic but are too slow. The vendor CUDA MMVQ path is already optimized for MXFP4 x F32/Q8_1 activations and is used by the accepted gate stream path. It may expose whether the remaining gap is exact-arithmetic overhead rather than source residency alone.",
+    "risk": "MMVQ is not expected to be bit-exact with the CPU Q8_0 fallback. This probe must not write logits or clear fallback counts. If performance is promising, a separate write/skip top1 gate is required before any strict cold benchmark."
+  },
+  "implementation_plan": {
+    "cpu_callsite": "Extend the existing hot-batch probe call to pass F32 src1 data and strides in addition to the current Q8_0 fallback buffer.",
+    "cuda_probe": "Add GGML_MOE_STREAM_MMVQ_HOT_BATCH_PROBE=1 inside the existing compare path. Gather ready rows by expert from the direct pool, copy their F32 activations to device, call ggml_cuda_moe_stream_mmvq_rows_dev in chunks of <= MMVQ_MAX_BATCH_SIZE, copy outputs back, and compare against CPU dst.",
+    "default_behavior": "No change unless GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT, GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE=1, and GGML_MOE_STREAM_MMVQ_HOT_BATCH_PROBE=1 are all set."
+  },
+  "pass_fail_gates": {
+    "build": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8 must pass",
+    "compare_only_correctness": "Probe must not change logits; fixed-text top1 report must still pass because CPU fallback output remains authoritative.",
+    "error_report": "Record op-level max_abs/mean_abs/diff_count versus CPU fallback. If error is nonzero, do not promote without a later write/skip top1 gate.",
+    "memory": "16GB cgroup including page cache, MemorySwapMax=0, no OOM and no swap",
+    "performance_reopen": "Projected top128 MMVQ kernel+integration must be <= 179.257 ms before any write/skip token-stability experiment is allowed"
+  },
+  "status": "planned_source_edit_default_off"
+}

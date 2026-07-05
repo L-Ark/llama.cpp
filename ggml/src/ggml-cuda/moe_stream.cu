@@ -12,7 +12,7 @@ bool ggml_cuda_moe_stream_one(int, const char *, int64_t, const void *, int64_t,
 void ggml_cuda_moe_stream_q80_probe(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, const float *, size_t, size_t, const ggml_moe_row_mapping *) {}
 void ggml_cuda_moe_stream_q80_write(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) {}
 bool ggml_cuda_moe_stream_q80_skip(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
-void ggml_cuda_moe_stream_q80_hot_batch_probe(int, const char *, int64_t, int64_t, int64_t, size_t, const void *, size_t, int64_t, const int64_t *, const ggml_moe_row_mapping *, int64_t, const float *, size_t, size_t) {}
+void ggml_cuda_moe_stream_q80_hot_batch_probe(int, const char *, int64_t, int64_t, int64_t, size_t, const void *, size_t, int64_t, const float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t, const float *, size_t, size_t) {}
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
@@ -145,6 +145,9 @@ void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const void *src1_q8_0,
     size_t src1_q8_0_row_size,
     int64_t src1_ne1,
+    const float *src1_f32,
+    size_t src1_nb1,
+    size_t src1_nb2,
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_per_expert,
@@ -2690,6 +2693,14 @@ static bool moe_stream_q80_hot_batch_probe_row_tile_enabled() {
     return enabled != 0;
 }
 
+static bool moe_stream_mmvq_hot_batch_probe_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_MMVQ_HOT_BATCH_PROBE");
+        return (env && env[0] && env[0] != '0') ? 1 : 0;
+    }();
+    return enabled != 0;
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     int src0_type_int,
     const char *src0_name,
@@ -2700,6 +2711,9 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const void *src1_q8_0,
     size_t src1_q8_0_row_size,
     int64_t src1_ne1,
+    const float *src1_f32,
+    size_t src1_nb1,
+    size_t src1_nb2,
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_per_expert,
@@ -2727,6 +2741,15 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     std::vector<const char *> h_src0_rows;
     std::vector<const float *> h_dst_rows;
     std::vector<uint8_t> h_q80;
+    struct mmvq_hot_group {
+        const char * src0;
+        int64_t start;
+        int64_t count;
+    };
+    const bool mmvq_probe_enabled = moe_stream_mmvq_hot_batch_probe_enabled();
+    const bool mmvq_probe_can_gather = mmvq_probe_enabled && src1_f32 && src1_nb1 > 0 && src1_nb2 > 0;
+    std::vector<float> h_src1_f32;
+    std::vector<mmvq_hot_group> mmvq_groups;
 
     for (int64_t expert = 0; expert < n_as; ++expert) {
         const int64_t cne1 = matrix_row_counts[expert];
@@ -2746,6 +2769,7 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             continue;
         }
         int64_t expert_ready_rows = 0;
+        const int64_t expert_start = (int64_t) h_src0_rows.size();
         const ggml_moe_row_mapping * rows = matrix_rows + expert * rows_per_expert;
         for (int64_t k = 0; k < cne1; ++k) {
             int64_t i11 = rows[k].i1 % src1_ne1;
@@ -2763,9 +2787,18 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             const size_t old = h_q80.size();
             h_q80.resize(old + src1_q8_0_row_size);
             std::memcpy(h_q80.data() + old, q80_row, src1_q8_0_row_size);
+            if (mmvq_probe_can_gather) {
+                const char * f32_row = (const char *) src1_f32 + (size_t) i11 * src1_nb1 + (size_t) i12 * src1_nb2;
+                const size_t old_f32 = h_src1_f32.size();
+                h_src1_f32.resize(old_f32 + (size_t) ne00);
+                std::memcpy(h_src1_f32.data() + old_f32, f32_row, (size_t) ne00 * sizeof(float));
+            }
             expert_ready_rows++;
         }
         if (expert_ready_rows > 0) {
+            if (mmvq_probe_can_gather) {
+                mmvq_groups.push_back({(const char *) d_src0, expert_start, expert_ready_rows});
+            }
             ready_experts++;
             ready_rows += expert_ready_rows;
             src0_bytes_projected += (uint64_t) expert_ready_rows * (uint64_t) ne01 * (uint64_t) nb01;
@@ -2796,26 +2829,69 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
 
     if (compare_enabled && compare_allowed_by_limit && ready_rows > 0 && ready_rows <= INT32_MAX && ne01 <= INT32_MAX) {
         const auto t_alloc0 = std::chrono::steady_clock::now();
+        const bool use_mmvq_probe = mmvq_probe_enabled && mmvq_probe_can_gather &&
+            !mmvq_groups.empty() && h_src1_f32.size() == (size_t) ready_rows * (size_t) ne00;
         const char ** d_src0_rows = nullptr;
         void * d_q80 = nullptr;
+        float * d_src1_f32 = nullptr;
+        void * d_src1_q8 = nullptr;
+        int32_t * d_ids = nullptr;
         float * d_out = nullptr;
         const size_t ptr_bytes = (size_t) ready_rows * sizeof(const char *);
         const size_t q80_bytes = h_q80.size();
+        const int64_t src1_padded = GGML_PAD(ne00, MATRIX_ROW_PADDING);
+        const size_t src1_q8_1_row_size = (size_t) src1_padded * sizeof(block_q8_1) / QK8_1;
+        const size_t src1_f32_bytes = (size_t) ready_rows * (size_t) ne00 * sizeof(float);
+        const size_t src1_q8_1_bytes = (size_t) ready_rows * src1_q8_1_row_size;
+        const size_t ids_bytes = (size_t) ready_rows * sizeof(int32_t);
         const size_t out_elems = (size_t) ready_rows * (size_t) ne01;
         const size_t out_bytes = out_elems * sizeof(float);
         std::vector<float> h_out(out_elems);
-        bool ok = cudaSetDevice(0) == cudaSuccess &&
-            cudaMalloc((void **) &d_src0_rows, ptr_bytes) == cudaSuccess &&
-            cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
-            cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+        bool ok = cudaSetDevice(0) == cudaSuccess;
+        if (ok && use_mmvq_probe) {
+            ok = cudaMalloc((void **) &d_src1_f32, src1_f32_bytes) == cudaSuccess &&
+                cudaMalloc(&d_src1_q8, src1_q8_1_bytes) == cudaSuccess &&
+                cudaMalloc((void **) &d_ids, ids_bytes) == cudaSuccess &&
+                cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+        } else if (ok) {
+            ok = cudaMalloc((void **) &d_src0_rows, ptr_bytes) == cudaSuccess &&
+                cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
+                cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+        }
         const auto t_alloc1 = std::chrono::steady_clock::now();
-        if (ok) {
+        if (ok && use_mmvq_probe) {
+            ok = cudaMemcpy(d_src1_f32, h_src1_f32.data(), src1_f32_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+                cudaMemset(d_ids, 0, ids_bytes) == cudaSuccess;
+        } else if (ok) {
             ok = cudaMemcpy(d_src0_rows, h_src0_rows.data(), ptr_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
                 cudaMemcpy(d_q80, h_q80.data(), q80_bytes, cudaMemcpyHostToDevice) == cudaSuccess;
         }
         const auto t_h2d = std::chrono::steady_clock::now();
         if (ok) {
-            if (moe_stream_q80_hot_batch_probe_row_tile_enabled()) {
+            if (use_mmvq_probe) {
+                for (const mmvq_hot_group & group : mmvq_groups) {
+                    for (int64_t off = 0; off < group.count; off += MMVQ_MAX_BATCH_SIZE) {
+                        const int64_t chunk = std::min<int64_t>(MMVQ_MAX_BATCH_SIZE, group.count - off);
+                        const int64_t row0 = group.start + off;
+                        if (!ggml_cuda_moe_stream_mmvq_rows_dev(
+                                    src0_type_int,
+                                    group.src0,
+                                    ne01, ne00, nb01,
+                                    d_src1_f32 + (size_t) row0 * (size_t) ne00,
+                                    (char *) d_src1_q8 + (size_t) row0 * src1_q8_1_row_size,
+                                    d_ids + row0,
+                                    chunk,
+                                    d_out + (size_t) row0 * (size_t) ne01,
+                                    0)) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) {
+                        break;
+                    }
+                }
+            } else if (moe_stream_q80_hot_batch_probe_row_tile_enabled()) {
                 const int threads = 256;
                 const dim3 blocks(
                         (unsigned int) ready_rows,
@@ -2850,7 +2926,9 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
                         d_src0_rows, nb01, (const char *) d_q80, src1_q8_0_row_size,
                         ne00, (int) ready_rows, (int) ne01, d_out);
             }
-            ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess;
+            if (ok) {
+                ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess;
+            }
         }
         const auto t_kernel = std::chrono::steady_clock::now();
         if (ok) {
@@ -2879,6 +2957,15 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
         }
         if (d_q80) {
             cudaFree(d_q80);
+        }
+        if (d_src1_f32) {
+            cudaFree(d_src1_f32);
+        }
+        if (d_src1_q8) {
+            cudaFree(d_src1_q8);
+        }
+        if (d_ids) {
+            cudaFree(d_ids);
         }
         if (d_out) {
             cudaFree(d_out);

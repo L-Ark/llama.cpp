@@ -1,0 +1,130 @@
+{
+  "accepted_sota_unchanged": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15102607360,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744,
+    "ttft_ms": 32892.55329
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json",
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true
+  },
+  "date": "2026-07-05",
+  "decision": {
+    "correctness_gate": "compare_only_passed_no_logit_write",
+    "kernel_speed_gate": "passed_kernel_only",
+    "performance_gate": "rejected_as_standalone_runtime_path",
+    "reason": "The MMVQ kernel alone projects to about 159.823 ms for the top128 hot residual, which is inside the 179.257 ms budget. However, the same sample projects F32 H2D plus output D2H to roughly another 146.544 ms, so the minimal H2D+kernel+D2H path is about 306.367 ms before scatter/scheduling. This exceeds the full top128 integration budget. Therefore the standalone resident-source MMVQ skip/write route is not promotable; it only reopens a fused/no-intermediate-transfer design.",
+    "sota_changed": false,
+    "strict_cold_performance_allowed": false
+  },
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "requirements": {
+    "top128_allowed_kernel_and_integration_ms_for_10tok": 179.25662243236,
+    "top128_call_weighted_source_gib": 44.15185546875,
+    "top128_required_effective_source_gib_s": 246.30529611484835
+  },
+  "runs": {
+    "smoke_mmvq_compare32": {
+      "compare_ok": 4,
+      "compare_ran": 4,
+      "diff_count": 8781,
+      "exit_status": 0,
+      "max_abs": 2.38418579e-7,
+      "mean_abs_avg_records": 1.337349432e-8,
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_peak_bytes": 815017984,
+        "memory_swap_max": "0",
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T042449Z-mmvq-hot-resident/smoke-mmvq-compare32",
+      "sample_ready_rows": 6,
+      "sample_src0_bytes": 26738688,
+      "timing_us": {
+        "alloc": 77,
+        "compare": 131,
+        "d2h": 42,
+        "elapsed": 569,
+        "free": 58,
+        "h2d": 74,
+        "kernel": 82
+      }
+    },
+    "fixed_text_compare512": {
+      "baseline_exit_status": 0,
+      "bytes_all": {
+        "out": 402325504,
+        "q80": 106754560,
+        "src0": 145832804352
+      },
+      "check_exit_status": 0,
+      "compare_ok": 262,
+      "compare_ran": 262,
+      "hashes": {
+        "hot-batch-probe.csv": "c98d58eb9c4dad47c15be887c5ba69c54b57993c35cbe3636b24494e09d95512",
+        "run.sh": "5841b05f5f5dd1a4d5ead43232e34e6635b165db85770c80884d60c9ac746a4b",
+        "top1-baseline.json": "f87331a65bd46bd760b3318f1ee97e91a80e16e5b0c5e800cc8fc5d5b6a3aa36",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_peak_bytes": 14030606336,
+        "memory_swap_max": "0",
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "op_level_diff_count": 616081,
+      "op_level_max_abs": 0.000209331512,
+      "op_level_mean_abs_avg_records": 9.627885090312974e-8,
+      "ready_rows_all": 32724,
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T042449Z-mmvq-hot-resident/probe-mmvq-compare512",
+      "sample": {
+        "kernel_source_bandwidth_gib_s": 276.25420958795564,
+        "output_elements": 1163264,
+        "projected_h2d_ms_at_top128_scale": 74.60442857142858,
+        "projected_d2h_ms_at_top128_scale": 71.93914285714286,
+        "projected_kernel_ms_by_ready_rows": 491.6391428571429,
+        "projected_kernel_ms_by_src_bytes": 491.6391428571429,
+        "projected_kernel_plus_h2d_d2h_ms_at_top128_scale": 306.36685714285716,
+        "projected_top128_kernel_ms_at_sample_bandwidth": 159.8232857142857,
+        "projected_total_ms_by_ready_rows": 2231.8114285714287,
+        "q80_bytes": 1231616,
+        "ready_rows": 378,
+        "src0_bytes": 1684537344,
+        "timing_us": {
+          "alloc": 3516,
+          "compare": 8873,
+          "d2h": 2555,
+          "elapsed": 29021,
+          "free": 2506,
+          "h2d": 2651,
+          "kernel": 5679
+        }
+      },
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145
+      }
+    }
+  },
+  "source_change": {
+    "default_off": true,
+    "files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ],
+    "new_env": "GGML_MOE_STREAM_MMVQ_HOT_BATCH_PROBE",
+    "summary": "Extends the existing hot-batch compare probe to pass F32 src1 rows and optionally replay ready resident direct-pool experts through ggml_cuda_moe_stream_mmvq_rows_dev. The probe runs after CPU fallback, compares against CPU dst, and does not write logits or clear fallback counts."
+  },
+  "status": "kernel_fast_but_transfer_bound"
+}

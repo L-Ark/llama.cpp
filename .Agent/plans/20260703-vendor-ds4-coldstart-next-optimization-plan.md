@@ -75,6 +75,20 @@ Row-tile microprobe result:
 - Correctness passed: smoke raw/transposed compare had `max_abs=0`, and fixed-text transposed compare512 passed `same_top1=145/145`, op-level `max_abs=0`, no OOM/no swap under 16GB cgroup including page cache.
 - Performance rejected: transposed compare512 sample measured only `62.907 GiB/s` effective source bandwidth, projecting top128 kernel time to about `701.853 ms` before integration overhead, far above the allowed `179.257 ms`. It is slower than the prior raw/transposed warp probes (`74.590/72.434 GiB/s`). Do not run strict cold SOTA benchmarks for row-tile/shared-Q8 variants; the accepted SOTA remains `4.4 tok/s`.
 
+Next candidate after row-tile rejection:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-plan.json`.
+- Rationale: exact CPU-compatible Q8_0 resident kernels are now closed by measured bandwidth. The next distinct question is whether the existing optimized vendor CUDA `mmvq_rows` path can compute resident hot up/down experts fast enough, even though it is not expected to be bit-exact with CPU Q8_0 fallback.
+- Allowed source edit: default-off compare-only path gated by `GGML_MOE_STREAM_MMVQ_HOT_BATCH_PROBE=1` together with the existing hot-batch compare env. It may extend the CPU callsite to pass F32 `src1` rows and strides. It must run after CPU fallback, compare against CPU `dst`, not write logits, and not clear fallback counts.
+- Hard gate: if projected top128 MMVQ kernel+integration is not `<=179.257 ms`, reject the route immediately. If it is fast enough but op-level error is nonzero, the next required gate is a separate write/skip fixed-text top1 test before any strict cold benchmark.
+
+MMVQ hot-resident compare result:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json`.
+- Correctness/safety: default-off compare-only probe built and ran under 16GB cgroup/no swap. It does not write logits or clear fallback counts. Fixed-text check passed `same_top1=145/145` because CPU fallback remains authoritative. Op-level error is nonzero (`max_abs=0.000209331512`, mostly down), so any future logit-changing use requires a separate write/skip top1 gate.
+- Performance: kernel-only speed is the first probe to cross the top128 threshold: compare512 measured `276.254 GiB/s`, projecting top128 kernel time to `159.823 ms` versus the `179.257 ms` budget. But projected F32 H2D plus output D2H adds about `146.544 ms`, so the minimal standalone H2D+kernel+D2H path is about `306.367 ms` before scatter/scheduling. Therefore standalone MMVQ hot-resident skip/write is rejected for 10 tok/s.
+- Next allowed design must be a fused/no-intermediate-transfer path that keeps at least the up/gate intermediate on GPU or otherwise removes most of the H2D/D2H transfer cost. Do not run strict cold SOTA benchmarks for standalone MMVQ hot-resident until that transfer bound is solved.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.
