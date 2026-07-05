@@ -1,0 +1,172 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/external-mtp-sidecar-followup-audit.json",
+  "created_at_utc": "2026-07-05T11:20:41Z",
+  "source_head_before_artifact": "57f319c4f127a45d3e520cc20600c054c9c487ed",
+  "decision": "no_vendor_loadable_high_acceptance_sidecar_found",
+  "runtime_source_modified": false,
+  "model_download_performed": false,
+  "model_run_performed": false,
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "search_queries": [
+    "deepseek-v4-flash-mtp sidecar",
+    "DeepSeek V4 Flash MTP sidecar GGUF",
+    "DeepSeek-V4-Flash MTP skulk",
+    "DeepSeek V4 Flash draft GGUF"
+  ],
+  "search_result_summary": {
+    "DeepSeek V4 Flash MTP sidecar GGUF": [],
+    "DeepSeek V4 Flash draft GGUF": [],
+    "DeepSeek-V4-Flash MTP skulk": [],
+    "deepseek-v4-flash-mtp sidecar": []
+  },
+  "repo_audit": [
+    {
+      "repo": "FoxlightAI/deepseek-v4-flash-mtp",
+      "url": "https://huggingface.co/FoxlightAI/deepseek-v4-flash-mtp",
+      "sha": "3b199487f401a2c14e9c45c78bdc39626673c0f5",
+      "last_modified": "2026-06-03T16:45:17.000Z",
+      "classification": "mtp_safetensors_sidecar",
+      "selected_files": [
+        {
+          "rfilename": "mtp.safetensors",
+          "size_bytes": 6777733547
+        }
+      ],
+      "tags": [
+        "mtp-sidecar",
+        "skulk",
+        "foxlight"
+      ],
+      "decision": "not_vendor_gguf_not_standalone_llama_speculative_draft"
+    },
+    {
+      "repo": "canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+      "url": "https://huggingface.co/canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+      "sha": "4a4f86303d4fd8c43bafbf02d5523b06275e577d",
+      "last_modified": "2026-05-30T00:23:25.000Z",
+      "classification": "large_vllm_safetensors_mtp_target",
+      "selected_files": [
+        {
+          "rfilename": "model-00001-of-00004.safetensors",
+          "size_bytes": 51194922826
+        },
+        {
+          "rfilename": "model-00002-of-00004.safetensors",
+          "size_bytes": 50169748020
+        },
+        {
+          "rfilename": "model-00003-of-00004.safetensors",
+          "size_bytes": 50164611144
+        },
+        {
+          "rfilename": "model-00004-of-00004.safetensors",
+          "size_bytes": 18814174990
+        }
+      ],
+      "decision": "not_vendor_gguf_no_current_loader_path"
+    },
+    {
+      "repo": "canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+      "url": "https://huggingface.co/canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+      "sha": "1e70632a7d3890ba227af6aa25b1d75152a6d3f9",
+      "last_modified": "2026-05-29T07:22:22.000Z",
+      "classification": "large_vllm_safetensors_mtp_target",
+      "siblings_count": 43,
+      "decision": "not_vendor_gguf_no_current_loader_path"
+    },
+    {
+      "repo": "LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+      "url": "https://huggingface.co/LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+      "sha": "c9ab0c108adc22d0fabf3f1b151554d0d247c122",
+      "last_modified": "2026-05-11T00:59:31.000Z",
+      "classification": "large_safetensors_mtp_with_3_55gb_mtp_module",
+      "selected_files": [
+        {
+          "rfilename": "model-mtp-w4a16.safetensors",
+          "size_bytes": 3552110692
+        },
+        {
+          "rfilename": "MTP_QUANT_MANIFEST.json",
+          "size_bytes": 580
+        }
+      ],
+      "decision": "not_vendor_gguf_no_current_loader_path"
+    },
+    {
+      "repo": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "url": "https://huggingface.co/inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "sha": "52b277799eb7694fdaeb3baab3d5316cd85b2e87",
+      "last_modified": "2026-06-27T05:30:25.000Z",
+      "classification": "mlx_safetensors_mtp",
+      "selected_files": [
+        {
+          "rfilename": "model.safetensors",
+          "size_bytes": 3598959572
+        }
+      ],
+      "decision": "not_vendor_gguf"
+    },
+    {
+      "repo": "mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+      "url": "https://huggingface.co/mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+      "sha": "0171b72cf11b5bba695aef01b0de237bef0a6640",
+      "last_modified": "2026-06-01T20:30:53.000Z",
+      "classification": "mlx_safetensors_mtp_draft_model",
+      "selected_files": [
+        {
+          "rfilename": "model.safetensors",
+          "size_bytes": 3598959572
+        }
+      ],
+      "decision": "not_vendor_gguf"
+    },
+    {
+      "repo": "antirez/deepseek-v4-gguf",
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf",
+      "sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "last_modified": "2026-05-31T11:28:43.000Z",
+      "classification": "gguf_targets_plus_supplementary_mtp_sidecar",
+      "selected_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size_bytes": 3807602400
+        }
+      ],
+      "decision": "vendor_loader_missing_and_exact_n2_cost_bound_closed"
+    }
+  ],
+  "source_audit": {
+    "generic_speculative_examples_present": [
+      "examples/speculative",
+      "examples/speculative-simple"
+    ],
+    "generic_speculative_limitation": "requires --model-draft standalone draft model with matching vocab/context; audited sidecars are supplementary MTP modules or non-GGUF formats",
+    "current_vendor_mtp_gap": [
+      "no deepseek4_mtp_support architecture loader",
+      "no mtp.0.* tensor runtime mapping",
+      "no target hidden-state export and KV commit/rollback verifier for DeepSeek4 sidecars",
+      "forced-batch target-verifier diagnostic previously showed only 1.000243x speedup"
+    ]
+  },
+  "reopen_conditions": [
+    "vendor-loadable GGUF standalone draft or sidecar artifact exists, or conversion plan is proven before download",
+    "hard-bound proves A>=7, or A>=5 with measured sublinear target verification",
+    "extra artifact bytes fit strict 16GB host RAM including page cache and TTFT gate",
+    "VRAM plan preserves accepted gate/cache behavior or proves a better placement",
+    "fixed-text top1, France prompt, and five-prompt semantic correctness pass before SOTA benchmark"
+  ],
+  "push_requirement": {
+    "remote": "https://github.com/wici-ai/ssd-llama.git",
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "identity": "L-Ark <fliangae@connect.ust.hk>"
+  }
+}
