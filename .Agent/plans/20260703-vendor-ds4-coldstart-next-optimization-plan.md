@@ -62,6 +62,18 @@ Updated next work after this probe:
 4. The next implementation, if the hard-bound still has positive margin, must be default-off and should start with a graph/new-op skeleton proving placement and copy counts before writing logits.
 5. If no such compact retained design can meet the hard bound, close the sparse retained route and rerun a fresh bottleneck search from the accepted `4.4 tok/s` SOTA rather than repeating source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or rectangular `DS4_HOT_DISPATCH`.
 
+Compact retained CUDA branch hard-bound result:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-retained-cuda-branch-hard-bound.json`.
+- Status: `reject_compact_retained_cuda_branch_before_logit_changing_source_edit`.
+- The only positive sparse top64 graph bound remains extremely tight: `10.014 tok/s` with only `18.947 ms` graph margin.
+- Gate recompute is still below target: `9.861 tok/s`, `-191.953 ms` margin, so any sparse route that recomputes gate is rejected before source edit.
+- Reusing a gate tensor is not currently available: pushed-source probe shows `graph_gate_output_input_available=0`, `hot_active=0`, and `dispatch_dual=0` across `6579` observed `build_expert_mix` calls.
+- The final hot/cold combine lower bound is too close to the margin: `0.413 GiB` per accepted decode estimate, `17.197 ms` at `24 GiB/s`, leaving only `1.750 ms` before launch/split/event overhead. Even at `50 GiB/s`, only `10.693 ms` remains.
+- Current `DS4_HOT_DISPATCH` remains rejected for this route because the sparse top64 profile inflates from `64` real pairs to `295` rectangular entries, i.e. `2507.5 MiB` up/down payload or `3761.25 MiB` gate/up/down payload.
+- Decision: close the current sparse retained top64 route for now. Do not add a logit-changing sparse retained/hot write path on this graph. Reopen only if a new placement probe first proves a retained CUDA `gate_all` tensor and a bounded combine-copy cost with meaningful margin.
+- Next optimization step must be a fresh bottleneck search from the accepted `4.4 tok/s` SOTA or a separate full-MoE CUDA design with its own hard-bound; it must not repeat source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or rectangular `DS4_HOT_DISPATCH`.
+
 Mandatory record/push rule:
 
 - Every practice step must first update this plan or an artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/`.

@@ -1,0 +1,95 @@
+{
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "promotion_ttft_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329
+  },
+  "candidate_routes": [
+    {
+      "blocking_facts": [
+        "Current build_expert_mix has no retained gate-output input before branch construction.",
+        "One-stream dataflow already showed gate helper D2H/CPU scatter instead of retained GPU output.",
+        "The final hot/cold combine copy lower bound consumes 17.197 ms of the 18.947 ms graph margin at 24 GiB/s."
+      ],
+      "name": "split graph with gate_all reused by hot and cold branches",
+      "required_change": "Compute selected gate once, keep gate_all on CUDA, route cold up/down through original tensors and hot up/down through compact top64 resident tensors.",
+      "verdict": "reject_until_a_probe_proves_gate_all_retained_on_cuda_and_combine_copy_below_margin"
+    },
+    {
+      "blocking_facts": [
+        "Without retained gate input this either recomputes gate, which has a 9.861 tok/s hard bound, or needs a multi-output/side-channel graph change.",
+        "Returning hot contribution still requires a hot/cold combine with essentially no remaining margin."
+      ],
+      "name": "new fused sparse op returning only hot contribution",
+      "required_change": "Single CUDA op consumes cur_ffn, selected IDs, weights, and compact top64 up/down payload, then returns hot contribution for add with cold contribution.",
+      "verdict": "reject_before_source_edit"
+    },
+    {
+      "blocking_facts": [
+        "Current DS4_HOT shape is rectangular K+P+1 per active layer, inflating 64 real pairs to 295 retained entries.",
+        "Payload inflates to 2507.5 MiB up/down or 3761.25 MiB gate/up/down, far above the ideal 544 MiB route and above the graph margin via gate-cache pressure."
+      ],
+      "name": "adapt current DS4_HOT_DISPATCH to sparse top64 profile",
+      "required_change": "Use existing hot manager remap tables and dual dispatch with sparse profile.",
+      "verdict": "reject_do_not_implement"
+    },
+    {
+      "blocking_facts": [
+        "Cold expert weights are mostly CPU_Mapped/CUDA_Host in the accepted path; including cold path in the fused op reintroduces the full fallback/source problem.",
+        "This becomes a new full MoE CUDA implementation, not the bounded top64 sparse retained route, and has no measured correctness/performance bound yet."
+      ],
+      "name": "single fused op replacing both hot and cold MoE output",
+      "required_change": "One op computes full selected MoE output and writes final n_embd result on CUDA, eliminating explicit hot/cold combine.",
+      "verdict": "out_of_scope_for_this_sparse_bound_start_new_design_if_pursued"
+    }
+  ],
+  "decision": "Close the current sparse retained top64 route for now. The only theoretical positive bound depends on a retained CUDA gate tensor and near-zero combine overhead, but the pushed-source probe shows neither is present in the accepted graph. No logit-changing source edit is allowed from this route without a new probe that first proves retained gate placement and a combine-copy budget with meaningful margin.",
+  "hard_bound": {
+    "combine_copy_gib": 0.413,
+    "combine_copy_ms_at_24_gib_s": 17.197,
+    "combine_copy_ms_at_50_gib_s": 8.255,
+    "gate_recompute_margin_ms": -191.953,
+    "gate_recompute_tok_s": 9.861,
+    "graph_margin_ms": 18.947,
+    "ideal_sparse_gate_updown_payload_mib": 816.0,
+    "ideal_sparse_updown_payload_mib": 544.0,
+    "rectangular_entries_for_current_hot_shape": 295,
+    "rectangular_gate_updown_payload_mib": 3761.25,
+    "rectangular_updown_payload_mib": 2507.5,
+    "remaining_margin_after_24_gib_s_combine_ms": 1.75,
+    "remaining_margin_after_50_gib_s_combine_ms": 10.693,
+    "top64_graph_zero_transfer_tok_s": 10.014
+  },
+  "inputs": {
+    "mmvq_fused_transfer_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    "sparse_retained_graph_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-graph-probe-validation.json",
+    "sparse_retained_planner_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json"
+  },
+  "latest_probe_facts": {
+    "combine_bytes_fixed_text": 646742016,
+    "dispatch_dual_sum": 0,
+    "full_down_backend_counts": {
+      "CPU_Mapped": 5960,
+      "CUDA0": 459,
+      "CUDA_Host": 160
+    },
+    "full_up_backend_counts": {
+      "CPU_Mapped": 5960,
+      "CUDA0": 459,
+      "CUDA_Host": 160
+    },
+    "graph_gate_output_input_available_sum": 0,
+    "hot_active_sum": 0,
+    "probe_source_commit": "f208fb105fdb7119a520523faf04088e650d8f1c",
+    "row_count": 6579,
+    "top1_ok": true
+  },
+  "next_plan": [
+    "Do not adapt DS4_HOT_DISPATCH or add a sparse hot write path on the current graph.",
+    "Start a fresh bottleneck search from the accepted 4.4 tok/s SOTA or design a new full-MoE CUDA route with its own hard bound.",
+    "If revisiting sparse retained later, the first proof must be a placement probe showing gate_all retained on CUDA and final combine copy under the remaining margin before correctness or performance benchmarking."
+  ],
+  "source_head": "0a789d46fbd0a68f66fc2b758c87b53188d1d2c5",
+  "status": "reject_compact_retained_cuda_branch_before_logit_changing_source_edit"
+}
