@@ -84883,3 +84883,147 @@ Reproducibility:
 
 - Commit and push this 7OH plan before running.
 - Commit and push the result before any follow-up experiment or source change.
+
+### Phase 7OH result
+
+Timestamp: 2026-07-06 08:15 CST.
+
+Plan commit before execution:
+
+- `1a96e880d` (`docs: plan priority launch n32 io refresh`)
+
+Server state:
+
+- Server reset to:
+  `1a96e880d`.
+- No source code was changed.
+- No model, GGUF, or expert-pack asset was changed.
+- No model asset was downloaded, converted, or deleted.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-230705Z-phase7oh-priority-n32-io-refresh`
+
+Launch properties:
+
+```text
+MemoryMax=15900000000
+MemorySwapMax=0
+IOAccounting=yes
+IOWeight=10000
+CPUWeight=10000
+Nice=-10
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+```
+
+Runtime env/shape:
+
+- `N=32`;
+- `VRAM_MIB=15000`;
+- `THREADS=32`;
+- `PINNED_SLOTS=12`;
+- `UPGATE_PCT=62`;
+- `IQ2_UPGATE_PARALLEL=1`;
+- `MIN_PROFILE=1`;
+- `MOE_IO_DEPTH=8`;
+- `MOE_IO_REFILL_BATCH=4`;
+- `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Diagnostic artifacts:
+
+- `io-batch-profile.csv`: `5179` lines;
+- `io-wait-trace.csv`: `18107` lines;
+- `io-locality-profile.csv`: `5179` lines;
+- `current-down-overlap-profile.csv`: `33` lines.
+
+Gate results:
+
+- Exit:
+  `0`.
+- Quality smoke:
+  pass, France-specific but truncated by `N=32`.
+- TTFT:
+  `69915.74 ms`.
+- Decode:
+  `23117.33 ms / 31`, `1.34 tok/s`.
+- Host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15085211648`;
+  - `file=14845849600`;
+  - `inactive_file=7727661056`;
+  - `active_file=7117447168`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_reads=22647`;
+  - `iouring_bytes=126391910400` (`117.712 GiB`);
+  - `iouring_wait_us=20227005`;
+  - `iouring_submit_us=56227`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.33`, max `8`;
+  - batch hist `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+- Current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3269414 us`.
+- VRAM cache:
+  - down slots `766`, hit rate `73.4%`;
+  - upgate slots `1735`, hit rate `45.2%`.
+
+Comparison:
+
+| run | decode ms / 31 | token rate | iouring wait |
+|---|---:|---:|---:|
+| 7NN n32 IO reference | `23428.83` | `1.32` | `20.097 s` |
+| 7OF n32 IO refresh | `21832.95` | `1.42` | `18.235 s` |
+| 7OH priority n32 IO refresh | `23117.33` | `1.34` | `20.227 s` |
+
+Interpretation:
+
+- 7OH does not show that the 7OG launch properties materially change the n32
+  IO/batch shape.
+- The n32 iouring bytes, batch histogram, cache hit rates, and current-down
+  overlap counters remain effectively unchanged.
+- The n32 wait result is closer to 7NN than to the faster 7OF n32 run.
+- Therefore 7OG remains accepted only as a small repeated n96 production launch
+  recipe improvement. It is not evidence of a new source-level IO scheduling
+  bottleneck to exploit.
+- The bottleneck conclusion remains unchanged: bytes/token and exposed iouring
+  wait dominate; local source families already rejected should not be retried
+  without new evidence.
+
+Decision:
+
+- Accept 7OH as the priority-launch n32 bottleneck refresh.
+- Do not promote n32 as SOTA.
+- Keep the 7OG n96 launch recipe as the current accepted production recipe.
+- Use 7OH's n32 profile for future priority-launch bottleneck comparisons.
+- Do not start another same-layer IO or queue-depth source patch from this
+  result.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 1a96e880d
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-230705Z-phase7oh-priority-n32-io-refresh
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
