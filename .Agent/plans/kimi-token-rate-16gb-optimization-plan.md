@@ -80233,6 +80233,112 @@ Reproducibility:
 - Commit and push this 7NY plan before running the audit.
 - Commit and push the 7NY result before any follow-up source or asset work.
 
+### Phase 7NY result
+
+Timestamp: 2026-07-06 12:31 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-205017Z-phase7ny-pack-compression`
+
+Plan commit before execution:
+
+- `2ea1258c9` (`docs: plan expert pack compression audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7ny_pack_compressibility.py`
+- `inventory.json`
+- `sample_rows.tsv`
+- `compressibility_summary.tsv`
+- `compressibility_by_kind.tsv`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was changed.
+- No full compressed expert-pack artifact was generated.
+- No asset was downloaded or deleted.
+- Server tools:
+  - `zstd`: `/usr/bin/zstd`;
+  - `lz4`: unavailable;
+  - `python3`: `/usr/bin/python3`.
+- Initial `MAX_SAMPLE_GIB=2.0` run was manually stopped because per-slice
+  zstd/zlib measurement was too slow for a quick go/no-go audit.
+- Final accepted run used deterministic `MAX_SAMPLE_GIB=0.25`, `SEED=7`.
+
+Sample:
+
+- Actual iouring trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32/io-read-trace.csv`
+- Expert packs:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Trace rows: `22647`.
+- Sample rows: `48`.
+- Sample bytes: `0.249 GiB`.
+- Sample by kind:
+  - up: `0.074 GiB`;
+  - gate: `0.076 GiB`;
+  - down: `0.098 GiB`.
+
+Compression result:
+
+| codec | source GiB | compressed GiB | ratio | save | estimated GiB/token | required GiB/s for 5 tok/s | measured decompression GiB/s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| zlib1 | `0.249` | `0.247` | `0.9922` | `0.78%` | `3.763` | `18.816` | `0.317` |
+| zstd | `0.249` | `0.247` | `0.9926` | `0.74%` | `3.765` | `18.825` | `0.362` |
+
+Compression by kind:
+
+| codec | kind | source GiB | compressed GiB | ratio | save |
+|---|---|---:|---:|---:|---:|
+| zlib1 | down | `0.098` | `0.097` | `0.9833` | `1.68%` |
+| zlib1 | gate | `0.076` | `0.076` | `0.9979` | `0.21%` |
+| zlib1 | up | `0.074` | `0.074` | `0.9981` | `0.19%` |
+| zstd | down | `0.098` | `0.096` | `0.9813` | `1.87%` |
+| zstd | gate | `0.076` | `0.076` | `1.0000` | `-0.00%` |
+| zstd | up | `0.074` | `0.074` | `1.0000` | `-0.00%` |
+
+Interpretation:
+
+- The currently used quantized expert slices are effectively entropy-dense.
+- Best measured weighted saving is only `0.78%`, far below the `20.0%`
+  minimum from Phase 7NX for the best raw I/O ceiling.
+- Up/gate slices, which dominate the byte mix, are almost completely
+  incompressible in this sample.
+- The measured decompression throughput is also far below the read throughput
+  required for `5 tok/s`, but the compression ratio alone is already enough to
+  reject this path.
+
+Decision:
+
+- Accept 7NY as a reproducible compression feasibility audit.
+- Reject compressed expert-pack source work for the current IQ3/IQ2/Q4 expert
+  pack.
+- Keep current SOTA unchanged.
+- Next byte-reduction work must be true lower-bit / different quantized asset
+  format, not generic compression of existing expert-pack bytes.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-205017Z-phase7ny-pack-compression
+TRACE=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32/io-read-trace.csv \
+SOURCE0=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+SOURCE1=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+MAX_SAMPLE_GIB=0.25 SEED=7 \
+python3 "$RUN/phase7ny_pack_compressibility.py"
+cat "$RUN/compressibility_summary.tsv"
+cat "$RUN/compressibility_by_kind.tsv"
+cat "$RUN/decision.md"
+```
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
