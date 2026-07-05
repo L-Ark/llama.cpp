@@ -1,0 +1,83 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: strict cold no-source prefill limit down-sweep",
+  "status": "planned",
+  "purpose": "After prefill_limit=3192 regressed by eliminating dynamic admission space, test whether lower prefill limits improve the accepted route by reserving more slots for runtime admission while reducing TTFT.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "ttft_ms": 32087.738292,
+    "prefill_limit": 3000,
+    "slots": 3192,
+    "dynamic_slots": 192,
+    "vram_cache_hits": 33265,
+    "vram_cache_misses": 1886,
+    "hit_rate_pct": 94.6,
+    "prefill_elapsed_ms": 4092.052,
+    "memory_peak_bytes": 16000000000,
+    "correctness_ok": true
+  },
+  "rejected_3192": {
+    "eval_tok_s": 4.3,
+    "ttft_ms": 32423.743579,
+    "prefill_limit": 3192,
+    "dynamic_slots": 0,
+    "vram_cache_hits": 33171,
+    "vram_cache_misses": 1980,
+    "hit_rate_pct": 94.4,
+    "prefill_elapsed_ms": 5052.58,
+    "reason": "Full prefill increased misses and TTFT, likely because runtime admission had no spare slots."
+  },
+  "candidate_limits": [
+    {
+      "prefill_limit": 2800,
+      "dynamic_slots": 392,
+      "profile_covered_count": 32839,
+      "profile_tail_count": 1026,
+      "delta_profile_covered_vs_3000": -400,
+      "hypothesis": "May reduce TTFT and allow more dynamic admission; could help if accepted misses are dominated by runtime entries absent from the static top3000 profile."
+    },
+    {
+      "prefill_limit": 2600,
+      "dynamic_slots": 592,
+      "hypothesis": "More aggressive admission capacity. Run only if 2800 does not clearly fail or if time permits; higher risk of losing too many high-frequency prefilled entries."
+    }
+  ],
+  "constant_config": {
+    "framework": "vendor",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "cache_mib": 13568,
+    "expert_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "expert_pack_io": "direct",
+    "context": 256,
+    "batch": 16,
+    "ubatch": 16,
+    "threads": 20,
+    "threads_batch": 20,
+    "drop_caches": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0
+  },
+  "acceptance": {
+    "accepted_if": [
+      "eval_tok_s > 4.4",
+      "TTFT <= 33617.688744 ms",
+      "memory_peak_bytes <= 16000000000 including page cache",
+      "no OOM or swap",
+      "France answer remains semantic and coherent",
+      "full reproduction metadata is recorded and pushed",
+      "clean pushed-source reproduction passes"
+    ],
+    "rejected_if": [
+      "eval_tok_s <= 4.4",
+      "TTFT exceeds gate",
+      "RAM/page-cache/OOM violation",
+      "correctness failure"
+    ]
+  },
+  "notes": [
+    "This is a no-source parameter probe; it cannot reach 10 tok/s alone.",
+    "It is still useful because a compliant current-route improvement must be promoted immediately and becomes the new baseline for larger work."
+  ]
+}
