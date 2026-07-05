@@ -77186,7 +77186,7 @@ Decision:
 
 Timestamp: 2026-07-05 22:26:12 CST.
 
-Status: planned.
+Status: complete.
 
 Goal:
 
@@ -77304,3 +77304,173 @@ Reproducibility:
 - Keep all run artifacts in the run directory.
 - Commit and push the final 7MY result even if the decision is to reject all
   immediate implementation candidates.
+
+Result - 2026-07-05 22:35 CST:
+
+- Plan commit before profiling: `c3068106b`
+  (`docs: plan current bottleneck refresh`).
+- No source code was changed.
+- Server synced to:
+  `c3068106bcff04070998e305b5591c89c77bd140`.
+- Build command succeeded:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard c3068106b
+cmake --build build-cuda-batch -j"$(nproc)"
+```
+
+- Strict n32 full-profile run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile`
+- Exact run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Exit `0`; systemd result `success`.
+- `memory.max=15899996160`; `memory.swap.max=0`;
+  `memory.peak=15899996160`.
+- `memory.events`: `oom=0`, `oom_kill=0`.
+- Final cgroup memory distribution:
+  - `memory.current.final=8791937024`;
+  - `file=8571535360`;
+  - `inactive_file=4695621632`;
+  - `active_file=3875229696`;
+  - `anon=458752`;
+  - `kernel=216563712`;
+  - `pgmajfault=1016747`;
+  - `workingset_refault_file=20926`.
+- Quality: `pass`.
+- Answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT: `73706.32 ms`, within the 20% cap.
+- Decode: `26045.71 ms / 31`, `1.19 tok/s`.
+- This is a full-profile run (`MIN_PROFILE=0`) and is slower than the current
+  min-profile n32/n96 references. Use it for bottleneck proportions, not SOTA.
+- Expert-pack counters:
+  - `iouring_reads=22647`;
+  - `iouring_bytes=126391910400` (`117.71 GiB`);
+  - `iouring_wait_us=20984633`;
+  - `iouring_submit_us=101113`;
+  - `direct_reads=671`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.33`, max `8`.
+- Pinned staging:
+  - main copies `16849`, waits `16813`, H2D `3602.700 ms`,
+    host stage `1590.662 ms`;
+  - gate copies `6652`, waits `6628`, H2D `1351.694 ms`,
+    host stage `735.755 ms`;
+  - slot wait is negligible: main `34.169 ms`, gate `13.961 ms`.
+- Current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673`;
+  - cache hits `3519`;
+  - failed batches `0`;
+  - worker `3220783 us`.
+- VRAM cache:
+  - down slots `766`, slot `7.44 MiB`, hits `9631`, misses `3489`,
+    preloads `3673`, hit rate `73.4%`;
+  - upgate slots `1735`, slot `5.36 MiB`, hits `13469`, misses `16307`,
+    hit rate `45.2%`.
+
+Profile summary artifacts:
+
+- `profile-summary.txt`;
+- `profile-summary.json`;
+- `summarize_profile.py`.
+
+CSV summary:
+
+- Up/gate total:
+  - wall `6405.311 ms`;
+  - kernel `6312.756 ms`;
+  - up `4881.039 ms`;
+  - gate `1389.904 ms`;
+  - D2H `6.331 ms`;
+  - scatter `17.267 ms`.
+- Up/gate by type:
+  - type `22/22`: calls `558`, active `4464`, wall `3600.223 ms`,
+    up `3417.264 ms`, gate `90.305 ms`, wait `6788.973 ms`,
+    compute `168.898 ms`;
+  - type `18/18`: calls `311`, active `2488`, wall `2805.088 ms`,
+    up `1463.775 ms`, gate `1299.599 ms`.
+- Down total:
+  - wall `4510.796 ms`;
+  - stage `4183.812 ms`;
+  - kernel `193.456 ms`;
+  - D2H `28.610 ms`;
+  - scatter `41.219 ms`.
+- Down by type:
+  - type `23`: calls `372`, active `2976`, hits `1269`,
+    misses/staged `1707`, wall `2262.437 ms`, stage `2185.011 ms`,
+    kernel `32.212 ms`;
+  - type `11`: calls `1272`, active `10176`, hits `8362`,
+    misses/staged `1814`, wall `2248.359 ms`, stage `1998.801 ms`,
+    kernel `161.244 ms`.
+- CPU fallback profile:
+  - `prompt,type=22`: `40.500 GiB`, `19314339 us`;
+  - `prompt,type=18`: `35.590 GiB`, `17411707 us`;
+  - `prompt,type=11`: `31.958 GiB`, `19342171 us`;
+  - `decode,type=2`: `13.351 GiB`, `2075960 us`;
+  - `prompt,type=23`: `11.854 GiB`, `6783842 us`;
+  - `prompt,type=2`: `7.321 GiB`, `3417603 us`.
+- Route bytes by kind:
+  - down `81.396 GiB`;
+  - gate `73.470 GiB`;
+  - up `67.960 GiB`.
+- Runtime-load trace by kind:
+  - gate `40.128 GiB`, copy-ms sum `33412.230`;
+  - up `37.354 GiB`, copy-ms sum `31196.816`;
+  - down `23.055 GiB`, copy-ms sum `12744.041`.
+
+Hard upper-bound analysis:
+
+- Full-profile n32 decode wall: `26.0457 s` for `31` decode runs.
+- Measured expert-pack iouring wait: `20.984633 s`.
+- Observed effective iouring throughput:
+  `117.71 GiB / 20.984633 s = 5.61 GiB/s`.
+- Naive non-IO floor if all measured iouring wait disappeared:
+  `26.0457 - 20.984633 = 5.0611 s`, or `6.13 tok/s`.
+- To reach `5 tok/s` for 31 tokens, decode wall must be at most `6.2 s`.
+  This leaves only about `1.14 s` for exposed iouring wait. At the observed
+  `5.61 GiB/s`, that is about `6.4 GiB` of exposed reads for n32, or
+  `0.21 GiB/token`.
+- Current exposed reads are `117.71 GiB` for n32, or `3.80 GiB/token`.
+  Therefore a `5 tok/s` path requires roughly a `94-95%` reduction in exposed
+  read wait/read volume, or an equivalent multi-token/speculative acceptance
+  factor. Small pinned/io_uring micro-optimizations cannot close that gap.
+- Naive upper bounds from local bucket reductions:
+  - removing 25% of iouring wait: `1.49 tok/s`;
+  - removing 25% of up/gate wall: `1.27 tok/s`;
+  - removing 25% of down wall: `1.24 tok/s`.
+
+Decision:
+
+- 7MY is a valid profiling run and passes quality, RAM, TTFT, and IO gates.
+- No source change was made and no SOTA was promoted.
+- The next optimization should not be another local kernel/IO micro-patch unless
+  it targets a measured bucket with a much stronger hard bound.
+- The next candidate phase should target read-volume or effective-token
+  reduction:
+  - externally prepared smaller expert format / model-format asset that reduces
+    SSD bytes substantially while preserving quality; or
+  - real speculative/MTP/EAGLE draft path with enough accepted tokens per target
+    decode to amortize expert reads.
+- For a `5 tok/s` target, speculative decoding needs an effective accepted-token
+  multiplier of about `5 / 1.36 = 3.68x` over the current strict n96 SOTA before
+  draft overhead. In practice this means a draft path must reliably accept about
+  4 tokens per expensive Kimi decode step on the France prompt, or it is not a
+  credible route to `5 tok/s`.
+- Because no local draft GGUF or smaller compliant expert asset is currently
+  available, the next phase should be an asset/speculative preflight rather than
+  a source patch.
