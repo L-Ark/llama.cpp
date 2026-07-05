@@ -30,6 +30,15 @@ Current measured bottleneck:
 - The no-layout warp probe is correct but still too slow: sample source bandwidth is only about `74.590 GiB/s` overall (`57.811 GiB/s` up, `104.641 GiB/s` down), projecting raw kernel time to about `1.82 s`. This closes persistent/pinned staging on the current raw layout, because kernel time alone exceeds the total budget.
 - The only remaining top768 compute variant worth designing is a coalesced/transposed resident source layout. It must preserve MXFP4 block bytes and CPU-compatible arithmetic, use the same `3264 MiB` final pool shape, and add only a small streaming transform workspace. CPU-side transform is rejected on paper unless measured otherwise, because the async direct prefill path has only about `78 ms` TTFT margin.
 
+Current execution note before the next run:
+
+- Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/fresh-sota44-current-head-trace-plan.json`.
+- Purpose: rerun the accepted `4.4 tok/s` path on current pushed head `7785efc75` with diagnostic-only component tracing, because older fallback/chunk artifacts were generated before the latest default-off probe source changes.
+- Runtime path must stay the accepted default: `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `-c 256 -b 16 -ub 16 -t 20 -tb 20`, cold `drop_caches`, strict 16GB cgroup including page cache, no swap.
+- Added diagnostic env only: `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT={case_dir}/fallback_profile.csv`, `GGML_MOE_CPU_CHUNK_TRACE_OUT={case_dir}/cpu_chunk_trace.csv`, `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=2000000`, `GGML_MOE_TTFT_TRACE_OUT={case_dir}/ttft_trace.csv`, `GGML_MOE_TTFT_TRACE_MAX_EVENTS=200000`, and the existing `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`.
+- This trace is diagnostic only. If trace overhead lowers token rate, that is not a regression and must not be promoted or rejected as a SOTA candidate. The run is valid only if exit status is 0, RAM remains within `MemoryMax=16000000000` including page cache, no swap/OOM occurs, and the France answer remains semantically correct and coherent.
+- Analysis after the run must separate: gate prefill/lookup, decode CPU up/down fallback, source/page exposure (`touch_us`, page faults, cgroup file cache), non-MoE dense/attention residual, scheduling/sync overhead, and trace overhead. The next runtime source edit is allowed only after writing a hard-bound artifact from this measured trace.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.

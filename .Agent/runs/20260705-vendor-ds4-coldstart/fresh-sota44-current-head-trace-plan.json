@@ -1,0 +1,91 @@
+{
+  "created_utc": "2026-07-05T03:22:03Z",
+  "experiment": "fresh-sota44-current-head-component-trace",
+  "status": "planned_before_run",
+  "objective": "Rerun the accepted 4.4 tok/s vendor DeepSeek cold-start path on the current pushed source head with diagnostic-only component tracing, then use the measured bottleneck to choose the next optimization direction toward 10 tok/s.",
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "expected_head": "7785efc75",
+    "push_remote": "ssd",
+    "push_branch": "vendor/deepseek-token-rate-16gb"
+  },
+  "accepted_sota_reference": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true,
+    "ram_ok": true
+  },
+  "run_kind": "diagnostic_only_not_sota_candidate",
+  "base_config": {
+    "framework": "vendor",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "prompt": "Please introduce France in a short paragraph.",
+    "cpu_moe": 40,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "drop_caches_before_case": true,
+    "cli_extra_args": [
+      "-c", "256",
+      "-b", "16",
+      "-ub", "16",
+      "-t", "20",
+      "-tb", "20"
+    ]
+  },
+  "base_env": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3000",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+    "GGML_MOE_VRAM_CACHE_GB": "0"
+  },
+  "diagnostic_env": {
+    "GGML_MOE_STREAM_ONE_TRACE_OUT": "{case_dir}/one_trace.csv",
+    "GGML_KIMI_CPU_MOE_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_NAME_PROFILE": "1",
+    "GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT": "{case_dir}/fallback_profile.csv",
+    "GGML_MOE_CPU_CHUNK_TRACE_OUT": "{case_dir}/cpu_chunk_trace.csv",
+    "GGML_MOE_CPU_CHUNK_TRACE_LIMIT": "2000000",
+    "GGML_MOE_TTFT_TRACE_OUT": "{case_dir}/ttft_trace.csv",
+    "GGML_MOE_TTFT_TRACE_MAX_EVENTS": "200000"
+  },
+  "validity_gates": {
+    "exit_status": 0,
+    "systemd_status": 0,
+    "memory_peak_bytes_max": 16000000000,
+    "memory_includes_page_cache": true,
+    "swap_allowed": false,
+    "oom_allowed": false,
+    "correctness": "France output must be semantically correct, coherent, and complete."
+  },
+  "analysis_requirements": [
+    "Aggregate fallback_profile.csv by phase and role, especially decode up/down fallback.",
+    "Use touch_us and cgroup memory/page-fault counters to estimate source/page exposure separately from hot compute.",
+    "Aggregate cpu_chunk_trace.csv by role, layer band, tensor, and thread to estimate scheduling/tail overhead.",
+    "Aggregate one_trace.csv into gate prefill/cache-hit/cache-miss timing.",
+    "Use ttft_trace.csv if present for prompt/cold-start timing markers.",
+    "Estimate non-MoE dense/attention residual as measured wall/decode time minus trace-attributed MoE components, with caveats for trace overhead.",
+    "Write a hard-bound artifact before any new runtime source edit."
+  ],
+  "promotion_rules": {
+    "this_run_can_be_sota": false,
+    "reason": "Diagnostic trace env and CSV writing can perturb token rate; it is used only to locate the next bottleneck.",
+    "future_sota_rule": "If a compliant throughput-improving candidate appears, immediately record complete reproduction information, commit and push source/artifacts to ssd/vendor/deepseek-token-rate-16gb, then reproduce from pushed source."
+  }
+}
