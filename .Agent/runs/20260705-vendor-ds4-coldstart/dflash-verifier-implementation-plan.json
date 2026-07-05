@@ -1,0 +1,129 @@
+{
+  "date": "2026-07-05",
+  "title": "DFlash verifier implementation plan: oracle target-verifier cost first",
+  "result": "plan_only_next_code_limited_to_oracle_verifier_diagnostic",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "decode_window_ms": 31047.44671,
+    "decoded_tokens_for_rate_model": 136.608765524,
+    "decode_ms_per_token": 227.272727,
+    "ttft_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head_before_record": "dbe65c420c47d1030a3671d917acd07e9563b60c",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "push_target": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb",
+    "runtime_source_modified": false,
+    "model_run_performed": false,
+    "full_download_performed": false
+  },
+  "dflash_candidate": {
+    "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+    "file": "model.safetensors",
+    "size_bytes": 3607596760,
+    "aux_hidden_state_layer_ids": [3, 13, 23, 32, 42],
+    "speculative_tokens": 7,
+    "position_acc": [0.7878868554365931, 0.5875753957980987, 0.4541761259979246, 0.35903399619091536, 0.28966203790287387, 0.23638368573594648, 0.19339194045398048],
+    "optimistic_tokens_per_verify_upper_bound": 3.908110037516333,
+    "independence_prefix_tokens_per_verify_estimate": 2.5646120303409123
+  },
+  "hard_gate_math": {
+    "target_tok_s": 10.0,
+    "required_speedup_from_4p4": 2.272727272727273,
+    "baseline_decode_ms_per_token": 227.272727,
+    "optimistic_upper": {
+      "tokens_per_verify": 3.908110037516333,
+      "ideal_decode_ms": 7944.363493339904,
+      "overhead_budget_ms_to_10tok": 5716.513059060095,
+      "max_target_verify_cost_x_one_token_zero_draft_overhead": 1.7195684165071865
+    },
+    "independence_prefix_estimate": {
+      "tokens_per_verify": 2.5646120303409123,
+      "ideal_decode_ms": 12106.098833932741,
+      "overhead_budget_ms_to_10tok": 1554.7777184672577,
+      "max_target_verify_cost_x_one_token_zero_draft_overhead": 1.1284292933500015
+    },
+    "interpretation": "If oracle target verification for W=8 costs more than about 1.72x one-token decode, DFlash cannot reach 10 tok/s even under the optimistic positional upper bound and zero draft overhead. Under a more realistic prefix estimate, the threshold is about 1.13x."
+  },
+  "existing_vendor_evidence": {
+    "forced_batch_target_verifier_diagnostic": ".Agent/runs/20260705-vendor-ds4-coldstart/forced-batch-target-verifier-diagnostic.json",
+    "seq_elapsed_seconds": 107.623408161,
+    "batch16_elapsed_seconds": 107.597260262,
+    "seq_over_batch16_speedup": 1.0002430164014988,
+    "interpretation": "The existing coarse fixed-text diagnostic did not show measurable target batch speedup. It is not a precise oracle verifier measurement, but it blocks full DFlash runtime work until a stricter verifier-cost probe passes."
+  },
+  "source_findings": [
+    {
+      "file": "examples/speculative/speculative.cpp",
+      "lines": "562-565,584-585",
+      "finding": "Existing target speculative path adds drafted tokens to batch_tgt and verifies with one llama_decode(ctx_tgt, batch_tgt). This pattern can be reused by an oracle verifier cost probe."
+    },
+    {
+      "file": "common/sampling.cpp",
+      "lines": "610-637",
+      "finding": "common_sampler_sample_and_accept_n() already implements greedy accept/reject from target logits for a draft sequence."
+    },
+    {
+      "file": "src/models/deepseek4.cpp",
+      "lines": "1629-1661",
+      "finding": "DeepSeek4 maintains per-layer high-capacity state inpL_hc. DFlash aux taps likely require post-layer inpL_hc for layers [3,13,23,32,42]."
+    },
+    {
+      "file": "include/llama.h",
+      "lines": "990-1004",
+      "finding": "Public embedding APIs expose final output embeddings, not arbitrary layer hidden-state taps."
+    },
+    {
+      "file": "common/debug.cpp",
+      "lines": "143-175",
+      "finding": "cb_eval can copy named tensors for diagnostics, but D2H copies are too expensive for final hot path."
+    },
+    {
+      "file": "common/speculative.cpp",
+      "lines": "578-590",
+      "finding": "EAGLE3 hidden-state speculation state is still TODO; no ready hidden-state draft runtime exists."
+    }
+  ],
+  "next_allowed_implementation": {
+    "name": "oracle_target_verifier_cost_probe",
+    "runtime_scope": "diagnostic-only, default-off, no DFlash weights, no SOTA promotion",
+    "inputs": [
+      "accepted SOTA target model/env",
+      "fixed France text used by the top1 verifier",
+      "oracle future tokens from that fixed text"
+    ],
+    "windows_to_test": [2, 4, 8],
+    "required_outputs": [
+      "C_verify(W) in units of one accepted single-token decode",
+      "top1 agreement for each oracle window",
+      "accepted oracle length",
+      "elapsed time and TTFT/proxy split",
+      "memory.peak, memory.stat file, memory.events",
+      "exact command/env/run path"
+    ],
+    "strict_gates": [
+      "MemoryMax=16000000000",
+      "MemorySwapMax=0",
+      "drop_caches before run",
+      "no OOM/swap",
+      "no generated-output SOTA claim",
+      "source and artifact committed/pushed if the diagnostic is added"
+    ],
+    "reopen_full_dflash_loader_only_if": "C_verify(W) is below the optimistic threshold with at least 500ms aggregate overhead slack and top1 is exact. Otherwise DFlash is closed for the 10 tok/s objective under current vendor target verification."
+  },
+  "blocked_items": [
+    "Persistent disk is still insufficient for the 3.6GB DFlash artifact on /dev/root.",
+    "No full DFlash loader/converter should be written until the oracle verifier cost gate passes.",
+    "Hidden-state tap mapping is unproven; cb_eval can be used for shape diagnostics only after verifier cost is promising."
+  ],
+  "decision": {
+    "full_dflash_runtime_patch_allowed_now": false,
+    "oracle_verifier_diagnostic_allowed_next": true,
+    "accepted_sota_unchanged": true,
+    "next_action": "Implement or script the oracle target-verifier cost probe, then run it under the strict 16GB cgroup before any DFlash loader work."
+  }
+}

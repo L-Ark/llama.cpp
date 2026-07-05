@@ -11054,3 +11054,43 @@ Decision:
 - Do not implement DFlash runtime source yet.
 - DFlash is the next non-4Expert design candidate if disk cleanup is not approved, but it needs a verifier-design artifact and either persistent disk space or a carefully bounded loader/conversion path before coding.
 - Current accepted SOTA remains `4.4 tok/s`.
+
+### 2026-07-05 DFlash Verifier Implementation Plan
+
+Artifact:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-verifier-implementation-plan.json`
+
+Purpose:
+
+- Decide the next executable step for DFlash without downloading the 3.6GB draft or changing runtime logits.
+- Existing evidence says DFlash is only useful if target verification is strongly sublinear. Therefore the next implementation is not the full DFlash loader; it is an oracle verifier cost diagnostic using known-correct fixed text.
+
+Source findings:
+
+- Existing `examples/speculative/speculative.cpp` already has the target-side pattern we need: drafted tokens are added to `batch_tgt` (`examples/speculative/speculative.cpp:562-565`) and verified by a single `llama_decode(ctx_tgt, batch_tgt)` (`examples/speculative/speculative.cpp:584-585`).
+- Greedy accept/reject can reuse `common_sampler_sample_and_accept_n()` (`common/sampling.cpp:610-637`) once target logits for draft positions exist.
+- DeepSeek4 per-layer high-capacity state exists as `inpL_hc` and is updated after each layer (`src/models/deepseek4.cpp:1629-1661`). DFlash needs aux taps `[3,13,23,32,42]`; current public API `llama_get_embeddings_ith()` exposes final embeddings only (`include/llama.h:990-1004`), not those layer taps.
+- `cb_eval` can observe named graph tensors (`common/debug.cpp:143-175`), but copying selected tensors from GPU to host is diagnostic-only overhead. It is suitable for a compare-only tap-shape probe, not for the final fast path.
+- `common_speculative_state_eagle3` remains TODO (`common/speculative.cpp:578-590`), reinforcing that current vendor has no ready hidden-state speculative implementation.
+
+Hard verifier gate:
+
+- Accepted decode cost is `227.272727 ms/token`.
+- RedHat DFlash optimistic upper bound is `3.908110 tokens/target-verify`; with zero draft overhead this allows target verification cost at most `1.719568x` one-token decode.
+- A more realistic independence-style prefix estimate is `2.564612 tokens/target-verify`; with zero draft overhead this allows target verification cost only `1.128429x` one-token decode.
+- Existing forced-batch diagnostic did not show sublinear target evaluation: sequential and batch16 fixed-text modes differed by only `1.000243x` and both took about `107.6s` for 145 tokens. This is too coarse to be the final decision, but it blocks full DFlash runtime work.
+
+Next executable diagnostic:
+
+1. Add a default-off, diagnostic-only oracle verifier tool or script, not a DFlash runtime path.
+2. It must use the accepted SOTA env/config and the fixed France text, then verify oracle windows `W=2,4,8` by feeding known future tokens as draft tokens to the target in one batch.
+3. It must report `C_verify(W)` in units of one accepted single-token decode, top1 agreement, accepted oracle length, TTFT, memory.peak, memory.stat file, memory.events, and exact run path.
+4. It must run under strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`, and must not write generated-output SOTA claims.
+5. Reopen full DFlash loader work only if `C_verify(W)` is below the DFlash upper-bound threshold with at least `500ms` aggregate overhead slack and top1 is exact. If not, close DFlash as a `10 tok/s` path under current vendor target verification.
+
+Decision:
+
+- Full DFlash runtime source is still not allowed.
+- The only DFlash-related code allowed next is the oracle target-verifier cost diagnostic, because it can prove or disprove the necessary sublinear target-verification assumption without DFlash weights.
+- Current accepted SOTA remains `4.4 tok/s`.
