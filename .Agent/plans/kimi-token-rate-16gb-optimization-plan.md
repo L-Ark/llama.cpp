@@ -79963,6 +79963,100 @@ cat "$RUN/online_concurrency_hist.tsv"
 cat "$RUN/decision.md"
 ```
 
+## Phase 7NW - default-off same-layer priority-fill I/O scheduler
+
+Status: planned.
+
+Timestamp: 2026-07-06 11:02 CST.
+
+Reason:
+
+- Phase 7NU found a raw O_DIRECT trace-replay ceiling of `15.181 GiB/s`,
+  while current runtime effective throughput is `5.854 GiB/s`.
+- Phase 7NV found online same-layer work is often available:
+  - `62.0%` of iouring route events have `>=12` known same-layer jobs;
+  - current iouring batches average only `4.37` read jobs;
+  - current batches have p90 `7` and `0` batches with `>=12` read jobs.
+- Current-down overlap already exists, so a valid source patch must preserve
+  up/gate priority and use down jobs only to fill otherwise idle read capacity.
+
+Theoretical bound:
+
+- Current movement volume: `3.797 GiB/token`.
+- 7NN effective throughput: `5.854 GiB/s`, movement-only bound
+  `1.54 tok/s`.
+- 7NU raw `8`-worker trace replay: `13.048 GiB/s`, movement-only bound
+  `3.44 tok/s`.
+- 7NU raw `12`-worker trace replay: `15.181 GiB/s`, movement-only bound
+  `4.00 tok/s`.
+- This source patch cannot reach `5 tok/s` by itself. It is accepted only if it
+  produces a reproducible strict n32 improvement and then strict n96
+  improvement without breaking quality, TTFT, or 16GB host RAM.
+
+Implementation plan:
+
+1. Add a default-off env flag:
+   `GGML_MOE_SAME_LAYER_IO_FILL=1`.
+2. Keep existing default behavior unchanged when the flag is unset.
+3. In the mixed up/gate decode path after active experts and down tensor are
+   known:
+   - build missing down jobs as current-down-overlap already does;
+   - before launching the ordinary up/gate runtime loads, opportunistically
+     submit down reads on the prefetch stream only if doing so does not consume
+     the ring used for the critical up/gate load;
+   - preserve up/gate-first completion semantics;
+   - do not mark down cache entries ready until the down copy completes;
+   - join/fence before down compute exactly as current-down-overlap does.
+4. If the existing current-down-overlap early path already provides this
+   behavior, do not duplicate it. Instead add instrumentation proving why it is
+   or is not active, and test the env combination that enables the earliest
+   safe behavior.
+5. Build in `build-cuda-batch`.
+
+Experiment sequence:
+
+1. Source inspection and minimal patch.
+2. Build only.
+3. Strict cold `-n 32` smoke/perf with:
+   - `MemoryMax=15900000000`;
+   - `MemorySwapMax=0`;
+   - current accepted runtime env;
+   - new flag enabled;
+   - France prompt.
+4. Accept for n96 only if n32:
+   - exits `0`;
+   - host memory peak stays `<15.9 GB`;
+   - output is semantically correct and coherent for France;
+   - TTFT stays within cap;
+   - token rate improves by at least `5%` versus the matching current n32
+     baseline.
+5. Strict cold `-n 96` validation only after n32 pass.
+6. Commit and push immediately only if n96 also improves and all gates pass.
+7. If build fails, quality fails, memory fails, TTFT fails, or token rate
+   regresses, revert source and record the rejected result.
+
+Required records:
+
+- Source diff summary.
+- Build command and result.
+- Exact run command(s).
+- TTFT, decode time, token rate, total time.
+- Full model output for the France prompt.
+- Host memory peak including cgroup/page cache.
+- Expert-pack metrics:
+  - iouring bytes;
+  - wait us;
+  - batches;
+  - inflight avg/max;
+  - batch histogram;
+  - current-down-overlap metrics.
+
+Reproducibility:
+
+- Commit and push this 7NW plan before source edits.
+- Commit and push only accepted improvements.
+- If rejected, revert source and commit/push the documentation result only.
+
 Artifacts:
 
 - `commands.log`
