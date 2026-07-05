@@ -80141,6 +80141,98 @@ cat "$RUN/candidate_budget.tsv"
 cat "$RUN/decision.md"
 ```
 
+## Phase 7NY - expert-pack slice compression feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 12:08 CST.
+
+Reason:
+
+- Phase 7NX showed `5 tok/s` requires:
+  - `69.1%` byte reduction at current runtime throughput; or
+  - `20.0%` byte reduction even at the best measured 7NU raw trace-replay
+    throughput.
+- Known typed-requant candidates are not enough as a complete path.
+- A possible asset-format path is a compressed expert-pack format that reads
+  fewer bytes from SSD and decompresses into pinned/H2D staging buffers.
+- Before source work, measure whether the current IQ3/IQ2/Q4 expert slices are
+  compressible enough. Quantized tensors may be entropy-dense, so this must be
+  measured rather than assumed.
+
+Goal:
+
+- Estimate actual compression ratio and decompression throughput for the
+  current runtime-read expert slices.
+- Determine whether compressed expert packs can plausibly provide the `>=20%`
+  global byte reduction required by Phase 7NX under the raw I/O ceiling.
+- Do not run model inference.
+- Do not edit source.
+- Do not create large compressed pack files.
+- Do not promote SOTA.
+
+Inputs:
+
+- Actual iouring read trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32/io-read-trace.csv`
+- Expert packs:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`
+- Phase 7NX required thresholds:
+  - global byte reduction target at raw12: `20.0%`;
+  - current movement: `3.793 GiB/token`;
+  - raw12 throughput: `15.181 GiB/s`.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ny-pack-compression`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - tool availability (`zstd`, `lz4`, `python3`);
+   - `phase7ny_pack_compressibility.py`;
+   - `compressibility_summary.tsv`;
+   - `compressibility_by_kind.tsv`;
+   - `decision.md`.
+3. Sample actual runtime slices from the iouring read trace:
+   - deterministic sample with a fixed seed;
+   - cap total sampled source bytes to avoid generating large artifacts;
+   - preserve tensor kind (`up`, `gate`, `down`), source id, offset, nbytes.
+4. For each sampled slice:
+   - read bytes with `os.pread`;
+   - compress in memory with available codecs:
+     - use `zstd`/`lz4` CLI only if installed and can operate via temporary
+       bounded files;
+     - always include Python `zlib` as a conservative availability baseline;
+   - measure compressed size;
+   - measure decompression throughput on the same sample.
+5. Report:
+   - weighted compression ratio overall;
+   - weighted compression ratio by tensor kind;
+   - estimated GiB/token after compression;
+   - required read throughput for `5 tok/s`;
+   - decompression throughput lower bound and whether it would become the new
+     bottleneck.
+
+Decision rule:
+
+- Reject compressed expert-pack source work if weighted compression saves
+  `<20%` of actual iouring bytes, because it misses the Phase 7NX raw12
+  threshold before overhead.
+- Reject if decompression throughput is below the required compressed read rate
+  for `5 tok/s`.
+- Allow a source design only if:
+  - weighted global byte reduction is `>=20%`;
+  - decompression throughput is safely above required rate;
+  - expected extra CPU/RAM buffers can fit strict 16GB host RAM and do not
+    increase TTFT beyond the 20% cap.
+
+Reproducibility:
+
+- Commit and push this 7NY plan before running the audit.
+- Commit and push the 7NY result before any follow-up source or asset work.
+
 ## Phase 7NW - default-off same-layer priority-fill I/O scheduler
 
 Status: planned.
