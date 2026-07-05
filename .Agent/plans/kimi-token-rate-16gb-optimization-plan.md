@@ -80358,3 +80358,138 @@ cat "$RUN/metrics.txt"
 cat "$RUN/command.txt"
 cat "$RUN/script.diff"
 ```
+
+## Phase 7NN - low-level io wait/locality decomposition
+
+Status: planned.
+
+Timestamp: 2026-07-06 02:45 CST.
+
+Reason:
+
+- Phase 7NM rejected ggml CPU poll tuning. The bottleneck is not explained by
+  worker busy-wait policy.
+- Phase 7NK/7NL rejected implementable cache-policy and previous-token route
+  predictors.
+- Current aggregate counters still show large expert-pack wait:
+  - 7MY n32 profile: `iouring_wait_us=20984633`;
+  - 7NM poll probe: `iouring_wait_us=20866275`.
+- Existing 7MY up/down CSV shows only the high-level endpoint:
+  - up/gate decode wall `6405.311 ms`;
+  - down decode wall `4510.796 ms`;
+  - down stage `4183.812 ms`;
+  - pinned-stage H2D aggregate `3602.700 ms` for the main ring and
+    `1351.694 ms` for the gate ring.
+- The aggregate `iouring_wait_us` is larger than the visible up/down endpoint
+  sums, so much of it is overlapped. Before designing a new source-level I/O
+  scheduler, we need to know whether the exposed time comes from:
+  - many small batches with low inflight;
+  - long-tail waits in a small number of batches;
+  - poor in-batch locality that could justify safe coalescing;
+  - or H2D/compute ordering rather than disk wait.
+
+Hypothesis:
+
+- If most exposed wait comes from small read batches with `read_jobs <= 4` and
+  low inflight, a future source implementation would need to enlarge scheduling
+  granularity across tensors or active families.
+- If locality shows very few adjacent/small-gap reads, then coalescing remains
+  low-value and should not be retried.
+- If wait is already near pure device throughput for the current bytes and is
+  broadly distributed, the next viable path is byte reduction or true
+  accepted-token parallelism rather than another I/O queue tweak.
+
+Theoretical bounds to compute from the trace:
+
+- Bytes lower bound:
+  `iouring_bytes / device_or_measured_bandwidth`.
+  Using 7MY `126391910400` bytes and measured wait `20.984633 s`, the current
+  effective wait-side throughput is about `5.61 GiB/s`.
+- Syscall/submit lower bound:
+  submit overhead is only `~0.10 s` in 7MY, so syscall-count-only optimization
+  cannot explain a multi-second endpoint gain.
+- Coalescing bound:
+  only accept a future coalescing implementation plan if locality data shows
+  enough adjacent/small-gap reads to reduce exposed wait without materially
+  increasing bytes read.
+
+Method:
+
+1. Create a run directory:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nn-io-wait-locality-n32`.
+2. Run the current accepted production script without source changes.
+3. Keep the standard strict runtime:
+   `N=32`, `VRAM_MIB=15000`, `THREADS=32`, `PINNED_SLOTS=12`,
+   `UPGATE_PCT=62`, `IQ2_UPGATE_PARALLEL=1`, `MIN_PROFILE=1`,
+   `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+   `MOE_PREFETCH_DOWN_DEPTH=2`.
+4. Add only these diagnostic envs through `EXTRA_RUNTIME_ENV`:
+
+```bash
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1
+GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv
+```
+
+5. Run strict cold-start n32:
+
+```bash
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required activation:
+
+- `env.txt` contains all five diagnostic envs above.
+- The run directory contains:
+  - `io-batch-profile.csv`;
+  - `io-wait-trace.csv`;
+  - `io-locality-profile.csv`;
+  - `current-down-overlap-profile.csv`.
+
+Strict gates:
+
+- Exit `0`.
+- Quality pass and manual France semantic pass.
+- TTFT below `127598.064 ms`.
+- `memory.peak <= 15899996160`.
+- `memory.swap.peak == 0`.
+- `read_failures=0`.
+- `iouring_fallbacks=0`.
+
+Analysis:
+
+- Store `phase7nn_analyze_io.py` in the run directory.
+- Produce:
+  - `io-summary.md`;
+  - wait distribution by op and read-job bucket;
+  - cumulative wait contribution from the top `1%`, `5%`, and `10%` batches;
+  - inflight distribution;
+  - locality summary: adjacent pairs, span/gap bytes, same-source/same-tensor
+    frequency, and maximum safe coalescing bound;
+  - current-down overlap tensor summary.
+
+Decision rule:
+
+- If a clear source implementation target appears with a hard expected n32
+  endpoint gain of at least `1.0 s` and no quality/RAM/TTFT risk, write the next
+  plan before editing source.
+- If the trace only confirms low locality, near-device-bandwidth reads, or
+  mostly overlapped wait, reject further I/O queue/coalescing work and move the
+  next plan to byte reduction or accepted-token parallelism.
+- This phase itself is diagnostic only and cannot be promoted as SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running the diagnostic.
+- Commit and push the result and analysis before any source change or follow-up
+  experiment.
