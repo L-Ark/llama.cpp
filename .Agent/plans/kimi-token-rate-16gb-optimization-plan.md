@@ -61969,3 +61969,84 @@ Decision:
 - Next viable target should not rely on a small static hot-key set. It should
   either reduce per-miss cost broadly or remove CPU fallback/unsupported decode
   work that appears as a separate multi-second bucket.
+
+## Phase 7JT: current fallback bucket recheck before Q4_0 retry
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck candidate:
+
+- 7JS rejects static up/gate hot-key pinning.
+- The remaining separate multi-second bucket in the profiled run is CPU
+  fallback.
+
+Experiment:
+
+- Reuse 7JS `fallback-profile.csv`:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/fallback-profile.csv`.
+- Aggregate by `phase`, `src0_type`, and tensor.
+
+Reproduction command:
+
+```bash
+python3 - <<'PY'
+import csv, collections
+path = "/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/fallback-profile.csv"
+def it(r, k):
+    try: return int(float(r.get(k, 0) or 0))
+    except Exception: return 0
+agg = collections.defaultdict(lambda: collections.Counter())
+for r in csv.DictReader(open(path)):
+    phase, typ, tensor = r["phase"], r["src0_type"], r["tensor"]
+    fb, calls, cnt, b = it(r, "fallback_us"), it(r, "calls"), it(r, "count"), it(r, "expert_bytes")
+    for key in [(phase, typ), (phase, "ALL"), ("ALL", typ), ("ALL", "ALL"), (phase, typ, tensor)]:
+        c = agg[key]
+        c["fallback_us"] += fb
+        c["calls"] += calls
+        c["count"] += cnt
+        c["bytes"] += b * cnt
+        c["rows"] += 1
+print(("decode", "ALL"), dict(agg[("decode", "ALL")]))
+print(("decode", "2"), dict(agg[("decode", "2")]))
+for key, c in sorted(
+        ((k, v) for k, v in agg.items() if len(k) == 3 and k[0] == "decode"),
+        key=lambda kv: kv[1]["fallback_us"], reverse=True)[:10]:
+    print(key, dict(c))
+PY
+```
+
+Results:
+
+- Decode fallback total:
+  - fallback `2639.648 ms`;
+  - calls `1736`;
+  - bytes `14335082496` (`13.35 GiB`);
+  - all decode fallback is `src0_type=2` / `Q4_0`.
+- Decode Q4_0 tensors:
+  - `blk.9.ffn_down_exps.weight`: `442.952 ms`;
+  - `blk.7.ffn_down_exps.weight`: `429.848 ms`;
+  - `blk.8.ffn_down_exps.weight`: `396.632 ms`;
+  - `blk.10.ffn_down_exps.weight`: `381.328 ms`;
+  - `blk.18.ffn_down_exps.weight`: `369.512 ms`;
+  - `blk.6.ffn_down_exps.weight`: `357.688 ms`;
+  - `blk.15.ffn_down_exps.weight`: `261.688 ms`.
+- Prompt fallback remains large (`70907.053 ms`) but is a TTFT issue, not the
+  current decode token-rate target.
+
+Decision:
+
+- Do not retry broad Q4_0 down GPU/cache now.
+- Reason:
+  - this is the same bounded seven-layer Q4_0 down fallback bucket documented in
+    earlier phases;
+  - historical Q4_0 attempts removed or reduced CPU fallback but regressed wall
+    time through staging/cache/IO side effects;
+  - the hard local upper bound is only `2.64 s` on n32, smaller than the
+    remaining up/gate and iouring movement buckets;
+  - current plan already explicitly says not to retry Q4_0 down GPU/cache
+    without a materially different design.
+- Keep Q4_0 fallback as a documented residual cost.
+- Next design should target a broad per-miss cost reduction or a scheduler-level
+  reduction that does not increase IO, cache churn, or TTFT.
