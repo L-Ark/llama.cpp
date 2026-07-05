@@ -1,0 +1,52 @@
+{
+  "acceptance": {
+    "files_deleted": false,
+    "full_model_downloaded": false,
+    "new_sota": false,
+    "reproduces_current_sota": true,
+    "strict_16gb_ram_including_page_cache": true,
+    "ttft_ok_vs_gate_ms_33617_688744": true
+  },
+  "changes_validated": [
+    "Added GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000 to the demo command.",
+    "Added GGML_MOE_STREAM_ONE_PREFILL_PROFILE=$PROFILE to the demo command.",
+    "Updated the demo expected strict-cold line from 4.1-4.2 to about 4.4 eval tok/s."
+  ],
+  "created_at_utc": "2026-07-05T20:56:13Z",
+  "demo_file": ".Agent/examples/demo_current_sota.sh",
+  "diff_summary": "diff --git a/.Agent/examples/demo_current_sota.sh b/.Agent/examples/demo_current_sota.sh\nindex 50bb9a020..37ce82f35 100755\n--- a/.Agent/examples/demo_current_sota.sh\n+++ b/.Agent/examples/demo_current_sota.sh\n@@ -6,7 +6,7 @@ set -euo pipefail\n #   - vendor framework\n #   - cold drop_caches\n #   - 16GB MemoryMax including page cache\n-#   - gate one-stream cache + O_DIRECT expert pack\n+#   - gate one-stream cache + one-prefill + O_DIRECT expert pack\n #   - current top-k policy and small batch/context settings\n #\n # Usage:\n@@ -73,6 +73,8 @@ cmd=(\n   --env GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1\n   --env GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps\n   --env GGML_MOE_STREAM_ONE_CACHE_MIB=13568\n+  --env GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000\n+  --env GGML_MOE_STREAM_ONE_PREFILL_PROFILE=\"$PROFILE\"\n   --env GGML_MOE_STREAM_DONTNEED=1\n   --env GGML_MOE_KEEP_TOPK_UPDOWN=4\n   --env GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39\n@@ -101,7 +103,7 @@ find \"$OUT_ROOT\" -mindepth 1 -maxdepth 1 -type d -printf '%p\\n' | sort > \"$befor\n printf '[demo] running current vendor DeepSeek SOTA config\\n'\n printf '[demo] repo: %s\\n' \"$ROOT\"\n printf '[demo] this is a strict cold run: drop_caches + 16GB cgroup including page cache\\n'\n-printf '[demo] expected strict-cold line: about 4.1-4.2 eval tok/s on this host\\n'\n+printf '[demo] expected strict-cold line: about 4.4 eval tok/s on this host\\n'\n \"${cmd[@]}\"\n \n find \"$OUT_ROOT\" -mindepth 1 -maxdepth 1 -type d -printf '%p\\n' | sort > \"$after\"\n",
+  "purpose": "Validate that .Agent/examples/demo_current_sota.sh explicitly carries the accepted SOTA one-prefill configuration and reproduces the current strict-cold SOTA without deleting files or downloading weights.",
+  "run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T205359Z-demo-current-sota-prefill-explicit-20260706/france-cpu40-vram0gb",
+    "required_env_present": {
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct": true,
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000": true,
+      "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": true
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T205359Z-demo-current-sota-prefill-explicit-20260706",
+    "stderr_counters": {
+      "expert_pack": "[moe_stream] one expert pack: hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_enabled=1 direct_reads=4886 direct_failures=0 direct_fallbacks=0",
+      "one_prefill_final": "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=4758.676",
+      "one_prefill_loaded": "[moe_stream] one prefill: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv limit=3000",
+      "vram_cache": "[moe_stream] VRAM cache: hits=33265 misses=1886 hit_rate=94.6%"
+    },
+    "summary": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 63.64,
+      "eval_tok_s": 4.4,
+      "memory_file_bytes": 15101468672,
+      "memory_max_events": 17037,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 271187,
+      "prompt_tok_s": 1.8,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 32598.901588,
+      "workingset_refault_file": 1676021
+    }
+  },
+  "source_head_before_commit": "3b34b3b905e9d452f11bd3488f52aa8e8bfa7e59"
+}

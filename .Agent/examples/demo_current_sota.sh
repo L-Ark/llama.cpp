@@ -6,7 +6,7 @@ set -euo pipefail
 #   - vendor framework
 #   - cold drop_caches
 #   - 16GB MemoryMax including page cache
-#   - gate one-stream cache + O_DIRECT expert pack
+#   - gate one-stream cache + one-prefill + O_DIRECT expert pack
 #   - current top-k policy and small batch/context settings
 #
 # Usage:
@@ -73,6 +73,8 @@ cmd=(
   --env GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1
   --env GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps
   --env GGML_MOE_STREAM_ONE_CACHE_MIB=13568
+  --env GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000
+  --env GGML_MOE_STREAM_ONE_PREFILL_PROFILE="$PROFILE"
   --env GGML_MOE_STREAM_DONTNEED=1
   --env GGML_MOE_KEEP_TOPK_UPDOWN=4
   --env GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39
@@ -101,7 +103,7 @@ find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort > "$befor
 printf '[demo] running current vendor DeepSeek SOTA config\n'
 printf '[demo] repo: %s\n' "$ROOT"
 printf '[demo] this is a strict cold run: drop_caches + 16GB cgroup including page cache\n'
-printf '[demo] expected strict-cold line: about 4.1-4.2 eval tok/s on this host\n'
+printf '[demo] expected strict-cold line: about 4.4 eval tok/s on this host\n'
 "${cmd[@]}"
 
 find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort > "$after"
