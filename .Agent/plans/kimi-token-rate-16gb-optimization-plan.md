@@ -72964,3 +72964,65 @@ Reproducibility:
 
 - Commit and push this result/repeat plan before running.
 - Record run directory, metrics, activation absence, and comparison with 7MC-B.
+
+### Phase 7MD result
+
+Timestamp: 2026-07-06 03:42:00 CST.
+
+Status: accepted default variance repeat.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-092042Z-phase7md-current-default-repeat-n32`
+
+Source:
+
+- `55cbf61d6`, H2D batch source reverted.
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `66044.43 ms`;
+- decode `22659.98 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- H2D batch activation match count `0`.
+
+Counters:
+
+- expert-pack iouring bytes `126391910400`;
+- iouring wait `20476147 us`;
+- iouring batches `5178`;
+- iouring inflight avg `3.32`;
+- current-down worker `3182817 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Comparison:
+
+- 7MC-B slow default:
+  - decode `24177.58 ms / 31`, `1.28 tok/s`;
+  - iouring wait `21916334 us`.
+- 7MD repeat:
+  - decode `22659.98 ms / 31`, `1.37 tok/s`;
+  - iouring wait `20476147 us`.
+
+Interpretation:
+
+- 7MC-B was runtime/storage variance, not a persistent source regression.
+- The default path is restored after the H2D batch revert.
+- Continue from the current default baseline, but do not use 7MC-B as evidence
+  for a new source target.
+
+Decision:
+
+- Keep H2D batch source reverted.
+- Do not retry H2D batch or shared IO.
+- The next source plan must come from a new measured bottleneck, not from the
+  already rejected IO/H2D scheduler family.
