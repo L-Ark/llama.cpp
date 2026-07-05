@@ -63,9 +63,25 @@
     "allowed": true,
     "scope": "default-off diagnostic/proof only, not a strict cold SOTA benchmark",
     "candidate": "compact sparse fused MMVQ hot-pair probe for complete (layer, expert) up/down pairs, starting with pair_count=48",
+    "profile": {
+      "summary": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-top48-after-topk-close-profile-summary.json",
+      "profile_json": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.profile.json",
+      "tsv": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.tsv",
+      "manifest": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.offset_manifest.csv",
+      "pairs": 48,
+      "entries": 96,
+      "payload_mib": 408.0,
+      "active_layers": 32,
+      "max_pairs_per_layer": 3,
+      "sha256": {
+        "profile_json": "c03b06315db8170faebc11a8cfbed034ea9cfe5774890d0879f6f3032a02dc86",
+        "tsv": "beeb1dd7a8b2641f3e5afac5a4fe3dcc824f1d96f4dac9d7e6e1f4dd5689936b",
+        "manifest": "fa8758fae53942438349bf21bf74306f84131231cd85b877814f637b2c75b2f2"
+      }
+    },
     "required_env_shape": [
       "DS4_SPARSE_FUSED_MMVQ_PROBE=1",
-      "DS4_SPARSE_FUSED_MMVQ_PROFILE=<top48-pair-profile>",
+      "DS4_SPARSE_FUSED_MMVQ_PROFILE=.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.profile.json",
       "DS4_SPARSE_FUSED_MMVQ_MODE=compare"
     ],
     "code_paths_to_change": [
