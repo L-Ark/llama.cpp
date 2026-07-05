@@ -81335,6 +81335,87 @@ cat "$RUN/hf_model_metadata.jsonl" | grep mradermacher
 cat "$RUN/decision.md"
 ```
 
+## Phase 7NU - expert-pack raw I/O ceiling audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 10:12 CST.
+
+Reason:
+
+- Phase 7NT showed that verifier/speculative reuse cannot reduce all-expert
+  movement enough for `5 tok/s`.
+- Current accepted n32/n96 runs are therefore still bounded by direct runtime
+  expert movement:
+  - 7NN measured `3.797 GiB/token` expert-pack reads;
+  - 7NN measured foreground wait-side throughput around `5.854 GiB/s`;
+  - 7MU n96 decode is `736.324 ms/token`.
+- Before any new IO scheduler, coalescing, or pack-layout source work, measure
+  the raw read ceiling of the actual expert-pack files on the current server.
+- This phase is an offline storage ceiling audit. It does not run model
+  inference, does not edit source, does not download assets, and does not
+  promote SOTA.
+
+Goal:
+
+- Determine whether current `5.854 GiB/s` effective runtime read throughput is:
+  - already near the storage/request-shape ceiling; or
+  - far below raw device capability, which would justify another IO/layout
+    implementation phase.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nu-raw-io-ceiling`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - expert-pack file inventory;
+   - benchmark tool availability (`fio`, `dd`, `blockdev`, `lsblk`, `numactl`);
+   - `io_ceiling_summary.tsv`;
+   - `decision.md`.
+3. Identify the exact expert-pack files used by the current runtime from:
+   - environment scripts;
+   - run logs;
+   - source/default pack paths if logs do not contain them.
+4. Run cold, bounded, read-only storage tests against the same file(s):
+   - sequential direct read with large block size;
+   - runtime-shaped direct random reads using the observed expert-copy sizes
+     (`~4.5-7.8 MiB`) and queue depths near current runtime (`8-12`) if `fio`
+     is available;
+   - otherwise use the safest available direct-read fallback and record the
+     limitation.
+5. Compare measured raw throughput with:
+   - 7NN wait-side throughput `5.854 GiB/s`;
+   - required throughput for `5 tok/s` at current bytes/token:
+     `3.797 GiB/token * 5 = 18.985 GiB/s`;
+   - required throughput for current `1.36 tok/s` n96:
+     `3.797 GiB/token * 1.36 = 5.164 GiB/s`.
+
+Decision rule:
+
+- If raw runtime-shaped throughput is within `<=20%` of 7NN effective
+  throughput, reject further narrow IO scheduler/coalescing work and move to
+  asset-format/byte-reduction only.
+- If raw runtime-shaped throughput is `>=1.5x` above 7NN effective throughput,
+  write the next source plan around closing that gap, with a hard theoretical
+  token-rate upper bound from measured throughput.
+- If raw throughput is still far below the `18.985 GiB/s` needed for `5 tok/s`,
+  record that IO-only optimization cannot reach the target even in the best
+  case; require byte reduction or more resident expert capacity for any future
+  path.
+
+Acceptance:
+
+- Diagnostic-only; no SOTA promotion.
+- Results must be reproducible from recorded commands.
+- Do not leave large generated files behind.
+
+Reproducibility:
+
+- Commit and push this 7NU plan before running the audit.
+- Commit and push the 7NU result before any follow-up source or asset work.
+
 ## Phase 7NR - target block verifier prompt-mode root-cause audit
 
 Status: planned.
