@@ -1,0 +1,121 @@
+{
+  "artifact": "async-updown-io-hard-bound-after-fine-grained",
+  "created_at": "2026-07-06T03:18:09+08:00",
+  "purpose": "Evaluate whether exact asynchronous up/down weight I/O, including an io_uring or O_DIRECT bounded-buffer design, can be a 10 tok/s path under the current 16GB cgroup and accepted vendor DeepSeek SOTA.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "pgmajfault": 272731,
+    "workingset_refault_file": 1638880,
+    "correctness_ok": true
+  },
+  "inputs": {
+    "membership_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-validation.json",
+    "touch_split_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T033155Z-20260705_current_head_sota44_touch_split/france-touch-cpu40-vram0gb",
+    "current_willneed_negative_control": "/root/lfz/runs/vendor-ds4-16gb/20260703T045821Z-20260703T045821Z-odirect-sota-cpu-willneed-probe/france-cpu40-vram0gb",
+    "accepted_stderr": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb/stderr.txt"
+  },
+  "decode_bound": {
+    "accepted_decode_ms": 30812.261708,
+    "target_decode_ms_for_10_tok_s": 13557.39515152,
+    "required_saving_ms": 17254.86655648,
+    "membership_updown_fallback_ms": 24079.423,
+    "non_updown_ms_if_membership_fallback_removed": 6732.838708000003
+  },
+  "touch_split_observation": {
+    "run_eval_tok_s": 2.6,
+    "run_ttft_ms": 35858.926477,
+    "run_memory_peak_bytes": 16000000000,
+    "run_memory_file_bytes": 15101722624,
+    "run_correctness_ok": true,
+    "decode_touch_ms": 41701.495,
+    "decode_fallback_after_touch_ms": 2882.262,
+    "decode_up_touch_ms": 20786.583,
+    "decode_down_touch_ms": 20914.912,
+    "decode_up_fallback_after_touch_ms": 1463.121,
+    "decode_down_fallback_after_touch_ms": 1419.141,
+    "interpretation": "The diagnostic shows cold page touch/refault dominates raw CPU fallback, but the synchronous touch/profile run itself regresses to 2.6 tok/s and fails the accepted TTFT gate. It is only a bottleneck diagnostic, not a performance route."
+  },
+  "async_io_budget": {
+    "assumption": "Grant a best-case exact design where all up/down CPU dot work costs only the touch-split after-touch fallback time, and all other non-up/down decode work remains at the accepted SOTA bound.",
+    "allowed_unhidden_io_ms": 3942.2944435199975,
+    "formula": "target_decode_ms_for_10_tok_s - non_updown_ms_if_membership_fallback_removed - decode_fallback_after_touch_ms"
+  },
+  "byte_and_bandwidth_bound": {
+    "active_updown_source_bytes_from_membership": 168008089600,
+    "active_updown_source_gib": 156.4697265625,
+    "accepted_timev_file_system_inputs_blocks": 147165840,
+    "accepted_timev_file_system_input_bytes": 75348910080,
+    "accepted_timev_file_system_input_gib": 70.17414093017578,
+    "required_bandwidth_gib_s_if_all_active_source_bytes_unhidden": 39.690015244724144,
+    "required_bandwidth_gib_s_if_only_accepted_file_inputs_unhidden": 17.800329715483823,
+    "measured_gate_pack_odirect_prefill_bytes": 13369344000,
+    "measured_gate_pack_odirect_prefill_ms": 4092.052,
+    "measured_gate_pack_odirect_prefill_gib_s": 3.0427697094269575,
+    "active_source_read_ms_at_measured_gate_odirect_bandwidth": 51423.453466666666,
+    "accepted_file_input_read_ms_at_measured_gate_odirect_bandwidth": 23062.58692952206
+  },
+  "dependency_window_analysis": [
+    {
+      "stage": "up expert source",
+      "exact_prefetch_window": "Selected experts for layer L are known only after that layer's router/selection graph. An exact active up-source read cannot be issued for the next token or future layer before those selections exist.",
+      "consequence": "Most up-source read latency is on the critical path unless the design falls back to static/hotset prediction, which is the already-closed topN payload frontier."
+    },
+    {
+      "stage": "down expert source",
+      "exact_prefetch_window": "Down source can be requested after selected experts are known and while gate/up work is executing.",
+      "consequence": "The touch-split decode up fallback-after-touch time is only about 1463 ms total, so it cannot hide the roughly 20915 ms down touch/page-read diagnostic cost or the 156.47 GiB active-source byte frontier."
+    },
+    {
+      "stage": "host RAM and page cache",
+      "exact_prefetch_window": "The 16GB cgroup is already at memory_peak=16000000000 with about 15.1GB file cache. Buffered prefetch competes with the accepted page-cache shape; O_DIRECT avoids page cache but must still move the same bytes through bounded host buffers.",
+      "consequence": "The previous current-path WILLNEED negative control reduced some faults but regressed to 4.0 tok/s, and broad/current-tensor page advice remains rejected."
+    }
+  ],
+  "negative_controls": {
+    "current_willneed_probe": {
+      "eval_tok_s": 4.0,
+      "ttft_ms": 29414.893158,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15103877120,
+      "pgmajfault": 181560,
+      "workingset_refault_file": 1579212,
+      "correctness_ok": true,
+      "verdict": "reject_no_sota"
+    },
+    "touch_split_probe": {
+      "eval_tok_s": 2.6,
+      "ttft_ms": 35858.926477,
+      "memory_peak_bytes": 16000000000,
+      "correctness_ok": true,
+      "verdict": "reject_regression_and_ttft_fail"
+    }
+  },
+  "decision": {
+    "runtime_source_edit_allowed_next": false,
+    "strict_cold_benchmark_allowed": false,
+    "io_uring_or_odirect_updown_status": "reject_before_source_for_10_tok_s_under_current_representation",
+    "reason": "A best-case exact active-I/O design has only about 3.94s of unhidden I/O budget after charging non-up/down decode and after-touch CPU fallback. It would require 17.8-39.7 GiB/s effective unhidden bandwidth, far above the measured 3.04 GiB/s gate-pack O_DIRECT prefill path, and active up-source reads have too little exact dependency window to hide. Buffered page prefetch has already regressed under the 16GB cgroup.",
+    "sota_changed": false,
+    "accepted_eval_tok_s_remains": 4.4,
+    "allowed_reopen_conditions": [
+      "A new representation reduces active up/down source bytes by several times while preserving exactness or fixed-text correctness.",
+      "A new measured storage path demonstrates at least 17.8 GiB/s effective unhidden bandwidth inside the strict 16GB cgroup with no page-cache regression.",
+      "A different model/artifact reduces routed expert bytes or selected expert count and passes correctness."
+    ],
+    "next_executable_route": "Continue only with a new hard-bound artifact that changes bytes/coverage, or obtain explicit disk cleanup approval for full alternate GGUF empirical testing."
+  },
+  "promotion_gate_remains": {
+    "eval_tok_s_must_exceed": 4.4,
+    "ttft_ms_must_be_at_most": 33617.688744,
+    "host_ram_including_page_cache_must_be_at_most_bytes": 16000000000,
+    "swap_allowed": false,
+    "strict_cold_drop_caches": true,
+    "correctness_required": true,
+    "push_branch": "ssd/vendor/deepseek-token-rate-16gb"
+  }
+}

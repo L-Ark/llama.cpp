@@ -4,6 +4,46 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Async Up/Down I/O Closed, Alternate GGUF Empirical Test Is Disk-Blocked
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT gate expert pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest planning artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/async-updown-io-hard-bound-after-fine-grained.json`
+- Prior artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/fine-grained-exact-subtensor-hard-bound-after-external-refresh.json`
+- Source head before this plan update: `040fda8e5adeb07de2b807c323784453cf6fc80d`
+- Purpose: evaluate whether exact asynchronous up/down I/O, including an `io_uring`/O_DIRECT bounded-buffer design, can become the next 10 tok/s route without changing model math.
+
+Latest hard-bound conclusion:
+
+- Async up/down I/O is closed before source under the current representation. The bottleneck is still cold expert page/source movement, but the exact active-I/O design does not have enough bandwidth or dependency window to reach `10 tok/s`.
+- Accepted decode is `30812.261708 ms`; the `10 tok/s` target decode window is `13557.39515152 ms`. Runtime membership estimates up/down fallback at `24079.423 ms`, leaving `6732.838708 ms` of non-up/down decode if all up/down fallback were removed.
+- The touch-split diagnostic proves the CPU dot itself can be small after pages are touched: decode fallback-after-touch is only `2882.262 ms` (`1463.121 ms` up, `1419.141 ms` down). But that diagnostic run regressed to `2.6 tok/s`, `TTFT=35858.926477 ms`, so synchronous touching is not an optimization path.
+- Even granting that best-case after-touch CPU fallback, the allowed unhidden I/O budget is only `3942.29444352 ms`. The active up/down source frontier from membership is `168008089600` bytes (`156.4697 GiB`), requiring `39.69 GiB/s` if those bytes are not hidden. Even using the accepted run's lower observed `/usr/bin/time` file input count (`75348910080` bytes, `70.1741 GiB`) still requires `17.80 GiB/s`.
+- The measured accepted gate-pack O_DIRECT prefill path moved `13369344000` bytes in `4092.052 ms`, about `3.04 GiB/s`. At that measured bandwidth, the active up/down source frontier would take about `51.42 s`, and even the optimistic accepted file-input byte count would take about `23.06 s`, far above the `3.94 s` unhidden budget.
+- Exact dependency windows are too small to hide this with `io_uring`: selected experts for a layer are known only after that layer's router/selection; exact up-source reads are therefore on the critical path unless the route falls back to static/hotset prediction, which is the already-closed topN payload frontier. Down-source reads can overlap with gate/up work, but the after-touch up compute window is only about `1.46 s` total across decode, not enough to hide the down source/page-read frontier.
+- Buffered page prefetch is also closed by negative controls under the 16GB cgroup. The current-path `GGML_MOE_CPU_WILLNEED=1` probe stayed correct and within RAM but regressed to `4.0 tok/s`; the touch-split probe regressed to `2.6 tok/s` and exceeded the TTFT gate. This matches the earlier conclusion that page advice moves cost into reclaim/refault pressure rather than removing it.
+
+Updated next executable plan:
+
+1. Commit and push this async-I/O hard-bound artifact and plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not implement `io_uring`, O_DIRECT active up/down streaming, current-tensor `MADV_WILLNEED`, or page-touch prefetch for the current representation as a 10 tok/s path. Reopen only if a new measured storage path proves at least `17.8 GiB/s` effective unhidden bandwidth inside the strict 16GB cgroup, or if a new representation reduces the active up/down byte frontier by several times while preserving correctness.
+3. Keep runtime/source optimization frozen unless a new hard-bound artifact proves a route above `10 tok/s` with integration margin. The current closed routes now include gate-sacrifice topN up/down residency, fine-grained exact row/column/sub-tensor residency, 4Expert split-loader/overlay, metadata-only REAP/compact/split/sidecar candidates, and async up/down I/O from the current representation.
+4. To make empirical progress, request explicit user approval for disk cleanup/relocation. Minimum useful targets remain about `60GB` for 0xSero Q2 REAP, `90-100GB` for low-bit native-topology GGUFs, and preferably `>=180GB` for cloudyu 4Expert GGUF plus hash/run artifacts.
+5. Preserve these assets before any cleanup: accepted native GGUF `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, accepted France gate pack `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, accepted SOTA run above, current source branch, profiles, and pushed-source reproduction artifacts. Do not delete files without explicit user approval.
+6. If disk is approved, test `cloudyu` 4Expert first. Required order: download full GGUF, record URL/path/size/SHA256, validate loader metadata with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` and `GGML_MOE_STREAM_ONE_Q4K=1`, confirm 16GB/no-swap accounting, run correctness gates, then run strict cold France only if correctness passes.
+7. Correctness remains mandatory before performance promotion. For same-model/default-off source changes, run fixed-text top1 and require `same_top1 == n_tokens`; for alternate model/quantization artifacts, record France output and the five-prompt semantic set before any SOTA claim. The France prompt must be semantically correct and coherent.
+8. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct France output.
+9. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+
 ### 2026-07-06 Latest Active Plan: Fine-Grained Exact Residency Closed, Alternate GGUF Empirical Test Is Disk-Blocked
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
