@@ -1,0 +1,163 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/mtp-union-source-amortization-bound.json",
+  "date": "2026-07-05",
+  "source_head": "f04b4e0bca94ed326b069ab9ba30db7802395df1",
+  "runtime_source_modified": false,
+  "sota_changed": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "strict_ram": "16GB cgroup including file page cache, MemorySwapMax=0"
+  },
+  "purpose": "Evaluate whether historical DeepSeek-V4-Flash route traces show enough multi-token expert-union source amortization to justify reopening a vendor DSpark/MTP or multi-token verifier implementation.",
+  "inputs": {
+    "fastllm_estimator": "/root/lfz/fastllm/tools/scripts/deepseek_v4_flash_mtp_union_estimator.py",
+    "trace": "/root/lfz/fastllm_runs/strict16g-sota-wrapper-fulltrace-repeat1-20260622/repeat1/gate/route.trace.repeat1.tsv",
+    "generated_union_json": "/tmp/vendor_ds4_mtp_union_windows_1_32.json",
+    "command": "cd /root/lfz/fastllm && python3 tools/scripts/deepseek_v4_flash_mtp_union_estimator.py --trace /root/lfz/fastllm_runs/strict16g-sota-wrapper-fulltrace-repeat1-20260622/repeat1/gate/route.trace.repeat1.tsv --windows 1,2,3,4,5,6,8,16,32 --output /tmp/vendor_ds4_mtp_union_windows_1_32.json",
+    "hashes_sha256": {
+      "generated_union_json": "b1cb92a433cf8e13144464b462d2f7b96a647688848308f239d4aacd5a2ef5af",
+      "trace": "0a04030521140cf645f91ea4c209cf70add463d21e82264a7b263423c6dbf76e",
+      "estimator": "76e5a15cf1496815919aacc21b914b1a08750cb4a7c982aa70fb113d0faf078e"
+    }
+  },
+  "trace_summary": {
+    "decode_layer_merges": 9472,
+    "input_rows": 60195,
+    "layers": 37,
+    "interpretation": "This estimates source-byte amortization if adjacent token windows reuse the union of selected experts. It is not a draft acceptance measurement and not a vendor verifier benchmark."
+  },
+  "window_results": [
+    {
+      "window_tokens": 1,
+      "union_to_single_ratio": 1.0,
+      "estimated_read_amortization": 1.0,
+      "avg_union_experts": 6.0,
+      "union_bytes_per_token": 80214652.5
+    },
+    {
+      "window_tokens": 2,
+      "union_to_single_ratio": 0.88509,
+      "estimated_read_amortization": 1.129829,
+      "avg_union_experts": 10.621,
+      "union_bytes_per_token": 70997805.7
+    },
+    {
+      "window_tokens": 3,
+      "union_to_single_ratio": 0.816266,
+      "estimated_read_amortization": 1.225091,
+      "avg_union_experts": 14.693,
+      "union_bytes_per_token": 65477256.1
+    },
+    {
+      "window_tokens": 4,
+      "union_to_single_ratio": 0.76361,
+      "estimated_read_amortization": 1.309568,
+      "avg_union_experts": 18.327,
+      "union_bytes_per_token": 61253546.9
+    },
+    {
+      "window_tokens": 5,
+      "union_to_single_ratio": 0.720509,
+      "estimated_read_amortization": 1.387908,
+      "avg_union_experts": 21.615,
+      "union_bytes_per_token": 57796173.1
+    },
+    {
+      "window_tokens": 6,
+      "union_to_single_ratio": 0.68402,
+      "estimated_read_amortization": 1.461946,
+      "avg_union_experts": 24.625,
+      "union_bytes_per_token": 54869206.2
+    },
+    {
+      "window_tokens": 8,
+      "union_to_single_ratio": 0.601787,
+      "estimated_read_amortization": 1.661718,
+      "avg_union_experts": 28.886,
+      "union_bytes_per_token": 48272865.8
+    },
+    {
+      "window_tokens": 16,
+      "union_to_single_ratio": 0.409996,
+      "estimated_read_amortization": 2.43905,
+      "avg_union_experts": 39.36,
+      "union_bytes_per_token": 32888200.2
+    },
+    {
+      "window_tokens": 32,
+      "union_to_single_ratio": 0.269635,
+      "estimated_read_amortization": 3.70872,
+      "avg_union_experts": 51.77,
+      "union_bytes_per_token": 21629029.1
+    }
+  ],
+  "bound_inputs_from_current_sota": {
+    "accepted_decode_window_ms": 31047.44671,
+    "accepted_decoded_tokens_estimate": 136.608765524,
+    "target_10tok_decode_ms": 13660.8765524,
+    "required_decode_saving_ms_for_10tok": 17386.5701576,
+    "full_trace_decode_fallback_ms": 19115.399,
+    "decode_source_page_delta_ms_estimate": 16233.137,
+    "touch_split_decode_hot_fallback_ms_after_touch": 2882.262,
+    "non_fallback_decode_ms": 11932.04771
+  },
+  "optimistic_bounds": [
+    {
+      "window_tokens": 5,
+      "estimated_read_amortization": 1.387908,
+      "source_page_only_tok_s": 5.153,
+      "moe_fallback_union_tok_s": 5.315,
+      "all_non_moe_perfect_batch_tok_s": 8.454,
+      "all_non_moe_perfect_batch_margin_to_10tok_ms": -2498.347,
+      "decision": "Below 10 tok/s even under an unrealistically favorable all-non-MoE batching assumption."
+    },
+    {
+      "window_tokens": 6,
+      "estimated_read_amortization": 1.461946,
+      "source_page_only_tok_s": 5.271,
+      "moe_fallback_union_tok_s": 5.463,
+      "all_non_moe_perfect_batch_tok_s": 9.069,
+      "all_non_moe_perfect_batch_margin_to_10tok_ms": -1403.109,
+      "decision": "Below 10 tok/s even under an unrealistically favorable all-non-MoE batching assumption."
+    },
+    {
+      "window_tokens": 8,
+      "estimated_read_amortization": 1.661718,
+      "source_page_only_tok_s": 5.557,
+      "moe_fallback_union_tok_s": 5.829,
+      "all_non_moe_perfect_batch_tok_s": 10.512,
+      "all_non_moe_perfect_batch_margin_to_10tok_ms": 665.975,
+      "decision": "Only barely positive under an unrealistically favorable assumption that all non-MoE decode cost batches perfectly by 8x and MoE fallback follows the route-trace union ratio. There is no current vendor DSpark/MTP verifier or measured batch verifier path supporting this."
+    },
+    {
+      "window_tokens": 16,
+      "estimated_read_amortization": 2.43905,
+      "source_page_only_tok_s": 6.363,
+      "moe_fallback_union_tok_s": 6.91,
+      "all_non_moe_perfect_batch_tok_s": 15.916,
+      "all_non_moe_perfect_batch_margin_to_10tok_ms": 5077.892,
+      "decision": "Requires an unsupported very long verified/draft window and high acceptance; not a current vendor implementation candidate."
+    }
+  ],
+  "relation_to_forced_batch_diagnostic": {
+    "forced_batch_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/forced-batch-target-verifier-diagnostic.json",
+    "seq_elapsed_seconds": 107.623408161,
+    "batch16_elapsed_seconds": 107.597260262,
+    "seq_over_batch16_speedup": 1.0002430164014988,
+    "interpretation": "The current vendor fixed-text path did not show measurable multi-token target-evaluation speedup. The route-trace union estimate is therefore not enough to justify a runtime verifier patch by itself."
+  },
+  "decision": {
+    "status": "does_not_reopen_runtime_source_patch",
+    "dspark_window5": "rejected_for_10_tok_s_bound",
+    "dspark_or_spec_window8_plus": "theoretical_only_not_source_ready",
+    "reason": "Historical route traces show much weaker expert-source amortization than the ideal token window. W=5, matching the official DSpark block-size hint, is below 10 tok/s even with unrealistic perfect batching of non-MoE decode work. W=8 is only positive in a no-overhead lower bound and conflicts with the current forced-batch diagnostic plus lack of a compatible vendor verifier/draft artifact.",
+    "next_allowed_work": [
+      "Do not implement DSpark/MTP verifier code until a concrete A>=7 or A>=5 mechanism proves acceptance, target-verification batching, and RAM/VRAM/TTFT/correctness accounting.",
+      "Continue only with an exact compact representation or a new verifier hard-bound that shows measured sublinear target verification, not source union estimates alone.",
+      "If no such artifact appears, keep runtime source frozen and continue documenting closed bounds rather than repeating rejected hot-batch/MMVQ/source-prefetch routes."
+    ]
+  }
+}
