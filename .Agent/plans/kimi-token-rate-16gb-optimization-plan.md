@@ -70912,3 +70912,138 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record all metrics, output text, cache split counters, IO counters, and run
   directory.
+
+### Phase 7LQ result
+
+Timestamp: 2026-07-05 23:52:00 CST.
+
+Status: rejected.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-073243Z-phase7lq-upgate-pct68-n32`
+
+Result:
+
+- source commit: `0014bd79a`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `75668.78 ms`;
+- decode `20730.98 ms / 31`, `1.50 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `134723649536`;
+- expert-pack iouring wait `17596397 us`;
+- current-down overlap worker `3054506 us`;
+- down hit rate `68.4%` (`645` slots);
+- upgate hit rate `45.4%` (`1903` slots).
+
+Comparison to pct62 references:
+
+- 7LM n32: `20196.41 ms / 31`, `1.53 tok/s`, down hit `73.4%`,
+  upgate hit `45.2%`.
+- 7LO/7LP diagnostic n32: `1.37 tok/s`, down hit `73.4%`,
+  upgate hit `45.2%`.
+- pct68 only improved upgate hit by `0.2 pp`, while down hit fell by `5.0 pp`
+  and staged down jobs increased from `16268` to `17525`.
+
+Interpretation:
+
+- More upgate slots do not materially improve route reuse for the measured
+  type22 wait bucket.
+- The faster endpoint versus 7LO/7LP is not supported by the cache counters and
+  is below the clean 7LM n32 result, so it is likely cold-run variance rather
+  than a real optimization.
+- Do not promote pct68 and do not continue split sweeps.
+
+Decision:
+
+- Keep production/default `UPGATE_PCT=62`.
+- Next target: type22 movement locality / expert-pack physical layout, because
+  cache residency did not solve the wait and combined/split/shared-IO staging
+  paths are already rejected.
+
+## Phase 7LR - type22 movement locality and pack-layout diagnostic
+
+Timestamp: 2026-07-05 23:54:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether the remaining type22 up/gate wait is caused by poor physical
+  locality in the expert pack.
+- Use existing IO read trace and `scripts/kimi-pack-layout-sim.py` to estimate
+  whether a future repacked expert pack can reduce random-read span/gap without
+  changing runtime math or cache policy.
+
+Theory:
+
+- 7LP shows `(22,22)` up/gate wall `3203.944 ms`, dominated by movement/wait,
+  with `5105` staged jobs.
+- 7LQ shows adding cache slots does not reduce misses, so the next possible
+  movement optimization is to make the unavoidable reads cheaper.
+- If simulated first-use/frequency/greedy-pair layouts materially reduce
+  `span/read`, `gap/read`, or increase `adjacent/read_jobs` for
+  `runtime_load`, then a pack-layout optimization has a measurable upper bound.
+- If simulation does not improve locality, pack repacking is not a good next
+  implementation target.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 0014bd79a
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lr-io-locality-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality.csv GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+
+python3 scripts/kimi-pack-layout-sim.py \
+  --trace "$RUN/io-read-trace.csv" \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  > "$RUN/pack-layout-sim.txt"
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `io-read-trace.csv`, `io-locality.csv`, `io-batch-profile.csv`, and
+  `pack-layout-sim.txt` must exist.
+
+Analysis to record:
+
+- Metrics and output quality.
+- `io-batch-profile.csv` aggregate by op.
+- `io-locality.csv` aggregate by op.
+- `pack-layout-sim.txt` current vs first_use/frequency/greedy_pair:
+  `span/read`, `gap/read`, `adjacent/read_jobs`, `coalesce_rows`.
+
+Decision rule:
+
+- If a simulated layout reduces `runtime_load` span/gap by at least `15%`, write
+  a new plan to generate and test a repacked expert pack before touching CUDA
+  scheduling.
+- If locality improvement is small, reject pack layout as next path and move to
+  compute-side type18 or broader perf evidence.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Save all CSVs and simulation output in the run directory.
