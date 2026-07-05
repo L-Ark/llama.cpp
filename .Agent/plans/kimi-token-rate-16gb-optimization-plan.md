@@ -79963,7 +79963,7 @@ Artifacts:
 
 Timestamp: 2026-07-06 02:25:00 CST.
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -80073,3 +80073,94 @@ Reproducibility:
 
 - Commit and push this plan before any trace simulation.
 - Commit and push the result before any source implementation plan.
+
+Result:
+
+- Timestamp: 2026-07-06 02:10:02 CST.
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-181002Z-phase7nl-prev-token-route`
+- No model run was needed. Existing strict route traces were sufficient:
+  - primary:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/route-trace.csv`;
+  - cross-check:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/route-trace.csv`.
+- Source files were not changed.
+- Parsed groups: `5366`.
+- Parsed events: `42928`.
+- Parsed token groups: `32`.
+
+Previous-token signal quality:
+
+- Up/gate:
+  - predicted entries: `28816`;
+  - true positives: `10222`;
+  - false positives: `18594`;
+  - false negatives: `18594`;
+  - precision: `35.4733%`;
+  - recall: `35.4733%`;
+  - true-positive bytes: `52160790528`;
+  - false-positive bytes: `94803165184`.
+- Down:
+  - predicted entries: `12728`;
+  - true positives: `4599`;
+  - false positives: `8129`;
+  - false negatives: `8129`;
+  - precision: `36.1329%`;
+  - recall: `36.1329%`;
+  - true-positive bytes: `30379933696`;
+  - false-positive bytes: `54200172544`.
+
+Policy simulation:
+
+- `current_lru`:
+  - hit rate `45.31%`;
+  - miss bytes `130968190976`;
+  - prefetch bytes `0`;
+  - net byte reduction `0.00%`.
+- `realistic_prev_token`:
+  - hit rate `45.31%`;
+  - miss bytes `130968190976`;
+  - prefetch bytes `0`;
+  - net byte reduction `0.00%`.
+- `perfect_prev_intersection`:
+  - hit rate `45.31%`;
+  - miss bytes `130968190976`;
+  - prefetch bytes `0`;
+  - net byte reduction `0.00%`.
+
+Interpretation:
+
+- The previous-token signal has nonzero overlap, but it does not create useful
+  additional prefetch work under the current cache sizes.
+- The useful predicted keys from the previous token are already retained by the
+  current LRU cache when the next same-layer group is reached.
+- Therefore even the optimistic perfect-intersection version saves `0` bytes
+  versus current LRU.
+- False positives would be very large if forced, so a forced predictor would
+  likely repeat the 7IT low-value prefetch failure mode.
+
+Decision:
+
+- Reject previous-token route predictor prefetch as a source implementation
+  family for now.
+- Do not add route-history prefetch code.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-181002Z-phase7nl-prev-token-route
+python3 phase7nl_prev_route.py
+cat group_summary.tsv
+cat policy_results.tsv
+cat bound.md
+```
+
+Artifacts:
+
+- `commands.log`
+- `repo_state.txt`
+- `phase7nl_prev_route.py`
+- `group_summary.tsv`
+- `policy_results.tsv`
+- `bound.md`
