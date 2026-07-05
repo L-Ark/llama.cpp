@@ -67708,3 +67708,69 @@ Decision:
 - Revert source commit `d66d8a4ff`.
 - Do not enable immediate refill in the repro script.
 - Keep accepted runtime defaults unchanged.
+
+## Phase 7KZ - post-revert current-head n96 guard baseline
+
+Timestamp: 2026-07-05 17:49:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-run the strict n96 cold-start baseline after the 7KW and 7KY source
+  experiments were both rejected and reverted.
+- Confirm that the current branch still reproduces stable long-decode output
+  and all hard gates before the next design step.
+- Do not change runtime defaults based on this run alone.
+
+Why this is needed:
+
+- 7KX confirmed the current-head n32 default is healthy:
+  `22601.57 ms / 31`, `1.37 tok/s`.
+- 7KW and 7KY showed two important negative results:
+  - larger combined up/gate IO batches reduce IO wait but lose useful
+    copy/compute overlap;
+  - immediate refill does not raise inflight enough and regresses decode.
+- Both candidate source commits were reverted, but the next design should use a
+  fresh n96 long-decode guard result rather than only n32 or older 7KU data.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 7f4a578ec
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kz-current-head-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n96 is close to or faster than 7KU (`56613.00 ms / 77`) while all gates
+  pass, record it as the current post-revert guard baseline.
+- If it materially regresses but gates pass, keep 7KU/7JY as the SOTA reference
+  and record variance before any new source experiment.
+- If any hard gate fails, stop and debug; do not start another optimization.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record source commit, run directory, command, output, TTFT, decode, token
+  rate, memory, swap, IO counters, and comparison with 7KU/7JY.
