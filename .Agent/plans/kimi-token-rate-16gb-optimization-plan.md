@@ -80927,3 +80927,79 @@ cat "$RUN/dry-run-q3k.pipe.txt" | tail
 cat "$RUN/dry-run-iq3xxs.pipe.txt" | tail
 cat "$RUN/dry-run-iq2s.pipe.txt" | tail
 ```
+
+## Phase 7NP - up/gate byte-reduction feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 03:08 CST.
+
+Reason:
+
+- Phase 7NN rejected simple I/O queue/coalescing work.
+- Phase 7NO rejected immediate down requantization:
+  - strict 7NN down io_uring path read `0` Q4_0 bytes;
+  - down-only all-to-`IQ2_S` saves only `12.667 GiB` on n32 before overlap
+    discount;
+  - typed expert-pack work is non-trivial and not justified by down-only bound.
+- The remaining byte-reduction target is up/gate:
+  - 7NN up read bytes: `36.009 GiB`;
+  - 7NN gate read bytes: `38.652 GiB`;
+  - combined up/gate read bytes: `74.661 GiB`.
+- Before any source or pack-format work, compute whether up/gate has a larger
+  quality-preserving byte-reduction bound than down.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7np-upgate-byte-bound`
+2. Use only existing artifacts:
+   - 7NN locality trace:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32/io-locality-profile.csv`;
+   - 7NO dry-run tensor inventory:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260705-185342Z-phase7no-down-requant-audit/dry-run-q3k.pipe.txt`.
+3. Parse current `ffn_up_exps` and `ffn_gate_exps` tensor types and full tensor
+   sizes from the dry-run output.
+4. Join with the 7NN read trace by tensor name to compute:
+   - read bytes by family and type;
+   - current full-model up/gate tensor size by type;
+   - top tensors by read volume;
+   - theoretical byte savings for targets supported by current kernels:
+     `IQ2_S`, `IQ3_XXS`, `Q3_K`, and `IQ4_XS`.
+5. Treat any target lower than `IQ2_S` as unsupported unless a future source
+   plan adds kernels and quality proof.
+6. Store:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7np_upgate_bound.py`;
+   - `upgate-byte-summary.md`;
+   - `upgate-type-by-tensor.tsv`;
+   - `upgate-read-by-type.tsv`;
+   - `upgate-target-bounds.tsv`.
+
+Strict constraints:
+
+- Do not run model inference.
+- Do not edit source.
+- Do not create or modify GGUF/expert-pack assets.
+- Do not use this phase as a SOTA claim; it is a bound/decision audit only.
+
+Decision rule:
+
+- Reject up/gate typed-pack/requantization source work if:
+  - all quality-plausible supported targets save less than `15 GiB` on n32; or
+  - the only target that saves enough is `IQ2_S` for tensors already close to
+    that precision, making quality risk high; or
+  - expected endpoint gain after overlap discount is below `1.0 s` n32 and
+    below `5%` projected n96 token-rate gain.
+- Only plan source work if the audit finds:
+  - a target with hard n32 read-byte reduction `>= 20 GiB`;
+  - expected endpoint gain `>= 1.0 s` after overlap discount;
+  - a viable default-off implementation path that keeps TTFT within the `20%`
+    cap and host RAM under strict `16GB`;
+  - a quality gate centered on the France prompt before any promotion.
+
+Reproducibility:
+
+- Commit and push this plan before running the offline audit.
+- Commit and push the audit result before any source implementation plan.
