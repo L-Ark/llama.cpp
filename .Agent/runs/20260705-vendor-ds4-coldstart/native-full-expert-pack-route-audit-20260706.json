@@ -1,0 +1,128 @@
+{
+  "created_at_utc": "2026-07-05T22:45:00Z",
+  "purpose": "Audit whether the already-present full native DeepSeek expert-pack can advance the vendor DeepSeek 16GB cold-start SOTA without downloading new files.",
+  "source_head_before_audit": "d802454ea58baaa694a8c8e7548bf6704c7ae16b",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_ms": 32087.738292,
+    "ram_limit_bytes": 16000000000,
+    "correctness_ok": true
+  },
+  "local_full_native_expert_pack": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "file_size_bytes": 147174760448,
+    "magic": "GGMLMOEPACKv1",
+    "version": 1,
+    "header_size": 40,
+    "n_entries": 33024,
+    "data_start": 5021696,
+    "payload_bytes": 147169738752,
+    "roles": {
+      "gate": 11008,
+      "up": 11008,
+      "down": 11008
+    },
+    "bytes_by_role": {
+      "gate": 49056579584,
+      "up": 49056579584,
+      "down": 49056579584
+    },
+    "unique_tensors": 129,
+    "expert_idx_range": "0..255",
+    "expert_idx_count": 256,
+    "layer_range": "0..42",
+    "layer_count": 43,
+    "entry_nbytes": 4456448
+  },
+  "accepted_gate_pack_for_comparison": {
+    "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+    "file_size_bytes": 20495904768,
+    "n_entries": 4599,
+    "roles": {
+      "gate": 4599
+    },
+    "payload_bytes": 20495204352,
+    "layer_range": "0..39",
+    "entry_nbytes": 4456448,
+    "accepted_france_path_pack_misses": 0
+  },
+  "binary_linkage": {
+    "accepted_binary": {
+      "path": "build-ds4-moe-stream/bin/llama-cli",
+      "sha256": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+      "GGML_CUDA_MOE_STREAM_BATCH": "OFF",
+      "implication": "The accepted SOTA binary does not link the batch expert-pack mmap helper used by GGML_MOE_CPU_FALLBACK_PACK_MMAP; the weak CPU-side extern resolves to the stub path."
+    },
+    "historical_batch_probe_binary": {
+      "path": "build-ds4-moe-stream-batch-probe/bin/llama-cli",
+      "sha256": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+      "GGML_CUDA_MOE_STREAM_BATCH": "ON",
+      "implication": "Can exercise the older batch expert-pack mmap path, but is not the accepted current SOTA binary."
+    }
+  },
+  "historical_same_mechanism_controls": [
+    {
+      "route": "local/top128 CPU fallback pack mmap",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T035604Z-20260703T035544Z-top128-local-cpu-fallback-pack-mmap/france-cpu40-vram0gb",
+      "eval_tok_s": 4.1,
+      "ttft_ms": 28948.869196,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15097528320,
+      "correctness_ok": true,
+      "mmap_hits": 10051,
+      "mmap_misses": 25829,
+      "bytes": 44791758848,
+      "verdict": "rejected_tie_or_regression_vs_current_sota"
+    },
+    {
+      "route": "local/top256 CPU fallback pack mmap",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T035839Z-20260703T035815Z-top256-local-cpu-fallback-pack-mmap/france-cpu40-vram0gb",
+      "eval_tok_s": 4.0,
+      "ttft_ms": 28267.070684,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15103459328,
+      "correctness_ok": true,
+      "mmap_hits": 13423,
+      "mmap_misses": 22457,
+      "bytes": 59818901504,
+      "verdict": "rejected_regression"
+    },
+    {
+      "route": "batch-probe/top256 CPU fallback pack mmap",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T205623Z-20260704_cpu_fallback_packmmap_top256_updown/france-cpu40-vram0gb",
+      "eval_tok_s": 4.0,
+      "prompt_tok_s": 1.6,
+      "ttft_ms": 30381.522449,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15101743104,
+      "correctness_ok": true,
+      "mmap_hits": 13423,
+      "mmap_misses": 22457,
+      "bytes": 59818901504,
+      "verdict": "rejected_regression"
+    }
+  ],
+  "analysis": {
+    "why_full_pack_is_not_a_new_source_route": [
+      "The full pack has exact gate/up/down coverage, but the current accepted binary has GGML_CUDA_MOE_STREAM_BATCH=OFF, so CPU fallback mmap cannot use GGML_MOE_EXPERT_PACK without rebuilding a different binary or reintroducing source changes.",
+      "The accepted France gate path already has zero one-pack misses with the smaller France gate pack, so replacing the gate one-pack with the full pack does not improve the accepted gate-cache path.",
+      "The only relevant benefit would be CPU fallback up/down source selection. The same mmap mechanism with top128/top256 up/down packs was already measured under strict cold 16GB and regressed to 4.1/4.0 tok/s despite correctness and RAM passing.",
+      "A full 147GB mmap pack would still fault file-backed pages inside the same 16GB cgroup; it changes source layout but not CPU fallback math or synchronization, and it can increase page-cache/refault pressure.",
+      "O_DIRECT/direct-staging variants for pack reads were previously bounded and measured as too narrow or too slow unless paired with a real compute/offload change."
+    ],
+    "theoretical_upper_bound": "A perfect source-layout-only win cannot exceed removal of cold source/page overhead from CPU fallback. Prior mmap controls show the mechanism does not realize that bound; top256 covered 59.8GB of fallback payload and still regressed. Full-pack mmap has larger coverage but no new mechanism to reduce CPU math/sync or page-cache accounting.",
+    "correctness_status": "No new model run was performed. Historical same-mechanism controls passed France correctness but did not improve token rate."
+  },
+  "decision": {
+    "new_sota": false,
+    "accepted_sota_unchanged": true,
+    "runtime_source_edit_allowed": false,
+    "strict_cold_benchmark_allowed": false,
+    "full_model_downloaded": false,
+    "files_deleted": false,
+    "route_status": "closed_before_new_run",
+    "reason": "The full native expert-pack is already present and exact, but it only reopens the previously rejected CPU fallback pack-mmap/source-layout mechanism. It is not wired into the accepted binary, and same-mechanism strict-cold controls regressed. Running a full-pack mmap benchmark would not be a justified 10 tok/s step without a new compute/offload or direct-source hard-bound."
+  },
+  "next_step": "Continue with the active plan: obtain disk approval for full alternate GGUF empirical testing, or require a new hard-bound above 10 tok/s before source work."
+}
