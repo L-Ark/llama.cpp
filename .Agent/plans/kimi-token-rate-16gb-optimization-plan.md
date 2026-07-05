@@ -77707,3 +77707,147 @@ Decision:
   - activation signals and counters;
   - strict cold-start validation command under `MemoryMax=15900000000`;
   - rollback criteria if token rate, quality, TTFT, or memory gates fail.
+
+## Phase 7NA - DFlash GGUF compatibility design audit
+
+Timestamp: 2026-07-05 23:10:00 CST.
+
+Status: planned.
+
+Source baseline:
+
+- Latest pushed baseline:
+  `71494b7d1 docs: record asset speculative preflight`.
+- No source change is allowed in this phase.
+- No large model weight download is allowed in this phase.
+- Current strict SOTA remains preserved. This phase can only decide whether a
+  future implementation phase is justified.
+
+Goal:
+
+- Determine whether `freakyskittle/Kimi-K2.7-Code-Dflash` can be integrated into
+  the current vendor llama.cpp tree as a real speculative path for Kimi.
+- Produce a concrete implementation/no-go decision before any code change.
+- Define the exact correctness and performance gates for any follow-up
+  implementation phase.
+
+Why this is the next step:
+
+- 7MY showed direct non-speculative micro-optimizations are not enough:
+  - current full-profile exposed iouring reads: `117.71 GiB` for n32,
+    `3.80 GiB/token`;
+  - reaching `5 tok/s` directly would need about `94-95%` exposed-read
+    reduction;
+  - removing 25% of iouring wait only bounds to about `1.49 tok/s`.
+- 7MZ found no immediately runnable smaller target asset, but did find public
+  draft assets that fit disk individually.
+- The most compatible-looking candidate is DFlash GGUF because it is already a
+  GGUF artifact and includes a small draft file, but it is not proven compatible
+  with llama.cpp speculative decoding.
+- Therefore the bottleneck to resolve is not kernel/IO tuning; it is whether a
+  draft path can reduce expensive target Kimi decode evaluations by at least the
+  required acceptance multiplier.
+
+Hard requirement for a future implementation:
+
+- Effective accepted target tokens per expensive Kimi step must be at least
+  `3.68x` before draft overhead to make `5 tok/s` plausible from the current
+  strict n96 SOTA.
+- Because draft overhead and verification are nonzero, the design target should
+  be `>=4.0` accepted target tokens per expensive target step on the France
+  prompt before promotion.
+- Strict quality gate:
+  prompt `Please introduce France in a short paragraph.` must produce a
+  semantically correct, coherent answer.
+- Strict runtime gates:
+  - cold start only;
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - host RAM including page cache below 16 GB;
+  - TTFT increase below 20% versus current accepted strict baseline;
+  - no accepted SOTA unless output quality passes and activation counters prove
+    the DFlash path is actually used.
+
+Audit questions:
+
+- Current vendor support:
+  - Which speculative modes exist in this tree (`ngram`, draft model,
+    self-spec, MTP, EAGLE, etc.)?
+  - Does current llama.cpp support a draft GGUF that consumes target hidden
+    states, or only a separate autoregressive draft model?
+  - What CLI/API flags, context objects, and scheduler paths would need to
+    change for DFlash?
+- DFlash asset contract:
+  - What tensors and metadata are present in the DFlash GGUF candidate?
+  - Is it a standalone draft model, a draft head, a block predictor, or an
+    Oxidize-specific artifact?
+  - What hidden-state shape, layer index, normalization, token embedding, and
+    vocabulary assumptions does it require?
+  - Does it share Kimi tokenizer/vocab and special-token handling exactly?
+- Verifier contract:
+  - How many candidate tokens are proposed per target step?
+  - Does verification require one target forward pass over multiple positions or
+    repeated one-token target passes?
+  - Where do accepted tokens enter KV cache?
+  - What happens on partial accept or rejection?
+  - Can the current Kimi MoE streaming path verify a multi-token block without
+    reintroducing the same SSD read volume per token?
+- Performance model:
+  - Compute a hard upper bound from candidate block size, expected accepted
+    length, and target verification cost.
+  - Include draft compute, target verification, extra KV work, and any additional
+    hidden-state extraction/copy.
+  - Reject the design if expected accepted length cannot plausibly exceed `4.0`
+    on the France prompt or if target verification still performs one expensive
+    Kimi MoE decode per accepted token.
+- Activation and reproducibility:
+  - Define counters for draft proposals, accepted tokens, rejected tokens,
+    expensive target steps, acceptance length histogram, target verification
+    wall time, draft wall time, and output text.
+  - Define the exact cold-start command for n32 first, then n96 only after n32
+    passes.
+
+Execution for this audit:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7na-dflash-compat-audit`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `vendor_speculative_sources.txt`;
+  - `vendor_speculative_flags.txt`;
+  - `dflash_hf_metadata.json`;
+  - `dflash_hf_readme.md`;
+  - `dflash_external_refs.txt`;
+  - `compatibility_matrix.md`;
+  - `dflash_contract.md`;
+  - `performance_bound.md`;
+  - `decision.md`.
+- Allowed commands:
+  - source inspection with `rg`, `sed`, `git grep`, `git ls-files`;
+  - Hugging Face API calls and small text/model-card downloads;
+  - bounded web/API metadata checks for Oxidize/DFlash references.
+- Forbidden in this phase:
+  - source edits;
+  - building or running a new speculative implementation;
+  - downloading full target weights or large model shards;
+  - promoting SOTA.
+
+Decision rule:
+
+- If DFlash is a standalone draft model compatible with existing llama.cpp draft
+  model speculative decoding, plan a strict n32 smoke phase using the smallest
+  GGUF draft asset.
+- If DFlash is a hidden-state/block predictor requiring new runtime support,
+  write a follow-up implementation phase only if the contract is clear and the
+  performance bound can plausibly reach the required `>=4.0` accepted tokens per
+  expensive target step.
+- If the contract is unclear, Oxidize-specific, or requires target verification
+  that still invokes expensive Kimi MoE once per accepted token, reject it for
+  this optimization track and preserve current SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store all raw metadata and commands in the run directory.
+- Commit and push the audit result before any implementation work.
