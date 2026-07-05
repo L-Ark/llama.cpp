@@ -183,6 +183,15 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
         return false;
     }
 
+    if (type == GGML_TYPE_Q4_0) {
+        const char * env = getenv("GGML_MOE_Q4_DOWN_PARITY");
+        if (!env || !env[0] || env[0] == '0') {
+            return false;
+        }
+        const char * target = getenv("GGML_MOE_Q4_DOWN_PARITY_TENSOR");
+        return !target || !target[0] || strcmp(target, name) == 0;
+    }
+
     return ggml_cuda_moe_stream_supports_type(type) ||
            type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }

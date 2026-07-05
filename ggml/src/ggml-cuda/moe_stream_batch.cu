@@ -39,6 +39,7 @@ const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t,
 #include <cstring>
 #include <cmath>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -5729,6 +5730,108 @@ static bool moe_stream_type_supported(ggml_type type) {
         type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
+static std::atomic<int> g_q4_down_parity_calls{0};
+static std::mutex g_q4_down_parity_seen_mu;
+static std::unordered_set<std::string> g_q4_down_parity_seen_tensors;
+
+static bool q4_down_parity_candidate(const char *name, ggml_type type) {
+    const char *env = std::getenv("GGML_MOE_Q4_DOWN_PARITY");
+    if (!env || !env[0] || env[0] == '0') return false;
+    if (type != GGML_TYPE_Q4_0 || !name || !std::strstr(name, "ffn_down_exps")) return false;
+    const char *target = std::getenv("GGML_MOE_Q4_DOWN_PARITY_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static bool q4_down_parity_once_per_tensor() {
+    const char *env = std::getenv("GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR");
+    return env && env[0] && env[0] != '0';
+}
+
+static int q4_down_parity_max_calls() {
+    const char *env = std::getenv("GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS");
+    long max_calls = (env && env[0]) ? std::atol(env) : 1;
+    if (max_calls < 1) max_calls = 1;
+    if (max_calls > 64) max_calls = 64;
+    return (int)max_calls;
+}
+
+static void q4_down_parity_report(
+        const char *name,
+        int call_id,
+        const void *src0_data,
+        size_t nb01,
+        size_t nb02,
+        int64_t ne00,
+        int64_t ne01,
+        const float *src1_f32,
+        size_t src1_nb1,
+        size_t src1_nb2,
+        const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *token_ids,
+        int n_active,
+        const float *gpu_rows) {
+    if (!src0_data || !src1_f32 || !active_experts || !dst_ids || !token_ids || !gpu_rows ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK4_0 != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] q4_down_parity tensor=%s call=%d status=invalid_args active=%d ne01=%ld ne00=%ld\n",
+                name ? name : "", call_id, n_active, (long)ne01, (long)ne00);
+        return;
+    }
+
+    std::vector<float> deq((size_t)ne00);
+    double sum_abs = 0.0;
+    double sum_rel = 0.0;
+    double max_abs = -1.0;
+    double max_rel = -1.0;
+    float worst_gpu = 0.0f;
+    float worst_cpu = 0.0f;
+    int worst_active = -1;
+    int worst_expert = -1;
+    int64_t worst_col = -1;
+    int64_t compared = 0;
+
+    for (int j = 0; j < n_active; ++j) {
+        const char *expert_base = (const char *)src0_data + (size_t)active_experts[j] * nb02;
+        const float *src_row = (const float *)((const char *)src1_f32 +
+                (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2);
+        const float *gpu_row = gpu_rows + (size_t)j * (size_t)ne01;
+        for (int64_t col = 0; col < ne01; ++col) {
+            const block_q4_0 *qrow = (const block_q4_0 *)(expert_base + (size_t)col * nb01);
+            dequantize_row_q4_0(qrow, deq.data(), ne00);
+            double cpu = 0.0;
+            for (int64_t k = 0; k < ne00; ++k) {
+                cpu += (double)deq[(size_t)k] * (double)src_row[(size_t)k];
+            }
+            const double gpu = (double)gpu_row[(size_t)col];
+            const double abs_err = std::fabs(gpu - cpu);
+            const double rel_err = abs_err / std::max(1.0e-6, std::fabs(cpu));
+            sum_abs += abs_err;
+            sum_rel += rel_err;
+            ++compared;
+            if (abs_err > max_abs) {
+                max_abs = abs_err;
+                max_rel = rel_err;
+                worst_gpu = (float)gpu;
+                worst_cpu = (float)cpu;
+                worst_active = j;
+                worst_expert = active_experts[j];
+                worst_col = col;
+            }
+        }
+    }
+
+    const double mean_abs = compared > 0 ? sum_abs / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    const double mean_rel = compared > 0 ? sum_rel / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    std::fprintf(stderr,
+            "[moe_stream_batch] q4_down_parity tensor=%s call=%d status=ok active=%d compared=%ld "
+            "max_abs=%.9g mean_abs=%.9g max_rel=%.9g mean_rel=%.9g worst_active=%d worst_expert=%d "
+            "worst_col=%ld gpu=%.9g cpu=%.9g\n",
+            name ? name : "", call_id, n_active, (long)compared,
+            max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert,
+            (long)worst_col, worst_gpu, worst_cpu);
+}
+
 static bool moe_tensor_layer_in_simple_range(const char *name, const char *range) {
     if (!range || !range[0]) return true;
     if (!name) return false;
@@ -6059,6 +6162,7 @@ static bool launch_moe_mmvq_compact_batch(
         int64_t n_active,
         cudaStream_t st) {
     switch (src0_type) {
+        case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
@@ -7967,7 +8071,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     };
     if (!init_batch_once()) return decline("init_batch_once");
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
-    if (!moe_stream_type_supported(src0_type)) return decline("unsupported_type");
+    const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
@@ -7985,6 +8090,23 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         ++n_active;
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
+    bool q4_parity_run = false;
+    int q4_parity_call = -1;
+    if (q4_parity_candidate) {
+        if (q4_down_parity_once_per_tensor()) {
+            std::lock_guard<std::mutex> q4_lk(g_q4_down_parity_seen_mu);
+            if (g_q4_down_parity_seen_tensors.find(src0_name) != g_q4_down_parity_seen_tensors.end()) {
+                return decline("q4_parity_seen_tensor");
+            }
+            g_q4_down_parity_seen_tensors.insert(src0_name);
+        }
+        q4_parity_call = g_q4_down_parity_calls.fetch_add(1, std::memory_order_relaxed);
+        if (q4_parity_call >= q4_down_parity_max_calls()) return decline("q4_parity_limit");
+        q4_parity_run = true;
+        std::fprintf(stderr,
+                "[moe_stream_batch] q4_down_parity active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
+                src0_name ? src0_name : "", q4_parity_call, n_active, (long)ne01, (long)ne00);
+    }
 
     static std::atomic<int> first_batch{0};
     const int batch_call = first_batch.fetch_add(1);
@@ -8244,6 +8366,14 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
     if (profile) cudaEventRecord(bc.ev_d2h, st);
     if (cudaStreamSynchronize(st) != cudaSuccess) return decline("sync_stream");
+
+    if (q4_parity_run) {
+        q4_down_parity_report(
+                src0_name, q4_parity_call, src0_data, nb01, nb02, ne00, ne01,
+                src1_f32, src1_nb1, src1_nb2,
+                active_experts, dst_ids, token_ids, n_active, (const float *)bc.h_dst);
+        return false;
+    }
 
     float stage_ms = 0.0f;
     float quant_ms = 0.0f;

@@ -73153,3 +73153,354 @@ Reproducibility:
 - Commit and push this plan before source edits.
 - Commit diagnostic source separately.
 - Record build result, exact run directory, output, gates, and parity report.
+
+7ME implementation result:
+
+Timestamp: 2026-07-06 17:48:00 CST.
+
+Status: diagnostic source implemented; not a performance promotion.
+
+Source changes:
+
+- Added default-off CUDA Q4_0 down parity instrumentation in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Added parity-only CPU eligibility for Q4_0 down tensors in
+  `ggml/src/ggml-cpu/ggml-cpu.c`.
+- The diagnostic only activates with `GGML_MOE_Q4_DOWN_PARITY=1`.
+- For matching Q4_0 down tensors, it runs CUDA MMVQ, copies the result back,
+  computes a CPU Q4_0 reference from the same routed experts/rows, prints
+  error metrics, then returns `false` so the normal CPU fallback still produces
+  model output.
+- Default production behavior is unchanged when the env var is absent.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+First run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-093544Z-phase7me-q4-parity-n32`
+- Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-093544Z-phase7me-q4-parity-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_PARITY=1 GGML_MOE_Q4_DOWN_PARITY_TENSOR=blk.6.ffn_down_exps.weight GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `72676.93 ms`;
+  - decode `23727.44 ms / 31`, `1.31 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Diagnostic failure:
+  - no `q4_down_parity` line was printed.
+  - Root cause: CPU eligibility still rejected Q4_0 before entering
+    `ggml_cuda_moe_stream_batch()`.
+
+GGUF Q4_0 down tensor inventory:
+
+```text
+blk.6.ffn_down_exps.weight
+blk.7.ffn_down_exps.weight
+blk.8.ffn_down_exps.weight
+blk.9.ffn_down_exps.weight
+blk.10.ffn_down_exps.weight
+blk.15.ffn_down_exps.weight
+blk.18.ffn_down_exps.weight
+```
+
+Second run after parity-only CPU eligibility:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-094153Z-phase7me-q4-parity2-n32`
+- Same command and cgroup as above, with the same target
+  `blk.6.ffn_down_exps.weight`.
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - TTFT `62617.00 ms`;
+  - decode `24208.72 ms / 31`, `1.28 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - output:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+
+Parity report:
+
+```text
+[moe_stream_batch] q4_down_parity active tensor=blk.6.ffn_down_exps.weight call=0 active=8 ne01=7168 ne00=2048
+[moe_stream_batch] q4_down_parity tensor=blk.6.ffn_down_exps.weight call=0 status=ok active=8 compared=57344 max_abs=0.000688341636 mean_abs=7.76090675e-05 max_rel=0.74287747 mean_rel=0.126404997 worst_active=5 worst_expert=286 worst_col=216 gpu=0.00023824675 cpu=0.000926588371
+```
+
+Interpretation:
+
+- The first sampled Q4_0 down CUDA MMVQ result is numerically close to the CPU
+  reference in absolute error.
+- The large relative error is on near-zero output (`cpu=0.000926588371`), so it
+  is not by itself evidence of semantic failure.
+- The 7LL-C broad Q4_0 quality failure is therefore not explained by a simple
+  first-call Q4_0 kernel math mismatch on `blk.6`.
+- It may come from:
+  - a later Q4_0 layer/call with larger parity error;
+  - scatter/route interaction when Q4_0 returns `true` broadly;
+  - changed cache pressure and slot-size partitioning when all Q4_0 down
+    tensors enter GPU staging;
+  - accumulated small differences across all Q4_0 down calls.
+- This diagnostic run is intentionally slower and is not compared against SOTA.
+
+Decision:
+
+- Keep Q4_0 broad GPU down disabled.
+- Do not promote this source as a speed improvement.
+- Continue with a multi-layer Q4_0 first-call parity sample before any selective
+  performance attempt.
+
+## Phase 7MF - Q4_0 all-layer first-call parity sample
+
+Timestamp: 2026-07-06 17:56:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether Q4_0 parity remains good across all Q4_0 down layers:
+  `blk.6`, `blk.7`, `blk.8`, `blk.9`, `blk.10`, `blk.15`, and `blk.18`.
+- Still preserve CPU fallback output and France quality.
+- Do not enable production Q4_0 GPU down.
+
+Selected method:
+
+- Extend the diagnostic so it can run once per Q4_0 tensor instead of only the
+  first global call.
+- New env:
+  - `GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR=1`
+  - optional `GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=7`
+- Keep the existing target filter behavior:
+  - when `GGML_MOE_Q4_DOWN_PARITY_TENSOR` is set, only that tensor is sampled;
+  - when it is unset and `ONCE_PER_TENSOR=1`, sample first call for each Q4_0
+    down tensor up to the max-call limit.
+
+Theory and bound:
+
+- This phase adds no intended speedup.
+- It bounds correctness risk for the Q4 fallback bucket before any future
+  selective GPU attempt.
+- If all seven first calls have max_abs on the same order as 7ME
+  (`~1e-3` or lower), the next bottleneck is likely broad enablement side
+  effects rather than raw Q4_0 dot math.
+- If any layer shows large absolute error, debug that layer's tensor layout,
+  stride, expert index, or route mapping before further performance work.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mf-q4-parity-all-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_PARITY=1 GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR=1 GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=7" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance for this diagnostic:
+
+- exit `0`;
+- quality `pass`;
+- France answer semantically correct;
+- TTFT below `127598.064 ms`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- parity reports present for all seven Q4_0 down tensors, or a documented reason
+  why a tensor was not routed in the sampled decode.
+
+Rollback:
+
+- If the once-per-tensor diagnostic affects default behavior, fails quality, or
+  cannot reliably return to CPU fallback, revert the diagnostic source.
+
+7MF result:
+
+Timestamp: 2026-07-06 18:05:00 CST.
+
+Status: diagnostic passed; no performance promotion.
+
+Source delta:
+
+- Added `GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR=1` to make the all-layer
+  sample independent of incidental call repetition.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-094805Z-phase7mf-q4-parity-all-n32`
+- Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-094805Z-phase7mf-q4-parity-all-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_PARITY=1 GGML_MOE_Q4_DOWN_PARITY_ONCE_PER_TENSOR=1 GGML_MOE_Q4_DOWN_PARITY_MAX_CALLS=7" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate result:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT `72819.13 ms`;
+- decode `24778.82 ms / 31`, `1.25 tok/s`;
+- memory.peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+
+Parity summary:
+
+```text
+blk.6  max_abs=0.000688341636 mean_abs=0.0000776090675
+blk.7  max_abs=0.000721992739 mean_abs=0.000119577727
+blk.8  max_abs=0.000716099210 mean_abs=0.000106617236
+blk.9  max_abs=0.000805798070 mean_abs=0.000110741340
+blk.10 max_abs=0.000892317940 mean_abs=0.000132068211
+blk.15 max_abs=0.002005883990 mean_abs=0.000375550157
+blk.18 max_abs=0.002545587790 mean_abs=0.000361598498
+```
+
+Interpretation:
+
+- All seven Q4_0 down first-call samples are close in absolute error.
+- The broad 7LL-C quality failure is unlikely to be caused by a basic Q4_0
+  MMVQ row layout or dot-product mismatch on the first decode token.
+- Remaining plausible causes:
+  - accumulated Q4_0 differences over many decode calls;
+  - route/scatter side effect only when Q4_0 returns `true`;
+  - extra Q4 staging/cache pressure causing different execution order or
+    exposing a stale handoff/copy dependency;
+  - endpoint regression from replacing CPU fallback with GPU staging for every
+    Q4 miss.
+
+Decision:
+
+- Keep broad Q4_0 down disabled.
+- Commit the default-off parity diagnostic because it is reproducible and useful
+  for future correctness probes.
+- Next phase must be a selective production probe, not broad Q4:
+  start with one Q4_0 tensor, require quality pass, and reject if token rate or
+  TTFT regresses.
+
+## Phase 7MG - Single Q4_0 down production probe
+
+Timestamp: 2026-07-06 18:10:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether one parity-clean Q4_0 down tensor can safely return `true` and
+  replace CPU fallback without semantic failure.
+- Separate correctness risk from broad cache/staging pressure.
+
+Selected tensor:
+
+- First candidate: `blk.6.ffn_down_exps.weight`.
+- Reason:
+  - parity max_abs is small;
+  - early layer, so semantic drift would be visible quickly;
+  - expected speed upper bound is small but measurable.
+
+Theory and hard upper bound:
+
+- Previously measured Q4_0 down fallback bucket is about `2.4-2.6 s / n32`
+  across seven Q4 down tensors.
+- If fallback work is roughly evenly distributed, one tensor can save at most:
+  `2.6 s / 7 ~= 0.37 s` on n32.
+- Actual upper bound is lower because GPU production needs staging/H2D and may
+  reduce down cache slots from the Q3/IQ4 slot size to the larger Q4 slot size.
+- Therefore a single-layer probe is accepted only if:
+  - quality passes;
+  - TTFT remains within gate;
+  - decode is not worse than current default after repeat noise;
+  - counters show Q4 CPU fallback bytes reduced for the selected layer.
+
+Implementation:
+
+- Add a second default-off env:
+  `GGML_MOE_Q4_DOWN_ENABLE_TENSOR=blk.6.ffn_down_exps.weight`.
+- CPU eligibility may allow Q4_0 down when either parity or this production
+  enable env matches the tensor.
+- CUDA batch may allow Q4_0 when production enable matches.
+- In production-enable mode, do not compute CPU parity and do not return
+  `false`; scatter the CUDA output and return `true` for the selected tensor.
+- Other Q4_0 tensors must continue to CPU fallback.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mg-q4-blk6-prod-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_ENABLE_TENSOR=blk.6.ffn_down_exps.weight" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance:
+
+- exit `0`;
+- quality `pass`;
+- France answer semantically correct;
+- TTFT below `127598.064 ms`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- repeat n32 confirms no decode regression beyond normal noise before any n96
+  attempt.
+
+Rollback:
+
+- If output quality fails, TTFT regresses beyond the gate, memory exceeds the
+  limit, or decode regresses materially, revert the production-enable source and
+  keep only the parity diagnostic.
