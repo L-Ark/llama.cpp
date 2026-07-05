@@ -70285,3 +70285,79 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Record run directory, command, output, gates, activation absence, and metrics.
+
+## Phase 7LL-C - Q4_0 down GPU batch full activation result
+
+Timestamp: 2026-07-05 23:10:00 CST.
+
+Status: rejected; source rollback required.
+
+Source under test:
+
+- `601b5df8a cuda: gate q4 down moe batch support`
+- `2898913bf cuda: include q4 in moe stream type support`
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7llc-q4down-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-070623Z-phase7llc-q4down-n32`
+
+Result:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, art, and culture. It is famous for landmarks like the Eiffel Tower, the Louvre`
+- quality `fail`, reason `repetition_collapse`;
+- TTFT `72622.46 ms`;
+- decode `28959.99 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `kimi_cpu_fallback_pack_mmap hits=0 misses=0 bytes=0 fallback_gguf=0`;
+- expert-pack iouring bytes `129592737792`;
+- expert-pack iouring wait `17683433 us`;
+- current-down overlap worker `6021466 us`;
+- down hit rate `66.9%`;
+- upgate hit rate `41.5%`.
+
+Interpretation:
+
+- The source change did activate: the previous decode Q4_0 CPU fallback path was
+  eliminated.
+- Eliminating fallback by pushing all Q4_0 down work through GPU batch increased
+  the staged IO/H2D work and worsened endpoint decode from the current accepted
+  n32 range (`~1.36 tok/s`) to `1.07 tok/s`.
+- The quality gate failed, so this change cannot be retained even if a narrower
+  follow-up later recovers speed.
+- Root cause to investigate later: Q4_0 down GPU batch likely changes the
+  accumulation/numeric path relative to the CPU Q4_0 fallback and also shifts
+  more work onto the already IO-bound down staging path.
+
+Decision:
+
+- Reject 7LL-C.
+- Revert source commits `2898913bf` and `601b5df8a`.
+- Preserve this plan/history entry.
+- Do not retry broad Q4_0 down GPU batch without first adding a correctness
+  parity test for one affected layer and proving that a selective subset can
+  reduce IO rather than increase it.
+
+Reproducibility:
+
+- This run used the cold-start repro script and 16GB cgroup.
+- The exact command and run directory above are sufficient to reproduce the
+  rejected behavior.
