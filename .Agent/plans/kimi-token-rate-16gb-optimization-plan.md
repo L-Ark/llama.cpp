@@ -64280,3 +64280,125 @@ Decision:
   - proves a wall-time upper bound larger than the current `~2.4 s` n32 bucket.
 - The next optimization should return to critical-path wall reduction rather
   than summed fallback/IO counters alone.
+
+## Phase 7KH - up/gate first-CQE scheduling upper-bound simulation
+
+Timestamp: 2026-07-05 11:04:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Before implementing another scheduler or prefetch path, compute a hard upper
+  bound for hiding post-7JY up/gate first-CQE latency at the tensor/layer
+  scheduling level.
+- Use existing strict cold-start 7KF traces; do not change runtime behavior in
+  this phase.
+- Decide whether a future source change is justified.
+
+Why this is needed:
+
+- 7KF shows foreground up+gate runtime-load wait is still large:
+  `14651.579 ms` on diagnostic n32.
+- 7KG shows Q4_0 decode fallback is bounded and should not be the next target.
+- Prior combined up/gate and broader IO scheduling attempts reduced some summed
+  wait counters but regressed wall time because they damaged useful overlap or
+  increased resource contention.
+- Therefore the next implementation must have a measured critical-path upper
+  bound before coding.
+
+Hypothesis:
+
+- If same-layer up and gate runtime-load batches are close together in the
+  execution order, a future implementation might submit the already-required
+  gate reads earlier while up compute/H2D is in flight.
+- The optimistic bound for each compatible up/gate pair is at most the smaller
+  first-CQE wait of the two batches, and the practical bound is lower because:
+  - the same SSD, pinned slots, and copy engines are shared;
+  - prior mixed/combined attempts showed extra concurrency can move wait rather
+    than remove it;
+  - the route/top-k ids are only known after the current layer reaches the MoE
+    node, so cross-layer lookahead cannot invent future layer routes without
+    trace dependence.
+
+Offline experiment:
+
+```bash
+cd /root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32
+python3 - <<'PY'
+import csv, collections, re
+run = "/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32"
+def layer(t):
+    m = re.search(r"blk\.(\d+)\.", t or "")
+    return int(m.group(1)) if m else None
+def kind(t):
+    if "ffn_up_exps" in (t or ""): return "up"
+    if "ffn_gate_exps" in (t or ""): return "gate"
+    if "ffn_down_exps" in (t or ""): return "down"
+    return "other"
+wait_first = {}
+wait_sum = collections.Counter()
+for r in csv.DictReader(open(f"{run}/io-wait-trace.csv")):
+    b = int(r["batch_seq"])
+    w = float(r["wait_ms"] or 0)
+    wait_sum[b] += w
+    if int(r["completed_before"]) == 0:
+        wait_first[b] += w
+rows = []
+for r in csv.DictReader(open(f"{run}/io-batch-profile.csv")):
+    if r.get("op") != "runtime_load":
+        continue
+    k = kind(r.get("first_tensor"))
+    if k not in ("up", "gate"):
+        continue
+    rows.append({
+        "seq": int(r["seq"]),
+        "kind": k,
+        "layer": layer(r.get("first_tensor")),
+        "tensor": r.get("first_tensor"),
+        "read_jobs": int(float(r.get("read_jobs", 0) or 0)),
+        "wait": float(r.get("wait_ms", 0) or 0),
+        "wall": float(r.get("wall_ms", 0) or 0),
+        "first": wait_first[int(r["seq"])],
+    })
+
+by_layer_adjacent = []
+for a, b in zip(rows, rows[1:]):
+    if a["layer"] == b["layer"] and {a["kind"], b["kind"]} == {"up", "gate"}:
+        by_layer_adjacent.append((a, b))
+
+bound_first = sum(min(a["first"], b["first"]) for a, b in by_layer_adjacent)
+bound_wait = sum(min(a["wait"], b["wait"]) for a, b in by_layer_adjacent)
+pair_wait = sum(a["wait"] + b["wait"] for a, b in by_layer_adjacent)
+print("rows", len(rows))
+print("adjacent_pairs", len(by_layer_adjacent))
+print("pair_wait_ms", round(pair_wait, 3))
+print("optimistic_first_cqe_bound_ms", round(bound_first, 3))
+print("optimistic_total_wait_bound_ms", round(bound_wait, 3))
+print("top_pairs")
+for a, b in sorted(by_layer_adjacent, key=lambda p: min(p[0]["first"], p[1]["first"]), reverse=True)[:20]:
+    print(a["layer"], a["kind"], round(a["first"], 3), round(a["wait"], 3), b["kind"], round(b["first"], 3), round(b["wait"], 3))
+PY
+```
+
+Decision rule:
+
+- If the optimistic first-CQE bound is below `2 s` on n32, reject a source
+  implementation because overhead/contestion risk is too high.
+- If the bound is above `2 s`, inspect whether the candidate pairs are already
+  covered by the accepted mixed up/gate parallel path; if yes, do not implement
+  another same-shape change.
+- Only write a source implementation phase if the simulation identifies a new
+  non-rejected scheduling shape with:
+  - no added expert reads;
+  - no host RAM increase;
+  - no trace dependence for correctness;
+  - a credible n32 wall-time bound above `2 s`.
+
+Reproducibility and gates:
+
+- This phase reuses a strict cold-start run that already passed all gates:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32`.
+- Record the script output here and commit/push the plan result.
+- No SOTA promotion is possible from this phase because it is offline
+  analysis only.
