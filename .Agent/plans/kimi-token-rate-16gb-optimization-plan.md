@@ -63447,3 +63447,127 @@ Decision:
   - pct65 did not improve upgate hit rate enough and hurt down;
   - pct60 improved down slightly but hurt upgate more;
   - pct62 remains the best observed balance under mixed parallel.
+
+## Phase 7KD - same-type IQ3 up/gate parallel staging
+
+Timestamp: 2026-07-05 10:03:07 CST.
+
+Status: planned.
+
+Goal:
+
+- Extend the accepted mixed up/gate parallel staging optimization to the
+  remaining same-type `IQ3_XXS/IQ3_XXS` up/gate rows.
+- Keep the new behavior default-off until strict n32 and n96 prove a
+  reproducible improvement.
+- Preserve all hard gates:
+  - host RAM below `15900000000` bytes, including page cache;
+  - swap `0`;
+  - cold start only;
+  - semantic pass for `Please introduce France in a short paragraph.`;
+  - TTFT no more than 20% above the current gate `106331.72 ms`;
+  - `read_failures=0` and `iouring_fallbacks=0`.
+
+Bottleneck evidence from existing 7JZ diagnostic run:
+
+```text
+Run: /root/lfz/runs/vendor-kimi-token-rate/20260705-7jz-post-mixed-sota-subprofile-n32
+
+type split                 rows    wall_ms      up_ms    gate_ms   up_miss gate_miss
+22/22,par=1,stage=1         558   3502.499   3338.087     85.974      2552      2553
+18/18,par=0,stage=0         311   2752.214   1438.255   1275.464      1502      1502
+```
+
+Interpretation:
+
+- 7JY only parallelizes the type-22 up/gate path in this diagnostic.
+- `IQ3_XXS/IQ3_XXS` rows still run as serial up then gate in the default
+  CUDA batch path.
+- The same-type IQ3 rows are a meaningful residual bottleneck:
+  `2752.214 ms` wall on diagnostic n32.
+
+Theory and upper bound:
+
+- Same-type up/gate tensors are independent until the later SiLU/multiply fuse.
+- If both operands can be staged to separate ring buffers and launched on
+  separate CUDA streams, the per-row lower bound changes from approximately:
+
+```text
+serial_bound ~= up_ms + gate_ms
+parallel_bound ~= max(up_ms, gate_ms) + synchronization/fuse overhead
+```
+
+- 7JZ aggregate upper-bound saving for these rows is approximately:
+
+```text
+up_ms + gate_ms - max(up_ms, gate_ms)
+= 1438.255 + 1275.464 - 1438.255
+= 1275.464 ms on diagnostic n32
+```
+
+- Real improvement will be lower because staging may contend for the same
+  staged-memory pool and CUDA copy engines. If measured improvement is much
+  smaller than expected, inspect whether:
+  - both streams really overlap in the CSV profile;
+  - the gate jobs accidentally alias the up stage ring;
+  - extra synchronization moved the wait to fuse/D2H;
+  - IO wait increases enough to erase compute overlap.
+
+Implementation plan:
+
+1. Add a default-off env gate, tentatively
+   `GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE=1`.
+2. Reuse the mixed-parallel implementation shape:
+   - plan up jobs into the normal stage ring;
+   - plan gate jobs into the gate stage ring;
+   - copy up jobs on `bc.up_stream`;
+   - copy gate jobs on `bc.gate_stream`;
+   - launch the existing up and gate MMVQ kernels on their respective streams;
+   - record and wait for both completion events before fuse/D2H/scatter.
+3. Restrict first pass to `GGML_TYPE_IQ3_XXS` up/gate rows to keep blast radius
+   narrow.
+4. Preserve the existing serial path when the env var is unset.
+
+Strict n32 experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <7KD-commit>
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kd-same-iq3-parallel-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Strict n96 promotion experiment, only if n32 improves:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kd-same-iq3-parallel-n96
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      GGML_MOE_SAME_TYPE_UP_GATE_PARALLEL_STAGE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- Reject and keep the env default-off if n32 is slower than the current strict
+  n32 default `22667.39 ms / 31`, if semantic output fails, if memory exceeds
+  the cgroup limit, if swap is used, or if TTFT exceeds the gate.
+- Promote only if strict n96 improves over current SOTA
+  `57169.16 ms / 77`, semantic output passes, and all memory/TTFT/IO gates pass.
+- If promoted, update the reproducible script default, commit immediately, and
+  push to `wici/vendor/kimi-moe-stream-on-vendor`.
