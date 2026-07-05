@@ -63765,3 +63765,97 @@ Promotion rule:
 - Only run n96 if strict n32 improves and passes all gates.
 - Promote only if strict n96 improves over `57169.16 ms / 77` and all gates
   pass. Otherwise revert the runtime code and record the rejection.
+
+### 7KE result
+
+Timestamp: 2026-07-05.
+
+Implementation tested:
+
+- Commit `24058cdbce9e0407711233aac07f34c36e97ce6e`.
+- Added default-off `GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE=1`.
+- The code compiled successfully in `build-cuda-batch`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ke-iq3-compute-parallel-n32`.
+
+Actual command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 24058cdbc
+cmake --build build-cuda-batch -j$(nproc)
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ke-iq3-compute-parallel-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE=1" \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Activation:
+
+```text
+env.txt contains GGML_MOE_IQ3_UP_GATE_PARALLEL_COMPUTE=1
+stderr.txt contains [moe_stream] IQ3_XXS compute-only parallel up/gate active
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `74617.82 ms`;
+- decode `24888.85 ms / 31`, `1.25 tok/s`;
+- memory peak `15899996160`;
+- memory final `15103426560`;
+- swap max `0`;
+- anon `454656`;
+- file `14865080320`;
+- kernel `234795008`;
+- inactive_file `3291328512`;
+- active_file `11573166080`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `19695`, bytes `109802520576`;
+- iouring wait `18246660 us`;
+- iouring batches `4568`, wait calls `16173`;
+- current-down overlap planned jobs `3673`, worker `3185765 us`;
+- down hit rate `73.4%`, slots `766`;
+- upgate hit rate `45.2%`, slots `1735`.
+
+Comparison:
+
+- Current accepted script-default n32: `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KE compute-only IQ3 parallel n32: `24888.85 ms / 31`, `1.25 tok/s`.
+- 7KE is `2221.46 ms` slower on n32.
+
+Gap analysis:
+
+- Unlike 7KD, iouring wait did not increase above the accepted profile window.
+- The regression is therefore not primarily from extra SSD reads.
+- The likely cause is added cross-stream synchronization and duplicated launch
+  overhead around small per-row IQ3 MMVQ work. For same-type IQ3, the remaining
+  exposed time is still dominated by movement and serial staging, not by enough
+  independent compute to justify additional streams.
+
+Decision:
+
+- Reject 7KE.
+- Do not run n96.
+- Revert the runtime code to the previous behavior.
+- Do not target same-type IQ3 up/gate parallelism again until an IO-miss
+  reduction changes the bottleneck.
