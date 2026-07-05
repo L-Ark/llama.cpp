@@ -75978,3 +75978,165 @@ Decision:
 - No SOTA promotion can occur from this phase.
 - Any full conversion or download still requires a new plan after the dry-run
   result is recorded.
+
+### Phase 7MS result
+
+Timestamp: 2026-07-05 20:39:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Source:
+
+- Local/remote plan commit: `246b98496`.
+- Converter code is unchanged from `5364ef4aa`; `246b98496` only adds the
+  bounded dry-run planning notes.
+
+Decart NVFP4 run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-121203Z-phase7ms-remote-fp4-convert-dryrun`
+- Command:
+  `python3 convert_hf_to_gguf.py --remote --outtype native --dry-run --split-max-size 45G --outfile <run>/decart-ai__Kimi-K2.7-Code-NVFP4-{ftype}.gguf decart-ai/Kimi-K2.7-Code-NVFP4`
+- Result:
+  - reached `INFO:hf-to-gguf:Exporting model...`;
+  - no stdout;
+  - no GGUF output;
+  - no full `.safetensors` or `.gguf` payload in the Hugging Face cache;
+  - cache stayed small; observed cache after interruption was about `30 MiB`;
+  - cgroup memory stayed within the 16 GB limit; observed peak was about
+    `2.014 GiB`;
+  - manually stopped after `17min 18.583s`; systemd reported
+    `code=killed/status=TERM`.
+- Interpretation:
+  - The remote dry-run did not download full shards, but it also did not emit
+    a split plan or size estimate in bounded time.
+  - The current converter dry-run path is too heavy for Kimi NVFP4 feasibility
+    validation on this runtime server.
+
+AMD MXFP4 run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-123431Z-phase7ms-amd-mxfp4-dryrun-timeout`
+- Command:
+  `timeout 600s python3 convert_hf_to_gguf.py --remote --outtype native --dry-run --split-max-size 45G --outfile <run>/amd__Kimi-K2.7-Code-MXFP4-{ftype}.gguf amd/Kimi-K2.7-Code-MXFP4`
+- Exit code: `1`.
+- Runtime:
+  - systemd runtime: `3min 36.707s`;
+  - CPU time: `20.577s`.
+- Memory and disk:
+  - `memory.max = 15900000000`;
+  - `memory.swap.max = 0`;
+  - `memory.peak = 417951744` bytes, about `398.6 MiB`;
+  - `memory.events`: `oom = 0`, `oom_kill = 0`;
+  - HF cache before/after: `267 MiB` -> `282 MiB`;
+  - no full `.safetensors` or `.gguf` payloads;
+  - no GGUF output file.
+- Failure:
+
+```text
+NotImplementedError: Quant method is not yet supported: 'quark'
+```
+
+Interpretation:
+
+- `decart-ai/Kimi-K2.7-Code-NVFP4` is not rejected as a format, but the
+  current remote dry-run is not a practical bounded estimator.
+- `amd/Kimi-K2.7-Code-MXFP4` is rejected for the current converter because its
+  Hugging Face config reports `quant_method = "quark"` and
+  `convert_hf_to_gguf.py` stops in `dequant_model()` before any useful
+  metadata-only output estimate.
+- Neither run produced a compliant token-rate improvement, so there is no
+  benchmark, no France prompt validation, no TTFT comparison, and no SOTA
+  promotion.
+- Next step must not attempt full FP4 conversion on this server. Either add a
+  metadata-only Kimi FP4 asset estimator first, or return to runtime decode
+  bottlenecks that can be tested against the existing GGUF/expert-pack setup.
+
+## Phase 7MT - metadata-only FP4 asset estimator
+
+Timestamp: 2026-07-05 20:43:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Implement and run a metadata-only estimator for the external FP4 Kimi assets
+  discovered in 7MR.
+- Do not download full safetensors shards, do not write GGUF output, and do
+  not run a model benchmark.
+- Decide whether the next implementation should be:
+  - a bounded `quark` -> MXFP4 converter compatibility patch for the AMD asset;
+  - a bounded ModelOpt/NVFP4 metadata conversion path for the decart asset;
+  - or abandoning FP4 assets on this server and returning to existing IQ3
+    runtime-only work.
+
+Why this is needed:
+
+- 7MS showed that full converter dry-run is not a practical estimator:
+  - decart NVFP4 ran more than 17 minutes without emitting a split plan;
+  - AMD MXFP4 stopped at `quant_method = "quark"` before useful output size
+    information.
+- Before editing converter code, the plan needs hard metadata:
+  - exact safetensors shard count and total remote bytes;
+  - largest shard size;
+  - model index tensor count;
+  - quantization config fields;
+  - representative tensor names for expert up/gate/down mapping.
+
+Implementation:
+
+- Add `scripts/kimi-hf-fp4-asset-audit.py`.
+- The script must:
+  - accept Hugging Face repo IDs as arguments;
+  - use `huggingface_hub` metadata and small JSON/config files only;
+  - summarize `.safetensors` file sizes from sibling metadata or HEAD requests;
+  - fetch and parse `model.safetensors.index.json`, `config.json`, and
+    optional `hf_quant_config.json`;
+  - report `quantization_config.quant_method`, producer metadata, safetensors
+    totals, largest file, unique shard count from the weight map, tensor count,
+    and representative expert/dense scale tensor names;
+  - fail if it would need to download full shard payloads.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <phase-7mt-script-commit>
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mt-fp4-asset-metadata
+mkdir -p "$RUN"
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  python3 scripts/kimi-hf-fp4-asset-audit.py \
+    --out "$RUN/asset-audit.json" \
+    decart-ai/Kimi-K2.7-Code-NVFP4 \
+    amd/Kimi-K2.7-Code-MXFP4
+```
+
+Required outputs:
+
+- script commit and exact command;
+- `asset-audit.json`;
+- cgroup memory peak/events;
+- HF cache size before/after;
+- confirmation that no full `.safetensors` or `.gguf` files were downloaded;
+- next-decision table.
+
+Decision rule:
+
+- If AMD total safetensors size fits the current `88 GiB` free disk with enough
+  margin and tensor names match the existing DeepSeek V4 MXFP4 converter path,
+  write a new bounded converter patch plan for `quant_method = "quark"`.
+- If AMD does not fit or names/layout differ materially, reject AMD for current
+  runtime work.
+- If decart NVFP4 total size exceeds current disk or requires heavy ModelOpt
+  full-export logic before metadata estimation, reject decart for this server.
+- No SOTA promotion can happen in this phase.
+
+Reproducibility:
+
+- Commit and push this plan before adding/running the script.
+- Commit and push the script before the remote run.
+- Record all metrics and raw JSON summary in this plan after the run.
