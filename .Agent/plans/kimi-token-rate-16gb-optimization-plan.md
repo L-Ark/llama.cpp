@@ -75492,3 +75492,89 @@ Reproducibility:
   audit.
 - Record exact binary support, available format names, source asset availability,
   disk space, and whether a safe conversion path exists.
+
+### Phase 7MQ result
+
+Timestamp: 2026-07-05 20:08:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-115522Z-phase7mq-quant-format-audit`
+
+Source:
+
+- `a0e3eac7db71f373c0ba1c55a859b34db3acf8d9`.
+
+Audit output:
+
+- `audit.txt`, 432 lines.
+
+Binary support:
+
+- `build-cuda-batch/bin/llama-quantize` exists.
+- `llama-quantize --help` allowed target types include:
+  - `38` / `MXFP4_MOE`;
+  - `41` / `F8_E4M3_MXFP4`.
+- `llama-quantize --help` did not list `NVFP4` as a target type, even though
+  `include/llama.h` declares `LLAMA_FTYPE_MOSTLY_NVFP4 = 39`.
+
+Code support found:
+
+- Loader/file-type references:
+  - `src/llama-model-loader.cpp` maps `MXFP4_MOE`, `NVFP4`, and
+    `F8_E4M3_MXFP4` file types.
+  - `src/llama-model.h` notes FF MoE per-expert scales for NVFP4 scale tensors.
+- CUDA references:
+  - `ggml/src/ggml-cuda/mmq.cu` dispatches `GGML_TYPE_MXFP4` and
+    `GGML_TYPE_NVFP4`.
+  - `ggml/src/ggml-cuda/mmvq.cu` has vector dot paths for `MXFP4` and `NVFP4`.
+  - `ggml/src/ggml-cuda/vecdotq.cuh` defines `VDR_MXFP4_Q8_1_MMVQ = 4` and
+    `VDR_NVFP4_Q8_1_MMVQ = 4`.
+  - `ggml/src/ggml-cuda/mmq.cu` has a Blackwell native MXFP4 branch.
+- This is enough to justify a future kernel smoke test only after a valid model
+  asset exists. It is not enough to accept a Kimi quality/performance result.
+
+Asset and disk findings:
+
+- `/root/lfz/models` still contains only the Kimi IQ3_S GGUF shards.
+- No BF16/F16 Kimi source model, no MXFP4/NVFP4 Kimi GGUF, and no safetensors
+  source asset was found.
+- Disk free space is only `88 GiB` on `/root` and `/root/lfz`.
+- The current IQ3_S shards are already lossy. `--allow-requantize` exists, but
+  the tool itself warns that requantizing already quantized tensors can severely
+  reduce quality.
+
+Decision:
+
+- Do not quantize full Kimi in this environment now.
+- Do not treat IQ3_S -> MXFP4/NVFP4/F8_E4M3_MXFP4 as a valid quality path.
+  At most it could become a local kernel/type smoke test, but it cannot satisfy
+  the France semantic quality gate as a new model-format SOTA.
+- `NVFP4` specifically is not currently exposed as a `llama-quantize` target in
+  this build, so producing NVFP4 Kimi would require either:
+  - an external prebuilt NVFP4 GGUF asset, or
+  - source work to expose and validate an NVFP4 quantization target, plus a
+    non-lossy source model.
+- `MXFP4_MOE` and `F8_E4M3_MXFP4` are exposed, but the server lacks both the
+  source model and disk budget needed for a valid full conversion.
+
+Overall model-format conclusion:
+
+- Current local optimization routes that can be implemented immediately are
+  exhausted under the strict gates:
+  - no draft/MTP asset for speculative decoding;
+  - lookahead is endpoint-slower and incomplete;
+  - no non-lossy source asset for FP4/MXFP4 conversion;
+  - no exposed `NVFP4` quantization target in `llama-quantize`.
+- The next actionable step is not another source patch. It is to acquire or
+  generate a valid Kimi model-format asset outside this constrained server:
+  - preferred: prebuilt Kimi MXFP4_MOE or NVFP4 GGUF with matching tokenizer and
+    enough metadata for expert-pack generation;
+  - alternative: BF16/F16 Kimi source plus enough temporary disk/RAM on a
+    conversion machine to produce MXFP4_MOE or F8_E4M3_MXFP4, then copy only the
+    final shards and regenerated expert packs to the 16GB runtime server.
+- After such an asset exists, the next plan must be a strict cold-start n32
+  smoke followed by repeat n96 quality/TTFT/token-rate validation before any
+  SOTA promotion.
