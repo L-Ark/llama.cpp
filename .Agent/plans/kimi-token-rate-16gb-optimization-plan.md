@@ -83255,3 +83255,103 @@ cat "$RUN_DIR/implementation_scope.tsv"
 cat "$RUN_DIR/bounds.tsv"
 cat "$RUN_DIR/decision.md"
 ```
+
+## Phase 7OB - IQ2_XXS exact prompt Q8_K math feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 05:38 CST.
+
+Reason:
+
+- Phase 7OA found that decode-side `IQ2_XXS` support likely needs only local
+  MoE-stream admission/switch changes because generic CUDA MMVQ/MMQ support
+  already exists.
+- The largest runtime blocker is prompt: current exact prompt `Q8_K` admits
+  `IQ3_XXS` and selected `IQ2_S` probes, but not `IQ2_XXS`.
+- A naive activation patch would therefore risk prompt CPU fallback, TTFT
+  regression, and page-cache growth, violating the strict 16GB host RAM and
+  TTFT gates.
+- Before any prompt kernel code is written, the exact `IQ2_XXS x Q8_K` math
+  must be derived from existing source and compared against the CPU dequant and
+  generic CUDA MMVQ/MMQ paths.
+
+Goal:
+
+- Determine whether `IQ2_XXS` exact prompt `Q8_K` support is a small
+  mathematically equivalent branch in the existing prompt kernel, or whether it
+  requires a broader kernel design.
+- Produce a formula-level implementation plan for a future default-off source
+  patch, including a synthetic parity selftest design.
+- Do not edit source.
+- Do not run model inference.
+- Do not download or convert assets.
+- Do not promote SOTA.
+
+Inputs:
+
+- Phase 7OA result:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-213240Z-phase7oa-iq2xxs-moe-feasibility`
+- Source files:
+  - `ggml/src/ggml-common.h`;
+  - `ggml/src/ggml-quants.c`;
+  - `ggml/src/ggml-cuda/convert.cu`;
+  - `ggml/src/ggml-cuda/vecdotq.cuh`;
+  - `ggml/src/ggml-cuda/mmq.cuh`;
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ob-iq2xxs-q8k-math`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7ob_iq2xxs_q8k_math.py`;
+   - `math_sources.tsv`;
+   - `formula_check.tsv`;
+   - `selftest_design.md`;
+   - `decision.md`.
+3. Extract the authoritative `IQ2_XXS` layout and scale formula:
+   - `block_iq2_xxs` block size;
+   - `iq2xxs_grid` lookup;
+   - `ksigns_iq2xs` sign lookup;
+   - packed scale bits;
+   - CPU dequant formula.
+4. Compare the CPU dequant formula with:
+   - CUDA dequant `dequantize_block_iq2_xxs`;
+   - MMVQ `vec_dot_iq2_xxs_q8_1`;
+   - MMQ `load_tiles_iq2_xxs`.
+5. Derive the exact prompt `Q8_K` dot formula:
+   - for each `ib32`, read `4` packed `uint16_t`;
+   - for each of `4` groups of `8`, use `iq2xxs_grid[aux8[l]]`;
+   - apply `ksigns_iq2xs[(aux32 >> (7*l)) & 127]`;
+   - accumulate `grid[j] * sign * q8[j]`;
+   - multiply by `(2*scale + 1) / 8`;
+   - multiply by `x.d * y.d`.
+6. Decide whether a future source patch can use a branch shaped like:
+   `0.125f * __half2float(x->d) * y->d * moe_iq2_xxs_q8k_block_sum(...)`.
+7. Design a synthetic parity selftest:
+   - create deterministic `block_iq2_xxs` test blocks;
+   - create deterministic `block_q8_K` rows;
+   - compare GPU prompt branch against CPU dequant dot or an existing CUDA
+     dequant+dot path;
+   - define tolerance and failure logging;
+   - make it default-off and runnable without Kimi model assets.
+
+Decision rule:
+
+- If CPU dequant, CUDA dequant, MMVQ/MMQ, and the derived `Q8_K` formula agree,
+  accept 7OB and write the next source plan for a default-off `IQ2_XXS` prompt
+  branch plus synthetic selftest.
+- If the formula requires a different activation quantization or a non-local
+  kernel rewrite, reject small prompt-branch work and write a broader kernel
+  design plan.
+- Even if prompt math is feasible, do not claim SOTA or run strict n32/n96
+  until an `IQ2_XXS` Kimi asset/imatrix path is validated.
+
+Reproducibility:
+
+- Commit and push this 7OB plan before running the audit.
+- Commit and push the 7OB result before any source implementation or asset
+  work.
