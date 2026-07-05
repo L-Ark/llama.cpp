@@ -69426,6 +69426,53 @@ Reproducibility:
 - Any accepted source change must include the exact flag/env needed to reproduce
   it and must be pushed immediately after acceptance.
 
+### 7LJ-A implementation target
+
+Timestamp: 2026-07-05 22:58:00 CST.
+
+Source target:
+
+- Add a default-off env flag:
+  `GGML_MOE_CPU_FALLBACK_PACK_READ=1`.
+- Keep `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1` as the accepted default.
+- Only affect decode fallback, because prompt fallback can involve many rows and
+  previously measured prompt fallback traffic is too large for a bounded
+  workspace under 16GB.
+
+Implementation details:
+
+- Expose a CUDA-side C API that reads one expert-pack entry by tensor name,
+  expert id, and exact byte size into a caller-provided 4K-aligned CPU buffer.
+- Reuse the existing expert-pack lookup and `expert_pack_read_entry()` path so
+  the experiment uses the same pack files and direct/io_uring/buffered backend
+  policy as GPU staging.
+- In CPU `MUL_MAT_ID` fallback:
+  - allocate one bounded anonymous workspace per active fallback expert only;
+  - use `align_up(expert_bytes, 4096)` capacity to avoid O_DIRECT overwrite;
+  - set the existing fallback source pointer to the workspace on read success;
+  - free all owned workspaces after a thread barrier when fallback compute is
+    done;
+  - fallback to existing pack mmap/GGUF behavior on read miss or allocation
+    failure to preserve correctness.
+
+Theory:
+
+- If 7LH's hot path is mostly mmap/filemap fault contention on fallback expert
+  pages, explicit direct reads into anonymous memory can reduce kernel filemap
+  lock pressure.
+- If the dominant cost is unavoidable SSD read latency or CPU vec-dot arithmetic,
+  this will regress because reads become synchronous before compute.
+- The experiment is still useful because it separates mmap fault cost from raw
+  expert-pack read cost without changing model placement.
+
+Rollback criteria:
+
+- Any build failure, quality failure, read failure counter increase, host RAM
+  peak above `15899996160`, TTFT gate failure, or n32 decode regression versus
+  7KX/7LG rejects the source patch.
+- If rejected, revert the source commit and record the run. Do not stack another
+  optimization on top.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
