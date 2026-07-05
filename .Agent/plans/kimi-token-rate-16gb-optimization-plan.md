@@ -66085,3 +66085,72 @@ Decision:
   movement-byte upper bound or a known-good converted model exists.
 - Remaining candidates must target runtime overhead/scheduling that is not
   captured by pure movement-byte, cache-policy, or CPU fallback upper bounds.
+
+## Phase 7KQ - current-head strict n32 baseline refresh
+
+Timestamp: 2026-07-05 14:05:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-establish a strict cold-start n32 baseline at the current head after the
+  cache-policy and byte-reduction analysis commits.
+- Confirm the accepted runtime path still passes all hard gates:
+  - RAM peak below `15900000000`;
+  - swap `0`;
+  - France prompt semantic quality pass;
+  - TTFT within `20%` of `106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- Capture current counters without heavy CSV profiling so the next design step
+  targets the largest remaining runtime bucket, not stale diagnostic runs.
+
+Why this is needed:
+
+- 7KN/7KO rejected cache-policy implementation.
+- 7KP rejected expert byte-size conversion.
+- 7KM rejected CPU/file-backed fallback reduction.
+- The next viable direction is runtime overhead/scheduling, but it must start
+  from a current strict baseline and current counters.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 6547c9356
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kq-current-head-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Collect:
+
+- `metrics.txt`;
+- `stderr.txt` summary lines:
+  - expert pack hits/misses/read failures;
+  - iouring bytes/wait/submit;
+  - pinned staging summaries;
+  - current-down overlap;
+  - down/upgate VRAM cache hit rates;
+  - fallback summaries;
+  - llama timing lines.
+
+Decision rule:
+
+- If n32 decode is faster than accepted n32 reference
+  `22667.39 ms / 31` while all gates pass, immediately run n96 before claiming
+  SOTA.
+- If n32 is within noise or slower, do not promote. Use counters to choose the
+  next targeted runtime-overhead phase.
+- If any hard gate fails, investigate before further optimization.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, exact commit, command shape, output quality, timings,
+  memory peak, IO failure counters, and interpretation.
