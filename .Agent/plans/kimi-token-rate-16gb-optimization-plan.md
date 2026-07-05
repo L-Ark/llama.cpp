@@ -74836,3 +74836,76 @@ Reproducibility:
 - Commit and push this guard plan before running.
 - Record run directory, source commit, build status, metrics, output, memory,
   activation absence, and comparison to 7MD/7LY default references.
+
+### Phase 7MN result
+
+Timestamp: 2026-07-06 21:41:00 CST.
+
+Status: accepted rollback guard.
+
+Source:
+
+- `c8f60db75`, with source revert `571253450` included.
+
+Build:
+
+- Server build succeeded on `build-cuda-batch`.
+- CUDA compile produced existing warnings only.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-111918Z-phase7mn-post-async-coalesce-revert-n32`
+
+Gates:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- manual semantic quality `pass`;
+- TTFT `75586.00 ms`, below `127598.064 ms`;
+- decode `23668.93 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- async coalesce activation match count `0`.
+
+Counters:
+
+- expert-pack:
+  - iouring reads `22647`;
+  - bytes `126391910400`;
+  - wait `21126367 us`;
+  - wait calls `18217`;
+  - CQEs `22647`;
+  - inflight avg `3.33`.
+- current-down overlap:
+  - planned/completed jobs `3673`;
+  - worker `3256581 us`.
+- down cache:
+  - slots `766`;
+  - hit rate `73.4%`.
+- upgate cache:
+  - slots `1735`;
+  - hit rate `45.2%`.
+
+Comparison:
+
+- 7MM rejected async coalesce:
+  - decode `24810.48 ms / 31`, `1.25 tok/s`;
+  - activation present;
+  - inflight avg `2.52`.
+- 7MN post-revert:
+  - decode `23668.93 ms / 31`, `1.31 tok/s`;
+  - activation absent;
+  - inflight avg `3.33`.
+- 7MN is within the current diagnostic/default band, though slower than the
+  fastest clean default variance run 7LY.
+
+Decision:
+
+- Rollback is clean.
+- Keep `571253450` revert.
+- Do not continue first-use overlay/coalescing under the current design.
+- Continue future optimization from the restored default path.
