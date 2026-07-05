@@ -85130,3 +85130,190 @@ RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oi-priority-wrapper-
 RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oi-priority-wrapper-n96-repeat \
   scripts/kimi-phase7og-priority-repro.sh
 ```
+
+### Phase 7OI result
+
+Timestamp: 2026-07-06 08:58 CST.
+
+Plan commit before execution:
+
+- `be5de1efa` (`docs: plan priority launch repro wrapper`)
+
+Wrapper implementation commit:
+
+- `551c9ed77` (`scripts: add kimi priority launch repro wrapper`)
+
+Server state:
+
+- Server fast-forwarded from `6bb9c0168` to `551c9ed77`.
+- Branch:
+  `vendor/kimi-moe-stream-on-vendor`.
+- No MoE runtime source, CUDA kernel, model, GGUF, expert-pack, quantization, or
+  cache-policy asset changed.
+- `bash -n scripts/kimi-phase7og-priority-repro.sh` passed on server before
+  execution.
+
+Wrapper:
+
+- `scripts/kimi-phase7og-priority-repro.sh`
+- It records:
+  - `wrapper-command.txt`;
+  - `wrapper-readme.md`;
+  - `wrapper.sh`;
+  - `wrapper-result.txt`;
+  - `systemd-run.txt`.
+- It then runs the existing base reproduction script:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Launch properties actually used:
+
+```text
+MemoryMax=15900000000
+MemorySwapMax=0
+IOAccounting=yes
+IOWeight=10000
+CPUWeight=10000
+Nice=-10
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+```
+
+Runtime env/shape:
+
+- `N=96`;
+- `VRAM_MIB=15000`;
+- `THREADS=32`;
+- `PINNED_SLOTS=12`;
+- `UPGATE_PCT=62`;
+- `IQ2_UPGATE_PARALLEL=1`;
+- `MIN_PROFILE=1`;
+- `MOE_IO_DEPTH=8`;
+- `MOE_IO_REFILL_BATCH=4`;
+- `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+n96 wrapper candidate:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-231933Z-phase7oi-priority-wrapper-n96`
+- Exit:
+  `0`.
+- Output quality:
+  pass.
+- Exact answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `77503.58 ms`.
+- Decode:
+  `56104.65 ms / 77`, `1.37 tok/s`.
+- Host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15090978816`;
+  - `file=14837862400`;
+  - `inactive_file=1847197696`;
+  - `active_file=12990136320`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_reads=56535`;
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=49043773`;
+  - `iouring_submit_us=122029`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.37`, max `8`;
+  - batch hist `1:437,2-4:6446,5-8:5839,9-16:0,17-32:0,gt32:0`.
+
+n96 wrapper repeat:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-232250Z-phase7oi-priority-wrapper-n96-repeat`
+- Exit:
+  `0`.
+- Output quality:
+  pass.
+- Exact answer:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `78061.45 ms`.
+- Decode:
+  `56688.06 ms / 77`, `1.36 tok/s`.
+- Host RAM:
+  - `memory.max=15899996160`;
+  - `memory.swap.max=0`;
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15092817920`;
+  - `file=14839717888`;
+  - `inactive_file=1189625856`;
+  - `active_file=13649567744`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_reads=56535`;
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=50355226`;
+  - `iouring_submit_us=118782`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.37`, max `8`;
+  - batch hist `1:437,2-4:6446,5-8:5839,9-16:0,17-32:0,gt32:0`.
+
+Comparison:
+
+| run | decode ms / 77 | token rate | iouring wait | quality |
+|---|---:|---:|---:|---|
+| 7MU non-priority reference | `56696.97` | `1.36` | `50.086 s` | pass |
+| 7OG priority A | `55528.61` | `1.39` | `48.513 s` | pass |
+| 7OG priority B | `55755.91` | `1.38` | `49.489 s` | pass |
+| 7OI wrapper A | `56104.65` | `1.37` | `49.044 s` | pass |
+| 7OI wrapper B | `56688.06` | `1.36` | `50.355 s` | pass |
+
+Interpretation:
+
+- The wrapper is functionally correct and reproducible:
+  - both runs exit `0`;
+  - both runs use the strict 16GB cgroup and cold-start base script;
+  - both runs pass the France semantic quality gate;
+  - both runs have `read_failures=0` and `iouring_fallbacks=0`.
+- The wrapper does not introduce a new runtime optimization. It only prevents
+  future manual command drift around the already accepted launch recipe.
+- The 7OI repeat did not reproduce the faster 7OG n96 band; it landed at
+  `56688.06 ms`, effectively equal to the old 7MU reference.
+- Therefore 7OI is accepted as reproduction tooling only. It is not promoted as
+  a new SOTA token-rate result.
+- Future experiments may use the wrapper for consistent launch properties, but
+  any future speed claim must compare against both:
+  - the conservative current-head production repeat:
+    `56688.06 ms / 77`, `1.36 tok/s`;
+  - and the faster observed 7OG launch band:
+    `55528.61-55755.91 ms / 77`.
+
+Decision:
+
+- Keep `scripts/kimi-phase7og-priority-repro.sh`.
+- Do not alter `scripts/kimi-phase7fb-min-profile-repro.sh`.
+- Do not change any accepted MoE runtime env defaults.
+- Do not promote a new SOTA from 7OI.
+- The next true token-rate optimization still needs to reduce expert-pack bytes
+  moved per token or reduce exposed `io_uring` wait without losing
+  current-down/up-gate overlap.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 551c9ed77
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-231933Z-phase7oi-priority-wrapper-n96 \
+  scripts/kimi-phase7og-priority-repro.sh
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-232250Z-phase7oi-priority-wrapper-n96-repeat \
+  scripts/kimi-phase7og-priority-repro.sh
+```
