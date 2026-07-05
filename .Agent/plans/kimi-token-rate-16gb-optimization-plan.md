@@ -66784,3 +66784,82 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, command shape, metrics, memory, output, IO counters, and
   comparison with 7JY.
+
+### 7KU result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `99ce3cf68` (`docs: plan current head n96 reproducibility`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-041855Z-phase7ku-current-head-n96`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-041855Z-phase7ku-current-head-n96 \
+      N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`;
+- manual semantic quality `pass`;
+- TTFT `77706.41 ms`;
+- decode `56613.00 ms / 77`, `1.36 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `63050`, misses `633`;
+- iouring reads `56535`;
+- iouring bytes `315379728384`;
+- iouring wait `50114702 us`;
+- iouring submit `120375 us`;
+- current-down overlap:
+  - calls `2464`;
+  - planned/completed jobs `9199/9199`;
+  - cache hits `8665`;
+  - missing tensor `231`;
+  - missing pack `99`;
+  - worker `8030560 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.0%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `44.1%`.
+
+Comparison with accepted 7JY:
+
+- 7JY n96:
+  - TTFT `73810.16 ms`;
+  - decode `57169.16 ms / 77`, `1.35 tok/s`.
+- 7KU current-head n96:
+  - TTFT `77706.41 ms`;
+  - decode `56613.00 ms / 77`, `1.36 tok/s`.
+- Decode is `556.16 ms` faster than 7JY, about `0.97%` lower decode time.
+- TTFT is `3896.25 ms` slower than 7JY but still far below the `20%` gate
+  (`127598.064 ms`).
+
+Decision:
+
+- Record 7KU as the current-head reproducible strict n96 baseline.
+- This is not a source-level SOTA change; no runtime code changed.
+- Keep the accepted runtime defaults unchanged.
+- Continue to require a measured `> 2 s` source-level bucket before making
+  another runtime change.
