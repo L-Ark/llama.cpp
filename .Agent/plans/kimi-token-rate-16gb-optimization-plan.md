@@ -76959,7 +76959,7 @@ Decision:
 
 Timestamp: 2026-07-05 22:06:47 CST.
 
-Status: planned.
+Status: complete.
 
 Goal:
 
@@ -77007,6 +77007,9 @@ Audit inputs:
   `/root/lfz/llama.cpp-vendor-kimi`
 - Historical ik_llama overlap repo if present:
   `/root/lfz/ik_llama-overlap-5tps`
+- Historical ik_llama main repo, because some high-quality-pass records were
+  produced there:
+  `/root/lfz/ik_llama`
 - Current plan:
   `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 - Historical run records under:
@@ -77047,6 +77050,7 @@ Required outputs:
 - `vendor_only_symbols.txt`
 - `feature_matrix.tsv`
 - `historical_runs.tsv`
+- `historical_flag_summary.tsv`
 - `local_assets.txt`
 - `decision.md`
 
@@ -77071,3 +77075,109 @@ Reproducibility:
 - Record every audit command in `commands.log`.
 - Record timestamps in `decision.md`.
 - Push the final audit record after the results are written into this plan.
+
+Result - 2026-07-05 22:28 CST:
+
+- Plan commit before audit: `fac42a990`
+  (`docs: plan ik_llama gap audit`).
+- Audit run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-141116Z-phase7mx-ikllama-feature-asset-audit`
+- Produced:
+  - `repo_state.txt`;
+  - `commands.log`;
+  - `ikllama_only_symbols.txt`;
+  - `vendor_only_symbols.txt`;
+  - `feature_matrix.tsv`;
+  - `historical_runs.tsv`;
+  - `historical_flag_summary.tsv`;
+  - `local_assets.txt`;
+  - `decision.md`.
+- Repos recorded:
+  - vendor: `fac42a990191e816b55f47a8b27b3a442ec9c4f1`, clean;
+  - `/root/lfz/ik_llama`: `179c550cd617cede8377bfe626f458a737a8322d`,
+    dirty historical worktree;
+  - `/root/lfz/ik_llama-overlap-5tps`: source exists, branch
+    `kimi-iq3s-streaming-overlap-5tps`, commit
+    `3df59c43a872c1646e288dfa31a9a4eacd3121a5`.
+- Historical quality-pass records found above or near current vendor speed:
+  - `overlap5tps-a1-ram512-skip0-n24`: `1.57 tok/s`, `n=24`,
+    TTFT `44.554 s`, quality `pass`, `cgroup_peak_gib=16.000`,
+    `page_cache_gib=15.459`, `process_rss_gib=11.230`;
+  - run `498`: `1.51 tok/s`, `n=64`, TTFT `35.465 s`, quality `pass`,
+    `cgroup_peak_gib=15.938`, `page_cache_gib=15.393`,
+    `process_rss_gib=11.229`;
+  - run `499`: `1.46 tok/s`, `n=64`, TTFT `37.647 s`, quality `pass`,
+    `cgroup_peak_gib=15.938`;
+  - run `5150`: `1.42 tok/s`, `n=32`, TTFT `35.675 s`, quality `pass`,
+    `cgroup_peak_gib=15.938`.
+- These records are not accepted SOTA under the current constraint because they
+  used the older `MemoryMax=16G` or `MemoryMax=16320M` style gate and reached
+  `15.938-16.000 GiB` cgroup peak, while the current strict gate is
+  `MemoryMax=15900000000` including page cache.
+- Fast records above `2 tok/s` were dominated by invalid outputs such as
+  repeated symbols or NaN/fatal failures, so they are not quality baselines.
+
+Feature decisions:
+
+- `GGML_MOE_STREAM_BATCH_SPLIT_UPGATE_SRC1_TOKEN`:
+  - old ik_llama enabled it and logged
+    `split up/gate src1 token-row input active`;
+  - current vendor already implements the same semantic behavior without the env
+    gate: up/gate copies `src_row = src1_base + token_ids[j] * src1_nb2`;
+  - decision: not a new vendor candidate.
+- `GGML_MOE_STREAM_BATCH_SPLIT_UPGATE_MMVQ`:
+  - historical env count `0`;
+  - decision: no quality-pass evidence and no bottleneck proof.
+- `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ` and dynamic-X MMQ:
+  - old pass runs used fused MMQ;
+  - vendor ordinary MMQ was rejected in Phase 2K;
+  - vendor dynamic-X MMQ was activated and rejected in Phase 7MW at
+    `0.76 tok/s`;
+  - decision: closed.
+- `GGML_MOE_STREAM_UP_GATE_DYNAMIC_X`:
+  - old pass env set it together with fused MMQ/Q8K and a wider memory cap;
+  - no clean run proves standalone value;
+  - decision: not a standalone source-patch candidate.
+- `GGML_MOE_STREAM_DOWN_Q8K`:
+  - old pass runs used it, but many historical Q8K records failed with
+    repeated-symbol or NaN/fatal outputs;
+  - current branch already tested/rejected broad down-on-GPU/Q8_K variants;
+  - decision: closed.
+- `GGML_MOE_DOWN_UNIFIED_IO`:
+  - active in old pass runs, but old records were under the wider memory cap and
+    do not isolate a gain above current strict SOTA;
+  - current vendor already has batched expert-pack io_uring and current-down
+    overlap, while fixed-buffer/shared/depth/refill scheduling attempts were
+    rejected;
+  - decision: do not port next.
+- `GGML_MOE_UPGATE_PAIR_MERGED_READ` /
+  `GGML_MOE_UPGATE_PAIR_DUAL_READ_SINGLE_H2D`:
+  - env appeared in 8 historical runs, but current old source only contains old
+    plan text and build-binary matches, no source implementation and no
+    activation line in inspected high-pass logs;
+  - decision: not recoverable as a reproducible source patch.
+- MTP/draft/speculative:
+  - local search found historical run dirs/logs, not a usable draft GGUF;
+  - known local MTP n16 record was around `0.81 tok/s`;
+  - decision: not available as a current optimization.
+- FP4/NVFP4/MXFP4:
+  - no local GGUF/expert-pack asset;
+  - current disk free is about `88G`, too small for the known public
+    safetensors conversion workflow and intermediates;
+  - decision: blocked by assets/storage.
+
+Decision:
+
+- No source code was changed in 7MX.
+- No compliant performance improvement was found.
+- Current accepted SOTA remains the strict cold-start n96 vendor result around
+  `1.36 tok/s` with `MemoryMax=15900000000`.
+- Do not continue with another old-ik_llama env-port micro-patch unless a new
+  phase first proves a fresh bottleneck, theory, hard upper bound, activation
+  signal, and strict cold-start validation command.
+- Next valid optimization direction must be one of:
+  - externally prepared FP4/NVFP4/MXFP4 GGUF plus expert-pack plan that fits the
+    16 GB host RAM gate;
+  - a real draft/speculative/EAGLE/MTP asset and acceptance-rate model;
+  - a deeper kernel rewrite based on new first-principles analysis, not another
+    stale env-port.
