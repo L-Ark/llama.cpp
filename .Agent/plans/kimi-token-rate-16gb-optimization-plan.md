@@ -75952,7 +75952,7 @@ AMD bounded retry command:
 
 ```bash
 cd /root/lfz/llama.cpp-vendor-kimi
-git reset --hard 5364ef4aa
+git reset --hard a534acac5
 
 RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ms-amd-mxfp4-dryrun-timeout
 mkdir -p "$RUN"
