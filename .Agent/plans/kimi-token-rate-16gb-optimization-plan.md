@@ -65293,3 +65293,61 @@ Decision:
 - Next optimization should reduce the amount of decode work that reaches
   CPU/file-backed fallback, or reduce required expert movement bytes, rather
   than trying to make mmap page faults cheaper.
+
+### 7KL decode-window correction
+
+Timestamp: 2026-07-05.
+
+Correction:
+
+- The first decode-window report above used the first global perf sample as the
+  run start. That can include script/perf-exec offset.
+- The first `llama-completion` sample is:
+  `824574.252879`.
+- Using TTFT `77.25384 s` and decode `25.06050 s`, the corrected decode window
+  is:
+  `824651.507,824676.567`.
+- Additional artifacts:
+  - `perf-report-decode2-flat-nochildren.txt`;
+  - `perf-report-decode2-flat-children.txt`.
+
+Corrected decode-window perf summary:
+
+- samples `37K`;
+- lost samples `0`;
+- flat self-time top rows:
+  - `52.20%` `[kernel] __pv_queued_spin_lock_slowpath`;
+  - `28.45%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `2.48%` `[kernel] io_sq_thread`;
+  - `1.47%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `0.72%` `ggml_vec_dot_iq3_xxs_q8_K`;
+  - `0.57%` `[kernel] __filemap_add_folio`;
+  - `0.24%` `ggml_vec_dot_iq2_s_q8_K`;
+  - `0.24%` `ggml_vec_dot_q3_K_q8_K`;
+  - `0.17%` `ggml_vec_dot_q4_0_q8_0`.
+
+Updated interpretation:
+
+- The corrected decode window still shows file-backed page-cache/memcg lock
+  contention as the dominant kernel path.
+- Libgomp wait is also a large self-time bucket in the corrected window. This
+  is expected in the current CPU-backend MoE wrapper shape:
+  - one thread performs CUDA/IO batch work for eligible paths;
+  - other CPU worker threads wait at barriers;
+  - previous `THREADS=24/28/36/40` probes did not improve the accepted SOTA.
+- Therefore the libgomp self-time is mostly a symptom of GPU/IO work being
+  driven from the CPU backend wrapper, not proof that generic thread-count
+  tuning will improve token rate.
+- `io_sq_thread` remains small in the corrected decode window, and 7KJ already
+  showed SQPOLL-off regresses wall time.
+
+Decision update:
+
+- Keep the 7KL high-level decision unchanged:
+  - do not target Q4 arithmetic;
+  - do not remove SQPOLL;
+  - do not tune global CPU thread count blindly;
+  - do not retry global mmap advice or dense retention.
+- If pursuing the libgomp/wait bucket later, first prove that a specific barrier
+  can be removed or overlapped without changing routing/math. Do not use perf
+  self-time alone as the implementation bound.
