@@ -1,0 +1,68 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/diskless-http-range-loader-hard-bound-after-storage-audit.json",
+  "calculation": {
+    "best_candidate": {
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size": 50439361920
+    },
+    "best_candidate_expert_payload_per_layer_bytes": 969176849.8604652,
+    "best_candidate_gpu_layers_fit": 25,
+    "best_candidate_metadata_bound_tok_s": 9.435899652555262,
+    "best_candidate_nonexpert_bytes": 8764757376,
+    "best_measured_bps": 44935551,
+    "best_measured_mibps": 42.853880882263184,
+    "full_model_size_bytes": 50439361920,
+    "full_model_size_gib": 46.975316405296326,
+    "gap_factor_full_model_vs_best_measured": 33.38963416170553,
+    "gap_factor_min_gpu_resident_vs_best_measured": 21.841345959509486,
+    "optimistic_min_gpu_resident_bytes_for_diskless_loader": 32994178622.51163,
+    "optimistic_min_gpu_resident_gib": 30.728223382040515,
+    "required_bps_full_model_within_ttft": 1500381608.744661,
+    "required_bps_min_gpu_resident_within_ttft": 981452915.2721825,
+    "required_gibps_full_model_within_ttft": 1.3973392627617913,
+    "required_gibps_min_gpu_resident_within_ttft": 0.9140492559151561,
+    "time_s_full_model_at_best_measured": 1122.4823285242458,
+    "time_s_min_gpu_resident_at_best_measured": 734.2555702168119,
+    "ttft_gate_s": 33.617688744
+  },
+  "created_at_utc": "2026-07-05T20:13:48Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "diskless_http_range_loader_source_edit_allowed": false,
+    "new_sota": false,
+    "next_allowed_work": "Continue with new hard-bound/source routes that do not need full alternate artifacts, or obtain explicit disk cleanup/relocation approval for full local GGUF tests.",
+    "reason": "Even the optimistic lower bound that fetches only non-expert bytes plus the GPU-resident expert layers for the best Q2 REAP candidate needs about 0.914 GiB/s to fit the TTFT gate, while the best measured 64MiB HF range throughput is only 42.854 MiB/s. At measured throughput that lower-bound fetch alone takes 734.3 s, before random range overhead, tensor parsing, GPU upload, CPU fallback reads, correctness checks, or generation.",
+    "strict_cold_benchmark_allowed": false
+  },
+  "inputs": {
+    "alternate_header_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-header-bound-20260706-after-layer-close.json",
+    "curl_command_class": "curl -L --fail --range 0-67108863 -o /dev/null -w speed/time; no model bytes written to disk",
+    "priority_header_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/priority-alternate-gguf-header-bound-20260706-after-layer-close.json"
+  },
+  "measured_http_range_samples": [
+    {
+      "bytes": 67108864,
+      "elapsed_s": 1.8,
+      "label": "sleepyeldrazi_q2_reap_k128_uniform_64m_range_to_devnull",
+      "speed_download_Bps": 37634838,
+      "time_total_s": 1.783158,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf"
+    },
+    {
+      "bytes": 67108864,
+      "elapsed_s": 1.51,
+      "label": "cloudyu_4expert_64m_range_to_devnull",
+      "speed_download_Bps": 44935551,
+      "time_total_s": 1.493447,
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf"
+    }
+  ],
+  "purpose": "Evaluate whether a diskless HTTP Range / remote virtual GGUF loader can bypass the local disk-space blocker while preserving strict cold TTFT/token-rate goals.",
+  "source_head": "00f6e988e2c28caf003d5056d66bd5d5c7dba412",
+  "storage_audit": {
+    "persistent_non_root_mount_found": false,
+    "root_free_observed": "about 1.8 GiB",
+    "tmpfs_note": "/dev/shm has about 44GiB free but is RAM-backed, smaller than the best 50.44GB candidate, and would violate the host-RAM/page-cache intent if used as model storage."
+  }
+}
