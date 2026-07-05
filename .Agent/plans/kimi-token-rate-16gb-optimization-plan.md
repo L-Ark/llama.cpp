@@ -79849,6 +79849,120 @@ Reproducibility:
 - Commit and push this 7NV plan before running the audit.
 - Commit and push the 7NV result before any follow-up source work.
 
+### Phase 7NV result
+
+Timestamp: 2026-07-06 10:55 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-202510Z-phase7nv-online-concurrency`
+
+Plan commit before execution:
+
+- `60878c1af` (`docs: plan online io concurrency audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `source_scheduling_refs.md`
+- `source_key_lines.txt`
+- `phase7nv_online_concurrency.py`
+- `online_concurrency_events.tsv`
+- `online_concurrency_summary.tsv`
+- `online_concurrency_hist.tsv`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No repo source code was changed.
+- No asset was downloaded or deleted.
+- The first script output double-counted bytes by summing both op and kind
+  counters; it was corrected and rerun before recording this result.
+
+Inputs:
+
+- Copy profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv`
+- IO batch profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32/io-batch-profile.csv`
+
+Source scheduling references:
+
+- `expert_pack_iouring_copy_jobs(...)`: `ggml/src/ggml-cuda/moe_stream_batch.cu:4189`
+- Runtime depth cap:
+  `const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());`
+  at `ggml/src/ggml-cuda/moe_stream_batch.cu:4202`
+- Ordinary runtime load call:
+  `expert_pack_iouring_copy_jobs(..., "runtime_load")` at
+  `ggml/src/ggml-cuda/moe_stream_batch.cu:6843`
+- Current-down-overlap worker starts at
+  `ggml/src/ggml-cuda/moe_stream_batch.cu:6893`
+- Current-down-overlap uses the same iouring helper at
+  `ggml/src/ggml-cuda/moe_stream_batch.cu:6980`
+- Existing early current-down-overlap switch:
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY` path around
+  `ggml/src/ggml-cuda/moe_stream_batch.cu:7133`
+
+Summary:
+
+- Decode tokens reconstructed: `31`; excluded prefix segments: `1`.
+- Possible route events at 60 MoE layers/token: `1860`.
+- Events with any iouring miss work: `1791` (`96.3%` of possible route events).
+- Same-layer known jobs `>=8`: `1503` (`83.9%` of iouring events).
+- Same-layer known jobs `>=12`: `1110` (`62.0%` of iouring events).
+- Same-layer known jobs `>=16`: `417`.
+- Current io batches: `5178`; read-jobs avg `4.37`, p50 `4`, p90 `7`,
+  p99 `8`.
+- Current batches with `>=8` read jobs: `283` (`5.5%`).
+- Current batches with `>=12` read jobs: `0`.
+- Down iouring events: `1584`.
+- Current-down-overlap present on down-miss events: `860`.
+- Runtime down present: `733`.
+- Iouring bytes excluding prefix: `117.581 GiB`.
+- Up/gate iouring bytes: `74.577 GiB`.
+- Down iouring bytes: `43.004 GiB`.
+
+Interpretation:
+
+- Same-layer online work is often large enough to fill a deeper queue:
+  `62.0%` of iouring route events have at least `12` known same-layer jobs.
+- Current runtime submits much smaller batches: p50 `4`, p90 `7`, and no batch
+  has `>=12` read jobs in the 7NN profile.
+- Current-down-overlap is active on many down-miss events, so the next source
+  design must not merely duplicate it. It must preserve up/gate priority and
+  use down jobs only as background fill when ring capacity would otherwise be
+  idle.
+- The possible gain remains bounded by Phase 7NU's `4.00 tok/s`
+  movement-only ceiling unless bytes/token are reduced.
+
+Decision:
+
+- Accept 7NV as a reproducible online-concurrency audit.
+- Allow a default-off source design for same-layer priority I/O fill.
+- Do not promote SOTA.
+- The next source plan must include:
+  - up/gate-first priority/fence semantics;
+  - down background-fill only after preserving critical up/gate reads;
+  - strict n32 smoke before any n96 run;
+  - rollback if TTFT rises, quality fails, memory exceeds 16GB, or token rate
+    falls.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-202510Z-phase7nv-online-concurrency
+COPY_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260705-084811Z-phase7ma-endpoint-overlap-n32/copy-profile.csv \
+IO_BATCH=/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32/io-batch-profile.csv \
+python3 "$RUN/phase7nv_online_concurrency.py"
+cat "$RUN/online_concurrency_summary.tsv"
+cat "$RUN/online_concurrency_hist.tsv"
+cat "$RUN/decision.md"
+```
+
 Artifacts:
 
 - `commands.log`
