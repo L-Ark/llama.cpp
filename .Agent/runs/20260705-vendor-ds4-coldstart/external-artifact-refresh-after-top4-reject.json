@@ -1,0 +1,93 @@
+{
+  "date": "2026-07-05",
+  "title": "External artifact refresh after native top4 rejection",
+  "status": "no_new_vendor_source_patch_allowed",
+  "method": "Metadata-only Hugging Face API checks with ?blobs=true; no model download performed.",
+  "current_constraints": {
+    "accepted_sota_eval_tok_s": 4.4,
+    "disk_available": "1.8G",
+    "host_ram_limit_bytes": 16000000000,
+    "gpu": "RTX 5090 32109 MiB",
+    "ttft_gate_ms": 33617.688744
+  },
+  "repos_checked": [
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "vendor_loadable_class": "GGUF",
+      "files": [
+        {"name": "ds4flash-4expert.gguf", "size_bytes": 164465760544}
+      ],
+      "decision": "Still the main 4Expert/Q4_K candidate, but full download requires >=180GB free disk. Sidecar bypass was rejected separately."
+    },
+    {
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-03T23:03:24.000Z",
+      "vendor_loadable_class": "GGUF",
+      "files": [
+        {"name": "DeepSeek-V4-Flash.gguf", "size_bytes": 156378344544}
+      ],
+      "decision": "Similar size to current native GGUF; no hard-bound reason to beat accepted route without a new representation or routing change."
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "vendor_loadable_class": "GGUF",
+      "files": [
+        {"name": "DeepSeek-V4-Flash.IQ2_S.gguf", "size_bytes": 88019539296},
+        {"name": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf", "size_bytes": 102431550816},
+        {"name": "DeepSeek-V4-Flash.IQ3_XXS.gguf", "size_bytes": 113974275424},
+        {"name": "DeepSeek-V4-Flash.IQ4_XS.gguf", "size_bytes": 155095231840},
+        {"name": "DeepSeek-V4-Flash.Q8_0.gguf", "size_bytes": 156378344544}
+      ],
+      "decision": "All files far exceed available disk. Existing alternate-GGUF hard-bound already rejected smaller 50-65GB candidates for the 10 tok/s objective, so these do not justify a source patch or download now."
+    },
+    {
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "vendor_loadable_class": "split GGUF",
+      "notable_totals": [
+        {"quant": "Q2_K", "total_size_bytes": 96962159168},
+        {"quant": "IQ3_XXS", "total_size_bytes": 112122725344},
+        {"quant": "MXFP4", "total_size_bytes": 156382890860}
+      ],
+      "decision": "Already represented in prior alternate-GGUF screening; still requires large disk and has no new bound over 10 tok/s."
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-05-19T19:14:44.000Z",
+      "vendor_loadable_class": "split GGUF",
+      "notable_totals": [
+        {"quant": "IQ1_M", "total_size_bytes": 64508046688},
+        {"quant": "IQ1_S-XL", "total_size_bytes": 61540805344},
+        {"quant": "IQ2_XXS-XL", "total_size_bytes": 78518823680}
+      ],
+      "decision": "Prior screening already included teamblobfish low-bit candidates; no correctness evidence and no 10 tok/s hard-bound on current 32GB GPU."
+    },
+    {
+      "repo": "fraserprice/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-01T16:10:17.000Z",
+      "vendor_loadable_class": "safetensors/custom DSpark, not GGUF",
+      "decision": "Still not current vendor-loadable. DFlash/DSpark verifier routes remain closed by target-verifier and source-read hard bounds unless a new vendor-compatible artifact appears."
+    }
+  ],
+  "decision": {
+    "new_download_allowed_now": false,
+    "new_runtime_source_patch_allowed_now": false,
+    "accepted_sota_unchanged": true,
+    "reason": "No newly checked artifact is both vendor-loadable under current disk constraints and hard-bound above 10 tok/s. The only plausible 4Expert candidate still requires full-disk availability or a new split-loader design; sidecar-only and native top-k shortcuts failed.",
+    "next_reopen_conditions": [
+      "Free or attach >=180GB disk and test cloudyu 4Expert GGUF with existing Q4_K/tid2eid gates.",
+      "Find a concrete vendor-loadable artifact with a hard-bound over 10 tok/s on 32GB VRAM and strict 16GB host/page-cache.",
+      "Provide a new split-loader hard-bound design before any source patch."
+    ]
+  },
+  "source_links": [
+    "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+    "https://huggingface.co/sokann/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF",
+    "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-DSpark"
+  ]
+}

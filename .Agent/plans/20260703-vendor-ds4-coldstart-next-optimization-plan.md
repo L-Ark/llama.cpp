@@ -33,6 +33,7 @@ Latest follow-up after prefill rejection:
 - Correctness guard update: `.Agent/run-tools/strict_ds4_runner.py` now rejects obvious self-correction/truncation patterns so future runs do not pass this kind of output by heuristic.
 - 4Expert sidecar audit: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-sidecar-bypass-feasibility-audit.json`
 - Sidecar decision: no safe runtime probe can bypass the full 4Expert GGUF with the current loader. A small expert pack alone cannot change hparams, tensor metadata, `expert_used_count`, or `ffn_gate_tid2eid.weight` routing; a native top-k override failed; sparse/header-only GGUFs cannot prove correctness. Reopen 4Expert only with the full `164.5GB` GGUF after freeing disk, or with a separate split-loader hard-bound design before source code.
+- External artifact refresh after this rejection: `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-after-top4-reject.json`. Metadata-only checks of recent `cloudyu`, `sokann`, `bullerwins`, `tarruda`, `teamblobfish`, and `fraserprice` artifacts found no new vendor-loadable route that is both disk-feasible now and hard-bound above `10 tok/s`.
 
 Why this improved:
 
