@@ -1,0 +1,131 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-warp-kernel-hard-bound-design.json",
+  "date": "2026-07-05",
+  "title": "Hard-bound design: resident-source warp CPU-compatible Q8_0 hot-batch compare kernel",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "design_allows_default_off_microprobe_only",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true
+  },
+  "inputs": {
+    "plan": ".Agent/plans/20260703-vendor-ds4-coldstart-next-optimization-plan.md",
+    "compare_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-compare-kernel-validation.json",
+    "top768_compute_design": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-batched-fused-exact-compute-design.json",
+    "top768_source_hidden_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-hard-bound-recheck.json",
+    "compare_csv": "/root/lfz/runs/vendor-ds4-16gb/20260705T014841Z-hot-batch-compare/probe-cpu41-compare512/hot-batch-probe.csv"
+  },
+  "hard_budget": {
+    "top768_source_hidden_tok_s_zero_overhead": 10.338,
+    "top768_total_overhead_budget_ms": 446.414,
+    "top768_calls_covered": 19410,
+    "average_overhead_budget_per_covered_call_us": 22.999,
+    "ttft_async_source_margin_ms": 78.135454
+  },
+  "fixed_text_ready_set_from_compare512": {
+    "records": 11890,
+    "ready_records": 10503,
+    "ready_rows": 32724,
+    "up": {
+      "ready_records": 5248,
+      "ready_rows": 16336,
+      "src0_bytes": 72800534528,
+      "q80_bytes": 71094272,
+      "out_bytes": 133824512,
+      "shape": "ne01=2048, ne00=4096"
+    },
+    "down": {
+      "ready_records": 5255,
+      "ready_rows": 16388,
+      "src0_bytes": 73032269824,
+      "q80_bytes": 35660288,
+      "out_bytes": 268500992,
+      "shape": "ne01=4096, ne00=2048"
+    },
+    "total": {
+      "src0_bytes": 145832804352,
+      "src0_gib": 135.817383,
+      "q80_bytes": 106754560,
+      "q80_mib": 101.809,
+      "out_bytes": 402325504,
+      "out_mib": 383.688
+    }
+  },
+  "minimum_bandwidth_math": {
+    "source_only_required_gib_s_if_entire_budget": 304.241,
+    "source_time_ms_at_300_gib_s": 452.725,
+    "source_time_ms_at_400_gib_s": 339.543,
+    "source_time_ms_at_500_gib_s": 271.635,
+    "source_time_ms_at_600_gib_s": 226.362,
+    "source_time_ms_at_800_gib_s": 169.772,
+    "source_time_ms_at_1000_gib_s": 135.817,
+    "d2h_time_ms_at_8_gib_s": 46.837,
+    "d2h_time_ms_at_12_gib_s": 31.225,
+    "q80_h2d_time_ms_at_8_gib_s": 12.428,
+    "q80_h2d_time_ms_at_12_gib_s": 8.285,
+    "practical_kernel_bandwidth_target_gib_s": "400-550 after reserving time for H2D, D2H, launch/sync, scatter/compare, and safety margin"
+  },
+  "current_scalar_compare": {
+    "sample_ready_rows": 378,
+    "sample_output_elements": 1163264,
+    "sample_kernel_us": 214715,
+    "sample_compute_total_us": 229634,
+    "projected_full_ms_by_ready_rows": 19879.743,
+    "projected_full_ms_by_output_count": 19855.255,
+    "decision": "rejected"
+  },
+  "kernel_design": {
+    "env_gate": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_WARP=1",
+    "default_behavior": "unchanged; env unset keeps accepted path and existing scalar compare behavior",
+    "execution_point": "after normal CPU fallback inside HOT_BATCH_PROBE_COMPARE, with CPU dst authoritative",
+    "logit_effect": "none; compare probe does not write final dst or clear CPU fallback counts",
+    "mapping": "Use one warp for two output elements. Each half-warp maps one output dot product to 16 CUDA lanes: lanes 0-7 accumulate CPU accum1[0..7], lanes 8-15 accumulate CPU accum2[0..7]. Lanes 16-31 compute a second output the same way.",
+    "bit_exact_rule": "For each output, keep the block-pair loop sequential in ib order. Each lane applies fmaf(scale, p_lane, acc_lane) in the same order as the CPU AVX path. Lane 0 or 16 gathers the 16 lane accumulators and applies the same hsum order as moe_stream_q80_cpu_compat_hsum8.",
+    "expected_gain_vs_scalar": "The scalar kernel under-occupies each per-op launch and serializes all 16 CPU accumulator lanes inside one thread. The warp design increases per-op parallelism and moves the 16 accumulator lanes into CUDA lanes while preserving reduction order.",
+    "known_limits": [
+      "No source layout transpose is included in the first probe, so resident source loads may remain poorly coalesced.",
+      "No pinned staging is included in the first raw kernel probe, so H2D/D2H totals from that probe are not the final path.",
+      "The route remains conditional on async source/page overlap; a passing kernel probe alone does not prove 10 tok/s."
+    ]
+  },
+  "probe_sequence": [
+    {
+      "step": "warp_compare_smoke",
+      "env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE=1, GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_WARP=1, GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE_MAX_RECORDS=32",
+      "pass": "process exits 0, compare_ok for all compare_ran records, op-level max_abs=0, no OOM/no swap"
+    },
+    {
+      "step": "warp_compare512_fixed_text",
+      "env": "same plus COMPARE_MAX_RECORDS=512 on fixed-text llama-results",
+      "pass": "same_top1=145/145, first_mismatch_pos=-1, op-level max_abs=0, no OOM/no swap"
+    },
+    {
+      "step": "projection_gate",
+      "pass": "projected raw kernel time for full ready set below about 250 ms before investing in pinned/persistent staging"
+    },
+    {
+      "step": "persistent_pinned_followup",
+      "condition": "only if raw kernel projection passes",
+      "pass": "combined projected H2D+kernel+D2H+scatter+launch/sync <=446.414 ms with margin"
+    }
+  ],
+  "rejection_rules": [
+    "Reject no-layout-change warp route if compare max_abs != 0 in CPU-compatible mode.",
+    "Reject before strict cold performance if fixed-text top1 does not pass.",
+    "Reject before persistent staging if projected raw kernel time is >=250 ms.",
+    "Reject before SOTA performance if combined projected overhead exceeds 446.414 ms or if additional workspace threatens the 16GB RAM/page-cache or observed VRAM margins.",
+    "Reject any strict cold promotion unless eval_tok_s > 4.4, TTFT <= 33617.688744 ms, 16GB cgroup including page cache holds, no swap/OOM, and France output is semantically correct and coherent."
+  ],
+  "decision": {
+    "implement_source_edit_next": true,
+    "allowed_source_edit": "default-off warp compare microprobe only",
+    "strict_cold_performance_allowed_now": false,
+    "sota_changed": false
+  }
+}
