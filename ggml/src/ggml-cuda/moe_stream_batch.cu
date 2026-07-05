@@ -4194,12 +4194,21 @@ static bool expert_pack_iouring_copy_jobs(
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     if (jobs.empty()) return true;
     if (g_expert_pack.io_backend != 2) return false;
-    if (!pinned_stage_ensure(ring, expert_bytes, true)) return false;
 
     const size_t alignment = expert_pack_direct_alignment();
-    const size_t read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
+    const bool variable_bytes = expert_bytes == 0;
+    size_t max_job_bytes = expert_bytes;
+    if (variable_bytes) {
+        for (const Job &job : jobs) {
+            if (job.nbytes == 0) return false;
+            max_job_bytes = std::max(max_job_bytes, job.nbytes);
+        }
+    }
+    if (max_job_bytes == 0) return false;
+    if (!pinned_stage_ensure(ring, max_job_bytes, true)) return false;
+
     const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
-    if (depth == 0 || read_sz == 0) return false;
+    if (depth == 0) return false;
     const bool profile_io_batch = io_batch_profile_enabled();
     const auto io_batch_start = profile_io_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
@@ -4207,11 +4216,14 @@ static bool expert_pack_iouring_copy_jobs(
     read_jobs.reserve(jobs.size());
     for (size_t i = 0; i < jobs.size(); ++i) {
         const Job &job = jobs[i];
+        const size_t job_bytes = variable_bytes ? job.nbytes : expert_bytes;
         if (!job.pack_entry ||
-                job.pack_entry->nbytes != expert_bytes ||
+                job.pack_entry->nbytes != job_bytes ||
                 (job.pack_entry->offset % alignment) != 0) {
             return false;
         }
+        const size_t read_sz = (size_t)align_up_u64((uint64_t)job_bytes, (uint64_t)alignment);
+        if (read_sz == 0 || read_sz > ring.slot_sz) return false;
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
         if (!source || source->fd_direct < 0) {
             return false;
@@ -4219,14 +4231,14 @@ static bool expert_pack_iouring_copy_jobs(
         batch_copy_trace copy_trace;
         copy_trace.pack_hit = true;
         const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-        if (expert_pack_ram_tier_copy_h2d(job.pack_entry, job.dst, expert_bytes, st, &copy_trace)) {
+        if (expert_pack_ram_tier_copy_h2d(job.pack_entry, job.dst, job_bytes, st, &copy_trace)) {
             if (copy_start != std::chrono::steady_clock::time_point{}) {
                 const auto copy_end = std::chrono::steady_clock::now();
                 batch_ttft_trace_record(
                     trace_op,
                     job.tensor,
                     job.expert_idx,
-                    expert_bytes,
+                    job_bytes,
                     false,
                     copy_trace.pack_hit,
                     copy_trace.ram_hit,
@@ -4234,7 +4246,7 @@ static bool expert_pack_iouring_copy_jobs(
             }
             continue;
         }
-        if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, expert_bytes, st)) {
+        if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, job_bytes, st)) {
             copy_trace.pack_hit = true;
             copy_trace.ram_hit = false;
             if (copy_start != std::chrono::steady_clock::time_point{}) {
@@ -4243,7 +4255,7 @@ static bool expert_pack_iouring_copy_jobs(
                     trace_op,
                     job.tensor,
                     job.expert_idx,
-                    expert_bytes,
+                    job_bytes,
                     false,
                     copy_trace.pack_hit,
                     copy_trace.ram_hit,
@@ -4410,6 +4422,8 @@ static bool expert_pack_iouring_copy_jobs(
     uint64_t io_batch_inflight_max = 0;
     auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
         const Job &job = jobs[job_idx];
+        const size_t job_bytes = variable_bytes ? job.nbytes : expert_bytes;
+        const size_t read_sz = (size_t)align_up_u64((uint64_t)job_bytes, (uint64_t)alignment);
         pinned_stage_slot &slot = ring.slots[slot_idx];
         if (slot.pending) {
             const auto wait_start = (profile_stage || profile_io_batch) ?
@@ -4505,6 +4519,7 @@ static bool expert_pack_iouring_copy_jobs(
 
             const pending_job done = pending[pending_idx];
             const Job &job = jobs[done.job_idx];
+            const size_t job_bytes = variable_bytes ? job.nbytes : expert_bytes;
             pinned_stage_slot &slot = ring.slots[done.slot_idx];
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
@@ -4517,7 +4532,7 @@ static bool expert_pack_iouring_copy_jobs(
                     return false;
                 }
             }
-            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            if (cudaMemcpyAsync(job.dst, slot.host, job_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
                 return false;
             }
             if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
@@ -4549,7 +4564,7 @@ static bool expert_pack_iouring_copy_jobs(
             slot.pending = true;
             ++ring.copies;
             ++g_expert_pack.iouring_reads;
-            g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
+            g_expert_pack.iouring_bytes.fetch_add(job_bytes);
             ++g_expert_pack.iouring_h2d_enqueues;
             if (profile_io_batch) ++io_batch_cqes;
 
@@ -4569,7 +4584,7 @@ static bool expert_pack_iouring_copy_jobs(
                         trace_op,
                         job.tensor,
                         job.expert_idx,
-                        expert_bytes,
+                        job_bytes,
                         false,
                         true,
                         false,
@@ -4577,7 +4592,7 @@ static bool expert_pack_iouring_copy_jobs(
                 }
                 if (profile_copy) {
                     copy_profile_record(
-                            trace_op, job.tensor, job.expert_idx, expert_bytes,
+                            trace_op, job.tensor, job.expert_idx, job_bytes,
                             true, false, true,
                             0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
                 }
@@ -5045,6 +5060,7 @@ static void trace_prefetch_on_hit(const char *tensor_name, int expert_idx, size_
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        size_t nbytes = 0;
         int expert_idx = -1;
         char tensor[128] = {};
     };
@@ -6694,6 +6710,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (uniform_bytes && expert_pack_iouring_copy_jobs(jobs, copy_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
+        if (!uniform_bytes &&
+                expert_pack_env_bool("GGML_MOE_MIXED_UP_GATE_COMBINED_IO", false) &&
+                expert_pack_iouring_copy_jobs(jobs, 0, run_stream, ring, "runtime_load")) {
+            return cudaGetLastError() == cudaSuccess;
+        }
         for (const stage_copy_job &job : jobs) {
             const size_t job_bytes = job.nbytes != 0 ? job.nbytes : src0_bytes;
             batch_copy_trace copy_trace;
@@ -7020,25 +7041,53 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             submit_planned_host_prefetch(up_jobs);
             submit_planned_host_prefetch(gate_jobs);
 
+            const bool combined_up_gate_io = expert_pack_env_bool("GGML_MOE_MIXED_UP_GATE_COMBINED_IO", false);
+            static std::atomic<int> first_combined_up_gate_io{0};
+            if (combined_up_gate_io && first_combined_up_gate_io.fetch_add(1) == 0) {
+                std::fprintf(stderr, "[moe_stream] mixed-type up/gate combined io_uring stage active\n");
+            }
+
+            bool combined_copy_done = false;
+            if (combined_up_gate_io) {
+                std::vector<stage_copy_job> combined_jobs;
+                combined_jobs.reserve(up_jobs.size() + gate_jobs.size());
+                combined_jobs.insert(combined_jobs.end(), up_jobs.begin(), up_jobs.end());
+                combined_jobs.insert(combined_jobs.end(), gate_jobs.begin(), gate_jobs.end());
+                if (!copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)) {
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return mixed_overlap_fail("mixed_copy_combined");
+                }
+                if (cudaEventRecord(bc.ev_stage_ready, bc.up_stream) != cudaSuccess ||
+                        cudaStreamWaitEvent(bc.gate_stream, bc.ev_stage_ready, 0) != cudaSuccess) {
+                    return mixed_overlap_fail("mixed_wait_combined_copy");
+                }
+                combined_copy_done = true;
+            }
+
             bool up_copy_ok = true;
             bool gate_copy_ok = true;
-            std::thread up_thread([&]() {
-                up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
-            });
-            std::thread gate_thread([&]() {
-                gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
-            });
+            std::thread up_thread;
+            std::thread gate_thread;
+            if (!combined_copy_done) {
+                up_thread = std::thread([&]() {
+                    up_copy_ok = copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring);
+                });
+                gate_thread = std::thread([&]() {
+                    gate_copy_ok = copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate);
+                });
 
-            up_thread.join();
-            if (!up_copy_ok) {
-                gate_thread.join();
-                clear_stage_jobs(up_jobs);
-                clear_stage_jobs(gate_jobs);
-                return mixed_overlap_fail("mixed_copy_up");
+                up_thread.join();
+                if (!up_copy_ok) {
+                    gate_thread.join();
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return mixed_overlap_fail("mixed_copy_up");
+                }
             }
             if (profile && bc.ev_up_compute_start) cudaEventRecord(bc.ev_up_compute_start, bc.up_stream);
             if (cudaMemsetAsync(bc.d_up, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), bc.up_stream) != cudaSuccess) {
-                gate_thread.join();
+                if (gate_thread.joinable()) gate_thread.join();
                 return mixed_overlap_fail("mixed_memset_up");
             }
             if (!launch_moe_mmvq_compact_batch(
@@ -7046,17 +7095,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                     (const char *)cache->pool, bc.h_x_ids_up, cache->slot_sz,
                     ne00, ne01, (const float *)bc.d_src1_f32, ne00, nullptr,
                     bc.d_src1_q8_up, (float *)bc.d_up, n_active, bc.up_stream)) {
-                gate_thread.join();
+                if (gate_thread.joinable()) gate_thread.join();
                 return mixed_overlap_fail("mixed_launch_up");
             }
             if (profile) cudaEventRecord(bc.ev_up, bc.up_stream);
 
             if (profile && bc.ev_gate_start) cudaEventRecord(bc.ev_gate_start, bc.gate_stream);
-            gate_thread.join();
-            if (!gate_copy_ok) {
-                clear_stage_jobs(up_jobs);
-                clear_stage_jobs(gate_jobs);
-                return mixed_overlap_fail("mixed_copy_gate");
+            if (!combined_copy_done) {
+                gate_thread.join();
+                if (!gate_copy_ok) {
+                    clear_stage_jobs(up_jobs);
+                    clear_stage_jobs(gate_jobs);
+                    return mixed_overlap_fail("mixed_copy_gate");
+                }
             }
             if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
             if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), bc.gate_stream) != cudaSuccess) {
@@ -8081,6 +8132,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         void *dst = nullptr;
         const void *host_data = nullptr;
         const expert_pack_entry *pack_entry = nullptr;
+        size_t nbytes = 0;
         int expert_idx = -1;
         char tensor[128] = {};
     };
